@@ -75,7 +75,7 @@
   } from "#lib/components/Toasts.svelte";
   import { programDetail } from "#lib/detail.svelte.js";
   import { driveGate } from "#lib/drive-gate.svelte.js";
-  import { SERVICE_TYPE_LABEL, stateLabel, time } from "#lib/format.js";
+  import { SERVICE_TYPE_LABEL, time } from "#lib/format.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { slides } from "#lib/jikkyo/ranking.js";
   import { JikkyoRanking } from "#lib/jikkyo/ranking.svelte.js";
@@ -84,6 +84,7 @@
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
   import { separateLiveAudio } from "#lib/native-audio-choice.js";
+  import { recordNotice } from "#lib/record-notice.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR, stepSpeed } from "#lib/ts/pacing.js";
   import { GUIDE_TYPES } from "#lib/types.js";
@@ -437,39 +438,6 @@
 
   /** いまの 1 コマを字幕・コメントごと切り抜いてサーバに保存する (3 画面共通。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
-
-  /**
-   * 録画ボタンの結果の文。予約は残っても、競合 (チューナーが足りない) とコピー禁止では録らないので、
-   * 「始めます」とは言わずに理由 (`conflict_reason`) を添える
-   */
-  function recordNotice(
-    name: string,
-    state: string,
-    reason: string | null,
-  ): Notice {
-    const key = `record-${name}-${state}`;
-    if (state === "scheduled")
-      return { key, kind: "info", text: `「${name}」の録画を始めます` };
-    if (state === "recording")
-      return { key, kind: "info", text: `「${name}」は録画中です` };
-    if (state === "conflict")
-      return {
-        key,
-        kind: "warning",
-        text: `「${name}」を予約しましたが、競合のため録画できません${reason === null ? "" : `。${reason}`}`,
-      };
-    if (state === "skipped")
-      return {
-        key,
-        kind: "warning",
-        text: `「${name}」は録画しません${reason === null ? "" : `。${reason}`}`,
-      };
-    return {
-      key,
-      kind: "info",
-      text: `「${name}」の予約は「${stateLabel(state)}」です`,
-    };
-  }
 
   const notices = $derived<Notice[]>([
     ...shooter.notices,
