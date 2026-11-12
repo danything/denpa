@@ -28,8 +28,14 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const { createIdentity } = await import("./agent-identity");
 const { fakeAgentUrl, serveFakeAgent } = await import("./fake-agent");
 const { listAgents } = await import("./agents");
-const { getTuners, openChannel, openWhenFree, TunerBusyError, tunerSnapshot } =
-  await import("./tuner");
+const {
+  getTuners,
+  openChannel,
+  openWhenFree,
+  pinGone,
+  TunerBusyError,
+  tunerSnapshot,
+} = await import("./tuner");
 const { forgetAgentCard } = await import("./agent-cards");
 const { checkContracts, getContractRows, testDecode } =
   await import("./contracts");
@@ -706,6 +712,32 @@ describe("契約を確かめる先", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("空きがありません");
     expect(pools[1]!.holder("live test-decode")).toBeUndefined();
+  });
+});
+
+describe("名指しのチューナーがもう無いか (ライブの名指しを自動に戻すか)", () => {
+  test("名指しのエージェントだけを見る。そのエージェントが落ちていれば無いとはみなさない", async () => {
+    const [a, b] = startAgents(
+      new FakePool([{ name: "gr", types: ["GR"], rank: 0 }]),
+      new FakePool([{ name: "bs", types: ["BS"], rank: 0 }]),
+    );
+    expect(await pinGone(`${a}:gr`)).toBe(false);
+    expect(await pinGone(`${b}:gr`)).toBe(true);
+    pools[0]!.stop();
+    expect(await pinGone(`${a}:gr`)).toBe(false);
+    // もう無いエージェントの名指しは無い
+    expect(await pinGone(`${b! + 100}:gr`)).toBe(true);
+  });
+
+  test("エージェントの ID の無い前の名指しは全部のエージェントで探し、返さないエージェントがあれば無いとはみなさない", async () => {
+    startAgents(
+      new FakePool([{ name: "gr", types: ["GR"], rank: 0 }]),
+      new FakePool([{ name: "bs", types: ["BS"], rank: 0 }]),
+    );
+    expect(await pinGone("bs")).toBe(false);
+    expect(await pinGone("cs")).toBe(true);
+    pools[1]!.stop();
+    expect(await pinGone("cs")).toBe(false);
   });
 });
 

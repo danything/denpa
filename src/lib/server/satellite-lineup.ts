@@ -70,10 +70,16 @@ export function markRemoved(
 ): void {
   const before = removedEntries();
   const after = new Set(before);
+  let all: number[] = [];
+  try {
+    all = listAgents().map((agent) => agent.id);
+  } catch {
+    // TUNER_AGENT_URL が読めない。前のバージョンの項目はそのまま残す
+  }
   for (const type of types) {
     // 前のバージョンの項目 (全部のエージェント) は、エージェントごとの項目に分けてから書き換える
-    if (after.delete(type))
-      for (const agent of listAgents()) after.add(`${agent.id}:${type}`);
+    if (all.length > 0 && after.delete(type))
+      for (const agent of all) after.add(`${agent}:${type}`);
     for (const agent of agentIds) {
       if (removed) after.add(`${agent}:${type}`);
       else after.delete(`${agent}:${type}`);

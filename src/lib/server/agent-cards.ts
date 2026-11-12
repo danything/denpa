@@ -112,6 +112,9 @@ async function routeCards(
   );
 }
 
+/** 復号に使うカードが無いエージェントの順 (`cardRanks` の表の 3)。カードが分からないエージェントもこの順にする (`tuner.route`) */
+export const NO_KEY = 3;
+
 /**
  * **有料の局を、そのエージェントで復号できる見込みの順** (小さいほど先)。振り分けは、いちばん小さいエージェントに絞る (`tuner.route` の手順 1)。
  *
@@ -125,9 +128,6 @@ async function routeCards(
  * どのエージェントも同じカードなら (勧めている組み方。カードは世帯で 1 枚)、カードを使える所はみな同じ順になり、絞っても変わらない。
  * `statusOf` はカードの番号から、その局の契約の状態 (`contract-status.contractStatus`。行が無ければ null)
  */
-/** 復号に使うカードが無いエージェントの順 (上の表の 3)。カードが分からないエージェントもこの順にする (`tuner.route`) */
-export const NO_KEY = 3;
-
 export function cardRanks(
   cards: Iterable<AgentCard>,
   statusOf: (card: string) => ReturnType<typeof contractStatus> | null,
