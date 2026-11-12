@@ -381,8 +381,10 @@ USB の機材はエミュレータに挿せないので、usbfs の fd (許可�
   `DENPA_ANDROID_KEYSTORE_PASSWORD`・`DENPA_ANDROID_KEY_ALIAS`・`DENPA_ANDROID_KEY_PASSWORD` として入れてあります。控えは管理者の手元にあります。
   Gradle には、CI が keystore のパスを `DENPA_ANDROID_KEYSTORE` で、ほかを同じ名前の環境変数で渡します
 - android.yml は、署名した証明書の SHA-256 を、ワークフローに書いた値 (`CERT_SHA256`。install-android.md の「上げる」にも書いてある) と突き合わせます。
-  secrets が無いときと値が違うときは、リリースの APK を出さずに止まります
-- 鍵を渡さないとき (PR の CI・手元) は、release も debug の鍵で署名します。PR の CI は、R8 で縮めた release が組めることもここで確かめます
+  secrets が無いときと値が違うときは、リリースの APK を出さずに止まります。突き合わせは .github/android-apk-cert.sh で、apksigner の出力の形が変わっても読めるように、
+  `certificate SHA-256 digest:` の行を方式 (v2・v3) ごとにすべて比べます
+- 鍵を渡さないとき (PR の CI・手元) は、release も debug の鍵で署名します。PR の CI は、R8 で縮めた release が組めることと、
+  その証明書をランナーの debug の鍵と同じ手順で突き合わせられることもここで確かめます
 - release は R8 で縮めます (`isMinifyEnabled`・`isShrinkResources`)。リフレクションで引くクラスが無く、マニフェストの部品は AGP の規則が残すので、規則は足していません。
   エミュレータで確かめるのは debug の APK だけなので、リフレクションを使うコードを足したら規則も足します
 - エージェントに入っているもののライセンスの文書 (Siano のファームウェアの許諾と OpenSSL の LICENSE) を、APK の `assets/licenses/` に入れます

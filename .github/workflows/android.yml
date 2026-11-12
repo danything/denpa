@@ -382,6 +382,9 @@ jobs:
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -E ' assets/server/'; then exit 1; fi
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -E ' assets/server/app/server\.js$'
           ls -l app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk
+          # 証明書の突き合わせは、リリースと同じ手順 (.github/android-apk-cert.sh) で流す。比べるのは、AGP がこのランナーで作った debug の鍵の証明書
+          debug_cert=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -alias androiddebugkey -storepass android | sha256sum | cut -c1-64)
+          bash ../.github/android-apk-cert.sh app/build/outputs/apk/release/app-release.apk "$debug_cert"
 
       - name: Upload APK
         if: inputs.tag == 'dev'
@@ -432,9 +435,7 @@ jobs:
           grep -E ' assets/licenses/ffmpeg/(SOURCE\.txt|versions\.txt|ffmpeg/COPYING\.GPLv3|x264/COPYING)$' apk.txt | wc -l | grep -qx 4
           # 確かめ用のサーバ (debug にだけ入る) が無いこと。3 段目で denpa 本体が入るまで、リリースの APK は bun を起動しない
           if grep -E ' assets/server/' apk.txt; then exit 1; fi
-          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
-          "$apksigner" verify --print-certs "$apk" | tee certs.txt
-          test "$(sed -nE 's/^Signer #1 certificate SHA-256 digest: //p' certs.txt)" = "$CERT_SHA256"
+          bash ../.github/android-apk-cert.sh "$apk" "$CERT_SHA256"
           mkdir -p ../dist
           asset="denpa-${TAG#v}-android-arm64.apk"
           cp "$apk" "../dist/$asset"
