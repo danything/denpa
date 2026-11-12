@@ -361,7 +361,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
 
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {
-        // 出しっぱなしの読みは待ち続ける (時間切れは Read の待ちで見る)。RAW_IO で WinUSB の詰め直しを省く
+        // 出しっぱなしの転送要求は待ち続ける (時間切れは Read の待ちで見る)。RAW_IO で WinUSB の詰め直しを省く
         Timeout(endpoint, 0);
         byte raw = 1;
         if (WinUsb_SetPipePolicy(Handle, endpoint, RawIo, 1, &raw) == 0) throw Failure("TS の読み出しに RAW_IO を設定できません");
@@ -379,7 +379,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         }
     }
 
-    /// <summary>OVERLAPPED 付きの読みを何本も出しておき、出した順に待つ。OVERLAPPED とバッファはアンマネージドのメモリに置く</summary>
+    /// <summary>OVERLAPPED 付きの転送要求を何本も出しておき、出した順に待つ。OVERLAPPED とバッファはアンマネージドのメモリに置く</summary>
     private sealed class InStream : IUsbInStream
     {
         private readonly WinUsbDevice _owner;
@@ -409,7 +409,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     // 先に入れておく (イベントを作れずに例外になっても、片付けで解放されるように)
                     _overlapped[i] = overlapped;
                     overlapped->EventHandle = CreateEventW(0, 1, 0, null);
-                    if (overlapped->EventHandle == 0) throw owner.Failure("TS の読みの用意ができません");
+                    if (overlapped->EventHandle == 0) throw owner.Failure("TS の転送要求の用意ができません");
                     _buffers[i] = (byte*)NativeMemory.Alloc((nuint)transferSize);
                 }
                 for (var i = 0; i < depth; i++) Submit(i);
@@ -431,7 +431,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
             if (WinUsb_ReadPipe(_owner.Handle, _endpoint, _buffers[i], (uint)_size, null, (nint)overlapped) == 0
                 && Marshal.GetLastPInvokeError() != ErrorIoPending)
             {
-                throw _owner.Failure("TS の読みを出せません");
+                throw _owner.Failure("TS の転送要求を出せません");
             }
             _pending[i] = true;
         }
@@ -452,12 +452,12 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     if (WinUsb_GetOverlappedResult(_owner.Handle, (nint)_overlapped[_head], &done, 0) == 0)
                     {
                         var error = Marshal.GetLastPInvokeError();
-                        // 端点のストールなどは、その読みだけ捨てて出し直す。読みを出したスレッドが終わると Windows が取り消す
+                        // 端点のストールなどは、その転送要求だけ捨てて出し直す。転送要求を出したスレッドが終わると Windows が取り消す
                         // (ERROR_OPERATION_ABORTED) ので、それも同じに扱う。受信を止めるとき、読み出しのスレッドが先に終わり、
                         // 別のスレッドが読み捨てるので、この取り消しは必ず起きる。例外にすると停止の手順が途中で止まり、機材が受信中のまま残って
                         // 次の受信の先頭に古いデータが混じる。出し直しは Read の呼びごとに深さの分までで、そのあとの待ちには時間切れがある
                         // (Dispose のあとは先頭の ThrowIf で抜ける) ので、出し直し続けることはない
-                        if (error is not (ErrorGenFailure or ErrorOperationAborted)) throw Failure(_owner.Name, "TS の読みが失敗しました", error);
+                        if (error is not (ErrorGenFailure or ErrorOperationAborted)) throw Failure(_owner.Name, "TS の読み出しが失敗しました", error);
                         done = 0;
                     }
                     _length = (int)done;
@@ -475,7 +475,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
             return copied;
         }
 
-        /// <summary>先頭の読みが済むのを待って、その転送を 1 つ返す (0 バイトの転送と、捨てた読みは飛ばす)。実機で確かめていない</summary>
+        /// <summary>先頭の転送要求が済むのを待って、その転送を 1 つ返す (0 バイトの転送と、捨てた転送要求は飛ばす)。実機で確かめていない</summary>
         public int ReadTransfer(Span<byte> buffer, int timeoutMs)
         {
             ObjectDisposedException.ThrowIf(_closed, this);
@@ -490,9 +490,9 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     _pending[_head] = false;
                     if (WinUsb_GetOverlappedResult(_owner.Handle, (nint)_overlapped[_head], &done, 0) == 0)
                     {
-                        // Read と同じく、端点のストールと取り消しはその読みだけ捨てて出し直す。出し直しは 1 回の呼び出しで深さの分まで
+                        // Read と同じく、端点のストールと取り消しはその転送要求だけ捨てて出し直す。出し直しは 1 回の呼び出しで深さの分まで
                         var error = Marshal.GetLastPInvokeError();
-                        if (error is not (ErrorGenFailure or ErrorOperationAborted) || round >= _overlapped.Length) throw Failure(_owner.Name, "TS の読みが失敗しました", error);
+                        if (error is not (ErrorGenFailure or ErrorOperationAborted) || round >= _overlapped.Length) throw Failure(_owner.Name, "TS の読み出しが失敗しました", error);
                         done = 0;
                     }
                     _length = (int)done;
@@ -507,7 +507,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
             }
         }
 
-        /// <summary>読みを取り消し (WinUsb_AbortPipe)、全部済むのを待ってから返す</summary>
+        /// <summary>転送要求を取り消し (WinUsb_AbortPipe)、全部済むのを待ってから返す</summary>
         public void Dispose()
         {
             if (_closed) return;
@@ -523,7 +523,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     if (WinUsb_GetOverlappedResult(handle, (nint)_overlapped[i], &done, 1) == 0
                         && Marshal.GetLastPInvokeError() is not (ErrorOperationAborted or ErrorGenFailure or ErrorBadCommand or ErrorDeviceNotConnected))
                     {
-                        // 済んだか分からない読みのバッファは返さない
+                        // 済んだか分からない転送要求のバッファは返さない
                         return;
                     }
                     _pending[i] = false;

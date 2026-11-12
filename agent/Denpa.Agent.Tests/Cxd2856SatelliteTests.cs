@@ -3,7 +3,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 復調器 CXD2856ER とチューナー CXD2858ER の衛星 (ISDB-S) と、地上波との切り替え (Cxd2856.cs・Cxd2858.cs)。
  * 偽のバス (Cxd2856Fakes.cs) の上で、書く順番と値を仕様書 (denpa-spec の cxd2856/spec.md) の表と照らす。添えた番号は仕様書の節。
- * 読んでから書く行 (マスクが FF でない行) は、読み (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0
+ * 読んでから書く行 (マスクが FF でない行) は、読み出し (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0
  */
 public class Cxd2856SatelliteTests
 {

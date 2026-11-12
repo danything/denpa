@@ -37,7 +37,7 @@ public class It930xIsdbcTests
         };
     }
 
-    /// <summary>TSMF の搬送波の TS (相対 TS 番号 2 と 3 が有効で、スロットを交互に使う)。1 回の読みで 4 フレーム</summary>
+    /// <summary>TSMF の搬送波の TS (相対 TS 番号 2 と 3 が有効で、スロットを交互に使う)。1 回の読み出しで 4 フレーム</summary>
     private static Func<byte[]?> TsmfCarrier()
     {
         var slots = TsmfFake.Alternate();
@@ -54,7 +54,7 @@ public class It930xIsdbcTests
         };
     }
 
-    /// <summary>ヘッダーの無い搬送波の TS。1 回の読みで 200 パケット</summary>
+    /// <summary>ヘッダーの無い搬送波の TS。1 回の読み出しで 200 パケット</summary>
     private static Func<byte[]?> PlainCarrier()
     {
         var number = 0;
@@ -257,7 +257,7 @@ public class It930xIsdbcTests
             tuner.Tune(ChannelTable.Parse("QC51")!);
             // 有効な TS は相対 TS 番号 2 と 3 の 2 本 (/denpa/stream の X-Denpa-Tsmf-Streams)
             await Assert.That(tuner.Tsmf!.Streams).IsEqualTo(2);
-            var sink = new Sink("live", 5, _ => { }) { Owner = new Lease(0, ChannelTable.Catv, "QC51") { TsmfStreams = tuner.Tsmf!.Streams } };
+            var sink = new Sink("live", 5, _ => { }) { Owner = new Lease(0, "tuner0", ChannelTable.Catv, "QC51") { TsmfStreams = tuner.Tsmf!.Streams } };
             await Assert.That(sink.TsmfStreams).IsEqualTo(2);
             await Assert.That(Sink.TsmfStreamsHeader).IsEqualTo("X-Denpa-Tsmf-Streams");
 
@@ -267,7 +267,7 @@ public class It930xIsdbcTests
             tuner.Tune(ChannelTable.Parse("QU20")!);
             await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Passthrough);
             await Assert.That(tuner.Tsmf!.Streams).IsNull();
-            var plain = new Sink("live", 5, _ => { }) { Owner = new Lease(0, ChannelTable.Catv, "QU20") { TsmfStreams = tuner.Tsmf!.Streams } };
+            var plain = new Sink("live", 5, _ => { }) { Owner = new Lease(0, "tuner0", ChannelTable.Catv, "QU20") { TsmfStreams = tuner.Tsmf!.Streams } };
             await Assert.That(plain.TsmfStreams).IsNull();
             // プールの外で作った利用者 (選局の無いもの) も null
             await Assert.That(new Sink("live", 5, _ => { }).TsmfStreams).IsNull();

@@ -371,6 +371,7 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
         // (5) 書く値。40 バイトのあと、水晶の分周に合わせて待ち、2F の bit1 を 1 にして書く
         var registers = s[FirstWritable..];
         Set(s, 0x2F, 1, 1, 1);
+        // 種類 0 の bit0 は (4) で 0 にしてあるので、値は変わらない。仕様書 6.5 の (4) の手順 5 と (5) の手順 3 の両方にあるとおりに持つ (2 回書く理由は確かめていない)
         if (kind == 0) Set(s, 0x2F, 0, 0, 0);
         return new R850Plan(registers, s[0x2F], xtal == 24000 ? 10 : xtal == 12000 ? 20 : 40, divider, n, fraction);
     }

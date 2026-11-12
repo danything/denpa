@@ -71,10 +71,10 @@ public sealed class Dt295NativeLink
 
     /// <summary>
     /// 制御転送 1 回ごとと、機材のプログラムへの要求と応答の組 (<see cref="Pump"/>・<see cref="RunI2c"/>・<see cref="CardSend"/>・<see cref="CardReceive"/>) を、1 つのスレッドずつ通す。
-    /// 書き込みのデータも、機材のプログラムの要求と応答も、同じ 64 バイトの場所 (0xC4620。仕様書 3.1) を通るので、要求と応答の読みの間に
-    /// 別のスレッドが書き込むと、応答が壊れる (受信中にカードや信号の読みが入るとき)。
+    /// 書き込みのデータも、機材のプログラムの要求と応答も、同じ 64 バイトの場所 (0xC4620。仕様書 3.1) を通るので、要求と応答の読み出しの間に
+    /// 別のスレッドが書き込むと、応答が壊れる (受信中にカードや信号の読み出しが入るとき)。
     /// <see cref="Pump"/> は、要求したパケットを送り終える (またはリングが空のまま待つ回数の限度に達する) まで、このロックを持つ。
-    /// 30 Mbps では 512 パケットで約 70 ms で、低いビットレートでは待つ回数の限度で先に戻る。その間、カードや C/N の読みは待たされる
+    /// 30 Mbps では 512 パケットで約 70 ms で、低いビットレートでは待つ回数の限度で先に戻る。その間、カードや C/N の読み出しは待たされる
     /// </summary>
     private readonly Lock _gate = new();
 
@@ -380,7 +380,7 @@ public sealed class Dt295NativeLink
         var code = BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(4));
         var index = BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(8));
         var count = (int)BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(12));
-        if (count < 0 || count > Math.Max(readBytes, 0)) throw new Dt295NativeException($"I2C の順次実行が返した読みの数 {count} が想定 ({readBytes}) を超えています");
+        if (count < 0 || count > Math.Max(readBytes, 0)) throw new Dt295NativeException($"I2C の順次実行が返した読み出しの数 {count} が想定 ({readBytes}) を超えています");
         byte[] read = [];
         if (count > 0)
         {

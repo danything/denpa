@@ -17,7 +17,7 @@ namespace Denpa.Agent;
 /// <param name="LockMs">選局の応答が届いてから、ロックを待つ期限</param>
 /// <param name="StatsEveryMs">ロックを待つ間に統計の要求を送る間隔 (これより詰めない)</param>
 /// <param name="StatsResponseMs">受信中に統計の応答を待つ上限</param>
-/// <param name="ReadMs">IN の読みを 1 回待つ時間 (読みは出したままで、止める合図を確かめる間隔)</param>
+/// <param name="ReadMs">IN の転送要求を 1 回待つ時間 (転送要求は出したままで、止める合図を確かめる間隔)</param>
 internal sealed record SianoTimings(
     int SendMs = 1_000, int ResponseMs = 10_000, int RunSettleMs = 400, int LockMs = 10_000,
     int StatsEveryMs = 100, int StatsResponseMs = 2_000, int ReadMs = 200);
@@ -30,7 +30,7 @@ internal sealed class SianoSilentException(string message) : IOException(message
 /// TS を受ける (仕様書 6)・統計を読む (仕様書 7)・閉じる (仕様書 8)。
 ///
 /// <para>
-/// 制御の応答・通知・TS は同じ IN の端点に届く (仕様書 2.3)。読みを出したままにして専用のスレッドで受け、番号で振り分ける (仕様書 3.2)。
+/// 制御の応答・通知・TS は同じ IN の端点に届く (仕様書 2.3)。転送要求を出したままにして専用のスレッドで受け、番号で振り分ける (仕様書 3.2)。
 /// このスレッドは下流の詰まりで止めない (仕様書 6.3)。TS は <see cref="Attach"/> で渡された先へすぐ渡すだけで、渡す先が無い間は捨てる。
 /// 要求は 1 つずつ送り、応答は番号だけで対応を取る (仕様書 2.4・3.4)。送る直前にその番号を受けた数を 0 に戻してから待つ
 /// </para>
@@ -44,7 +44,7 @@ internal sealed class SianoDevice : IDisposable
     public const int TransferSize = 16_384;
 
     /// <summary>
-    /// 出したままにする読みの数 (仕様書 2.3 の「32 個以上」)。macOS は、32 個で TS の連続性の欠けが出て 128 個で出なくなったという記録に合わせる
+    /// 出したままにする転送要求の数 (仕様書 2.3 の「32 個以上」)。macOS は、32 個で TS の連続性の欠けが出て 128 個で出なくなったという記録に合わせる
     /// </summary>
     public static int Depth => OperatingSystem.IsMacOS() ? 128 : 32;
 
@@ -70,7 +70,7 @@ internal sealed class SianoDevice : IDisposable
     /// <summary>要求を 1 つずつにする (選局・統計の読み取り・閉じる)</summary>
     private readonly Lock _gate = new();
 
-    /// <summary>読みのスレッドと要求を出す側で分け合う状態。Monitor.Wait で待つので object</summary>
+    /// <summary>読み出しのスレッドと要求を出す側で分け合う状態。Monitor.Wait で待つので object</summary>
     private readonly object _sync = new();
     private readonly Dictionary<ushort, int> _received = [];
     private readonly HashSet<ushort> _unknown = [];
@@ -97,7 +97,7 @@ internal sealed class SianoDevice : IDisposable
 
     private long _droppedTs;
 
-    /// <summary>読みが失敗した (機材が抜かれたなど)。閉じて開き直すまで使えない</summary>
+    /// <summary>読み出しが失敗した (機材が抜かれたなど)。閉じて開き直すまで使えない</summary>
     public bool Faulted
     {
         get
@@ -126,7 +126,7 @@ internal sealed class SianoDevice : IDisposable
     private void Note(string message) => _log($"[{_name}] {message}");
 
     /// <summary>
-    /// 開いたあとの手順 (仕様書 2.2 の 2〜6): 端点を見つけ、ストールをクリアし、読みを出してから、起動する。
+    /// 開いたあとの手順 (仕様書 2.2 の 2〜6): 端点を見つけ、ストールをクリアし、転送要求を出してから、起動する。
     /// 失敗したら例外を送出する (呼ぶ側が <see cref="Dispose"/> する)
     /// </summary>
     public void Start()
@@ -157,14 +157,14 @@ internal sealed class SianoDevice : IDisposable
             }
         }
 
-        // 応答は IN に届くので、最初の要求を送る前に読みを出しておく (仕様書 2.2 の 5)
+        // 応答は IN に届くので、最初の要求を送る前に転送要求を出しておく (仕様書 2.2 の 5)
         _in = _usb.OpenInStream(input.Endpoint, TransferSize, Depth);
         _reader = new Thread(Read) { IsBackground = true, Name = $"{_name} IN" };
         _reader.Start();
         lock (_gate) Boot();
     }
 
-    // ---- 読み (仕様書 2.3・3) ----
+    // ---- 読み出し (仕様書 2.3・3) ----
 
     private void Read()
     {
@@ -263,7 +263,7 @@ internal sealed class SianoDevice : IDisposable
 
     /// <summary>
     /// <paramref name="done"/> が true を返すまで、長くても <paramref name="timeoutMs"/> 待つ (<see cref="_sync"/> を取った中で呼ばれる)。
-    /// 読みが失敗していれば <see cref="IOException"/>、閉じていれば <see cref="ObjectDisposedException"/> を送出する
+    /// 読み出しが失敗していれば <see cref="IOException"/>、閉じていれば <see cref="ObjectDisposedException"/> を送出する
     /// </summary>
     private bool Wait(Func<bool> done, int timeoutMs)
     {
@@ -395,7 +395,7 @@ internal sealed class SianoDevice : IDisposable
                     Note($"{frequencyHz} Hz でロックしませんでした (統計の要求 {requests} 回、応答 {answered} 回)");
                     return false;
                 }
-                // 統計の応答は待たない。読みのスレッドが受けて印を立てる
+                // 統計の応答は待たない。読み出しのスレッドが受けて印を立てる
                 Send(StatsRequest());
                 requests++;
                 // 間隔は詰めない。印が立ったら待ちを切り上げる
@@ -441,8 +441,8 @@ internal sealed class SianoDevice : IDisposable
 
     // ---- TS (仕様書 6) ----
 
-    /// <summary>TS のメッセージの中身を渡す先を決める。<paramref name="sink"/> は読みのスレッドから呼ばれるので、待たずに戻ること</summary>
-    /// <param name="failed">読みが失敗したとき (機材が抜かれたなど) に理由を渡す先</param>
+    /// <summary>TS のメッセージの中身を渡す先を決める。<paramref name="sink"/> は読み出しのスレッドから呼ばれるので、待たずに戻ること</summary>
+    /// <param name="failed">読み出しが失敗したとき (機材が抜かれたなど) に理由を渡す先</param>
     public void Attach(Action<ReadOnlySpan<byte>> sink, Action<string> failed)
     {
         _failed = failed;
@@ -457,7 +457,7 @@ internal sealed class SianoDevice : IDisposable
     }
 
     /// <summary>
-    /// 閉じる (仕様書 8): 出してある読みを取り消して済むのを待ち、インターフェースを手放して、機材を閉じる。
+    /// 閉じる (仕様書 8): 出してある転送要求を取り消して済むのを待ち、インターフェースを手放して、機材を閉じる。
     /// 機材に止めるメッセージは送らない。USB の電源が入っている間はファームウェアが残り、次に開いたときは送り直さない
     /// </summary>
     public void Dispose()

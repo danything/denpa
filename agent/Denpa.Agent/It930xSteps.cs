@@ -3,7 +3,7 @@ namespace Denpa.Agent;
 /*
  * --tune <受信機+受信機+…> <チャンネル> --steps 2,3,5: IT930x の機材 1 台で、TS を流す受信機を段階を追って増やす。
  * 5 つを同時に流したあとブリッジから TS が届かなくなり、電源を抜くまで戻らなかった記録 (PX-MLT5PE) を、1 回の電源の入れ直しの中で少しずつ確かめるためのもの。
- * 段階ごとと受信機を 1 つ足すごとに、ブリッジの TS の経路の状態 (It930xBridge.ReadTsStatus) と EP 0x84 の読みの数えを出し、
+ * 段階ごとと受信機を 1 つ足すごとに、ブリッジの TS の経路の状態 (It930xBridge.ReadTsStatus) と EP 0x84 の読み出しの数えを出し、
  * TS が届かない受信機が出たら、その先の受信機は足さずに止める。
  */
 
@@ -42,7 +42,7 @@ internal static class It930xSteps
 
         private volatile string? _ended;
 
-        /// <summary>出口が尽きるか読めなくなった理由 (流れている間は null。読みのスレッドが書き、ほかのスレッドが読む)</summary>
+        /// <summary>出口が尽きるか読めなくなった理由 (流れている間は null。読み出しのスレッドが書き、ほかのスレッドが読む)</summary>
         public string? Ended => _ended;
 
         public void Start()

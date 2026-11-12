@@ -71,7 +71,7 @@ internal sealed class NativeTsFramer
 }
 
 /// <summary>
-/// TS を 1 回流すぶん。取り込みを設定して始め (<see cref="Dt295NativeBoard"/>)、EP 0x81 の読みを出しっぱなしにして 188 バイトのパケットを取り出し、
+/// TS を 1 回流すぶん。取り込みを設定して始め (<see cref="Dt295NativeBoard"/>)、EP 0x81 の転送要求を出しっぱなしにして 188 バイトのパケットを取り出し、
 /// <see cref="Pipe"/> に詰める。流している間は、別のスレッドで機材のプログラムに要求を送り続ける (1 回の要求で <see cref="KickPackets"/> 個のパケットを bulk IN へ送らせる)。
 /// 要求を送っている間は制御転送が機材の中の処理の終わりまで返らない。通常の要求は <see cref="KickPackets"/> 個 (256 KiB。30 Mbps で約 70 ms) で、
 /// 実機の試験では 30 Mbps を欠けなく送れ、ホストの CPU 時間も少なかった (32 個にすると CS22 の 6 秒で 313 ms から 797 ms に増えた)。
@@ -81,7 +81,7 @@ internal sealed class Dt295NativeStream
 {
     private const byte Endpoint = 0x81;
 
-    /// <summary>1 本の読みの大きさと数 (8 KiB を 64 本)。以前の方式 (mAgicVISION のファームウェアを入れる方式) のときに実機で測って決めた値</summary>
+    /// <summary>1 本の転送要求の大きさと数 (8 KiB を 64 本)。以前の方式 (mAgicVISION のファームウェアを入れる方式) のときに実機で測って決めた値</summary>
     private const int TransferSize = 8192;
 
     private const int Depth = 64;
@@ -164,7 +164,7 @@ internal sealed class Dt295NativeStream
         return stream;
     }
 
-    /// <summary>機材のプログラムの状態を戻し、取り込みを始めて、読みと要求を動かす。TS はここから出る (<see cref="Prepare"/> のあと、受信を確認してから)</summary>
+    /// <summary>機材のプログラムの状態を戻し、取り込みを始めて、読み出しと要求を動かす。TS はここから出る (<see cref="Prepare"/> のあと、受信を確認してから)</summary>
     public void Begin()
     {
         try
@@ -301,7 +301,7 @@ internal sealed class Dt295NativeStream
         Log.Write($"[{_name}] {reason}");
     }
 
-    /// <summary>止める。要求と読みを止め、取り込みを止めて設定を戻し、読んでいる途中の呼び出しが戻ってからバッファを閉じる</summary>
+    /// <summary>止める。要求と読み出しを止め、取り込みを止めて設定を戻し、読んでいる途中の呼び出しが戻ってからバッファを閉じる</summary>
     public void Stop()
     {
         _stopped = true;
@@ -346,8 +346,8 @@ public sealed class Dt295NativeTuner : ITuneDevice
     /// <summary>設定の device (画面に出す理由の持ち主のキー)</summary>
     private readonly string _key;
 
-    public Dt295NativeTuner(string port)
-        : this($"{Dt295.Model} {port}", () => Dt295NativeDevice.Acquire(port), () => Dt295NativeDevice.CloseIfIdle(port), Dt295.Device(port))
+    public Dt295NativeTuner(string port, string? name = null)
+        : this(name ?? $"{Dt295.Model} {port}", () => Dt295NativeDevice.Acquire(port), () => Dt295NativeDevice.CloseIfIdle(port), Dt295.Device(port))
     {
     }
 

@@ -3,7 +3,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 復調器 CXD2856ER とチューナー CXD2858ER (Cxd2856.cs・Cxd2858.cs)。偽のバス (Cxd2856Fakes.cs) の上で、書く順番と値を仕様書の表と照らす。
  * 期待値は仕様書 (denpa-spec の cxd2856/spec.md) の表を 1 行ずつ写したもので、添えた番号は仕様書の節。
- * 読んでから書く行 (マスクが FF でない行) は、読み (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0
+ * 読んでから書く行 (マスクが FF でない行) は、読み出し (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0
  */
 public class Cxd2856Tests
 {
@@ -145,7 +145,7 @@ public class Cxd2856Tests
         frontend.Init();
         clock.Sleeps.Clear();
         await Assert.That(frontend.TuneIsdbt(557143)).IsFalse();
-        // 10 ms ごとに 1.5 秒まで (手順 9〜10 は読みの間に書く)
+        // 10 ms ごとに 1.5 秒まで (手順 9〜10 は読み出しの間に書く)
         await Assert.That(clock.Sleeps.All(ms => ms == Cxd2856Frontend.LockPollMs)).IsTrue();
         await Assert.That(clock.Sleeps.Sum()).IsEqualTo(Cxd2856Frontend.IsdbtLockTimeoutMs);
         await Assert.That(frontend.LockMs).IsEqualTo(-1);

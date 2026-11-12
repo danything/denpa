@@ -125,7 +125,7 @@ public class R850Tests
             "10 R850 ?1", "10 R850 ?1", "10 R850 ?1", "10 R850 ?1",
             // 08〜2F を読んで取っておく (00 から 48 バイト)
             "10 R850 ?48",
-            // 水晶の駆動の強さ: 付録 A.1 の初期値の 7 つを書き換えた 40 バイト、22 ← 84・94・A4・B4 と 02 の読み
+            // 水晶の駆動の強さ: 付録 A.1 の初期値の 7 つを書き換えた 40 バイト、22 ← 84・94・A4・B4 と 02 の読み出し
             $"10 R850 08={trial}",
             "10 R850 22=84", "10 R850 ?3", "10 R850 22=94", "10 R850 ?3", "10 R850 22=A4", "10 R850 ?3", "10 R850 22=B4", "10 R850 ?3",
             // 取っておいた 40 バイトを書き戻す
@@ -146,7 +146,7 @@ public class R850Tests
         chip.Status[0x00] = (byte)id;
         tuner.Init();
         await Assert.That((tuner.Kind, tuner.Id)).IsEqualTo((kind, (byte)id));
-        // 種類 1 は最初の読みで決まる。種類 1 のときの試しの 2F は 41 (種類 0 は 40)
+        // 種類 1 は最初の読み出しで決まる。種類 1 のときの試しの 2F は 41 (種類 0 は 40)
         await Assert.That(bus.Log.TakeWhile(line => line == "10 R850 ?1").Count()).IsEqualTo(kind == 1 ? 1 : 4);
         await Assert.That(bus.Log.First(line => line.StartsWith("10 R850 08=", StringComparison.Ordinal))).EndsWith(kind == 1 ? "41" : "40");
     }
@@ -171,7 +171,7 @@ public class R850Tests
     public async Task 水晶の駆動の強さは_PLL_がロックして下位_6_ビットが_61_以下になった回に_1_を足す(int passes, int expected)
     {
         var (tuner, _, chip, _) = Fake();
-        // 02 を読むのは、種類の 4 回と 48 バイトの 1 回のあと (6 回目から)。passes 回目 (0 から) の読みだけ、ロックして下位 6 ビットが 61
+        // 02 を読むのは、種類の 4 回と 48 バイトの 1 回のあと (6 回目から)。passes 回目 (0 から) の読み出しだけ、ロックして下位 6 ビットが 61
         chip.OnRead = count => chip.Status[0x02] = (byte)(count - 6 == passes ? 0x40 | 61 : 0x40 | 62);
         tuner.Init();
         await Assert.That(tuner.XtalDrive).IsEqualTo(expected);

@@ -5,7 +5,7 @@ namespace Denpa.Agent;
 
 /*
  * 挿さっている USB の機材を並べる・開く・抜き差しを受け取る、OS との境目 (IUsbHost)。機材ごとのコード (Zd1j・Dt295・Siano・It930x・
- * Ccid・AsicenUserland) と DeviceWatch は、ここだけを通して USB の機材を探し、開く。OS を見分けるのは UsbHost.Current の 1 か所だけ (例外は SianoDevice.Depth の、macOS で読みの数を増やすところ)。
+ * Ccid・AsicenUserland) と DeviceWatch は、ここだけを通して USB の機材を探し、開く。OS を見分けるのは UsbHost.Current の 1 か所だけ (例外は SianoDevice.Depth の、macOS で転送要求の数を増やすところ)。
  * 実装は SysfsUsbHost (Linux の sysfs と usbfs)・WinUsbHost (Windows の WinUSB)・IoKitUsbHost (macOS の IOKit)・
  * BrokerUsbHost (Android のアプリから受け取る。UsbBroker.cs)。
  */

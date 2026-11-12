@@ -250,9 +250,9 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// **<see cref="PipeReader"/> から読む。待つのは 200ms ずつ** (fd の poll と同じく、時々印を確かめる)。
     ///
     /// <para>
-    /// 読みかけの間に読む側が抜けても、待っている読み (<c>ReadAsync</c>) は捨てずに次の読む側が引き継ぐ。
+    /// 読みかけの間に読む側が抜けても、待っている読み出し (<c>ReadAsync</c>) は捨てずに次の読む側が引き継ぐ。
     /// PipeReader は同時に 1 つしか読めないので、読む側はロックで 1 つずつ通す。
-    /// バッファにあるぶんは <c>TryRead</c> で待たずに取り、無いときだけ待つ (待たない読みは確保をしない)
+    /// バッファにあるぶんは <c>TryRead</c> で待たずに取り、無いときだけ待つ (待たない読み出しは確保をしない)
     /// </para>
     /// </summary>
     private sealed class Piped
@@ -262,7 +262,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
         /// <summary>
         /// 待っている読み。**Task にしない。** 待つたびに Task と待ち合わせの入れ物を作ると、
-        /// 8 本ぶん流したときに秒あたり数千回の確保になる。読みが済むと PipeReader が <see cref="_ready"/> を立てるので、
+        /// 8 本ぶん流したときに秒あたり数千回の確保になる。読み出しが済むと PipeReader が <see cref="_ready"/> を立てるので、
         /// それを 200ms ずつ待つ (どちらも使い回す)
         /// </summary>
         private ValueTask<ReadResult> _pending;
@@ -277,13 +277,13 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         }
 
         /// <summary>
-        /// 待っている読みが済むのを、長くても <see cref="WakeMs"/> 待つ。
+        /// 待っている読み出しが済むのを、長くても <see cref="WakeMs"/> 待つ。
         ///
         /// <para>
         /// **済んだかは <see cref="_pending"/> で見る。<see cref="_ready"/> だけで決めない。**
         /// PipeReader は済んだ印を立ててから、ロックの外で合図を呼ぶ。読む側はその間に印を見て先に読み進め、
-        /// 次の読みを待ちはじめることがあるので、**前の読みの合図が遅れて届く**。それを次の読みが済んだと
-        /// 取ると、まだ済んでいない読みの結果を取得しようとして例外になる (CI でときどき落ちていた)
+        /// 次の読み出しを待ちはじめることがあるので、**前の読み出しの合図が遅れて届く**。それを次の読み出しが済んだと
+        /// 取ると、まだ済んでいない読み出しの結果を取得しようとして例外になる (CI でときどき落ちていた)
         /// </para>
         /// <para>
         /// <see cref="Wake"/> で待ちが終わったときは <paramref name="giveUp"/> を確かめ、抜けるならすぐ戻る
@@ -297,7 +297,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 var left = WakeMs - (int)(Environment.TickCount64 - since);
                 if (left <= 0 || !_ready.Wait(left)) return _pending.IsCompleted;
                 if (_pending.IsCompleted) break;
-                // 前の読みの合図か、Wake で待ちが終わっただけ。下ろして待ち直す (下ろす前にこの読みが済んでいても、上の印で分かる)
+                // 前の読み出しの合図か、Wake で待ちが終わっただけ。下ろして待ち直す (下ろす前にこの読み出しが済んでいても、上の印で分かる)
                 _ready.Reset();
                 if (giveUp?.Invoke() == true) return false;
             }
@@ -363,7 +363,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         }
 
         /// <summary>
-        /// 読むのをやめる。書く側はもう終わっている (AsicenStream などが先に閉じる) ので、待っている読みも戻っている。
+        /// 読むのをやめる。書く側はもう終わっている (AsicenStream などが先に閉じる) ので、待っている読み出しも戻っている。
         /// **読む側がまだ中にいれば触らない** (同時に触ると PipeReader が例外を送出する。バッファは GC が回収する)
         /// </summary>
         public void Complete()
@@ -374,7 +374,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 _reader.CancelPendingRead();
                 if (_waiting && WaitPending())
                 {
-                    // 受けた読みは返してから閉じる (返さないまま閉じると、読んでいる最中として例外になる)
+                    // 受けた読み出しは返してから閉じる (返さないまま閉じると、読んでいる最中として例外になる)
                     _reader.AdvanceTo(_pending.GetAwaiter().GetResult().Buffer.End);
                 }
                 _waiting = false;
@@ -702,8 +702,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private readonly SafeFileHandle _frontend;
     private readonly SafeFileHandle _demux;
     private readonly DeviceStream _dvr;
-    /// <summary>どのアダプタか。記録に添えるためだけに持つ</summary>
-    private readonly string _adapter;
+    /// <summary>設定のチューナーの名前。記録の先頭に付けるためだけに持つ</summary>
+    private readonly string _name;
     private readonly int? _voltage;
     /// <summary>電圧を断られた。以後は送らない (記録も 1 回だけ)</summary>
     private bool _noVoltage;
@@ -711,10 +711,11 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     /// <param name="frontend">`/dev/dvb/adapter0/frontend0`。demux と dvr は同じ番号から組み立てる</param>
     /// <param name="lnb">衛星の給電 (`15v` / `11v`)。要らない構成では null</param>
-    public DvbTuner(string frontend, string? lnb)
+    /// <param name="name">設定のチューナーの名前。無ければアダプタの名前 (`adapter0`。検出したときの名前と同じ)</param>
+    public DvbTuner(string frontend, string? lnb, string? name = null)
     {
         var (adapter, number) = Split(frontend);
-        _adapter = $"{adapter}/{number}";
+        _name = name ?? Path.GetFileName(adapter);
         _frontend = Sys.Must(frontend, Sys.ReadWrite | Sys.CloseOnExec);
         try
         {
@@ -764,7 +765,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         if (tuning.Satellite)
         {
             properties.Add((DtvStreamId, streamId));
-            if (_voltage is { } voltage && !_noVoltage) _noVoltage = !PowerLnb(_adapter, voltage, SetVoltage);
+            if (_voltage is { } voltage && !_noVoltage) _noVoltage = !PowerLnb(_name, voltage, SetVoltage);
         }
         else
         {
@@ -803,7 +804,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// </para>
     /// </summary>
     /// <param name="setVoltage"><c>FE_SET_VOLTAGE</c> を呼び、成功なら 0、失敗なら errno を返す</param>
-    internal static bool PowerLnb(string adapter, int voltage, Func<int, int> setVoltage)
+    internal static bool PowerLnb(string name, int voltage, Func<int, int> setVoltage)
     {
         var errno = setVoltage(voltage);
         if (errno == 0) return true;
@@ -811,7 +812,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         {
             throw new IOException($"LNB の電源の切り替えに失敗しました ({Marshal.GetPInvokeErrorMessage(errno)})");
         }
-        Log.Write($"[{adapter}] この機材は LNB の電源を出せません。電源を出さずに選局します");
+        Log.Write($"[{name}] この機材は LNB の電源を出せません。電源を出さずに選局します");
         return false;
     }
 
@@ -945,7 +946,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
          */
         if (Sys.Ioctl((int)_dvr.Handle.DangerousGetHandle(), DmxSetBufferSize, DvrBuffer) < 0)
         {
-            Log.Write($"[{_adapter}] dvr のバッファを広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
+            Log.Write($"[{_name}] dvr のバッファを広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
         }
 
         // struct dmx_pes_filter_params { __u16 pid; enum input; enum output; enum pes_type; __u32 flags; }

@@ -135,7 +135,7 @@ public class It930xTsTests
     }
 
     [Test]
-    public async Task EP_0x84_の読みは_SDK_と同じ大きさで_SDK_より多く出す()
+    public async Task EP_0x84_の読み出しは_SDK_と同じ大きさで_SDK_より多く出す()
     {
         // URB_BUFSIZE (188 × 348) は 188 バイトのパケットの区切りで、EP 0x84 の転送の大きさ (0xDD88) は 4 バイト単位
         await Assert.That(It930xBridge.TsTransferSize).IsEqualTo(188 * 348);
@@ -443,7 +443,7 @@ public class It930xTsTests
         await Assert.That(text).Contains("2 回で 1128 バイト");
         await Assert.That(text).Contains("入力ごとのパケット: 0 (0x17) 3、1 (0x27) 0、2 (0x37) 0、3 (0x57) 0、4 (0x67) 2");
         await Assert.That(text).Contains("飛ばした 0 バイト、知らない同期バイトのパケット 1 個、揃いが外れた 0 回");
-        // 読みを出してから入力を開け、終わったら入力を閉じて EP 0x84 をリセットしてから読みを閉じる。そのあと REBOOT する
+        // 転送要求を出してから入力を開け、終わったら入力を閉じて EP 0x84 をリセットしてから読み出しを閉じる。そのあと REBOOT する
         var log = usb.Log;
         var opened = log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}");
         await Assert.That(opened).IsGreaterThan(log.IndexOf("W DA7C=67"));

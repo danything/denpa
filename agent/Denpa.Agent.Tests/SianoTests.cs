@@ -290,7 +290,7 @@ public class SianoTests
     // ---- 開く (仕様書 2.2) ----
 
     [Test]
-    public async Task 開くときは_ストールをクリアして_読みを出してから_最初の要求を送る()
+    public async Task 開くときは_ストールをクリアして_転送要求を出してから_最初の要求を送る()
     {
         var usb = new FakeSianoUsb { Mode = 6 };
         using var device = SianoFake.Started(usb);
@@ -747,7 +747,7 @@ public class SianoTests
     // ---- 抜かれた・閉じる (仕様書 8・10) ----
 
     [Test]
-    public async Task 読みが失敗したら_使えなくなったものとして扱い_待っている要求も終える()
+    public async Task 読み出しが失敗したら_使えなくなったものとして扱い_待っている要求も終える()
     {
         var usb = new FakeSianoUsb { Mode = 6, Signal = false };
         using var device = SianoFake.Started(usb, timings: SianoFake.Fast with { LockMs = 5_000 });
@@ -763,7 +763,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task 閉じるときは機材に何も送らず_読みを止めてから機材を閉じる()
+    public async Task 閉じるときは機材に何も送らず_読み出しを止めてから機材を閉じる()
     {
         var usb = new FakeSianoUsb { Mode = 6 };
         var device = SianoFake.Started(usb);
@@ -800,7 +800,7 @@ public class SianoTests
     {
         var usb = new FakeSianoUsb { Mode = 6 };
         var opened = 0;
-        using var tuner = new SianoTuner("siano 1-2", () =>
+        using var tuner = new SianoTuner("PLEX PX-S1UD 1-2", () =>
         {
             opened++;
             return SianoFake.Started(usb, timings: SianoFake.Fast with { LockMs = 3_000 });
@@ -834,7 +834,7 @@ public class SianoTests
     public async Task チューナーの信号の状態は_統計の_SNR_と受信電力から()
     {
         var usb = new FakeSianoUsb { Mode = 6, Level = (22, -57) };
-        using var tuner = new SianoTuner("siano 1-2", () => SianoFake.Started(usb));
+        using var tuner = new SianoTuner("PLEX PX-S1UD 1-2", () => SianoFake.Started(usb));
         await Assert.That(((ITuneDevice)tuner).Signal()).IsNull();
         tuner.Tune(T27);
         await Assert.That(((ITuneDevice)tuner).Signal()).IsEqualTo(new TunerSignal(true, 22, TunerSignal.Db, StrengthDbm: -57));
@@ -847,7 +847,7 @@ public class SianoTests
     {
         var usb = new FakeSianoUsb { Mode = 6, Signal = false };
         var opened = 0;
-        using var tuner = new SianoTuner("siano 1-2", () =>
+        using var tuner = new SianoTuner("PLEX PX-S1UD 1-2", () =>
         {
             opened++;
             return SianoFake.Started(usb);
@@ -879,7 +879,7 @@ public class SianoTests
     {
         var usb = new FakeSianoUsb { Mode = 6 };
         var opened = 0;
-        using var tuner = new SianoTuner("siano 1-2", () =>
+        using var tuner = new SianoTuner("PLEX PX-S1UD 1-2", () =>
         {
             opened++;
             return SianoFake.Started(usb);
@@ -904,7 +904,7 @@ public class SianoTests
     public async Task チューナーは衛星を機材を開く前に断る()
     {
         var opened = 0;
-        using var tuner = new SianoTuner("siano 1-2", () =>
+        using var tuner = new SianoTuner("PLEX PX-S1UD 1-2", () =>
         {
             opened++;
             throw new IOException("開かないはず");
@@ -917,7 +917,7 @@ public class SianoTests
     [Test]
     public async Task 読む側が詰まっても_TS_を受ける側は待たずに_入りきらないぶんを捨てて数える()
     {
-        var stream = new SianoStream("siano 1-2", () => { });
+        var stream = new SianoStream("PLEX PX-S1UD 1-2", () => { });
         try
         {
             // 誰も読まないまま 16,384 バイト弱のメッセージを 1,200 個 (約 19 MB)。バッファ 8 MB とキュー 256 個に入りきらない

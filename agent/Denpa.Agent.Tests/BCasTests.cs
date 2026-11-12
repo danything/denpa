@@ -477,6 +477,31 @@ public class BCasTests
         await Assert.That(opened).IsEqualTo(2);
     }
 
+    /// <summary>開けなかったあとは <see cref="BCas.RetryAfter"/> のあいだ探さずに同じ理由で断り、過ぎたら探し直す (時計は差し替えられる)</summary>
+    [Test]
+    public async Task 開けなかったあとは間を置いてから探し直す()
+    {
+        var clock = new FakeClock();
+        var link = new FakeLink("reader");
+        var ready = false;
+        var opened = 0;
+        var local = new LocalCard(open: () =>
+        {
+            opened++;
+            return ready ? BCas.Open(() => [Candidate(link)]) : throw new IOException("カードリーダーが見つかりません");
+        }, clock: clock);
+
+        Assert.Throws<IOException>(() => local.Init());
+        ready = true;
+        clock.Now += BCas.RetryAfter - TimeSpan.FromSeconds(1);
+        Assert.Throws<IOException>(() => local.Init());
+        await Assert.That(opened).IsEqualTo(1);
+
+        clock.Now += TimeSpan.FromSeconds(1);
+        await Assert.That(local.Init().CaSystemId).IsEqualTo(5);
+        await Assert.That(opened).IsEqualTo(2);
+    }
+
     /*
      * EMM 受信 (90 36)。契約の更新を渡す
      */

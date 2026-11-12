@@ -78,7 +78,7 @@ public partial class It930xConcurrencyTests
     /// 偽のブリッジが受けた I2C を、バスごとの順で確かめる。見つけた食い違いを返す (無ければ空)。
     /// <list type="bullet">
     /// <item>中継を開けてから (X <c>08</c> ← <c>01</c>) 閉じるまで、同じバスのほかの復調器 (T・X) に届いていない (チューナーは同じアドレス 0x60 なので、中継の区切りは交えない。CXD2856 の仕様書 1.4)</item>
-    /// <item>読む番地を書いた (1 バイトの書き込み) 次の同じバスの I2C は、同じ相手からの読み (IT930x の仕様書 4.1)</item>
+    /// <item>読む番地を書いた (1 バイトの書き込み) 次の同じバスの I2C は、同じ相手からの読み出し (IT930x の仕様書 4.1)</item>
     /// </list>
     /// </summary>
     private static List<string> Interleaving(FakeIt930x usb, It930xModel model)
@@ -133,7 +133,7 @@ public partial class It930xConcurrencyTests
         {
             // バス 1 の受信機 1 (0x6C) が中継を開けている間に、受信機 2 (0x64) の T に届いた
             usb.Log.AddRange(["I2C W 1 6E 0801", "I2C W 1 60 0100", "I2C W 1 64 0000", "I2C W 1 6E 0800"]);
-            // 読む番地を書いたあと、別の受信機の読みが入った
+            // 読む番地を書いたあと、別の受信機の読み出しが入った
             usb.Log.AddRange(["I2C W 1 6C FD", "I2C R 1 64 1"]);
         }
         var problems = Interleaving(usb, Pe);
@@ -335,18 +335,18 @@ public partial class It930xConcurrencyTests
         {
             foreach (var tuner in tuners) tuner.Dispose();
         }
-        // 最後の受信機を捨てて閉じるときに、入力を全部閉じて EP 0x84 をリセットする (DRV_ResetRxPort)。そのあと読みを止める
+        // 最後の受信機を捨てて閉じるときに、入力を全部閉じて EP 0x84 をリセットする (DRV_ResetRxPort)。そのあと読み出しを止める
         var after = RouteWrites(usb, 0).SkipWhile(line => line != "W DA5A=1F").Skip(1).ToList();
         await Assert.That(after).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
         await Assert.That(usb.Log.IndexOf("TS 閉じる")).IsGreaterThan(usb.Log.LastIndexOf("W DA1D=00"));
     }
 
     [Test]
-    public async Task 受信機の_TS_を読む側が止まっても_EP_0x84_の読みは止まらずその受信機のパケットだけを捨てる()
+    public async Task 受信機の_TS_を読む側が止まっても_EP_0x84_の読み出しは止まらずその受信機のパケットだけを捨てる()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
-        // 受信機 1 (PX-MLT5PE の入力 1) のパケットを、1 回の読みで 348 個 (65,424 バイト) ずつ流し続ける
+        // 受信機 1 (PX-MLT5PE の入力 1) のパケットを、1 回の読み出しで 348 個 (65,424 バイト) ずつ流し続ける
         var packet = new byte[188];
         packet[0] = It930xBridge.SyncBytes[1];
         var chunk = Enumerable.Repeat(packet, 348).SelectMany(bytes => bytes).ToArray();
@@ -360,7 +360,7 @@ public partial class It930xConcurrencyTests
             var deadline = DateTime.UtcNow + Stuck;
             while (tuner.Dropped == 0 && DateTime.UtcNow < deadline) Thread.Sleep(10);
             await Assert.That(tuner.Dropped).IsGreaterThan(0L);
-            // 溢れたあとも EP 0x84 の読みは進み、捨てた数が増え続ける
+            // 溢れたあとも EP 0x84 の読み出しは進み、捨てた数が増え続ける
             var reads = device.TsReads;
             var dropped = tuner.Dropped;
             while ((device.TsReads < reads + 50 || tuner.Dropped <= dropped) && DateTime.UtcNow < deadline) Thread.Sleep(10);
@@ -516,7 +516,7 @@ public partial class It930xConcurrencyTests
     }
 
     /// <summary>
-    /// 機材を閉じ終えた (USB を閉じた)。読みのスレッドが残す「TS 閉じる」は、閉じる処理が電源を切るより前に出るので、
+    /// 機材を閉じ終えた (USB を閉じた)。読み出しのスレッドが残す「TS 閉じる」は、閉じる処理が電源を切るより前に出るので、
     /// それを待つと最後の書き込み (電源を切る) より先に確かめてしまう (Windows の CI で時々落ちていた)
     /// </summary>
     private static bool Closed(FakeIt930x usb) => usb.Disposed;
@@ -549,7 +549,7 @@ public partial class It930xConcurrencyTests
             first.Release();
             It930xDevice.CloseIfIdle("11-8", TimeSpan.Zero);
         }
-        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読み出しを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
         await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
     }
 
@@ -565,7 +565,7 @@ public partial class It930xConcurrencyTests
         await Assert.That(Closed(usb)).IsFalse();
         for (var i = 0; i < 100 && !Closed(usb); i++) await Task.Delay(50);
         await Assert.That(Closed(usb)).IsTrue();
-        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読み出しを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
         await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
         // 閉じた機材は使わず、次の Acquire は開き直す
         usb.ResetSequence();
@@ -593,7 +593,7 @@ public partial class It930xConcurrencyTests
         // CloseAll と同じ処理を、このテストのポートだけに
         It930xDevice.CloseAll(port => port == "11-10");
         await Assert.That(Closed(usb)).IsTrue();
-        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読み出しを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
         await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
     }
 

@@ -11,7 +11,7 @@ namespace Denpa.Agent.Tests;
  */
 public class LeaseReadersTests
 {
-    private static Lease Make() => new(0, "GR", "T27");
+    private static Lease Make() => new(0, "tuner0", "GR", "T27");
 
     [Test]
     public async Task 誰も来ていなければ利用者なし()

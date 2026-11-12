@@ -371,9 +371,9 @@ public sealed class Zd1jTuner : ITuneDevice
     /// 設定のポートに見当たらなければ、ほかに 1 台だけ挿さっているものを使う (<see cref="Zd1j.Follow(string)"/>)。
     /// 設定に CECH-ZD1 J が 1 台だけのとき (<see cref="TunerPool"/> が決める)
     /// </param>
-    public Zd1jTuner(string port, bool follow = false)
+    public Zd1jTuner(string port, bool follow = false, string? name = null)
     {
-        _name = $"{Zd1j.Model} {port}";
+        _name = name ?? $"{Zd1j.Model} {port}";
         _port = port;
         // 開くたびに見直す (動いている間に挿し替えても追従する)。閉じるのは最後に開いたポート
         _acquire = () => Zd1jBoard.Acquire(_port = follow ? Zd1j.Follow(port) : port);
@@ -517,7 +517,7 @@ public sealed class Zd1jTuner : ITuneDevice
 }
 
 /// <summary>
-/// TS を 1 回流すぶん。EP 0x81 の読みを 16 本出しっぱなしにして、192 バイトの単位から取り出し、
+/// TS を 1 回流すぶん。EP 0x81 の転送要求を 16 本出しっぱなしにして、192 バイトの単位から取り出し、
 /// <see cref="Pipe"/> (8MB) に詰める。読み出し側は <see cref="DeviceStream"/> (asicend から受けるときと同じ形)
 /// </summary>
 internal sealed class Zd1jStream
@@ -525,16 +525,16 @@ internal sealed class Zd1jStream
     private const byte Endpoint = 0x81;
 
     /// <summary>
-    /// 1 本の読みの大きさ。仕様書 9.4 の「1536 バイト (192 と 512 の公倍数) の倍数」で、64KB に収まるいちばん大きいもの (64,512 バイト)
+    /// 1 本の転送要求の大きさ。仕様書 9.4 の「1536 バイト (192 と 512 の公倍数) の倍数」で、64KB に収まるいちばん大きいもの (64,512 バイト)
     /// </summary>
     private const int TransferSize = 42 * 1536;
 
     /// <summary>
-    /// 出しっぱなしにする読みの数。仕様書 9.3 の例 (64KB を 16 本)。地上波 (約 17Mbps) で約 0.5 秒ぶんで、読む側が少し遅れても抜けない
+    /// 出しっぱなしにする転送要求の数。仕様書 9.3 の例 (64KB を 16 本)。地上波 (約 17Mbps) で約 0.5 秒ぶんで、読む側が少し遅れても抜けない
     /// </summary>
     private const int Depth = 16;
 
-    /// <summary>1 回の読みの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。読みは裏で出したまま)</summary>
+    /// <summary>1 回の読み出しの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。転送要求は裏で出したまま)</summary>
     private const int ReadTimeoutMs = 300;
 
     private readonly Pipe _pipe = TsBuffer.New();
@@ -613,7 +613,7 @@ internal sealed class Zd1jStream
         Log.Write($"[{_name}] {reason}");
     }
 
-    /// <summary>止める。読みを取り消し、読んでいる途中の呼び出しが戻ってからバッファを閉じる</summary>
+    /// <summary>止める。転送要求を取り消し、読んでいる途中の呼び出しが戻ってからバッファを閉じる</summary>
     public void Stop()
     {
         _stopped = true;

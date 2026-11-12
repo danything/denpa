@@ -56,7 +56,7 @@ public class Dt295NativeCardTests
         expected.AddRange(block.Select(b => (CardUart.Tx, (uint)b)));
         expected.AddRange([(CardUart.Status, 0x3FF), (CardUart.Control, 0x200), (CardUart.Start, 1)]);
         await Assert.That(fake.Stores.Skip(before).Where(s => Uart(s.Address)).Select(s => (s.Address, s.Value))).IsEquivalentTo(expected, CollectionOrdering.Matching);
-        // 機材のプログラムなら、送りは要求と応答の 2 回、受けも 1 回の読みで 2 回の制御転送で済む (ホストは 1 バイトに 1 回)
+        // 機材のプログラムなら、送りは要求と応答の 2 回、受けも 1 回の読み出しで 2 回の制御転送で済む (ホストは 1 バイトに 1 回)
         var used = fake.Controls - controls;
         if (program) await Assert.That(used).IsLessThan(block.Length + 6L);
         else await Assert.That(used).IsGreaterThan(block.Length + 6L);

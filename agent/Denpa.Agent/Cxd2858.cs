@@ -52,7 +52,7 @@ internal sealed class Cxd2858(CxdLink link)
     /// </summary>
     public bool KeepMatching { get; set; }
 
-    /// <summary>仕様書 4.2 の手順 1〜8 (手順 9 の読みの前まで)。手順 2 は整合を保つ設定 (仕様書 4.8) なら <c>02</c></summary>
+    /// <summary>仕様書 4.2 の手順 1〜8 (手順 9 の読み出しの前まで)。手順 2 は整合を保つ設定 (仕様書 4.8) なら <c>02</c></summary>
     internal static CxdRow[] InitHead(bool keepMatching) =>
     [
         CxdRow.W(U, 0x01, 0x00),

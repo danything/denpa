@@ -237,7 +237,7 @@ public class Tc90522Tests
     {
         var (frontend, bus, clock) = Satellite();
         var demod = bus[0x11];
-        // TMCC の TSID は 3 回目の読みで入る (それまでは 0)
+        // TMCC の TSID は 3 回目の読み出しで入る (それまでは 0)
         demod.OnRead = (register, count) => register == 0xCE ? (byte)(count < 3 ? 0x00 : 0x40) : register == 0xCF ? (byte)(count < 3 ? 0x00 : 0x10) : null;
         await Assert.That(frontend.Tune(ChannelTable.Parse("BS01")!)).IsTrue();
         var after = bus.Log.SkipWhile(line => line != "11 C3?").ToList();

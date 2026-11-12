@@ -163,7 +163,7 @@ public class Zd1jTests
         await Assert.That(usb.Dib.Tuner[0x24]).IsEqualTo((ushort)0x22);
         await Assert.That(usb.Dib.Demod[285]).IsEqualTo((ushort)0x0061);
 
-        // 読みは塊をすぐ送り、応答に載った値を返す
+        // 読み出しは塊をすぐ送り、応答に載った値を返す
         Span<byte> value = stackalloc byte[2];
         bridge.WriteRead(Dib8096.DemodAddress, [0x03, 0x80], value);
         await Assert.That(BinaryPrimitives.ReadUInt16BigEndian(value)).IsEqualTo((ushort)0x01B3);
@@ -324,7 +324,7 @@ public class Zd1jTests
             // 流している間は赤 (GPIO 1 = 出力・High)
             await Assert.That(usb.Dib.Demod[1029] & 2).IsEqualTo(0);
             await Assert.That(usb.Dib.Demod[1030] & 2).IsEqualTo(2);
-            // 流し始めのあとに読みを出す
+            // 流し始めのあとに転送要求を出す
             await Assert.That(usb.Log.IndexOf("S 81 64512x16")).IsGreaterThan(usb.Log.IndexOf("W 00D02010=02000000"));
 
             var units = new byte[192 * 10];

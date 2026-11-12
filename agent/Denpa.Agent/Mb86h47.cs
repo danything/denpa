@@ -11,7 +11,7 @@ namespace Denpa.Agent;
  *
  * ホストはベンダー要求 0xBC (メモリ要求) でブリッジのレジスタを読み書きする。メモリ要求は全部このロックで 1 つずつ通す
  * (カードの UART もメモリ要求なので、チューナーとカードが別のスレッドから呼んでも混ざらない)。
- * TS の EP 0x81 の読みはこの外 (IUsbInStream) で並べる。
+ * TS の EP 0x81 の読み出しはこの外 (IUsbInStream) で並べる。
  *
  * **I2C はコア 1 に任せ、指示は EP 0x02 の bulk の塊で送る (仕様書 5.4・5.5) 方式だけ。** 実機で 3 つの方式を比べた結果
  * (開く・選局からロック・メモリ要求の回数。ホストから直 (5.3) / コア 1 のメモリ要求のリング / コア 1 の bulk の命令):
@@ -104,7 +104,7 @@ public sealed class Mb86h47 : II2c
     /// <summary>メモリ要求の数 (速さを測るため)</summary>
     public long Requests { get; private set; }
 
-    /// <summary>I2C のやり取りの数 (書き込み・読み・読みかえ書きを 1 つずつ)</summary>
+    /// <summary>I2C のやり取りの数 (書き込み・読み出し・リード・モディファイ・ライトを 1 つずつ)</summary>
     public long I2cTransfers { get; private set; }
 
     /// <param name="trace">あれば、起動の様子 (アドレスを広げたか) を渡す (<c>--tune</c> のとき)</param>
@@ -331,7 +331,7 @@ public sealed class Mb86h47 : II2c
         Write32(0xFD80C4, 0);
         Write16(0x90114, 0x8008);
         Write32(0xFD8FF8, 0x06);
-        // 分周 0x08 (0x10 の倍の速さ。0x05 だと DiB8000 の初期化中に読みを落とす)
+        // 分周 0x08 (0x10 の倍の速さ。0x05 だと DiB8000 の初期化中に読み出しを落とす)
         Write32(0xFD8FF4, 0x08);
         Write32(0xFD8FE8, 0x3C);
         Write32(I2cControl, 0x40);
@@ -417,7 +417,7 @@ public sealed class Mb86h47 : II2c
     }
 
     // ---------------------------------------------------------------------
-    // I2C (5)。書き込みと読みかえ書きは 1 つずつ応答を待たずに塊に溜め、読む前と待つ前 (Flush) にまとめて送る
+    // I2C (5)。書き込みとリード・モディファイ・ライトは 1 つずつ応答を待たずに塊に溜め、読む前と待つ前 (Flush) にまとめて送る
     // ---------------------------------------------------------------------
 
     public void Write(byte address, ReadOnlySpan<byte> data)
@@ -445,7 +445,7 @@ public sealed class Mb86h47 : II2c
         lock (_gate)
         {
             I2cTransfers++;
-            // 読みかえ書きはコア 1 の上で済ませる (応答を待たない)
+            // リード・モディファイ・ライトはコア 1 の上で済ませる (応答を待たない)
             if (_commands.Count + 2 > CommandWords) SendChunk();
             _commands.Add(0x02000000u | ((uint)address << 16) | register);
             _commands.Add(((uint)keep << 16) | set);
@@ -655,7 +655,7 @@ public sealed class Mb86h47 : II2c
         }
     }
 
-    /// <summary>9.5 流し終わりの 1〜3 (コア 0・受信側・書き込み側を止める)。出力のハイインピーダンスと読みの取り消しは呼ぶ側</summary>
+    /// <summary>9.5 流し終わりの 1〜3 (コア 0・受信側・書き込み側を止める)。出力のハイインピーダンスと転送要求の取り消しは呼ぶ側</summary>
     public void StopStream()
     {
         lock (_gate)
@@ -740,7 +740,7 @@ public sealed class Mb86h47 : II2c
 
 /// <summary>
 /// 9.4 EP 0x81 から来る「4 バイトの到着時刻 + 188 バイトの TS」の 192 バイトの単位から取り出して、188 バイトのパケットにする。
-/// 読みの区切りは単位と揃わないので、TS の先頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の 2 つで揃える
+/// 転送要求の区切りは単位と揃わないので、TS の先頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の 2 つで揃える
 /// (TS の中の 0x47 は珍しくないので 1 つだけでは先頭とみなさない)。揃えたあと先頭が 0x47 でなくなったら揃え直す
 /// </summary>
 public sealed class Mb86h47Framer

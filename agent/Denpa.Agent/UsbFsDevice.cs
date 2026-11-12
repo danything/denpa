@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 /// <para>
 /// ioctl の番号の組み立て方、errno、開くときの文言は <see cref="UsbFs"/> と共通にしている。
 /// interrupt の IN も <c>USBDEVFS_BULK</c> で読む (カーネルの <c>usb_bulk_msg</c> は interrupt の端点なら interrupt の URB にする)。
-/// 出しっぱなしの読みは <c>USBDEVFS_SUBMITURB</c> で URB を出し、<c>poll</c> で待って <c>USBDEVFS_REAPURBNDELAY</c> で回収する。
+/// 出しっぱなしの転送要求は <c>USBDEVFS_SUBMITURB</c> で URB を出し、<c>poll</c> で待って <c>USBDEVFS_REAPURBNDELAY</c> で回収する。
 /// </para>
 /// </summary>
 public sealed unsafe class UsbFsDevice : IUsbDevice
@@ -70,7 +70,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     private const byte UrbTypeBulk = 3;
     private const short PollOut = 0x004;
 
-    /// <summary>端点のストール (EPIPE) やプロトコルエラー (EPROTO) で続けて捨ててよい読みの数。超えたら読みを失敗で終える</summary>
+    /// <summary>端点のストール (EPIPE) やプロトコルエラー (EPROTO) で続けて捨ててよい転送要求の数。超えたら読み出しを失敗で終える</summary>
     private const int MaxStalls = 8;
 
     private readonly Lock _gate = new();
@@ -293,7 +293,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
             var urb = _urbs[i];
             urb->Status = 0;
             urb->ActualLength = 0;
-            if (Sys.Ioctl(_owner.Fd, SubmitUrb, (nint)urb) < 0) throw _owner.Failure("TS の読みを出せません");
+            if (Sys.Ioctl(_owner.Fd, SubmitUrb, (nint)urb) < 0) throw _owner.Failure("TS の転送要求を出せません");
             _pending[i] = true;
             _done[i] = false;
         }
@@ -309,7 +309,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
                 {
                     var errno = Marshal.GetLastPInvokeError();
                     if (errno is UsbFs.Eagain or UsbFs.Eintr) return any;
-                    throw Failure(_owner.Name, "TS の読みを回収できません", errno);
+                    throw Failure(_owner.Name, "TS の転送要求を回収できません", errno);
                 }
                 var i = (int)(nint)urb->UserContext;
                 _pending[i] = false;
@@ -377,20 +377,20 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
             var poll = new PollFd { Fd = _owner.Fd, Events = PollOut };
             if (Sys.Poll((byte*)&poll, 1, (int)Math.Min(wait, int.MaxValue)) < 0 && Marshal.GetLastPInvokeError() != UsbFs.Eintr)
             {
-                throw _owner.Failure("TS の読みを待てません");
+                throw _owner.Failure("TS の読み出しを待てません");
             }
             return true;
         }
 
         /// <summary>
         /// 済んだ URB の失敗。端点のストール (EPIPE) はストールをクリアして (USBDEVFS_CLEAR_HALT)、プロトコルエラー (EPROTO) はそのまま、その URB の中身だけ捨てて
-        /// 出し直す。続けて <see cref="MaxStalls"/> 回を超えたら読みを失敗で終える
+        /// 出し直す。続けて <see cref="MaxStalls"/> 回を超えたら読み出しを失敗で終える
         /// </summary>
         private void Fail(Urb* urb)
         {
             var errno = -urb->Status;
-            if (errno is not (UsbFs.Epipe or UsbFs.Eproto)) throw Failure(_owner.Name, "TS の読みが失敗しました", errno);
-            if (++_stalls > MaxStalls) throw Failure(_owner.Name, $"TS の読みが続けて {_stalls} 回失敗しました", errno);
+            if (errno is not (UsbFs.Epipe or UsbFs.Eproto)) throw Failure(_owner.Name, "TS の読み出しが失敗しました", errno);
+            if (++_stalls > MaxStalls) throw Failure(_owner.Name, $"TS の読み出しが続けて {_stalls} 回失敗しました", errno);
             if (errno == UsbFs.Epipe)
             {
                 var endpoint = (uint)urb->Endpoint;
@@ -426,7 +426,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
                 // 回収できなかった URB のバッファは、カーネルがまだ持っているかもしれないので返さない
                 if (_pending.Count(pending => pending) is var left and > 0)
                 {
-                    Log.Write($"[{_owner.Name}] TS の読みを {left} 本回収できなかったので、バッファを返さずに残します");
+                    Log.Write($"[{_owner.Name}] TS の転送要求を {left} 本回収できなかったので、バッファを返さずに残します");
                     return;
                 }
             }

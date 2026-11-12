@@ -44,12 +44,14 @@ public static class Keys
 /// <param name="find">探すリーダー。既定は見えているもの全部 (<see cref="CardLinks.Find"/>)。<c>--tune zd1j:… --decode</c> (<c>dt295:</c>・<c>it930x:</c> も) は
 /// その機材の内蔵の差し込み口だけを渡す (試験でほかの機材に触らない)</param>
 /// <param name="open">カードを開く。既定は <paramref name="find"/> から探して開く (テストは偽のリーダーを開く関数を渡す)</param>
-public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = null, Func<BCas>? open = null) : IKeySource
+/// <param name="clock">開けなかったあと探さずに断る間を測る時計 (<see cref="BCas"/>・<see cref="Emm"/> と同じ。テストは時を進める)</param>
+public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = null, Func<BCas>? open = null, TimeProvider? clock = null) : IKeySource
 {
     private readonly Func<BCas> _open = open ?? (find is null ? CardLinks.Open : () => BCas.Open(find));
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly Lock _gate = new();
     private BCas? _card;
-    private (DateTime At, IOException Error)? _failed;
+    private (DateTimeOffset At, IOException Error)? _failed;
 
     /// <summary>いま使っているリーダー。開いていなければ空</summary>
     public string Name => _card?.Name ?? "";
@@ -63,7 +65,7 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
         lock (_gate)
         {
             if (_card is not null) return _card;
-            if (_failed is { } failed && DateTime.UtcNow - failed.At < BCas.RetryAfter) throw failed.Error;
+            if (_failed is { } failed && _clock.GetUtcNow() - failed.At < BCas.RetryAfter) throw failed.Error;
             try
             {
                 _card = _open();
@@ -72,7 +74,7 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
             }
             catch (IOException error)
             {
-                _failed = (DateTime.UtcNow, error);
+                _failed = (_clock.GetUtcNow(), error);
                 throw;
             }
         }

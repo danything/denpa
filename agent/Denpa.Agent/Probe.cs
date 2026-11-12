@@ -538,7 +538,7 @@ public static class Probe
         ShowBridge(tuner.Device, output);
     }
 
-    /// <summary>ブリッジの TS の経路の状態 (<see cref="It930xBridge.ReadTsStatus"/>) と、EP 0x84 の読みを数えた値 (<see cref="It930xDevice.DescribeTsCounters"/>) を出す</summary>
+    /// <summary>ブリッジの TS の経路の状態 (<see cref="It930xBridge.ReadTsStatus"/>) と、EP 0x84 の読み出しを数えた値 (<see cref="It930xDevice.DescribeTsCounters"/>) を出す</summary>
     internal static void ShowBridge(It930xDevice? device, TextWriter output, string indent = "    ")
     {
         if (device is null) return;
@@ -825,8 +825,8 @@ public static class Probe
     }
 
     /// <summary>
-    /// 平均の Mbps。**最初の読みから最後の読みまでで割る** (最初の読みのぶんは除く。<c>--dt295-probe</c> と同じ)。
-    /// 決めた秒数で割ると、最初の TS が遅れたぶん少なく出る。読みが 1 回だけなら測れないので null
+    /// 平均の Mbps。**最初の読み出しから最後の読み出しまでで割る** (最初の読み出しのぶんは除く。<c>--dt295-probe</c> と同じ)。
+    /// 決めた秒数で割ると、最初の TS が遅れたぶん少なく出る。読み出しが 1 回だけなら測れないので null
     /// </summary>
     internal static double? Rate(long total, long firstChunk, TimeSpan receiving) =>
         receiving > TimeSpan.Zero ? (total - firstChunk) * 8.0 / receiving.TotalSeconds / 1_000_000 : null;

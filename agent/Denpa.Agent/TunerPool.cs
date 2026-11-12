@@ -91,8 +91,11 @@ public sealed class TunerPool(
     private Task _closing = Task.CompletedTask;
 
     /// <summary>1 台ぶんの実体。**閉じるのは定義が変わったときと、止めるときだけ**</summary>
-    private sealed class Held(ITuneDevice device)
+    private sealed class Held(ITuneDevice device, string name)
     {
+        /// <summary>設定のチューナーの名前。記録の先頭に付ける</summary>
+        public string Name { get; } = name;
+
         public ITuneDevice Device { get; } = device;
 
         /// <summary>
@@ -318,7 +321,7 @@ public sealed class TunerPool(
             }
 
             spec = Tuners[index];
-            lease = new Lease(index, type, channel) { Psi = Psi };
+            lease = new Lease(index, spec.Name, type, channel) { Psi = Psi };
             _leases[index] = lease;
             _signals ??= new Timer(_ => ReadSignals(), null, TunerSignal.Every, TunerSignal.Every);
             /*
@@ -330,8 +333,7 @@ public sealed class TunerPool(
         }
 
         // 選局のどこで止まっても (前の読み出し・同期・TS の読み出し)、上限までに TS が届かなければ利用者に理由を返す
-        var name = spec.Name;
-        _ = Task.Delay(FirstTsLimit).ContinueWith(_ => Starve(lease, name), TaskScheduler.Default);
+        _ = Task.Delay(FirstTsLimit).ContinueWith(_ => Starve(lease), TaskScheduler.Default);
 
         /*
          * **選局は取り合いのロックを放してからやる** (同期待ちの 5〜15 秒、ほかの要求を止めない。
@@ -472,9 +474,9 @@ public sealed class TunerPool(
     /// そのチューナーはそのチャンネルで後回しにし (<see cref="UnsyncedFor"/>)、次の選局では選局し直す。
     /// 取り上げられた選局、もう TS が届いた選局、失敗で畳んだ選局には何もしない
     /// </summary>
-    private void Starve(Lease lease, string name)
+    private void Starve(Lease lease)
     {
-        var reason = $"{name}: {FirstTsLimit.TotalSeconds:0} 秒待っても TS が届きませんでした";
+        var reason = $"{lease.Name}: {FirstTsLimit.TotalSeconds:0} 秒待っても TS が届きませんでした";
         lock (_gate)
         {
             if (!_leases.TryGetValue(lease.Tuner, out var current) || current != lease || !lease.Starve(reason)) return;
@@ -491,7 +493,7 @@ public sealed class TunerPool(
         {
             if (_held.TryGetValue(lease.Tuner, out var held)) held.Channel = null;
         }
-        Log.Write($"[{name}] {lease.Channel}: {reason}。この選局を畳みます");
+        Log.Write($"[{lease.Name}] {lease.Channel}: {reason}。この選局を畳みます");
         onChange();
     }
 
@@ -523,9 +525,9 @@ public sealed class TunerPool(
 
             var path = spec.Device ?? throw new IOException($"{spec.Name} のデバイスが指定されていません");
             // CECH-ZD1 J は、設定に 1 台だけなら挿し替えたポートに追従する (2 台以上はポートで見分ける。Zd1j.Follow)
-            var device = openDevice?.Invoke(spec) ?? OpenDevice(path, spec.Lnb, followZd1j: _specs.Count(other => Zd1j.Is(other.Device)) == 1);
+            var device = openDevice?.Invoke(spec) ?? OpenDevice(path, spec.Lnb, followZd1j: _specs.Count(other => Zd1j.Is(other.Device)) == 1, name: spec.Name);
 
-            var held = new Held(device);
+            var held = new Held(device, spec.Name);
             _held[index] = held;
             Log.Write($"[{spec.Name}] {path} を確保しました");
             return held;
@@ -547,7 +549,8 @@ public sealed class TunerPool(
     /// <para>それ以外は例外を送出する</para>
     /// </summary>
     /// <param name="followZd1j">CECH-ZD1 J が設定のポートに見当たらなければ、ほかに 1 台だけ挿さっているものを使う (<see cref="Zd1j.Follow(string)"/>)</param>
-    public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false)
+    /// <param name="name">設定のチューナーの名前。チューナーが記録と理由の先頭に付ける。無ければ機種名とポートから作る (検出したときの名前と同じ)</param>
+    public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false, string? name = null)
     {
         /*
          * **Windows は、エージェントが USB を直に持つ機材 (Siano・CECH-ZD1 J・PIX-DT295・IT930x) だけ。** DVB は無く、asicen-userland は Windows を出していない。
@@ -558,12 +561,12 @@ public sealed class TunerPool(
             throw new IOException(
                 $"{path} は Windows では使えません (Windows で使えるのは {Siano.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> と {Dt295.Scheme}<USB のポート> と {It930x.Scheme}<USB のポート>:<受信機> だけ)");
         }
-        if (Zd1j.Parse(path) is { } zd1j) return new Zd1jTuner(zd1j, followZd1j);
-        if (Dt295.Parse(path) is { } dt295) return new Dt295NativeTuner(dt295);
-        if (It930x.Parse(path) is { } it930x) return new It930xTuner(it930x.Port, it930x.Receiver, lnb);
-        if (Siano.Parse(path) is { } port) return Siano.Open(port);
-        if (AsicenUserland.Parse(path) is { } asicen) return AsicenUserland.Open(asicen.Id, asicen.Receiver, lnb);
-        if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb);
+        if (Zd1j.Parse(path) is { } zd1j) return new Zd1jTuner(zd1j, followZd1j, name);
+        if (Dt295.Parse(path) is { } dt295) return new Dt295NativeTuner(dt295, name);
+        if (It930x.Parse(path) is { } it930x) return new It930xTuner(it930x.Port, it930x.Receiver, lnb, name);
+        if (Siano.Parse(path) is { } port) return Siano.Open(port, name);
+        if (AsicenUserland.Parse(path) is { } asicen) return AsicenUserland.Open(asicen.Id, asicen.Receiver, lnb, name);
+        if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb, name);
         throw new IOException(
             $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Siano.Scheme}<USB のポート> か {AsicenUserland.Scheme}<USB のポート>:<受信機> か {Zd1j.Scheme}<USB のポート> か {Dt295.Scheme}<USB のポート> か {It930x.Scheme}<USB のポート>:<受信機>)");
     }
@@ -581,7 +584,7 @@ public sealed class TunerPool(
             foreach (var (index, _) in retired) _held.Remove(index);
             var closing = Task.Run(() =>
             {
-                foreach (var (index, held) in retired)
+                foreach (var (_, held) in retired)
                 {
                     try
                     {
@@ -590,7 +593,7 @@ public sealed class TunerPool(
                     catch (Exception error)
                     {
                         // 閉じられなくても、次に開く処理は待たせたままにしない
-                        Log.Write($"[{index}] デバイスを閉じられませんでした ({error.Message})");
+                        Log.Write($"[{held.Name}] デバイスを閉じられませんでした ({error.Message})");
                     }
                 }
             });
@@ -948,7 +951,7 @@ public sealed class TunerPool(
                     if (!lease.SignalFailed)
                     {
                         lease.SignalFailed = true;
-                        Log.Write($"[{Tuners.ElementAtOrDefault(lease.Tuner)?.Name}] 受信の状態と C/N を読めませんでした ({error.Message})");
+                        Log.Write($"[{lease.Name}] 受信の状態と C/N を読めませんでした ({error.Message})");
                     }
                 }
                 finally
@@ -1108,13 +1111,16 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
 }
 
 /// <summary>1 本の選局。共有している利用者をまとめて持つ</summary>
-internal sealed class Lease(int tuner, string type, string channel)
+internal sealed class Lease(int tuner, string name, string type, string channel)
 {
     private Process? _child;
     private CancellationTokenSource? _linger;
     private string _stderr = "";
 
     public int Tuner { get; } = tuner;
+
+    /// <summary>設定のチューナーの名前。記録の先頭に付ける</summary>
+    public string Name { get; } = name;
     public string Type { get; } = type;
     public string Channel { get; } = channel;
     public List<Sink> Sinks { get; } = [];
@@ -1216,7 +1222,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// <summary>
     /// 読み出しとデスクランブラの間に溜められる量。**64MB** は地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほどで、
     /// カードや配る側を待つ上限 (CCID 5 秒・配る側 10 秒・繋ぎ直しの見送り 10 秒) を丸ごと呑める。
-    /// **数ではなくバイトで測る。** 読み出し側は溜まっているぶんだけ返すので、1 回の読みは小さいこともある
+    /// **数ではなくバイトで測る。** 読み出し側は溜まっているぶんだけ返すので、1 回の読み出しは小さいこともある
     /// </summary>
     private const long QueueLimit = 64 * 1024 * 1024;
 
@@ -1303,7 +1309,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                 if (Interlocked.Add(ref _queued, read) > QueueLimit)
                 {
                     // デスクランブラが止まったまま埋まった。空くまで読むのを待つ (まれなので、10ms ごとに確かめる形で足りる)
-                    if (!waited) Log.Write($"[{Tuner}] {Channel}: 復号が追いつかずキューが埋まったので、読むのを待ちます");
+                    if (!waited) Log.Write($"[{Name}] {Channel}: 復号が追いつかずキューが埋まったので、読むのを待ちます");
                     waited = true;
                     while (Volatile.Read(ref _queued) > QueueLimit && !_stopped && !_drained) Thread.Sleep(10);
                 }
@@ -1352,9 +1358,9 @@ internal sealed class Lease(int tuner, string type, string channel)
                 // 同期の内訳: 選局を始めた時点と、ロックまで (IT930x の機材。地上波は、ロックが早くても確かめ始めてから 350 ms は待ってから流す)
                 var tuned = TuneStartMs >= 0 && LockMs >= 0 ? $"{At(TunedMs)} (始め {TuneStartMs}ms・ロックまで {LockMs}ms)" : At(TunedMs);
                 Log.Write(b25 is null
-                    ? $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {tuned} / "
+                    ? $"[{Name}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {tuned} / "
                         + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms / 復号しない ({undecoded})"
-                    : $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {tuned} / "
+                    : $"[{Name}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {tuned} / "
                         + $"最初の TS {At(_firstReadMs)} / {b25.HeldAt()} / 送り出し {Clock.ElapsedMilliseconds}ms / {b25.CardUse()}"
                         + (b25.Undecodable > 0 ? $" (スクランブルされたまま {b25.Undecodable} パケット)" : ""));
             }
@@ -1380,7 +1386,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                     }
                     Push();
                     // 覚えた PAT・PMT で流し始めた選局は、本物で確かめ終わったときにもう 1 行残す (docs/stream.md「本番の記録で割る」)
-                    if (b25?.TakeChecked() is { } verdict) Log.Write($"[{Tuner}] {Channel}: {verdict}");
+                    if (b25?.TakeChecked() is { } verdict) Log.Write($"[{Name}] {Channel}: {verdict}");
                 }
             }
             if (!_stopped)
@@ -1401,7 +1407,7 @@ internal sealed class Lease(int tuner, string type, string channel)
          */
         if (b25 is { Undecodable: > 0 })
         {
-            Log.Write($"[{Tuner}] {Channel}: {b25.Undecodable} パケットをスクランブルされたまま流しました"
+            Log.Write($"[{Name}] {Channel}: {b25.Undecodable} パケットをスクランブルされたまま流しました"
                 + (b25.LastError is { } why ? $" ({why})" : ""));
         }
         // 畳む指示で終わったのなら、それは失敗ではない
@@ -1425,11 +1431,11 @@ internal sealed class Lease(int tuner, string type, string channel)
         if (count == 0)
         {
             // 選局の前に埋まっていたぶんは読む側の遅れではない。数には入れず、そうと分かる言い方で残す
-            if (stale > 0) Log.Write($"[{Tuner}] {Channel}: 選局前にリングバッファが {stale} 回溢れていました");
+            if (stale > 0) Log.Write($"[{Name}] {Channel}: 選局前にリングバッファが {stale} 回溢れていました");
             return;
         }
         Log.Write(
-            $"[{Tuner}] {Channel}: リングバッファが {count} 回溢れました "
+            $"[{Name}] {Channel}: リングバッファが {count} 回溢れました "
                 + $"(読むのが追いつきません: {Readers()}、いちばん空いたのは {worstGap / 1000.0:0.0} 秒)");
     }
 
@@ -1543,7 +1549,7 @@ internal sealed class Lease(int tuner, string type, string channel)
      */
     public void Await()
     {
-        if (_pump?.Wait(StopWait) == false) Log.Write($"[{Tuner}] {Channel}: 読み出しが {StopWait.TotalSeconds} 秒で止まりませんでした");
+        if (_pump?.Wait(StopWait) == false) Log.Write($"[{Name}] {Channel}: 読み出しが {StopWait.TotalSeconds} 秒で止まりませんでした");
     }
 
     /// <summary>止まるのを待つ上限。読み出し側は 200ms ごとに印を確かめるので、十分に長い</summary>

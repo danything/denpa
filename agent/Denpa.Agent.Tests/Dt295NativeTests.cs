@@ -457,7 +457,7 @@ public class Dt295NativeTests
         var afterWait = Index(i2c, "10 W FEC00301");          // T チューナーの 03=01。ここから 100 ms の待ち
         var firstS = Index(i2c, "11 W 0190");                  // S 復調の最初の書き込み
         var lastS = Index(i2c, "11 W FEC011C0A7");             // S チューナーの最後の書き込み
-        var resumed = Index(i2c, "10 W FEC00D", afterWait);    // 待ちのあとの T チューナーの 0x0D の読み・変更・書き
+        var resumed = Index(i2c, "10 W FEC00D", afterWait);    // 待ちのあとの T チューナーの 0x0D のリード・モディファイ・ライト
         await Assert.That(afterWait).IsGreaterThan(0);
         await Assert.That(firstS).IsGreaterThan(afterWait);
         await Assert.That(lastS).IsGreaterThan(firstS);
@@ -493,7 +493,7 @@ public class Dt295NativeTests
         // 待ちの合計は、7.1 の 130 ms と 7.2.2 の 140 ms を含む
         var waits = text.Split('\n').First(line => line.StartsWith("固定の待ち:", StringComparison.Ordinal));
         await Assert.That(waits).Contains("合計");
-        // 受信の平均は、最初の読みから最後の読みまでの秒数で割る (読みが 1 回だけなら求められないと出す)
+        // 受信の平均は、最初の読み出しから最後の読み出しまでの秒数で割る (読み出しが 1 回だけなら求められないと出す)
         await Assert.That(text).Contains("受信の平均:");
     }
 

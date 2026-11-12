@@ -27,12 +27,12 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
 
     /// <summary>
     /// 受信の確認の周の間の待ち (ms)。仕様書の周期ではなく、ホストが決めた値 (仕様書 7.2.4 の常駐イメージは 10 ms 周期、衛星 7.3.4 は約 7 ms)。
-    /// 1 周の読みは 1 回 約 2 ms (I2C の転送 2 回) かかるので、周期は 6 ms ほどになる
+    /// 1 周の読み出しは 1 回 約 2 ms (I2C の転送 2 回) かかるので、周期は 6 ms ほどになる
     /// </summary>
     public const int TerrestrialPollMs = 4, SatellitePollMs = 3;
 
-    // 書き込みと、読んだ値を使わない読み・変更・書きは、ためておいて Flush で I2C の順次実行にまとめて渡す (Dt295I2cBatch)。
-    // 読んだ値をこちらで使う読み (DemodRead) は、ためた分と一緒に実行してその値を返す。待ち (Wait) と段の切れ目の前にも実行する
+    // 書き込みと、読んだ値を使わないリード・モディファイ・ライトは、ためておいて Flush で I2C の順次実行にまとめて渡す (Dt295I2cBatch)。
+    // 読んだ値をこちらで使う読み出し (DemodRead) は、ためた分と一緒に実行してその値を返す。待ち (Wait) と段の切れ目の前にも実行する
     private readonly Dt295I2cBatch _batch = new();
 
     private void Demod(int dev, int reg, params int[] data) => _batch.Write(dev, [(byte)reg, .. data.Select(value => (byte)value)]);
@@ -60,7 +60,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         return Flush()[^count..];
     }
 
-    /// <summary>チューナーのレジスタの読み・変更・書き: 新しい値 = (旧 &amp; 残す) | 立てる (仕様書 7.0 のフラグ 0x80)。読みは機材の中で書きに使う</summary>
+    /// <summary>チューナーのレジスタのリード・モディファイ・ライト: 新しい値 = (旧 &amp; 残す) | 立てる (仕様書 7.0 のフラグ 0x80)。読み出しは機材の中で書きに使う</summary>
     private void TunerRmw(int dev, int reg, int keep, int set)
     {
         _batch.Write(dev, 0xFE, 0xC0, 0xFB, (byte)reg);
@@ -69,7 +69,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         _batch.WriteModified(dev, [0xFE, 0xC0, (byte)reg], (byte)keep, (byte)set);
     }
 
-    /// <summary>復調のレジスタの読み・変更・書き (仕様書 7.0 のフラグ 0x01)</summary>
+    /// <summary>復調のレジスタのリード・モディファイ・ライト (仕様書 7.0 のフラグ 0x01)</summary>
     private void DemodRmw(int dev, int reg, int keep, int set)
     {
         _batch.Write(dev, (byte)reg);

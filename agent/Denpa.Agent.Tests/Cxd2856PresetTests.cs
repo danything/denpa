@@ -248,7 +248,7 @@ public class Cxd2856PresetTests
     }
 
     [Test]
-    public async Task 手順_8_のあとすぐ選局を終え_50_ms_たってからロックを確かめる読みの間に_88_と_87_を書く()
+    public async Task 手順_8_のあとすぐ選局を終え_50_ms_たってからロックを確かめる読み出しの間に_88_と_87_を書く()
     {
         // 100 ms でロックする
         var (frontend, bus, clock, _) = Make(demod => demod.Status = read => read > 10 ? (byte)0x03 : (byte)0x00);
@@ -263,7 +263,7 @@ public class Cxd2856PresetTests
         await Assert.That(finish).IsGreaterThan(step8);
         await Assert.That(tail).IsGreaterThan(finish);
         await Assert.That(bus.Log.Skip(tail - 1).Take(4)).IsEquivalentTo(new[] { "X 08=01", "U 88=00", "U 87=C0", "X 08=00" });
-        // 選局の書き込みの中に 50 ms の待ちは無い。読みは 0・10・20・30・40 ms の 5 回、50 ms で手順 9〜10、続けて読む
+        // 選局の書き込みの中に 50 ms の待ちは無い。読み出しは 0・10・20・30・40 ms の 5 回、50 ms で手順 9〜10、続けて読む
         await Assert.That(bus.Log.Take(tail).Count(line => line == "T 10?")).IsEqualTo(5);
         await Assert.That(bus.Log[tail + 3]).IsEqualTo("T 00=60");
         await Assert.That(bus.Log[tail + 4]).IsEqualTo("T 10?");

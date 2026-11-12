@@ -310,6 +310,9 @@ public static class It930x
     /// <summary>画面に出す受信機の名前 (<c>PLEX PX-MLT5PE 4-12.1 #0</c>)</summary>
     public static string Name(It930xModel model, string port, int receiver) => $"{model.Name} {port} #{receiver}";
 
+    /// <summary>開かずに機種を調べて付ける受信機の名前。抜けていて機種が分からなければ、機種名の代わりに <see cref="Model"/></summary>
+    public static string Name(string port, int receiver) => Identify(port) is { } model ? Name(model, port, receiver) : $"{Model} {port} #{receiver}";
+
     /// <summary>
     /// 挿さっている機材の受信機を、設定に書いたのと同じ形式で。並べるだけで開かない (開くとファームウェアを起動して電源を入れる)。
     /// 受信機ごとに、受けられる種別のうち最初に選ぶもの (<see cref="It930xReceiver.DetectedTypes"/>) を付ける。
