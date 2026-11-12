@@ -80,6 +80,8 @@ async function check() {
 }
 
 const server = Bun.serve({
+  // 確かめは adb forward から読むので、端末の外には出さない
+  hostname: "127.0.0.1",
   port: Number(process.env.PORT),
   async fetch(request) {
     const url = new URL(request.url);

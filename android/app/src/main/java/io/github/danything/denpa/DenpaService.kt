@@ -22,7 +22,6 @@ import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import java.io.File
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
@@ -69,7 +68,7 @@ class DenpaService : Service() {
      *
      * @param label 記録の文に入れる名前 (エージェント・サーバ)
      * @param tag 部品の出力を流す logcat のタグ
-     * @param prepare 起動する前に呼ぶ ([worker] のスレッド)。IOException なら起動せず、待ってからやり直す
+     * @param prepare 起動する前に呼ぶ ([worker] のスレッド)。例外 (書き出しの失敗など) なら起動せず、待ってからやり直す
      */
     private inner class Slot(
         val label: String,
@@ -97,7 +96,8 @@ class DenpaService : Service() {
                 val launch = prepare()
                 Part(tag, executable, launch.arguments, launch.environment, launch.directory) { code -> worker.post { onExit(code) } }
                     .also { it.start() }
-            } catch (error: IOException) {
+            } catch (error: Exception) {
+                // 書き出しは IOException のほかに PackageManager や AssetManager の実行時例外も投げる。ほかの部品と worker を巻き込まないよう、どれも起動し直しに回す
                 Log.e(TAG, "${label}を起動できませんでした", error)
                 scheduleRestart()
                 return
@@ -228,7 +228,11 @@ class DenpaService : Service() {
         if (!Server.bundled(this)) return null
         return Slot("サーバ", Server.TAG, Server.bun(this)) {
             val entry = Server.extract(this, home)
-            Log.i(Server.TAG, "bun ${Server.version(Server.bun(this)) ?: "(--version に答えません)"}")
+            // 記録に出すだけなので、worker を待たせない (答えない bun でも「終了」や様子の読み取りが止まらない)
+            thread(name = "denpa-server-version", isDaemon = true) {
+                val version = runCatching { Server.version(Server.bun(this)) }.getOrNull()
+                Log.i(Server.TAG, "bun ${version ?: "(--version に答えません)"}")
+            }
             Launch(listOf(entry.path), baseEnvironment() + ("PORT" to Server.PORT.toString()), entry.parentFile)
         }
     }
