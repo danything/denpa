@@ -11,7 +11,10 @@
 # patches/ の直しも Linux と同じく当てる。
 #
 # Linux と同じく、SVT-AV1 と Opus はソースから組んで libavcodec に静的に繋ぎ、x264・dav1d・zimg は配布物
-# (MSYS2 のパッケージ。Linux は Debian のもの) を使う。**libav* は Linux と違って静的に繋ぐ** (ffmpeg.exe と ffprobe.exe が
+# (MSYS2 のパッケージの DLL。Linux は Debian のもの) を使う。MSYS2 に opus・svt-av1 のパッケージが入っていると、組むときに
+# そちらの DLL を拾う。そのため x264 は CLI のパッケージ (MSYS2 の ffmpeg を通して opus・svt-av1 も入れる) ではなく、
+# ライブラリだけの libx264 を入れる (.github/workflows/windows-server.yml。zip に入る DLL は、そこの bundle で決めた一覧と比べる)。
+# **libav* は Linux と違って静的に繋ぐ** (ffmpeg.exe と ffprobe.exe が
 # それぞれ抱える)。DLL にすると、libavfilter の DLL が libavformat の関数 (metadata フィルタの avio_closep) を解決できず組めない
 # (Linux の共有ライブラリは解決を実行時まで待つので組める)。
 #
@@ -21,7 +24,7 @@
 #
 # **GPU のエンコーダは NVENC・QSV・AMF を組む** (`gpu`。docs/encode.md「Windows でエンコードする」)。どれもドライバのライブラリは
 # 実行時に読むので、配布物には足さない。ヘッダとライブラリは MSYS2 のパッケージで、ライセンスは GPL-3.0-or-later のままにできるもの
-# (nonfree にしない): nv-codec-headers (MIT。ffnvcodec-headers)、AMF のヘッダ (MIT。amf-headers)、libvpl (MIT。静的ライブラリ)。
+# (nonfree にしない): nv-codec-headers (MIT。ffnvcodec-headers)、AMF のヘッダ (MIT。amf-headers)、libvpl (MIT。DLL)。
 # QSV は Direct3D 11 のデバイスを子にして開くので `--enable-d3d11va` も要る。QSV と AMF のエンコーダは Dockerfile の
 # 一覧に無い (Linux は組まない) ので、ここで足す
 #
@@ -234,8 +237,15 @@ cd "$out"
 export PATH="/c/Windows/System32:/c/Windows"
 ./ffmpeg.exe -hide_banner -version
 ./ffprobe.exe -hide_banner -loglevel error -version > /dev/null
+# SVT-AV1 が Dockerfile と同じバージョンか (preset と crf の効き方はバージョンで変わる。src/lib/server/encoder.ts)。
+# SVT-AV1 が標準エラーに出すバージョンの行で見る
 ./ffmpeg.exe -hide_banner -loglevel error -f lavfi -i testsrc2=s=320x240:r=30:d=1 -f lavfi -i sine=d=1 \
-  -c:v libsvtav1 -preset 12 -c:a libopus -f matroska -y "$work/av1.mkv"
+  -c:v libsvtav1 -preset 12 -c:a libopus -f matroska -y "$work/av1.mkv" 2> "$work/av1.log" || { /usr/bin/cat "$work/av1.log" >&2; exit 1; }
+/usr/bin/grep -qF "SVT-AV1 Encoder Lib ${SVT_AV1_VERSION}" "$work/av1.log" || {
+  /usr/bin/cat "$work/av1.log" >&2
+  echo "ffmpeg が読む SVT-AV1 が ${SVT_AV1_VERSION} ではありません" >&2
+  exit 1
+}
 ./ffmpeg.exe -hide_banner -loglevel error -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v libx264 -f null -
 ./ffmpeg.exe -hide_banner -loglevel error -c:v libdav1d -i "$work/av1.mkv" -f null -
 /usr/bin/ls -la "$out"
