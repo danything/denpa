@@ -1,5 +1,5 @@
 /**
- * **本物の HEVC と AAC を MMT/TLV に包んで、4K の局の放送を作る** (試験用。`synth-av.ts` の 4K 版)。
+ * **本物の HEVC と AAC を MMT/TLV に包んで、4K の局の放送を作る** (試験用。`synth-av.ts` の 4K の放送に当たる)。
  *
  * 素材は ffmpeg で作り、ここに base64 で持つ (E2E のイメージには本物の ffmpeg が無い)。
  *

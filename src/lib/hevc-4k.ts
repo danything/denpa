@@ -30,7 +30,25 @@ export interface HevcProbe {
   }) => Promise<{ supported: boolean }>;
 }
 
-/** 4K の局の放送の HEVC を再生できるか。`decodingInfo` が例外を投げたときは、再生できないとみなす */
+/**
+ * ブラウザで調べるもの。MSE は `pickMediaSource` の `Source` で調べ、`Source` が無ければ `isTypeSupported` はいつも false を返す。`decodingInfo` は `navigator.mediaCapabilities` にあるときだけ渡す。
+ * ライブ (`live-player.svelte.ts`) と観る画面 (4K の局の録画を、放送の HEVC のまま流すとき) で同じものを使う
+ */
+export function browserHevcProbe(
+  source: { isTypeSupported(type: string): boolean } | undefined,
+): HevcProbe {
+  return {
+    isTypeSupported: (type) => source?.isTypeSupported(type) ?? false,
+    ...(typeof navigator.mediaCapabilities?.decodingInfo === "function"
+      ? {
+          decodingInfo: (config) =>
+            navigator.mediaCapabilities.decodingInfo(config),
+        }
+      : {}),
+  };
+}
+
+/** 4K の局の放送の HEVC を再生できるか。`decodingInfo` が失敗したときは、再生できないとみなす */
 export async function broadcastHevcPlayable(
   probe: HevcProbe,
 ): Promise<boolean> {
