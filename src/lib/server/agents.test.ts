@@ -223,6 +223,31 @@ describe("syncEnvAgents", () => {
     ]);
   });
 
+  test("画面から登録した宛先を環境変数にも書いたら、その行を環境変数の行にする (証明書と名前はそのまま)", () => {
+    orm().delete(agents).run();
+    config.agentUrl = "";
+    syncEnvAgents();
+    orm()
+      .insert(agents)
+      .values({
+        name: "書斎",
+        origin: "https://c:3",
+        cert: "CERT",
+        from_env: false,
+        position: 0,
+        added_at: 0,
+      })
+      .run();
+    config.agentUrl = "https://a:1#pair=x,https://c:3#pair=y";
+    syncEnvAgents();
+    expect(
+      rows().map((r) => [r.origin, r.name, r.cert, r.position, r.from_env]),
+    ).toEqual([
+      ["https://a:1", "a", null, 0, true],
+      ["https://c:3", "書斎", "CERT", 1, true],
+    ]);
+  });
+
   test("同じ証明書を別の行に保存しない (同じエージェントを別の URL で 2 回書いたとき)", () => {
     config.agentUrl = "https://a:1#pair=x,https://a2:1#pair=x";
     syncEnvAgents();
@@ -265,7 +290,7 @@ describe("listAgents・primaryAgent", () => {
   // ほかのテストが画面から登録した行を残していても、ここでは環境変数のものだけにする
   beforeEach(() => orm().delete(agents).run());
 
-  test("全部の行を並びの順に返し、カードとスキャンに使うのは先頭の 1 台", () => {
+  test("全部の行を並びの順に返し、primaryAgent は並びの先頭", () => {
     config.agentUrl = "https://b:2#pair=y,https://a:1";
     expect(listAgents().map((a) => [a.origin, a.pair])).toEqual([
       ["https://b:2", "y"],

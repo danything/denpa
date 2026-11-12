@@ -4,8 +4,9 @@
  * - `TUNER_AGENT_URL` はカンマで区切って何台でも書ける。書いたものは起動のたびに行と突き合わせ、
  *   URL (`#` の前) が同じ行があればそれを使い、無ければ行を足す。**環境変数から消したものは行も消す**
  * - 組むときの合言葉 (`#pair=`) は DB に持たない。環境変数から読む
- * - 通知の購読・ログ・バージョン・チャンネルの控え・チューナーの一覧と、選局の振り分けは全部の行 (`listAgents`。
- *   振り分けは `tuner.openChannel`)。スキャンとその結果を預けるのと、カード・復号は並びの先頭の 1 台 (`primaryAgent`) に送る
+ * - 通知の購読・ログ・バージョン・チャンネルの控え・チューナーとカードの一覧・スキャンと、選局の振り分けは全部の行 (`listAgents`。
+ *   振り分けは `tuner.openChannel`、後から復号させる先は `scramble.decodeAgent`)。並びの先頭の 1 台 (`primaryAgent`) に送るのは、
+ *   どのエージェントか分からないときのカードの問い合わせ (`scramble.cardStatus`) だけ
  */
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
@@ -109,7 +110,7 @@ export function agentHostnames(): string[] {
   return [...out];
 }
 
-/** 行の名前。今は URL のホスト名 */
+/** 環境変数から足した行の名前。URL のホスト名 (画面から登録した行は、エージェントが名乗る名前) */
 function nameOf(origin: string): string {
   return new URL(origin).hostname;
 }
@@ -143,7 +144,27 @@ export function syncEnvAgents(): void {
     }
     targets.forEach((target, position) => {
       const row = env.find((r) => r.origin === target.origin);
-      if (row === undefined) {
+      // 画面から登録した同じ宛先の行があれば、環境変数の行に切り替える (証明書・チャンネル・受信の記録はそのまま)。
+      // 別に足すと、同じ証明書の行が 2 つになって組めない (`rememberAgentCert`)
+      const added =
+        row === undefined
+          ? tx
+              .select({ id: agents.id })
+              .from(agents)
+              .where(
+                and(
+                  eq(agents.origin, target.origin),
+                  eq(agents.from_env, false),
+                ),
+              )
+              .get()
+          : undefined;
+      if (added !== undefined) {
+        tx.update(agents)
+          .set({ from_env: true, position })
+          .where(eq(agents.id, added.id))
+          .run();
+      } else if (row === undefined) {
         tx.insert(agents)
           .values({
             name: nameOf(target.origin),
@@ -223,7 +244,7 @@ export const NO_AGENT =
   "エージェントがありません。設定の「受信」の「エージェントを追加」に登録用の URL を貼るか、TUNER_AGENT_URL に https://ホスト:25252#pair=<合言葉> を書きます (docs/agent.md)";
 
 /**
- * 並びの先頭のエージェント。カード・復号・チャンネルスキャンはここに送る。
+ * 並びの先頭のエージェント。どのエージェントか分からないときのカードの問い合わせに使う (`scramble.cardStatus`)。
  * 1 台も無ければ、TUNER_AGENT_URL の書き方を入れたエラーを送出する
  */
 export function primaryAgent(): Agent {

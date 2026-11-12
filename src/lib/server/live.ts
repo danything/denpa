@@ -121,13 +121,13 @@ import { settings } from "./settings";
 import { chunks, endInput, lines, sideOutput } from "./stream";
 import { holdTranscode, transcodeRoom } from "./transcode";
 import {
-  getTuners,
   openWhenFree,
-  pinKey,
+  pinGone,
   type StreamUse,
   TransportChangedError,
   TuneError,
   TunerBusyError,
+  tunersOf,
 } from "./tuner";
 import { HLG_TO_SDR, UHD_HEIGHT } from "./uhd";
 import type { Connection } from "./ws";
@@ -901,11 +901,6 @@ export function pinnedNotTuned(
  * エージェントが答えを返さないまま止まっても、画面を「読み込み中」のままにしない
  */
 const LIVE_ANSWER_WAIT = 60_000;
-
-/** 1 台のエージェントのチューナー (`getTuners` から選ぶ)。チューナーの `index` はエージェントごとの番号なので、エージェントで絞ってから引く */
-async function tunersOf(agent: number) {
-  return (await getTuners()).filter((tuner) => tuner.agent === agent);
-}
 
 interface Viewer {
   /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者は映像か字幕だけを流すエンドポイント (`sessionStream`・`liveCaptions`) */
@@ -2000,10 +1995,7 @@ class Session {
       this.died(label, why, plain);
       return;
     }
-    const gone = await getTuners().then(
-      (tuners) => !tuners.some((tuner) => pinKey(tuner) === pin),
-      () => false,
-    );
+    const gone = await pinGone(pin);
     this.died(
       label,
       why,

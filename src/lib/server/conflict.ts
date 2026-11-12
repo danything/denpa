@@ -199,6 +199,11 @@ class Tuners {
   private readonly free: number[];
   /** 実際に入った選局の印 (`Spot.key`) → 入っている組と、使っている数 */
   private readonly held = new Map<string, { group: number; refs: number }>();
+  /**
+   * 使っている人 (`take` の `id`) → 入った選局の印 (`Spot.key`)。離すときはその選局を離す。
+   * 受けられる所は局ごとに違う (カードで絞る) ので、印から探し直すと、同じ TS のほかの人が入った選局を離すことがある
+   */
+  private readonly mine = new Map<unknown, string>();
 
   constructor(private readonly capacity: Capacity) {
     this.free = capacity.map((group) => group.count);
@@ -244,10 +249,13 @@ class Tuners {
    * うち選ぶ順のいちばん前の組**から 1 台取る (約束の 2。見るのは局を受けられるエージェントの組だけ)。
    * 取れた組の番号 (取れなければ -1)
    */
-  take(type: string, channel: string): number {
+  take(type: string, channel: string, id?: unknown): number {
     const key = keyOf(type, channel);
     const held = this.heldSpot(key);
-    if (held !== undefined) return this.hold(held, this.held.get(held)!.group);
+    if (held !== undefined) {
+      if (id !== undefined) this.mine.set(id, held);
+      return this.hold(held, this.held.get(held)!.group);
+    }
     const spots = spotsOf(key);
     const group = this.capacity.findIndex(
       (g, i) =>
@@ -257,12 +265,18 @@ class Tuners {
     );
     if (group < 0) return -1;
     const spot = spots.find((s) => fits(s, this.capacity[group]!))!;
+    if (id !== undefined) this.mine.set(id, spot.key);
     return this.hold(spot.key, group);
   }
 
-  /** 離す。最後の 1 人が離れたらチューナーが空く (空いたら true) */
-  drop(key: string): boolean {
-    const spot = this.heldSpot(key);
+  /**
+   * 離す。最後の 1 人が離れたらチューナーが空く (空いたら true)。
+   * `id` を渡せば、その人が `take` で入った選局を離す (渡さなければ、印の受けられる所のうち入っているもの。録画中のものは所が 1 つ)
+   */
+  drop(key: string, id?: unknown): boolean {
+    const own = id === undefined ? undefined : this.mine.get(id);
+    if (id !== undefined) this.mine.delete(id);
+    const spot = own ?? this.heldSpot(key);
     if (spot === undefined) return false;
     const held = this.held.get(spot)!;
     if (--held.refs > 0) return false;
@@ -277,12 +291,19 @@ class Tuners {
     copy.free.splice(0, copy.free.length, ...this.free);
     for (const [key, { group, refs }] of this.held)
       copy.held.set(key, { group, refs });
+    for (const [id, spot] of this.mine) copy.mine.set(id, spot);
     return copy;
   }
 
   /** 同じ様子か。同じなら、この先は同じように進む */
   same(other: Tuners): boolean {
-    if (this.held.size !== other.held.size) return false;
+    if (
+      this.held.size !== other.held.size ||
+      this.mine.size !== other.mine.size
+    )
+      return false;
+    for (const [id, spot] of this.mine)
+      if (other.mine.get(id) !== spot) return false;
     for (const [key, { group, refs }] of this.held) {
       const theirs = other.held.get(key);
       if (
@@ -338,10 +359,10 @@ export function placements(
     const hold = holds[event.i]!;
     if (event.delta < 0) {
       const key = keys[event.i];
-      if (key !== null && key !== undefined) tuners.drop(key);
+      if (key !== null && key !== undefined) tuners.drop(key, event.i);
       continue;
     }
-    const group = tuners.take(hold.type, hold.channel);
+    const group = tuners.take(hold.type, hold.channel, event.i);
     if (group < 0) continue;
     placed[event.i] = {
       agent: capacity[group]!.agent,
@@ -540,14 +561,14 @@ class Timeline {
   /** 使う・離すを 1 つ反映する。使えなければ false */
   private apply(tuners: Tuners, mark: Mark, extra?: Hold): boolean {
     if (mark.delta < 0) {
-      tuners.drop(mark.key);
+      tuners.drop(mark.key, mark.i < 0 ? undefined : mark.i);
       return true;
     }
     const hold =
       mark.i === this.holds.length && extra !== undefined
         ? extra
         : this.holds[mark.i]!;
-    return tuners.take(hold.type, hold.channel) >= 0;
+    return tuners.take(hold.type, hold.channel, mark.i) >= 0;
   }
 
   /**
@@ -977,7 +998,7 @@ function* sweep(
   const where = new Map<Occupant, number>();
   const waiting = new Set<Occupant>();
   const enter = (o: Occupant) => {
-    const group = tuners.take(o.type, o.channel);
+    const group = tuners.take(o.type, o.channel, o);
     where.set(o, group < 0 ? WAITING : group);
     return group >= 0;
   };
@@ -990,7 +1011,7 @@ function* sweep(
     for (const { o, delta } of batch) {
       if (delta > 0) continue;
       if (where.get(o) === WAITING) waiting.delete(o);
-      else freed = tuners.drop(keyOf(o.type, o.channel)) || freed;
+      else freed = tuners.drop(keyOf(o.type, o.channel), o) || freed;
       active.delete(o);
       where.delete(o);
     }

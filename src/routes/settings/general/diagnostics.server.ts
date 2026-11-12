@@ -6,14 +6,14 @@ import {
   serverEnvironment,
   serverLogLines,
 } from "#lib/server/diagnostics.js";
-import { cardStatus } from "#lib/server/scramble.js";
+import { type CardStatus, cardStatus } from "#lib/server/scramble.js";
 import { getTuners, pinKey } from "#lib/server/tuner.js";
 
 /**
  * 「バージョンと環境」と「ログ」の節 (前の「診断」)。動いている環境 (denpa とエージェントのバージョン・OS・チューナー・カードリーダー) と、サーバとエージェントのログ。
  * バグを報告するとき、ここから伏せた報告を作って GitHub の Issue を開く (`#lib/issue-report.ts`)。
  *
- * **エージェントのバージョンとログは、全部のエージェントから 1 台ずつ取る** (`agents` と同じ並び)。
+ * **エージェントのバージョンとログ・チューナー・カードリーダーは、全部のエージェントから取る** (`agents` と同じ並び)。
  * エージェントが無い・`TUNER_AGENT_URL` が読めないときは、その理由を `agentsError` に入れる。
  *
  * **秘密の値 (OIDC のクライアントシークレット・Webhook の URL) は、画面に送る前にログから消す。**
@@ -54,6 +54,20 @@ export function load(url: URL) {
         error: null as string | null,
       }))
       .catch((error: unknown) => ({ list: [], error: String(error) })),
-    card: cardStatus(),
+    card: cards(all),
+  };
+}
+
+/**
+ * 全部のエージェントのカードリーダーを、エージェントの並びの順につなげたもの (チューナーと同じ)。
+ * リーダーが 1 つも無いときの理由は、最初に理由を返したエージェントのもの
+ */
+async function cards(all: Agent[]): Promise<CardStatus> {
+  const got = await Promise.all(all.map((agent) => cardStatus(agent)));
+  const first = got[0] ?? (await cardStatus());
+  return {
+    ...first,
+    message: got.find((card) => card.message !== "")?.message ?? first.message,
+    readers: got.flatMap((card) => card.readers),
   };
 }

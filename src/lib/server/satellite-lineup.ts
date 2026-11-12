@@ -16,7 +16,7 @@
  * `RETRY_AFTER` たってから試し直す (局の一覧は 1 分ごとに読むので、そのたびに選局しない)
  */
 import type { ChannelType } from "../types";
-import type { Agent } from "./agents";
+import { type Agent, listAgents } from "./agents";
 import { orm } from "./db";
 import { readFromAir } from "./lineup-follow";
 import {
@@ -32,38 +32,67 @@ import { type AgentChannel, putChannels, tunerList } from "./tuner";
 
 const TYPES: SatelliteType[] = ["BS", "CS"];
 
-/** 設定の表のキー。人が設定から消した衛星の種別 (JSON の並び) */
+/**
+ * 設定の表のキー。人が設定から消した衛星の種別 (JSON の並び)。項目は `<エージェントの ID>:<種別>`。
+ * 前のバージョンが書いた種別だけの項目は、全部のエージェントで消したもの
+ */
 const REMOVED_KEY = "removedSatellites";
 
-/**
- * **人が設定から消した衛星の種別。放送の一覧から入れ直さない** (`fillSatellites`)。引っ越してアンテナが無くなった、
- * ケーブルをやめたなどで消した種別が、1 分後の取り込みで戻らないようにする。その種別をスキャンすると外れる (`scan.ts`)
- */
-export function removedSatellites(): SatelliteType[] {
+/** 消した種別の控えの項目 (`REMOVED_KEY`)。読めなければ空 */
+function removedEntries(): string[] {
   try {
     const raw: unknown = JSON.parse(storedSetting(REMOVED_KEY) ?? "[]");
-    return TYPES.filter((type) => Array.isArray(raw) && raw.includes(type));
+    return Array.isArray(raw)
+      ? raw.filter((entry): entry is string => typeof entry === "string")
+      : [];
   } catch {
     return [];
   }
 }
 
-/** 消した (`removed`) か、スキャンで戻した種別を書く */
+/**
+ * **人が設定から消した衛星の種別。放送の一覧から入れ直さない** (`fillSatellites`)。引っ越してアンテナが無くなった、
+ * ケーブルをやめたなどで消した種別が、1 分後の取り込みで戻らないようにする。その種別をスキャンすると外れる (`scan.ts`)。
+ * **エージェントごと。** 一部のエージェントから消した種別も、そのエージェントには入れ直さない
+ */
+export function removedSatellites(agent: number): SatelliteType[] {
+  const entries = removedEntries();
+  return TYPES.filter(
+    (type) => entries.includes(type) || entries.includes(`${agent}:${type}`),
+  );
+}
+
+/** 消した (`removed`) か、スキャンで戻した種別を、そのエージェントのぶんだけ書く */
 export function markRemoved(
   types: readonly SatelliteType[],
   removed: boolean,
+  agentIds: readonly number[],
 ): void {
-  const before = removedSatellites();
-  const after = TYPES.filter((type) =>
-    types.includes(type) ? removed : before.includes(type),
-  );
-  if (after.length !== before.length) store(REMOVED_KEY, JSON.stringify(after));
+  const before = removedEntries();
+  const after = new Set(before);
+  let all: number[] = [];
+  try {
+    all = listAgents().map((agent) => agent.id);
+  } catch {
+    // TUNER_AGENT_URL が読めない。前のバージョンの項目はそのまま残す
+  }
+  for (const type of types) {
+    // 前のバージョンの項目 (全部のエージェント) は、エージェントごとの項目に分けてから書き換える
+    if (all.length > 0 && after.delete(type))
+      for (const agent of all) after.add(`${agent}:${type}`);
+    for (const agent of agentIds) {
+      if (removed) after.add(`${agent}:${type}`);
+      else after.delete(`${agent}:${type}`);
+    }
+  }
+  if (after.size !== before.length || before.some((entry) => !after.has(entry)))
+    store(REMOVED_KEY, JSON.stringify([...after]));
 }
 
 /** 読めなかった種別を試し直すまで */
 const RETRY_AFTER = 60 * 60_000;
 
-/** 最後に試して読めなかった時刻 (種別ごと) */
+/** 最後に試して読めなかった時刻 (エージェントと種別ごと) */
 const failedAt = new Map<string, number>();
 
 /** `failedAt` のキー。エージェントごとに数える */
@@ -154,7 +183,7 @@ export function fillSatellites(
    * スキャンの途中で一覧が入れ替わる
    */
   if (scanState().state === "running") return Promise.resolve([]);
-  const removed = removedSatellites();
+  const removed = removedSatellites(agent.id);
   const wanted = TYPES.filter(
     (type) =>
       !removed.includes(type) &&
@@ -215,7 +244,7 @@ async function fill(
     // スキャンが始まっていたら書かない (スキャンの結果のほうが新しい)
     if (scanState().state === "running") break;
     // 読んでいる間に設定から消された種別は書かない
-    if (removedSatellites().includes(type)) continue;
+    if (removedSatellites(agent.id).includes(type)) continue;
     // 預ける先は放送の一覧を読んだエージェント (`lineup-follow.readFromAir` に渡したもの)
     await putChannels(lineup.channels, [type], agent);
     for (const network of goneNetworks(

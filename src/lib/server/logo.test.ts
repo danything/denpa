@@ -60,7 +60,8 @@ describe("取得できたロゴの数", () => {
  * 衛星の外れの中継を閉じた直後に CS の空きを訊いて 0 と見え、残りの CS を諦めていた
  */
 describe("空きチューナーの数", () => {
-  const tuner = (types: string[], users: string[] = []) => ({
+  const tuner = (types: string[], users: string[] = [], agent = 1) => ({
+    agent,
     disabled: false,
     types: types as ("GR" | "BS" | "CS")[],
     channel:
@@ -87,6 +88,13 @@ describe("空きチューナーの数", () => {
     ];
     expect(countFree(tuners, "CS", ["logo BS/BS03_0"])).toBe(0);
     expect(countFree(tuners, "GR")).toBe(1);
+  });
+
+  test("中継を受けられるエージェントを渡せば、そのエージェントのチューナーだけを数える", () => {
+    const tuners = [tuner(["BS"], [], 1), tuner(["BS"], [], 2)];
+    expect(countFree(tuners, "BS")).toBe(2);
+    expect(countFree(tuners, "BS", [], [2])).toBe(1);
+    expect(countFree([tuner(["BS"], [], 1)], "BS", [], [2])).toBe(0);
   });
 
   test("利用者のいない選局 (エージェントが畳むまでの余韻) は空きとして数える", () => {
