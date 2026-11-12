@@ -41,12 +41,8 @@ export function autoLabel(step: Step, codec: string | null): string {
   return autoValue(step, name);
 }
 
-/** 段を切り替えようとして、サーバが混んでいて断られたとき。`down` は下げようとしたか */
-export function busyNote(down: boolean): string {
-  return down
-    ? "サーバが混んでいるため、画質を下げられませんでした"
-    : "サーバが混んでいるため、画質を上げられませんでした";
-}
+/** サーバが混んでいて段を替えられなかったときの文言。ライブのサーバの通知と同じ文なので、段の表 (`rungs.ts`) が持つ */
+export { busyNote } from "./rungs";
 
 /** 呼ぶたびに観る画面が渡すもの。`now`・`route`・`pace` はここで足す */
 export type WatchSample = Omit<AdaptSample, "now" | "route" | "pace"> & {

@@ -230,7 +230,7 @@ export type Notice =
       /**
        * **失敗ではないが、リクエストどおりにできなかった**ことの一行。映像は出ている。
        * 「GPU でエンコードできなかったのでソフトウェアでエンコードしている」(`server/live.ts` の `GPU_GAVE_UP`) や、
-       * 「サーバが混んでいて画質を下げられなかった」(`RUNG_BUSY`) など。画面は断り書き (`warning`) に出す
+       * 「サーバが混んでいて画質を下げられなかった」(`rungs.ts` の `busyNote`) など。画面は断り書き (`warning`) に出す
        */
       type: "notice";
       message: string;

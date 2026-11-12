@@ -68,3 +68,13 @@ export interface Pace {
  * ときに 0.99 が 4 秒続いて「サーバのエンコードが追いつかないため、再生が止まります」が出て、その間は段を下げなかった
  */
 export const ENCODE_SLOW = 0.95;
+
+/**
+ * 段を替えようとして、サーバが混んでいて断られたときの文言。`down` は下げようとしたか。
+ * 録画の観る画面 (`watch-adapt.ts`) と、ライブで変換の枠が埋まっていて段を下げられなかったときのサーバの通知 (`server/live.ts`) が使う
+ */
+export function busyNote(down: boolean): string {
+  return down
+    ? "サーバが混んでいるため、画質を下げられませんでした"
+    : "サーバが混んでいるため、画質を上げられませんでした";
+}
