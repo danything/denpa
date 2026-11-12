@@ -513,14 +513,16 @@ export function forgetRawProbe(agent?: number): void {
 }
 
 /**
- * **元の TS の置き場 (`RAW_DIR`) が、エージェントから見えるか。** denpa が `RAW_DIR/.denpa/probe-<エージェントの ID>` に乱数を書き、
+ * **元の TS の置き場 (`RAW_DIR`) が、エージェントから見えるか。** denpa が `RAW_DIR/.denpa/probe-<エージェントの ID>-<乱数>` に乱数を書き、
  * エージェントに `POST /denpa/raw/probe` でその中身の SHA-256 を返させて比べる。書いたファイルは確かめ終えたら消す。
  *
  * true は見える、false は見えない (ファイルが無い・中身が違う)、null は確かめられない (繋がらない・`/denpa/raw/probe` の無い古いエージェント)
  */
 export async function probeRaw(agent: Agent): Promise<boolean | null> {
-  const name = `.denpa/probe-${agent.id}`;
-  const path = join(config.rawDir, ".denpa", `probe-${agent.id}`);
+  // 同じエージェントを同時に確かめても、互いのファイルを消さないよう名前に乱数を足す
+  const nonce = randomBytes(8).toString("hex");
+  const name = `.denpa/probe-${agent.id}-${nonce}`;
+  const path = join(config.rawDir, ".denpa", `probe-${agent.id}-${nonce}`);
   const content = randomBytes(32).toString("hex");
   try {
     mkdirSync(dirname(path), { recursive: true });

@@ -1,6 +1,12 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -710,7 +716,7 @@ describe("後から復号させる先", () => {
   }
 
   test("カードの準備ができていて、置き場が見えるエージェントに送る。確かめた結果は控える", async () => {
-    const [a] = startAgents(pool(localCard(CARD_X)), pool(remoteCard(CARD_X)));
+    startAgents(pool(localCard(CARD_X)), pool(remoteCard(CARD_X)));
     pools[0]!.raw = "missing";
     const { input, output } = await scrambled();
     await descramble(input, output);
@@ -718,7 +724,16 @@ describe("後から復号させる先", () => {
     await descramble(input, output);
     expect(pools.map((p) => p.probes)).toEqual([1, 1]);
     // 確かめたファイルは消す
-    expect(existsSync(join(config.rawDir, ".denpa", `probe-${a}`))).toBe(false);
+    expect(readdirSync(join(config.rawDir, ".denpa"))).toEqual([]);
+  });
+
+  test("同時に何本復号させても、確かめるファイルを取り違えない", async () => {
+    startAgents(pool(localCard(CARD_X)), pool(localCard(CARD_X)));
+    pools[0]!.raw = "missing";
+    const { input, output } = await scrambled();
+    await Promise.all([1, 2, 3].map(() => descramble(input, output)));
+    expect(pools.map((p) => p.decodes)).toEqual([0, 3]);
+    expect(readdirSync(join(config.rawDir, ".denpa"))).toEqual([]);
   });
 
   test("カードの無いエージェントには、置き場が見えても送らない。どこにも見えなければカードのある先頭", async () => {

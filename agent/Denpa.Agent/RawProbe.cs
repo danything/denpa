@@ -29,7 +29,7 @@ public static class RawProbe
     {
         static (int, JsonObject) Failed(int status, string error) => (status, new JsonObject { ["error"] = error });
         if (string.IsNullOrEmpty(path)) return Failed(400, "path は文字列で書きます");
-        var root = Path.Combine(recorded, Dir);
+        var root = Path.GetFullPath(Path.Combine(recorded, Dir));
         var full = Path.GetFullPath(Path.Combine(recorded, path));
         if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             return Failed(400, $"読めるのは元の TS の保存先の {Dir}/ の下だけです");
