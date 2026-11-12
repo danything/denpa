@@ -251,4 +251,27 @@ Android 向けのエージェントに入れる OpenSSL は `.github/openssl-and
 digest もタグと一緒に Renovate が上げ、タグだけで足した土台やアクションには digest を足す PR を出します (`renovate.json` の `pinDigests`)。
 `renovate.json` の書き方は `docker compose run --rm unit bunx --package renovate renovate-config-validator` で確かめます。
 
+## Android 向けのエージェント
+
+**Android で動かすエージェントは、Linux と同じソースを `linux-bionic-arm64` の Native AOT で組みます。** CI のエミュレータのために `linux-bionic-x64` も組みます。
+まだ配りません (APK を作る PR から配る)。組むのは `.github/workflows/android.yml` で、test.yml が呼びます。必須チェックではありません。
+
+- .NET の SDK は ASP.NET Core の実行時パックを bionic 向けに出していません。csproj でその除外を外し、linux の実行時パックの IL を AOT で組ませています。
+  SDK が支えていない使い方なので、SDK を上げたら Android の CI が通るかを見ます
+- Android には OpenSSL が無いので、NDK で組んだ OpenSSL の静的ライブラリを実行ファイルに入れます (`StaticOpenSslLinking`)。
+  組むのは `.github/openssl-android.sh` で、CI は組み上がりを actions/cache に置き、バージョン・組み方・NDK が変わるまで使い回します
+- 出来上がりは `/system/bin/linker64` で動く PIE で、繋ぐのは libc・libm・libdl だけです。LOAD は 16 KB ページに揃えます。CI がこの 3 つを確かめます
+
+手元で組むなら、NDK (バージョンは android.yml の `NDK_VERSION`) を置いたコンテナで、cmake と make を入れてから流します。
+
+```sh
+ANDROID_NDK_ROOT=/opt/ndk bash .github/openssl-android.sh arm64 /tmp/openssl-arm64
+PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/tmp/openssl-arm64 \
+  dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r linux-bionic-arm64 -o out
+```
+
+CI は x86_64 の実行ファイルを Android 10 (API 29。minSdk) と Android 15 (API 35) のエミュレータに `adb push` し、shell のユーザーで起動します
+(`.github/android-agent-smoke.sh`)。`--version`・`--pair`、サーバの起動、denpa と同じ手順で組むこと、`/denpa/about`・`/denpa/tuners`・`/denpa/card`、SIGTERM で終わることを見ます。
+アプリの子プロセス (SELinux の `untrusted_app` と、アプリに掛かる seccomp) では、まだ動かしていません。USB の機材はエミュレータに挿せないので、CI では見ません。
+
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。

@@ -1,9 +1,0 @@
-name: Android try (temporary)
-on:
-  push:
-    branches: [feat/android-agent-aot]
-permissions:
-  contents: read
-jobs:
-  android:
-    uses: ./.github/workflows/android.yml

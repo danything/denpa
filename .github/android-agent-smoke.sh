@@ -22,7 +22,8 @@ mkdir -p "$logs"
 logs=$(cd "$logs" && pwd)
 dir=/data/local/tmp/denpa
 port=25252
-token=smoke-token
+# 合言葉は denpa と同じく 32 字以上の乱数 (短いとエージェントが警告する)
+token=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')
 host=$(mktemp -d)
 
 on_exit() {
