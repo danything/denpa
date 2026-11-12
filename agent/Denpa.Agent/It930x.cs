@@ -349,7 +349,7 @@ public static class It930x
 
     /// <summary>
     /// 設定の <c>it930x:</c> の受信機が受けられる種別 (<c>GET /denpa/tuners</c> の <c>receivable</c>)。
-    /// 機種は、最後に探したときの控え (<see cref="Found(Action{string}?)"/>) か、そのポートだけを安く読める OS (Linux の sysfs) ならそこから
+    /// 機種は、最後に探したときの控え (<see cref="Found(Action{string}?)"/>) か、そのポートだけを読める OS (Linux の sysfs) ならそこから
     /// (<see cref="IUsbHost.Peek"/>。一覧を返すたびに並べ直さない)。
     /// 機種が分からない (抜いてある) ときは、どの機種かを決められないので <see cref="Types"/> の全部を返す。
     /// 機種は分かっていて、その機種に無い受信機の番号なら空。<c>it930x:</c> の形式でなければ null

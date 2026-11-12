@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 namespace Denpa.Agent;
 
 /*
- * 挿さっている USB の機材を並べる・開く・抜き挿しを受け取る、OS との境目 (IUsbHost)。機材ごとのコード (Zd1j・Dt295・Siano・It930x・
+ * 挿さっている USB の機材を並べる・開く・抜き差しを受け取る、OS との境目 (IUsbHost)。機材ごとのコード (Zd1j・Dt295・Siano・It930x・
  * Ccid・AsicenUserland) と DeviceWatch は、ここだけを通して USB の機材を探し、開く。OS を見分けるのは UsbHost.Current の 1 か所だけ。
  * 実装は SysfsUsbHost (Linux の sysfs と usbfs)・WinUsbHost (Windows の WinUSB)・IoKitUsbHost (macOS の IOKit)。
  */
@@ -32,7 +32,7 @@ public readonly record struct UsbId(int Vendor, int Product)
 public sealed record UsbFound(string Port, int Vendor, int Product, string? Serial, string? Manufacturer,
     string? ProductName, string? Driver, IReadOnlyList<(int Config, int Number, int Class)> Interfaces);
 
-/// <summary>挿さっている USB の機材を並べる・開く・抜き挿しを受け取る。OS ごとに 1 つ (<see cref="UsbHost.Current"/>)</summary>
+/// <summary>挿さっている USB の機材を並べる・開く・抜き差しを受け取る。OS ごとに 1 つ (<see cref="UsbHost.Current"/>)</summary>
 public interface IUsbHost
 {
     /// <summary>
@@ -43,7 +43,7 @@ public interface IUsbHost
 
     /// <summary>
     /// そのポートの機材だけを、並べ直さずに読む (ID は問わない)。挿さっていなければ null。
-    /// 1 台だけを安く読む手段の無い OS (Windows・macOS) は、挿さっていても null (呼ぶ側は <see cref="List"/> で探す)
+    /// 1 台だけを読む手段の無い OS (Windows・macOS は ID ごとに並べるしかない) は、挿さっていても null (呼ぶ側は <see cref="List"/> で探す)
     /// </summary>
     UsbFound? Peek(string port);
 
@@ -72,7 +72,7 @@ public interface IUsbHost
     Action<string, TimeSpan>? PowerCycle { get; }
 
     /// <summary>
-    /// 抜き挿しを受け取り始める。挿した・抜いたらしいときに <paramref name="changed"/> を呼ぶ (続けて呼ぶことがあり、まとめるのは呼ぶ側。DeviceWatch)。
+    /// 抜き差しを受け取り始める。挿した・抜いたらしいときに <paramref name="changed"/> を呼ぶ (続けて呼ぶことがあり、まとめるのは呼ぶ側。DeviceWatch)。
     /// 止めるときは Dispose
     /// </summary>
     IDisposable Watch(Action changed);
@@ -138,7 +138,7 @@ internal sealed class NoWatch : IDisposable
 /// Linux の sysfs (<c>/sys/bus/usb/devices</c>) で並べ、usbfs (<c>/dev/bus/usb</c>) で開く。
 /// 並べるのは sysfs のポートごとのディレクトリの <c>idVendor</c>・<c>idProduct</c>・<c>serial</c>・<c>manufacturer</c>・<c>product</c> と、
 /// インターフェース (<c>4-11:1.0</c>) の <c>bInterfaceNumber</c>・<c>bInterfaceClass</c>・<c>driver</c>。
-/// 抜き挿しは <c>/dev/bus/usb</c> の下にファイルができる・消えるのを inotify で受け取る (<see cref="FileSystemWatcher"/>)。
+/// 抜き差しは <c>/dev/bus/usb</c> の下にファイルができる・消えるのを inotify で受け取る (<see cref="FileSystemWatcher"/>)。
 /// カーネルの uevent はコンテナのネットワーク名前空間には届かないので、コンテナでも届くファイルの変化を使う
 /// </summary>
 /// <param name="sysfs">sysfs の置き場 (渡せるのはテストのため)</param>
@@ -236,7 +236,7 @@ public sealed class SysfsUsbHost(string sysfs, string devUsb = UsbSysfs.DevUsb) 
 /// <summary>
 /// Windows の WinUSB で並べて開く (<see cref="WinUsbDevice"/>)。WinUSB でないものも並ぶ (開けるかは開くまで分からない)。
 /// シリアル番号はデバイスのパスから (<see cref="UsbDevices.WindowsSerial"/>)。カードリーダーは PC/SC で開く。
-/// 抜き挿しは、挿さっている USB 機材のパス (<see cref="WinUsbDevice.Fingerprint"/>) を 2 秒ごとに見比べる
+/// 抜き差しは、挿さっている USB 機材のパス (<see cref="WinUsbDevice.Fingerprint"/>) を 2 秒ごとに見比べる
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class WinUsbHost : IUsbHost
@@ -284,7 +284,7 @@ public sealed class WinUsbHost : IUsbHost
 
 /// <summary>
 /// macOS の IOKit で並べて開く (<see cref="IoKitDevice"/>)。シリアル番号・文字列ディスクリプタ・インターフェースは読まない。カードリーダーは PC/SC で開く。
-/// 抜き挿しは受け取らず、10 秒ごとに <c>changed</c> を呼ぶ (探した結果を前回と比べ、増えた機材だけを足す。Config.Additions)
+/// 抜き差しは受け取らず、10 秒ごとに <c>changed</c> を呼ぶ (探した結果を前回と比べ、増えた機材だけを足す。Config.Additions)
 /// </summary>
 [SupportedOSPlatform("macos")]
 public sealed class IoKitUsbHost : IUsbHost
