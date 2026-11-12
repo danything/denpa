@@ -111,15 +111,22 @@ internal object Server {
         "BUN_RUNTIME_TRANSPILER_CACHE_PATH" to "0",
     ) + tools(context)
 
-    /** リリースの APK (versionName が `2.43.0` の形) は `v2.43.0`、手元と CI の APK は `dev` (更新の知らせを出さない) */
+    /** リリースの APK (versionName が `2.43.0` の形) は `v2.43.0`、手元と CI の APK は `dev` (更新の通知を出さない) */
     fun denpaVersion(versionName: String?): String =
         if (versionName != null && Regex("""^\d+\.\d+\.\d+$""").matches(versionName)) "v$versionName" else "dev"
 
     /**
      * 人が足す環境変数 (外部ストレージのアプリの置き場の `denpa.env`。`adb push` で書ける)。無ければ既定を書いてから読む。
-     * 外部ストレージが使えなければ既定の中身を使う
+     * 外部ストレージが使えなければ既定の中身を使う。
+     *
+     * **Android 10 では読まずに既定の中身を使う。** Android 10 は、ストレージの権限を持つ古い作りのアプリ (requestLegacyExternalStorage) が
+     * ほかのアプリの `Android/data/` にも書けるので、`TRUSTED_NETWORKS` を書き換えられて denpa を開けられてしまうため
      */
     fun userEnvironment(context: Context): Map<String, String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            Log.i(TAG, "Android 10 では $ENV_FILE を読まず、既定の中身を使います")
+            return parseEnvironment(ENV_DEFAULT)
+        }
         val text = try {
             context.getExternalFilesDir(null)?.let { dir ->
                 val file = File(dir, ENV_FILE)
@@ -155,11 +162,11 @@ internal object Server {
         return token
     }
 
-    /** `GET /api/health` が 200 を返すか (通知に出す。2 秒で諦める) */
+    /** `GET /api/health` が 200 を返すか (通知に出す)。様子の読み取りと同じスレッドで呼ぶので、繋ぐのと読むのをそれぞれ 1 秒で諦める */
     fun healthy(): Boolean = try {
         Socket().use { socket ->
-            socket.connect(InetSocketAddress("127.0.0.1", PORT), 2_000)
-            socket.soTimeout = 2_000
+            socket.connect(InetSocketAddress("127.0.0.1", PORT), 1_000)
+            socket.soTimeout = 1_000
             socket.getOutputStream().write("GET /api/health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n".toByteArray())
             socket.getInputStream().bufferedReader().readLine()?.split(' ')?.getOrNull(1) == "200"
         }
