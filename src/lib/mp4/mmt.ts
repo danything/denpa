@@ -8,7 +8,8 @@
  *
  * - **時刻 0 は、最初に使う映像の頭出しできるコマの DTS。** それより前の音声は捨てる。字幕も同じ 0 で数える (`origin`)
  * - 断片は映像の MPU (頭出しできる所から次の頭出しできる所まで) ごとに 1 つ出す。音声は、映像の断片の終わりまでのぶんを一緒に出す
- * - 初期化セグメントは、映像の VPS・SPS・PPS と、音声の設定がそろったときに 1 回だけ出す。
+ * - 初期化セグメントは、映像の VPS・SPS・PPS と、音声の設定がそろったときに 1 回だけ出す。入れ物の名前は `hvc1` で、
+ *   VPS・SPS・PPS は `hvcC` にだけ置く (Safari は `hev1` を受け取らない)。
  *   そろう前に映像の MPU が終わったら、それまでのコマを捨て、次の頭出しできるコマから始め直す (時刻 0 もそのコマにする)。
  *   アセットが変わったら (`MediaEvent` の `assets`) 作り直すのは使う側
  */
@@ -51,21 +52,41 @@ function sampleData(nals: readonly Uint8Array[]): Uint8Array {
   return out;
 }
 
-/** 頭出しできるコマの VPS・SPS・PPS から、映像のトラックを作る。そろっていなければ null */
-function videoTrack(unit: VideoUnit): VideoTrack | null {
-  const find = (type: number) => unit.nals.find((nal) => nalType(nal) === type);
-  const vps = find(NAL_VPS);
-  const sps = find(NAL_SPS);
-  const pps = find(NAL_PPS);
-  if (vps === undefined || sps === undefined || pps === undefined) return null;
-  const info = parseSps(sps);
+/** パラメータセット (VPS・SPS・PPS) の NAL ユニットか */
+function isParameterSet(nal: Uint8Array): boolean {
+  const type = nalType(nal);
+  return type === NAL_VPS || type === NAL_SPS || type === NAL_PPS;
+}
+
+/** 2 つのバイト列が同じか */
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, i) => byte === b[i]);
+}
+
+/**
+ * 頭出しできるコマの VPS・SPS・PPS から、映像のトラックを作る。そろっていなければ null。
+ * `parameterSets` は `hvcC` に入れたもの (サンプルから外すものを決める。`MmtFmp4.push`)
+ */
+function videoTrack(
+  unit: VideoUnit,
+): { track: VideoTrack; parameterSets: Uint8Array[] } | null {
+  const all = (type: number) =>
+    unit.nals.filter((nal) => nalType(nal) === type);
+  const vps = all(NAL_VPS);
+  const sps = all(NAL_SPS);
+  const pps = all(NAL_PPS);
+  if (vps.length === 0 || sps.length === 0 || pps.length === 0) return null;
+  const info = parseSps(sps[0]!);
   if (info === null) return null;
   return {
-    kind: "video",
-    id: VIDEO_TRACK,
-    width: info.width,
-    height: info.height,
-    hvcC: hvcC(info, { vps, sps, pps }),
+    track: {
+      kind: "video",
+      id: VIDEO_TRACK,
+      width: info.width,
+      height: info.height,
+      hvcC: hvcC(info, { vps, sps, pps }),
+    },
+    parameterSets: [...vps, ...sps, ...pps],
   };
 }
 
@@ -86,6 +107,10 @@ export class MmtFmp4 {
   private readonly hasVideo: boolean;
   private readonly hasAudio: boolean;
   private video: VideoTrack | null = null;
+  /** `hvcC` に入れた VPS・SPS・PPS */
+  private parameterSets: Uint8Array[] = [];
+  /** `hvcC` に無いパラメータセットがサンプルに来た (`push`)。ライブはこれを見て作り直す */
+  parametersChanged = false;
   private audio: AudioTrack | null = null;
   private started = false;
   private sequence = 1;
@@ -123,15 +148,29 @@ export class MmtFmp4 {
       if (this.video === null) {
         // 頭出しできるコマから始める。それまでのコマは前のコマが無いとデコードできない
         if (!unit.keyframe) return out;
-        this.video = videoTrack(unit);
-        if (this.video === null) return out;
+        const made = videoTrack(unit);
+        if (made === null) return out;
+        this.video = made.track;
+        this.parameterSets = made.parameterSets;
         this.origin = unit.dts;
       }
+      /*
+       * **`hvcC` に入れたパラメータセットはサンプルから外す** (`hvc1`。`hevc.hvcC`)。違うものが来たら (番組が替わって
+       * 符号化の設定が変わった、など) サンプルに残し、`parametersChanged` を立てる。デコーダはサンプルの中のもので切り替えられる。
+       * ライブは init から作り直す (`server/live-mmt.ts`)。録画は 1 本の fMP4 にするので、そのまま続ける (`server/mmts.ts`)
+       */
+      const nals = unit.nals.filter((nal) => {
+        if (!isParameterSet(nal)) return true;
+        if (this.parameterSets.some((known) => sameBytes(known, nal)))
+          return false;
+        this.parametersChanged = true;
+        return true;
+      });
       this.videoSamples.push({
         dts: unit.dts,
         unit,
         sample: {
-          data: sampleData(unit.nals),
+          data: sampleData(nals),
           duration: unit.duration,
           offset: unit.pts - unit.dts,
           keyframe: unit.keyframe,
@@ -187,6 +226,7 @@ export class MmtFmp4 {
       this.videoSamples = [];
       this.audioSamples = [];
       this.video = null;
+      this.parameterSets = [];
       this.origin = null;
       return out;
     }

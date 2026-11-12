@@ -17,6 +17,7 @@
 import { statSync } from "node:fs";
 
 import { PACKET } from "@danything/arib/psi";
+import { TlvStream } from "@danything/arib/tlv";
 
 import { lastVideoPts, readHead, sinceHead, tsHead } from "#lib/ts/seek.js";
 
@@ -139,6 +140,35 @@ export function chasePlan(
     paceBytesPerSec: Math.max(1_000_000, bytesPerSec) * PACE,
     bytesPerSec,
   };
+}
+
+/** TLV のパケットの先頭を探す幅 (バイト)。パケットは長くて 65,539 バイトなので、次の先頭まで入る */
+const TLV_SEARCH = 256 * 1024;
+
+/**
+ * **4K の局の録画 (TLV) を途中から流すとき、`offset` から先で最初の TLV パケットの先頭** (HTTP の追っかけの `codec=raw`)。
+ * `chasePlan` は TS の 188 バイトで切るので、パケットの長さが決まっていない TLV ではパケットの途中に当たる。受け取る側は
+ * 先頭をパケットの先頭として読む (ライブの 4K の局の `codec=raw` と同じ)。先頭の探し方は `TlvStream` (次のパケットの先頭も合う所)。
+ * 読めない・見つからなければ `offset` のまま
+ */
+export function tlvStart(path: string, offset: number): number {
+  if (offset === 0) return 0;
+  let file: RecordingSyncHandle;
+  try {
+    file = openRecordingSync(path);
+  } catch {
+    return offset;
+  }
+  try {
+    const buffer = new Uint8Array(TLV_SEARCH);
+    const read = file.read(buffer, 0, buffer.length, offset);
+    const stream = new TlvStream();
+    // 最初のパケットが出た時点で、それより前に読み飛ばした長さが先頭までのずれ
+    const first = stream.feed(buffer.subarray(0, read)).next();
+    return first.done === true ? offset : offset + stream.skipped;
+  } finally {
+    file.close();
+  }
 }
 
 /**

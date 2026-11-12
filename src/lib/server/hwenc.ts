@@ -534,19 +534,24 @@ function rkmppRate(bps: number): string[] {
 /**
  * NVENC と AMF のレート制御の引数。**VBR で、平均を表の値に寄せる** (MPP の VBR と違い、平均を目指す)。
  * `rc` は NVENC が `vbr`、AMF がピークを抑えた `vbr_peak`。
- * 上限は目標の 2 倍。動きの多い場面に量を寄せられる幅として置いたもので、測っていない。
+ * 上限 (`peak`) は既定で目標の 2 倍。動きの多い場面に量を寄せられる幅として置いたもので、測っていない。
+ * 段を下げたライブでは段の値を渡す (`liveHwArgs` の `cap`)。
  * バッファは上限と同じ (FFmpeg の nvenc.c が何も渡さないときに置く値は平均の 2 倍で、それと同じ)
  */
-function vbrRate(rc: "vbr" | "vbr_peak", bps: number): string[] {
+function vbrRate(
+  rc: "vbr" | "vbr_peak",
+  bps: number,
+  peak = bps * 2,
+): string[] {
   return [
     "-rc",
     rc,
     "-b:v",
     String(bps),
     "-maxrate",
-    String(bps * 2),
+    String(peak),
     "-bufsize",
-    String(bps * 2),
+    String(peak),
   ];
 }
 
@@ -604,12 +609,12 @@ function vtProfile(codec: HwCodec): string[] {
 }
 
 /**
- * VideoToolbox のレート制御の引数。**平均を表の値に寄せ、上限を 2 倍に** (NVENC と同じ幅で、測っていない)。
+ * VideoToolbox のレート制御の引数。**平均を表の値に寄せ、上限 (`peak`) を既定で 2 倍に** (NVENC と同じ幅で、測っていない。段を下げたライブは段の値)。
  * `-maxrate` は FFmpeg が VideoToolbox の `DataRateLimits` (1 秒あたりのバイト数) に渡す。
  * FFmpeg の videotoolboxenc.c は `-bufsize` を読まないので渡さない
  */
-function vtRate(bps: number): string[] {
-  return ["-b:v", String(bps), "-maxrate", String(bps * 2)];
+function vtRate(bps: number, peak = bps * 2): string[] {
+  return ["-b:v", String(bps), "-maxrate", String(peak)];
 }
 
 /**
@@ -710,10 +715,14 @@ export function liveHw(
  *
  * 回線に合わせて下げた段 (`#lib/rungs.ts`) では、`cap` に段の高さとビットレートの上限を渡す。
  *
- * - Rockchip MPP・NVENC は、表の値 (`hwBitrate`) の代わりに段の上限を同じレート制御 (`rkmppRate`・`vbrRate`) に渡す
- * - QSV は ICQ をやめて **VBR** にする (`-b:v` に段の上限、`-maxrate` にその 2 倍。NVENC・AMF と同じ幅)。FFmpeg の qsvenc.c は
- *   `-maxrate` が `-b:v` と同じだと CBR を、上回ると VBR を選ぶ
+ * **どの GPU も、ピーク (`-maxrate`) を段の値で止める** (x264 の `-maxrate`・`-bufsize` と同じ)。段の値は回線に収まる量なので、
+ * 2 倍まで許すと動きの多い場面で回線を超える。平均 (`-b:v`) も段の値にする (MPP だけは下のとおり 16/17)
+ *
+ * - NVENC・AMF は同じ VBR のまま、平均と上限に段の値を渡す (`vbrRate` の `peak`)
+ * - Rockchip MPP は上限 (`rc:bps_max`) を目指すので、上限が段の値になるように目標を 16/17 にする (`rkmppRate`)
+ * - QSV は ICQ をやめて、`-b:v` と `-maxrate` に段の値を渡す。FFmpeg の qsvenc.c は 2 つが同じだと CBR を選ぶ
  * - VA-API は CQP をやめて **VBR で上限を決める** (`-b:v` と `-maxrate:v` に同じ値)。CQP は量を場面に任せるので、回線に収まる保証が無い
+ * - VideoToolbox も `-b:v` と `-maxrate` に段の値を渡す
  * - `full` なら GPU の上でインタレ解除して 30 コマにし (`rate=frame`)、そのまま `scale_vaapi` で縮める。フレームを CPU に降ろさない。
  *   `full` でなければ、縮めるのは呼ぶ側の CPU の `scale` (`live.ts` の `rungVideo`)
  *
@@ -728,11 +737,16 @@ export function liveHwArgs(
   const { way } = hw;
   const base = hwArgs(way, codec);
   const bps = cap?.bps ?? hwBitrate(codec, LARGEST);
+  /** ピーク。段を下げたら段の値で止める (上の「段を下げた変換」)。段 0 は平均の 2 倍まで */
+  const peak = cap === null ? bps * 2 : bps;
   if (way.kind === "rkmpp") {
     return {
       input: base.device,
       filter: base.filter,
-      encoder: [`${codec}_rkmpp`, ...rkmppRate(bps)],
+      encoder: [
+        `${codec}_rkmpp`,
+        ...rkmppRate(cap === null ? bps : Math.round((bps * 16) / 17)),
+      ],
     };
   }
   if (way.kind === "qsv") {
@@ -746,7 +760,7 @@ export function liveHwArgs(
         "veryfast",
         ...(cap === null
           ? ["-global_quality:v", String(QSV_ICQ[codec])]
-          : ["-b:v", String(bps), "-maxrate", String(bps * 2)]),
+          : ["-b:v", String(bps), "-maxrate", String(peak)]),
         "-bf",
         "0",
         "-async_depth",
@@ -769,7 +783,7 @@ export function liveHwArgs(
         "-b:v",
         String(bps),
         "-maxrate",
-        String(bps * 2),
+        String(peak),
         "-async_depth",
         "1",
       ],
@@ -786,10 +800,7 @@ export function liveHwArgs(
         "1",
         "-prio_speed",
         "1",
-        // 段を下げたときは回線に収まるよう、上限も段の値にする (VA-API と同じ)
-        ...(cap === null
-          ? vtRate(bps)
-          : ["-b:v", String(bps), "-maxrate", String(bps)]),
+        ...vtRate(bps, peak),
         "-bf",
         "0",
       ],
@@ -806,7 +817,7 @@ export function liveHwArgs(
         "p2",
         "-tune",
         "ll",
-        ...vbrRate("vbr", bps),
+        ...vbrRate("vbr", bps, peak),
         "-bf",
         "0",
         "-zerolatency",

@@ -208,11 +208,29 @@ describe("MmtFmp4 (ffmpeg の HEVC と AAC)", () => {
   test("init の映像と音声の設定", () => {
     const tracks = readInit(segments[0]!.data);
     expect(tracks.map((t) => [t.kind, t.codec, t.width, t.height])).toEqual([
-      ["video", "hev1.2.4.L30.90", 64, 64],
+      ["video", "hvc1.2.4.L30.90", 64, 64],
       ["audio", "mp4a.40.2", 0, 0],
     ]);
     expect(tracks.every((t) => t.timescale === CLOCK)).toBe(true);
     expect([...tracks[1]!.config]).toEqual([0x11, 0x90]);
+  });
+
+  /*
+   * `hvc1` はパラメータセットを `hvcC` にだけ置く。放送はコマの中にも送ってくるので、同じものはサンプルから外す
+   */
+  test("VPS・SPS・PPS は hvcC にだけ置き、サンプルから外す", () => {
+    const sets = hevcPictures(base64Bytes(HEVC))[0]!.filter((n) =>
+      [32, 33, 34].includes(nalType(n)),
+    );
+    expect(sets.length).toBeGreaterThanOrEqual(3);
+    const contains = (data: Uint8Array, part: Uint8Array) =>
+      Buffer.from(data).indexOf(Buffer.from(part)) >= 0;
+    for (const set of sets) {
+      expect(contains(segments[0]!.data, set)).toBe(true);
+      for (const media of segments.slice(1))
+        expect(contains(media.data, set)).toBe(false);
+    }
+    expect(muxer.parametersChanged).toBe(false);
   });
 
   test("SPS から 10 ビットと大きさを読む", () => {

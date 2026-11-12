@@ -355,7 +355,7 @@ test.describe("ケーブル", () => {
     expect(hevc.status).toBe(200);
     expect(hevc.type).toBe("video/mp4");
     expect(hevc.codec).toBe("hevc");
-    for (const box of ["hev1", "hvcC", "mp4a", "moof", "mdat"])
+    for (const box of ["hvc1", "hvcC", "mp4a", "moof", "mdat"])
       expect(hevc.text).toContain(box);
     // 1 局に絞った TLV そのもの (`codec=raw`)。頭は TLV のパケットの 0x7F
     const raw = await streamHead(`${live}?codec=raw`, (text) => text !== "");
@@ -380,7 +380,7 @@ test.describe("ケーブル", () => {
       seen.__init = [];
       const support = MediaSource.isTypeSupported.bind(MediaSource);
       MediaSource.isTypeSupported = (type) =>
-        type.includes("hev1") || support(type);
+        type.includes("hvc1.2.4") || support(type);
       Object.defineProperty(navigator.mediaCapabilities, "decodingInfo", {
         value: async () => ({
           supported: true,
@@ -423,7 +423,7 @@ test.describe("ケーブル", () => {
       .toMatchObject({
         codec: "hevc",
         raw: false,
-        codecs: expect.stringContaining("hev1.2.4"),
+        codecs: expect.stringContaining("hvc1.2.4"),
       });
     await expect
       .poll(() =>
@@ -628,7 +628,7 @@ test.describe("ケーブル", () => {
         expect(info.offers).toContainEqual({
           codec: "hevc",
           way: "stream",
-          codecs: "hev1.2.4.L153.B0,mp4a.40.2",
+          codecs: "hvc1.2.4.L153.B0,mp4a.40.2",
         });
         expect(info.offers.some((offer) => offer.codec === "mpeg2")).toBe(
           false,

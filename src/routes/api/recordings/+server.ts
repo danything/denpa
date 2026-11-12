@@ -9,7 +9,7 @@ import { encodedFiles } from "#lib/server/library.js";
 import { rulerOf } from "#lib/server/playback.js";
 import { recordings } from "#lib/server/schema.js";
 import { displayTitle } from "#lib/server/title.js";
-import { recordedTransport } from "#lib/source.js";
+import { recordedTransport, tsPathOf } from "#lib/source.js";
 import { fromTsTime } from "#lib/ts/watch.js";
 
 /**
@@ -83,28 +83,21 @@ export function GET({ url }) {
         hevc_path: row.hevc,
         alt_path: row.alt,
       });
-      const present = new Set(encoded.map((entry) => entry.path));
-      const files = (
-        [
-          ["encoded", row.library],
-          ["hevc", row.hevc],
-          ["alt", row.alt],
-          ["ts", row.ts],
-        ] as const
-      ).flatMap(([source, path]) =>
-        // 4K の局の元の録画 (`.mmts`。TLV) はアプリがそのまま読めないので並べない。観るのは `playback` の `auto` から
-        path === null ||
-        (path.endsWith(".mkv") && !present.has(path)) ||
-        recordedTransport(path) === "tlv"
+      /*
+       * 元の TS は、エンコードしない録画なら置き場の TS (`tsPathOf`)。4K の局の元の録画 (`.mmts`。TLV) は
+       * アプリがそのまま読めないので並べない。観るのは `playback` の `auto` から
+       */
+      const ts = tsPathOf({ ts_path: row.ts, library_path: row.library });
+      const files = [
+        ...encoded.map(({ source, path }) => ({
+          source,
+          codec: encodedCodec(path),
+          url: file(source),
+        })),
+        ...(ts === null || recordedTransport(ts) === "tlv"
           ? []
-          : [
-              {
-                source,
-                codec: source === "ts" ? "mpeg2" : encodedCodec(path),
-                url: file(source),
-              },
-            ],
-      );
+          : [{ source: "ts" as const, codec: "mpeg2", url: file("ts") }]),
+      ];
       return {
         id: row.id,
         title: displayTitle(row.name),
@@ -137,8 +130,8 @@ export function GET({ url }) {
         // 末尾まで観た時刻 (ms)。まだなら null。null かつ resumeMs も null なら未視聴 (画面の印と同じ)
         watchedAt: row.watchedAt,
         recording: row.state === "recording",
-        // 元の TS がある間 (録画中・エンコードする前) は追っかけで観られる
-        chase: row.ts === null ? null : `api/recordings/${row.id}/chase`,
+        // 元の TS がある間 (録画中・エンコードする前・「エンコードしない」録画) は追っかけで観られる
+        chase: ts === null ? null : `api/recordings/${row.id}/chase`,
         cmReliable: !logoUnusable(row.cmNote),
         poster: `api/recordings/${row.id}/poster`,
         files,

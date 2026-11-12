@@ -16,6 +16,8 @@ CM は 1 本目をエンコードしながら探し、どのコーデックも�
 
 **「エンコードしない」は「どれも選ばない」ことです。** 元の TS (4K の局は 1 局に絞った TLV の `.mmts`) をそのまま保存先へ置くので、
 CM のチャプターも字幕トラックも付きません (どちらもエンコードのときに入れるため)。
+予約したあとに「エンコードしない」へ変えたときも、録り終えた時点の設定に従って元の TS を置きます。待っているエンコードは「映像コーデックが選ばれていません」で失敗にし、元の TS は残します。
+前のバージョンでは、この 2 つを AV1 でエンコードしていました。
 
 ## GPU でエンコードする (VA-API)
 
@@ -194,13 +196,17 @@ Helm は既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.h
 コマを足さずにそのままのコマ数で縮め、キーフレームも 1 秒ごと (24 コマなら `-g 24`) にします。元のコマ数はファイルを ffprobe で読んだ
 平均のコマ数 (`avg_frame_rate`) で、読めなければ 29.97 コマにそろえます。放送 (インタレ) は今までどおり `bwdif` で 29.97 コマにします。`bwdif` はインタレのコマだけを解除するので (`deint=interlaced`)、720p (59.94p) の局はそのあと `fps` で 29.97 コマにそろえます。
 
-| エンコーダ   | レート制御                                                           | 縮める所                                                                                  |
-| ------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| x264         | `veryfast`・`-crf 23 -maxrate <上限> -bufsize <上限>` (上限つき crf) | CPU (`bwdif=mode=send_frame:deint=interlaced,fps=30000/1001` か `fps`、`scale=-2:<高さ>`) |
-| Rockchip MPP | 今の AVBR (`hwenc.rkmppRate`) に段の上限を渡す                       | CPU                                                                                       |
-| NVENC        | 今の VBR (`hwenc.vbrRate`) に段の上限を渡す                          | CPU                                                                                       |
-| VA-API       | CQP をやめて VBR (`-b:v` と `-maxrate:v` に上限)                     | デコードから GPU なら GPU (`deinterlace_vaapi=rate=frame,scale_vaapi`)、ほかは CPU        |
-| QSV          | ICQ をやめて VBR (`-b:v` に上限、`-maxrate` にその 2 倍)             | CPU                                                                                       |
+**どのエンコーダも、ピーク (`-maxrate`) を段の値で止めます。** 段の値は回線に収まる量で、段 0 のように平均の 2 倍まで許すと、動きの多い場面で回線を超えるためです。
+
+| エンコーダ   | レート制御                                                                                       | 縮める所                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| x264         | `veryfast`・`-crf 23 -maxrate <上限> -bufsize <上限>` (上限つき crf)                             | CPU (`bwdif=mode=send_frame:deint=interlaced,fps=30000/1001` か `fps`、`scale=-2:<高さ>`) |
+| Rockchip MPP | 今の AVBR (`hwenc.rkmppRate`)。上限 (`-maxrate`) が段の値になるよう、目標を段の値の 16/17 にする | CPU                                                                                       |
+| NVENC        | 今の VBR (`hwenc.vbrRate`)。`-b:v`・`-maxrate`・`-bufsize` に段の値                              | CPU                                                                                       |
+| AMF          | 今の VBR (`-rc vbr_latency`)。`-b:v` と `-maxrate` に段の値                                      | CPU                                                                                       |
+| VA-API       | CQP をやめて VBR (`-b:v` と `-maxrate:v` に段の値)                                               | デコードから GPU なら GPU (`deinterlace_vaapi=rate=frame,scale_vaapi`)、ほかは CPU        |
+| QSV          | ICQ をやめて `-b:v` と `-maxrate` に段の値 (qsvenc.c は 2 つが同じだと CBR)                      | CPU                                                                                       |
+| VideoToolbox | `-b:v` と `-maxrate` に段の値                                                                    | CPU                                                                                       |
 
 - x264 は `ultrafast` にしません。CABAC とデブロックを切るので、低いビットレートでは粗さが目立ちます。静かな場面は crf のぶんだけ小さく、動きの多い場面は上限で抑えます
 - 段 1〜3 の音声は 96k です (256k は 2.4 Mbit/s の回線の 1 割を使う)
@@ -412,7 +418,7 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
   VA-API は無いためです。H.265・AV1 の QSV が Arc で落ちたのは Linux で、Windows のドライバでは確かめていません。
   通らなければ、その GPU のそのコーデックは試しのエンコードで外れます
 - **ライブは低遅延の速い段にします** (`hwenc.liveHwArgs`)。QSV は `-preset veryfast -bf 0 -async_depth 1` (ICQ は録画と同じ値。回線に合わせて
-  段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。デコードとインタレ解除は CPU のままです
+  段を下げたときは `-b:v` と `-maxrate` に段の値)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。デコードとインタレ解除は CPU のままです
   (GPU に寄せるのは VA-API だけ)。映像が出る前に降りれば、Linux と同じくソフトウェアでエンコードし直し、その方式を 15 分外します
 - **QSV は GPU を `-init_hw_device qsv=…,child_device=<番号>,child_device_type=d3d11va` で選び**、CPU で作ったフレームを `hwupload` で渡します (通らない GPU は CPU のメモリのまま。上)。
   **AMF は `-init_hw_device d3d11va=…:<番号>` で開いたデバイスを使います**

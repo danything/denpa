@@ -25,10 +25,12 @@ export function load(url: URL) {
     // エージェント待ちのものは promise のまま返して後から流し込む (待つと画面が出ない)
     agentLogs: agentLogs(known),
     agentAbout: agentAbout(known),
+    // 「その他」のライブのチューナーの選択肢もこれから作る (`/denpa/tuners` を 1 回だけ呼ぶ)
     tuners: tunerList()
       .then((got) => ({
         list: got.tuners.map((tuner) => ({
           name: tuner.name,
+          pin: tuner.pin,
           types: tuner.types,
           disabled: tuner.disabled,
           error: tuner.error,

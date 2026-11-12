@@ -108,7 +108,7 @@ function sampleEntry(track: Mp4Track): Uint8Array {
   const head = [0, 0, 0, 0, 0, 0, ...be16(1)]; // 予約・data_reference_index
   if (track.kind === "video")
     return box(
-      "hev1",
+      "hvc1",
       head,
       new Array(16).fill(0), // pre_defined・予約
       be16(track.width),

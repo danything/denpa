@@ -35,10 +35,13 @@ export interface MmtOut {
    */
   anchor: { media: number; unixMs: number } | null;
   /**
-   * 番組が替わって、映像・音声・字幕のアセットの並び (MPT) が変わった。TS の PMT が変わったときと同じく作り直す (`live.ts` の `restart`)。
+   * 番組が替わって、映像・音声・字幕のアセットの並び (MPT) が変わったか、`hvcC` に無いパラメータセットが来た (`MmtFmp4.parametersChanged`)。
+   * TS の PMT が変わったときと同じく作り直す (`live.ts` の `restart`)。
    * 立ったら、それより後ろは読んでいない
    */
   changed: boolean;
+  /** この塊で読んだ、局の映像・音声・字幕の MMTP のパケットの数と、そのうちスクランブルされていた数 (`LastingScramble.add`) */
+  media: { total: number; scrambled: number };
 }
 
 /**
@@ -58,12 +61,18 @@ export class MmtLive {
     this.reader = new MmtMediaReader(serviceId);
   }
 
-  /** スクランブルされていて読めなかった MMTP のパケットの数 (`MmtMediaReader.scrambled`) */
-  get scrambled(): number {
-    return this.reader.scrambled;
+  feed(chunk: Uint8Array): MmtOut {
+    const total = this.reader.media;
+    const scrambled = this.reader.scrambled;
+    const out = this.read(chunk);
+    out.media = {
+      total: this.reader.media - total,
+      scrambled: this.reader.scrambled - scrambled,
+    };
+    return out;
   }
 
-  feed(chunk: Uint8Array): MmtOut {
+  private read(chunk: Uint8Array): MmtOut {
     const tlv = this.filter.filter(chunk);
     const out: MmtOut = {
       tlv,
@@ -71,6 +80,7 @@ export class MmtLive {
       captions: [],
       anchor: null,
       changed: false,
+      media: { total: 0, scrambled: 0 },
     };
     if (tlv.length === 0) return out;
     for (const event of this.reader.feed(tlv)) {
@@ -96,6 +106,11 @@ export class MmtLive {
         continue;
       }
       out.segments.push(...muxer.push(event));
+      // `hvcC` に無いパラメータセットが来た。init から作り直す (アセットの並びが変わったときと同じ)
+      if (muxer.parametersChanged) {
+        out.changed = true;
+        return out;
+      }
       const origin = muxer.origin;
       if (event.kind === "video" && origin !== null && event.pts >= origin)
         out.anchor = {

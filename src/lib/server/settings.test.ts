@@ -36,6 +36,19 @@ describe("コーデックの選択", () => {
   test("知らない値は捨てる", () => {
     expect(parseCodecs("av1,vp9")).toEqual(["av1"]);
   });
+
+  test("選んだ一覧で書き、主とエンコードするかは読むときに決まる", () => {
+    expect(saveSettings({ codecs: ["av1", "h264"] })).toMatchObject({
+      codec: "av1",
+      codecs: ["av1", "h264"],
+      encode: true,
+    });
+    expect(saveSettings({ codecs: [] })).toMatchObject({
+      codec: "none",
+      codecs: [],
+      encode: false,
+    });
+  });
 });
 
 /*

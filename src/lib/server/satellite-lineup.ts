@@ -10,6 +10,7 @@
  * 局の表 (`services`) に前の名前で残っているネットワークがあれば作り直す (NIT から作るようにした最初のバージョンで、CS のネットワーク 7 が
  * 一覧から落ち、局の表にだけ前の名前で残った)。予約とルールは局の ID (ネットワーク ID とサービス ID) で
  * 持っているので、そのまま残る。入れるのは受けられるチューナーがある種別だけ。
+ * **人が設定から消した種別は入れない** (`removedSatellites`)。その種別をスキャンし直すまで消えたまま。
  *
  * 読めなかった種別 (アンテナが無い・チューナーが塞がっている) と、CS で読めなかったネットワークがあった回は、
  * `RETRY_AFTER` たってから試し直す (局の一覧は 1 分ごとに読むので、そのたびに選局しない)
@@ -25,9 +26,38 @@ import {
 } from "./satellite";
 import { scanState } from "./scan";
 import { services } from "./schema";
+import { store, stored as storedSetting } from "./settings";
 import { type AgentChannel, getTuners, putChannels } from "./tuner";
 
 const TYPES: SatelliteType[] = ["BS", "CS"];
+
+/** 設定の表のキー。人が設定から消した衛星の種別 (JSON の並び) */
+const REMOVED_KEY = "removedSatellites";
+
+/**
+ * **人が設定から消した衛星の種別。放送の一覧から入れ直さない** (`fillSatellites`)。引っ越してアンテナが無くなった、
+ * ケーブルをやめたなどで消した種別が、1 分後の取り込みで戻らないようにする。その種別をスキャンすると外れる (`scan.ts`)
+ */
+export function removedSatellites(): SatelliteType[] {
+  try {
+    const raw: unknown = JSON.parse(storedSetting(REMOVED_KEY) ?? "[]");
+    return TYPES.filter((type) => Array.isArray(raw) && raw.includes(type));
+  } catch {
+    return [];
+  }
+}
+
+/** 消した (`removed`) か、スキャンで戻した種別を書く */
+export function markRemoved(
+  types: readonly SatelliteType[],
+  removed: boolean,
+): void {
+  const before = removedSatellites();
+  const after = TYPES.filter((type) =>
+    types.includes(type) ? removed : before.includes(type),
+  );
+  if (after.length !== before.length) store(REMOVED_KEY, JSON.stringify(after));
+}
 
 /** 読めなかった種別を試し直すまで */
 const RETRY_AFTER = 60 * 60_000;
@@ -117,8 +147,10 @@ export function fillSatellites(
    * スキャンの途中で一覧が入れ替わる
    */
   if (scanState().state === "running") return Promise.resolve([]);
+  const removed = removedSatellites();
   const wanted = TYPES.filter(
     (type) =>
+      !removed.includes(type) &&
       needsLineup(channels, type, withoutGone(stored)) &&
       now - (failedAt.get(type) ?? -Infinity) >= RETRY_AFTER,
   );
@@ -167,6 +199,8 @@ async function fill(
     }
     // スキャンが始まっていたら書かない (スキャンの結果のほうが新しい)
     if (scanState().state === "running") break;
+    // 読んでいる間に設定から消された種別は書かない
+    if (removedSatellites().includes(type)) continue;
     await putChannels(lineup.channels, [type]);
     for (const network of goneNetworks(
       leftoverNetworks(channels, type, stored),

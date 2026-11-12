@@ -73,9 +73,9 @@ export function codecsFor(
 
 /**
  * **4K の局の放送の HEVC と AAC を詰め替えた fMP4** (`server/live.ts` の 4K の経路。`mp4/mmt.ts`)。
- * Main 10 Profile・Level 5.1 (2160p60)。入れ物の中の名前は `hev1` (VPS・SPS・PPS がコマの中にも来る。`mp4/mmt.ts`)
+ * Main 10 Profile・Level 5.1 (2160p60)。入れ物の中の名前は `hvc1` (Safari は `hev1` を受け取らない。VPS・SPS・PPS は `hvcC` にだけ置く。`mp4/mmt.ts`)
  */
-export const BROADCAST_HEVC = 'video/mp4; codecs="hev1.2.4.L153.B0,mp4a.40.2"';
+export const BROADCAST_HEVC = 'video/mp4; codecs="hvc1.2.4.L153.B0,mp4a.40.2"';
 
 /**
  * **MSE に渡す型。MP4 の `Opus` は、小文字の `opus` を受け取れる端末では小文字にする。**

@@ -78,11 +78,28 @@ export function mediaPids(streams: string | null): Set<number> {
 }
 
 /**
- * **1 局に絞った TS で、映像・音声・字幕のパケットのうちスクランブルされたまま届いたものを数える** (契約の復号テストとライブ)。
+ * **TS のパケットが、局の映像・音声・字幕のうちスクランブルされたまま届いたものか。** 数えないパケットは null。
  *
  * エージェントは、カードが鍵を返さなかった ES (未契約) をスクランブルされたまま流す ([docs/agent.md](../../../docs/agent.md))。
  * denpa が読むのはその印 (transport_scrambling_control)。PAT・PMT・ECM・EIT のようなセクションは掛からないので数えない
  * (割合が下がって、復号できたように見える)。ペイロードの無いパケットもスクランブルの対象にならないので数えない
+ *
+ * @param media その局の映像・音声・字幕の PID (`mediaPids`)
+ */
+function scrambledMedia(
+  packet: Uint8Array,
+  media: Set<number>,
+): boolean | null {
+  if (packet[0] !== SYNC) return null;
+  if (!media.has(((packet[1]! & 0x1f) << 8) | packet[2]!)) return null;
+  if ((packet[3]! & 0x10) === 0) return null;
+  // 4 バイト目の上位 2 ビットが transport_scrambling_control
+  return (packet[3]! & 0xc0) !== 0;
+}
+
+/**
+ * **局の映像・音声・字幕のパケットのうち、スクランブルされたまま届いたものを数える** (契約の復号テストとライブ)。
+ * TS は 188 バイトのパケットを 1 つずつ (`feed`)、4K の局 (TLV) は MMTP のパケットの数をまとめて (`add`) 渡す
  */
 export class ScrambleCount {
   total = 0;
@@ -96,14 +113,18 @@ export class ScrambleCount {
     return this.total >= this.limit;
   }
 
-  /** パケットを 1 つ (188 バイト)。`media` はその局の映像・音声・字幕の PID (`mediaPids`) */
+  /** TS のパケットを 1 つ (188 バイト)。`media` はその局の映像・音声・字幕の PID (`mediaPids`) */
   feed(packet: Uint8Array, media: Set<number>): void {
-    if (this.full || packet[0] !== SYNC) return;
-    if (!media.has(((packet[1]! & 0x1f) << 8) | packet[2]!)) return;
-    if ((packet[3]! & 0x10) === 0) return;
-    this.total++;
-    // 4 バイト目の上位 2 ビットが transport_scrambling_control
-    if ((packet[3]! & 0xc0) !== 0) this.scrambled++;
+    if (this.full) return;
+    const scrambled = scrambledMedia(packet, media);
+    if (scrambled !== null) this.add(1, scrambled ? 1 : 0);
+  }
+
+  /** 数えたパケットの数と、そのうちスクランブルされていた数を足す。`limit` を超えたぶんも足す (まとめて渡されたとき) */
+  add(total: number, scrambled: number): void {
+    if (this.full) return;
+    this.total += total;
+    this.scrambled += scrambled;
   }
 
   /** 掛かったままと言えるか。数えたのが `least` 個に満たなければ言えない (false) */
@@ -113,7 +134,7 @@ export class ScrambleCount {
 }
 
 /**
- * **ライブで、局の映像・音声・字幕がスクランブルされたまま届き続けているかを決める** (`live.ts`)。
+ * **ライブで、局の映像・音声・字幕がスクランブルされたまま届き続けているかを決める** (`live.ts`)。TS の局も 4K の局 (TLV) も同じ決まり。
  *
  * 復号できる局でも、選局したての数百パケットがスクランブルされたまま届くことがある。鍵がそろう前のパケットで、
  * 本番 (2026-11-11、PT3 の地上波) ではエージェントが PMT の来ていない番組の ES をそのまま流していた ([docs/agent.md](../../../docs/agent.md))。
@@ -143,12 +164,21 @@ export class LastingScramble {
     this.count = new ScrambleCount(window);
   }
 
-  /** パケットを 1 つ (188 バイト)。`media` はその局の映像・音声・字幕の PID (`mediaPids`)、`now` は受けた時刻 (ミリ秒) */
+  /** TS のパケットを 1 つ (188 バイト)。`media` はその局の映像・音声・字幕の PID (`mediaPids`)、`now` は受けた時刻 (ミリ秒) */
   feed(packet: Uint8Array, media: Set<number>, now: number): void {
     if (this.verdict !== null) return;
-    const empty = this.count.total === 0;
-    this.count.feed(packet, media);
-    if (empty && this.count.total > 0) this.openedAt = now;
+    const scrambled = scrambledMedia(packet, media);
+    if (scrambled !== null) this.add(1, scrambled ? 1 : 0, now);
+  }
+
+  /**
+   * 数えたパケットの数と、そのうちスクランブルされていた数を足す (4K の局。MMTP のパケットを 1 塊ぶんまとめて)。
+   * まとめて渡されたぶんは 1 つの窓に入れる (窓が `window` 個を少し超える)
+   */
+  add(total: number, scrambled: number, now: number): void {
+    if (this.verdict !== null || total === 0) return;
+    if (this.count.total === 0) this.openedAt = now;
+    this.count.add(total, scrambled);
     if (!this.count.full) return;
     this.done = this.count;
     this.count = new ScrambleCount(this.window);

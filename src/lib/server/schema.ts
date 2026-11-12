@@ -259,6 +259,15 @@ export const services = sqliteTable("services", {
    * スキャンがチャンネルの控えに書き、取り込みのたびに入れ直す (`epg.syncServices`)。選局の前に読み方と復号できるかを決めるのに使う
    */
   transport: text("transport").$type<Transport>().notNull().default("ts"),
+  /**
+   * いまエージェントの一覧にある局か (`epg.currentServices`)。**画面とルールに出すのはこの局。** 行は消さない
+   * (その局の録画と過去の予約を辿るため)。取り込みで局が 1 つでも取れた回に、見かけた局を 1、見かけなかった局を 0 にする
+   * (`epg.syncServices`)。設定から種別を消したときは、その種別の局をその場で 0 にする (`epg.unlistType`)
+   */
+  listed: flag("listed")
+    .notNull()
+    .default(sql`1`),
+  /** 最後に取り込みで見かけた時刻。見かけない時間が長い局の番組表と予約を片付けるのに使う (`epg.forgetMissing`) */
   updated_at: integer("updated_at").notNull(),
   /**
    * 番組表の取得 (`epg-collect.ts`) がこの局の番組を最後に書いた時刻。まだなら null。
@@ -528,7 +537,8 @@ export const reservations = sqliteTable(
       .notNull()
       .default(sql`0`),
     /**
-     * 「エンコードするか否か」だけは予約した時点で固定する (recorder が読む)。エンコード方法の細目
+     * 「エンコードするか否か」は予約した時点の設定を写す (recorder が読む)。録り終えたときの設定が「エンコードしない」なら、
+     * 1 でもエンコードしない。エンコード方法の細目
      * (元の TS を残すか・コーデック) は持たず、エンコードするときに settings を見る
      */
     encode: flag("encode")

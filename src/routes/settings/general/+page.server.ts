@@ -8,27 +8,8 @@ import {
   find,
 } from "#lib/server/session.js";
 import { saveSettings, settings } from "#lib/server/settings.js";
-import { getTuners } from "#lib/server/tuner.js";
 
 import * as diagnostics from "./diagnostics.server";
-
-/**
- * ライブのチューナーを名指しするための一覧 (開発者向け。`live-tuner.svelte.ts`)。
- * 無効なものは出さない。エージェントに繋がらなければ空
- */
-async function liveTuners() {
-  try {
-    return (await getTuners())
-      .filter((tuner) => !tuner.disabled)
-      .map((tuner) => ({
-        name: tuner.name,
-        types: tuner.types,
-        pin: tuner.pin,
-      }));
-  } catch {
-    return [];
-  }
-}
 
 /**
  * その他。この端末だけの設定 (画面で読み書きするのでサーバは何もしない)・ログイン・バージョンと環境・ログ。
@@ -37,11 +18,13 @@ async function liveTuners() {
  * **ログアウトはログインの控え (Cookie) で入っているときだけ出す。** 素通し (LAN) には控えが無く、
  * 切るものも無い。アクセストークン (テレビのアプリ) で画面を開くことは無いが、
  * 開けても控えが無いので同じ扱い
+ *
+ * **エージェントを待たずに画面を返す。** チューナーの一覧は promise のまま渡し (`diagnostics.server.ts` の `tuners`)、
+ * ライブのチューナーの選択肢もそこから作る
  */
-export async function load({ cookies, url }) {
+export function load({ cookies, url }) {
   const session = find(cookies.get(COOKIE));
   return {
-    liveTuners: await liveTuners(),
     /** この端末の控えのほかに生きているログインの数。控えで入っていなければ null */
     others: session === null ? null : countOthers(session.id),
     /** ロゴの取得を記録するか (開発者向け。`logo-record.ts`) と、新しいものからの記録 */

@@ -628,7 +628,7 @@ describe("Windows の QSV・AMF", () => {
     ]);
   });
 
-  test("ライブは低遅延の速い段で、段を下げたときは QSV が VBR で上限を決める", () => {
+  test("ライブは低遅延の速い段で、段を下げたときは QSV も段の値を平均と上限に渡す", () => {
     const qsv = liveHwArgs({ way: Q, full: false }, "h264");
     expect(qsv.input).toEqual(hwArgs(Q, "h264").device);
     expect(qsv.encoder.join(" ")).toBe(
@@ -639,7 +639,7 @@ describe("Windows の QSV・AMF", () => {
       bps: 2_000_000,
     });
     expect(capped.encoder.join(" ")).toBe(
-      "h264_qsv -preset:v veryfast -b:v 2000000 -maxrate 4000000 -bf 0 -async_depth 1",
+      "h264_qsv -preset:v veryfast -b:v 2000000 -maxrate 2000000 -bf 0 -async_depth 1",
     );
     const amf = liveHwArgs({ way: M, full: false }, "av1");
     expect(amf.encoder.slice(0, 7)).toEqual([
@@ -651,6 +651,13 @@ describe("Windows の QSV・AMF", () => {
       "-rc",
       "vbr_latency",
     ]);
+    // 段を下げたら、AMF も上限を段の値で止める
+    expect(
+      liveHwArgs({ way: M, full: false }, "av1", {
+        height: 540,
+        bps: 2_000_000,
+      }).encoder.join(" "),
+    ).toContain("-b:v 2000000 -maxrate 2000000");
     // デコードから GPU は VA-API だけ
     const gpu: HwDevice = {
       path: "qsv1",

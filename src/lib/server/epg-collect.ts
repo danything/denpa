@@ -802,7 +802,18 @@ export async function drain<J extends { channel: { type: string } }>(
       free();
     }
   };
-  await Promise.all(lanes.map(lane));
+  /*
+   * **列にある種別は、どれも少なくとも 1 つの処理が引く。** チューナーが塞がっている種別は `laneTypes` に入らないので、
+   * その種別を 1 つの処理にまとめて引かせる。塞がっていれば上の決まりどおり待ち、待ちきれなければ記録して落とす
+   * (`dropped`)。並びに入れなかった頃は、その種別が記録も無く抜けていた
+   */
+  const covered = new Set(lanes.flat());
+  const orphans = [...new Set(queue.map((job) => job.channel.type))].filter(
+    (type) => !covered.has(type),
+  );
+  await Promise.all(
+    (orphans.length > 0 ? [...lanes, orphans] : lanes).map(lane),
+  );
 }
 
 async function run(): Promise<number> {
@@ -967,25 +978,18 @@ async function run(): Promise<number> {
     };
 
     /*
-     * エージェントに聞けなかったとき・使えるチューナーが 1 台も無いときは、1 つだけで回す
+     * エージェントに聞けなかったとき・使えるチューナーが無い種別は、`drain` が 1 つの処理にまとめて引く
      * (聞けないだけで、チューナーはある。塞がっていれば `drain` が待つ)
      */
-    await drain(
-      queue,
-      lanes.length === 0
-        ? [[...new Set(queue.map((job) => job.channel.type))]]
-        : lanes,
-      attempt,
-      {
-        requeued: () => update({ pending: state.pending + 1 }),
-        dropped: (jobs) => {
-          update({ pending: state.pending - jobs.length });
-          console.warn(
-            `[epg] チューナーが空かないため、${jobs.map((job) => key(job.channel)).join("・")} はこの周回では読みませんでした`,
-          );
-        },
+    await drain(queue, lanes, attempt, {
+      requeued: () => update({ pending: state.pending + 1 }),
+      dropped: (jobs) => {
+        update({ pending: state.pending - jobs.length });
+        console.warn(
+          `[epg] チューナーが空かないため、${jobs.map((job) => key(job.channel)).join("・")} はこの周回では読みませんでした`,
+        );
       },
-    );
+    });
   } finally {
     update({
       running: false,
