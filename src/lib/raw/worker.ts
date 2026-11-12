@@ -205,10 +205,11 @@ function postSize(): void {
   post({ type: "size", width, height });
 }
 
-function fail(reason: string): void {
+/** 使えなくなったと画面に伝える (1 回だけ)。`slow` は間に合わずに打ち切ったときの、掛かった条件 (`DecodeBudget.why`) */
+function fail(reason: string, slow?: string): void {
   if (failed) return;
   failed = true;
-  post({ type: "fail", reason });
+  post({ type: "fail", reason, slow });
 }
 
 /** 描く道具を用意できなかった */
@@ -723,7 +724,7 @@ function watch(
 ): void {
   const wall = performance.now();
   if (budget.tick(wall, (frame / CLOCK) * 1000, late, queued, dropped, stretch))
-    fail(reason);
+    fail(reason, budget.why());
   report();
 }
 

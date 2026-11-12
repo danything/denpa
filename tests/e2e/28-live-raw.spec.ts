@@ -658,6 +658,13 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     // 選んでいた MPEG-2 は自動に戻す (開くたびに断り書きを出さない)。家の中の順 (MPEG-2 → H.264 → AV1) で MPEG-2 の次の H.264
     await expect(page.getByTestId("live-codec")).toContainText("自動 (H.264)");
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
+    // 断り書きは局を替えても消さず、10 秒で引っ込める (`SWITCH_NOTE`)。切り替えた先はメニューの行に残る
+    await page.getByTestId("live-channel").nth(1).click();
+    await expect(page.getByTestId("live-warning")).toBeVisible();
+    await expect(page.getByTestId("live-warning")).toHaveCount(0, {
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("live-codec")).toContainText("自動 (H.264)");
   });
 
   test("選んだものはエンコード方式と同じくこの端末に覚える", async ({

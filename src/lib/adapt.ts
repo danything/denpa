@@ -134,6 +134,12 @@ export interface AdaptSample {
  */
 export const ADAPT_NOTE = 6_000;
 
+/**
+ * 形式を切り替えた (MPEG-2 を打ち切った・AV1 を再生できなかった、など) ときと、サーバの `notice` の断り書きを出しておく長さ (ms)。
+ * ライブ・追っかけ・観る画面で同じ。理由まで書く長い文なので、段の文 (`ADAPT_NOTE`) より長く出す
+ */
+export const SWITCH_NOTE = 10_000;
+
 /** 選局・シーク・切り替えの直後はこれだけ数えない (ms)。立ち上がりでバッファが空なのを「足りない」と読まない */
 export const GRACE = 3_000;
 /** 切り替えのあと、これだけ動かさない (ms)。行き来を止める */

@@ -91,8 +91,8 @@ interface CanvasOptions {
   paused: boolean;
   /** 繋ぎ直している・打ち切った・戻った・混んでいて断られた */
   state(state: StreamState): void;
-  /** 描けなくなった (間に合わない・デコーダが失敗し続ける・音が来ない)。**画面がほかの方式へ移す** */
-  gaveUp(reason: string): void;
+  /** 描けなくなった (間に合わない・デコーダが失敗し続ける・音が来ない)。**画面がほかの方式へ移す**。`slow` は `RawEvents.gaveUp` と同じ */
+  gaveUp(reason: string, slow?: string): void;
   /** 外 (ロック画面・車の操作) から止められた・再開された */
   remote(paused: boolean): void;
   /** バッファを使い切って止まった / また流れ出した (読み込み中の輪) */
@@ -204,8 +204,8 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         starving = true;
         options.waiting(true);
       },
-      gaveUp: (reason) => {
-        if (!closed) options.gaveUp(reason);
+      gaveUp: (reason, slow) => {
+        if (!closed) options.gaveUp(reason, slow);
       },
       remote: (stop) => {
         if (stop === paused) return;

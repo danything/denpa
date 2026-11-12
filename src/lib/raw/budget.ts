@@ -15,7 +15,8 @@
  *
  * どれも**1 秒ごとに数えて、3 秒続いたら**打ち切る。1 回の重さ (タブを戻したとき・
  * GC・選局の直後) では戻さない。戻すと再エンコードで 1 秒近く映像が止まるので、
- * 一瞬の詰まりより高くつく。
+ * 一瞬の詰まりより高くつく。打ち切ったら、数えた窓ごとにどの条件に掛かったかを返す (`why`)。画面がコンソールに出力する。
+ * 出力する前は、どの条件で打ち切ったかが外から読めず、端末ごとに切り分けられなかった
  *
  * ## エンコードしたものを canvas で描くとき (WebCodecs。`fmp4.ts`)
  *
@@ -56,6 +57,8 @@ export class DecodeBudget {
   private droppedFrom = Number.NaN;
   /** 直近の窓の 95 パーセンタイル (ms)。画面に出す */
   p95 = 0;
+  /** 続けて数えた窓ごとの、掛かった条件 (`why`)。掛からない窓が来たら空にする */
+  private struck: string[] = [];
 
   /**
    * @param timed 1 コマの時間で判じるか。WebCodecs の経路は判じない (上の説明)。時間は画面に出すので数える
@@ -115,13 +118,35 @@ export class DecodeBudget {
     if (top >= 0) this.p95 = samples[top]!;
     const choppy =
       lost >= DROP_LEAST && lost >= (WINDOW / frameMs) * DROP_SHARE;
-    const bad =
-      (this.timed && this.p95 > frameMs * SHARE * stretch) ||
-      worst > LATE ||
-      stuck ||
-      choppy;
-    this.strikes = bad ? this.strikes + 1 : 0;
+    const limit = frameMs * SHARE * stretch;
+    const hits: string[] = [];
+    if (this.timed && this.p95 > limit)
+      hits.push(
+        `デコード ${this.p95.toFixed(1)} ms (目安 ${limit.toFixed(1)} ms)`,
+      );
+    if (worst > LATE)
+      hits.push(`映像の遅れ ${worst.toFixed(2)} 秒 (目安 ${LATE} 秒)`);
+    if (stuck) hits.push(`デコーダに残ったまま ${least} 枚`);
+    if (choppy)
+      hits.push(
+        `捨てたコマ ${lost} 枚 (目安 ${Math.ceil((WINDOW / frameMs) * DROP_SHARE)} 枚)`,
+      );
+    if (hits.length === 0) {
+      this.strikes = 0;
+      this.struck = [];
+      return false;
+    }
+    this.strikes += 1;
+    this.struck.push(hits.join("、"));
     return this.strikes >= STRIKES;
+  }
+
+  /**
+   * 打ち切るまでに続けて数えた窓ごとの、掛かった条件。`tick` が true を返したあとに読む。窓は「 / 」で区切る
+   * (「デコード 28.4 ms (目安 26.7 ms) / デコード 27.9 ms (目安 26.7 ms)、映像の遅れ 0.31 秒 (目安 0.25 秒) / …」)
+   */
+  why(): string {
+    return this.struck.join(" / ");
   }
 
   /**
@@ -133,6 +158,7 @@ export class DecodeBudget {
    */
   reset(until = Number.NEGATIVE_INFINITY): void {
     this.strikes = 0;
+    this.struck = [];
     this.quietUntil = Number.NEGATIVE_INFINITY;
     this.pause(until);
   }

@@ -27,6 +27,7 @@ import {
   RungAdapter,
   type Step,
   stepOrder,
+  SWITCH_NOTE,
 } from "#lib/adapt.js";
 import type { AudioTrack } from "#lib/arib.js";
 import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
@@ -375,7 +376,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let hevcGaveUp = false;
   /**
    * 断り書き。失敗ではないが、リクエストされたとおりにできなかったとき (AV1 を出せないので次の形式に切り替えた・
-   * サーバの `notice`)。`message` と違って選局で消さない。戻した先が映っても理由が残っているように
+   * サーバの `notice`)。`message` と違って選局では消さない。戻した先が映り始めても理由を読めるように。
+   * かわりに出してから決まった長さで引っ込める (`note`)。引っ込めたあとも、切り替えた先はメニューの行 (「自動 (H.264)」) に残る
    */
   let warning = $state("");
 
@@ -435,7 +437,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /** `tuned` のあとで、元の TS の最初の塊が届いた (前の局の残りを数えない) */
     bytes?: number;
   } | null = null;
-  /** 段を動かした断り書きを引っ込める時計 (`act`) */
+  /** 断り書きを引っ込める時計 (`note`) */
   let noteTimer: ReturnType<typeof setTimeout> | null = null;
   /** 次の選局で繋ぎ直すか (足りなくて下げるとき。`tune`) */
   let freshSocket = false;
@@ -1171,14 +1173,25 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 足りなくて下げるなら、溜まった前の段の映像の後ろに並ばないように繋ぎ直す (`tune`)
     freshSocket = decision.reason === "slow" && chase === null;
     asked = step;
+    // 段を動かした断り書きは、観る画面と同じく少しで引っ込める (`ADAPT_NOTE`)
+    note(text, ADAPT_NOTE);
+    requestAgain();
+  }
+
+  /**
+   * 断り書きを出し、`hold` (ms) で引っ込める。**ほかの断り書きで替わっていれば消さない。** 形式を切り替えた・サーバの `notice` は
+   * `SWITCH_NOTE` (10 秒)。段の文より長いので `ADAPT_NOTE` より長く出す。切り替えた先はメニューの行 (「自動 (H.264)」) に残る。
+   * 出しっぱなしにしていた頃は、メニューで選び直すまで映像の上に残り、局を替えても押しても消えなかった
+   * (`StageNote` は押せない)。
+   * 引っ込めないのは `encode`・`pinned` の文だけで、その状態が来なくなったら消す (`act`)
+   */
+  function note(text: string, hold = SWITCH_NOTE): void {
     warning = text;
-    // 段を動かした断り書きは、観る画面と同じく少しで引っ込める (`ADAPT_NOTE`)。ほかの断り書きで替わっていれば消さない
     if (noteTimer !== null) clearTimeout(noteTimer);
     noteTimer = setTimeout(() => {
       noteTimer = null;
       if (warning === text) warning = "";
-    }, ADAPT_NOTE);
-    requestAgain();
+    }, hold);
   }
 
   /**
@@ -2050,7 +2063,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       kind === "mpeg2" &&
       typeof rawProblem === "string"
     ) {
-      warning = `MPEG-2 を再生できません: ${rawProblem}`;
+      note(`MPEG-2 を再生できません: ${rawProblem}`);
       choice = "auto";
       if (tuned !== null) remember(tuned, choice);
     }
@@ -2061,7 +2074,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
     const wanted = choice === "raw" ? broadcastFormat(kind) : choice;
     if (choice !== "auto" && next !== wanted && warning === "")
-      warning = `${formatLabel(choice, kind)} を再生できないため、${formatLabel(next)} に切り替えました`;
+      note(
+        `${formatLabel(choice, kind)} を再生できないため、${formatLabel(next)} に切り替えました`,
+      );
     rawChosen = next === "raw";
     if (next !== "raw") codec = next;
     if (tuned !== null) tuned = { ...tuned, codec, raw: rawChosen };
@@ -2546,7 +2561,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
              * `playable` から外し、同じ段をリクエストし直す (サーバが次のコーデックを選ぶ)
              */
             rungOff.add(codec);
-            warning = `${notice.message}。ほかの形式に切り替えました`;
+            note(`${notice.message}。ほかの形式に切り替えました`);
             requestAgain();
           } else if (
             codec === "hevc" &&
@@ -2560,7 +2575,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
              * この画面を開いている間は H.265 をやめて、次の形式でリクエストし直す (`decideFormat`)
              */
             hevcGaveUp = true;
-            warning = `${notice.message}。ほかの形式に切り替えました`;
+            note(`${notice.message}。ほかの形式に切り替えました`);
             requestAgain();
           } else fail(notice.message);
         } else if (notice.type === "lost") {
@@ -2588,7 +2603,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           }
         } else if (notice.type === "notice") {
           // 映像は出ている。断り書きに残す (GPU でエンコードできずにソフトウェアへ降りた、サーバが混んでいて段を下げられなかった、など)
-          warning = notice.message;
+          note(notice.message);
           standing = null;
         } else if (notice.type === "pace") {
           // 送り出しの具合。届くたびに新しいオブジェクトにする (`AdaptSample.pace`。同じものの `dropped` は 1 回だけ数える)
@@ -2777,7 +2792,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     else hevcGaveUp = true;
     const next = decideFormat();
     if (next !== null)
-      warning = `${formatLabel(baked)} を再生できないため、${formatLabel(next)} に切り替えました`;
+      note(
+        `${formatLabel(baked)} を再生できないため、${formatLabel(next)} に切り替えました`,
+      );
     requestAgain();
   }
 
@@ -2839,7 +2856,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       nativeAudio?.destroy();
       nativeAudio = null;
       video.muted = silenced;
-      warning = `音を別に鳴らせないため、音量のつまみは効きません (${reason})`;
+      note(`音を別に鳴らせないため、音量のつまみは効きません (${reason})`);
     };
     if (options.separateAudio?.()) {
       try {
@@ -2954,7 +2971,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
               reportStartup(performance.now());
             },
             stalled: onWaiting,
-            gaveUp: (reason) => fallBack(reason, input),
+            gaveUp: (reason, slow) => fallBack(reason, input, slow),
             // ロック画面・車の操作で `<audio>` を直に止められた・再開された
             remote: (stop) => {
               if (stop !== paused) toggle();
@@ -3031,13 +3048,19 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    *   (`prepareCompat`)。互換モードでエンコードしたものも描けなければ、理由を出して止まる
    * - 互換モードのエンコードしたものをやめた … MPEG-2 で描けるならそちらへ、無理なら理由を出して止まる。
    *   **`<video>` には戻らない** (テスラでは止まってしまう)
+   *
+   * 間に合わずにやめたとき (`slow` がある) は、掛かった条件をコンソールに出力する
    */
-  function fallBack(reason: string, input: RawInput): void {
+  function fallBack(reason: string, input: RawInput, slow?: string): void {
     stopRaw();
+    if (slow !== undefined)
+      console.warn(
+        `[live] ${input === "fmp4" ? "互換モードの描画" : "MPEG-2"} を打ち切りました: ${slow}`,
+      );
     if (input === "fmp4") {
       compatGaveUp = true;
       if (rawProblem === null && !rawGaveUp) {
-        warning = `${reason}。MPEG-2 に切り替えました`;
+        note(`${reason}。MPEG-2 に切り替えました`);
         /*
          * 段を下げていたら段 0 に戻す。下げた段のままだと `stepFields` が `raw` を外し、描けるものの無い
          * `playable` でまた変換をリクエストする。MPEG-2 に移ったあとは段を動かさない (`adapt`)
@@ -3054,7 +3077,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       fail("MPEG-2 の再生を続けられませんでした");
       return;
     }
-    warning = reason;
+    note(reason);
     requestAgain();
   }
 

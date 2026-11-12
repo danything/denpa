@@ -18,6 +18,7 @@
     HOLD,
     type Step,
     stepOrder,
+    SWITCH_NOTE,
   } from "#lib/adapt.js";
   import { arming } from "#lib/arming.svelte.js";
   import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
@@ -302,8 +303,9 @@
   let canvasGaveUp: CanvasCodec[] = [];
   /** 互換モードで観られない理由。出したら `<video>` には戻らずに止まる */
   let canvasProblem = $state<string | null>(null);
-  /** 映像の上に出しておく断り書き (MPEG-2 に切り替えた、など) */
+  /** 映像の上に出しておく断り書き (MPEG-2 に切り替えた、など)。`SWITCH_NOTE` で引っ込める (`note`。ライブと同じ) */
   let warning = $state<string | null>(null);
+  let warningTimer: ReturnType<typeof setTimeout> | null = null;
   /** 運転中の注意 (互換モード。`drive-gate.svelte.ts`)。押すまで再生を始めない */
   const drive = driveGate();
 
@@ -525,13 +527,17 @@
    * サーバから流すものへ。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
    *
    * 互換モードでないのに描いているのは MPEG-2 を選んだときだけ (`pickOffer` の `raw`)。打ち切ったらこの画面を開いている間は
-   * MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で `<video>` に戻す
+   * MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で `<video>` に戻す。
+   *
+   * 間に合わずに打ち切ったとき (`slow` がある) は、掛かった条件をコンソールに出力する
    */
-  function canvasFallBack(reason: string): void {
+  function canvasFallBack(reason: string, slow?: string): void {
     const failed = canvasCodec;
     const position = mediaTime();
     const wasLocal = localMkv !== null;
     stopCanvas();
+    if (slow !== undefined)
+      console.warn(`[watch] ${failed ?? ""} を打ち切りました: ${slow}`);
     // 描けなくなったのは端末のデコードの都合 (`raw/budget.ts`)。回線の段とは混ぜず、段 0 から決め直す
     step = 0;
     stepCodec = null;
@@ -540,10 +546,11 @@
       rawGaveUp = true;
       const fresh =
         info === null ? null : pickOffer(info, ability(), "auto", data.indoor);
-      warning =
+      note(
         fresh === null
           ? reason
-          : `${reason}。${codecLabel(fresh.codec)} に切り替えました`;
+          : `${reason}。${codecLabel(fresh.codec)} に切り替えました`,
+      );
       replay(fresh, position);
       return;
     }
@@ -571,9 +578,7 @@
       canvasProblem = reason;
       return;
     }
-    warning = wasLocal
-      ? reason
-      : `${reason}。${codecLabel(next)} に切り替えました`;
+    note(wasLocal ? reason : `${reason}。${codecLabel(next)} に切り替えました`);
     switchAt = position;
     canvasCodec = next;
   }
@@ -877,6 +882,16 @@
   ): string | null {
     if (at === "audio") return AUDIO_TYPE;
     return at === 0 ? plan.type : null;
+  }
+
+  /** 形式を切り替えた断り書きを出す。`SWITCH_NOTE` で引っ込める (ライブの `note` と同じ。切り替えた先はメニューの行に残る) */
+  function note(text: string): void {
+    warning = text;
+    if (warningTimer !== null) clearTimeout(warningTimer);
+    warningTimer = setTimeout(() => {
+      warningTimer = null;
+      if (warning === text) warning = null;
+    }, SWITCH_NOTE);
   }
 
   /** 段の断り書きを出す。しばらくで引っ込める */
@@ -1376,6 +1391,7 @@
     return () => {
       clearInterval(timer);
       if (adaptTimer !== null) clearTimeout(adaptTimer);
+      if (warningTimer !== null) clearTimeout(warningTimer);
     };
   });
 

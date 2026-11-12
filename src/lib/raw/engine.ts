@@ -55,8 +55,11 @@ interface RawEvents {
   shown(): void;
   /** 貯めを使い切って止まった (エンコードする経路の `waiting` にあたる) */
   stalled(): void;
-  /** **使えなくなった。** 次の方式に移るか止まるかは画面が決める (理由は画面に出す) */
-  gaveUp(reason: string): void;
+  /**
+   * **使えなくなった。** 次の方式に移るか止まるかは画面が決める (理由は画面に出す)。`slow` は間に合わずに打ち切ったときだけ付く、
+   * 掛かった条件 (`DecodeBudget.why`)
+   */
+  gaveUp(reason: string, slow?: string): void;
   /**
    * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ**。
    * ロック画面・車のハンドルの再生ボタン・ブラウザの再生中の通知は `<audio>` を直に
@@ -440,9 +443,9 @@ export class RawEngine {
     if (!this.gone) this.worker.postMessage(message, transfer);
   }
 
-  private giveUp(reason: string): void {
+  private giveUp(reason: string, slow?: string): void {
     if (this.gone) return;
-    this.events.gaveUp(reason);
+    this.events.gaveUp(reason, slow);
   }
 
   private receive(message: FromWorker): void {
@@ -503,7 +506,7 @@ export class RawEngine {
         this.canvas.dataset["thinned"] = String(message.thinned);
         break;
       case "fail":
-        this.giveUp(message.reason);
+        this.giveUp(message.reason, message.slow);
         break;
       case "full":
         if (!this.gone) this.events.full();
