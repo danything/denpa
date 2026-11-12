@@ -128,6 +128,8 @@ public sealed class Descrambler(
     private bool _recalling;
     /// <summary>いまの PAT が覚えたもので、本物がまだ来ていない</summary>
     private bool _patRecalled;
+    /// <summary>覚えた PAT・PMT を読み込んだ。それで流し始めたかは <see cref="_settledOnRecall"/></summary>
+    private bool _recallLoaded;
     /// <summary>覚えた PMT で、本物がまだ来ていない局 (program_number → 覚えた PMT の PID)</summary>
     private readonly Dictionary<int, int> _recalledPmts = [];
     /// <summary>覚えた PAT・PMT の、どれかが本物と違った</summary>
@@ -265,10 +267,12 @@ public sealed class Descrambler(
         var last = _lastEcm < 0 ? "" : $" (0x{_lastEcm:X4})";
         var arrived = _arrivedEcm < 0 ? "" : $" (0x{_arrivedEcm:X4})";
         var only = _settledFor is null ? "" : $" (局 {_settledFor})";
-        // 覚えた PAT・PMT で流し始めたら「覚え」。本物の時刻は確かめ終わったときの 1 行 (TakeChecked) に出す
-        var pat = _settledOnRecall && _patMs < 0 ? "覚え" : At(_patMs);
-        var pmt = _settledOnRecall ? "覚え" : At(_pmtMs);
-        return $"PAT {pat} / PMT {pmt}{only} / ECM 着 {At(_arrivedMs)}{arrived} / カード応答 {At(_ecmMs)}{last}";
+        // 覚えた PAT・PMT で流し始めたら「覚えたもの」。本物の時刻は確かめ終わったときの 1 行 (TakeChecked) に出す
+        var pat = _settledOnRecall && _patMs < 0 ? "覚えたもの" : At(_patMs);
+        var pmt = _settledOnRecall ? "覚えたもの" : At(_pmtMs);
+        // 覚えたものを読み込んだが、本物の PAT・PMT が先にそろって本物で流し始めた。PAT・PMT の時刻は本物のもの
+        var loaded = _recallLoaded && !_settledOnRecall ? " / 覚えた PAT・PMT は読み込み済み (本物で開始)" : "";
+        return $"PAT {pat} / PMT {pmt}{only} / ECM 着 {At(_arrivedMs)}{arrived} / カード応答 {At(_ecmMs)}{last}{loaded}";
     }
 
     /// <summary>
@@ -297,6 +301,7 @@ public sealed class Descrambler(
         foreach (var (_, (pid, section)) in recalled.Pmts) OnPmt(pid, section);
         _recalling = false;
         _patRecalled = true;
+        _recallLoaded = true;
         foreach (var (number, (pid, _)) in recalled.Pmts) _recalledPmts[number] = pid;
     }
 
@@ -1121,7 +1126,11 @@ public sealed class Descrambler(
         _pmts[number] = section.ToArray();
         if (!_recalling) memory?.Pmt(number, pid, section);
         Rebuild();
-        if (_holding && _pmtMs < 0 && !Unconfirmed() && TablesReady()) _pmtMs = arrived;
+        /*
+         * 覚えた PMT を読み込んでいる間は測らない。_patRecalled はまだ立っていないので Unconfirmed では弾けず、
+         * 読み込んだ時刻が PMT の時刻に入って、本物の PAT より前の時刻が出ていた
+         */
+        if (!_recalling && _holding && _pmtMs < 0 && !Unconfirmed() && TablesReady()) _pmtMs = arrived;
     }
 
     /// <summary>

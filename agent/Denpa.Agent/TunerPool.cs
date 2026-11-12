@@ -153,6 +153,8 @@ public sealed class TunerPool(
         {
             var before = _specs;
             _specs = next;
+            // 同期しなかった印はチューナーの番号で持っている。並べ替わると別のチューナーを指すので消す
+            _unsynced.Clear();
             // 同じチューナーのまま使い続けてよいか。名前とデバイスが同じで、無効になっていない
             bool Kept(int index)
             {
@@ -198,8 +200,39 @@ public sealed class TunerPool(
     /// **<paramref name="service"/> は観る局 (program_number)。** 選局の先頭で、その局の PMT と ECM の答えがそろえば流し始める (<see cref="Sink.Service"/>)。
     /// チューナーの選び方と共有には使わない
     /// </para>
+    ///
+    /// <para>
+    /// **同期しなければ、同じ組の空いている別のチューナーで選局し直してから答える** (<see cref="SyncTries"/>。docs/agent.md「同期しなかったら別のチューナーで選局し直す」)。
+    /// どれでも同期しなければ、試したチューナーの名前を並べて同じ文言で投げる
+    /// </para>
     /// </summary>
-    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null, int? service = null)
+    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null, int? service = null) =>
+        Open(type, channel, priority, use, after, pin, service, []);
+
+    /// <summary>
+    /// **1 回の選局で試すチューナーの数の上限** (最初の 1 台を含む)。同期しないと分かるまでに機材ごとの待ち (DVB は 5 秒、PIX-DT295 は 10 秒) が掛かり、
+    /// ライブは画面の前で人が待っている。2 台目でも同期しなければ、チューナーよりチャンネル (放送休止・その地域に無い周波数) を疑うほうが当たりやすい
+    /// </summary>
+    public const int SyncTries = 2;
+
+    /// <summary>
+    /// **同期しなかったチューナーを、同じチャンネルで後回しにする長さ。** 同じ組 (受けられる種別がまったく同じ) の中で並べ替えるだけで、
+    /// 選ぶ順 (<see cref="Ranks"/>) は変えない。雨やアンテナの抜き差しのように一時的な理由でも、この長さで元の順に戻る
+    /// </summary>
+    public static readonly TimeSpan UnsyncedFor = TimeSpan.FromHours(1);
+
+    /// <summary>同期しなかったチューナー・種別・チャンネルと、その時刻 (<see cref="Environment.TickCount64"/>)。<see cref="_gate"/> の中で読み書きする</summary>
+    private readonly Dictionary<(int Tuner, string Type, string Channel), long> _unsynced = [];
+
+    /// <summary>このチューナーがこのチャンネルで、<see cref="UnsyncedFor"/> の間に同期しなかったか</summary>
+    private bool Unsynced(int index, string type, string channel) =>
+        _unsynced.TryGetValue((index, type, channel), out var at) && Environment.TickCount64 - at < (long)UnsyncedFor.TotalMilliseconds;
+
+    /// <summary>同期しなかったときの失敗か (どの方式も <see cref="ITuneDevice.SyncFailed"/> を投げる)</summary>
+    private static bool IsUnsynced(Exception error) => error.Message.Contains(ITuneDevice.SyncFailed, StringComparison.Ordinal);
+
+    /// <param name="tried">この選局で、もう試して同期しなかったチューナー (番号と名前)。空でなければ、最初のチューナーと同じ組の空いているものだけから選ぶ</param>
+    private Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after, string? pin, int? service, IReadOnlyList<(int Index, string Name)> tried)
     {
         int index;
         TunerSpec spec;
@@ -227,9 +260,17 @@ public sealed class TunerPool(
                 }
             }
 
-            index = pin is null
-                ? Pick(type, channel, priority, after) ?? throw new TunerBusyException($"{type} のチューナーに空きがありません")
-                : PickPinned(pin, type, channel, priority, after);
+            if (tried.Count > 0)
+            {
+                // 選局し直す先が無い。最初の失敗と同じ文言で返す
+                index = Pick(type, channel, priority, after, tried) ?? throw new IOException(UnsyncedReason(tried));
+            }
+            else
+            {
+                index = pin is null
+                    ? Pick(type, channel, priority, after, tried) ?? throw new TunerBusyException($"{type} のチューナーに空きがありません")
+                    : PickPinned(pin, type, channel, priority, after);
+            }
 
             if (_leases.TryGetValue(index, out var victim))
             {
@@ -333,23 +374,53 @@ public sealed class TunerPool(
              * 「使用中」で開けなくなる (総当たりのスキャンが 1 本目以降ぜんぶ
              * 落ちたのはこれ)。次の選局で取り直す
              */
-            var reason = $"{spec.Name}: {error.Message}";
+            var unsynced = IsUnsynced(error);
+            List<(int Index, string Name)> attempts = [.. tried, (index, spec.Name)];
+            var reason = unsynced && tried.Count > 0 ? UnsyncedReason(attempts) : $"{spec.Name}: {error.Message}";
+            /*
+             * **同期しなければ、別のチューナーで選局し直す。** 名指し (pin) はほかへ振り替えない。スキャンは放送の無いチャンネルを
+             * 選局するのが普通で、選局し直すとスキャンの一周がそのぶん延びるので選局し直さない
+             */
+            var retry = unsynced && pin is null && !use.StartsWith("scan", StringComparison.Ordinal) && attempts.Count < SyncTries;
+            // 選局し直す先 (記録に名前を出すため。入るのは下の Open が選び直したチューナー)
+            string? next = null;
             lock (_gate)
             {
                 Forget(lease);
+                if (unsynced) _unsynced[(index, type, channel)] = Environment.TickCount64;
+                if (retry && Pick(type, channel, priority, after, attempts) is { } candidate) next = Tuners[candidate].Name;
+                else retry = false;
                 lock (lease.Sinks)
                 {
-                    // 選局している間に共有に入った利用者にも失敗を伝える (失敗を伝えずに外すと読み出しが終わらない)
+                    /*
+                     * 選局している間に共有に入った利用者にも失敗を伝える (失敗を伝えずに外すと読み出しが終わらない)。
+                     * 選局し直すときも、共有に入った利用者はこの選局に結び付いているので失敗で返す (呼んだ側が読み直せば、選局し直した先を共有する)
+                     */
                     foreach (var joined in lease.Sinks) joined.Fail(reason);
                     lease.Sinks.Clear();
                 }
             }
             sink.Fail(reason);
             onChange();
+            if (retry)
+            {
+                Log.Write($"[{spec.Name}] {channel}: 同期しなかったので ({lease.Clock.ElapsedMilliseconds}ms)、{next} で選局し直します");
+                return Open(type, channel, priority, use, after, pin, service, attempts);
+            }
+            if (unsynced && tried.Count > 0) Log.Write($"[{spec.Name}] {channel}: {UnsyncedReason(attempts)}");
             throw new IOException(reason);
+        }
+        // 同期した。前に同期しなかった印は消して、元の順に戻す
+        if (lease.TunedMs >= 0)
+        {
+            lock (_gate) _unsynced.Remove((index, type, channel));
         }
         return sink;
     }
+
+    /// <summary>試したチューナーのどれでも同期しなかったときの理由。名前を「・」で並べ、文言は 1 台のときと同じ (denpa は文言で放送休止を見分ける)</summary>
+    private static string UnsyncedReason(IEnumerable<(int Index, string Name)> attempts) =>
+        $"{string.Join("・", attempts.Select(attempt => attempt.Name))}: {ITuneDevice.SyncFailed}";
 
     /// <summary>
     /// 開きっぱなしの実体を取り出す。**無ければ、そのとき 1 度だけ開く。** 手放したデバイスがまだ閉じていなければ、閉じ終わるまで待ってから開く。
@@ -590,10 +661,17 @@ public sealed class TunerPool(
     /// <para>
     /// 組の中では、同じチャンネルの選局 → もうそのチャンネルに合っているもの (<see cref="Held.Channel"/>。
     /// 実測 0.6〜0.8 秒の選局し直しが 10ms になる) → ほかの余韻 (1 人の視聴で 2 台塞がない) → 空いているもの →
-    /// いちばん優先度の低い相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)
+    /// いちばん優先度の低い相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)。
+    /// どの段でも、このチャンネルで同期しなかったチューナー (<see cref="UnsyncedFor"/> の間) は組の後ろに回す
+    /// </para>
+    ///
+    /// <para>
+    /// **<paramref name="tried"/> が空でなければ、同期しなかったあとの選局し直し。** 最初のチューナーと同じ組で、まだ試していない、
+    /// 空いているもの (余韻だけのものも) から選ぶ。優先度の低い利用者からは取り上げない (届くかどうか分からない選局のために切断しない)。
+    /// ほかの組へは移らない (同じ組ならどれを使ってもよいという約束 2 の内に収め、denpa の割り振りを崩さない)
     /// </para>
     /// </summary>
-    private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after)
+    private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after, IReadOnlyList<(int Index, string Name)> tried)
     {
         var ranks = Ranks(Tuners);
         // 残る利用者の優先度。引き継ぐ相手 (`after`) はもう離れたものとして数えない。誰もいなければ null
@@ -609,12 +687,26 @@ public sealed class TunerPool(
         bool Idle(int index) => _leases.ContainsKey(index) && Strongest(index) is null;
         bool Usable(int index) => Strongest(index) is not { } strongest || strongest < priority;
 
-        var usable = Enumerable.Range(0, Tuners.Count)
-            .Where(index => ranks[index] is not null && Tuners[index].Types.Contains(type) && Usable(index))
-            .ToList();
-        if (usable.Count == 0) return null;
-        var best = usable.Min(index => ranks[index]);
-        var group = usable.Where(index => ranks[index] == best).ToList();
+        List<int> group;
+        if (tried.Count > 0)
+        {
+            var first = tried[0].Index;
+            if (first >= ranks.Length || ranks[first] is not { } rank) return null;
+            group = [.. Enumerable.Range(0, Tuners.Count)
+                .Where(index => ranks[index] == rank && Tuners[index].Types.Contains(type) && Strongest(index) is null && !tried.Any(attempt => attempt.Index == index))];
+            if (group.Count == 0) return null;
+        }
+        else
+        {
+            var usable = Enumerable.Range(0, Tuners.Count)
+                .Where(index => ranks[index] is not null && Tuners[index].Types.Contains(type) && Usable(index))
+                .ToList();
+            if (usable.Count == 0) return null;
+            var best = usable.Min(index => ranks[index]);
+            group = [.. usable.Where(index => ranks[index] == best)];
+        }
+        // 同期しなかったチューナーを後ろに回す (OrderBy は安定なので、ほかの並びは変わらない)
+        group = [.. group.OrderBy(index => Unsynced(index, type, channel))];
 
         foreach (var index in group)
         {
