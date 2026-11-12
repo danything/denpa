@@ -158,6 +158,12 @@ public interface IBulkPipe : IDisposable
     void ResetPort() { }
 }
 
+/// <summary>CCID のカードリーダーへの経路 (<see cref="IUsbHost.OpenCcid"/> が返す)。開くときに構成ディスクリプタから読んだ CCID の情報を持つ</summary>
+public interface ICcidPipe : IBulkPipe
+{
+    CcidInterface Interface { get; }
+}
+
 /// <summary>
 /// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直に扱うための共通の部品。<see cref="UsbFsPipe"/> (カードリーダー) と
 /// <see cref="UsbFsDevice"/> (チューナー) が使う。**libusb を使わない。**
@@ -219,7 +225,7 @@ internal static unsafe class UsbFs
 }
 
 /// <summary>CCID のカードリーダーへのバルク転送の経路。usbfs を ioctl で直に扱う (<see cref="UsbFs"/>)</summary>
-public sealed unsafe class UsbFsPipe : IBulkPipe
+public sealed unsafe class UsbFsPipe : ICcidPipe
 {
     private readonly string _path;
     private int _fd;

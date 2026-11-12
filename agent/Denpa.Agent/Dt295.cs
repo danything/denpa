@@ -1,4 +1,3 @@
-using System.Globalization;
 
 namespace Denpa.Agent;
 
@@ -88,8 +87,8 @@ public static class Dt295
         }
     }
 
-    /// <summary>Linux の sysfs から (場所を渡せるのはテストのため)</summary>
-    internal static List<string> Ports(string sysfs, Action<string>? warn) => Usable(Found(sysfs, warn), warn);
+    /// <summary>渡した <see cref="IUsbHost"/> から (渡せるのはテストのため)</summary>
+    internal static List<string> Ports(IUsbHost host, Action<string>? warn) => Usable(Found(host, warn), warn);
 
     private static List<string> Usable(List<(string Port, Dt295Model Model)> found, Action<string>? warn)
     {
@@ -100,38 +99,30 @@ public static class Dt295
         return [.. found.Where(item => item.Model.Supported).Select(item => item.Port)];
     }
 
-    /// <summary>同じドライバーの機材 (<see cref="Family"/>) が挿さっているポートと、その機材。未確認のものも含む。**開かない**</summary>
-    public static List<(string Port, Dt295Model Model)> Found(Action<string>? warn = null) =>
-        OperatingSystem.IsLinux()
-            ? Found(UsbSysfs.Devices, warn)
-            : [.. Family.SelectMany(model => UsbDevices.List(model.Vendor, model.Product).Select(found => (found.Port, model)))];
+    /// <summary>
+    /// 同じドライバーの機材 (<see cref="Family"/>) が挿さっているポートと、その機材。未確認のものも含む。**開かない。**
+    /// カーネルのドライバが使っているものは並べない
+    /// </summary>
+    public static List<(string Port, Dt295Model Model)> Found(Action<string>? warn = null) => Found(UsbHost.Current, warn);
 
-    /// <summary>Linux の sysfs から (場所を渡せるのはテストのため)</summary>
-    internal static List<(string Port, Dt295Model Model)> Found(string sysfs, Action<string>? warn) =>
-        UsbDevices.Scan(sysfs, dir => Identify(sysfs, Path.GetFileName(dir)), model => model.Name, warn);
+    /// <summary>渡した <see cref="IUsbHost"/> から (渡せるのはテストのため)</summary>
+    internal static List<(string Port, Dt295Model Model)> Found(IUsbHost host, Action<string>? warn) =>
+        [.. UsbHost.Scan(host, Family, Id, model => model.Name, warn).Select(item => (item.Found.Port, item.Model))];
 
-    /// <summary>sysfs のそのポートの機材。同じドライバーの機材でなければ null</summary>
-    internal static Dt295Model? Identify(string sysfs, string port)
-    {
-        var dir = Path.Combine(sysfs, port);
-        return Hex(UsbSysfs.Read(dir, "idVendor")) is { } vendor && Hex(UsbSysfs.Read(dir, "idProduct")) is { } product ? Find(vendor, product) : null;
-    }
+    private static UsbId Id(Dt295Model model) => new(model.Vendor, model.Product);
 
-    private static int? Hex(string? text) =>
-        int.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value) ? value : null;
+    /// <summary>そのポートの機材。同じドライバーの機材でなければ null。**開かない**</summary>
+    public static Dt295Model? Identify(string port) => Identify(UsbHost.Current, port);
 
-    /// <summary>そのポートの機材 (Linux は sysfs、Windows・macOS は OS に問い合わせる)。**開かない**</summary>
-    public static Dt295Model? Identify(string port) =>
-        OperatingSystem.IsLinux() ? Identify(UsbSysfs.Devices, port) : Found().FirstOrDefault(item => item.Port == port).Model;
+    /// <summary>渡した <see cref="IUsbHost"/> から (渡せるのはテストのため)</summary>
+    internal static Dt295Model? Identify(IUsbHost host, string port) => UsbHost.Identify(host, Family, Id, port);
 
     /// <summary>
     /// 開く (Linux は usbfs、Windows は WinUSB、macOS は IOKit)。インターフェース 0 を確保する。
     /// 構成 1 を選ぶ操作はしない (構成は 1 つだけで、OS が選んだまま使う)。未確認の機材は開かずに断る
     /// </summary>
     public static IUsbDevice OpenUsb(string port) =>
-        OpenUsb(port, Identify, model => OperatingSystem.IsLinux()
-            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product)
-            : UsbDevices.Open(port, model.Vendor, model.Product));
+        OpenUsb(port, Identify, model => UsbHost.Current.Open(port, model.Vendor, model.Product));
 
     /// <summary>機材を見分けてから開く (見分け方と開き方を渡せるのはテストのため)</summary>
     internal static IUsbDevice OpenUsb(string port, Func<string, Dt295Model?> identify, Func<Dt295Model, IUsbDevice> open)

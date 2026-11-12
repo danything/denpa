@@ -303,7 +303,7 @@ public class Zd1jTests
             Device("1-3", "0511", "0045");
             Device("1-4", "054c", "04b2");
             Directory.CreateDirectory(Path.Combine(sysfs, "1-4:1.0", "driver"));
-            await Assert.That(string.Join(",", Zd1j.Ports(sysfs))).IsEqualTo("1-2");
+            await Assert.That(string.Join(",", Zd1j.Ports(new SysfsUsbHost(sysfs)))).IsEqualTo("1-2");
         }
         finally
         {

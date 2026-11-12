@@ -293,7 +293,7 @@ public class It930xTests
             Usb("1-3", "0511", "0051");
             Usb("1-4", "0511", "924e");
             Usb("1-2:1.0", "0511", "084e");
-            var found = It930x.Found(dir.FullName, null);
+            var found = It930x.Found(new SysfsUsbHost(dir.FullName), null);
             await Assert.That(found.Select(item => $"{item.Port} {item.Model.Name}"))
                 .IsEquivalentTo(new[] { "1-2 PLEX PX-MLT5U", "1-4 e-Better DTV02A-5TS-P" });
         }

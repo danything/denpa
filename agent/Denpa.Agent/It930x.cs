@@ -349,12 +349,13 @@ public static class It930x
 
     /// <summary>
     /// 設定の <c>it930x:</c> の受信機が受けられる種別 (<c>GET /denpa/tuners</c> の <c>receivable</c>)。
-    /// 機種は、最後に探したときの控え (<see cref="Found(Action{string}?)"/>) か、Linux なら sysfs から。
+    /// 機種は、最後に探したときの控え (<see cref="Found(Action{string}?)"/>) か、そのポートだけを読める OS (Linux の sysfs) ならそこから
+    /// (<see cref="IUsbHost.Peek"/>。一覧を返すたびに並べ直さない)。
     /// 機種が分からない (抜いてある) ときは、どの機種かを決められないので <see cref="Types"/> の全部を返す。
     /// 機種は分かっていて、その機種に無い受信機の番号なら空。<c>it930x:</c> の形式でなければ null
     /// </summary>
     public static string[]? Receivable(string? device) => Receivable(
-        device, port => Known.TryGetValue(port, out var known) ? known : OperatingSystem.IsLinux() ? Identify(UsbSysfs.Devices, port) : null);
+        device, port => Known.TryGetValue(port, out var known) ? known : UsbHost.Current.Peek(port) is { } found ? Find(found.Vendor, found.Product) : null);
 
     /// <summary>ポートから機種を調べる方法を渡す (テストのため)</summary>
     internal static string[]? Receivable(string? device, Func<string, It930xModel?> identify)
@@ -429,32 +430,20 @@ public static class It930x
     }
 
     /// <summary>
-    /// 挿さっているポートと機種。**開かない。** Linux はカーネルのドライバが使っているものを並べない。
+    /// 挿さっているポートと機種。**開かない。** カーネルのドライバが使っているものを並べない。
     /// 探せなければ (USB の一覧を読めない・ライブラリが無い) <paramref name="warn"/> に出して空
     /// </summary>
     public static List<(string Port, It930xModel Model)> Found(Action<string>? warn = null)
     {
         try
         {
-            List<(string Port, It930xModel Model)> found;
-            if (OperatingSystem.IsLinux())
+            var found = UsbHost.Scan(UsbHost.Current, Family, Id, model => model.Name, warn);
+            foreach (var (item, model) in found)
             {
-                found = Found(UsbSysfs.Devices, warn);
+                Known[item.Port] = model;
+                Serials[item.Port] = item.Serial;
             }
-            else
-            {
-                found = [];
-                foreach (var model in Family)
-                {
-                    foreach (var location in UsbDevices.List(model.Vendor, model.Product))
-                    {
-                        found.Add((location.Port, model));
-                        Paths[location.Port] = location.Path;
-                    }
-                }
-            }
-            foreach (var (port, model) in found) Known[port] = model;
-            return found;
+            return [.. found.Select(item => (item.Found.Port, item.Model))];
         }
         catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
         {
@@ -463,44 +452,28 @@ public static class It930x
         }
     }
 
-    /// <summary>Windows・macOS で最後に探したときの、ポートごとの OS の名前 (<see cref="UsbLocation.Path"/>)。Windows のシリアル番号はここから取る</summary>
-    private static readonly ConcurrentDictionary<string, string> Paths = new(StringComparer.Ordinal);
+    /// <summary>最後に探したときの、ポートごとの USB のシリアル番号 (<see cref="Serial"/> が読む)</summary>
+    private static readonly ConcurrentDictionary<string, string?> Serials = new(StringComparer.Ordinal);
 
-    /// <summary>Linux の sysfs から (場所を渡せるのはテストのため)</summary>
-    internal static List<(string Port, It930xModel Model)> Found(string sysfs, Action<string>? warn) =>
-        UsbDevices.Scan(sysfs, dir => Identify(sysfs, Path.GetFileName(dir)), model => model.Name, warn);
+    /// <summary>渡した <see cref="IUsbHost"/> から (渡せるのはテストのため)</summary>
+    internal static List<(string Port, It930xModel Model)> Found(IUsbHost host, Action<string>? warn) =>
+        [.. UsbHost.Scan(host, Family, Id, model => model.Name, warn).Select(item => (item.Found.Port, item.Model))];
 
-    /// <summary>sysfs のそのポートの機種。扱う機種でなければ null</summary>
-    internal static It930xModel? Identify(string sysfs, string port)
-    {
-        var dir = Path.Combine(sysfs, port);
-        return Hex(UsbSysfs.Read(dir, "idVendor")) is { } vendor && Hex(UsbSysfs.Read(dir, "idProduct")) is { } product ? Find(vendor, product) : null;
-    }
+    private static UsbId Id(It930xModel model) => new(model.Vendor, model.Product);
 
-    /// <summary>そのポートの機種 (Linux は sysfs、Windows・macOS は OS に問い合わせる)。**開かない**</summary>
-    public static It930xModel? Identify(string port) =>
-        OperatingSystem.IsLinux() ? Identify(UsbSysfs.Devices, port) : Found().FirstOrDefault(item => item.Port == port).Model;
+    /// <summary>そのポートの機種。扱う機種でなければ null。**開かない**</summary>
+    public static It930xModel? Identify(string port) => UsbHost.Identify(UsbHost.Current, Family, Id, port);
 
     /// <summary>
-    /// そのポートの機材の USB のシリアル番号。**開かない。** 読めなければ null。
-    /// Linux は sysfs の <c>serial</c>。Windows はデバイスのパス (<c>\\?\usb#vid_0511&amp;pid_024a#&lt;シリアル番号&gt;#{…}</c>) の 3 つ目の区切り
-    /// (シリアル番号の無い機材は、ここに <c>&amp;</c> を含む OS が作った名前が入る)。Windows の読み方は実機で確かめていない。macOS は読まない
+    /// そのポートの機材の USB のシリアル番号 (<see cref="UsbFound.Serial"/>)。**開かない。** 読めなければ null。
+    /// 最後に探したとき (<see cref="Found(Action{string}?)"/>) のもので、まだ探していないポートなら探してから。
+    /// Linux は sysfs の <c>serial</c>、Windows はデバイスのパスから (<see cref="UsbDevices.WindowsSerial"/>)。macOS は読まない
     /// </summary>
     public static string? Serial(string port)
     {
-        if (OperatingSystem.IsLinux()) return SysfsSerial(UsbSysfs.Devices, port);
-        if (!OperatingSystem.IsWindows()) return null;
-        if (!Paths.ContainsKey(port)) Found();
-        return Paths.TryGetValue(port, out var path) ? WindowsSerial(path) : null;
+        if (!Serials.ContainsKey(port)) Found();
+        return Serials.TryGetValue(port, out var serial) ? serial : null;
     }
-
-    /// <summary>sysfs の <c>serial</c> (場所を渡せるのはテストのため)</summary>
-    internal static string? SysfsSerial(string sysfs, string port) =>
-        UsbSysfs.Read(Path.Combine(sysfs, port), "serial") is { Length: > 0 } serial ? serial : null;
-
-    /// <summary>Windows のデバイスのパスからシリアル番号。無ければ null</summary>
-    internal static string? WindowsSerial(string path) =>
-        path.Split('#') is [_, _, var serial, ..] && serial.Length > 0 && !serial.Contains('&') ? serial : null;
 
     /// <summary>
     /// Q3 のシリアル番号を、筐体の番号 (先頭の 14 桁) と側 (末尾の 1 桁。1 か 2) に分ける (IT930x の仕様書 2.1)。
@@ -527,15 +500,10 @@ public static class It930x
         return others.Count == 1 ? others[0] : null;
     }
 
-    private static int? Hex(string? text) =>
-        int.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value) ? value : null;
-
     /// <summary>
     /// 開く (Linux は usbfs、Windows は WinUSB、macOS は IOKit)。インターフェース 0 を確保する。
     /// ほかのソフトが使っていれば、OS の理由のまま失敗する
     /// </summary>
     public static IUsbDevice OpenUsb(string port, It930xModel model) =>
-        OperatingSystem.IsLinux()
-            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product, selectAlternate: false)
-            : UsbDevices.Open(port, model.Vendor, model.Product, selectAlternate: false);
+        UsbHost.Current.Open(port, model.Vendor, model.Product, selectAlternate: false);
 }

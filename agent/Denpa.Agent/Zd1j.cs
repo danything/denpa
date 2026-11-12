@@ -39,21 +39,15 @@ public static class Zd1j
     /// 挿さっている CECH-ZD1 J のポート。**開かない** (開くと他から使えなくなり、ブリッジの起動もしてしまう)。
     /// カーネルのドライバが使っているものは並べない (usbfs はこちらが開いているしるしなので並べる)
     /// </summary>
-    internal static List<string> Ports(string sysfs, Action<string>? warn = null)
-    {
-        var vendor = Vendor.ToString("x4", CultureInfo.InvariantCulture);
-        var product = Product.ToString("x4", CultureInfo.InvariantCulture);
-        return [.. UsbDevices.Scan(sysfs,
-            dir => UsbSysfs.Read(dir, "idVendor") == vendor && UsbSysfs.Read(dir, "idProduct") == product ? Model : null,
-            model => model, warn).Select(found => found.Port)];
-    }
+    internal static List<string> Ports(IUsbHost host, Action<string>? warn = null) =>
+        [.. UsbHost.Scan(host, [Model], _ => new UsbId(Vendor, Product), model => model, warn).Select(found => found.Found.Port)];
 
-    /// <summary>挿さっているポート (OS ごと)。Windows・macOS は OS の並べたもの</summary>
+    /// <summary>挿さっているポート (今の OS の <see cref="UsbHost.Current"/> から)</summary>
     private static List<string> Ports(Action<string>? warn = null)
     {
         try
         {
-            return OperatingSystem.IsLinux() ? Ports(UsbSysfs.Devices, warn) : [.. UsbDevices.List(Vendor, Product).Select(found => found.Port)];
+            return Ports(UsbHost.Current, warn);
         }
         catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
         {
@@ -77,10 +71,7 @@ public static class Zd1j
     }
 
     /// <summary>開く (Linux は usbfs、Windows は WinUSB、macOS は IOKit)</summary>
-    internal static IUsbDevice OpenUsb(string port) =>
-        OperatingSystem.IsLinux()
-            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, Vendor, Product)
-            : UsbDevices.Open(port, Vendor, Product);
+    internal static IUsbDevice OpenUsb(string port) => UsbHost.Current.Open(port, Vendor, Product);
 
     /// <summary>追従したことを記録したもの (設定のポート → 使ったポート)。同じ組は 1 回だけ記録する</summary>
     private static readonly HashSet<(string From, string To)> Followed = [];

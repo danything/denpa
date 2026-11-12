@@ -490,8 +490,8 @@ public class Tc90522BoardTests
         await Assert.That(It930x.Side("00001205000960A")).IsNull();
         await Assert.That(It930x.Side(null)).IsNull();
         // Windows のデバイスのパスの 3 つ目の区切りがシリアル番号。OS が作った名前 (& を含む) はシリアル番号ではない
-        await Assert.That(It930x.WindowsSerial(@"\\?\usb#vid_0511&pid_024a#000012050009601#{a5dcbf10-6530-11d2-901f-00c04fb951ed}")).IsEqualTo("000012050009601");
-        await Assert.That(It930x.WindowsSerial(@"\\?\usb#vid_0511&pid_024a#6&2f0a1c3&0&2#{a5dcbf10-6530-11d2-901f-00c04fb951ed}")).IsNull();
+        await Assert.That(UsbDevices.WindowsSerial(@"\\?\usb#vid_0511&pid_024a#000012050009601#{a5dcbf10-6530-11d2-901f-00c04fb951ed}")).IsEqualTo("000012050009601");
+        await Assert.That(UsbDevices.WindowsSerial(@"\\?\usb#vid_0511&pid_024a#6&2f0a1c3&0&2#{a5dcbf10-6530-11d2-901f-00c04fb951ed}")).IsNull();
     }
 
     [Test]
@@ -1055,13 +1055,13 @@ public class Tc90522BoardTests
             }
             // 表に無い ID (PX-MLT8UT) は挙げない
             Usb("3-1", 0x0051);
-            var found = It930x.Found(dir.FullName, null);
+            var found = It930x.Found(new SysfsUsbHost(dir.FullName), null);
             await Assert.That(found.Count).IsEqualTo(It930x.Family.Count + 1);
             await Assert.That(found.Select(item => item.Model).Distinct().Count()).IsEqualTo(It930x.Family.Count);
-            await Assert.That(It930x.SysfsSerial(dir.FullName, "2-1")).IsEqualTo("000012050009602");
-            await Assert.That(It930x.SysfsSerial(dir.FullName, "3-1")).IsNull();
+            await Assert.That(new SysfsUsbHost(dir.FullName).Peek("2-1")?.Serial).IsEqualTo("000012050009602");
+            await Assert.That(new SysfsUsbHost(dir.FullName).Peek("3-1")?.Serial).IsNull();
 
-            var specs = It930x.Specs(found, port => It930x.SysfsSerial(dir.FullName, port));
+            var specs = It930x.Specs(found, port => new SysfsUsbHost(dir.FullName).Peek(port)?.Serial);
             // 受信機の数: MLT5 系 5 × 3、Q3・W3 系 4 × 7 (Q3PE4 は 2 つの側)、MLT8PE 5 + 3、DTV02A-4TS-P 4、受信機が 1 つの機種 5
             await Assert.That(specs.Count).IsEqualTo(15 + 28 + 8 + 4 + 5);
             string Types(string device) => string.Join("/", specs.Single(spec => spec.Device == device).Types);
@@ -1078,7 +1078,7 @@ public class Tc90522BoardTests
             // Q3PE4 は側 1 (1-x) の 4 つのあとに側 2 (2-1) の 4 つ
             var devices = specs.Select(spec => spec.Device).ToList();
             await Assert.That(devices.IndexOf("it930x:2-1:0")).IsEqualTo(devices.IndexOf($"it930x:{port(0x024A)}:3") + 1);
-            await Assert.That(It930x.Partner("2-1", It930x.Find(0x0511, 0x024A)!, found, p => It930x.SysfsSerial(dir.FullName, p))).IsEqualTo(port(0x024A));
+            await Assert.That(It930x.Partner("2-1", It930x.Find(0x0511, 0x024A)!, found, p => new SysfsUsbHost(dir.FullName).Peek(p)?.Serial)).IsEqualTo(port(0x024A));
             // 設定の画面に返す、受けられる種別 (最後に探したときの機種から)。機種が分からなければ全部
             await Assert.That(specs.All(spec => spec.Types.Length > 0 && !spec.Disabled)).IsTrue();
         }

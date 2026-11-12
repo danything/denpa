@@ -53,6 +53,7 @@
         <Compile Include="../Denpa.Agent/PsiMemory.cs" />
         <Compile Include="../Denpa.Agent/Emm.cs" />
         <Compile Include="../Denpa.Agent/UsbDevice.cs" />
+        <Compile Include="../Denpa.Agent/UsbHost.cs" />
         <Compile Include="../Denpa.Agent/CardUart.cs" />
         <Compile Include="../Denpa.Agent/Mb86h47.cs" />
         <Compile Include="../Denpa.Agent/Mb86h47Programs.cs" />

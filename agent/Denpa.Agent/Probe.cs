@@ -182,7 +182,7 @@ public static class Probe
             }
             return OneCard(Zd1j.Card(port), Zd1jBoard.CloseAll);
         }
-        Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
+        Console.WriteLine(Ccid.Describe() ?? PcscLink.Describe());
         foreach (var found in It930x.Cards().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
         Zd1j.DescribeCards(Zd1j.Cards(), Console.Out);
         Dt295.DescribeCards(Dt295.Cards(), Console.Out);

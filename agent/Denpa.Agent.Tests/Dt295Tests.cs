@@ -39,7 +39,7 @@ public class Dt295Tests
             Usb(dir, "1-3", "054c", "04b2");
             Usb(dir, "1-2:1.0", "06b8", "103b");
             Usb(dir, "2-1.4", "06b8", "103b");
-            await Assert.That(Dt295.Ports(dir.FullName, null)).IsEquivalentTo(new[] { "1-2", "2-1.4" });
+            await Assert.That(Dt295.Ports(new SysfsUsbHost(dir.FullName), null)).IsEquivalentTo(new[] { "1-2", "2-1.4" });
         }
         finally
         {
@@ -91,10 +91,10 @@ public class Dt295Tests
             Usb(dir, "1-2", "06b8", "103c");
             Usb(dir, "1-3", "06b8", "1038");
             Usb(dir, "1-6", "06b8", "103a");
-            await Assert.That(Dt295.Identify(dir.FullName, "1-3")?.Name).IsEqualTo("PIXELA PIX-DT420");
-            await Assert.That(Dt295.Identify(dir.FullName, "1-6")).IsNull();
+            await Assert.That(Dt295.Identify(new SysfsUsbHost(dir.FullName), "1-3")?.Name).IsEqualTo("PIXELA PIX-DT420");
+            await Assert.That(Dt295.Identify(new SysfsUsbHost(dir.FullName), "1-6")).IsNull();
             List<string> warnings = [];
-            await Assert.That(Dt295.Ports(dir.FullName, warnings.Add)).IsEquivalentTo(new[] { "1-1" });
+            await Assert.That(Dt295.Ports(new SysfsUsbHost(dir.FullName), warnings.Add)).IsEquivalentTo(new[] { "1-1" });
             await Assert.That(warnings.Count).IsEqualTo(2);
         }
         finally

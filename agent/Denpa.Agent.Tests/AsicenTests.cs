@@ -253,14 +253,14 @@ public class AsicenTests
             Usb(root, "1-3", "3275", "0080");     // PX-S1UD (siano)
             Usb(root, "usb1", "1d6b", "0002");    // ルートハブ
 
-            var found = AsicenUserland.Scan(root.FullName);
+            var found = AsicenUserland.Scan(new SysfsUsbHost(root.FullName));
             await Assert.That(found.Select(function => $"{function.Port} {function.Usb} {function.Loader}").ToArray())
                 .IsEquivalentTo(new[] { "1-2.1 0b06:0005 False", "1-2.2 1738:5211 True", "1-5 1738:5216 True" });
 
             var waiting = AsicenUserland.Waiting(found);
             await Assert.That(waiting.Select(enclosure => $"{enclosure.Id}={string.Join(",", enclosure.Ports)}").ToArray())
                 .IsEquivalentTo(new[] { "1-2=1-2.1,1-2.2", "1-5=1-5" });
-            await Assert.That(AsicenUserland.Scan(Path.Combine(root.FullName, "none"))).IsEmpty();
+            await Assert.That(AsicenUserland.Scan(new SysfsUsbHost(Path.Combine(root.FullName, "none")))).IsEmpty();
         }
         finally
         {

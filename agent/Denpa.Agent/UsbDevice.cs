@@ -3,9 +3,9 @@ using System.Collections.Concurrent;
 namespace Denpa.Agent;
 
 /*
- * エージェントが USB を直に持つ機材 (CECH-ZD1 J・PIX-DT295・IT930x の機材) のための小さな抽象。OS ごとの実装は
+ * エージェントが USB を直に持つ機材 (CECH-ZD1 J・PIX-DT295・IT930x の機材・Siano) の、開いた 1 台の小さな抽象。OS ごとの実装は
  * UsbFsDevice (Linux の usbfs)・WinUsbDevice (Windows の WinUSB)・IoKitDevice (macOS の IOKit)。どれも P/Invoke だけで、
- * 外のライブラリ (libusb など) は使わない。iso の転送は持たない (要る機材が無い)。
+ * 外のライブラリ (libusb など) は使わない。iso の転送は持たない (要る機材が無い)。並べる・開くのは IUsbHost (UsbHost.cs)。
  */
 
 /// <summary>開いた USB の機材 1 台。インターフェース 0 を確保したところから使う。代替設定 0 を選ぶかは開く側が決める (IT930x は選ばない)</summary>
@@ -73,20 +73,9 @@ public sealed class UsbGoneException(string message) : IOException(message);
 /// <param name="Path">OS が開くときに使う名前 (Windows のデバイスのパス・macOS の locationID)</param>
 public sealed record UsbLocation(string Port, string Path);
 
-/// <summary>OS ごとの、挿さっている機材を並べる・開く</summary>
+/// <summary>OS の名前からポートの名前を作る部品と、記録に出す文言。並べる・開くのは <see cref="IUsbHost"/> (UsbHost.cs)</summary>
 public static class UsbDevices
 {
-    /// <summary>
-    /// 挿さっている機材を並べる (Windows・macOS)。**開かない。** Windows は WinUSB でないものも並ぶ (開けるかは開くまで分からない)。
-    /// Linux は呼ぶ側が sysfs で探すので空 (<see cref="Scan"/>)
-    /// </summary>
-    public static IReadOnlyList<UsbLocation> List(int vendor, int product)
-    {
-        if (OperatingSystem.IsWindows()) return WinUsbDevice.List(vendor, product);
-        if (OperatingSystem.IsMacOS()) return IoKitDevice.List(vendor, product);
-        return [];
-    }
-
     /// <summary>
     /// Windows の場所の文字列 (<c>PCIROOT(0)#PCI(1400)#USBROOT(0)#USB(3)#USB(2)</c>) からポートの名前 (<c>1-3.2</c>)。
     /// 先頭の数は、ホストコントローラーの場所の文字列を並べた <paramref name="controllers"/> の何番目か (1 から)。分からなければ null
@@ -132,42 +121,12 @@ public static class UsbDevices
         return ports.Count == 0 ? null : $"{location >> 24}-{string.Join('.', ports)}";
     }
 
-    /// <summary>そのポートの機材を開く (Windows・macOS)。無ければ投げる</summary>
-    /// <param name="selectAlternate">代替設定 0 を選ぶ。IT930x は選ばない (<see cref="UsbFsDevice.Open"/> と同じ理由)</param>
-    public static IUsbDevice Open(string port, int vendor, int product, bool selectAlternate = true)
-    {
-        var found = List(vendor, product).FirstOrDefault(location => location.Port == port)
-            ?? throw new IOException($"USB のポート {port} に {vendor:x4}:{product:x4} が見当たりません");
-        if (OperatingSystem.IsWindows()) return WinUsbDevice.Open(found, selectAlternate);
-        if (OperatingSystem.IsMacOS()) return IoKitDevice.Open(found, vendor, product, selectAlternate);
-        throw new PlatformNotSupportedException();
-    }
-
     /// <summary>
-    /// Linux の sysfs から、<paramref name="identify"/> が見分けた機材のポートと機材。**開かない。**
-    /// カーネルのドライバが使っているものは <paramref name="warn"/> に出して並べない (usbfs はこちらが開いている印なので並べる)
+    /// Windows のデバイスのパス (<c>\\?\usb#vid_0511&amp;pid_024a#&lt;シリアル番号&gt;#{…}</c>) の 3 つ目の区切りからシリアル番号。
+    /// シリアル番号の無い機材は、ここに <c>&amp;</c> を含む OS が作った名前が入るので null。実機で確かめていない
     /// </summary>
-    /// <param name="identify">ポートのディレクトリから機材を見分ける。違う機材なら null</param>
-    /// <param name="name">記録に出す機材の名前</param>
-    internal static List<(string Port, T Model)> Scan<T>(string sysfs, Func<string, T?> identify, Func<T, string> name, Action<string>? warn)
-        where T : class
-    {
-        var found = new List<(string, T)>();
-        if (!Directory.Exists(sysfs)) return found;
-        foreach (var dir in Directory.EnumerateFileSystemEntries(sysfs).Order(StringComparer.Ordinal))
-        {
-            var port = Path.GetFileName(dir);
-            if (!UsbSysfs.IsPort(port) || identify(dir) is not { } model) continue;
-            var driver = UsbSysfs.Driver(sysfs, port);
-            if (driver is not (null or "usbfs"))
-            {
-                warn?.Invoke($"{name(model)} {port} はカーネルのドライバ ({driver}) が使っているので使いません");
-                continue;
-            }
-            found.Add((port, model));
-        }
-        return found;
-    }
+    public static string? WindowsSerial(string path) =>
+        path.Split('#') is [_, _, var serial, ..] && serial.Length > 0 && !serial.Contains('&') ? serial : null;
 
     /// <summary>
     /// <c>--card</c> の差し込み口の行: ATR と、開いてから ATR までの時間。**見つからなくても 1 行出す**

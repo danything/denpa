@@ -196,9 +196,14 @@ public static class Dt295NativeProbe
         }
         if (options.Replug)
         {
+            if (UsbHost.Current.PowerCycle is not { } cycle)
+            {
+                Console.Error.WriteLine("この OS ではポートの電源を入れ直せません。機材を挿し直してください");
+                return 1;
+            }
             try
             {
-                UsbSysfs.PowerCycle(UsbSysfs.Devices, port, TimeSpan.FromSeconds(10));
+                cycle(port, TimeSpan.FromSeconds(10));
                 Thread.Sleep(500);
             }
             catch (IOException error)
