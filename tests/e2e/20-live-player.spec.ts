@@ -13,6 +13,7 @@ import {
   flipSetting,
   goto,
   holdCaptions,
+  later,
   leaveFullscreen,
   liveWithoutMpeg2,
   oneRowTroubles,
@@ -1389,13 +1390,6 @@ test.describe("ライブで番組が替わる", () => {
     await expect(range).toHaveText(before);
   });
 });
-
-/** "HH:MM" の minutes 分あと */
-function later(clock: string, minutes: number): string {
-  const [hours, mins] = clock.split(":").map(Number);
-  const total = ((hours ?? 0) * 60 + (mins ?? 0) + minutes) % (24 * 60);
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
 
 /**
  * **Safari は、ユーザーが操作した直後でないと Screen Wake Lock を取らせない** (#2209)。

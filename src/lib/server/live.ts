@@ -30,6 +30,7 @@ import {
   type CaptionLanguage,
 } from "@danything/arib/caption-text";
 import { PresentFollowing } from "@danything/arib/eit";
+import { MmtPresentFollowing } from "@danything/arib/mh-eit";
 import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
 import { PacketStream } from "@danything/arib/psi";
 import { ServiceFilter, StreamsWatch } from "@danything/arib/service-filter";
@@ -1343,6 +1344,8 @@ class Session {
    * ファイルを読んでいて、流れている p/f は過去のものなので読まない
    */
   private onAir: PresentFollowing | null = null;
+  /** 4K の局 (`tlv`) の「いま」と「次」(MH-EIT[p/f]) を読む側 (`packages/arib/src/mh-eit.ts`)。読み方のほかは `onAir` と同じ (`followTlv`) */
+  private mmtOnAir: MmtPresentFollowing | null = null;
   /** 最後に番組表と突き合わせた時刻 (`ON_AIR_EVERY`) */
   private followedAt = 0;
   /** 最後に伝えた Hybridcast。**同じものを伝え直さない** */
@@ -2138,6 +2141,18 @@ class Session {
   }
 
   /**
+   * 4K の局の、1 局に絞った TLV を MH-EIT[p/f] の読み取りへ渡す (`tap` の EIT[p/f] と同じ扱い)。
+   * 詰め替え (`runMmt`)・エンコード (`pump`)・HTTP の `raw` (`relayTlv`) のどれでも読む。追っかけ (`source`) は読まない (`onAir` の説明)
+   */
+  private followTlv(tlv: Uint8Array): void {
+    if (tlv.length === 0 || this.program <= 0 || this.source !== undefined)
+      return;
+    const onAir = (this.mmtOnAir ??= new MmtPresentFollowing(this.program));
+    if (onAir.feed(tlv) || Date.now() - this.followedAt >= ON_AIR_EVERY)
+      this.followOnAir(onAir);
+  }
+
+  /**
    * エージェントから来た TS を ffmpeg へ。**その局のぶんだけ渡す。**
    *
    * 録画と同じ絞り方 (`packages/arib/src/service-filter.ts`)。丸ごと渡すと、局が 3 つ入っている TS で
@@ -2348,7 +2363,7 @@ class Session {
   }
 
   /**
-   * 4K の局の塊を読んだ結果のうち、fMP4 のほかのもの (`live-mmt.ts`)。字幕の文字の配置を配り、時計の組を覚える。
+   * 4K の局の塊を読んだ結果のうち、fMP4 のほかのもの (`live-mmt.ts`)。字幕の文字の配置を配り、時計の組を覚え、MH-EIT[p/f] を読む (`followTlv`)。
    * 続けてよければ true。番組が替わってアセットの並びが変わったら作り直し (`restart`)、映像・音声がスクランブルされたまま
    * 届いていたら理由を伝えて畳む (どちらも false)。4K の局のスクランブルは ACAS で、まだ復号できない (`types.DESCRAMBLABLE`)
    */
@@ -2366,6 +2381,7 @@ class Session {
       this.stop();
       return false;
     }
+    this.followTlv(read.tlv);
     if (mmt.hasCaptions && this.list.add(null))
       for (const viewer of this.viewers)
         this.tellCaptions(viewer, this.list.tracks);
@@ -2820,6 +2836,7 @@ class Session {
     const filter = new MmtServiceFilter(this.program);
     return this.readTlv(label, tuned, (chunk) => {
       const out = filter.filter(chunk);
+      this.followTlv(out);
       if (out.length > 0)
         for (const viewer of this.viewers)
           this.hand(viewer, CHANNEL.rawTs, out);

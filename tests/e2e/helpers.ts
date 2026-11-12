@@ -119,6 +119,13 @@ export async function expectTokenRefused(
   expect(body.data, action).toContain("アクセストークンでは使えません");
 }
 
+/** "HH:MM" の minutes 分あと (ライブの番組の時間帯が延びたのを比べる) */
+export function later(clock: string, minutes: number): string {
+  const [hours, mins] = clock.split(":").map(Number);
+  const total = ((hours ?? 0) * 60 + (mins ?? 0) + minutes) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 /**
  * 検索の結果の行の、放送の始まり (`10/22(木) 21:30〜22:00` の頭)。年は出ないので、いまに近いほうの年にする
  * (画面もテストも TZ=Asia/Tokyo)。

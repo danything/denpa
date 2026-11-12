@@ -20,6 +20,7 @@ import {
   EpgReader,
   parseBcdDuration,
   parseMjdTime,
+  PresentFollowing,
 } from "./eit.js";
 import { mmtDescriptors, MmtTableStream, mmtText } from "./mmt-si.js";
 import { isCopyNever } from "./psi.js";
@@ -260,5 +261,25 @@ export class MmtEpgReader extends EpgReader {
       if (section !== null && this.add(section)) added = true;
     }
     return added;
+  }
+}
+
+/**
+ * **1 局の「いま」と「次」(MH-EIT[p/f]) を追う。** TS の `PresentFollowing` の 4K の放送 (MMT/TLV) 版で、
+ * 違うのは読み方だけ (覚え方と、変わったかの比べ方は同じ)。ライブで番組の切り替わりを知るのに使う
+ */
+export class MmtPresentFollowing extends PresentFollowing {
+  private readonly tables = new MmtTableStream();
+
+  /** 任意の長さの TLV のバイト列を渡す。**いまか次のどちらかが変わったら true** (最初に読めたときも true) */
+  feed(chunk: Uint8Array): boolean {
+    let changed = false;
+    for (const { table } of this.tables.feed(chunk)) {
+      // 予定 (0x8C〜) は読まずに捨てる。同じ並びに流れてくる
+      if (table[0] !== MH_PF_ACTUAL || table.length < 18) continue;
+      if (u16(table, 3) !== this.serviceId) continue;
+      if (this.hold(parseMhEit(table))) changed = true;
+    }
+    return changed;
   }
 }
