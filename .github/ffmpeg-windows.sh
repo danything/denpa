@@ -240,9 +240,9 @@ export PATH="/c/Windows/System32:/c/Windows"
 # SVT-AV1 が Dockerfile と同じバージョンか (preset と crf の効き方はバージョンで変わる。src/lib/server/encoder.ts)。
 # SVT-AV1 が標準エラーに出すバージョンの行で見る
 ./ffmpeg.exe -hide_banner -loglevel error -f lavfi -i testsrc2=s=320x240:r=30:d=1 -f lavfi -i sine=d=1 \
-  -c:v libsvtav1 -preset 12 -c:a libopus -f matroska -y "$work/av1.mkv" 2> "$work/av1.log" || { cat "$work/av1.log" >&2; exit 1; }
-grep -qF "SVT-AV1 Encoder Lib ${SVT_AV1_VERSION}" "$work/av1.log" || {
-  cat "$work/av1.log" >&2
+  -c:v libsvtav1 -preset 12 -c:a libopus -f matroska -y "$work/av1.mkv" 2> "$work/av1.log" || { /usr/bin/cat "$work/av1.log" >&2; exit 1; }
+/usr/bin/grep -qF "SVT-AV1 Encoder Lib ${SVT_AV1_VERSION}" "$work/av1.log" || {
+  /usr/bin/cat "$work/av1.log" >&2
   echo "ffmpeg が読む SVT-AV1 が ${SVT_AV1_VERSION} ではありません" >&2
   exit 1
 }
