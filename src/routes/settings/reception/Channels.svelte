@@ -29,6 +29,7 @@
   /*
    * **チャンネルを書き換えたお知らせは、この画面を開いたら消す** (書き換えたチャンネルはここに並んでいる)。
    * load で消すと先読みでも消えるので、開いた画面からリクエストする (`channels.server.ts` の `seenLineup`)
+   * 消したあとも読み直さない。この画面にいる間は、見出しの下の文 (下の `channelAlert`) とヘッダーの印を残して読めるようにし、次に画面を移ったときに消える
    */
   $effect(() => {
     if (!data.lineupChanged) return;
@@ -332,7 +333,7 @@
     {/if}
 
     {#if coverage.length > 0}
-      <!-- 番組表がもう入っている局の数)。下の表の右端を全部見なくても分かるように -->
+      <!-- 番組表がもう入っている局の数。下の表の右端を全部見なくても分かるように -->
       {@const withEpg = services.filter(
         (service) => service.programs > 0,
       ).length}
