@@ -24,6 +24,7 @@ import android.widget.Toast
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 /**
  * 常駐サービス (種類は connectedDevice)。部品 ([Part]) を子プロセスとして起動し、通知を出し続ける。1 段目の部品はエージェントだけ。
@@ -86,7 +87,7 @@ class DenpaService : Service() {
         try {
             startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } catch (error: IllegalStateException) {
-            // Android 12 からは、後ろにいるときに常駐を始められない (落とされたあとに START_STICKY で戻されたときなど)。次のアイコンか挿入を待つ
+            // Android 12 からは、後ろにいるときに常駐を始められない (システムに終了されたあとに START_STICKY で起動し直されたときなど)。次のアイコンか挿入を待つ
             Log.w(TAG, "常駐サービスを始められないため止めます", error)
             stopSelf()
             return START_NOT_STICKY
@@ -161,11 +162,13 @@ class DenpaService : Service() {
         status = null
         if (stopping) {
             Log.i(TAG, "エージェントが終了したため、常駐サービスを止めます (終了コード $code)")
+            // 様子の読み取りが通知を出し直さないよう、先に止める
+            worker.removeCallbacksAndMessages(null)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
-        // 長く動いてから落ちたなら、すぐ起動し直す。続けて落ちるなら間を延ばす
+        // 長く動いてから異常終了したなら、すぐ起動し直す。続けて終了するなら間を延ばす
         if (SystemClock.elapsedRealtime() - startedAt > RESTART_MAX) backoff = RESTART_MIN
         Log.w(TAG, "エージェントが終了しました (終了コード $code)。${backoff / 1000} 秒後に起動し直します")
         scheduleRestart()
@@ -206,7 +209,7 @@ class DenpaService : Service() {
                 status = try {
                     client.status()
                 } catch (error: Exception) {
-                    Log.d(TAG, "エージェントの様子を読めませんでした: $error")
+                    Log.d(TAG, "エージェントの GET /denpa/tuners を取得できませんでした: $error")
                     null
                 }
             }
@@ -271,7 +274,7 @@ class DenpaService : Service() {
         val url = try {
             pairUrl()
         } catch (error: Exception) {
-            Log.w(TAG, "組む URL を読めませんでした", error)
+            Log.w(TAG, "組む URL を取得できませんでした", error)
             null
         }
         val address = PairUrl.lanAddress(getSystemService(ConnectivityManager::class.java))
@@ -291,14 +294,17 @@ class DenpaService : Service() {
             .apply { environment().putAll(this@DenpaService.environment()) }
             .start()
         process.outputStream.close()
-        // 標準エラー (鍵を作ったなどの記録) は logcat に流す
-        Thread { process.errorStream.bufferedReader().forEachLine { Log.i("denpa-agent", it) } }.start()
-        val line = process.inputStream.bufferedReader().readLine()
+        // 標準エラー (鍵を作ったなどの記録) は logcat に流す。終わるか destroy で切れたら、このスレッドも終わる
+        thread(name = "denpa-agent-pair", isDaemon = true) {
+            runCatching { process.errorStream.bufferedReader().forEachLine { Log.i("denpa-agent", it) } }
+        }
+        // 出力は URL の 1 行だけでパイプに収まるので、終わるのを先に待ってから読む (止まったまま worker を塞がない)
         if (!process.waitFor(10, TimeUnit.SECONDS)) {
-            process.destroy()
+            process.destroyForcibly()
             return null
         }
-        return line?.takeIf { process.exitValue() == 0 }
+        if (process.exitValue() != 0) return null
+        return process.inputStream.bufferedReader().readLine()
     }
 
     private fun copy(url: String) {

@@ -12,6 +12,8 @@ import android.hardware.usb.UsbManager
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import java.io.File
@@ -63,7 +65,7 @@ internal class UsbBroker(private val context: Context, private val socketFile: F
         }
     }
 
-    // RECEIVER_NOT_EXPORTED は API 33 から意味を持つ。それより前の Android は知らない印を無視する
+    // RECEIVER_NOT_EXPORTED は API 33 から効く。それより前の Android はこのフラグを無視する
     @SuppressLint("InlinedApi")
     fun start() {
         running = true
@@ -72,15 +74,19 @@ internal class UsbBroker(private val context: Context, private val socketFile: F
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
             addAction(permission)
         }
-        // 挿抜はシステムが、許可の結果はこのアプリの PendingIntent が送るので、ほかのアプリからは受けない
-        context.registerReceiver(receiver, actions, Context.RECEIVER_NOT_EXPORTED)
-        scan()
+        // 挿抜はシステムが、許可の結果はこのアプリの PendingIntent が送るので、ほかのアプリからは受けない。
+        // 受けたら機材を開いてソケットに書くので、メインのスレッドでなく events のスレッドで受ける (書くのが詰まっても画面の応答を止めない)
+        context.registerReceiver(receiver, actions, null, Handler(events.looper), Context.RECEIVER_NOT_EXPORTED)
         connector = thread(name = "usb-broker", isDaemon = true) { connectLoop() }
     }
+
+    /** ブロードキャストを受けて機材を開くスレッド */
+    private val events = HandlerThread("usb-events").apply { start() }
 
     fun stop() {
         running = false
         context.unregisterReceiver(receiver)
+        events.quitSafely()
         synchronized(lock) {
             connected?.let(::closeQuietly)
             connected = null
@@ -91,9 +97,15 @@ internal class UsbBroker(private val context: Context, private val socketFile: F
         connector?.interrupt()
     }
 
-    /** 挿さっている機材を見直す (アイコンや挿入で常駐サービスが起こされたとき)。許可があれば開き、無ければ求める */
+    /**
+     * 挿さっている機材を見直す (常駐サービスを始めたときと、アイコンや挿入で起こされたとき)。許可があれば開き、無ければ求める。
+     * 前に断られた機材にも求め直す (アイコンを押すのが、断ったあとに許可し直す手段)
+     */
     fun scan() {
-        usb.deviceList.values.forEach(::offer)
+        Handler(events.looper).post {
+            synchronized(lock) { asked.clear() }
+            usb.deviceList.values.forEach(::offer)
+        }
     }
 
     private fun offer(device: UsbDevice) {

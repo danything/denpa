@@ -19,7 +19,7 @@ class BootReceiver : BroadcastReceiver() {
         try {
             context.startForegroundService(Intent(context, DenpaService::class.java))
         } catch (error: IllegalStateException) {
-            // Android 12 からの、後ろから常駐を始められないとき (BOOT_COMPLETED と MY_PACKAGE_REPLACED は除かれているはず)。落とさずに記録だけ残す
+            // Android 12 からの、後ろから常駐を始められないとき (BOOT_COMPLETED と MY_PACKAGE_REPLACED は除かれているはず)。アプリを異常終了させずに記録だけ残す
             Log.w(TAG, "${intent.action} で常駐サービスを始められませんでした", error)
         }
     }
