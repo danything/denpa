@@ -379,7 +379,7 @@ public class TunerPoolTests
     }
 
     [Test]
-    public async Task ISDB_C_は_IT930x_の機材のほかでは選局せずに断る()
+    public async Task ISDB_C_は_受け付けない機材では選局せずに断る()
     {
         await Task.Yield();
         // 種別に CATV を入れても、IT930x の機材でなければ ISDB-T の選局として渡さない
@@ -387,7 +387,7 @@ public class TunerPoolTests
         try
         {
             var error = Assert.Throws<IOException>(() => rig.Pool.Open(ChannelTable.Catv, "QC30:1", 3, "scan QC30:1"));
-            await Assert.That(error.Message).Contains("QC30:1 (ISDB-C) を選局できるのは it930x: の受信機だけ");
+            await Assert.That(error.Message).Contains("QC30:1 (ISDB-C) を選局できるのは it930x: の受信機と、DVB-C に対応した DVB の機材だけ");
             await Assert.That(rig.Opened("fake:a").Single().Tunes).IsEqualTo(0);
         }
         finally

@@ -1184,6 +1184,9 @@ public sealed class It930xTuner : ITuneDevice
         }
     }
 
+    /// <summary>どの方式も受け付ける。受信機が受けられない方式は、<see cref="Tune"/> が機種の表で機材に触る前に断る</summary>
+    public bool Accepts(ChannelTable.Tuning tuning) => true;
+
     /// <summary>最後の選局で、ロックを確かめ始めてからロックするまで (ms)。<c>--tune</c> が出す</summary>
     public long LockMs => _frontend?.LockMs ?? -1;
 
@@ -1460,12 +1463,20 @@ public sealed class It930xTuner : ITuneDevice
         }
         StopOutput();
         // 1 パケットも届かなかったときは、電波ではなくブリッジから先で TS が止まっている (IT930x の仕様書 6.3)。同期しなかった文 (放送休止と読まれる) と分ける
-        if (decision == TsmfDecision.Pending && tsmf.Received == 0) throw new IOException(TsMissing);
-        if (decision == TsmfDecision.Pending) throw new IOException(ITuneDevice.SyncFailed);
+        throw new IOException(TsmfFailure(tsmf, decision, TsMissing));
+    }
+
+    /// <summary>
+    /// TSMF の判定で失敗したときの文 (<see cref="DvbTuner"/> も使う)。判定が決まらないうちに時間切れなら、1 パケットも届かなかったときは
+    /// <paramref name="noPackets"/>、届いていればロックしないときと同じ文。指定した TS が無ければ <see cref="TsmfMissing"/> で始まる文
+    /// </summary>
+    internal static string TsmfFailure(TsmfSelector tsmf, TsmfDecision decision, string noPackets)
+    {
+        if (decision == TsmfDecision.Pending) return tsmf.Received == 0 ? noPackets : ITuneDevice.SyncFailed;
         var detail = tsmf.FirstHeader is { } header
             ? $"TSMF の有効な TS は {header.ValidStreams.Count} 本で、{tsmf.Index} 本目 (0 から数える) を指定した"
             : $"TSMF を使わない搬送波で、TS は 0 本目だけ。{tsmf.Index} 本目を指定した";
-        throw new IOException($"{TsmfMissing} ({detail})");
+        return $"{TsmfMissing} ({detail})";
     }
 
     /// <summary>

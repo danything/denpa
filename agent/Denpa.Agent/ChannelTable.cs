@@ -22,12 +22,21 @@ public static class ChannelTable
     public const int SysIsdbs = 9;
 
     /// <summary>`linux/dvb/frontend.h` の <c>SYS_DVBC_ANNEX_B</c> (J.83 Annex B。スカパー！プレミアムサービス光)</summary>
-    public const int SysDvbcAnnexB = 3;
+    public const int SysDvbcAnnexB = 2;
+
+    /// <summary>`linux/dvb/frontend.h` の <c>SYS_DVBC_ANNEX_A</c> (J.83 Annex A。DVB-C)。DVB の機材が Annex C を持たないときに ISDB-C を選局する方式 (<see cref="DvbTuner"/>)</summary>
+    public const int SysDvbcAnnexA = 1;
+
+    /// <summary>`linux/dvb/frontend.h` の <c>SYS_DVBC_ANNEX_C</c> (J.83 Annex C)。DVB の機材で ISDB-C を選局する方式 (<see cref="DvbTuner"/>)</summary>
+    public const int SysDvbcAnnexC = 18;
 
     /// <summary>スカパー！プレミアムサービス光 (J.83B) の種別。サーバの <c>ChannelType</c> の <c>SKY</c></summary>
     public const string Sky = "SKY";
 
-    /// <summary>`linux/dvb/frontend.h` の <c>SYS_ISDBC</c> (J.83 Annex C。ケーブルテレビのトランスモジュレーション方式。CXD2856 の仕様書 8)</summary>
+    /// <summary>
+    /// `linux/dvb/frontend.h` の <c>SYS_ISDBC</c> (J.83 Annex C。ケーブルテレビのトランスモジュレーション方式。CXD2856 の仕様書 8)。
+    /// 選局表の中の印で、DVB の機材にはこの値を渡さず、<see cref="SysDvbcAnnexC"/> か <see cref="SysDvbcAnnexA"/> で選局する (<see cref="DvbTuner"/>)
+    /// </summary>
     public const int SysIsdbc = 10;
 
     /// <summary>ケーブルテレビのトランスモジュレーション方式 (ISDB-C) の種別。サーバの <c>ChannelType</c> の <c>CATV</c> (画面では「ケーブル」)</summary>

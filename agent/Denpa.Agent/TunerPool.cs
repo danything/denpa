@@ -257,6 +257,12 @@ public sealed class TunerPool(
     /// <summary>同期しなかったときの失敗か (どの方式も <see cref="ITuneDevice.SyncFailed"/> の文言で例外を送出する)</summary>
     private static bool IsUnsynced(Exception error) => error.Message.Contains(ITuneDevice.SyncFailed, StringComparison.Ordinal);
 
+    /// <summary>機材が受け付けない方式のチャンネルを断る文 (<see cref="ITuneDevice.Accepts"/>。<c>--tune</c> も使う)</summary>
+    internal static string Unaccepted(string channel, ChannelTable.Tuning tuning) => tuning.IsdbC
+        ? $"{channel} (ISDB-C) を選局できるのは {It930x.Scheme} の受信機と、DVB-C に対応した DVB の機材だけです"
+        : tuning.Cable ? $"{channel} (J.83B) を選局できるのは {It930x.Scheme} の受信機だけです"
+        : $"{channel} ({tuning.Type}) はこの機材では選局できません";
+
     /// <param name="tried">この選局で、もう試して同期しなかったチューナー (番号と名前)。空でなければ、最初のチューナーと同じ組の空いているものだけから選ぶ</param>
     private Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after, string? pin, int? service, IReadOnlyList<(int Index, string Name)> tried)
     {
@@ -370,9 +376,8 @@ public sealed class TunerPool(
                     {
                         var tuning = ChannelTable.Parse(channel)
                             ?? throw new IOException($"{channel} は選局表にありません");
-                        // J.83B と ISDB-C を選局できるのは IT930x の機材だけ (ほかの機材は ISDB-T の選局として扱ってしまう)
-                        if ((tuning.Cable || tuning.IsdbC) && held.Device is not It930xTuner)
-                            throw new IOException($"{channel} ({(tuning.IsdbC ? "ISDB-C" : "J.83B")}) を選局できるのは {It930x.Scheme} の受信機だけです");
+                        // 受け付けない方式は渡さない (J.83B と ISDB-C を選局できない機材は、地上波の選局として扱ってしまう。ITuneDevice.Accepts)
+                        if (!held.Device.Accepts(tuning)) throw new IOException(Unaccepted(channel, tuning));
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す
                         held.Channel = null;
                         lease.TuneStartMs = lease.Clock.ElapsedMilliseconds;
@@ -391,7 +396,7 @@ public sealed class TunerPool(
                         return sink;
                     }
                     // 選局し直さずに済んだときも、TSMF の判定はそのチャンネルを選局したときのまま残っている。読み出しを始める前に写す (Sink.TsmfStreams)
-                    lease.TsmfStreams = (held.Device as It930xTuner)?.Tsmf?.Streams;
+                    lease.TsmfStreams = held.Device.Tsmf?.Streams;
                     // 流すバイト列の形式 (Sink.Format)。TSMF の有効な TS の数と同じく、選局したときの判定のまま
                     lease.Format = held.Device.Format;
                     lease.StartNative(held.Device, () => OnExit(lease));

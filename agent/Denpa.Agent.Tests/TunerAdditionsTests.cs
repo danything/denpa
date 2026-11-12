@@ -37,6 +37,7 @@ public sealed class TunerAdditionsTests
      * 見つけていない機材 (抜いた・手で書いたデバイス) は分からないので null (#2386)
      */
     [Test]
+    [NotInParallel(nameof(DeviceProbe))]
     public async Task 受けられる種別は見つけた機材のもので_見つけていない機材は_null()
     {
         DeviceProbe.Remember([

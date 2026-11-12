@@ -62,6 +62,18 @@ public interface ITuneDevice : IDisposable
     /// </summary>
     StreamFormat Format => StreamFormat.Ts;
 
+    /// <summary>
+    /// 最後に ISDB-C を選局したときの TSMF の判定 (<c>/denpa/stream</c> の <c>X-Denpa-Tsmf-Streams</c> と <c>--tune</c> が読む)。
+    /// ISDB-C を選局しない機材と、ISDB-C でない選局では null
+    /// </summary>
+    TsmfSelector? Tsmf => null;
+
+    /// <summary>
+    /// この方式の選局を受け付けるか。**受け付けない方式は <see cref="Tune"/> に渡さない** (<see cref="TunerPool"/> と <c>--tune</c> が先に断る)。
+    /// J.83B と ISDB-C を選局できない機材に渡すと、地上波の選局として扱ってしまうため。既定は地上波と衛星だけ
+    /// </summary>
+    bool Accepts(ChannelTable.Tuning tuning) => !tuning.Cable && !tuning.IsdbC;
+
     /// <summary>同期しなかったときの文言 (どの方式でも同じにする)</summary>
     const string SyncFailed = "同期しませんでした (電波が来ていないか、その周波数に放送がありません)";
 }
@@ -671,7 +683,10 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     private const uint DtvTune = 1;
     private const uint DtvFrequency = 3;
+    private const uint DtvModulation = 4;
     private const uint DtvBandwidthHz = 5;
+    private const uint DtvInversion = 6;
+    private const uint DtvSymbolRate = 8;
     private const uint DtvDeliverySystem = 17;
     private const uint DtvIsdbtPartialReception = 18;
     private const uint DtvIsdbtSoundBroadcasting = 19;
@@ -679,6 +694,13 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const uint DtvStreamId = 42;
     private const uint DtvStatSignalStrength = 62;
     private const uint DtvStatCnr = 63;
+
+    // enum fe_modulation の QAM_64 と、enum fe_spectral_inversion の INVERSION_AUTO (linux/dvb/frontend.h)
+    private const uint Qam64 = 3;
+    private const uint InversionAuto = 2;
+
+    /// <summary>ISDB-C のシンボルレート (5.274 Mbaud。ITU-T J.83 Annex C)。DVB-C の機材にはボー単位で渡す</summary>
+    internal const uint CableSymbolRate = 5_274_000;
 
     // struct dtv_stats の scale (linux/dvb/frontend.h の enum fecap_scale_params)
     private const byte FeScaleDecibel = 1;
@@ -717,6 +739,13 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// <summary>電圧を断られた。以後は送らない (記録も 1 回だけ)</summary>
     private bool _noVoltage;
     private bool _streaming;
+    /// <summary>ISDB-C を選局するときに渡す方式 (<see cref="DeviceProbe.CableSystem"/>)。DVB-C に対応していなければ null</summary>
+    private readonly int? _cableSystem;
+    /// <summary>ISDB-C を受けている間の、dvr から TSMF の TS を選んで流す処理。ほかの方式では null</summary>
+    private DvbCable? _cable;
+
+    /// <summary>ISDB-C でロックしたのに、TSMF の判定の時間切れまで dvr から TS が 1 パケットも届かなかったときの失敗の文</summary>
+    public const string TsMissing = "ロックしましたが、TS が 1 パケットも届きません (dvr から TS が出てきません)";
 
     /// <param name="frontend">`/dev/dvb/adapter0/frontend0`。demux と dvr は同じ番号から組み立てる</param>
     /// <param name="lnb">衛星の給電 (`15v` / `11v`)。要らない構成では null</param>
@@ -740,16 +769,63 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
         // recisdb と同じ対応。11v→13V / 15v→18V (SEC_VOLTAGE_13 = 0, SEC_VOLTAGE_18 = 1)
         _voltage = lnb switch { "15v" => 1, "11v" => 0, _ => null };
+        _cableSystem = DeviceProbe.CableSystem(DeviceProbe.Delivery((int)_frontend.DangerousGetHandle()));
     }
 
-    public Stream Output => _dvr;
+    /// <summary>TS の読み出し側。ISDB-C では TSMF から選んだ TS (<see cref="DvbCable"/>)、ほかの方式は dvr そのもの</summary>
+    public Stream Output => _cable?.Output ?? (Stream)_dvr;
 
-    /// <summary>カーネルが持っているので、一度合わせたら合ったまま</summary>
-    public bool Tuned => _streaming;
+    /// <summary>カーネルが持っているので、一度合わせたら合ったまま。ISDB-C は、TSMF から選んだ TS の出口が閉じたら (読む側が閉じた・形式が変わった) 選局し直す</summary>
+    public bool Tuned => _streaming && _cable is not { Closed: true };
+
+    /// <summary>J.83B は受け付けない。ISDB-C は DVB-C (Annex C か Annex A) に対応しているときだけ受け付ける</summary>
+    public bool Accepts(ChannelTable.Tuning tuning) => !tuning.Cable && (!tuning.IsdbC || _cableSystem is not null);
+
+    /// <summary>最後に ISDB-C を選局したときの TSMF の判定。選局に失敗したあとも残す。ISDB-C でないか、ロックしなかったなら null</summary>
+    public TsmfSelector? Tsmf { get; private set; }
+
+    /// <summary>最後の ISDB-C の選局で、分割 TLV を組み立てる処理 (<c>--tune</c> が数を出す)。ISDB-C でなければ null</summary>
+    public SplitTlv? Tlv { get; private set; }
+
+    /// <summary>流しているバイト列の形式。TSMF から選んだ TS が分割 TLV なら <see cref="StreamFormat.Tlv"/></summary>
+    public StreamFormat Format => Tsmf?.Format ?? StreamFormat.Ts;
+
+    /// <summary>最後の ISDB-C の選局でロックした周波数 (Hz。<c>--tune</c> が出す)。ISDB-C でないか、ロックしなかったなら null</summary>
+    public uint? CableFrequency { get; private set; }
+
+    /// <summary>ISDB-C を選局するときの方式の名前 (<c>--tune</c> が出す)。DVB-C に対応していなければ null</summary>
+    public string? CableSystemName => _cableSystem switch
+    {
+        ChannelTable.SysDvbcAnnexC => "DVB-C Annex C",
+        ChannelTable.SysDvbcAnnexA => "DVB-C Annex A",
+        _ => null,
+    };
+
+    /// <summary>
+    /// ISDB-C の選局で渡す property。64QAM・5.274 Mbaud で、周波数は選局表の中心周波数 (Hz)。
+    /// 方式は <c>SYS_DVBC_ANNEX_C</c> か <c>SYS_DVBC_ANNEX_A</c> (<see cref="DeviceProbe.CableSystem"/>)。ロールオフは方式で決まるので渡さない。
+    /// 256QAM は渡さない (確かめた回線の搬送波はどれも 64QAM)
+    /// </summary>
+    internal static List<(uint Command, uint Value)> CableProperties(int system, uint hertz) =>
+    [
+        (DtvDeliverySystem, (uint)system),
+        (DtvFrequency, hertz),
+        (DtvModulation, Qam64),
+        (DtvSymbolRate, CableSymbolRate),
+        (DtvInversion, InversionAuto),
+        // これを最後に置いて初めて選局が始まる
+        (DtvTune, 0),
+    ];
 
     public void Tune(ChannelTable.Tuning tuning)
     {
+        if (!Accepts(tuning)) throw new IOException(TunerPool.Unaccepted(tuning.Type, tuning));
         var streamId = tuning.StreamId;
+        // ISDB-C の TS を流す処理は、demux を止める前に止める (dvr を読んでいる間に捨てない)
+        StopCable();
+        Tsmf = null;
+        Tlv = null;
+        CableFrequency = null;
         // 選局し直す間は止める。前のチャンネルの残りが混ざったまま流れると、
         // 読む側 (denpa) には途中で中身が変わったようにしか見えない
         if (_streaming)
@@ -765,35 +841,93 @@ public sealed unsafe class DvbTuner : ITuneDevice
             _dvr.Discard();
         }
 
-        var properties = new List<(uint Command, uint Value)>
+        if (tuning.IsdbC)
         {
-            (DtvDeliverySystem, (uint)tuning.Delivery),
-            (DtvFrequency, tuning.Frequency),
-        };
-
-        if (tuning.Satellite)
-        {
-            properties.Add((DtvStreamId, streamId));
-            if (_voltage is { } voltage && !_noVoltage) _noVoltage = !PowerLnb(_name, voltage, SetVoltage);
+            LockCable(tuning);
         }
         else
         {
-            properties.Add((DtvBandwidthHz, 6_000_000));
-            // 地上波は階層が 3 つある。全部受ける (部分受信=ワンセグだけ、ではない)
-            properties.Add((DtvIsdbtPartialReception, 0));
-            properties.Add((DtvIsdbtSoundBroadcasting, 0));
-            properties.Add((DtvIsdbtLayerEnabled, 0x07));
+            var properties = new List<(uint Command, uint Value)>
+            {
+                (DtvDeliverySystem, (uint)tuning.Delivery),
+                (DtvFrequency, tuning.Frequency),
+            };
+
+            if (tuning.Satellite)
+            {
+                properties.Add((DtvStreamId, streamId));
+                if (_voltage is { } voltage && !_noVoltage) _noVoltage = !PowerLnb(_name, voltage, SetVoltage);
+            }
+            else
+            {
+                properties.Add((DtvBandwidthHz, 6_000_000));
+                // 地上波は階層が 3 つある。全部受ける (部分受信=ワンセグだけ、ではない)
+                properties.Add((DtvIsdbtPartialReception, 0));
+                properties.Add((DtvIsdbtSoundBroadcasting, 0));
+                properties.Add((DtvIsdbtLayerEnabled, 0x07));
+            }
+
+            // これを最後に置いて初めて選局が始まる
+            properties.Add((DtvTune, 0));
+
+            SetProperties(properties);
+            if (!WaitForLock()) throw new IOException(ITuneDevice.SyncFailed);
         }
-
-        // これを最後に置いて初めて選局が始まる
-        properties.Add((DtvTune, 0));
-
-        SetProperties(properties);
-        WaitForLock();
 
         // 全 PID (0x2000) をそのまま dvr へ。選り分けるのは denpa の仕事
         StartFilter();
         _streaming = true;
+        if (tuning.IsdbC) StartCable(tuning);
+    }
+
+    /// <summary>
+    /// ISDB-C を DVB-C として選局し、ロックを待つ。ずらして送られることがあるチャンネル (<see cref="ChannelTable.Tuning.ShiftedFrequency"/>) は、
+    /// 中心周波数でロックしなければ、ずらした周波数も試す
+    /// </summary>
+    private void LockCable(ChannelTable.Tuning tuning)
+    {
+        var system = _cableSystem ?? throw new IOException(TunerPool.Unaccepted(tuning.Type, tuning));
+        uint[] frequencies = tuning.ShiftedFrequency is { } shifted ? [tuning.Frequency, shifted] : [tuning.Frequency];
+        foreach (var hertz in frequencies)
+        {
+            SetProperties(CableProperties(system, hertz));
+            if (!WaitForLock()) continue;
+            CableFrequency = hertz;
+            return;
+        }
+        throw new IOException(ITuneDevice.SyncFailed);
+    }
+
+    /// <summary>
+    /// ISDB-C で、dvr から読んだ TS を TSMF の処理に通して流し始め (<see cref="DvbCable"/>)、判定を待つ。
+    /// 判定の扱いは IT930x の受信機と同じ (<see cref="It930xTuner.TsmfFailure"/>)。失敗したら TS を止めて、例外を送出する
+    /// </summary>
+    private void StartCable(ChannelTable.Tuning tuning)
+    {
+        var tsmf = new TsmfSelector(tuning.TsmfIndex);
+        var tlv = new SplitTlv();
+        Tsmf = tsmf;
+        Tlv = tlv;
+        _dvr.Begin();
+        _cable = new DvbCable(_dvr.Read, tsmf, tlv, _name);
+        var decision = tsmf.Wait(TsmfSelector.TimeoutMs);
+        if (decision is TsmfDecision.Selected or TsmfDecision.Passthrough) return;
+        StopCable();
+        Sys.Call(_demux, DmxStop, 0, "demux の停止");
+        _dvr.Discard();
+        _streaming = false;
+        throw new IOException(It930xTuner.TsmfFailure(tsmf, decision, TsMissing));
+    }
+
+    /// <summary>ISDB-C の TS を流す処理を止める。dvr の溢れと、読む側が詰まって捨てたパケットがあれば記録に残す</summary>
+    private void StopCable()
+    {
+        if (_cable is not { } cable) return;
+        _cable = null;
+        cable.Stop();
+        var (overflows, worst, _) = _dvr.TakeOverflows();
+        if (overflows > 0) Log.Write($"[{_name}] dvr のリングバッファが {overflows} 回溢れました (読む側がいちばん長く空いたのは {worst} ms)");
+        if (cable.Dropped > 0) Log.Write($"[{_name}] 読む側が詰まって、TSMF から選んだ TS を {cable.Dropped} パケット捨てました");
     }
 
     /// <summary>
@@ -929,10 +1063,10 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// <para>
     /// **待たずに読み始めてはいけない。** 同期前の dvr からは何も出ないか、
     /// 崩れたものが出る。総当たりのスキャンはここで待つのをやめる時間がそのまま
-    /// 一周の長さになるので、短めにしてある。
+    /// 一周の長さになるので、短めにしてある。同期したら true、上限を過ぎたら false
     /// </para>
     /// </summary>
-    private void WaitForLock()
+    private bool WaitForLock()
     {
         uint status = 0;
         var deadline = DateTime.UtcNow + LockTimeout;
@@ -942,9 +1076,9 @@ public sealed unsafe class DvbTuner : ITuneDevice
             // その半分が待つだけの時間になる (カーネルは選局のたびに
             // status を 0 に戻すので、前のチャンネルの同期を読み取ることはない)
             Thread.Sleep(10);
-            if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeReadStatus, (nint)(&status)) >= 0 && (status & FeHasLock) != 0) return;
+            if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeReadStatus, (nint)(&status)) >= 0 && (status & FeHasLock) != 0) return true;
         }
-        throw new IOException(ITuneDevice.SyncFailed);
+        return false;
     }
 
     private void StartFilter()
@@ -983,6 +1117,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     public void Dispose()
     {
+        // ISDB-C の TS を流す処理は、dvr を閉じる前に止める (閉じた fd を読ませない)
+        StopCable();
         // 先に読み出し側を閉じる。demux を止めてから閉じると、dvr で待っている
         // 読む側の待ちが終わらないまま残る
         _dvr.Dispose();

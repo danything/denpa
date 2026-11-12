@@ -24,6 +24,7 @@
         <Compile Include="../Denpa.Agent/DeviceProbe.cs" />
         <Compile Include="../Denpa.Agent/ChannelTable.cs" />
         <Compile Include="../Denpa.Agent/Tuning.cs" />
+        <Compile Include="../Denpa.Agent/DvbCable.cs" />
         <Compile Include="../Denpa.Agent/Userland.cs" />
         <Compile Include="../Denpa.Agent/TunerNotice.cs" />
         <Compile Include="../Denpa.Agent/Siano.cs" />
