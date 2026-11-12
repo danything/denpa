@@ -649,7 +649,13 @@ export function shim(init: ShimInit): void {
   }));
   method("setChannel", (_, args) => {
     const to = args[0] as Record<string, unknown> | null;
-    if (to === null || typeof to !== "object" || typeof to["sid"] !== "number")
+    // onid か sid が数でない指定は、画面が捨てる (`app.ts` の `frameMessage`)
+    if (
+      to === null ||
+      typeof to !== "object" ||
+      typeof to["onid"] !== "number" ||
+      typeof to["sid"] !== "number"
+    )
       return unsupported("setChannel (局の指定が読めない)");
     post({
       type: "tune",

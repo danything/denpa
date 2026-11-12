@@ -14,7 +14,7 @@ import {
 } from "../live-choice";
 import type { Ruler } from "./watch";
 
-/** 出せる映像の形式。H.265 はエンコード済みがあるときだけ (ファイルそのままと詰め替え。その場の変換では作らない) */
+/** 出せる映像の形式。H.265 はエンコード済みがあるとき (ファイルそのままと詰め替え) と、4K の局の元の録画 (放送の HEVC の詰め替え) だけ。その場の変換では作らない */
 export type PlayCodec = "h264" | "hevc" | "av1" | "mpeg2";
 
 /**
@@ -261,7 +261,7 @@ function byOrder(
  * 観られなければ、または `auto` なら端末に合わせる。
  *
  * **録画しか無い (エンコード済みが無い) ときは、ライブ・追っかけと同じ「その場でエンコード」の順** (`autoOrder`。家の中なら
- * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。サーバは H.265 に変換しないので、H.265 は出てこない)。4K の局の録画
+ * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。`autoOrder` の H.265 は、サーバが H.265 に変換しないので選ばれない)。4K の局の録画
  * (`broadcast` が `hevc`) は MPEG-2 の場所に放送の HEVC の詰め替えが入る (家の中なら HEVC → H.264 → AV1)。エンコード済みがあるときは次の順。
  *
  * 1. **そのまま読めるファイル** (AV1 → H.265 → H.264。小さいほうが先。同じ画質なら回線もディスクも使わない)
@@ -401,7 +401,7 @@ export const MENU_ORDER: readonly PlayCodec[] = [...ENCODED_ORDER, "mpeg2"];
 
 /**
  * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデックを `MENU_ORDER` の順に。
- * H.265 はエンコード済みがある録画にだけある (その場の変換では作らない)。MPEG-2 は元の TS が残っていて、この端末で
+ * H.265 はエンコード済みがある録画と 4K の局の元の録画にだけある (その場の変換では作らない)。MPEG-2 は元の TS が残っていて、この端末で
  * デコードできるときだけ。`hidden` は並べない (メニューは `#lib/live-choice.ts` の `HIDDEN_CODECS` を渡す。
  * 混んでいるときに勧めるものは全部から選ぶので渡さない)。外すのはメニューだけで、自動 (`pickOffer`) は今までどおり選ぶ
  */
@@ -499,9 +499,13 @@ export function canvasTranscodes(
   return codec !== "mpeg2" && !hasFile(info, codec);
 }
 
-/** 選んだもので観るとき、サーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
+/**
+ * 選んだもので観るとき、サーバがその場でエンコードするか (枠を使う。混んでいると断られる)。
+ * 4K の局の元の録画の H.265 (`broadcast` が `hevc`) は放送の HEVC の詰め替えで、エンコードしない
+ */
 export function transcodes(info: PlaybackInfo, picked: Picked): boolean {
-  return picked.way === "stream" && !hasFile(info, picked.codec);
+  if (picked.way !== "stream" || hasFile(info, picked.codec)) return false;
+  return !(picked.codec === "hevc" && info.broadcast === "hevc");
 }
 
 /** `TimeRanges` を配列にしたもの (`[始まり, 終わり]` 秒) */

@@ -106,7 +106,7 @@ export function autoOrder(
  *
  * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ打ち切っていない」、`av1`・`hevc`・`h264` は「受け取れて (互換モードなら
  * 描けて)、まだ打ち切っていない」。`hevc` はそのうえでライブのエンコーダが GPU のとき (`server/viewing.ts` の
- * `ViewingOptions.hevc`)。追っかけと互換モードでは呼ぶ側が false にする。どれをやめたかは呼ぶ側が持つ。
+ * `ViewingOptions.hevc`)。TS の局の追っかけと互換モードでは呼ぶ側が false にする。どれをやめたかは呼ぶ側が持つ。
  * 4K の局 (`broadcast` が `hevc`) の `hevc` は「放送の HEVC (2160p・10 ビット・HLG) を再生できる」で、GPU は要らない (`#lib/hevc-4k.ts`)
  */
 export function autoCodec(o: {

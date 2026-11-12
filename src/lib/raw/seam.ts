@@ -15,7 +15,7 @@
  */
 
 /** AudioContext のサンプルレート。日本の放送の AAC (ARIB STD-B32) とエンコードした Opus はどちらも 48kHz */
-export const SAMPLE_RATE = 48_000;
+const SAMPLE_RATE = 48_000;
 /** 前のコマの終わりとこれ以内のずれなら、前のコマの終わりにつなぐ (秒)。これより離れていれば本当の途切れ */
 export const SNAP = 0.001;
 

@@ -45,7 +45,6 @@ export interface GateState {
  *
  * - `half` … 次の切り替わりまでが間隔の半分より長いときだけ (前の作り)
  * - `none` … 区切らない
- * - `fixed` … 次の切り替わりまでが 4ms より長いときだけ
  * - `change` … 描くものが次に変わる切り替わりまでに、見積もった時間でデコードを終えられるときだけ
  */
 export const GATES = {
@@ -54,10 +53,6 @@ export const GATES = {
     return next === null || next - wall > vsync.period! / 2;
   },
   none: () => true,
-  fixed: ({ vsync, wall }) => {
-    const next = vsync.next(wall);
-    return next === null || next - wall > 4;
-  },
   change: ({ vsync, wall, at, shown, frame, recent, decoded }) =>
     mayDecode(vsync, wall, at, shown, frame, recent, decoded),
 } satisfies Record<string, Gate>;

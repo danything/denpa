@@ -9,7 +9,8 @@
 - ARIB STD-B24 の 8 単位符号 (JIS X 0213 の 1 面・2 面まで) と ARIB 外字を文字列にする (`aribtext`、`aribtext-gaiji`)
 - 字幕は STD-B24 の字幕文を、字の置き場所まで決めた JSON にする (`b24caption`、形式は `caption-text`)
 - データ放送は DSM-CC のカルーセルからモジュールとファイルを組み立てる (`dsmcc`、`multipart`、`bml`、形式は `bml-protocol`)
-- Hybridcast の AIT を読む (`ait`)。1 つの局だけを抜き出す (`service-filter`)
+- Hybridcast の AIT を読む (`ait`)
+- 1 つの局だけを TS のまま抜き出す (`service-filter`)
 - 4K の放送 (MMT/TLV。ARIB STD-B32・B60) の土台として、TLV パケットの切り出し (`tlv`)、IP とヘッダー圧縮した IP から UDP の中身を取り出す処理 (`tlv-ip`)、MMTP のヘッダーとスクランブルの印、信号メッセージの分割と集約 (`mmtp`)
 - 4K の放送の表は、TLV-NIT・PLT・MPT・MH-SDT・MH-TOT (`mmt-si`)。局の一覧と、局ごとの CA_system_id (MPT のアクセス制御記述子) をそろえて読む `TlvServiceReader` もここ (TS の `psi` の `ServiceReader` に当たる)。番組表の MH-EIT は TS と同じ形式の番組にする (`mh-eit`)。1 つの局だけを TLV のまま抜き出す (`mmt-service-filter`)
 - 4K の放送の映像 (HEVC)・音声 (AAC)・字幕 (TTML) のアクセスユニットを、MPT の記述子から付けた PTS・DTS (90 kHz) と一緒に取り出す (`mmt-media`)。音声は LATM を外した AAC のフレームと AudioSpecificConfig、映像は NAL ユニットの並び。字幕の TTML は、TS の字幕と同じ字幕の文字の配置にする (`ttml`)。スクランブルの復号は無い

@@ -52,7 +52,7 @@ const ESS_SERVICE_ID = 929;
 const DESC_STREAM_IDENTIFIER = 0x52;
 /** DDB (ブロック) の table_id。数えるためだけに持つ (読むのは `parseDdb`) */
 const TABLE_DDB = 0x3c;
-/** ロゴのカルーセルが乗る ES の目印。0x79 が BS、0x7A が CS */
+/** ロゴのカルーセルが流れる ES の目印。0x79 が BS、0x7A が CS */
 const LOGO_COMPONENT_TAGS = new Set([0x79, 0x7a]);
 
 /** モジュール記述子の名前。ロゴかどうかはこれで見分ける */

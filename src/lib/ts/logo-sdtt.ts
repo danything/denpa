@@ -12,7 +12,7 @@
  * その component_tag で運ぶ ES が分かる。
  */
 
-/** SDTT が乗る PID (ARIB STD-B10。地上波の 0x0028 は衛星では使わない) */
+/** SDTT を運ぶ PID (ARIB STD-B10。地上波の 0x0028 は衛星では使わない) */
 export const PID_SDTT = 0x0023;
 const TABLE_SDTT = 0xc3;
 const DESC_DOWNLOAD_CONTENT = 0xc9;

@@ -1985,7 +1985,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     requestAgain();
   }
 
-  /** 選んでいるものから決まる形式が、MPEG-2 になりうるか (デコードできるかを確かめる要るか)。4K の局の放送のままは HEVC */
+  /** 選んでいるものから決まる形式が、MPEG-2 になりうるか (デコードできるかを確かめる必要があるか)。4K の局の放送のままは HEVC */
   function needsRawCheck(): boolean {
     return (
       broadcastKind() === "mpeg2" &&
@@ -2020,7 +2020,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * **選んでいるものから、リクエストする形式を決める。** 自動なら `autoCodec`。選んだものは使えればそのまま、
    * 使えなければ外と同じ順 (AV1 → H.265 → H.264、互換モードは AV1 → H.264 → MPEG-2) で代わりを探す。何も使えなければ null。
    * 使えるかは、MPEG-2 はデコードできて打ち切っていないか、AV1・H.265・H.264 は受け取れて (互換モードなら描けて) 打ち切っていないか。
-   * H.265 はそのうえで、ライブのエンコーダが GPU のときだけ (`options.hevc`)。互換モードと追っかけでは使わない。
+   * H.265 はそのうえで、ライブのエンコーダが GPU のときだけ (`options.hevc`)。互換モードと TS の局の追っかけでは使わない。
    * ライブと追っかけで決め方は同じ (使えない形式を外すだけ)。
    * **4K の局は、放送のままが HEVC の詰め替え** (`BroadcastCodec`)。MPEG-2 の場所に HEVC が入り (`autoOrder`)、H.265 は
    * 放送の HEVC を再生できるか (`hevcCan`) で決める
@@ -2568,11 +2568,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             !raw &&
             !hevcGaveUp &&
             chase === null &&
-            tuned !== null
+            tuned !== null &&
+            broadcastKind() === "mpeg2"
           ) {
             /*
              * H.265 でリクエストして降りた (サーバが GPU でエンコードできなかった。ソフトウェアには降りられない)。
-             * この画面を開いている間は H.265 をやめて、次の形式でリクエストし直す (`decideFormat`)
+             * この画面を開いている間は H.265 をやめて、次の形式でリクエストし直す (`decideFormat`)。
+             * 4K の局の `hevc` は詰め替えで GPU を使わないので、エラーは形式のせいではない。ここには入れない
              */
             hevcGaveUp = true;
             note(`${notice.message}。ほかの形式に切り替えました`);

@@ -218,7 +218,7 @@ describe("pickTrack", () => {
     expect(pickTrack(tracks, "0:sub").side).toBe("sub");
   });
 
-  test("無いものを指定されたら先頭", () => {
+  test("無いものを指定されたら、主音声を言っていなければ先頭", () => {
     expect(pickTrack(tracks, "1:sub").id).toBe("0:main");
     expect(pickTrack(tracks, undefined).id).toBe("0:main");
   });

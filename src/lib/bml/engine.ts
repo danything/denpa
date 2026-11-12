@@ -157,7 +157,7 @@ export interface Bml {
   destroy(): void;
 }
 
-/** AribKeyCode (STD-B24 第二分冊 付属 2 表 5-9) */
+/** AribKeyCode (STD-B24 第二編 付属 2 表 5-9) */
 const KEY = {
   up: 1,
   down: 2,
@@ -1567,6 +1567,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     return (
       ref !== null && this.resources.unlock(ref.component, ref.module, kind)
     );
+  }
+
+  unlockAll(): void {
+    this.resources.unlockAll();
   }
 
   locked(): [string, boolean, boolean][] {

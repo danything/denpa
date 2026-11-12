@@ -88,6 +88,8 @@ export interface BrowserHost {
   screen(locked: boolean): void;
   lock(module: string, kind: LockKind): number;
   unlock(module: string, kind?: LockKind): boolean;
+  /** 押さえたものを全部外す。名前を引き直さないので、通信の文書から呼んでも外れる */
+  unlockAll(): void;
   locked(): [string, boolean, boolean][];
   detect(component: string): number;
   loadDrcs(ref: string): NativeResult;
@@ -376,7 +378,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
     host.unlock(str(args, 0), "lockEx") ? 1 : Number.NaN,
   );
   fn("unlockAllModulesOnMemory", () => {
-    for (const [module] of host.locked()) host.unlock(module);
+    host.unlockAll();
     return 1;
   });
   fn("getLockedModuleInfo", () =>

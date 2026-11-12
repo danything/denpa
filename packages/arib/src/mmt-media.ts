@@ -91,14 +91,14 @@ export interface MpuExtendedTimestamp {
  * MPU 拡張タイムスタンプ記述子を読む。次のものは DTS を進められないので、空を返す (その MPU は時刻が分からないものとして捨てる)
  *
  * - timescale を持たないもの (MPU のメタデータの mdhd を見る、の意味)。放送ではメタデータを送らない
- * - pts_offset を持たないもの (pts_offset_type 0)。コマの長さが分からない
+ * - pts_offset を持たないもの (pts_offset_type 0) と、予約の種類 3。コマの長さが分からない
  */
 export function parseMpuExtendedTimestamps(
   body: Uint8Array,
 ): MpuExtendedTimestamp[] {
   if (body.length < 5 || (body[0]! & 0x01) === 0) return [];
   const offsetType = (body[0]! >> 1) & 0x03;
-  if (offsetType === 0) return [];
+  if (offsetType !== 1 && offsetType !== 2) return [];
   const timescale = u32(body, 1);
   let at = 5;
   let fixed = 0;
@@ -584,11 +584,15 @@ export class MmtMediaReader {
     // 時刻の無いもの (MPU 全体で 1 つ) は sample_number が無いので 0 とする
     const sample = timed ? u32(unit, 4) : 0;
     const body = unit.subarray(timed ? TIMED_HEADER : ITEM_HEADER);
-    if (fragmentation === WHOLE || fragmentation === FIRST) {
-      if (track.sample !== null && sample !== track.sample)
-        yield* this.finish(track);
-      track.sample = sample;
+    /*
+     * sample_number が変わったら、途中の断片でも前のアクセスユニットを閉じる。先頭の断片が欠けたアクセスユニットも
+     * 1 つと数えないと、MPU の何番目か (`index`) がずれて、その MPU の残りのコマに違う時刻が付く
+     */
+    if (track.sample !== null && sample !== track.sample) {
+      yield* this.finish(track);
+      track.fragment = null;
     }
+    track.sample = sample;
     // 中身は届いたチャンクの一部を指すので、持ち越すものはコピーする (`TlvStream`)
     if (fragmentation === WHOLE) {
       this.keep(track, body.slice());

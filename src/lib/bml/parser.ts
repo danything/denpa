@@ -627,7 +627,8 @@ class Parser {
           return { kind: "object", props };
         }
     }
-    this.at--;
+    // 誤りの位置はこの字句にする (終わりなら next は進んでいないので戻さない)
+    if (token.type !== "eof") this.at--;
     return this.fail("式がありません");
   }
 }
