@@ -277,11 +277,11 @@ public class AsicenTests
             var w3u3 = new AsicenUserland.Enclosure("1-2", "PX-W3U3", ["1-2.1", "1-2.2"], []);
             var s3u2 = new AsicenUserland.Enclosure("1-3", "PX-S3U2", ["1-3"], []);
 
-            await Assert.That(AsicenDaemon.Hardware("1-2", firmware, false, () => [w3u3, s3u2]))
+            await Assert.That(AsicenDaemon.Hardware("1-2", firmware, false, () => [w3u3, s3u2]).Args)
                 .IsEquivalentTo(new[] { "--device", "usb:1-2.1,1-2.2", "--firmware", firmware });
-            await Assert.That(AsicenDaemon.Hardware("1-2", firmware, true, () => [w3u3, s3u2])).Contains("--allow-lnb-power");
+            await Assert.That(AsicenDaemon.Hardware("1-2", firmware, true, () => [w3u3, s3u2]).Args).Contains("--allow-lnb-power");
             // PX-S3U2 は上流が給電の制御を未解明としているので、設定に 15V があっても許可しない
-            await Assert.That(AsicenDaemon.Hardware("1-3", firmware, true, () => [w3u3, s3u2]))
+            await Assert.That(AsicenDaemon.Hardware("1-3", firmware, true, () => [w3u3, s3u2]).Args)
                 .IsEquivalentTo(new[] { "--device", "usb:1-3", "--firmware", firmware });
 
             var gone = Assert.Throws<IOException>(() => AsicenDaemon.Hardware("9-9", firmware, false, () => [w3u3]));
@@ -292,6 +292,91 @@ public class AsicenTests
         finally
         {
             File.Delete(firmware);
+        }
+    }
+
+    [Test]
+    [ExcludeOn(OS.Windows)]
+    public async Task Android_では_USB_機能の_fd_を_ポートの順に継がせ_device_の代わりに_fd_を渡す()
+    {
+        var firmware = Path.GetTempFileName();
+        try
+        {
+            using var file = File.OpenHandle(firmware);
+            var fd = (int)file.DangerousGetHandle();
+            var w3u3 = new AsicenUserland.Enclosure("1-2", "PX-W3U3", ["1-2.1", "1-2.2"], []);
+            var lent = new List<string>();
+            InheritedFds Lend(IReadOnlyList<string> ports)
+            {
+                lent.AddRange(ports);
+                return InheritedFds.Duplicate([.. ports.Select(port => (fd, port))]);
+            }
+
+            var selection = AsicenDaemon.Hardware("1-2", firmware, true, () => [w3u3], Lend);
+            using var inherit = selection.Inherit!;
+            await Assert.That(lent).IsEquivalentTo(new[] { "1-2.1", "1-2.2" });
+            await Assert.That(inherit.Numbers.Count).IsEqualTo(2);
+            var (first, second) = (inherit.Numbers[0].ToString(), inherit.Numbers[1].ToString());
+            await Assert.That(selection.Args)
+                .IsEquivalentTo(new[] { "--fd", first, "--fd", second, "--firmware", firmware, "--allow-lnb-power" });
+            await Assert.That(selection.Args.Contains("--device")).IsFalse();
+        }
+        finally
+        {
+            File.Delete(firmware);
+        }
+    }
+
+    [Test]
+    public async Task Android_では受け取った機材の_ID_とポートから筐体を組む()
+    {
+        var warnings = new List<string>();
+        AsicenUserland.Function Runtime(string usb, string port) => new(usb, port, false);
+        var found = AsicenUserland.Group(
+        [
+            Runtime("0b06:0005", "1-2.1"), Runtime("0b06:0005", "1-2.2"),
+            Runtime("0b06:0003", "1-3"),
+            // 内蔵ハブの片方だけ
+            Runtime("0b06:0006", "2-1.1"),
+            // ポートの名前を作れないカーネル (名前から作った 001-004) では内蔵ハブが分からない
+            Runtime("0b06:0004", "001-004"), Runtime("0b06:0004", "001-005"),
+            // ファームウェア待ちは Boot が扱う
+            new("1738:5211", "1-4", true),
+        ], warnings.Add);
+
+        await Assert.That(found.Select(enclosure => $"{enclosure.Id} {enclosure.Model} {string.Join(",", enclosure.Ports)}").ToArray())
+            .IsEquivalentTo(new[] { "1-2 PX-W3U3 1-2.1,1-2.2", "1-3 PX-S3U2 1-3" });
+        await Assert.That(string.Join(" ", found[0].Receivers.Select(receiver => string.Join("/", receiver.Types)))).IsEqualTo("BS/CS GR BS/CS GR");
+        await Assert.That(found[0].Receivers[0].Lnb15v).IsTrue();
+        await Assert.That(found[1].Receivers.Select(receiver => receiver.Index).ToArray()).IsEquivalentTo(new[] { 0, 1 });
+        await Assert.That(warnings.Count).IsEqualTo(2);
+        await Assert.That(warnings.Any(warning => warning.Contains("PX-W3U3 V2 (USB 2-1.1)"))).IsTrue();
+        await Assert.That(warnings.Any(warning => warning.Contains("PX-W3U2 (USB 001-004 / 001-005)"))).IsTrue();
+    }
+
+    [Test]
+    public async Task ソケットのパスが_108_バイトに収まらない置き場では起動しない()
+    {
+        // Android の置き場 (<dataDir>/r)
+        AsicenUserland.CheckSocketPath("/data/user/0/io.github.danything.denpa/r", "1-2.3.4");
+        await Assert.That(UdtvControl.Endpoint("/data/user/0/io.github.danything.denpa/r", "1-2.3.4", "control.sock").Length).IsLessThan(90);
+        var error = Assert.Throws<IOException>(() => AsicenUserland.CheckSocketPath("/data/user/0/" + new string('a', 60), "1-2.3.4"));
+        await Assert.That(error!.Message).Contains("上限の 107 バイトを超える");
+    }
+
+    [Test]
+    public async Task 実行ファイルは_Android_のアプリの_lib_の名前でも見つける()
+    {
+        var dir = Directory.CreateTempSubdirectory("asicen-bin");
+        try
+        {
+            await Assert.That(AsicenUserland.Bin(dir.FullName, "asicend")).IsEqualTo(Path.Combine(dir.FullName, "asicend"));
+            File.WriteAllText(Path.Combine(dir.FullName, "libasicend.so"), "");
+            await Assert.That(AsicenUserland.Bin(dir.FullName, "asicend")).IsEqualTo(Path.Combine(dir.FullName, "libasicend.so"));
+        }
+        finally
+        {
+            dir.Delete(true);
         }
     }
 
@@ -809,7 +894,7 @@ public class AsicenMockTests
         var runtime = Directory.CreateTempSubdirectory("asicen");
         var id = $"6-{mock.Length}{mock[^1] % 7}";
         var powers = AsicenUserland.PowersLnb(model);
-        var daemon = new AsicenDaemon(id, dir, runtime.FullName, () => ["--model", mock, .. powers ? ["--allow-lnb-power"] : Array.Empty<string>()], "asicend-mock");
+        var daemon = new AsicenDaemon(id, dir, runtime.FullName, () => new(["--model", mock, .. powers ? ["--allow-lnb-power"] : Array.Empty<string>()]), "asicend-mock");
         try
         {
             daemon.Ensure();
@@ -848,6 +933,68 @@ public class AsicenMockTests
         }
     }
 
+    /// <summary>
+    /// Android と同じ起動の仕方 (APK の名前 <c>libasicend.so</c>・<c>libasicenctl.so</c>、<c>--fd</c> で継がせる)。
+    /// 模擬は <c>--fd</c> を受けないので、間に挟んだシェルのスクリプトが、継いだ fd を確かめて記録し、<c>--fd</c> と <c>--firmware</c> を落として模擬に替わる
+    /// </summary>
+    [Test]
+    public async Task Android_と同じく_fd_を継がせて起動した模擬の_asicend_で選局できる(CancellationToken cancel)
+    {
+        await Task.Yield();
+        if (Built is not { } dir)
+        {
+            Skip.Test("ASICEN_USERLAND_DIR が指されていません");
+            return;
+        }
+        var root = Directory.CreateTempSubdirectory("asicen-android");
+        var runtime = Path.Combine(root.FullName, "r");
+        var apk = Directory.CreateDirectory(Path.Combine(root.FullName, "lib")).FullName;
+        var seen = Path.Combine(root.FullName, "seen.txt");
+        var firmware = Path.Combine(root.FullName, "asicen-loader.bin");
+        var usb = new[] { Path.Combine(root.FullName, "usb-1"), Path.Combine(root.FullName, "usb-2") };
+        File.WriteAllBytes(firmware, new byte[16]);
+        foreach (var path in usb) File.WriteAllText(path, "");
+        File.WriteAllText(Path.Combine(apk, "libasicend.so"), $$"""
+            #!/bin/sh
+            set -eu
+            while [ $# -gt 0 ]; do
+              case "$1" in
+                --fd) test -e "/proc/self/fd/$2" || { echo "fd $2 を継いでいません" >&2; exit 9; }; readlink "/proc/self/fd/$2" >> '{{seen}}'; shift 2 ;;
+                --firmware) test -f "$2"; shift 2 ;;
+                --runtime-dir) runtime=$2; shift 2 ;;
+                --instance) instance=$2; shift 2 ;;
+                *) echo "知らない引数 $1" >&2; exit 8 ;;
+              esac
+            done
+            exec '{{AsicenUserland.Bin(dir, "asicend-mock")}}' --model w3u3 --runtime-dir "$runtime" --instance "$instance"
+            """);
+        File.SetUnixFileMode(Path.Combine(apk, "libasicend.so"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        File.CreateSymbolicLink(Path.Combine(apk, "libasicenctl.so"), AsicenUserland.Bin(dir, "asicenctl"));
+
+        var handles = usb.Select(path => File.OpenHandle(path)).ToList();
+        var enclosure = new AsicenUserland.Enclosure("1-2", "PX-W3U3", ["1-2.1", "1-2.2"], []);
+        var daemon = new AsicenDaemon("1-2", apk, runtime, () => AsicenDaemon.Hardware(
+            "1-2", firmware, false, () => [enclosure],
+            ports => InheritedFds.Duplicate([.. ports.Select((port, index) => ((int)handles[index].DangerousGetHandle(), port))])));
+        try
+        {
+            daemon.Ensure();
+            await Assert.That(daemon.Listed!.Model).IsEqualTo("PX-W3U3");
+            // .1 が先
+            await Assert.That(File.ReadAllLines(seen)).IsEquivalentTo(usb);
+            // ランタイムルートは持ち主だけが使える
+            await Assert.That(File.GetUnixFileMode(runtime)).IsEqualTo(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            using var tuner = new AsicenTuner("1-2", 1, null, runtime, () => daemon.Listed);
+            await Stream(tuner, "T27", cancel);
+        }
+        finally
+        {
+            daemon.Stop();
+            foreach (var handle in handles) handle.Dispose();
+            root.Delete(true);
+        }
+    }
+
     [Test]
     public async Task 給電を許可せずに起動した模擬には_LNB_の給電を断られる(CancellationToken cancel)
     {
@@ -858,7 +1005,7 @@ public class AsicenMockTests
             return;
         }
         var runtime = Directory.CreateTempSubdirectory("asicen");
-        var daemon = new AsicenDaemon("6-99", dir, runtime.FullName, () => [], "asicend-mock");
+        var daemon = new AsicenDaemon("6-99", dir, runtime.FullName, () => new([]), "asicend-mock");
         try
         {
             daemon.Ensure();

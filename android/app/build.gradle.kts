@@ -27,6 +27,14 @@ val agentLicenses = System.getenv("DENPA_AGENT_LICENSES")?.takeIf { it.isNotEmpt
     ?: rootProject.layout.projectDirectory.dir("agent-licenses").asFile.path
 val sianoLicence = rootProject.layout.projectDirectory.file("../agent/Denpa.Agent/firmware/LICENCE.siano")
 
+/*
+ * asicen-userland (ASICEN 系。試験的) の置き場。CI が .github/asicen-android.sh で、上流の Android 版を `jniLibs/<ABI>/libasicend.so`・
+ * `libasicenctl.so` に、ファームウェアを `assets/asicen/` に、ライセンスの文書とソースの入手先を `assets/licenses/asicen-userland/` に並べる。
+ * 既定は android/asicen-userland/ (リポジトリには入れない)。`DENPA_ASICEN` で別の置き場を渡せる。無ければ入れずに組む (ASICEN の機材は使えない)
+ */
+val asicen = System.getenv("DENPA_ASICEN")?.takeIf { it.isNotEmpty() }
+    ?: rootProject.layout.projectDirectory.dir("asicen-userland").asFile.path
+
 /** ライセンスの文書を `licenses/` に並べた assets の置き場を作る */
 abstract class LicenseAssets : DefaultTask() {
     @get:InputFiles
@@ -116,7 +124,9 @@ android {
 androidComponents {
     onVariants { variant ->
         variant.sources.jniLibs?.addStaticSourceDirectory(agentLibs)
+        variant.sources.jniLibs?.addStaticSourceDirectory("$asicen/jniLibs")
         variant.sources.assets?.addGeneratedSourceDirectory(licenseAssets, LicenseAssets::output)
+        variant.sources.assets?.addStaticSourceDirectory("$asicen/assets")
     }
 }
 

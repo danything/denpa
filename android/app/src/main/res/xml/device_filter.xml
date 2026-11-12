@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   挿したときにこのアプリを起こす機材。エージェントが USB を直に持つ機材 (エージェントが引数 usb-ids で出すもの。agent/Denpa.Agent/WinUsbTargets.cs) と、
+  asicen-userland に渡す機材 (agent/Denpa.Agent/Asicen.cs。ファームウェア待ちと、流し込んだあとにつながり直した ID の両方) と、
   USB の CCID のカードリーダー (インターフェースのクラス 11) を並べる。DenpaService が許可を求める機材もこの表で決める (DeviceFilter.kt)。
-  **WinUsbTargets と食い違わないことを、エージェントの単体テスト (AndroidDeviceFilterTests.cs) で確かめる。** 機種を足したらここにも足す
+  **WinUsbTargets・Asicen.cs と食い違わないことを、エージェントの単体テスト (AndroidDeviceFilterTests.cs) で確かめる。** 機種を足したらここにも足す
 -->
 <resources>
     <usb-device vendor-id="0x054c" product-id="0x04b2" /><!-- Sony CECH-ZD1 J -->
@@ -26,6 +27,14 @@
     <usb-device vendor-id="0x0511" product-id="0x0052" /><!-- e-Better DTV03A-1TU -->
     <usb-device vendor-id="0x3275" product-id="0x0080" /><!-- PLEX PX-S1UD -->
     <usb-device vendor-id="0x187f" product-id="0x0600" /><!-- Siano RIO -->
+    <!-- asicen-userland の機材 (ASICEN 系。試験的)。agent/Denpa.Agent/Asicen.cs の機種の表と、ファームウェア待ちの ID -->
+    <usb-device vendor-id="0x0b06" product-id="0x0001" /><!-- PLEX PX-S3U -->
+    <usb-device vendor-id="0x0b06" product-id="0x0003" /><!-- PLEX PX-S3U2 -->
+    <usb-device vendor-id="0x0b06" product-id="0x0004" /><!-- PLEX PX-W3U2 -->
+    <usb-device vendor-id="0x0b06" product-id="0x0005" /><!-- PLEX PX-W3U3 -->
+    <usb-device vendor-id="0x0b06" product-id="0x0006" /><!-- PLEX PX-W3U3 V2 -->
+    <usb-device vendor-id="0x1738" product-id="0x5211" /><!-- ASICEN のファームウェア待ち -->
+    <usb-device vendor-id="0x1738" product-id="0x5216" /><!-- ASICEN のファームウェア待ち -->
     <!-- USB の CCID のカードリーダー (Gemalto PC Twin など) -->
     <usb-device class="11" />
 </resources>

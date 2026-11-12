@@ -13,6 +13,7 @@
 #   アプリがそこに繋いで synced を送る
 # - denpa と同じ手順で組み (POST /denpa/pair)、/denpa/about (os が android)・/denpa/tuners (0 台)・/denpa/card が答える
 # - アプリの LocalSocket から、ファイルの fd を付けた attached を送ると、エージェントが fd ごと受け取る (setFileDescriptorsForSend と 1 回の write)
+# - エージェントが APK の asicend (libasicend.so) を起動でき (--version)、ファームウェア待ちの ID の fd を asicend --fd に継がせる
 # - エージェントが異常終了すると、アプリが起動し直し、繋ぎ直して synced を送り直す
 # - 通知の「終了」で SIGTERM が届き、エージェントも常駐サービスも残らない
 # - アイコンで始めたあとに端末を起動し直すと、BOOT_COMPLETED で常駐サービスが始まる
@@ -74,7 +75,7 @@ has_agent() { [ -n "$(agent_pid)" ]; }
 # 通知の本文に出ているか
 notified() { adb shell dumpsys notification --noredact | tr -d '\r' | grep -A60 "pkg=$pkg" | grep -qF "android.text=String ($1)"; }
 
-broadcast() { adb shell am broadcast -n "$pkg/.DebugReceiver" -a "$pkg.debug.$1" > /dev/null; }
+broadcast() { adb shell am broadcast -n "$pkg/.DebugReceiver" -a "$pkg.debug.$1" "${@:2}" > /dev/null; }
 
 adb shell getprop ro.build.version.release | tee "$logs/android-version.txt"
 adb shell uname -r | tee "$logs/kernel.txt"
@@ -138,6 +139,23 @@ wait_log "アプリから USB の機材を受け取りました: 001-004 (1234:5
 wait_log "アプリから USB の機材を 1 台受け取りました"
 if adb logcat -d -s denpa-agent | grep -qF "fd の付いていない attached"; then
   echo "fd が attached の行に付いていません" >&2
+  exit 1
+fi
+
+# --- asicen-userland。asicend はエージェントの子プロセス (untrusted_app) で起動できる (起動したときに --version を記録に出す)。
+# ファームウェア待ちの ID (1738:5211) でファイルの fd を送ると、エージェントが fd を継がせて asicend --fd を起動する。
+# asicend は、継いだ fd が usbfs でなければ USB_IO で終わる (継いでいなければ INVALID_ARGUMENT)
+echo "=== asicen-userland"
+wait_log "asicen-userland: asicend 1.0.0"
+adb shell run-as "$pkg" ls -l files/asicen/asicen-loader.bin | tr -d '\r' | tee "$logs/asicen.txt"
+grep -qE ' 16384 ' "$logs/asicen.txt"
+broadcast ATTACH_FILE --ei vendor 5944 --ei product 21009
+wait_log "アプリから USB の機材を受け取りました: 001-004 (1738:5211)"
+wait_log "ファームウェアの流し込みで asicend が終了しました"
+adb logcat -d -s denpa-agent | tr -d '\r' | grep -F "ファームウェアの流し込みで asicend が終了しました" | tee -a "$logs/asicen.txt"
+grep -qF "file descriptor model: USB_IO" "$logs/asicen.txt"
+if adb logcat -d | grep -E 'avc: +denied' | grep -qF 'libasicen'; then
+  echo "SELinux が asicend を断りました" >&2
   exit 1
 fi
 

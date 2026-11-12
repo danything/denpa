@@ -11,7 +11,7 @@ APK はリリースに `denpa-<バージョン>-android-arm64.apk` として添�
 
 - 要るのは Android 10 以上で、arm64 の端末です。チューナーを挿すには、端末が USB のホストになれる必要があります
 - Play では配りません。省電力の対象から外すよう求めることと、子プロセスの使い方が Play の決まりと合わないためです
-- ASICEN 系の機材 (asicen-userland で動かすもの) は、Android ではまだ使えません
+- ASICEN 系の機材 (PX-W3U3 など。asicen-userland で動かすもの) も試験的に使えます ([下記](#asicen-系の機材を挿す試験的))
 
 ## 入れる
 
@@ -38,10 +38,25 @@ APK はリリースに `denpa-<バージョン>-android-arm64.apk` として添�
 
 - 許可を断った機材は、ホーム画面の「denpa」を押すと、もう一度許可を求められます
 
-- 挿せる機材は、エージェントが USB を直に持つ機材 ([tuners.md](tuners.md)) と、USB の CCID のカードリーダーです
+- 挿せる機材は、エージェントが USB を直に持つ機材 ([tuners.md](tuners.md))、ASICEN 系の機材 ([下記](#asicen-系の機材を挿す試験的))、USB の CCID のカードリーダーです
 - 同じ機材を扱うテレビのアプリがほかにも入っていると、「常に」の選択を取り合います。denpa を選びます
 - ポートの名前 (`tuners.json` の `device` に入る `1-2.3`) は、端末のカーネルが 5.3 以上なら挿した USB のポートから作ります。それより古いカーネルでは `001-004` の形式になり、
   挿し直すと名前が変わります。そのときは denpa の設定の「受信」の「チューナー」で書き直します。カーネルのバージョンは `adb shell uname -r` で見られます
+
+## ASICEN 系の機材を挿す (試験的)
+
+PX-W3U3・PX-W3U2・PX-W3U3 V2・PX-S3U2・PX-S3U は、APK に入れた asicen-userland で動かします。**Android でも Linux でも、実機では確かめていません**
+([tuners.md](tuners.md#px-w3u3-など-asicen-userland試験的))。
+
+1. 機材を挿すと、「denpa を開きますか」と聞かれます。「常にこのアプリで開く」に印を付けて「OK」を選びます。
+   挿した直後の機材はファームウェア待ちで、エージェントがファームウェアを流し込みます
+2. 流し込むと、機材が別の USB の ID でつながり直すので、もう一度「denpa を開きますか」と聞かれます。同じく印を付けて「OK」を選びます
+3. 通知が「チューナー 4 台」のように変わります (PX-W3U3 は受信機が 4 つ)。2 回とも印を付けておけば、次からは挿すだけで使えます
+
+- USB 機能が 2 つの機種 (PX-W3U2・PX-W3U3・PX-W3U3 V2) は、端末のカーネルが 5.3 以上のときだけ使えます。古いカーネルでは、同じ機材の 2 つの機能を見分けられないためです。
+  PX-S3U2・PX-S3U は古いカーネルでも使えます
+- 内蔵カードリーダーは使えません。B-CAS カードは USB のカードリーダーで使います
+- 動かないときは、`adb logcat -s denpa-agent` の `asicend` と `asicen` の行に理由が出ます
 
 ## denpa と組む
 
@@ -80,6 +95,8 @@ APK はリリースに `denpa-<バージョン>-android-arm64.apk` として添�
 | `files/denpa/config/` | エージェントの `tuners.json`・`channels.json`・`cards.json`・`tls/` (`tls/pair-token` は組むときの合言葉) |
 | `files/denpa/media/`  | `MEDIA_DIR`。いまは使いません                                                                             |
 | `u`                   | アプリが USB の機材を渡すソケット (`USB_BROKER`)                                                          |
+| `files/asicen/`       | ASICEN 系のファームウェア (`asicen-loader.bin`。APK から書き出したもの)                                   |
+| `r`                   | asicend のソケット (`ASICEN_RUNTIME_DIR`)                                                                 |
 
 ## 確かめる
 
@@ -87,5 +104,6 @@ APK はリリースに `denpa-<バージョン>-android-arm64.apk` として添�
 - チューナーを挿すと、設定の「受信」の「チューナー」に出ます
 - PC から `adb logcat -s denpa denpa-agent` でログを見られます。`denpa` はアプリ、`denpa-agent` はエージェントの出力です
 
-**実機ではまだ確かめていません。** エミュレータで確かめたのは、常駐サービス・通知・エージェントの起動と応答・アプリからエージェントへ fd を渡すこと・「終了」・端末の起動までです
+**実機ではまだ確かめていません。** エミュレータで確かめたのは、常駐サービス・通知・エージェントの起動と応答・アプリからエージェントへ fd を渡すこと・
+エージェントが asicend を起動して fd を継がせること・「終了」・端末の起動までです
 ([development.md](development.md#android-のアプリ))。チューナーを挿して映るかと、画面を消したまま LAN から届くかは、実機で確かめる必要があります。

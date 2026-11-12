@@ -26,6 +26,13 @@ namespace Denpa.Agent;
 /// (PX-S3U・PX-S3U2) は、その機能のポートを名前にする。名前は <c>asicend --instance</c> とソケットの置き場にもそのまま使う。
 /// **ポートを変えると別のチューナーになる。** 設定の <c>device</c> は <c>asicen:&lt;ポート&gt;:&lt;受信機&gt;</c> (<c>asicen:1-2:1</c>)。
 /// </para>
+///
+/// <para>
+/// **Android (アプリから USB を受け取るとき。<see cref="BrokerUsbHost"/>) は、機材を開くのも並べるのもアプリ。** asicend は libusb で機材を
+/// 並べられないので、<c>--list-json</c> の代わりに受け取った機材の VID・PID から筐体を組み (<see cref="Group"/>)、
+/// 受け取った fd を継がせて <c>asicend --fd</c> で起動する (<see cref="BrokerUsbHost.Lend"/>)。実行ファイルは APK の
+/// <c>libasicend.so</c>・<c>libasicenctl.so</c> (<see cref="Bin"/>)。作りは docs/agent.md「asicen-userland の作り」。
+/// </para>
 /// </summary>
 public static class AsicenUserland
 {
@@ -51,9 +58,18 @@ public static class AsicenUserland
     public static string RuntimeDir =>
         Environment.GetEnvironmentVariable("ASICEN_RUNTIME_DIR") ?? "/run/asicen-userland";
 
-    /// <summary>実行ファイルの場所。配布アーカイブは直下。<c>bin/</c> の下にあればそちら</summary>
-    public static string Bin(string dir, string name) =>
-        File.Exists(Path.Combine(dir, "bin", name)) ? Path.Combine(dir, "bin", name) : Path.Combine(dir, name);
+    /// <summary>
+    /// 実行ファイルの場所。配布アーカイブは直下。<c>bin/</c> の下にあればそちら。Android のアプリは <c>lib&lt;名前&gt;.so</c> の名前で
+    /// nativeLibraryDir に置く (APK の jniLibs に入れたものしか実行できない)
+    /// </summary>
+    public static string Bin(string dir, string name)
+    {
+        foreach (var path in (string[])[Path.Combine(dir, "bin", name), Path.Combine(dir, $"lib{name}.so")])
+        {
+            if (File.Exists(path)) return path;
+        }
+        return Path.Combine(dir, name);
+    }
 
     /// <summary>配布物が入っているか。**入っていなければ機材を挙げない**</summary>
     public static bool Installed =>
@@ -248,6 +264,7 @@ public static class AsicenUserland
         warn ??= Log.Write;
         if (!Installed) return [];
         Boot(warn);
+        if (UsbHost.Current is BrokerUsbHost broker) return Group(Scan(broker), warn);
         var (code, output) = Shell.Run(Bin(Dir, "asicend"), ["--list-json"], TimeSpan.FromSeconds(15));
         if (code != 0)
         {
@@ -279,14 +296,20 @@ public static class AsicenUserland
     }
 
     /// <summary>
-    /// ASICEN の USB 機能を探す。**ファームウェア待ちの機材を見つけるためだけに使う** (<see cref="Boot"/>)。
-    /// 5 機種 (<see cref="Models"/>) と、ファームウェア待ち (<c>1738:5211</c> / <c>1738:5216</c>)。ID の読めないデバイスは飛ばす。
+    /// 探す USB の ID。5 機種 (<see cref="Models"/>) と、ファームウェア待ち (<c>1738:5211</c> / <c>1738:5216</c>)。
+    /// Android のアプリの device_filter.xml にも同じものを並べる (AndroidDeviceFilterTests)
+    /// </summary>
+    internal static IReadOnlyList<UsbId> UsbIds => [.. Loaders.Concat(Models.Select(model => model.Usb)).Select(UsbId.Parse).Distinct()];
+
+    /// <summary>
+    /// ASICEN の USB 機能を探す (<see cref="UsbIds"/>)。Linux はファームウェア待ちの機材を見つけるためだけに使い (<see cref="Boot"/>)、
+    /// Android は筐体もここから組む (<see cref="Group"/>)。ID の読めないデバイスは飛ばす。
     /// カーネルのドライバが使っているものも並べる (流し込むかは asicend が決める)
     /// </summary>
     public static List<Function> Scan(IUsbHost host)
     {
         var found = new List<Function>();
-        foreach (var item in host.List([.. Loaders.Concat(Models.Select(model => model.Usb)).Select(UsbId.Parse).Distinct()]))
+        foreach (var item in host.List(UsbIds))
         {
             var usb = $"{item.Vendor:x4}:{item.Product:x4}";
             found.Add(new Function(usb, item.Port, Loaders.Contains(usb)));
@@ -310,6 +333,70 @@ public static class AsicenUserland
             if (IdOf(ports) is { } id && found.All(known => known.Item1 != id)) found.Add((id, ports));
         }
         return found;
+    }
+
+    /// <summary>
+    /// 動いている USB 機能を筐体にまとめる (Android。<c>asicend --list-json</c> の代わり)。**USB 機能が 2 つの機種は、同じ内蔵ハブの
+    /// <c>.1</c> と <c>.2</c> に同じ ID の機能が揃ったときだけ 1 つの筐体にする。** 受信機は機種の表 (<see cref="Models"/>) のもので、
+    /// asicend が起動したあとは <c>asicenctl list</c> のものに替わる。
+    /// ポートの名前を作れないカーネル (5.3 より前。名前が <c>001-004</c>) では内蔵ハブが分からず、USB 機能が 2 つの機種は使えない
+    /// </summary>
+    internal static List<Enclosure> Group(IReadOnlyList<Function> functions, Action<string> warn)
+    {
+        var found = new List<Enclosure>();
+        foreach (var group in functions.Where(function => !function.Loader).GroupBy(function => function.Usb))
+        {
+            var model = Models.First(known => known.Usb == group.Key);
+            if (model.Functions == 1)
+            {
+                foreach (var function in group)
+                {
+                    found.Add(new Enclosure(function.Port, model.Name, [function.Port], Receivers(model, warn)));
+                }
+                continue;
+            }
+            foreach (var hub in group.GroupBy(function => function.Parent))
+            {
+                var ports = hub.OrderBy(function => function.Slot).Select(function => function.Port).ToList();
+                if (hub.Key is not null && hub.Select(function => function.Slot).Order().SequenceEqual([1, 2]) && IdOf(ports) is { } id)
+                {
+                    found.Add(new Enclosure(id, model.Name, ports, Receivers(model, warn)));
+                    continue;
+                }
+                warn($"{model.Name} (USB {string.Join(" / ", ports)}) は使えません (USB 機能が {model.Functions} つ揃っていないか、"
+                    + "内蔵ハブのポートが読めません。ポートの名前を作れないカーネルでは、USB 機能が 2 つの機種は使えません)");
+            }
+        }
+        return [.. found.OrderBy(enclosure => enclosure.Id, StringComparer.Ordinal)];
+    }
+
+    private static List<UserlandReceiver> Receivers(Model model, Action<string> warn) =>
+        [.. model.Systems.Select((systems, index) => Receiver(index, [systems], model.Name, warn)).OfType<UserlandReceiver>()];
+
+    /// <summary>
+    /// asicend のソケットのパスが <c>sun_path</c> に収まるか。**収まらなければ起動しない** (asicend が断る前に、理由を記録に出す)。
+    /// Android の置き場 (<c>&lt;dataDir&gt;/r/asicen-userland/v1/&lt;筐体&gt;/control.sock</c>) は 80 バイトほど
+    /// </summary>
+    internal static void CheckSocketPath(string runtimeDir, string id)
+    {
+        var socket = UdtvControl.Endpoint(runtimeDir, id, "control.sock");
+        var length = System.Text.Encoding.UTF8.GetByteCount(socket);
+        if (length > Userland.MaxSocketPath)
+        {
+            throw new IOException($"asicend のソケットのパス {socket} が {length} バイトで、上限の {Userland.MaxSocketPath} バイトを超えるので起動しません"
+                + " (ASICEN_RUNTIME_DIR を短い置き場にしてください)");
+        }
+    }
+
+    /// <summary>入っている asicend のバージョンを記録に出す (起動したとき。Android では、アプリの子プロセスから起動できるかもここで分かる)</summary>
+    public static void LogVersion()
+    {
+        if (!Installed) return;
+        var asicend = Bin(Dir, "asicend");
+        var (code, output) = Shell.Run(asicend, ["--version"], TimeSpan.FromSeconds(10));
+        Log.Write(code == 0
+            ? $"asicen-userland: {output} ({asicend})"
+            : $"asicen-userland: {asicend} --version が通りません (exit {code}: {output})。ASICEN の機材は使えません");
     }
 
     private static readonly Lock BootGate = new();
@@ -342,7 +429,12 @@ public static class AsicenUserland
                         + $"ファームウェア待ちの ASICEN の機材 (USB {where}) は使えません");
                     continue;
                 }
-                var loader = new AsicenDaemon(id, Dir, RuntimeDir, () => AsicenDaemon.Arguments(ports, Firmware, allowLnb: false));
+                if (UsbHost.Current is BrokerUsbHost broker)
+                {
+                    Load(broker, id, ports, where, warn);
+                    continue;
+                }
+                var loader = new AsicenDaemon(id, Dir, RuntimeDir, () => new(AsicenDaemon.Arguments(ports, Firmware, allowLnb: false)));
                 try
                 {
                     loader.Ensure();
@@ -357,6 +449,44 @@ public static class AsicenUserland
                     loader.Stop();
                 }
             }
+        }
+    }
+
+    /// <summary>流し込みを待つ上限。16 KB を送るだけなので数秒で済む</summary>
+    private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Android のファームウェア待ちの機材に流し込む。**<c>asicend --fd … --firmware …</c> を起動し、終わるまで待つ。**
+    /// <c>--fd</c> の asicend は、流し込んだあとにつながり直した機材を追えないので、流し込んだら終わる (上流 README)。
+    /// つながり直した機材は別の VID・PID でアプリから届き (<c>attached</c>)、探し直したときに <see cref="AsicenDaemon"/> が起動する。
+    /// 終了コードは見ずに、asicend の出力を記録に出す
+    /// </summary>
+    private static void Load(BrokerUsbHost broker, string id, IReadOnlyList<string> ports, string where, Action<string> warn)
+    {
+        try
+        {
+            CheckSocketPath(RuntimeDir, id);
+            Userland.CreateRuntimeDir(RuntimeDir);
+            var fds = broker.Lend(ports);
+            using var process = Userland.Start(
+                Bin(Dir, "asicend"), [.. AsicenDaemon.FdArguments(fds.Numbers, Firmware, allowLnb: false), "--runtime-dir", RuntimeDir, "--instance", id], fds);
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(LoadTimeout))
+            {
+                Interop.Terminate(process.Id);
+                if (!process.WaitForExit(TimeSpan.FromSeconds(10))) process.Kill();
+                process.WaitForExit();
+                warn($"ASICEN の機材 (USB {where}) への流し込みが {LoadTimeout.TotalSeconds:0} 秒で終わらないので止めました");
+                return;
+            }
+            var output = $"{stdout.GetAwaiter().GetResult()}{stderr.GetAwaiter().GetResult()}".Trim();
+            Log.Write($"[asicen {id}] ファームウェアの流し込みで asicend が終了しました (exit {process.ExitCode}: {output})。"
+                + "流し込めていれば、機材がつながり直してアプリから届きます");
+        }
+        catch (IOException error)
+        {
+            warn($"ASICEN の機材 (USB {where}) にファームウェアを流し込めません ({error.Message})");
         }
     }
 
@@ -408,19 +538,25 @@ public static class AsicenUserland
 /// <para>
 /// 起動は <c>asicend --device usb:&lt;ポート&gt;[,&lt;ポート&gt;] --firmware &lt;ファイル&gt; [--allow-lnb-power] --runtime-dir … --instance &lt;筐体の名前&gt;</c>
 /// (上流 README と <c>asicend --help</c>)。ファームウェア待ちの機材には、asicend が起動するときに流し込む。
+/// Android は <c>--device</c> の代わりに <c>--fd &lt;番号&gt;</c> (USB 機能が 2 つなら 2 回。<c>.1</c> が先) で、受け取った fd を継がせる。
 /// ready は <c>asicenctl list</c> が通ることで見て、その出力から機種と受信機を読む (<see cref="Listed"/>)。
 /// </para>
 /// </summary>
 /// <param name="select">
-/// どの機材を使うかの引数 (<see cref="Arguments"/>)。起動する直前に呼ぶ。使えなければ IOException を送出する。テストは模擬のデーモンの引数を返す
+/// どの機材を使うかの引数と継がせる fd (<see cref="Hardware"/>)。起動する直前に呼ぶ。使えなければ IOException を送出する。テストは模擬のデーモンの引数を返す
 /// </param>
 /// <param name="program">起動する実行ファイルの名前。テストは模擬 (<c>asicend-mock</c>)</param>
-public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<string[]> select, string program = "asicend")
+public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<AsicenDaemon.Selection> select, string program = "asicend")
     : UserlandDaemon("asicend", id)
 {
+    /// <summary>asicend に渡す、機材を選ぶ引数と、継がせる fd (Android)。fd は起動し終えたら閉じる</summary>
+    public sealed record Selection(string[] Args, InheritedFds? Inherit = null);
+
     public static AsicenDaemon For(string id) => For(id, () => new AsicenDaemon(
         id, AsicenUserland.Dir, AsicenUserland.RuntimeDir,
-        () => Hardware(id, AsicenUserland.Firmware, AsicenUserland.WantsLnb(id), () => AsicenUserland.Enclosures(_ => { }))));
+        () => Hardware(
+            id, AsicenUserland.Firmware, AsicenUserland.WantsLnb(id), () => AsicenUserland.Enclosures(_ => { }),
+            UsbHost.Current is BrokerUsbHost broker ? broker.Lend : null)));
 
     /// <summary>動いている asicend に問い合わせた機種と受信機。ready になるまで、問い合わせられなかったときも null</summary>
     public AsicenUserland.Listed? Listed { get; private set; }
@@ -433,10 +569,21 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         ["--device", $"usb:{string.Join(',', ports)}", "--firmware", firmware, .. allowLnb ? ["--allow-lnb-power"] : Array.Empty<string>()];
 
     /// <summary>
-    /// 本物の機材を使う引数。**ファームウェアが無ければ起動しない** (asicend が <c>--firmware</c> を必須にしている)。
-    /// 給電を許可するのは、設定に LNB 15V があり、上流が給電に対応としている機種のときだけ
+    /// 継がせた fd で機材を選ぶ引数 (Android)。<c>--fd</c> は 2 つまでで、先が USB 機能の <c>.1</c>。
+    /// **ファームウェアは動いている機材にも渡す** (<c>--firmware</c> は必須。動いている機材には流し込まない。上流 README)
     /// </summary>
-    internal static string[] Hardware(string id, string firmware, bool wantsLnb, Func<IEnumerable<AsicenUserland.Enclosure>> enclosures)
+    internal static string[] FdArguments(IReadOnlyList<int> fds, string firmware, bool allowLnb) =>
+        [.. fds.SelectMany(fd => (string[])["--fd", fd.ToString(System.Globalization.CultureInfo.InvariantCulture)]),
+            "--firmware", firmware, .. allowLnb ? ["--allow-lnb-power"] : Array.Empty<string>()];
+
+    /// <summary>
+    /// 本物の機材を使う引数。**ファームウェアが無ければ起動しない** (asicend が <c>--firmware</c> を必須にしている)。
+    /// 給電を許可するのは、設定に LNB 15V があり、上流が給電に対応としている機種のときだけ。
+    /// <paramref name="lend"/> があれば (Android)、筐体の USB 機能の fd を継がせる
+    /// </summary>
+    internal static Selection Hardware(
+        string id, string firmware, bool wantsLnb, Func<IEnumerable<AsicenUserland.Enclosure>> enclosures,
+        Func<IReadOnlyList<string>, InheritedFds>? lend = null)
     {
         if (!File.Exists(firmware))
         {
@@ -444,7 +591,10 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         }
         var enclosure = enclosures().FirstOrDefault(found => found.Id == id)
             ?? throw new IOException($"ASICEN の筐体 {id} が見つかりません (抜けたか、USB ポートを変えた?)");
-        return Arguments(enclosure.Ports, firmware, wantsLnb && AsicenUserland.PowersLnb(enclosure.Model));
+        var allowLnb = wantsLnb && AsicenUserland.PowersLnb(enclosure.Model);
+        if (lend is null) return new Selection(Arguments(enclosure.Ports, firmware, allowLnb));
+        var fds = lend(enclosure.Ports);
+        return new Selection(FdArguments(fds.Numbers, firmware, allowLnb), fds);
     }
 
     public override void Ensure()
@@ -458,8 +608,9 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         }
         var asicend = AsicenUserland.Bin(dir, program);
         if (!File.Exists(asicend)) throw new IOException($"asicen-userland が入っていません: {asicend}");
+        AsicenUserland.CheckSocketPath(runtimeDir, Id);
         // 機材を並べるのはロックの外で
-        var args = select();
+        var (args, inherit) = select();
         var listed = "";
         // asicend は止まるときに給電を切る。前の給電の要求は消して、次の選局でオンにし直す
         AsicenLnb.Forget(Id);
@@ -485,7 +636,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
                 Write($"{Listed.Model} 受信機 {Listed.Receivers.Count} つ: "
                     + string.Join(", ", Listed.Receivers.Select(receiver => $"#{receiver.Index} {string.Join("/", receiver.Types)}")));
             },
-            hint: Hint);
+            hint: Hint, inherit: inherit);
     }
 
     /// <summary>asicend の終了コード (external-contract §3.7) に、どうすればいいかを添える</summary>

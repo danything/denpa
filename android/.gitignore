@@ -7,3 +7,5 @@ local.properties
 agent-libs/
 # エージェントに入っているもののライセンスの文書 (CI が置く。app/build.gradle.kts の DENPA_AGENT_LICENSES)
 agent-licenses/
+# asicen-userland の上流の Android 版 (CI が .github/asicen-android.sh で置く。app/build.gradle.kts の DENPA_ASICEN)
+asicen-userland/

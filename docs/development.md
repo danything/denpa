@@ -321,8 +321,11 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
   Gradle・AGP・Kotlin・compileSdk・JDK・依存は、その時点の最新の安定版にします。上げるのは Renovate です (JDK は `renovate.json` の注釈で追う)
 - エージェントは `android/agent-libs/<ABI>/libdenpa_agent.so` に置くと APK に入ります (`DENPA_AGENT_LIBS` で別の置き場も渡せます)。
   入れるときに `nativeLibraryDir` へ展開させ (`useLegacyPackaging`)、そこから exec します。Android 10 からは、アプリのデータの置き場のファイルは実行できません
-- 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と食い違わないことを、
-  エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
+- asicen-userland は `android/asicen-userland/` に置くと APK に入ります (`DENPA_ASICEN` で別の置き場も渡せます)。`bash .github/asicen-android.sh android/asicen-userland arm64 x86_64` が、
+  上流の Android 版を SHA-256 で確かめて取り、`jniLibs/<ABI>/libasicend.so`・`libasicenctl.so`、ファームウェア、ライセンスの文書を並べます。
+  バージョンが `agent/Dockerfile` と、組んだコミットが test.yml の `ASICEN_USERLAND_REF` と違えば止まります。置かなければ asicen-userland の無い APK になります
+- 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と asicen-userland の機材
+  (`AsicenUserland.UsbIds`) と食い違わないことを、エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
 - debug の APK にだけ、エミュレータで確かめるための受け口 (`src/debug/` の `DebugReceiver`) が入ります。USB の機材の代わりにファイルの fd を送ること、
   通知の「終了」を押すこと、エージェントの異常終了の代わりに SIGKILL を送ることを `adb shell am broadcast` で代えます。DUMP の権限を持つもの (adb shell) からしか送れません
 
@@ -340,6 +343,7 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - エージェントがアプリの子プロセス (SELinux の `untrusted_app`) で動き、`<dataDir>/u` に USB_BROKER のソケット (0600) を作り、アプリが繋いで `synced` を送ること
 - denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
 - アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
+- エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
 - エージェントが落ちたらアプリが起動し直すこと、通知の「終了」でエージェントも常駐サービスも残らないこと、端末を起動し直すと常駐サービスが始まること
 
 エミュレータの列は必須チェックではありません (起動や応答の時間がばらつき、コードと関係なく落ちることがあるため)。
@@ -347,7 +351,7 @@ USB の機材はエミュレータに挿せないので、usbfs の fd (許可�
 
 ### リリースの APK と署名の鍵
 
-リリース (release.yml) は android.yml を `tag` 付きで呼び、arm64 のエージェントだけを入れた release の APK を組んで、`denpa-<バージョン>-android-arm64.apk` と `.sha256` を添えます (出所の証明も付ける)。
+リリース (release.yml) は android.yml を `tag` 付きで呼び、arm64 のエージェントと asicen-userland だけを入れた release の APK を組んで、`denpa-<バージョン>-android-arm64.apk` と `.sha256` を添えます (出所の証明も付ける)。
 
 - **リリースはいつも同じ鍵で署名します。** 鍵が違う APK は上書きで入れられないためです。denpa-tv とは別の鍵で、漏れたときに巻き込むアプリを 1 つにします
 - 鍵は PKCS12 (RSA 4096 ビット、有効期限 36500 日。denpa-tv と同じ作り) で、リポジトリの Actions の secrets に `DENPA_ANDROID_KEYSTORE_BASE64` (keystore を base64 にしたもの)・
@@ -359,6 +363,7 @@ USB の機材はエミュレータに挿せないので、usbfs の fd (許可�
 - release は R8 で縮めます (`isMinifyEnabled`・`isShrinkResources`)。リフレクションで引くクラスが無く、マニフェストの部品は AGP の規則が残すので、規則は足していません。
   エミュレータで確かめるのは debug の APK だけなので、リフレクションを使うコードを足したら規則も足します
 - エージェントに入っているもののライセンスの文書 (Siano のファームウェアの許諾と OpenSSL の LICENSE) を、APK の `assets/licenses/` に入れます
-  (`licenseAssets`。OpenSSL のものは CI が `android/agent-licenses/` に置く。`DENPA_AGENT_LICENSES` で替えられる)
+  (`licenseAssets`。OpenSSL のものは CI が `android/agent-licenses/` に置く。`DENPA_AGENT_LICENSES` で替えられる)。
+  asicen-userland のライセンスの文書とソースの入手先は `assets/licenses/asicen-userland/` に入ります ([licenses.md](licenses.md#android-のアプリ))
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。
