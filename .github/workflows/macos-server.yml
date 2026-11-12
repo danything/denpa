@@ -13,7 +13,7 @@ name: Mac server bundle
 # | `licenses/` | denpa と bun のライセンス                                                                    |
 #
 # ffmpeg は Mac のランナーで組む。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段と組むスクリプトが変わるまで使い回す**。
-# 依存 (Opus・SVT-AV1・x264・dav1d) の組み上がりはそれぞれ別のキャッシュに置き、バージョンと組み方が変わるまで使い回す
+# 依存 (Opus・SVT-AV1・x264・dav1d・zimg) の組み上がりはそれぞれ別のキャッシュに置き、バージョンと組み方が変わるまで使い回す
 # (ffmpeg の configure の引数だけを変えたときに、依存を組み直さない。windows-server.yml と同じ)。
 # **Mac のジョブはこの 1 つだけ** (Mac のランナーは混むと待たされる)。キャッシュに当たれば、取り出して渡すだけで終わる。
 #
@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # 鍵は Dockerfile の ffmpeg 段 (土台の FROM の行は除く) と、組むスクリプトと patches/。
-      # 依存の鍵はバージョンと、スクリプトの `# recipe:<名前>:begin` から `:end` までの組み方 (x264 と dav1d はバージョンも中にある)
+      # 依存の鍵はバージョンと、スクリプトの `# recipe:<名前>:begin` から `:end` までの組み方 (x264・dav1d・zimg はバージョンも中にある)
       - name: Cache key
         id: key
         run: |
@@ -53,13 +53,14 @@ jobs:
           for v in OPUS_VERSION SVT_AV1_VERSION; do
             test -n "$(version $v)" || { echo "Dockerfile の ffmpeg 段に $v がありません" >&2; exit 1; }
           done
-          for r in opus svt-av1 x264 dav1d; do
+          for r in opus svt-av1 x264 dav1d zimg; do
             grep -q "^# recipe:$r:end" .github/ffmpeg-macos.sh || { echo "ffmpeg-macos.sh に recipe:$r がありません" >&2; exit 1; }
           done
           echo "opus=ffmpeg-macos-arm64-opus-$(version OPUS_VERSION)-$(recipe opus)" >> "$GITHUB_OUTPUT"
           echo "svtav1=ffmpeg-macos-arm64-svt-av1-$(version SVT_AV1_VERSION)-$(recipe svt-av1)" >> "$GITHUB_OUTPUT"
           echo "x264=ffmpeg-macos-arm64-x264-$(recipe x264)" >> "$GITHUB_OUTPUT"
           echo "dav1d=ffmpeg-macos-arm64-dav1d-$(recipe dav1d)" >> "$GITHUB_OUTPUT"
+          echo "zimg=ffmpeg-macos-arm64-zimg-$(recipe zimg)" >> "$GITHUB_OUTPUT"
 
       - name: Restore ffmpeg
         id: cache
@@ -68,10 +69,10 @@ jobs:
           path: ffmpeg-out
           key: ${{ steps.key.outputs.key }}
 
-      # dav1d は meson で組む。cmake はランナーに入っている
+      # dav1d は meson で、zimg は autotools (configure を autoreconf で作る) で組む。cmake はランナーに入っている
       - name: Install build tools
         if: steps.cache.outputs.cache-hit != 'true'
-        run: brew install meson ninja
+        run: brew install meson ninja autoconf automake libtool
 
       # 組み上がり (入れ先は .github/ffmpeg-macos.sh の `deps`)。ffmpeg が当たらなかったときだけ使う
       - name: Restore Opus
@@ -105,6 +106,14 @@ jobs:
         with:
           path: ${{ runner.temp }}/ffmpeg-deps/dav1d
           key: ${{ steps.key.outputs.dav1d }}
+
+      - name: Restore zimg
+        id: zimg
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-deps/zimg
+          key: ${{ steps.key.outputs.zimg }}
 
       # 依存は組み終えた直後に保存する (ffmpeg のビルドが落ちても残る)。ffmpeg 本体は成功したときだけ保存する
       - name: Build Opus
@@ -150,6 +159,17 @@ jobs:
         with:
           path: ${{ runner.temp }}/ffmpeg-deps/dav1d
           key: ${{ steps.key.outputs.dav1d }}
+
+      - name: Build zimg
+        if: steps.cache.outputs.cache-hit != 'true' && steps.zimg.outputs.cache-hit != 'true'
+        run: bash .github/ffmpeg-macos.sh ffmpeg-out zimg
+
+      - name: Save zimg
+        if: steps.cache.outputs.cache-hit != 'true' && steps.zimg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-deps/zimg
+          key: ${{ steps.key.outputs.zimg }}
 
       - name: Build ffmpeg
         if: steps.cache.outputs.cache-hit != 'true'

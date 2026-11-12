@@ -157,7 +157,7 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
 
 ## 確かめたこと
 
-- **CI** (test.yml の `server-macos`・`agent-macos`): 配布物の ffmpeg で denpa が使う経路を流し、VideoToolbox のエンコーダが組み込まれて
+- **CI** (test.yml の `server-macos`・`agent-macos`): 配布物の ffmpeg で denpa が使う経路 (4K の局の HLG を SDR に直すフィルタを含む) を流し、VideoToolbox のエンコーダが組み込まれて
   denpa が渡すオプションを持つこと、通れば放送に似せた素材をエンコードできること (ランナーでは通る)、試しのエンコードが落ちればソフトウェアに戻ることを見る。
   進み具合を fd 3 で受け、スリープを止める呼び出しが `pmset -g assertions` に、起こす予約が `pmset -g sched` に出て取り消せることを見る。
   本体を `bun server.js` で起こして画面・字・デコーダが返ることを見る。install.sh で本体ごと入れて root の LaunchDaemon で動き、
