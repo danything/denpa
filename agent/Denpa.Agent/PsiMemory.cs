@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// **選局で読んだ PAT と PMT を覚えておく。** 次に同じ局を選局したとき、本物の PAT・PMT を待たずに流し始めるため (<see cref="Descrambler"/>)。
-/// 鍵は種別・チャンネル・service_id。PAT はチャンネルごとに 1 つ、PMT は局ごとに 1 つ持つ。
+/// キーは種別・チャンネル・service_id。PAT はチャンネルごとに 1 つ、PMT は局ごとに 1 つ持つ。
 ///
 /// <para>
 /// 持つのはセクションのバイト列 (CRC まで) だけで、デスクランブラが本物と同じ読み方で読む。
@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// <para>
 /// 新しい PAT の transport_stream_id が覚えたものと違えば、そのチャンネルの PMT を全部捨てる (チャンネルの定義が変わった・別の中継を受けた)。
 /// 同じでも、新しい PAT が挙げていない局と、PMT の PID が変わった局の PMT は捨てる。
-/// service_id だけを鍵にしないのは、ケーブルの再送信で同じ service_id の局が別のチャンネルに入っていることがあるため (推定)。
+/// service_id だけをキーにしないのは、ケーブルの再送信で同じ service_id の局が別のチャンネルに入っていることがあるため (推定)。
 /// 大きさは局 1 つにつき PMT 1 つ (1KB まで) で、BS・CS を全部覚えても数百 KB (推定)
 /// </para>
 /// </summary>

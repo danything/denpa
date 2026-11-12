@@ -31,7 +31,7 @@ import { type AccessControl, TlvServiceReader } from "@danything/arib/mmt-si";
 import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
 import { type ChannelType, isSatellite, type Transport } from "../types";
-import { CaObserver, describe, type Observed } from "./ca-observe";
+import { CaObserver, describe, hex, type Observed } from "./ca-observe";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank } from "./epg";
 import { collectOnce } from "./epg-collect";
@@ -306,9 +306,6 @@ export async function readTlvServices(
       : `${reader.network === null ? "TLV-NIT" : "MH-SDT"} を受信できませんでした`;
   return { ...result, services: null, error: `${why}${detail}` };
 }
-
-const hex = (value: number) =>
-  `0x${value.toString(16).toUpperCase().padStart(4, "0")}`;
 
 /**
  * TLV のチャンネルについて、スキャンの記録の 1 行に足す説明。局ごとの CA_system_id と ECM の packet_id (MPT のアクセス制御記述子)。

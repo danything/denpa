@@ -4,7 +4,7 @@ namespace Denpa.Agent.Tests;
  * ATR の読み方と T=1 のブロックのやり取り。
  *
  * カードは台本 (送るはずのブロックと、それへの応答) で置き換える。送ったものが台本と
- * 違えばその場で例外を投げる。本物のカードで当てるのは Ccid.Describe() (`denpa-agent --card`)。
+ * 違えばその場で例外を送出する。本物のカードで当てるのは Ccid.Describe() (`denpa-agent --card`)。
  */
 public class T1Tests
 {
@@ -66,7 +66,7 @@ public class T1Tests
     }
 
     [Test]
-    public async Task 壊れた_ATR_は投げる()
+    public async Task 壊れた_ATR_は例外にする()
     {
         var badTck = (byte[])BcasAtr.Clone();
         badTck[^1] ^= 1;
@@ -130,7 +130,7 @@ public class T1Tests
     }
 
     [Test]
-    public async Task 化け続けたら投げる()
+    public async Task 化け続けたら例外にする()
     {
         var script = new Script(
             (I(0, false, "01"), null),

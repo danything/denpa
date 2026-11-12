@@ -9,7 +9,7 @@ namespace Denpa.Agent.Tests;
  *
  * 配る側の側は、本文の長さの確認 (400) とカードへの受け渡しを、HTTP を通さずに確かめる。
  * 相手のアドレスと往復時間で断る (403) のは、パスを読む前の共通の確認 (CardLanTests)。
- * カードが無い・読めないときは投げて、ほかの API と同じく 503 になる (CardShareServer.Reply)。
+ * カードが無い・読めないときは例外を送出し、ほかの API と同じく 503 になる (CardShareServer.Reply)。
  * 受け取る側 (RemoteCard) は、ループバックで応答する小さな HTTP サーバに繋ぐ。
  */
 public class CardShareEmmTests
@@ -64,7 +64,7 @@ public class CardShareEmmTests
         await Assert.That(Emm.Forwarded(refusing, Payload, () => notified++)).IsEqualTo(0xA107);
         await Assert.That(notified).IsEqualTo(1);
 
-        // カードが無ければ投げる (503 になる)
+        // カードが無ければ例外を送出する (503 になる)
         var absent = new Card(() => throw new CardAbsentException("カードが挿さっていません"));
         Assert.Throws<CardAbsentException>(() => Emm.Forwarded(absent, Payload, () => notified++));
     }
@@ -95,7 +95,7 @@ public class CardShareEmmTests
     }
 
     [Test]
-    public async Task 配る側のカードが読めなければ理由ごと投げる()
+    public async Task 配る側のカードが読めなければ理由ごと例外にする()
     {
         using var share = new Share((_, _) => (503, Encoding.UTF8.GetBytes("""{"error":"カードリーダーが見つかりません"}""")));
         var remote = new RemoteCard(share.Url, 1);

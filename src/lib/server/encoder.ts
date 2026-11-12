@@ -2468,7 +2468,8 @@ export function pump(): void {
         .innerJoin(encodeJobs, eq(encodeJobs.recording_id, recordings.id))
         .where(eq(encodeJobs.id, next.id))
         .get();
-      const reason = `エンコードを ${next.attempts} 回試しましたが、完了しませんでした`;
+      const what = next.kind === "cm" ? "CM 検出" : "エンコード";
+      const reason = `${what}を ${next.attempts} 回試しましたが、完了しませんでした`;
       if (recording === undefined) {
         markFailed(next.id, reason);
         emit("recordings");
@@ -2476,7 +2477,7 @@ export function pump(): void {
         // もう動かさないので、この元の TS の中間ファイルもここで片付ける
         const input = encodeSource(recording);
         if (input !== null) clearScratch(input);
-        fail(next.id, recording, reason);
+        fail(next.id, recording, reason, what);
       }
       continue;
     }

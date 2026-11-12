@@ -172,7 +172,7 @@ public class It930xTsTests
         writerScheduler: PipeScheduler.Inline,
         useSynchronizationContext: false));
 
-    /// <summary>入力ごとの出口を付けた分け器と、出口の読み出し側</summary>
+    /// <summary>入力ごとの出口を付けた It930xTsDemux と、出口の読み出し側</summary>
     private static (It930xTsDemux Demux, Pipe[] Pipes) Demux()
     {
         var demux = new It930xTsDemux(It930xBridge.SyncBytes);

@@ -463,16 +463,13 @@ function forgetMissing(at: number, seen: Set<number>): number {
  * 番組表が空のまま何も出ない時間が続く。
  */
 export function syncServicesOnly(channels: AgentChannel[]): number {
-  const current = () =>
-    orm().select({ n: count() }).from(services).where(currentServices()).get()
-      ?.n ?? 0;
-  const before = current();
+  const before = listedServices();
   const synced = syncServices(channels);
   /*
    * 数が変わったときだけ知らせる。毎回知らせると、番組表を開いている端末が
    * 何も変わっていないのに 1 分おきに読み直すことになる
    */
-  if (current() !== before) emit("services");
+  if (listedServices() !== before) emit("services");
   return synced;
 }
 
@@ -861,7 +858,8 @@ export function settle(): SettleResult {
 }
 
 /**
- * 局と番組表を取り込み直す。E2E と docs の画像を撮るスクリプトが呼ぶとき (`/api/sync`)・起動直後・スキャンのあと。
+ * 局と番組表を取り込み直す。E2E と docs の画像を撮るスクリプトが呼ぶとき (`/api/sync`)・起動直後・スキャンのあと・
+ * エージェントの `channels` の通知 (`runtime.ts`)・種別を消したとき (`scan.removeType`)。
  *
  * 番組そのものを集めるのは `epg-collect.ts` で、こちらは**溜まっているものを
  * 使って予約を組み直すだけ**。

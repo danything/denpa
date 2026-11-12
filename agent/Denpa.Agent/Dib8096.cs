@@ -11,7 +11,7 @@ namespace Denpa.Agent;
  * 仕様書が「参考の実装の振る舞い」と書いた所はそのとおりにし、仕様書に無かった所は「仕様書に無い」と書いた。
  *
  * レジスタの書き方: D[n] は DiB8000 のレジスタ n (10 進)、T[0xNN] は DiB0090 のレジスタ (16 進)。どちらも 16 ビット。
- * 待ちは 0.1ms 単位で数える所が多い (DiB0090 と AGC の状態の機械)。
+ * 待ちは 0.1ms 単位で数える所が多い (DiB0090 と AGC の状態機械)。
  */
 
 /// <summary>DiB8096 の待ちと時計。ボードは待つ前に溜めた I2C を流し、待ちの間に流し始めの準備を回す (Zd1j.cs)</summary>
@@ -42,7 +42,7 @@ public enum DibLock
 /// <param name="CnDb">C/N。ロックしていないか測れなければ null</param>
 public sealed record DibSignal(bool Locked, double StrengthDbm, double? CnDb, ushort Status);
 
-/// <summary>DiB8000 + DiB0090 (CECH-ZD1 J の中身)。**同時に 1 本からだけ呼ぶ** (呼ぶ側が順番にする)</summary>
+/// <summary>DiB8000 + DiB0090 (CECH-ZD1 J の中身)。**同時には 1 つのスレッドからだけ呼ぶ** (呼ぶ側が順番にする)</summary>
 public sealed class Dib8096
 {
     public const byte DemodAddress = 0x12;
@@ -189,7 +189,7 @@ public sealed class Dib8096
 
     /// <summary>
     /// DiB8000 と DiB0090 を初期化して起動する。ブリッジの GPIO で電源とリセットを済ませたあと (仕様書 4.6) に呼ぶ。
-    /// 対応していないバージョンの部品なら投げる
+    /// 対応していないバージョンの部品なら例外を送出する
     /// </summary>
     public void Initialize()
     {
@@ -451,7 +451,7 @@ public sealed class Dib8096
         if ((TunerVersion & 0x1F) >= 3) Fuses();
         // 水晶 12MHz
         T(0x14, 2);
-        // 較正の宿題。DC は開くときに (CalibrateDc)、WBD と温度は最初の選局で走る
+        // 残っている較正 (仕様書の「宿題」)。DC は開くときに (CalibrateDc)、WBD と温度は最初の選局で走る
         _dcPending = _wbdPending = _tempPending = true;
         _tunerState = TunerStart;
     }
@@ -538,7 +538,7 @@ public sealed class Dib8096
 
     /// <summary>
     /// チャンネルの中心周波数 (Hz) に合わせる (7.1)。ロックしなかったのは失敗ではなく結果
-    /// (<see cref="DibLock.Failed"/>)。範囲外と、探索が 5 秒で終わらないとき (探索し直すとそこからもう 5 秒) は投げる
+    /// (<see cref="DibLock.Failed"/>)。範囲外と、探索が 5 秒で終わらないとき (探索し直すとそこからもう 5 秒) は例外を送出する
     /// </summary>
     public DibLock Tune(uint hz)
     {
@@ -570,7 +570,7 @@ public sealed class Dib8096
         }
         catch
         {
-            if (_capacitors.Remove(_tunerKhz)) _notes.Add("キャパシタ: 探索が投げたので保存した値を捨てた");
+            if (_capacitors.Remove(_tunerKhz)) _notes.Add("キャパシタ: 探索が例外で終わったので保存した値を捨てた");
             throw;
         }
         // 合わなかったら、使い回したキャパシタも次は較正し直す
@@ -1680,7 +1680,7 @@ public sealed class Dib8096
     }
 
     /// <summary>
-    /// 7.5 の状態の機械を回す。**1 歩の間は仕様書では最低 10ms** (7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
+    /// 7.5 の状態機械を回す。**1 歩の間は仕様書では最低 10ms** (7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
     /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)。それに関わらない段だけ 3ms に詰める (<see cref="Floor"/>)
     /// </summary>
     private DibLock Search()
@@ -2424,7 +2424,7 @@ public sealed class DibMemory
     }
 
     /// <summary>
-    /// ファイルの中身から。**どれか 1 つでも形式が違えば投げる** (呼ぶ側が全部捨てて探索から)。
+    /// ファイルの中身から。**どれか 1 つでも形式が違えば例外を送出する** (呼ぶ側が全部捨てて探索から)。
     /// 使う項目を名前で読むだけなので、ほかの項目は無視する
     /// </summary>
     public static DibMemory FromJson(JsonObject json)

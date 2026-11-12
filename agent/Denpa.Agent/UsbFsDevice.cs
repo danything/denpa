@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace Denpa.Agent;
@@ -71,7 +70,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     private const byte UrbTypeBulk = 3;
     private const short PollOut = 0x004;
 
-    /// <summary>EP の止まりや化けで続けて捨ててよい読みの数。超えたら読みを失敗で終える</summary>
+    /// <summary>端点のストール (EPIPE) やプロトコルエラー (EPROTO) で続けて捨ててよい読みの数。超えたら読みを失敗で終える</summary>
     private const int MaxStalls = 8;
 
     private readonly Lock _gate = new();
@@ -95,13 +94,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     /// </param>
     public static UsbFsDevice Open(string sysfs, string devUsb, string port, int vendor, int product, bool selectAlternate = true)
     {
-        var dir = Path.Combine(sysfs, port);
-        if (!int.TryParse(UsbSysfs.Read(dir, "busnum"), NumberStyles.None, CultureInfo.InvariantCulture, out var bus)
-            || !int.TryParse(UsbSysfs.Read(dir, "devnum"), NumberStyles.None, CultureInfo.InvariantCulture, out var device))
-        {
-            throw new IOException($"USB のポート {port} に機材がありません (抜かれたか、コンテナに /sys が見えていません)");
-        }
-        var path = Path.Combine(devUsb, bus.ToString("D3", CultureInfo.InvariantCulture), device.ToString("D3", CultureInfo.InvariantCulture));
+        var path = UsbSysfs.Node(sysfs, devUsb, port) ?? throw new IOException(UsbSysfs.NoDevice(port));
         return OpenFd(UsbFs.Open(path), path, port, vendor, product, selectAlternate);
     }
 
@@ -112,7 +105,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     public static UsbFsDevice Open(int received, string port, int vendor, int product, bool selectAlternate = true) =>
         OpenFd(UsbFs.Dup(received, port), $"USB のポート {port}", port, vendor, product, selectAlternate);
 
-    /// <summary>開いた fd で ID を確かめ、インターフェース 0 を確保する。失敗したら fd を閉じて投げる</summary>
+    /// <summary>開いた fd で ID を確かめ、インターフェース 0 を確保する。失敗したら fd を閉じて例外を送出する</summary>
     /// <param name="where">ID が違うときの文言に出す、開いたもの (パスかポート)</param>
     private static UsbFsDevice OpenFd(int fd, string where, string port, int vendor, int product, bool selectAlternate)
     {
@@ -349,13 +342,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
                     _head = (_head + 1) % _urbs.Length;
                 }
                 if (copied > 0) return copied;
-                var wait = deadline - Environment.TickCount64;
-                if (wait <= 0) return 0;
-                var poll = new PollFd { Fd = _owner.Fd, Events = PollOut };
-                if (Sys.Poll((byte*)&poll, 1, (int)Math.Min(wait, int.MaxValue)) < 0 && Marshal.GetLastPInvokeError() != UsbFs.Eintr)
-                {
-                    throw _owner.Failure("TS の読みを待てません");
-                }
+                if (!Wait(deadline)) return 0;
             }
         }
 
@@ -378,18 +365,25 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
                     _head = (_head + 1) % _urbs.Length;
                     if (take > 0) return take;
                 }
-                var wait = deadline - Environment.TickCount64;
-                if (wait <= 0) return 0;
-                var poll = new PollFd { Fd = _owner.Fd, Events = PollOut };
-                if (Sys.Poll((byte*)&poll, 1, (int)Math.Min(wait, int.MaxValue)) < 0 && Marshal.GetLastPInvokeError() != UsbFs.Eintr)
-                {
-                    throw _owner.Failure("TS の読みを待てません");
-                }
+                if (!Wait(deadline)) return 0;
             }
         }
 
+        /// <summary>URB が済むのを <paramref name="deadline"/> (Environment.TickCount64) まで待つ。もう過ぎていれば false</summary>
+        private bool Wait(long deadline)
+        {
+            var wait = deadline - Environment.TickCount64;
+            if (wait <= 0) return false;
+            var poll = new PollFd { Fd = _owner.Fd, Events = PollOut };
+            if (Sys.Poll((byte*)&poll, 1, (int)Math.Min(wait, int.MaxValue)) < 0 && Marshal.GetLastPInvokeError() != UsbFs.Eintr)
+            {
+                throw _owner.Failure("TS の読みを待てません");
+            }
+            return true;
+        }
+
         /// <summary>
-        /// 済んだ URB の失敗。端点の止まり (EPIPE) はストールをクリアして (USBDEVFS_CLEAR_HALT)、化け (EPROTO) はそのまま、その URB の中身だけ捨てて
+        /// 済んだ URB の失敗。端点のストール (EPIPE) はストールをクリアして (USBDEVFS_CLEAR_HALT)、プロトコルエラー (EPROTO) はそのまま、その URB の中身だけ捨てて
         /// 出し直す。続けて <see cref="MaxStalls"/> 回を超えたら読みを失敗で終える
         /// </summary>
         private void Fail(Urb* urb)

@@ -54,7 +54,7 @@ export function decodeEntities(text: string): string {
     (whole, body: string) => {
       if (body[0] === "#") {
         const code =
-          body[1] === "x" || body[1] === "X"
+          body[1] === "x"
             ? Number.parseInt(body.slice(2), 16)
             : Number(body.slice(1));
         return Number.isInteger(code) && code > 0 && code <= 0x10ffff
@@ -197,7 +197,7 @@ export function parseXml(source: string): XmlElement | null {
     at = i;
     const element: XmlElement = { kind: "element", name, attrs, children: [] };
     open.at(-1)!.children.push(element);
-    // 中身を持たない要素 (閉じずに書かれても、後ろを飲み込まない)
+    // 中身を持たない要素 (閉じずに書かれても、後ろの要素を中に入れない)
     if (selfClosing || VOID.has(name)) continue;
     // script と style の中身は文字のまま (中の < をタグと見ない)。閉じタグも前置き (`</bml:script>`) を許す
     if (name === "script" || name === "style") {

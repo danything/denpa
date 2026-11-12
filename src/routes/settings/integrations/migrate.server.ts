@@ -21,7 +21,7 @@ export function load() {
 export const actions = {
   /**
    * EPGStation からの引き継ぎ。先に繋がるかだけ確かめ、数百 GB を取ってくるところは裏で進める。
-   * 進み具合は SSE で降ってくる。
+   * 進み具合は SSE で届く。
    */
   migrate: async ({ request, locals }) => {
     const refused = tokenRefusal(locals);
@@ -44,7 +44,7 @@ export const actions = {
     return { success: true, migrate: "中断しました" };
   },
   /**
-   * EDCB からの引き継ぎ。先に EpgTimerSrv から一覧を読み、繋がらなければその場で理由を返す。進み具合は EPGStation と同じく SSE で降ってくる
+   * EDCB からの引き継ぎ。先に EpgTimerSrv から一覧を読み、繋がらなければその場で理由を返す。進み具合は EPGStation と同じく SSE で届く
    */
   migrateEdcb: async ({ request, locals }) => {
     const refused = tokenRefusal(locals);

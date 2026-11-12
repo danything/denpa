@@ -412,7 +412,7 @@ public static class AsicenUserland
 /// </para>
 /// </summary>
 /// <param name="select">
-/// どの機材を使うかの引数 (<see cref="Arguments"/>)。起動する直前に呼ぶ。駄目なら例外を投げる。テストは模擬のデーモンの引数を返す
+/// どの機材を使うかの引数 (<see cref="Arguments"/>)。起動する直前に呼ぶ。使えなければ IOException を送出する。テストは模擬のデーモンの引数を返す
 /// </param>
 /// <param name="program">起動する実行ファイルの名前。テストは模擬 (<c>asicend-mock</c>)</param>
 public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<string[]> select, string program = "asicend")
@@ -421,9 +421,6 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
     public static AsicenDaemon For(string id) => For(id, () => new AsicenDaemon(
         id, AsicenUserland.Dir, AsicenUserland.RuntimeDir,
         () => Hardware(id, AsicenUserland.Firmware, AsicenUserland.WantsLnb(id), () => AsicenUserland.Enclosures(_ => { }))));
-
-    /// <summary>カードリーダーは挙げない (<see cref="AsicenUserland.Cards"/>) ので、どのカードの名前とも合わない</summary>
-    public override string CardName => $"asicen-userland {Id} Internal Card Reader";
 
     /// <summary>動いている asicend に問い合わせた機種と受信機。ready になるまで、問い合わせられなかったときも null</summary>
     public AsicenUserland.Listed? Listed { get; private set; }

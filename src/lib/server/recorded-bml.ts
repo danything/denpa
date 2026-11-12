@@ -39,7 +39,7 @@ import { programs, services } from "./schema";
  * ライブと同じく DB から組み立てる (`live.ts` の `programInfo`)。局の番号は
  * `services`、番組は録画の行が持っている。
  *
- * **中継の番号 (`transportStreamId`) は null のままにします。** ライブでは放送から
+ * **TS の ID (`transportStreamId`) は null のままにします。** ライブでは放送から
  * 読み取って渡していますが (あちらは TVer リンクが訊いてくる)、**放送のアプリは録画の
  * 再生中に双方向通信を使いません。** テレ朝の TVer リンクは `IsRecorded()` で分かれて
  * 「録画再生中は、このサービスをご利用いただけません」を出す。訊かれないものを

@@ -51,7 +51,7 @@ const { programs, recordings, reservations, services } =
   await import("./schema");
 const { broadcastDayStart, guideOf, HOUR, programRange, programsOf } =
   await import("./guide");
-const { cancelProgram, recordedBody, recordProgram } =
+const { cancelProgram, cancelReservation, recordedBody, recordProgram } =
   await import("./reservations");
 const { COPY_NEVER_REASON, NOT_CANCELABLE_REASON } = await import("../format");
 const { undecodableReason } = await import("../types");
@@ -505,5 +505,35 @@ describe("番組を録る・取り消す", () => {
       "skipped",
       "canceled",
     ]);
+  });
+
+  test("ID での取消 (ホームと検索の画面) も同じ決まりで断る", async () => {
+    reset();
+    program(1, MAIN, NOW - 60 * MINUTE, NOW - 30 * MINUTE);
+    program(2, MAIN, NOW - 30 * MINUTE, NOW + 30 * MINUTE);
+    const missed = reservation(1, { state: "missed" });
+    const scheduled = reservation(2);
+    expect(await cancelReservation(missed)).toEqual({
+      ok: false,
+      status: 409,
+      message: NOT_CANCELABLE_REASON,
+    });
+    expect(await cancelReservation(scheduled)).toEqual({
+      ok: true,
+      stopped: false,
+    });
+    expect((await cancelReservation(scheduled)).ok).toBe(false);
+  });
+
+  test("録り終えてから消した録画の予約は、取り消せる予約に戻らない (完了のまま)", async () => {
+    reset();
+    program(1, MAIN, NOW - 30 * MINUTE, NOW + 30 * MINUTE);
+    const id = reservation(1, { started_at: NOW - 30 * MINUTE });
+    recording(id, 1, { finished_at: NOW - MINUTE, deleted_at: NOW });
+    expect(await cancelProgram(1)).toEqual({
+      ok: false,
+      status: 409,
+      message: NOT_CANCELABLE_REASON,
+    });
   });
 });

@@ -133,8 +133,8 @@ export function parseStylesheet(text: string, start = 0): Rule[] {
       at = i;
       continue;
     }
-    // 本体は次の `}` まで。その前に `{` が来たら閉じ忘れ: そこまでの区切り (`;` か改行) で本体を
-    // 終え、残りは次の規則として読み直す (壊れた所だけ捨てる。後ろの規則まで道連れにしない)
+    // 本体は次の `}` まで。その前に `{` が来たら閉じ忘れとみなし、そこまでの区切り (`;` か改行) で本体を
+    // 終え、残りは次の規則として読み直す (壊れた所だけ捨てる。後ろの規則は捨てない)
     const close = source.indexOf("}", open + 1);
     const inner = source.indexOf("{", open + 1);
     let body: string;

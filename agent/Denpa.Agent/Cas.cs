@@ -10,8 +10,7 @@ namespace Denpa.Agent;
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (LocalCard → BCas.cs) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
  * - ICardLink   … カードと APDU をやり取りする接続。USB の CCID リーダーを直接扱う (Ccid.cs。
  *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、IT930x の機材の内蔵リーダー (It930xCard.cs) か、
- *                 CECH-ZD1 J と PIX-DT295 の差し込み口 (Zd1j.cs の Zd1jCard・Dt295NativeCard.cs の Dt295NativeCard) か、
- *                 IT930x の機材の内蔵リーダー (It930xCard.cs)
+ *                 CECH-ZD1 J と PIX-DT295 の差し込み口 (Zd1j.cs の Zd1jCard・Dt295NativeCard.cs の Dt295NativeCard)
  */
 
 /// <summary>カードの定数。**鍵を作るのに要る定数**で、初めに 1 回だけ受け取る</summary>
@@ -34,8 +33,8 @@ public readonly record struct EcmAnswer(byte[] Odd, byte[] Even, int Code, bool 
 /// (順番に通すのは実装の側)。
 ///
 /// <para>
-/// 失敗は <see cref="IOException"/> で投げる。カードが使えない応答を返したときは <see cref="CardRefusedException"/> を投げる。カードを抜き差ししたりリーダーを挿し直したりしても
-/// 次の ECM では読めているように、繋ぎ直せるものは中で繋ぎ直してから投げる。
+/// 失敗は <see cref="IOException"/> にして送出する。カードが使えない応答を返したときは <see cref="CardRefusedException"/> を送出する。カードを抜き差ししたりリーダーを挿し直したりしても
+/// 次の ECM では読めているように、繋ぎ直せるものは中で繋ぎ直してから送出する。
 /// </para>
 /// </summary>
 public interface IKeySource
@@ -46,7 +45,7 @@ public interface IKeySource
 
     /// <summary>
     /// 契約の更新 (EMM 受信、<c>90 36</c>)。渡すのは EMM セクションの中のペイロード 1 つ (カード ID から MAC まで)。
-    /// 返すのはカードの返り値 (<c>0x2100</c> が正常終了)。カードと通信できなければ投げる (<see cref="Emm"/>)
+    /// 返すのはカードの返り値 (<c>0x2100</c> が正常終了)。カードと通信できなければ例外を送出する (<see cref="Emm"/>)
     /// </summary>
     int Emm(ReadOnlySpan<byte> payload);
 }
@@ -83,7 +82,7 @@ public interface ICardLink : IDisposable
     /// <summary>画面やログに出す名前 (「Gemalto PC Twin Reader (usb 4-11)」など)</summary>
     string Name { get; }
 
-    /// <summary>電源を入れて ATR を返す。カードが無ければ投げる</summary>
+    /// <summary>電源を入れて ATR を返す。カードが無ければ例外を送出する</summary>
     byte[] Reset();
 
     /// <summary>APDU を 1 つ送り、SW1 SW2 まで含んだ応答を返す</summary>

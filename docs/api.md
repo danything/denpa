@@ -960,10 +960,11 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 
   ```
   event: yielded
-  data: {"serviceId":3239123608,"recording":{"id":12,"title":"ニュース","serviceName":"TOKYO MX","endAt":1790001815000}}
+  data: {"serviceId":3239123608,"recording":{"id":12,"title":"ニュース","serviceName":"TOKYO MX","endAt":1790001815000,"broadcast":"mpeg2"}}
   ```
 
   `recording.endAt` は録り終える時刻 (UNIX ミリ秒。終わりのマージン込み)。それまでそのチューナーは空きません。
+  `recording.broadcast` は録画の放送のコーデックで、4K の局の録画は `hevc`、ほかは `mpeg2` です。
   使い方は [ライブ](#ライブ-get-apiservicesidlive) の「録画にチューナーを譲ると閉じます」
 
 - 25 秒おきに `event: ping` が来ます。60 秒ほど何も届かなければ繋ぎ直してください (黙って切れた繋ぎを見分けるため)

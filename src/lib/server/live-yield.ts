@@ -20,6 +20,8 @@
 import { eq } from "drizzle-orm";
 
 import type { YieldedRecording } from "#lib/live.js";
+import { recordedTransport } from "#lib/source.js";
+import type { Recording } from "#lib/types.js";
 
 import { orm } from "./db";
 import { recordingUntil } from "./recorder";
@@ -66,7 +68,29 @@ export function recordingOn(
 const LOOKS = 5;
 const LOOK_WAIT = 300;
 
-/** 録画の行から、画面に渡す形式を作る。消された・無い録画なら null */
+/** 録画の行から、画面に渡す形式を作る。消された録画なら null */
+export function yieldedRecording(
+  id: number,
+  rec: Pick<
+    Recording,
+    "name" | "service_name" | "end_at" | "record_to" | "deleted_at" | "ts_path"
+  >,
+): YieldedRecording | null {
+  if (rec.deleted_at !== null) return null;
+  return {
+    id,
+    title: displayTitle(rec.name),
+    serviceName: rec.service_name,
+    endAt: recordingUntil(rec),
+    // 録っている元の録画の拡張子で分かる (4K の局は `.mmts`。`#lib/source.ts`)。追っかけをこの形式で開かせる
+    broadcast:
+      rec.ts_path !== null && recordedTransport(rec.ts_path) === "tlv"
+        ? "hevc"
+        : "mpeg2",
+  };
+}
+
+/** 録画の行を引いて `yieldedRecording` にする。無い録画なら null */
 function lookup(id: number): YieldedRecording | null {
   const rec = orm()
     .select({
@@ -75,17 +99,12 @@ function lookup(id: number): YieldedRecording | null {
       end_at: recordings.end_at,
       record_to: recordings.record_to,
       deleted_at: recordings.deleted_at,
+      ts_path: recordings.ts_path,
     })
     .from(recordings)
     .where(eq(recordings.id, id))
     .get();
-  if (rec === undefined || rec.deleted_at !== null) return null;
-  return {
-    id,
-    title: displayTitle(rec.name),
-    serviceName: rec.service_name,
-    endAt: recordingUntil(rec),
-  };
+  return rec === undefined ? null : yieldedRecording(id, rec);
 }
 
 /**

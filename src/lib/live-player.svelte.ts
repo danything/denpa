@@ -22,6 +22,7 @@ import {
   ADAPT_NOTE,
   type AdaptDecision,
   adaptNote,
+  GRACE,
   HOLD as ADAPT_HOLD,
   PROBE_START,
   RungAdapter,
@@ -167,14 +168,6 @@ const LOW_SPAN = 2;
  * 塊が届いたとき (`updateend`) だけでは、空いている間に何もできない。空きの途中で遅くし始めれば、終わりまで持つことがある
  */
 const PACE_EVERY = 250;
-/**
- * 選局や飛んだ直後、詰まりを数えない間 (ms)。
- *
- * **自分で起こした詰まりで貯める量を増やさない。** MediaSource を作り直せば必ず
- * `waiting` が上がるし、飛べば読み込み直しになる。宅外で本当に届かない
- * のとは別ものなので、混ぜると遅延が伸びたまま戻らない
- */
-const GRACE = 3_000;
 /** 画面を離れて止めた試しのデータの印 (`AbortController.abort` の理由)。上限の時間で止めたものとは違い、測った値に使わない */
 const LEFT = "left";
 /**
@@ -1898,6 +1891,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     state = "error";
     message = text;
     attempts = 0;
+    // 段を上げたあとの待ち (`upAsk`) を残すと、エラーの画面のまま段を下げてリクエストし直す
+    upAsk = null;
     thaw();
   }
 
@@ -2052,7 +2047,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 形式を決めて (`decideFormat`)、リクエストする形 (`codec`・`rawChosen`) に移す。選んだものと違う形式になったら
+   * 形式を決めて (`decideFormat`)、リクエストする形式 (`codec`・`rawChosen`) に移す。選んだものと違う形式になったら
    * 理由を断り書きに出す (先に出ている理由があればそちら)。何も使えなければ理由を出して false
    */
   function pickFormat(): boolean {
@@ -2236,7 +2231,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     yielded = { recording, back, refused };
     // リクエストし直しで伸びた待ちは持ち越さない (追っかけが切れたら 1 秒から繋ぎ直す)
     attempts = 0;
-    void openChase(element, recording.id, CHASE_EDGE);
+    // 4K の局の録画は HEVC で開く (省くと MPEG-2 として開き、HEVC を受け取れない端末がリクエストし直しを繰り返す)
+    void openChase(
+      element,
+      recording.id,
+      CHASE_EDGE,
+      false,
+      recording.broadcast,
+    );
   }
 
   /** 「ライブに戻る」。同じ局をリクエストし直し、入れなければ追っかけに戻る (`giveWay`) */

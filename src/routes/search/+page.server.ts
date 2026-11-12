@@ -13,7 +13,11 @@ import {
 import { removeRecording } from "#lib/server/files.js";
 import { relative } from "#lib/server/paths.js";
 import { recordingFromForm } from "#lib/server/recording.js";
-import { cancel, reserveFromForm } from "#lib/server/reservations.js";
+import {
+  cancelReservation,
+  reservationStates,
+  reserveFromForm,
+} from "#lib/server/reservations.js";
 import {
   createRule,
   deleteRule,
@@ -57,33 +61,43 @@ const CLIP_PREVIEW = 6;
 function focusOf(url: URL) {
   const id = parseId(url.searchParams.get("program"));
   if (id === null) return null;
-  return (
-    orm()
-      .select({
-        id: programs.id,
-        name: programs.name,
-        description: programs.description,
-        service_id: programs.service_id,
-        service_name: serviceTable.name,
-        start_at: programs.start_at,
-        end_at: programs.end_at,
-        copy_never: programs.copy_never,
-        reservation_id: reservations.id,
-        // 詳細のボタンを決める (`ProgramActions`)。ここで引く状態はどれも取り消せるもの
-        reservation_state: reservations.state,
-      })
-      .from(programs)
-      .innerJoin(serviceTable, eq(serviceTable.id, programs.service_id))
-      .leftJoin(
-        reservations,
-        and(
-          eq(reservations.program_id, programs.id),
-          inArray(reservations.state, HELD_STATES),
-        ),
-      )
-      .where(eq(programs.id, id))
-      .get() ?? null
-  );
+  const row = orm()
+    .select({
+      id: programs.id,
+      name: programs.name,
+      description: programs.description,
+      service_id: programs.service_id,
+      service_name: serviceTable.name,
+      start_at: programs.start_at,
+      end_at: programs.end_at,
+      copy_never: programs.copy_never,
+      reservation_id: reservations.id,
+      state: reservations.state,
+    })
+    .from(programs)
+    .innerJoin(serviceTable, eq(serviceTable.id, programs.service_id))
+    .leftJoin(
+      reservations,
+      and(
+        eq(reservations.program_id, programs.id),
+        inArray(reservations.state, HELD_STATES),
+      ),
+    )
+    .where(eq(programs.id, id))
+    .get();
+  if (row === undefined) return null;
+  const { state, ...program } = row;
+  return {
+    ...program,
+    /*
+     * 詳細のボタンを決める (`ProgramActions`)。予約の行の `state` は録り始めても `scheduled` のままなので、
+     * 番組表と同じく録画の行と合わせた状態にする (`reservationStates`)。録画中・録り終えたものに取消を出さない
+     */
+    reservation_state:
+      state === null
+        ? null
+        : (reservationStates([program.id]).get(program.id) ?? state),
+  };
 }
 
 /** 編集するルール (`?rule=<ID>`)。無ければ undefined */
@@ -214,7 +228,8 @@ export const actions = {
     const form = await request.formData();
     const id = parseId(form.get("reservationId"));
     if (id === null) return fail(400, { message: "予約 ID が不正です" });
-    await cancel(id);
+    const result = await cancelReservation(id);
+    if (!result.ok) return fail(result.status, { message: result.message });
     return { success: true };
   },
 

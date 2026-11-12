@@ -125,7 +125,7 @@ public static class DeviceProbe
     /// <para>
     /// 分かるのは**デバイスと受けられる方式**だけ。LNB を足したい・1 台だけ
     /// 止めたい、は人にしか決められないので、そこは画面から書いてもらう
-    /// (書いてあればそちらが勝つ)。
+    /// (書いてあればそちらを使う)。
     /// </para>
     /// </summary>
     public static List<TunerSpec> Detect()
@@ -152,7 +152,7 @@ public static class DeviceProbe
         found.AddRange(AsicenUserland.Detect());
 
         /*
-         * Sony CECH-ZD1 J は並べるだけで開かない (開くとブリッジの起動もしてしまう)。Linux は sysfs、Windows・macOS は OS に問い合わせる (Zd1j.cs)
+         * Sony CECH-ZD1 J は並べるだけで開かない (開くとブリッジの起動もしてしまう)。並べ方は OS ごとで、IUsbHost に任せる (Zd1j.cs)
          */
         found.AddRange(Zd1j.Detect());
 

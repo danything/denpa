@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import type { YieldedRecording } from "#lib/live.js";
 
-import { recordingOn, tunerOf, yieldedTo } from "./live-yield";
+import {
+  recordingOn,
+  tunerOf,
+  yieldedRecording,
+  yieldedTo,
+} from "./live-yield";
 
 /** 一覧の 1 本。読むところ (`index` `channel` `users`) だけ */
 const tuner = (index: number, channel: string | null, ...uses: string[]) => ({
@@ -19,6 +24,7 @@ const found = (id: number): YieldedRecording => ({
   title: `録画${id}`,
   serviceName: "局",
   endAt: 1,
+  broadcast: "mpeg2",
 });
 const noWait = () => Promise.resolve();
 
@@ -81,5 +87,33 @@ describe("ライブが譲った録画を名指しする", () => {
   test("消された録画は名指ししない", async () => {
     const list = () => Promise.resolve([tuner(1, "T27", "rec 5")]);
     expect(await yieldedTo(1, list, () => null, noWait)).toBeNull();
+  });
+});
+
+describe("譲った録画の中身", () => {
+  const row = (ts_path: string | null) => ({
+    name: "番組",
+    service_name: "局",
+    end_at: 1000,
+    record_to: 2000,
+    deleted_at: null,
+    ts_path,
+  });
+
+  test("4K の局の録画 (.mmts) は HEVC で開かせる。TS の録画は MPEG-2", () => {
+    expect(yieldedRecording(5, row("/media/raw/a-5.mmts"))?.broadcast).toBe(
+      "hevc",
+    );
+    expect(yieldedRecording(5, row("/media/raw/a-5.m2ts"))).toEqual({
+      id: 5,
+      title: "番組",
+      serviceName: "局",
+      endAt: 2000,
+      broadcast: "mpeg2",
+    });
+  });
+
+  test("消された録画は名指ししない", () => {
+    expect(yieldedRecording(5, { ...row(null), deleted_at: 1 })).toBeNull();
   });
 });

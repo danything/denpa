@@ -96,9 +96,9 @@ export class MmtServiceFilter {
       const mmtp = datagram === null ? null : parseMmtp(datagram.payload);
       if (datagram === null || mmtp === null) continue;
       const flow = this.flow(datagram.flow);
-      if (flow.foreign) continue;
       const packetId = mmtp.packetId;
 
+      // ほかの局だけの並びでも信号は読み続ける (後の PLT がこの局を挙げたら出し始める)。出すかは読んだあとで決める
       if (mmtp.payloadType === PAYLOAD_SIGNALING) {
         const before = flow.own;
         for (const raw of this.signaling.feed(datagram.flow, mmtp))
@@ -109,6 +109,7 @@ export class MmtServiceFilter {
         if (flow.own !== null && flow.own !== before) this.release(out);
         continue;
       }
+      if (flow.foreign) continue;
       if (flow.own === null) this.hold(datagram.flow, packetId, packet.bytes);
       else if (flow.own.has(packetId)) out.push(packet.bytes);
     }

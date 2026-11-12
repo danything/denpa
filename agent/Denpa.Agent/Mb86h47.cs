@@ -178,7 +178,7 @@ public sealed class Mb86h47 : II2c
     // 起動 (4)
     // ---------------------------------------------------------------------
 
-    /// <summary>4.1〜4.5 と、コア 1 と bulk の命令の経路 (5.4・5.5)。どこかで失敗したら投げる (開くのを止める)</summary>
+    /// <summary>4.1〜4.5 と、コア 1 と bulk の命令の経路 (5.4・5.5)。どこかで失敗したら例外を送出する (開くのを止める)</summary>
     /// <param name="stage">いまどこまで進んだか (<see cref="Zd1jBoard.Acquire(string, Func{IUsbDevice})"/> が失敗の記録に出す)</param>
     public void Start(Action<string>? stage = null)
     {

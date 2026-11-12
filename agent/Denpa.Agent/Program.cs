@@ -84,7 +84,7 @@ if (args is ["--status"])
         : "127.0.0.1";
     return await AgentTls.Status(config.TlsDir, target, port);
 }
-// PIX-DT295 を確かめる。機材を設定して選局し (--card ならカードを読み)、受信の統計を出す (Dt295NativeProbe.cs)
+// PIX-DT295 を確かめる。機材を設定して選局し、カードを読むまでの時間と受信の統計を出す (Dt295NativeProbe.cs)
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
 // IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) のブリッジを確かめる。ファームウェアを起動してバージョンと EEPROM の写しを出す。--chips でチップも読む (It930xProbe.cs)
 if (args.ElementAtOrDefault(0) == "--it930x-probe") return It930xProbe.Run(args);
@@ -96,11 +96,12 @@ if (args.ElementAtOrDefault(0) == "--it930x-cycle") return It930xProbe.Cycle(arg
  */
 if (args.Length > 0)
 {
-    Console.Error.WriteLine($"対応していない引数です:{string.Join(" ", args)}");
+    Console.Error.WriteLine($"対応していない引数です: {string.Join(" ", args)}");
     Console.Error.WriteLine("usage: denpa-agent                     (引数なしでサーバとして立ち上がる)");
     Console.Error.WriteLine("       denpa-agent --version");
     Console.Error.WriteLine("       denpa-agent --pair                (denpa と組むときの URL を出す)");
     Console.Error.WriteLine("       denpa-agent --status              (動いているエージェントの /denpa/tuners を出す)");
+    Console.Error.WriteLine("       denpa-agent --usb-ids             (エージェントが USB を直に持つ機材の USB ID を出す)");
     Console.Error.WriteLine($"       {Probe.TuneUsage}");
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
@@ -187,7 +188,7 @@ var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected =
 
 /*
  * **asicen-userland の筐体の asicend を起動する。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
- * 使う受信機が無くなった筐体の asicend は止める (内蔵カードリーダーを復号に使っていれば止めない。UserlandDaemon.Prepare)。
+ * 使う受信機が無くなった筐体の asicend は止める (UserlandDaemon.Prepare)。
  * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
 var daemonsGate = new Lock();
@@ -198,10 +199,9 @@ void PrepareDaemons()
     lock (daemonsGate)
     {
         if (daemonsStopped) return;
-        bool CardInUse(string name) => Keys.Local.Name == name;
         // asicen-userland の筐体の asicend (Asicen.cs)。配布物が無ければ顔ぶれにも出ない。LNB 15V の設定は起動の引数に効くので先に控える
         AsicenUserland.Configure(pool.Tuners);
-        UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For, CardInUse);
+        UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For);
     }
 }
 
@@ -581,7 +581,7 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
         return;
     }
 
-    // 文字列でない値は、読むところ (ここと Config.SaveChannels) で投げて 500 になるので先に断る
+    // 文字列でない値は、読むところ (ここと Config.SaveChannels) で例外になり 500 になるので先に断る
     if (!scanned.All(node => Respond.IsText(node))
         || !found.All(entry => entry is null || (entry is JsonObject item && Respond.IsText(item["type"]) && Respond.IsText(item["channel"]))))
     {
@@ -663,8 +663,6 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
             else if (Zd1j.Parse(device) is { } zd1j) Zd1jBoard.CloseIfIdle(zd1j);
         }
     });
-    // 内蔵カードリーダーのためだけに動かしていた asicend を止める (UserlandDaemon.Prepare)。応答は待たせない
-    _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, new JsonObject { ["disabled"] = Json.Strings(disabled.Order(StringComparer.Ordinal)) });
 });
 
@@ -730,16 +728,10 @@ app.MapFallback((HttpContext http) =>
  * チューナーの提供) まで遅れる。筐体が無ければ何もしない。
  *
  * **手元のカードは起動したときに開いておく** (LocalCard.Warm)。最初の選局がカードを開くのを待たない。
- * asicend の内蔵リーダーは起動してからでないと見えないので、起動し終えたらもう一度試す
- * (開けていれば何もしない)。鍵を受け取る拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
+ * 鍵を受け取る拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
  */
-var warmCard = cardUrl is not { Length: > 0 } || sharing is not null;
-if (warmCard) _ = Task.Run(Keys.Local.Warm);
-_ = Task.Run(() =>
-{
-    PrepareDaemons();
-    if (warmCard) Keys.Local.Warm();
-});
+if (cardUrl is not { Length: > 0 } || sharing is not null) _ = Task.Run(Keys.Local.Warm);
+_ = Task.Run(PrepareDaemons);
 
 /*
  * 機材の抜き差しを受け取ったら、定義に足す (Rescan。DeviceWatch.cs)。偽の選局で動かす適合テストでは受け取らない。
@@ -814,7 +806,7 @@ internal static class Respond
     public static Task Error(HttpContext http, string message, int status) =>
         Write(http, new JsonObject { ["error"] = message }, status);
 
-    /// <summary>無いか文字列か (<c>GetValue&lt;string&gt;</c> で読んでも投げない)</summary>
+    /// <summary>無いか文字列か (<c>GetValue&lt;string&gt;</c> で読んでも例外にならない)</summary>
     public static bool IsText(JsonNode? node) => node is null || (node is JsonValue value && value.TryGetValue<string>(out _));
 
     public static async Task<JsonNode?> Read(HttpContext http)

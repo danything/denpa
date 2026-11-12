@@ -74,7 +74,7 @@ public sealed record UserlandReceiver(int Index, bool Terrestrial, bool Satellit
         }
     }
 
-    /// <summary><c>key=value</c> を空白で並べた 1 行を割る。同じ鍵が 2 度あれば最初のもの</summary>
+    /// <summary><c>key=value</c> を空白で並べた 1 行を割る。同じキーが 2 度あれば最初のもの</summary>
     internal static Dictionary<string, string> Fields(string line) => line
         .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
         .Select(field => field.Split('=', 2))
@@ -89,7 +89,7 @@ public sealed record UserlandReceiver(int Index, bool Terrestrial, bool Satellit
 /// <para>
 /// 起動するのは最初に要ったとき (起動時の <see cref="Prepare{T}"/> か、初めての選局)。
 /// ファームウェアを流し込んでから ready になるので、数秒かかる。
-/// 落ちていたら次に要ったときに起動し直す。受信機を全部使わない設定にしたら止める (<see cref="Prepare{T}"/>)。
+/// 終了していたら次に要ったときに起動し直す。受信機を全部使わない設定にしたら止める (<see cref="Prepare{T}"/>)。
 /// </para>
 /// </summary>
 public abstract class UserlandDaemon(string name, string id)
@@ -130,12 +130,9 @@ public abstract class UserlandDaemon(string name, string id)
         }
     }
 
-    /// <summary>内蔵カードリーダーの名前 (カードの候補に出る名前)</summary>
-    public abstract string CardName { get; }
-
     /// <summary>
     /// 挙げた筐体ぶん起動して ready まで待ち、**挙げなかった <typeparamref name="T"/> は止める。**
-    /// 起動時と、設定 (チューナー・カードリーダー) を書き換えたときと、機材を挿したとき。
+    /// 起動時と、チューナーの設定を書き換えたときと、機材を挿したとき。
     ///
     /// <para>
     /// **起動できなくても止まらない。** 筐体が抜けている・ファームウェアが無い、は
@@ -146,23 +143,16 @@ public abstract class UserlandDaemon(string name, string id)
     /// <para>
     /// **受信機を全部使わない設定にした筐体は、常駐を止めて USB を手放す。** 動いたままだと、ほかのソフトに
     /// 機材を渡せない (docs/switch.md「並べて動かすとき」)。使う設定に戻せば、ここか次の選局で起動し直す。
-    /// 起動したときに使う受信機の無い筐体を起動しないのと同じ。
-    /// ただし、**内蔵カードリーダーをいま復号に使っているなら止めない** (<paramref name="cardInUse"/>)。
-    /// 止めるとほかのチューナーの復号まで止まる。カードリーダーも使わない設定にすれば止まる
+    /// 起動したときに使う受信機の無い筐体を起動しないのと同じ
     /// </para>
     /// </summary>
-    public static void Prepare<T>(IReadOnlyCollection<string> ids, Func<string, T> daemon, Func<string, bool> cardInUse)
+    public static void Prepare<T>(IReadOnlyCollection<string> ids, Func<string, T> daemon)
         where T : UserlandDaemon
     {
         List<T> unused;
         lock (Registry) unused = [.. All.Values.OfType<T>().Where(target => target.Running && !ids.Contains(target.Id))];
         foreach (var target in unused)
         {
-            if (cardInUse(target.CardName))
-            {
-                target.Write("使う受信機はありませんが、内蔵カードリーダーを復号に使っているので止めません");
-                continue;
-            }
             target.Write("使う受信機が無くなったので止めます");
             target.Stop();
         }
@@ -181,7 +171,7 @@ public abstract class UserlandDaemon(string name, string id)
         }
     }
 
-    /// <summary>動いていなければ起動して ready まで待つ。駄目なら理由を添えて投げる</summary>
+    /// <summary>動いていなければ起動して ready まで待つ。駄目なら理由を添えて例外を送出する</summary>
     public abstract void Ensure();
 
     protected void Write(string message) => Log.Write($"[{name} {Id}] {message}");
@@ -266,7 +256,7 @@ public abstract class UserlandDaemon(string name, string id)
                 Interop.Terminate(process.Id);
                 if (!process.WaitForExit(StopGrace))
                 {
-                    Write($"{StopGrace.TotalSeconds:F0} 秒で終わらないので落とします");
+                    Write($"{StopGrace.TotalSeconds:F0} 秒で終わらないので強制終了します");
                     process.Kill();
                 }
             }

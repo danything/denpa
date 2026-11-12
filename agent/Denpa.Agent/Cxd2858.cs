@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /*
- * Sony CXD2858ER (チューナー)。PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P の受信機ごとに 1 つ、復調器 CXD2856ER の I2C の中継の先にある。
+ * Sony CXD2858ER (チューナー)。MLT5 系・PX-MLT8PE・DTV02A-4TS-P の受信機ごとに 1 つ、復調器 CXD2856ER の I2C の中継の先にある。
  *
  * クリーンルームで、仕様書 (denpa-spec の cxd2856/spec.md。CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
  * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は cxd2856/spec.md の節の番号 (ブリッジの側の it930x/spec.md は「IT930x の仕様書 x.y」と書く) で、表の値と順はその節の表のまま持つ。
@@ -46,7 +46,7 @@ internal sealed class Cxd2858(CxdLink link)
 
     /// <summary>
     /// 待機中の地上波の RF 入力の整合を保つ設定 (仕様書 4.8)。地上波・ケーブルの RF 入力を全チューナーに分配している機材で、
-    /// あるチューナーが待機と動作を切り替えると、隣の受信機の 256QAM に誤りが出たため。J.83B か ISDB-C を初めて選局したときに機材の全受信機で立てる (<see cref="It930xDevice.KeepMatching"/>)。
+    /// あるチューナーが待機と動作を切り替えると、隣の受信機の 256QAM に誤りが出たため。J.83B か ISDB-C を初めて選局したときに機材の全受信機で立てる (<see cref="CxdBoard.KeepMatching"/>)。
     /// 立てると、待機にする書き込み (初期化の手順 2・地上波側の停止の手順 2・衛星側の停止のあと) で <c>67</c> の bit1 を立てる。
     /// 選局の書き込み (仕様書 4.3・4.5 の手順 7) は、どちらでも bit1 を 0 にする
     /// </summary>
@@ -302,11 +302,11 @@ internal sealed class Cxd2858(CxdLink link)
         return (a, b, g);
     }
 
-    /// <summary>IF の帯域通過フィルタの利得の番号ごとの利得 (dB。仕様書 9.7 の G の表)</summary>
+    /// <summary>IF の帯域通過フィルタで、利得の番号ごとの利得 (dB。仕様書 9.7 の G の表)</summary>
     private static readonly int[] GainTable = [0, 0, 0, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 20, 20];
 
     /// <summary>
-    /// 入力のレベル (dBm × 100。仕様書 9.7 の計算)。<paramref name="correction"/> は方式の補正 (dB × 100。ISDB-T は -450、J.83B は -150)。
+    /// 入力のレベル (dBm × 100。仕様書 9.7 の計算)。<paramref name="correction"/> は方式の補正 (dB × 100。ISDB-T は -450、J.83B と ISDB-C は -150)。
     /// 整数の割り算は仕様書の式のまま (式の中の足し算で四捨五入になっている)
     /// </summary>
     public static int InputLevel(byte ifAgc, byte rfAgc, int gain, uint khz, int correction)

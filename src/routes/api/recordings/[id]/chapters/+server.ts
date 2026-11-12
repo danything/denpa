@@ -85,6 +85,11 @@ export async function GET({ params, request }) {
     { timeoutMs: PROBE_TIMEOUT, stdout: true },
   );
   const out = new TextDecoder().decode(probed.stdout);
+  // 失敗 (時間切れを含む) は控えさせない。ETag を付けると、ファイルが変わるまで空のチャプターが 304 で返り続ける
+  if (probed.code !== 0) {
+    delete headers["ETag"];
+    headers["Cache-Control"] = "no-store";
+  }
 
   return Response.json({ chapters: parseChapters(out) }, { headers });
 }

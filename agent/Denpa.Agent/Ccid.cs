@@ -115,7 +115,7 @@ public static class CcidMessage
 /// </summary>
 public sealed class CcidLink : ICardLink
 {
-    /// <summary>番号の合わない応答を、投げるまでに読み飛ばす数 (前のプロセスが残した応答など)</summary>
+    /// <summary>番号の合わない応答を、例外にするまでに読み飛ばす数 (前のプロセスが残した応答など)</summary>
     private const int MaxStale = 8;
 
     private readonly IBulkPipe _pipe;
@@ -470,7 +470,7 @@ public static class Ccid
         if (Find() is not { } found) return null;
         if (found.Count == 0)
         {
-            return $"CCID のカードリーダーが見つかりません ({UsbSysfs.Devices} に bInterfaceClass 0b のインターフェースがありません)";
+            return $"CCID のカードリーダーが見つかりません ({(UsbHost.Brokered ? "アプリから受け取った機材" : UsbSysfs.Devices)} に bInterfaceClass 0b のインターフェースがありません)";
         }
         foreach (var candidate in found) text.AppendLine(candidate.Name);
 

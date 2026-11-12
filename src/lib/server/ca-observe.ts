@@ -66,7 +66,7 @@ export function caSystemIds(observed: Observed): number[] {
   ].sort((a, b) => a - b);
 }
 
-const hex = (value: number) =>
+export const hex = (value: number) =>
   `0x${value.toString(16).toUpperCase().padStart(4, "0")}`;
 
 /** CA_system_id を、B-CAS かどうかが分かる形で */

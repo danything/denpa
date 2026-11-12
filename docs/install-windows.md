@@ -172,7 +172,7 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 - **Sony CECH-ZD1 J** (PS3 の torne。地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません。
   内蔵の差し込み口の B-CAS も読みます)。機材にドライバが無いので、`054c:04b2` のドライバを WinUSB に替えます。
   替えていないか、ほかのソフトが使っていると「ほかのソフトが使っているか、WinUSB になっていません」と返します。
-  device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形に作ります (1 台だけなら挿し替えても付いていく。[tuners.md](tuners.md#sony-cech-zd1-j))。
+  device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形式に作ります (1 台だけなら挿し替えても付いていく。[tuners.md](tuners.md#sony-cech-zd1-j))。
   Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#sony-cech-zd1-j))
 - **PIXELA PIX-DT295** (地上波・BS・CS)。エージェントが WinUSB で USB を直に持ちます。`06b8:103b` のドライバを WinUSB に替えます。
   機材のレジスタをエージェントが直に書く方式 (ファームウェアは入れません) は、Windows の実機では確かめていません。エージェントが途中で止まったあとなどは、機材を挿し直してください
@@ -181,8 +181,8 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   **PX-Q3 系と PX-MLT8PE は USB の機材が 2 つ並ぶので、両方とも替えます** (`-WinUsb` は挿さっている対応機材をまとめて替える)。PLEX のドライバで TVTest などから使っていた
   機材は、WinUSB にするとそちらからは見えなくなります。
   install.ps1 は、入れるときにはドライバを替えません (ほかのソフトで使っていた機材を、聞かずに使えなくしない)。
-  WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
-  (Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
+  WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに選局が失敗し、そう添えて返します
+  (エージェントは WinUSB で機材を開くので、WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
 - IT930x・Siano・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。

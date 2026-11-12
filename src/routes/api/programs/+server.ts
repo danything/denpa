@@ -12,7 +12,8 @@ import { GUIDE_TYPES } from "#lib/types.js";
  */
 export function GET({ url }) {
   const type = GUIDE_TYPES.find((t) => t === url.searchParams.get("type"));
-  if (type === undefined) error(400, "type は GR・BS・CS・CATV のどれかです");
+  if (type === undefined)
+    error(400, `type は ${GUIDE_TYPES.join("・")} のどれかです`);
   const range = programRange(
     url.searchParams.get("from"),
     url.searchParams.get("to"),

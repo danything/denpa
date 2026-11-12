@@ -169,7 +169,7 @@ public interface ICcidPipe : IBulkPipe
 /// <see cref="UsbFsDevice"/> (チューナー) が使う。**libusb を使わない。**
 ///
 /// <para>
-/// ioctl の番号と構造体の形はカーネルの uapi (<c>linux/usbdevice_fs.h</c>) のもの。x64 と arm64 で同じ (どちらも LP64 で、
+/// ioctl の番号と構造体のレイアウトはカーネルの uapi (<c>linux/usbdevice_fs.h</c>) のもの。x64 と arm64 で同じ (どちらも LP64 で、
 /// arm64 も asm-generic の <c>_IOC</c> の並びを使う)。構造体の大きさは番号に埋まるので、<c>sizeof</c> から組み立てる。
 /// libc は Sys (Tuning.cs) のものを使う。
 /// </para>
@@ -207,7 +207,7 @@ internal static unsafe class UsbFs
     internal const int Eshutdown = 108;
     internal const int Etimedout = 110;
 
-    /// <summary>usbfs のノードを読み書きで開く。開けなければ、理由を書いた <see cref="IOException"/> を投げる</summary>
+    /// <summary>usbfs のノードを読み書きで開く。開けなければ、理由を書いた <see cref="IOException"/> を送出する</summary>
     internal static int Open(string path)
     {
         var fd = Sys.Open(path, Sys.ReadWrite | Sys.CloseOnExec);
@@ -217,7 +217,7 @@ internal static unsafe class UsbFs
 
     /// <summary>
     /// 受け取った fd の複製 (close-on-exec を付ける)。複製はファイルの位置を共有するので、ディスクリプタは pread で読む。
-    /// 受け取った fd が閉じられていれば (抜かれた)、<see cref="IOException"/> を投げる
+    /// 受け取った fd が閉じられていれば (抜かれた)、<see cref="IOException"/> を送出する
     /// </summary>
     internal static int Dup(int received, string port)
     {
@@ -268,7 +268,7 @@ public sealed unsafe class UsbFsPipe : ICcidPipe
     public static UsbFsPipe Open(int received, string port, int vendor, int product, int configValue, int interfaceNumber) =>
         OpenFd(UsbFs.Dup(received, port), $"USB のポート {port}", vendor, product, configValue, interfaceNumber);
 
-    /// <summary>開いた fd でディスクリプタを確かめ、インターフェースを確保する。失敗したら fd を閉じて投げる</summary>
+    /// <summary>開いた fd でディスクリプタを確かめ、インターフェースを確保する。失敗したら fd を閉じて例外を送出する</summary>
     /// <param name="path">文言に出す、開いたもの (パスかポート)</param>
     private static UsbFsPipe OpenFd(int fd, string path, int vendor, int product, int configValue, int interfaceNumber)
     {

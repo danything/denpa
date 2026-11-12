@@ -102,7 +102,7 @@ internal static class It930xSteps
         try
         {
             device = It930xDevice.Acquire(port);
-            output.WriteLine($"--- 開いた直後 (入力 0〜4 を開けて、どの受信機もまだ流していない。開くのに {device.OpenMs} ms)");
+            output.WriteLine($"--- 開いた直後 (どの受信機もまだ開いておらず、入力も開けていない。開くのに {device.OpenMs} ms)");
             Probe.ShowBridge(device, output);
             var added = 0;
             for (var step = 0; step < steps.Length && !failed; step++)

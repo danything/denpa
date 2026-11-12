@@ -909,7 +909,7 @@ export function cancel(): void {
 /**
  * プロセスを終える。compose (`restart: unless-stopped`)・Helm (Pod の再起動)・Mac (LaunchDaemon の KeepAlive)・Windows (install.ps1 が書く `denpa.cmd` の
  * ループ。Windows ではこの合図で待たずに終わる) が起こし直し、
- * 起動の最初で入れ替わる。いつもの止まり方 (SIGTERM。`runtime.ts` の drain) で降りる。
+ * 起動の最初で入れ替わる。いつもの止まり方 (SIGTERM。`runtime.ts` の drain) で終わる。
  * 空の denpa なので録画を待つことはない
  */
 export function restartSoon(): void {

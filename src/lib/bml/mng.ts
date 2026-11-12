@@ -78,7 +78,7 @@ export function parseMng(data: Uint8Array): Mng | null {
         if (length >= 2) {
           let field = body + 1;
           while (field < body + length && data[field] !== 0) field++;
-          // 名前の終わりの 0 の次から: 間隔を変えるか・時間切れ・切り取り・同期 (各 1)・間隔 (4)
+          // 名前の終わりの 0 の次から、間隔を変えるか・時間切れ・切り取り・同期 (各 1)・間隔 (4)
           const change = data[field + 1];
           if (field + 9 > body + length) break;
           const value = view.getUint32(field + 5);

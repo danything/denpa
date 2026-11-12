@@ -231,11 +231,13 @@ export class ServiceFilter {
       this.tsid = u16(section, 3);
       const pmtPid = parsePat(section).get(this.serviceId);
       if (pmtPid === undefined) continue;
-      if (pmtPid === this.pmtPid) return;
-      // 選局し直した・PAT が入れ替わった。PMT も読み直す
-      this.pmtPid = pmtPid;
-      this.pmt = new SectionAssembler(pmtPid);
-      this.own.clear();
+      if (pmtPid !== this.pmtPid) {
+        // 選局し直した・PAT が入れ替わった。PMT も読み直す
+        this.pmtPid = pmtPid;
+        this.pmt = new SectionAssembler(pmtPid);
+        this.own.clear();
+      }
+      // PMT の PID が同じでも、バージョンと TSID は届いた PAT に合わせる
       const version = (section[5]! >> 1) & 0x1f;
       this.rewritten = buildPat(this.tsid, version, this.serviceId, pmtPid);
       return;
