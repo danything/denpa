@@ -6,6 +6,7 @@ import {
   feedNotice,
   goto,
   openSettings,
+  pickCodec,
   syncEpg,
   test,
   wakeControls,
@@ -67,6 +68,44 @@ test.describe("ライブの自動", () => {
     await expect(page.getByTestId("live-codec")).toContainText("自動 (H.264)");
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
     await expect(page.getByTestId("live-warning")).toHaveCount(0);
+  });
+
+  test("MPEG-2 を打ち切ったと覚えている端末は、開いても H.264 で観る。MPEG-2 を選ぶと忘れて試し直す", async ({
+    page,
+  }) => {
+    // 前に間に合わずに打ち切った端末 (`raw/slow-device.ts`。値は打ち切った時刻)
+    await page.addInitScript(() => {
+      localStorage.setItem("raw-slow", String(Date.now()));
+    });
+    await openLive(page);
+    await expect(page.getByTestId("live-codec")).toContainText("自動 (H.264)");
+    await expect(page.getByTestId("live-raw")).toHaveCount(0);
+    await expect(page.getByTestId("live-warning")).toHaveCount(0);
+
+    await wakeControls(page, "live-frame");
+    await pickCodec(page, "live", "mpeg2");
+    await expect(page.getByTestId("live-raw")).toBeVisible({
+      timeout: 30_000,
+    });
+    expect(await page.evaluate(() => localStorage.getItem("raw-slow"))).toBe(
+      null,
+    );
+  });
+
+  test("30 日より前に打ち切った端末は、また MPEG-2 で観る", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "raw-slow",
+        String(Date.now() - 31 * 24 * 60 * 60 * 1000),
+      );
+    });
+    await openLive(page);
+    await expect(page.getByTestId("live-raw")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("live-codec")).toContainText("自動 (MPEG-2)");
   });
 
   test("サーバが塊を捨てたと知らせてきたら、家の中の MPEG-2 から段を下げた変換に移り、メニューに高さを出す", async ({

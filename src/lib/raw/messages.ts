@@ -94,8 +94,11 @@ export type ToWorker =
 
 /** worker → 画面 */
 export type FromWorker =
-  /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**次の方式に移るか止まるかは画面が決める** */
-  | { type: "fail"; reason: string }
+  /**
+   * 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**次の方式に移るか止まるかは画面が決める**。
+   * `slow` は間に合わずに打ち切ったときだけ付く、掛かった条件 (`DecodeBudget.why`)
+   */
+  | { type: "fail"; reason: string; slow?: string | undefined }
   /**
    * デコードできた音 1 コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
    */

@@ -186,4 +186,45 @@ describe("DecodeBudget (WebCodecs の経路)", () => {
     );
     expect(results).toEqual([false, false, true]);
   });
+
+  /** どの条件で打ち切ったかを外から読めるように、窓ごとに掛かった条件を返す (`why`。画面がコンソールに出力する) */
+  test("打ち切ったら、窓ごとに掛かった条件を返す", () => {
+    const budget = new DecodeBudget();
+    budget.tick(0, 33.4, 0);
+    expect(second(budget, 1 * WINDOW, 30)).toBe(false);
+    expect(second(budget, 2 * WINDOW, 30, 0.4)).toBe(false);
+    expect(second(budget, 3 * WINDOW, 10, 0.3)).toBe(true);
+    expect(budget.why()).toBe(
+      [
+        "デコード 30.0 ms (目安 26.7 ms)",
+        "デコード 30.0 ms (目安 26.7 ms)、映像の遅れ 0.40 秒 (目安 0.25 秒)",
+        "映像の遅れ 0.30 秒 (目安 0.25 秒)",
+      ].join(" / "),
+    );
+  });
+
+  test("間に合った窓が挟まれば、それまでの条件は忘れる", () => {
+    const budget = new DecodeBudget();
+    budget.tick(0, 33.4, 0);
+    second(budget, 1 * WINDOW, 30);
+    second(budget, 2 * WINDOW, 10);
+    second(budget, 3 * WINDOW, 30);
+    second(budget, 4 * WINDOW, 30);
+    expect(second(budget, 5 * WINDOW, 30)).toBe(true);
+    expect(budget.why().split(" / ")).toHaveLength(STRIKES);
+  });
+
+  test("捨てたコマとデコーダの詰まりも条件の名前で返す", () => {
+    const budget = new DecodeBudget(false);
+    budget.tick(0, 33.4, 0, QUEUE_STUCK, 0);
+    let out = false;
+    for (let s = 1; s <= STRIKES; s++) {
+      for (let i = 0; i < 30; i++) budget.record(5);
+      out = budget.tick(s * WINDOW, 33.4, 0, QUEUE_STUCK, s * 10);
+    }
+    expect(out).toBe(true);
+    expect(budget.why().split(" / ")[0]).toBe(
+      `デコーダに残ったまま ${QUEUE_STUCK} 枚、捨てたコマ 10 枚 (目安 5 枚)`,
+    );
+  });
 });
