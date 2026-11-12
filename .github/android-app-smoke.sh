@@ -42,7 +42,9 @@ trap on_exit EXIT
 # ログの denpa (アプリ) と denpa-agent (エージェントの出力) に、その文言が出るまで待つ (30 秒まで)
 wait_log() {
   for _ in $(seq 60); do
-    adb logcat -d -s denpa denpa-agent | tr -d '\r' | grep -qF "$1" && return 0
+    # 先に全部を読んでから探す (grep -q が途中で閉じると、pipefail で tr の SIGPIPE が失敗になる)
+    adb logcat -d -s denpa denpa-agent | tr -d '\r' > "$host/logcat.txt"
+    grep -qF "$1" "$host/logcat.txt" && return 0
     sleep 0.5
   done
   echo "logcat に「$1」が出ません" >&2
