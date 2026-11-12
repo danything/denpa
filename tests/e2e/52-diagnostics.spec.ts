@@ -113,12 +113,13 @@ test.describe("設定のバージョンと環境・ログ", () => {
     await expect(logs).not.toHaveValue(/192\.168\.10\.20/);
     await expect(logs).not.toHaveValue(/card-host/);
     await expect(logs).toHaveValue(/--- サーバのログ/);
-    await expect(logs).toHaveValue(/--- エージェントのログ/);
+    // エージェントは名前を付けて 1 台ずつ (名前のホスト名も伏せる)
+    await expect(logs).toHaveValue(/--- エージェント「[^」]+」のログ/);
     const environment = dialog.getByTestId("issue-field-environment");
     await expect(environment).toHaveValue(/チューナー: /);
     await expect(environment).toHaveValue(/ブラウザ: /);
     await expect(environment).toHaveValue(
-      /エージェント: v1\.0\.0・Linux 6\.12\.0-fake #1 SMP \(x64\)/,
+      /エージェント「[^」]+」: v1\.0\.0・Linux 6\.12\.0-fake #1 SMP \(x64\)/,
     );
 
     const issueUrl = async () =>
@@ -231,9 +232,11 @@ test.describe("設定のバージョンと環境・ログ", () => {
       .getByTestId("issue-dialog")
       .getByTestId("issue-field-environment");
     await expect(environment).toHaveValue(
-      /エージェント: v0\.9\.0 \(denpa とバージョンが違います\)・Darwin 25\.0\.0 .*\(arm64\)/,
+      /エージェント「[^」]+」: v0\.9\.0 \(denpa とバージョンが違います\)・Darwin 25\.0\.0 .*\(arm64\)/,
     );
-    await expect(environment).toHaveValue(/CCID ドライバ: macOS の標準のもの/);
+    await expect(environment).toHaveValue(
+      /CCID ドライバ「[^」]+」: macOS の標準のもの/,
+    );
   });
 
   test("エージェントからログを取れなくても、一言出して画面は止めない", async ({
@@ -259,7 +262,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
     await expect(
       page.getByTestId("issue-dialog").getByTestId("issue-field-logs"),
     ).toHaveValue(
-      /--- エージェントのログ \(0 行\) ---\n\(エージェントからログを取得できません \(500\)\)/,
+      /--- エージェント「[^」]+」のログ \(0 行\) ---\n\(エージェントからログを取得できません \(500\)\)/,
     );
   });
 });

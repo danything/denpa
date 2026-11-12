@@ -28,7 +28,8 @@ import {
   epgReadableService,
   type Transport,
 } from "../types";
-import { agentFetch } from "./agent-client";
+import { fetchAgent } from "./agent-client";
+import { type Agent, primaryAgent, tuningAgents } from "./agents";
 import { config } from "./config";
 import type { Busy } from "./conflict";
 import { recordReceived } from "./reception";
@@ -152,12 +153,19 @@ const AGENT_TUNER = object({
    */
   signal: nullable(SIGNAL),
 });
-export type AgentTuner = Infer<typeof AGENT_TUNER>;
+/** エージェントが返したチューナーに、どのエージェントのものか (`agent`。`agents` の行の ID) を付けたもの */
+export type AgentTuner = Infer<typeof AGENT_TUNER> & { agent: number };
 
 const TUNERS = object({
   tuners: array(AGENT_TUNER),
   detected: boolean,
 });
+
+/** 1 台のエージェントの一覧と、定義を書いていないので自分で見つけた状態か */
+export interface TunerList {
+  tuners: AgentTuner[];
+  detected: boolean;
+}
 
 /** 画面から書き換えられる部分だけ */
 export interface TunerConfig {
@@ -203,8 +211,8 @@ export function programKey(
   return serviceKey(networkId, serviceId, type) * 100000 + eventId;
 }
 
-async function get<T>(path: string, shape: Shape<T>): Promise<T> {
-  const res = await agentFetch(path, {
+async function get<T>(agent: Agent, path: string, shape: Shape<T>): Promise<T> {
+  const res = await fetchAgent(agent, path, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(10_000),
   });
@@ -217,8 +225,8 @@ async function get<T>(path: string, shape: Shape<T>): Promise<T> {
 }
 
 /** 書き換えを預ける。控えを書くのを待つので、読むより長く待つ */
-function put(path: string, body: unknown): Promise<Response> {
-  return agentFetch(path, {
+function put(agent: Agent, path: string, body: unknown): Promise<Response> {
+  return fetchAgent(agent, path, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -226,8 +234,12 @@ function put(path: string, body: unknown): Promise<Response> {
   });
 }
 
-export function getChannels(): Promise<AgentChannel[]> {
-  return get("/denpa/channels", array(AGENT_CHANNEL));
+/**
+ * エージェントの控えのチャンネル。`agent` を渡さなければ並びの先頭のエージェント (`primaryAgent`)。
+ * 先頭を決めるのも呼んだあとにするので、エージェントが無いときは送出せずに reject する (下の関数も同じ)
+ */
+export async function getChannels(agent?: Agent): Promise<AgentChannel[]> {
+  return get(agent ?? primaryAgent(), "/denpa/channels", array(AGENT_CHANNEL));
 }
 
 /**
@@ -243,8 +255,12 @@ export function getChannels(): Promise<AgentChannel[]> {
 export async function putChannels(
   found: AgentChannel[],
   scanned: ChannelType[],
+  agent?: Agent,
 ): Promise<AgentChannel[]> {
-  const res = await put("/denpa/channels", { channels: found, scanned });
+  const res = await put(agent ?? primaryAgent(), "/denpa/channels", {
+    channels: found,
+    scanned,
+  });
   if (!res.ok)
     throw new Error(
       `チャンネルを保存できません (${res.status}) ${await res.text()}`,
@@ -262,8 +278,10 @@ export async function putChannels(
  */
 export async function deleteChannels(
   type: ChannelType,
+  agent?: Agent,
 ): Promise<AgentChannel[]> {
-  const res = await agentFetch(
+  const res = await fetchAgent(
+    agent ?? primaryAgent(),
     `/denpa/channels?type=${encodeURIComponent(type)}`,
     { method: "DELETE", signal: AbortSignal.timeout(30_000) },
   );
@@ -278,13 +296,28 @@ export async function deleteChannels(
   );
 }
 
-/** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を 1 度に */
-export function tunerList(): Promise<Infer<typeof TUNERS>> {
-  return get("/denpa/tuners", TUNERS);
+/**
+ * 1 台のエージェントの一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を 1 度に。
+ * `agent` を渡さなければ並びの先頭のエージェント
+ */
+export async function tunerList(agent?: Agent): Promise<TunerList> {
+  const target = agent ?? primaryAgent();
+  const got = await get(target, "/denpa/tuners", TUNERS);
+  return {
+    tuners: got.tuners.map((tuner) => ({ ...tuner, agent: target.id })),
+    detected: got.detected,
+  };
 }
 
+/**
+ * 選局に使う全部のエージェント (`tuningAgents`) のチューナーを、エージェントの並びの順につなげたもの。
+ * 1 台でも取れなければ reject する (どのエージェントが落ちたかで割り振りが変わるので、欠けた一覧では数えない)
+ */
 export async function getTuners(): Promise<AgentTuner[]> {
-  return (await tunerList()).tuners;
+  const lists = await Promise.all(
+    tuningAgents().map((agent) => tunerList(agent)),
+  );
+  return lists.flatMap((list) => list.tuners);
 }
 
 /**
@@ -295,8 +328,11 @@ export async function getTuners(): Promise<AgentTuner[]> {
  *
  * **空を渡すと定義そのものが消える** = 自動検出に戻す。
  */
-export async function putTuners(tuners: TunerConfig[]): Promise<void> {
-  const res = await put("/denpa/tuners", { tuners });
+export async function putTuners(
+  tuners: TunerConfig[],
+  agent?: Agent,
+): Promise<void> {
+  const res = await put(agent ?? primaryAgent(), "/denpa/tuners", { tuners });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const error =
@@ -510,7 +546,8 @@ export async function openChannel(
       : setTimeout(() => answer.abort(), answerWithin);
   let res: Response;
   try {
-    res = await agentFetch(`/denpa/stream?${query}`, {
+    // 送る先は選局に使うエージェントの先頭 (今は 1 台だけ。`tuningAgents`)
+    res = await fetchAgent(tuningAgents()[0]!, `/denpa/stream?${query}`, {
       signal:
         timer === undefined ? signal : AbortSignal.any([signal, answer.signal]),
     });

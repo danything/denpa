@@ -1,4 +1,5 @@
-import { agentFetch } from "./agent-client";
+import { fetchAgent } from "./agent-client";
+import type { Agent } from "./agents";
 import { config } from "./config";
 import { chunks } from "./stream";
 
@@ -61,7 +62,8 @@ export async function* blocks(
 }
 
 /**
- * 繋ぎっぱなしにして、届いたものを渡す。切れたら間を置いて繋ぎ直す。
+ * 1 台のエージェントに繋ぎっぱなしにして、届いたものを渡す。切れたら間を置いて繋ぎ直す。
+ * エージェントごとに 1 つずつ呼ぶ (`runtime.ts` が全部のエージェントに)。
  * 戻り値を呼ぶと止まる。
  *
  * `onReachable` は**繋がる/繋がらないが切り替わったときだけ**呼ぶ。一瞬の切れで
@@ -71,6 +73,7 @@ export async function* blocks(
  * 気付けなかったのを埋める (webhook は `runtime.ts` が繋ぐ)
  */
 export function listen(
+  agent: Agent,
   onEvent: (event: AgentEvent) => void,
   onReachable?: (up: boolean) => void,
 ): () => void {
@@ -85,7 +88,7 @@ export function listen(
   const loop = async () => {
     while (!stopped) {
       try {
-        const res = await agentFetch("/denpa/events", {
+        const res = await fetchAgent(agent, "/denpa/events", {
           signal: controller.signal,
           headers: { Accept: "text/event-stream" },
         });
@@ -99,17 +102,20 @@ export function listen(
         // 落ちていると知らせたあとに繋がったときだけ「復帰」を鳴らす
         if (reachable === false) onReachable?.(true);
         reachable = true;
-        console.log("[agent] 通知の購読を開始しました");
+        console.log(`[agent] ${agent.name} の通知の購読を開始しました`);
 
         for await (const block of blocks(res.body)) {
           const event = parseBlock(block);
           if (event !== null) onEvent(event);
         }
-        if (!stopped) console.warn("[agent] 通知が途切れました。繋ぎ直します");
+        if (!stopped)
+          console.warn(
+            `[agent] ${agent.name} の通知が途切れました。繋ぎ直します`,
+          );
       } catch (error) {
         if (stopped) return;
         console.warn(
-          `[agent] 通知に繋げません (${Math.round(retry / 1000)} 秒後に再試行): ${error}`,
+          `[agent] ${agent.name} の通知に繋げません (${Math.round(retry / 1000)} 秒後に再試行): ${error}`,
         );
       }
       // 繋がらない状態が猶予を超えて続いたら、一度だけ「落ちている」を鳴らす

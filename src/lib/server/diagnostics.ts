@@ -2,8 +2,8 @@ import { arch, release, type } from "node:os";
 
 import { type AgentAbout, guessLevel, type LogLine } from "../issue-report";
 import { type Known, MASK, redact } from "../redact";
-import { agentFetch } from "./agent-client";
-import { agentHostnames, agentSecrets } from "./agents";
+import { fetchAgent } from "./agent-client";
+import { type Agent, agentHostnames, agentSecrets } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
 import { serverLogs } from "./log-buffer";
@@ -46,9 +46,12 @@ function readAgentLogs(raw: unknown): LogLine[] {
   return out;
 }
 
-export async function agentLogs(known: Known): Promise<AgentLogs> {
+export async function agentLogs(
+  agent: Agent,
+  known: Known,
+): Promise<AgentLogs> {
   try {
-    const res = await agentFetch("/denpa/logs", {
+    const res = await fetchAgent(agent, "/denpa/logs", {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
@@ -101,9 +104,12 @@ function readAgentAbout(raw: unknown): AgentAbout {
 }
 
 /** エージェントのバージョン・OS・arch と、macOS なら CCID ドライバ (`GET /denpa/about`) */
-export async function agentAbout(known: Known): Promise<AgentAboutResult> {
+export async function agentAbout(
+  agent: Agent,
+  known: Known,
+): Promise<AgentAboutResult> {
   try {
-    const res = await agentFetch("/denpa/about", {
+    const res = await fetchAgent(agent, "/denpa/about", {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });

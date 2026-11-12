@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { SOCKET_PATH } from "#lib/live.js";
 
 import { listen } from "./agent-events";
-import { syncEnvAgents } from "./agents";
+import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
 import { pruneCodes } from "./device-auth";
@@ -34,7 +34,8 @@ let started = false;
 /** スリープの様子を見る間隔 (ms。power.ts)。起こしてから録画を始めるまで (`WAKE_LEAD`。3 分) より十分短くする */
 const POWER_CHECK = 30_000;
 const timers: ReturnType<typeof setInterval>[] = [];
-let unlisten: (() => void) | null = null;
+/** エージェントごとの通知の購読を止めるもの */
+let unlisten: (() => void)[] = [];
 
 async function guard(
   name: string,
@@ -106,16 +107,7 @@ export function start(): void {
    * **`TUNER_AGENT_URL` と DB の `agents` を突き合わせる** (agents.ts)。環境変数から消したエージェントの行はここで消える。
    * 読めない書き方なら起動は止めず、エージェントを呼ぶたびに同じ誤りを返す
    */
-  try {
-    syncEnvAgents();
-    if (config.agentUrl.trim() === "") {
-      console.warn(
-        "[agent] TUNER_AGENT_URL が空のため、つなぐエージェントがありません (docs/config.md)",
-      );
-    }
-  } catch (error) {
-    console.error(`[agent] ${error instanceof Error ? error.message : error}`);
-  }
+  syncEnvAgentsOnBoot();
 
   /*
    * **ログインする方法が無ければ、無いことを起動ログに出す。** 何も設定していなければ
@@ -186,7 +178,7 @@ export function start(): void {
    */
   nowAndEvery(config.epgCollectInterval, "epg-collect", collectOnce);
 
-  listenToAgent();
+  listenToAgents();
 
   every(config.schedulerTick, "scheduler", async () => {
     await tick();
@@ -293,10 +285,25 @@ const recheckAfterCard = settleThen(
 );
 
 /**
- * エージェントからの通知を受け取る (agent-events.ts)。上の定期実行は、通知が途切れたときの保険として残す
+ * 全部のエージェントからの通知を受け取る (agent-events.ts。1 台に 1 つずつ繋ぐ)。上の定期実行は、通知が途切れたときの保険として残す。
+ * 読めない `TUNER_AGENT_URL` のときは繋がない (起動は止めない。`start` の突き合わせと同じ)
  */
-function listenToAgent(): void {
-  unlisten = listen(
+function listenToAgents(): void {
+  let all: Agent[];
+  try {
+    all = listAgents();
+  } catch (error) {
+    console.error(
+      `[agent] 通知を購読できません: ${error instanceof Error ? error.message : error}`,
+    );
+    return;
+  }
+  unlisten = all.map((agent) => listenToAgent(agent));
+}
+
+function listenToAgent(agent: Agent): () => void {
+  return listen(
+    agent,
     (event) => {
       switch (event.name) {
         case "tuners":
@@ -337,16 +344,16 @@ function listenToAgent(): void {
     // 次の録画が失敗するまで気付けなかったのを埋める (agent-events.ts が切り替えを判定)
     (up) => {
       if (up) {
-        console.log("[agent] チューナーに繋がりました");
+        console.log(`[agent] ${agent.name} に繋がりました`);
         notify({
           event: "agent.up",
-          text: "チューナーエージェントに繋がりました",
+          text: `エージェント「${agent.name}」に繋がりました`,
         });
       } else {
-        console.error("[agent] チューナーに繋がりません");
+        console.error(`[agent] ${agent.name} に繋がりません`);
         notify({
           event: "agent.down",
-          text: "エージェントに繋がりません。いまは録画できません",
+          text: `エージェント「${agent.name}」に繋がりません。このエージェントのチューナーでは録画できません`,
         });
       }
     },
@@ -356,8 +363,8 @@ function listenToAgent(): void {
 function stop(): void {
   for (const timer of timers) clearInterval(timer);
   timers.length = 0;
-  unlisten?.();
-  unlisten = null;
+  for (const off of unlisten) off();
+  unlisten = [];
   // Mac: 録画の前に起こす予約を取り消す (止まった本体のために起こさない。power.ts)
   forgetWake();
   started = false;

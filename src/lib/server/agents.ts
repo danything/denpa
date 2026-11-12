@@ -4,7 +4,8 @@
  * - `TUNER_AGENT_URL` はカンマで区切って何台でも書ける。書いたものは起動のたびに行と突き合わせ、
  *   URL (`#` の前) が同じ行があればそれを使い、無ければ行を足す。**環境変数から消したものは行も消す**
  * - 組むときの合言葉 (`#pair=`) は DB に持たない。環境変数から読む
- * - 選局もカードも復号も、今は並びの先頭の 1 台 (`primaryAgent`) に送る
+ * - 通知の購読・ログ・バージョンは全部の行 (`listAgents`) に、選局とチューナーの一覧は `tuningAgents` に、
+ *   チャンネル・カード・復号は並びの先頭の 1 台 (`primaryAgent`) に送る
  */
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
@@ -14,7 +15,7 @@ import { agents } from "./schema";
 
 /** `TUNER_AGENT_URL` の 1 台ぶんを、送る先 (`origin`) と合言葉に分けたもの */
 export interface AgentTarget {
-  /** `https://host:port` (末尾の `/` と `#` から後ろは除く) */
+  /** `https://host:port` (ホスト名は小文字。末尾の `/` と `#` から後ろは除く) */
   origin: string;
   /** `#pair=` の値。無ければ null */
   pair: string | null;
@@ -44,8 +45,11 @@ export function parseAgentUrl(raw: string): AgentTarget {
       `TUNER_AGENT_URL のホストが読めません (${base})。https://ホスト:ポート の形で書きます (docs/agent.md)`,
     );
   }
+  // 大文字と小文字だけが違うホスト名を別の行にしない (`https://Host` と `https://host`)
+  const url = new URL(base);
+  const origin = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
   const pair = new URLSearchParams(fragment).get("pair");
-  return { origin: base, pair: pair && pair.length > 0 ? pair : null };
+  return { origin, pair: pair && pair.length > 0 ? pair : null };
 }
 
 /** `TUNER_AGENT_URL` の項目 (カンマ区切り。空の項目は飛ばす) */
@@ -82,17 +86,26 @@ export function agentSecrets(): string[] {
   return out;
 }
 
-/** エージェントの宛先のホスト名 (不具合報告で伏せるため) */
+/** エージェントの宛先のホスト名 (不具合報告で伏せるため)。環境変数に書いたものと、DB の全部の行 */
 export function agentHostnames(): string[] {
-  const out: string[] = [];
+  const out = new Set<string>();
   for (const entry of entries(config.agentUrl)) {
     try {
-      out.push(new URL(parseAgentUrl(entry).origin).hostname);
+      out.add(new URL(parseAgentUrl(entry).origin).hostname);
     } catch {
       // 読めない項目は宛先にならない
     }
   }
-  return out;
+  try {
+    for (const row of orm()
+      .select({ origin: agents.origin })
+      .from(agents)
+      .all())
+      out.add(new URL(row.origin).hostname);
+  } catch {
+    // DB が読めなくても、環境変数のぶんは伏せる
+  }
+  return [...out];
 }
 
 /** 行の名前。今は URL のホスト名 */
@@ -163,12 +176,29 @@ export function syncEnvAgents(): void {
   }
   if (targets.length > 1) {
     console.warn(
-      `[agent] TUNER_AGENT_URL に ${targets.length} 台書いてありますが、今使うのは最初の 1 台 (${targets[0]!.origin}) だけです`,
+      `[agent] TUNER_AGENT_URL に ${targets.length} 台書いてありますが、選局に使うのは最初の 1 台 (${targets[0]!.origin}) だけです`,
     );
   }
   const pairs = new Map<string, string>();
   for (const t of targets) if (t.pair !== null) pairs.set(t.origin, t.pair);
   synced = { raw, db: config.dbPath, pairs };
+}
+
+/**
+ * 起動したときの突き合わせ。**読めない書き方でも起動は止めず**、理由をログに出す
+ * (エージェントを呼ぶたびに同じ誤りを返す。行は何も変えない)。空なら、つなぐエージェントが無いと出す
+ */
+export function syncEnvAgentsOnBoot(): void {
+  try {
+    syncEnvAgents();
+    if (config.agentUrl.trim() === "") {
+      console.warn(
+        "[agent] TUNER_AGENT_URL が空のため、つなぐエージェントがありません (docs/config.md)",
+      );
+    }
+  } catch (error) {
+    console.error(`[agent] ${error instanceof Error ? error.message : error}`);
+  }
 }
 
 /** 環境変数と DB が前に突き合わせたときのままでなければ、突き合わせ直す */
@@ -179,23 +209,38 @@ function ensureSynced(): Map<string, string> {
   return synced!.pairs;
 }
 
-/**
- * 呼ぶ先のエージェント (並びの先頭)。1 台も無ければ、TUNER_AGENT_URL の書き方を入れたエラーを送出する
- */
-export function primaryAgent(): Agent {
+/** 全部のエージェント (並びの順)。通知の購読・ログ・バージョンはこの全部に送る */
+export function listAgents(): Agent[] {
   const pairs = ensureSynced();
-  const row = orm()
+  return orm()
     .select({ id: agents.id, name: agents.name, origin: agents.origin })
     .from(agents)
     .orderBy(asc(agents.position), asc(agents.id))
-    .limit(1)
-    .get();
-  if (row === undefined) {
-    throw new Error(
-      "エージェントがありません。TUNER_AGENT_URL に https://ホスト:25252#pair=<合言葉> を書きます (docs/agent.md)",
-    );
-  }
-  return { ...row, pair: pairs.get(row.origin) ?? null };
+    .all()
+    .map((row) => ({ ...row, pair: pairs.get(row.origin) ?? null }));
+}
+
+/** エージェントが 1 台も無いときの理由 */
+export const NO_AGENT =
+  "エージェントがありません。TUNER_AGENT_URL に https://ホスト:25252#pair=<合言葉> を書きます (docs/agent.md)";
+
+/**
+ * 並びの先頭のエージェント。チャンネル・カード・復号はここに送る。
+ * 1 台も無ければ、TUNER_AGENT_URL の書き方を入れたエラーを送出する
+ */
+export function primaryAgent(): Agent {
+  const first = listAgents()[0];
+  if (first === undefined) throw new Error(NO_AGENT);
+  return first;
+}
+
+/**
+ * 選局に使うエージェント。チューナーの一覧 (`getTuners`) はこの全部のものをつなげる。
+ * 今は並びの先頭の 1 台だけ (どのエージェントで選局するかを選ぶ振り分けが、まだ無いため)。
+ * 1 台も無ければ `primaryAgent` と同じエラーを送出する
+ */
+export function tuningAgents(): Agent[] {
+  return [primaryAgent()];
 }
 
 /** 保存した証明書 (PEM)。まだ組んでいなければ null */

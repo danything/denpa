@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
@@ -7,10 +7,13 @@ import { asc } from "drizzle-orm";
 import {
   agentHostnames,
   agentSecrets,
+  listAgents,
   parseAgentUrls,
   primaryAgent,
   rememberAgentCert,
   syncEnvAgents,
+  syncEnvAgentsOnBoot,
+  tuningAgents,
 } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
@@ -71,6 +74,23 @@ describe("agentSecrets・agentHostnames", () => {
     config.agentUrl = "https://a:1#pair=one,http://b:2#pair=two";
     expect(agentSecrets()).toEqual(["one", "two"]);
     expect(agentHostnames()).toEqual(["a"]);
+  });
+
+  test("画面から登録した行のホスト名も伏せる", () => {
+    config.agentUrl = "https://a:1#pair=x";
+    syncEnvAgents();
+    orm()
+      .insert(agents)
+      .values({
+        name: "書斎",
+        origin: "https://study.lan:3",
+        from_env: false,
+        position: 1,
+        added_at: 0,
+      })
+      .run();
+    expect(agentHostnames()).toEqual(["a", "study.lan"]);
+    orm().delete(agents).run();
   });
 });
 
@@ -175,5 +195,49 @@ describe("syncEnvAgents", () => {
     expect(() => rememberAgentCert(second!.id, "CERT", "fp-same")).toThrow(
       "https://a:1",
     );
+  });
+});
+
+describe("syncEnvAgentsOnBoot", () => {
+  // ほかのテストが画面から登録した行を残していても、ここでは環境変数のものだけにする
+  beforeEach(() => orm().delete(agents).run());
+
+  test("読めない書き方でも送出せず、行を変えずに理由をログに出す", () => {
+    config.agentUrl = "https://a:1#pair=x";
+    syncEnvAgents();
+    const logged: unknown[] = [];
+    const real = console.error;
+    console.error = (...args: unknown[]) => logged.push(...args);
+    try {
+      config.agentUrl = "https://a:1#pair=x,http://b:2";
+      expect(() => syncEnvAgentsOnBoot()).not.toThrow();
+    } finally {
+      console.error = real;
+    }
+    expect(String(logged[0])).toContain("https://");
+    expect(rows().map((r) => r.origin)).toEqual(["https://a:1"]);
+    // 呼ぶたびに同じ誤りを返す
+    expect(() => listAgents()).toThrow("https://");
+  });
+});
+
+describe("listAgents・tuningAgents", () => {
+  // ほかのテストが画面から登録した行を残していても、ここでは環境変数のものだけにする
+  beforeEach(() => orm().delete(agents).run());
+
+  test("全部の行を並びの順に返し、選局に使うのは先頭の 1 台だけ", () => {
+    config.agentUrl = "https://b:2#pair=y,https://a:1";
+    expect(listAgents().map((a) => [a.origin, a.pair])).toEqual([
+      ["https://b:2", "y"],
+      ["https://a:1", null],
+    ]);
+    expect(tuningAgents().map((a) => a.origin)).toEqual(["https://b:2"]);
+  });
+
+  test("大文字と小文字だけが違うホスト名は 1 つの行にする", () => {
+    config.agentUrl = "https://Host:1#pair=x,https://host:1#pair=y";
+    expect(listAgents().map((a) => [a.origin, a.pair])).toEqual([
+      ["https://host:1", "x"],
+    ]);
   });
 });

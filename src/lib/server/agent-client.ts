@@ -27,12 +27,7 @@ import {
   pairProof,
   pemToDer,
 } from "./agent-identity";
-import {
-  type Agent,
-  agentCert,
-  primaryAgent,
-  rememberAgentCert,
-} from "./agents";
+import { type Agent, agentCert, rememberAgentCert } from "./agents";
 import { config } from "./config";
 
 // --- 置き場 -------------------------------------------------------------------
@@ -138,11 +133,13 @@ function makeTlsOptions(identity: Identity, ca: string) {
   };
 }
 
-let pairing: { id: number; done: Promise<void> } | null = null;
+/** 組んでいる途中のもの (行の ID ごと)。別のエージェントとは同時に組める */
+const pairing = new Map<number, Promise<void>>();
 
 /** 合言葉で組み、相手の証明書を行に保存する。同じエージェントに同時に呼ばれても 1 度だけ */
 function pair(target: Agent): Promise<void> {
-  if (pairing?.id === target.id) return pairing.done;
+  const running = pairing.get(target.id);
+  if (running !== undefined) return running;
   const done = (async () => {
     const token = target.pair;
     if (token === null) {
@@ -181,11 +178,13 @@ function pair(target: Agent): Promise<void> {
       );
     }
     rememberAgentCert(target.id, peerPem, agent);
-    console.log(`[agent] エージェント (${agent.slice(0, 16)}) と組みました`);
+    console.log(
+      `[agent] エージェント (${target.name}・${agent.slice(0, 16)}) と組みました`,
+    );
   })();
-  pairing = { id: target.id, done };
+  pairing.set(target.id, done);
   const clear = () => {
-    if (pairing?.done === done) pairing = null;
+    if (pairing.get(target.id) === done) pairing.delete(target.id);
   };
   done.then(clear, clear);
   return done;
@@ -212,17 +211,8 @@ async function notPaired(res: Response): Promise<boolean> {
 }
 
 /**
- * エージェントを呼ぶ。`path` は `/denpa/...`。返すのはふつうの `fetch` の応答。宛先は並びの先頭のエージェント
- */
-export async function agentFetch(
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  return fetchAgent(primaryAgent(), path, init);
-}
-
-/**
- * 決まったエージェントを呼ぶ。
+ * 決まったエージェントを呼ぶ。`path` は `/denpa/...`。返すのはふつうの `fetch` の応答。
+ * どのエージェントに送るかは呼ぶ側が決める (`agents.ts` の `listAgents`・`tuningAgents`・`primaryAgent`)。
  * まだ組んでいない・保存した証明書と合わない・組んでいないと断られた、のどれかなら、合言葉で組み直して 1 度だけ試し直す。
  * 試し直すので、`init.body` は文字列など何度でも送れるものにする (いまの呼び出し元はどれも JSON の文字列か本文なし)
  */

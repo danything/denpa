@@ -18,20 +18,21 @@ export function fakeAgentIdentity(): Identity {
   return identity;
 }
 
-/** Bun.serve の `tls` */
-export function fakeAgentTls(): {
+/** Bun.serve の `tls`。`own` を渡せば、その鍵と証明書の偽のエージェントになる (2 台目のエージェント) */
+export function fakeAgentTls(own: Identity = fakeAgentIdentity()): {
   key: string;
   cert: string;
   requestCert: true;
   rejectUnauthorized: false;
 } {
-  const { key, cert } = fakeAgentIdentity();
+  const { key, cert } = own;
   return { key, cert, requestCert: true, rejectUnauthorized: false };
 }
 
-/** `POST /denpa/pair` なら答えを返す。ほかは null */
+/** `POST /denpa/pair` なら答えを返す。ほかは null。`own` はこの偽のエージェントの鍵と証明書 */
 export async function answerPairing(
   request: Request,
+  own: Identity = fakeAgentIdentity(),
 ): Promise<Response | null> {
   if (
     request.method !== "POST" ||
@@ -42,7 +43,7 @@ export async function answerPairing(
     client?: unknown;
     proof?: unknown;
   } | null;
-  const agent = fakeAgentIdentity().fingerprint;
+  const agent = own.fingerprint;
   const client = typeof body?.client === "string" ? body.client : "";
   if (body?.proof !== pairProof(FAKE_AGENT_PAIR, "client", agent, client)) {
     return Response.json({ error: "合言葉が違います" }, { status: 403 });
@@ -59,17 +60,18 @@ export function fakeAgentUrl(port: number, host = "127.0.0.1"): string {
 
 /**
  * 単体テスト用: `fetch` を受ける偽のエージェントを立てる。組む受け答えは前に挟む。
- * `config.agentUrl = fakeAgentUrl(server.port)` で指す
+ * `config.agentUrl = fakeAgentUrl(server.port)` で指す。`own` を渡せば別の鍵と証明書で立てる (2 台目のエージェント)
  */
 export function serveFakeAgent(
   fetch: (request: Request) => Response | Promise<Response>,
+  own: Identity = fakeAgentIdentity(),
 ): ReturnType<typeof Bun.serve> {
   return Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
-    tls: fakeAgentTls(),
+    tls: fakeAgentTls(own),
     async fetch(request) {
-      return (await answerPairing(request)) ?? fetch(request);
+      return (await answerPairing(request, own)) ?? fetch(request);
     },
   });
 }

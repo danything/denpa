@@ -197,6 +197,7 @@ describe("retryWhileBusy", () => {
  */
 describe("recordingHolds", () => {
   const tuner = (over: Partial<AgentTuner>): AgentTuner => ({
+    agent: 1,
     index: 0,
     name: "mlt0",
     types: ["GR", "BS", "CS"],

@@ -12,7 +12,8 @@ import {
   string,
   tolerate,
 } from "../shape";
-import { agentFetch } from "./agent-client";
+import { fetchAgent } from "./agent-client";
+import { type Agent, primaryAgent } from "./agents";
 import { config } from "./config";
 import { openRecordingSync, type RecordingSyncHandle } from "./recording-io";
 
@@ -357,8 +358,11 @@ function failed(message: string): CardStatus {
  * 使わないカードリーダーを入れ替える (設定の「受信」のカードリーダーの表のスイッチ)。
  * 渡すのは使わないリーダーの名前の一覧。使っている最中のリーダーなら、エージェントが手放して次のリーダーで繋ぎ直す
  */
-export async function putCardReaders(disabled: string[]): Promise<void> {
-  const res = await agentFetch("/denpa/card/readers", {
+export async function putCardReaders(
+  disabled: string[],
+  agent?: Agent,
+): Promise<void> {
+  const res = await fetchAgent(agent ?? primaryAgent(), "/denpa/card/readers", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ disabled }),
@@ -375,14 +379,14 @@ export async function putCardReaders(disabled: string[]): Promise<void> {
 const DECODED = object({ ok: optional(boolean), error: optional(string) });
 
 /**
- * カードリーダーの状態。設定画面に出す。
+ * カードリーダーの状態。設定画面に出す。`agent` を渡さなければ並びの先頭のエージェント (`putCardReaders`・`descramble` も同じ)。
  *
  * リーダーが見えていてもカードを読めていないことがある (挿さっていない・USB が黙る)。
  * そのまま録ると上に書いた壊れ方になるので、画面から見えるようにしてある。
  */
-export async function cardStatus(): Promise<CardStatus> {
+export async function cardStatus(agent?: Agent): Promise<CardStatus> {
   try {
-    const res = await agentFetch("/denpa/card", {
+    const res = await fetchAgent(agent ?? primaryAgent(), "/denpa/card", {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
@@ -410,6 +414,7 @@ export async function descramble(
   input: string,
   output: string,
   signal?: AbortSignal,
+  agent?: Agent,
 ): Promise<{ ok: boolean; error: string; stillScrambled?: boolean }> {
   /*
    * 向こうのマウント先はこちらと同じとは限らないので、元の TS の置き場からの相対で渡す。
@@ -434,7 +439,7 @@ export async function descramble(
 
   try {
     // 復号は数十分かかることがある。中止を押されたらここで切る
-    const res = await agentFetch("/denpa/decode", {
+    const res = await fetchAgent(agent ?? primaryAgent(), "/denpa/decode", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input: from, output: to }),
