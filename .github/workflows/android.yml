@@ -1,0 +1,146 @@
+name: Android agent
+
+# **Android で動かすエージェント** (`linux-bionic-arm64`・`linux-bionic-x64` の Native AOT) を組み、エミュレータで起動して確かめる。
+# CI (test.yml) が呼ぶ。まだ配らない (リリースに載せるのは APK ができてから)。組み方は docs/development.md「Android 向けのエージェント」。
+#
+# 1. OpenSSL を NDK で静的ライブラリに組む (.github/openssl-android.sh)。**組んだものは actions/cache に置き、バージョン・組み方・NDK が
+#    変わるまで使い回す**
+# 2. エージェントを NDK の clang で組む。ASP.NET Core は linux の実行時パックの IL を使わせる (csproj の説明)
+# 3. x86_64 をエミュレータ (minSdk の API 29 と、新しい API 35) に `adb push` して起動し、組んで HTTP に答えるかを見る
+#    (.github/android-agent-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)
+#
+# 組むのは呼んだ workflow のコミット。コミットを入力で受けて取り出すことはしない (windows-server.yml と同じく、キャッシュを汚させない)
+
+on:
+  workflow_call: {}
+
+permissions:
+  contents: read
+
+env:
+  # NDK のバージョン (sdkmanager の名前)。上げたら OpenSSL のキャッシュも組み直しになる (鍵に入れている)
+  NDK_VERSION: "29.0.14206865"
+
+jobs:
+  agent:
+    name: agent (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64
+            rid: linux-bionic-arm64
+          - abi: x86_64
+            rid: linux-bionic-x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "11.0.100"
+
+      # ランナーに入っている NDK はランナーのイメージで変わるので、バージョンを決めて入れる
+      - name: Set up NDK
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Cache key
+        id: key
+        run: echo "openssl=openssl-android-${{ matrix.abi }}-ndk$NDK_VERSION-$(sha256sum .github/openssl-android.sh | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore OpenSSL
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: openssl-out
+          key: ${{ steps.key.outputs.openssl }}
+
+      - name: Build OpenSSL
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash .github/openssl-android.sh "${{ matrix.abi }}" openssl-out
+
+      - name: Save OpenSSL
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: openssl-out
+          key: ${{ steps.key.outputs.openssl }}
+
+      # NDK の clang を PATH の先頭に置く (csproj が `<triple>24-clang` を呼ぶ。暗号の部品もこれで組まれる)
+      - name: Publish (Native AOT, ${{ matrix.rid }})
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export OPENSSL_ROOT_DIR="$PWD/openssl-out"
+          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r "${{ matrix.rid }}" -o out
+          readelf=llvm-readelf
+          # 動的リンカは Android のもの、繋ぐのは Android にある libc・libm・libdl だけ。LOAD は 16 KB 以上に揃える
+          $readelf -l out/denpa-agent | grep -F '[Requesting program interpreter: /system/bin/linker64]'
+          needed=$($readelf -d out/denpa-agent | sed -nE 's/.*\(NEEDED\).*\[(.+)\]/\1/p' | sort | tr '\n' ' ')
+          echo "NEEDED: $needed"
+          test "$needed" = "libc.so libdl.so libm.so "
+          for align in $($readelf -lW out/denpa-agent | awk '$1 == "LOAD" { print $NF }'); do test "$((align))" -ge 16384; done
+          ls -l out/denpa-agent
+
+      - name: Upload agent
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-agent-android-${{ matrix.abi }}
+          path: out/denpa-agent
+          retention-days: 3
+
+  # **必須チェックにはしない** (エミュレータは揺れやすい。docs/development.md「Android 向けのエージェント」)
+  emulator:
+    name: emulator (API ${{ matrix.api-level }})
+    needs: agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # 29 は minSdk (Android 10)。35 は新しい側
+        api-level: [29, 35]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download agent
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-agent-android-x86_64
+          path: agent-out
+
+      # android-emulator-runner の README のとおり
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Smoke test
+        timeout-minutes: 20
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: default
+          arch: x86_64
+          cores: 4
+          ram-size: 2048M
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash .github/android-agent-smoke.sh agent-out/denpa-agent smoke-results
+
+      # 通っても落ちても残す (エージェントのログ・logcat・応答)
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-smoke-${{ matrix.api-level }}
+          path: smoke-results/
+          retention-days: 7
