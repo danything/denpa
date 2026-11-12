@@ -13,6 +13,7 @@
 # Mac の Homebrew のものは Homebrew の置き場 (/opt/homebrew) に繋がり、Homebrew の無い Mac では動かない。
 # x264・dav1d・zimg のバージョンは、Linux のイメージ (Debian trixie のパッケージ) と同じものにそろえる (下の X264_COMMIT・DAV1D_VERSION・ZIMG_VERSION。
 # Dockerfile の土台の Debian を上げたら、ここも合わせる)。libav* も静的に繋ぐ (ffmpeg と ffprobe がそれぞれ抱える。Windows と同じ)。
+# **ffprobe は ffmpeg とは別に、読む部品だけで組む** (.github/ffmpeg-windows.sh と同じ。エンコーダが ffprobe にも静的に入らないように)。
 # 出来上がりが繋ぐのは macOS に最初からあるもの (/usr/lib と /System/Library) だけで、ほかに繋いでいれば止める。
 #
 # **自動で見つけるもの (`--disable-autodetect`) は全部切ってから、要るものだけ足す** (Windows と同じ理由。ランナーに入っているもので
@@ -54,10 +55,11 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 temp=${RUNNER_TEMP:-/tmp}
 prefix="$temp/ffmpeg-prefix"
+probe_prefix="$temp/ffprobe-prefix"
 work="$temp/ffmpeg-work"
 deps="$temp/ffmpeg-deps"
-rm -rf "$prefix" "$work"
-mkdir -p "$prefix" "$work" "$deps"
+rm -rf "$prefix" "$probe_prefix" "$work"
+mkdir -p "$prefix" "$probe_prefix" "$work" "$deps"
 # pkg-config は組んだ依存だけを見る (Homebrew の .pc を拾わない)
 export PKG_CONFIG_LIBDIR="$deps/opus/lib/pkgconfig:$deps/svt-av1/lib/pkgconfig:$deps/x264/lib/pkgconfig:$deps/dav1d/lib/pkgconfig:$deps/zimg/lib/pkgconfig"
 jobs=$(sysctl -n hw.ncpu)
@@ -159,11 +161,14 @@ rm -rf "$out"
 mkdir -p "$out/licenses"
 for dep in opus svt-av1 x264 dav1d zimg; do cp -R "$deps/$dep/licenses/." "$out/licenses/"; done
 
-# FFmpeg (キャッシュの鍵はこのスクリプト全体。ここから下を変えても、上の依存は組み直さない)
-mkdir "$work/ffmpeg" && cd "$work/ffmpeg"
+# FFmpeg (キャッシュの鍵はこのスクリプト全体。ここから下を変えても、上の依存は組み直さない)。
+# ffmpeg と ffprobe は同じソースから、別々の場所で組む (configure の出力をソースの中に書かない)
+src="$work/ffmpeg"
+mkdir "$src" && cd "$src"
 fetch_tar "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2" j
 for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 --fuzz=0 < "$p"; done
-./configure \
+mkdir "$work/build-ffmpeg" && cd "$work/build-ffmpeg"
+"$src/configure" \
   --prefix="$prefix" \
   --enable-gpl \
   --enable-version3 \
@@ -179,6 +184,7 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
   --enable-libdav1d \
   --enable-libzimg \
   --enable-videotoolbox \
+  --disable-ffprobe \
   --disable-everything \
   --disable-network \
   --disable-doc \
@@ -196,8 +202,52 @@ filters=$("$prefix/bin/ffmpeg" -hide_banner -filters)
 for f in setparams zscale tonemap; do
   grep -qw "$f" <<< "$filters" || { echo "ffmpeg に $f が組み込まれていません" >&2; exit 1; }
 done
-mkdir -p "$out/licenses/ffmpeg" && cp COPYING.GPLv3 LICENSE.md "$out/licenses/ffmpeg/"
-cp "$prefix/bin/ffmpeg" "$prefix/bin/ffprobe" "$out/"
+mkdir -p "$out/licenses/ffmpeg" && cp "$src/COPYING.GPLv3" "$src/LICENSE.md" "$out/licenses/ffmpeg/"
+
+# ffprobe。読む部品 (Dockerfile の一覧のうちデコーダ・デマクサ・パーサ・bsf・プロトコル) と、デコーダの使う dav1d・zlib だけで組む。
+# エンコーダ・マクサ・フィルタ・libavfilter・libavdevice は入れない。ライセンスの設定は ffmpeg とそろえる
+probe_components=()
+while IFS= read -r line; do probe_components+=("$line"); done < <(
+  printf '%s\n' "${components[@]}" | grep -E -- '^--enable-(decoder|demuxer|parser|bsf|protocol)='
+)
+mkdir "$work/build-ffprobe" && cd "$work/build-ffprobe"
+"$src/configure" \
+  --prefix="$probe_prefix" \
+  --enable-gpl \
+  --enable-version3 \
+  --disable-shared \
+  --enable-static \
+  --pkg-config-flags="--static" \
+  --disable-autodetect \
+  --enable-pthreads \
+  --enable-zlib \
+  --enable-libdav1d \
+  --disable-programs \
+  --enable-ffprobe \
+  --disable-avdevice \
+  --disable-avfilter \
+  --disable-everything \
+  --disable-network \
+  --disable-doc \
+  "${probe_components[@]}"
+make -j"$jobs"
+make install
+# ffprobe が読める部品が ffmpeg と同じか (.github/ffmpeg-windows.sh と同じ見方。lavfi は ffmpeg の入力の装置で、ffprobe には組まない。
+# bsf はマクサとエンコーダが自分で足すものが ffmpeg に載るので、Dockerfile の一覧にあるものだけを見る)
+for kind in decoders demuxers; do
+  missing=$(comm -23 <("$prefix/bin/ffmpeg" -hide_banner "-$kind" | LC_ALL=C sort) \
+    <("$probe_prefix/bin/ffprobe" -hide_banner "-$kind" | LC_ALL=C sort) | grep -vw lavfi || true)
+  if [ -n "$missing" ]; then
+    echo "ffprobe に、ffmpeg にある $kind がありません:" >&2
+    echo "$missing" >&2
+    exit 1
+  fi
+done
+bsfs=$("$probe_prefix/bin/ffprobe" -hide_banner -bsfs)
+for b in $(printf '%s\n' "${probe_components[@]}" | sed -nE 's/^--enable-bsf=//p' | tr ',' ' '); do
+  grep -qx "$b" <<< "$bsfs" || { echo "ffprobe に bsf の $b が組み込まれていません" >&2; exit 1; }
+done
+cp "$prefix/bin/ffmpeg" "$probe_prefix/bin/ffprobe" "$out/"
 
 # 繋いでいるのが macOS に最初からあるものだけか (組んだ依存も Homebrew のものも、外のライブラリとして残っていないか)
 for bin in ffmpeg ffprobe; do
