@@ -4,7 +4,7 @@
  * 単体テストで見るために分けてある (`volume.test.ts`)
  */
 
-/** 端末ごとに覚える鍵 (`keep.ts`)。速さ・バックグラウンド再生と同じ置き場 */
+/** 端末ごとに覚えるキー (`keep.ts`)。速さ・バックグラウンド再生と同じ置き場 */
 export const VOLUME_KEY = "player-volume";
 
 /**

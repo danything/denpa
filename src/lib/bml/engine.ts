@@ -34,7 +34,7 @@ import { DEFAULT_CLUT, readClut, type Rgba } from "./clut";
 import { type Code, compileScript } from "./compiler";
 import { parseStylesheet, parseUrl, type Rule } from "./css";
 import { BmlDocument, type BmlElement } from "./document";
-import { Dom, type DomHost } from "./dom";
+import { Dom, type DomHost, numberAttr } from "./dom";
 import { fontIdOf, parseDrcs } from "./drcs";
 import { decodeEuc } from "./euc";
 import { parseMng } from "./mng";
@@ -374,7 +374,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   feed(message: ResponseMessage): void {
     if (this.destroyed) return;
-    // 届いたものを捌くのもエンジンの仕事に数える (ライブは止まらずに流れ込み続ける。
+    // 届いたものを処理するのもエンジンの仕事に数える (ライブは止まらずに流れ込み続ける。
     // モジュールをデコードする・ハンドラを探すのを数えないと、「10 秒のうち 4 割を超えて動いたら止める」
     // 決まり (budget.ts) の勘定から漏れる)
     this.work(() => {
@@ -646,13 +646,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
     for (const beitem of this.beitems("EventMessageFired")) {
       if (target(beitem) !== message.componentId) continue;
-      const group =
-        Number.parseInt(beitem.attr("message_group_id") ?? "0", 10) || 0;
-      const wantId = Number.parseInt(beitem.attr("message_id") ?? "255", 10);
-      const wantVersion = Number.parseInt(
-        beitem.attr("message_version") ?? "255",
-        10,
-      );
+      // 読めない値は DOM の messageId などと同じく既定 (255 は何でも合う)
+      const group = numberAttr(beitem, "message_group_id", 0);
+      const wantId = numberAttr(beitem, "message_id", 255);
+      const wantVersion = numberAttr(beitem, "message_version", 255);
       for (const event of message.events) {
         // 時刻指定 (NPT) のイベントは NPT を持たないので動かせない。すぐ起きるものだけ
         if (
@@ -1846,11 +1843,12 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       this.handle(focused, "onclick", { type: "click" });
       if (focused.tag === "a") {
         const href = focused.attr("href") ?? "";
-        if (href !== "" && !href.startsWith("#") && !this.unknownName(href)) {
+        // launchDocument と同じ確認を通す (移れない先なら今の文書のまま、通信の文書は取り直す)
+        if (href !== "") {
           this.enqueue({
             kind: "native",
             token: this.token,
-            run: () => void this.load(href),
+            run: () => void this.launch(href),
           });
         }
       }

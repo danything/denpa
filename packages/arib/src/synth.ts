@@ -2,7 +2,7 @@
  * TS のセクションを組み立てる。
  *
  * 実チューナーが無いので、解析のテストにも偽エージェントにも「それらしい TS」が要る。
- * 読む側 (psi.ts・eit.ts・dsmcc.ts・ait.ts、denpa の logo.ts など) と対になる書く側で、仕様を書き写しているのはここだけ。
+ * 読む側 (psi.ts・eit.ts・dsmcc.ts・ait.ts、denpa の logo.ts など) と対になる書く側で、TS の PSI・SI の仕様を書き写しているのはここだけ。
  */
 
 import { joinBytes } from "./bytes.js";
@@ -598,7 +598,7 @@ export function bxmlDescriptor(
   const body = [
     ...be(dataComponentId),
     // 伝送方式 00 / 入口 / 自動起動 / 解像度 0011 (960x540)
-    ...(entryPoint ? [0x33, 0x70] : [0x00, 0xff]),
+    ...(entryPoint ? [0x33, 0x70] : [0x00]),
     0xf8, // dataEventId 0xF / event_section_flag
     0xa0, // 即時取得あり / 蓄積不可 / 起動優先
   ];

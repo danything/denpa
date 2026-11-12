@@ -6,8 +6,8 @@
  * その場で流すとき (`remux-player.ts`) と同じ `/api/recordings/<id>/stream` で、届いたものを MSE ではなく
  * ライブ・追っかけと同じエンジン (`raw/engine.ts`) へ流す。
  *
- * - `fmp4` … H.264 / AV1 の fMP4。時刻はページの物差しのまま (`PlayAxis`)。箱の切れ目で割ってから渡す
- *   (`ts/fmp4.ts` の `Fmp4Splitter`。worker は箱ごとに受け取る)
+ * - `fmp4` … H.264 / AV1 の fMP4。時刻はページの物差しのまま (`PlayAxis`)。ボックスの切れ目で割ってから渡す
+ *   (`ts/fmp4.ts` の `Fmp4Splitter`。worker はボックスごとに受け取る)
  * - `ts-mpeg2` … 元の TS (MPEG-2)。時刻は放送の PTS なので、応答の `X-Denpa-Origin` (物差しの 0 にあたる PTS)
  *   を引いて物差しに直す (`ts/seek.ts` の `sinceHead`)
  * - `mkv` … **端末に保存した録画** (エンコード済みの Matroska)。サーバではなく Blob を切り出して読む

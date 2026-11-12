@@ -2,7 +2,7 @@
 /**
  * **エンコードしたもの (fMP4) を canvas に描く**、worker の中の半分 (`messages.ts` の `fmp4`)。
  *
- *     fMP4 ─→ 箱を読む (ts/fmp4.ts) ┬→ 映像: WebCodecs の VideoDecoder → 2D で描く
+ *     fMP4 ─→ ボックスを読む (ts/fmp4.ts) ┬→ 映像: WebCodecs の VideoDecoder → 2D で描く
  *                                   └→ 音声: AAC は ADTS のヘッダを付けて / Opus はそのまま → WASM (worker.ts)
  *
  * **<video> の再生が止まる端末のための経路。** テスラの車載ブラウザは停車中でも <video> を
@@ -210,7 +210,7 @@ export class Fmp4Video {
     return this.frames.length;
   }
 
-  /** 箱を 1 つぶん (init か媒体)。サーバは箱の切れ目で送ってくる */
+  /** ボックスを 1 つぶん (init か媒体)。サーバはボックスの切れ目で送ってくる */
   feed(bytes: Uint8Array): void {
     // init (ftyp + moov)。**来るたびに開き直す**。選局し直し・音声やコーデックの選び直しで中身が変わる
     if (hasBox(bytes, "moov")) {

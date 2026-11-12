@@ -83,7 +83,7 @@ export class HostObject extends JSObject {
 }
 
 /** 数を書く属性 (読めなければ既定) */
-function numberAttr(
+export function numberAttr(
   element: BmlElement,
   name: string,
   fallback: number,

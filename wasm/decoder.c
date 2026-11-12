@@ -137,7 +137,7 @@ static void receive(void) {
  * ES を渡す。`pts` は 90kHz (無ければ負)。**返すのは待っている枚数。**
  *
  * 1 PES ぶんを丸ごと渡す想定。parser はフレームの終わりを次のフレームの先頭で知るので、
- * 最後の 1 枚は次の PES が来たときに出てくる (1 コマ遅れる。貯めの中に収まる)
+ * 最後の 1 枚は次の PES が来たときに出てくる (1 コマ遅れる。バッファの中に収まる)
  */
 EMSCRIPTEN_KEEPALIVE int dec_push(const uint8_t *data, int len, double pts) {
     double started = emscripten_get_now();
@@ -258,7 +258,7 @@ EMSCRIPTEN_KEEPALIVE int *dec_peek(void) {
     info[9] = f->sample_aspect_ratio.num;
     info[10] = f->sample_aspect_ratio.den;
     info[11] = f->colorspace;
-    int64_t pts = f->pts != AV_NOPTS_VALUE ? f->pts : f->best_effort_timestamp;
+    int64_t pts = frame_pts(f);
     info_pts = pts == AV_NOPTS_VALUE ? -1 : (double)pts;
     return info;
 }
@@ -272,7 +272,7 @@ EMSCRIPTEN_KEEPALIVE double dec_peek_pts(void) { return info_pts; }
 EMSCRIPTEN_KEEPALIVE double dec_pts_at(int i) {
     if (i < 0 || i >= count) return -1;
     const AVFrame *f = queue[(head + i) % QUEUE];
-    int64_t pts = f->pts != AV_NOPTS_VALUE ? f->pts : f->best_effort_timestamp;
+    int64_t pts = frame_pts(f);
     return pts == AV_NOPTS_VALUE ? -1 : (double)pts;
 }
 

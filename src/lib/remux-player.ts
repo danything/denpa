@@ -539,6 +539,8 @@ export function remuxPlayer(
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("timeupdate", nudge);
       media.removeEventListener("startstreaming", nudge);
+      // sourceopen が来る前に畳むと、そこで解放しないまま残る (2 回解放しても害は無い)
+      URL.revokeObjectURL(objectUrl);
     },
   };
 }
