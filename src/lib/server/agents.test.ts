@@ -17,7 +17,7 @@ import {
 } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
-import { agents } from "./schema";
+import { agentChannels, agents, channelReception } from "./schema";
 
 const realAgent = config.agentUrl;
 const realDb = config.dbPath;
@@ -146,6 +146,47 @@ describe("syncEnvAgents", () => {
     syncEnvAgents();
     expect(rows()).toEqual([]);
     expect(() => primaryAgent()).toThrow("エージェントがありません");
+  });
+
+  test("消したエージェントのチャンネルの写しと受信の記録も消す (全部消したときも)", () => {
+    config.agentUrl = "https://a:1#pair=x,https://b:1#pair=y";
+    syncEnvAgents();
+    const [a, b] = listAgents();
+    for (const agent of [a!, b!]) {
+      orm()
+        .insert(agentChannels)
+        .values({
+          agent_id: agent.id,
+          type: "GR",
+          channel: "T27",
+          network_id: 1,
+          transport_stream_id: 1,
+          transport: "ts",
+        })
+        .run();
+      orm()
+        .insert(channelReception)
+        .values({ agent_id: agent.id, type: "GR", channel: "T27" })
+        .run();
+    }
+    const owners = () => [
+      orm()
+        .select({ id: agentChannels.agent_id })
+        .from(agentChannels)
+        .all()
+        .map((row) => row.id),
+      orm()
+        .select({ id: channelReception.agent_id })
+        .from(channelReception)
+        .all()
+        .map((row) => row.id),
+    ];
+    config.agentUrl = "https://a:1#pair=x";
+    syncEnvAgents();
+    expect(owners()).toEqual([[a!.id], [a!.id]]);
+    config.agentUrl = "";
+    syncEnvAgents();
+    expect(owners()).toEqual([[], []]);
   });
 
   test("読めない書き方なら行を変えない (保存した証明書を消さない)", () => {
