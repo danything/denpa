@@ -10,7 +10,7 @@
  * - 書き換えるのはそのネットワークのチャンネルだけ (CS はネットワークが 2 つある)
  * - 予約とルールは局の ID (ネットワーク ID とサービス ID) で持っているので、チャンネルの名前が変わっても外れない。
  *   書き換えたあとの新しいチャンネルは「確認中」で、受信できるかは番組表の取得が確かめる (`reception.ts`)
- * - 書き換えたら、お知らせの 1 行 (録画・番組表・ライブの上) と通知 (`channels.changed`) で知らせる
+ * - 書き換えたら、ヘッダーの印 (`ChannelAlert.svelte`) と通知 (`channels.changed`) で知らせる
  * - **録画が衛星のチャンネルを選局できなかったら、すぐに読み直す** (`refreshLineup`)。再編の切り替えの直後に録画が
  *   始まると、番組表の取得が次に中継器を開くまで待てない
  */
@@ -261,7 +261,7 @@ export async function readFromAir(
   return { lineup, busy };
 }
 
-/** お知らせの 1 行。書き換えてから `NOTICE_FOR` の間で、設定の「受信」をまだ開いていないもの */
+/** ヘッダーの印に出す文。書き換えてから `NOTICE_FOR` の間で、設定の「受信」をまだ開いていないもの */
 export function lineupNotice(at = now()): string | null {
   const row = orm()
     .select({ text: channelChanges.text })

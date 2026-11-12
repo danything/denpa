@@ -196,20 +196,21 @@ test.describe("ホームと画面遷移", () => {
   });
 
   /*
-   * **お知らせの 1 行はヘッダーに重ねない。** 広い形のヘッダーは浮かせて流れから外しているので、流れの頭に置いた 1 行が
-   * ヘッダーの裏に入り、文がロゴに、ボタンがナビに重なっていた (幅 1885px の実機)。ヘッダーの下から始め、中身はその下に続く
+   * **中身が動いている間に起きたチャンネルのお知らせは、ヘッダーの印に畳む。** 中身の上に 1 行を足すと、広い形では
+   * その分だけ中身が下がっていた。印に乗せると文と「確認」が出て、離すと消える。押すと離しても出したまま。
+   * スマホの形はヘッダーを隠すので、設定の入口 (下のタブ) に同じ印を付け、文は設定の「チャンネル」で読む
    */
-  test("お知らせの 1 行はヘッダーの下に出て、中身にも重ならない", async ({
+  test("チャンネルのお知らせはヘッダーの印に出て、乗せると文が出る", async ({
     page,
     request,
     stack,
   }) => {
     await syncEpg(request);
     const text =
-      "T26 を続けて選局できません。周波数が変わった場合は、地上波をスキャンし直すと選局できます";
+      "BS のチャンネルが放送で変わったため、受信できるチャンネルを書き換えました";
     sqlite(
       `${stack.root}/denpa.db`,
-      `db.run("INSERT INTO channel_changes (type, text, at) VALUES ('GR', '${text}', ${Date.now()})")`,
+      `db.run("INSERT INTO channel_changes (type, text, at) VALUES ('BS', '${text}', ${Date.now()})")`,
     );
     try {
       await page.setViewportSize({ width: 1885, height: 900 });
@@ -219,14 +220,57 @@ test.describe("ホームと画面遷移", () => {
         ["/live", "[data-player-layout]"],
       ] as const) {
         await goto(page, path);
-        const notice = page.getByTestId("channel-notice");
-        await expect(notice, path).toHaveText(new RegExp(text));
-        const box = (await notice.boundingBox())!;
+        await expect(page.getByTestId("channel-notice"), path).toHaveCount(0);
+        const mark = page.locator(".navbar").getByTestId("channel-alert");
+        await expect(mark, path).toBeVisible();
+        // 中身はヘッダーのすぐ下から始まる (1 行の分だけ下げない)
         const header = (await page.locator(".navbar").boundingBox())!;
-        expect(box.y, path).toBeGreaterThanOrEqual(header.y + header.height);
         const next = (await page.locator(below).first().boundingBox())!;
-        expect(next.y, path).toBeGreaterThanOrEqual(box.y + box.height);
+        expect(next.y, path).toBeLessThan(header.y + header.height + 40);
       }
+
+      await goto(page, "/");
+      const mark = page.getByTestId("channel-alert");
+      const bubble = page.getByTestId("channel-alert-text");
+      await expect(bubble).toBeHidden();
+      await mark.hover();
+      await expect(bubble).toBeVisible();
+      await expect(bubble).toContainText(text);
+      await expect(bubble.getByRole("link", { name: "確認" })).toHaveAttribute(
+        "href",
+        /\/settings\/reception#channels$/,
+      );
+      // 箱はヘッダーの下に出る
+      const box = (await bubble.boundingBox())!;
+      const markBox = (await mark.boundingBox())!;
+      expect(box.y).toBeGreaterThanOrEqual(markBox.y + markBox.height);
+      await page.mouse.move(900, 600);
+      await expect(bubble).toBeHidden();
+      // 押せば、離しても出したまま。もう一度押すと閉じる
+      await mark.click();
+      await page.mouse.move(900, 600);
+      await expect(bubble).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(bubble).toBeHidden();
+
+      // スマホの形: ヘッダーは隠れ、下のタブの「その他」に印。設定の左の一覧の「受信」にも
+      await page.setViewportSize({ width: 390, height: 844 });
+      await goto(page, "/guide");
+      await expect(
+        page
+          .getByTestId("tabbar")
+          .getByTestId("alert-dot")
+          .filter({ visible: true }),
+      ).toBeVisible();
+      await expect(page.getByTestId("channel-alert")).toBeHidden();
+      await goto(page, "/settings");
+      await expect(
+        page.getByTestId("settings-nav-reception").getByTestId("alert-dot"),
+      ).toBeVisible();
+      await goto(page, "/settings/reception");
+      await expect(page.getByTestId("channel-alert-notice")).toContainText(
+        text,
+      );
     } finally {
       sqlite(
         `${stack.root}/denpa.db`,

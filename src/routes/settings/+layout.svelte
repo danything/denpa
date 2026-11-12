@@ -5,6 +5,7 @@
   import { onDestroy } from "svelte";
   import ArrowLeft from "~icons/lucide/arrow-left";
 
+  import ChannelAlertDot from "#lib/components/ChannelAlertDot.svelte";
   import { SECTION_ALIASES, SETTINGS_GROUPS } from "#lib/settings-sections.js";
 
   let { children, data } = $props();
@@ -14,6 +15,11 @@
    * 下のタブ・ヘッダーの「設定」の点 (`routes/+layout.svelte` の `fresh`) からここまでをたどれるように
    */
   const freshGroup = $derived(data.update === null ? null : "general");
+  /**
+   * チャンネルのお知らせがあれば、文を出す「受信」(`reception#channels`) に印を付ける (`app.css` の `.alert-dot`)。
+   * 下のタブの「設定」の印 (`routes/+layout.svelte` の `entryMark`) からここまでをたどれるように
+   */
+  const alert = $derived(data.channelAlert);
 
   /** いま開いているグループ (`/settings/reception` なら `reception`)。`/settings` そのものなら null */
   const current = $derived(page.route.id?.split("/")[2] ?? null);
@@ -190,6 +196,9 @@
             data-testid="settings-nav-{g.slug}"
           >
             {g.label}
+            {#if alert !== null && g.slug === "reception"}
+              <ChannelAlertDot kind={alert.kind} />
+            {/if}
             {#if freshGroup === g.slug}
               <span
                 class="fresh-dot"

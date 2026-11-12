@@ -8,7 +8,7 @@
  * - **局の顔ぶれがスキャンの結果と違うチャンネル。** 番組表の取得がチャンネルを開いたときに SDT を読み、そのチャンネルに入っている
  *   局 (テレビ) をスキャンの結果と比べる。局が増えた・減ったなら、スキャンし直せば入る
  *
- * どちらもお知らせの 1 行 (録画・番組表・ライブの上) に出し、起きたときに通知の「チャンネルの変更」も送る。
+ * どちらもヘッダーの印 (`ChannelAlert.svelte`) に出し、起きたときに通知の「チャンネルの変更」も送る。
  * スキャンし直すか、受信できるようになれば消える
  */
 import { SdtReader, type TransportInfo } from "@danything/arib/psi";
@@ -89,7 +89,7 @@ function groundTexts(): string[] {
   return texts;
 }
 
-/** お知らせの 1 行。両方あれば、選局できないほうを出す。知らせることが無ければ null */
+/** ヘッダーの印に出す文。両方あれば、選局できないほうを出す。知らせることが無ければ null */
 export function groundNotice(): string | null {
   return groundTexts()[0] ?? null;
 }
