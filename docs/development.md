@@ -275,7 +275,8 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 **Android で denpa を動かすアプリは `android/` の Gradle のプロジェクトです (パッケージは `io.github.danything.denpa`)。** 画面は持たず、常駐サービスがエージェントを子プロセスとして起動します。
 使い方は [install-android.md](install-android.md)、エージェントとの取り決めは [agent.md](agent.md#android-でアプリから-usb-を受け取る) にあります。リリースにはまだ載せません。
 
-- Kotlin で、依存はありません (Kotlin の標準ライブラリだけ)。AGP・Gradle・JDK のバージョンは denpa-tv と揃えます
+- Kotlin で、Android の標準の API (`android.*`) だけで書きます。AndroidX も使わず、APK に入る依存は Kotlin の標準ライブラリだけです。
+  Gradle・AGP・Kotlin・compileSdk・JDK・依存は、その時点の最新の安定版にします。上げるのは Renovate です (JDK は `renovate.json` の注釈で追う)
 - エージェントは `android/agent-libs/<ABI>/libdenpa_agent.so` に置くと APK に入ります (`DENPA_AGENT_LIBS` で別の置き場も渡せます)。
   入れるときに `nativeLibraryDir` へ展開させ (`useLegacyPackaging`)、そこから exec します。Android 10 からは、アプリのデータの置き場のファイルは実行できません
 - 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と食い違わないことを、

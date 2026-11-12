@@ -1,6 +1,6 @@
-# バージョンは denpa-tv (danything/denpa-tv の gradle/libs.versions.toml) と揃える。上げるのは Renovate
+# バージョンはどれもその時点の最新の安定版にする (denpa-tv より新しいものがあれば新しいほう)。上げるのは Renovate
 [versions]
-agp = "9.5.0"
+agp = "9.5.1"
 kotlin = "2.4.21"
 junit = "4.13.2"
 org-json = "20260814"

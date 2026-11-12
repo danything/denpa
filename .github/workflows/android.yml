@@ -107,12 +107,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # denpa-tv と同じ JDK (AGP 9 は 17 以上)。Android SDK はランナーに入っている。足りない platform は AGP が取ってくる
+      # JDK はその時点の最新の安定版 (Gradle 9.8 から 27 で動く)。Android SDK はランナーに入っている。足りない platform は AGP が取ってくる
       - name: Set up JDK
         uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
-          java-version: "25"
+          # renovate: datasource=java-version depName=java-jdk
+          java-version: "27"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1

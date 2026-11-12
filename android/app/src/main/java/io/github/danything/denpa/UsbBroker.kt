@@ -197,7 +197,9 @@ internal class UsbBroker(private val context: Context, private val socketFile: F
             }
             // エージェントからは何も送られてこない。切れたら read が -1 を返す
             try {
-                while (socket.inputStream.read() >= 0) Unit
+                while (socket.inputStream.read() >= 0) {
+                    // 読み捨てる
+                }
             } catch (_: IOException) {
                 // 切れた
             }

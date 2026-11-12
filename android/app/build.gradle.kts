@@ -20,7 +20,10 @@ val agentLibs = System.getenv("DENPA_AGENT_LIBS")?.takeIf { it.isNotEmpty() }
 
 android {
     namespace = "io.github.danything.denpa"
-    compileSdk = 37
+    // いまの最新の安定版 (Android 17 の 37.2)。targetSdk は小数を持てないので 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         applicationId = "io.github.danything.denpa"

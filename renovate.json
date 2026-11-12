@@ -34,6 +34,15 @@
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+[A-Z0-9_]+=(?<currentValue>\\S+)",
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)\\s+image: \\S+?:(?<currentValue>\\S+)"
       ]
+    },
+    {
+      "description": "Android のアプリを組む JDK (.github/workflows/android.yml の `java-version`)。メジャーだけで留め、新しいメジャーが出たら上げる。Gradle・AGP・Kotlin・依存は android/gradle/ にあり、Renovate の gradle と gradle-wrapper が自分で見つける",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/android\\.yml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)\\s+java-version: \"(?<currentValue>\\d+)\""
+      ],
+      "extractVersionTemplate": "^(?<version>\\d+)"
     }
   ],
   "packageRules": [

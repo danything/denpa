@@ -45,7 +45,6 @@
             android:name=".StartActivity"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>

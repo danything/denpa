@@ -177,7 +177,8 @@ CI は zip を作る前に、DLL が上の表のもの (x264・dav1d・zimg・zl
 ### Android のアプリ (まだ配らない)
 
 CI が組む APK (`io.github.danything.denpa`。[.github/workflows/android.yml](../.github/workflows/android.yml)) です。リリースにはまだ載せません。
-アプリ (`android/`) は denpa と同じ AGPL-3.0-or-later で、APK に入る依存は Kotlin の標準ライブラリだけです。
+アプリ (`android/`) は denpa と同じ AGPL-3.0-or-later です。常駐サービス・通知・USB・ソケット・子プロセスは Android の標準の API で書き、AndroidX も使いません。
+APK に入る依存は、Kotlin で書くと付いてくる下の 2 つだけです。単体テストだけで使う JUnit (EPL-1.0) と org.json (Public Domain。android.jar の org.json は中身が無いため) は APK に入りません。
 
 | 名前                                                                 | 何に                        | 出どころ                                        | ライセンス |
 | -------------------------------------------------------------------- | --------------------------- | ----------------------------------------------- | ---------- |
