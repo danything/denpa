@@ -353,7 +353,7 @@ public sealed class Zd1jTuner : ITuneDevice
     /// </summary>
     internal static TimeSpan StallLimit => TunerPool.Linger;
 
-    /// <summary>書いたぶんを渡す (<see cref="TsBuffer.Flush"/>)。CECH-ZD1 J と PIX-DT295 の TS のストリームが使う。読む側がいないまま <see cref="StallLimit"/> 経ったら <paramref name="stalled"/></summary>
+    /// <summary>書いたぶんを渡す (<see cref="TsBuffer.Flush"/>)。CECH-ZD1 J・PIX-DT295・Siano の機材から受けた TS を渡すときに使う。読む側がいないまま <see cref="StallLimit"/> 経ったら <paramref name="stalled"/></summary>
     internal static bool Flush(PipeWriter writer, Func<bool> stopped, Action stalled) => TsBuffer.Flush(writer, stopped, StallLimit, stalled);
 
     private readonly string _name;

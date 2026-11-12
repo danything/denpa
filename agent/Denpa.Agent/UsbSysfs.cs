@@ -1,9 +1,11 @@
+using System.Globalization;
+
 namespace Denpa.Agent;
 
 /// <summary>
 /// USB デバイスが並ぶ sysfs (Linux)。USB ポートごとのディレクトリに、属性が 1 つずつファイルで置かれている。
 /// 機材を並べるところ (<see cref="SysfsUsbHost"/>) と開くところ (<see cref="UsbFsDevice"/>) で同じ読み方をする。
-/// ポートの名前の形 (<see cref="IsPort"/>) は、どの OS の <see cref="IUsbHost"/> も同じ
+/// ポートの名前の形式 (<see cref="IsPort"/>) は、どの OS の <see cref="IUsbHost"/> も同じ
 /// </summary>
 public static class UsbSysfs
 {
@@ -14,7 +16,7 @@ public static class UsbSysfs
 
     /// <summary>
     /// USB のポートの名前 (<c>1-2</c>、<c>1-2.3.1</c>)。インターフェース (<c>1-2:1.0</c>) やルートハブは違う。
-    /// 設定の <c>siano:</c>・<c>zd1j:</c>・<c>dt295:</c>・<c>it930x:</c>・<c>asicen:</c> の機材もこの形で指す (Windows・macOS でも同じ形に作る)
+    /// 設定の <c>siano:</c>・<c>zd1j:</c>・<c>dt295:</c>・<c>it930x:</c>・<c>asicen:</c> の機材もこの形式で指す (Windows・macOS・Android でも同じ形式に作る)
     /// </summary>
     public static bool IsPort(string name)
     {
@@ -24,6 +26,24 @@ public static class UsbSysfs
             && name[(dash + 1)..].Split('.').All(part => part.Length > 0 && part.All(char.IsAsciiDigit));
     }
 
+    /// <summary>
+    /// そのポートの機材の usbfs のノード (<c>/dev/bus/usb/BBB/DDD</c>)。番号は sysfs の <c>busnum</c>・<c>devnum</c> から作る。
+    /// 番号が読めなければ null。番号は挿し直すたびに振り直されるので、開いたあとに USB の ID を確かめる
+    /// </summary>
+    public static string? Node(string sysfs, string devUsb, string port)
+    {
+        var dir = Path.Combine(sysfs, port);
+        if (!int.TryParse(Read(dir, "busnum"), NumberStyles.None, CultureInfo.InvariantCulture, out var bus)
+            || !int.TryParse(Read(dir, "devnum"), NumberStyles.None, CultureInfo.InvariantCulture, out var device))
+        {
+            return null;
+        }
+        return Path.Combine(devUsb, bus.ToString("D3", CultureInfo.InvariantCulture), device.ToString("D3", CultureInfo.InvariantCulture));
+    }
+
+    /// <summary><see cref="Node"/> が null のときの文言</summary>
+    public static string NoDevice(string port) => $"USB のポート {port} に機材がありません (抜かれたか、コンテナに /sys が見えていません)";
+
     /// <summary>設定の device (<c>zd1j:4-12.1</c>) から接頭辞の後ろのポートを取る。接頭辞かポートの形式が違えば null</summary>
     public static string? PortOf(string? device, string scheme) =>
         device?.StartsWith(scheme, StringComparison.Ordinal) == true && IsPort(device[scheme.Length..]) ? device[scheme.Length..] : null;
@@ -31,7 +51,7 @@ public static class UsbSysfs
     /// <summary>そのポートのどれかのインターフェースを使っているドライバの名前。誰も使っていなければ null</summary>
     public static string? Driver(string sysfs, string port)
     {
-        // sysfs が無い (Linux でない) ならカーネルのドライバも無い
+        // sysfs が無ければ、ドライバも読めない
         if (!Directory.Exists(sysfs)) return null;
         foreach (var entry in Directory.EnumerateFileSystemEntries(sysfs, $"{port}:*").Order(StringComparer.Ordinal))
         {
@@ -101,7 +121,7 @@ public static class UsbSysfs
         throw new IOException($"USB のポート {port} の電源を入れ直したあと、機材が {wait.TotalSeconds:0} 秒のうちにつながりませんでした");
     }
 
-    /// <summary>属性を 1 つ読む (前後の空白を落とす)。無い・読めなければ null</summary>
+    /// <summary>属性を 1 つ読む (前後の空白を除く)。無い・読めなければ null</summary>
     public static string? Read(string dir, string name)
     {
         try

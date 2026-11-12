@@ -5,7 +5,7 @@ namespace Denpa.Agent;
 
 /*
  * 挿さっている USB の機材を並べる・開く・抜き差しを受け取る、OS との境目 (IUsbHost)。機材ごとのコード (Zd1j・Dt295・Siano・It930x・
- * Ccid・AsicenUserland) と DeviceWatch は、ここだけを通して USB の機材を探し、開く。OS を見分けるのは UsbHost.Current の 1 か所だけ。
+ * Ccid・AsicenUserland) と DeviceWatch は、ここだけを通して USB の機材を探し、開く。OS を見分けるのは UsbHost.Current の 1 か所だけ (例外は SianoDevice.Depth の、macOS で読みの数を増やすところ)。
  * 実装は SysfsUsbHost (Linux の sysfs と usbfs)・WinUsbHost (Windows の WinUSB)・IoKitUsbHost (macOS の IOKit)・
  * BrokerUsbHost (Android のアプリから受け取る。UsbBroker.cs)。
  */
@@ -13,7 +13,7 @@ namespace Denpa.Agent;
 /// <summary>USB の ID (idVendor と idProduct)</summary>
 public readonly record struct UsbId(int Vendor, int Product)
 {
-    /// <summary><c>1738:5211</c> の形 (16 進 4 桁ずつ) から。形式が違えば投げる</summary>
+    /// <summary><c>1738:5211</c> の形式 (16 進 4 桁ずつ) から。形式が違えば例外を送出する</summary>
     public static UsbId Parse(string text)
     {
         var colon = text.IndexOf(':');
@@ -24,7 +24,7 @@ public readonly record struct UsbId(int Vendor, int Product)
 }
 
 /// <summary>挿さっている機材 1 台。並べただけで、開いていない</summary>
-/// <param name="Port">ポートの名前。Linux の sysfs と同じ形 (<c>1-2.3</c>)。Windows・macOS でもこの形に作る</param>
+/// <param name="Port">ポートの名前。Linux の sysfs と同じ形式 (<c>1-2.3</c>)。Windows・macOS・Android でもこの形式に作る</param>
 /// <param name="Serial">USB のシリアル番号。無い・読めないなら null (macOS は読まない)</param>
 /// <param name="Manufacturer">作り手の名前 (文字列ディスクリプタ)。読まない OS では null</param>
 /// <param name="ProductName">製品名 (文字列ディスクリプタ)。読まない OS では null</param>
@@ -65,7 +65,7 @@ public interface IUsbHost
 
     /// <summary>
     /// CCID のインターフェースを開いて確保する (<see cref="Readers"/> が並べたもの)。USB の ID も確かめる。
-    /// <see cref="Readers"/> が null の OS では投げる
+    /// <see cref="Readers"/> が null の OS では例外を送出する
     /// </summary>
     ICcidPipe OpenCcid(string port, int vendor, int product, int config, int interfaceNumber);
 
@@ -171,8 +171,7 @@ public sealed class SysfsUsbHost(string sysfs, string devUsb = UsbSysfs.DevUsb) 
         foreach (var port in Ports())
         {
             // 開くときに /dev/bus/usb/BBB/DDD を組み立てるので、番号が読めないものは並べない
-            var dir = Path.Combine(sysfs, port);
-            if (!int.TryParse(UsbSysfs.Read(dir, "busnum"), out _) || !int.TryParse(UsbSysfs.Read(dir, "devnum"), out _)) continue;
+            if (UsbSysfs.Node(sysfs, devUsb, port) is null) continue;
             if (Read(port, null) is { } item && item.Interfaces.Any(entry => entry.Class == Ccid.InterfaceClass)) found.Add(item);
         }
         return found;
@@ -181,15 +180,8 @@ public sealed class SysfsUsbHost(string sysfs, string devUsb = UsbSysfs.DevUsb) 
     public IUsbDevice Open(string port, int vendor, int product, bool selectAlternate = true) =>
         UsbFsDevice.Open(sysfs, devUsb, port, vendor, product, selectAlternate);
 
-    public ICcidPipe OpenCcid(string port, int vendor, int product, int config, int interfaceNumber)
-    {
-        var dir = Path.Combine(sysfs, port);
-        if (!int.TryParse(UsbSysfs.Read(dir, "busnum"), out var bus) || !int.TryParse(UsbSysfs.Read(dir, "devnum"), out var address))
-        {
-            throw new IOException($"USB のポート {port} に機材がありません (抜かれたか、コンテナに /sys が見えていません)");
-        }
-        return UsbFsPipe.Open($"{devUsb}/{bus:000}/{address:000}", vendor, product, config, interfaceNumber);
-    }
+    public ICcidPipe OpenCcid(string port, int vendor, int product, int config, int interfaceNumber) =>
+        UsbFsPipe.Open(UsbSysfs.Node(sysfs, devUsb, port) ?? throw new IOException(UsbSysfs.NoDevice(port)), vendor, product, config, interfaceNumber);
 
     public Action<string, TimeSpan>? PowerCycle => (port, wait) => UsbSysfs.PowerCycle(sysfs, port, wait);
 

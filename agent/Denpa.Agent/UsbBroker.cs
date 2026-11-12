@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 namespace Denpa.Agent;
 
 /*
- * Android の USB の受け取り口 (USB_BROKER)。Android ではアプリしか USB の機材を開けない (UsbManager の許可が要る) ので、
+ * Android のアプリから USB の機材を受け取る仕組み (USB_BROKER)。Android ではアプリしか USB の機材を開けない (UsbManager の許可が要る) ので、
  * アプリが開いた usbfs の fd を UNIX ドメインソケットの SCM_RIGHTS でエージェントに渡す。エージェントは受け取った fd を持ち、
  * 開くたびに dup して使う (UsbFsDevice.Open・UsbFsPipe.Open の fd 版)。
  *
@@ -16,8 +16,8 @@ namespace Denpa.Agent;
  * - エージェントが USB_BROKER のパスで待ち受け (AF_UNIX・SOCK_STREAM・0600)、アプリが繋ぐ。uid が自分と違う相手は切る
  *   (bind から chmod までの間に umask の権限で繋がれても、uid で切る。置き場はアプリだけが読める dataDir)
  * - 1 行 1 つの JSON (UTF-8)。`type` が attached・detached・synced。1 行は 1 回の write で送り、attached の write に fd を SCM_RIGHTS で 1 つ付ける
- *   (fd がどの行のものかは、fd を受け取った読みの中で始まった最後の行で決める)
- * - 繋がるたびに、前の接続で受け取った機材を捨てる。接続が切れただけでは捨てない (アプリが落ちても受け取った fd は使える)。
+ *   (fd がどの行のものかは、fd を受け取った recvmsg の中で始まった最後の行で決める)
+ * - 繋がるたびに、前の接続で受け取った機材を捨てる。接続が切れただけでは捨てない (アプリが終了しても受け取った fd は使える)。
  *   synced (許可のある機材を全部送り終えた印) を受けたら探し直してもらう (changed)。
  *   synced のあとの attached・detached も、受けるたびに changed を呼ぶ
  */
@@ -207,8 +207,8 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
                 var chunk = data.AsSpan(0, (int)got);
                 if (received.Count > 0)
                 {
-                    // カーネルは fd の付いた write を読んだところで recvmsg を返す (fd の違う write を 1 回の読みに混ぜない) ので、
-                    // fd はこの読みの中で始まった最後の行のもの。行の終わりの改行の後ろは、次の読みで始まる行
+                    // カーネルは fd の付いた write を読んだところで recvmsg を返す (fd の違う write を 1 回の recvmsg に混ぜない) ので、
+                    // fd はこの recvmsg の中で始まった最後の行のもの。行の終わりの改行の後ろは、次の recvmsg で始まる行
                     var owner = index + chunk[..^1].Count((byte)'\n');
                     if (!owned.TryGetValue(owner, out var list)) owned[owner] = list = [];
                     list.AddRange(received);
@@ -229,7 +229,7 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
                     }
                     catch (Exception error)
                     {
-                        // 受けるスレッドで投げるとエージェントごと落ちるので、その行だけを捨てる (changed の中の失敗も同じ)
+                        // 受けるスレッドで例外を外に出すとエージェントのプロセスが終了するので、その行だけを捨てる (changed の中の失敗も同じ)
                         Log.Write($"USB_BROKER の行を受けられませんでした ({error.Message})");
                     }
                     index++;
@@ -388,7 +388,7 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
     internal static string? PortName(uint bus, ReadOnlySpan<byte> ports) =>
         bus == 0 || ports.Length == 0 ? null : $"{bus}-{string.Join('.', ports.ToArray())}";
 
-    /// <summary><c>/dev/bus/usb/001/004</c> から <c>001-004</c>。形が違えば null</summary>
+    /// <summary><c>/dev/bus/usb/001/004</c> から <c>001-004</c>。形式が違えば null</summary>
     internal static string? FallbackPort(string name) =>
         DeviceName().Match(name) is { Success: true } match ? $"{match.Groups[1].Value}-{match.Groups[2].Value}" : null;
 

@@ -170,7 +170,7 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task ACK_が無ければ投げる()
+    public async Task ACK_が無ければ_IOException_になる()
     {
         var usb = new FakeBridgeUsb();
         var bridge = Started(usb);
@@ -383,7 +383,7 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task ロックしなければ同期失敗の例外を投げてボードを返す()
+    public async Task ロックしなければ同期失敗の例外を送出してボードを返す()
     {
         var usb = new FakeBridgeUsb();
         usb.Dib.Signal = false;
@@ -416,7 +416,7 @@ public class Zd1jTests
     public async Task 開けなければ_どこで止まったかを_1_行記録する()
     {
         // ポートはテストごとに変える (記録はプロセスで 1 つ。テストは並んで走る)
-        var usbError = new IOException("usb 9-11 を開けません (見当たらないか、IOKit が開かせません)");
+        var usbError = new IOException("usb 9-11 を開けません (見当たらないか、IOKit でプラグインを作れません)");
         Assert.Throws<IOException>(() => Zd1jBoard.Acquire("9-11", () => throw usbError));
         await Assert.That(Logged($"[Sony CECH-ZD1 J 9-11] 開けません (USB を開くところで): {usbError.Message}")).IsEqualTo(1);
 

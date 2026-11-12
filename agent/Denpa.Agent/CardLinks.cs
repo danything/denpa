@@ -33,7 +33,7 @@ public static class CardLinks
         [.. Ccid.Find() ?? PcscLink.Find(), .. It930x.Cards(), .. AsicenUserland.Cards(), .. Zd1j.Cards(), .. Dt295.Cards()];
 
     /// <summary>
-    /// カードが挿さっていて INT に応答した最初のリーダーで B-CAS を開く。どれも駄目なら例外を投げる。
+    /// カードが挿さっていて INT に応答した最初のリーダーで B-CAS を開く。どれも駄目なら例外を送出する。
     /// 繋ぎ直すときも <see cref="Find"/> から探し直す (<see cref="BCas.Open"/>)
     /// </summary>
     public static BCas Open() => BCas.Open(Find);

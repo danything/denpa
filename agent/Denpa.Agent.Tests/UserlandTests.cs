@@ -15,9 +15,9 @@ public class UserlandTests
     /// <summary>どの受信機も地上波と衛星の両方を受けられる筐体</summary>
     private static readonly List<UserlandReceiver> Both = [.. Enumerable.Range(0, 5).Select(index => new UserlandReceiver(index, true, true))];
 
-    /// <summary>同じ鍵が 2 度ある行は最初の値を採る (<see cref="UserlandReceiver.Fields"/>)。投げない</summary>
+    /// <summary>同じキーが 2 度ある行は最初の値を採る (<see cref="UserlandReceiver.Fields"/>)。例外にしない</summary>
     [Test]
-    public async Task 同じ鍵が_2_度あれば最初の値()
+    public async Task 同じキーが_2_度あれば最初の値()
     {
         var fields = UserlandReceiver.Fields("receiver=3 device=1 system=ISDB-T system=ISDB-S\r");
         await Assert.That(fields["receiver"]).IsEqualTo("3");
@@ -66,7 +66,7 @@ public class UserlandTests
 
 /*
  * asicend は使う受信機がある間だけ動かす (UserlandDaemon.Prepare)。受信機を全部使わない設定にした筐体は止めて
- * USB を手放し、使う設定に戻したら起動し直す。内蔵カードリーダーを復号に使っている間は止めない。
+ * USB を手放し、使う設定に戻したら起動し直す。
  * 常駐の代わりに sleep を起動する (止めるのは SIGTERM)
  */
 [ExcludeOn(OS.Windows)]
@@ -75,8 +75,6 @@ public class UserlandDaemonTests
     private sealed class SleepDaemon(string id, string dir) : UserlandDaemon("sleep", id)
     {
         public static SleepDaemon For(string id, string dir) => For(id, () => new SleepDaemon(id, dir));
-
-        public override string CardName => $"sleep {Id} Internal Card Reader";
 
         public override void Ensure()
         {
@@ -97,22 +95,20 @@ public class UserlandDaemonTests
         string[] both = [$"{tag}a", $"{tag}b"];
         try
         {
-            UserlandDaemon.Prepare(both, Daemon, _ => false);
+            UserlandDaemon.Prepare(both, Daemon);
             await Assert.That(a.Running && b.Running).IsTrue();
 
             // b の受信機を全部使わない設定にした
-            UserlandDaemon.Prepare([$"{tag}a"], Daemon, _ => false);
+            UserlandDaemon.Prepare([$"{tag}a"], Daemon);
             await Assert.That(a.Running).IsTrue();
             await Assert.That(b.Running).IsFalse();
 
-            // 内蔵カードリーダーを復号に使っている間は止めない。カードリーダーも使わない設定にしたら止まる
-            UserlandDaemon.Prepare([], Daemon, name => name == a.CardName);
-            await Assert.That(a.Running).IsTrue();
-            UserlandDaemon.Prepare([], Daemon, _ => false);
+            // a も使わない設定にした
+            UserlandDaemon.Prepare([], Daemon);
             await Assert.That(a.Running).IsFalse();
 
             // 使う設定に戻した
-            UserlandDaemon.Prepare(both, Daemon, _ => false);
+            UserlandDaemon.Prepare(both, Daemon);
             await Assert.That(a.Running && b.Running).IsTrue();
         }
         finally

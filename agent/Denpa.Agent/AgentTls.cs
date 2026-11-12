@@ -268,7 +268,7 @@ public sealed class AgentTls
     ///
     /// <para>
     /// **拡張は serverAuth と SKI だけ。** denpa はこの証明書そのものを ca に渡して確かめる。basicConstraints の CA:FALSE があると
-    /// Bun (BoringSSL) はそれを信頼の起点にできず落ちる (UNABLE_TO_VERIFY_LEAF_SIGNATURE)。keyUsage も付けない
+    /// Bun (BoringSSL) はそれを信頼の起点にできず、検証に失敗する (UNABLE_TO_VERIFY_LEAF_SIGNATURE)。keyUsage も付けない
     /// (付けて keyCertSign が無いと、自分で自分を発行したと見なされなくなる)
     /// </para>
     /// </summary>

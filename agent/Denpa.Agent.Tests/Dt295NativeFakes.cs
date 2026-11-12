@@ -8,8 +8,7 @@ namespace Denpa.Agent.Tests;
  *
  * - メモリをバイトの辞書で持ち、ベンダー要求 0xBC (仕様書 3.1) を受ける。0x80000〜0x9FFFF の窓 (書く側 0xEA3D8・読む側 0xE9EBC の基底)、
  *   wValue 下位 = 1 のマスク付きの書き込み、hook (0xEA6FC) が Dt295NativePrograms のものに書き換わっていれば、その body を Fr30Machine で動かす
- * - レジスタの振る舞い: I2C コントローラ (仕様書 6.4)、TS の FIFO と確定 (仕様書 8.3.2)、取り込みの開始・停止 (仕様書 8.1.4)、
- *   書くと 0 に戻るレジスタ (0xFDBD10・0xFDBD38)
+ * - レジスタの振る舞い: I2C コントローラ (仕様書 6.4)、TS の FIFO と確定 (仕様書 8.3.2)、取り込みの開始・停止 (仕様書 8.1.4)
  * - I2C の先は 2 つの復調 (0x10・0x11) と、レジスタ 0xFE を通した中継の先のチューナー (仕様書 7.0)
  * - bulk IN の EP 0x81 は、FIFO に書いて確定した 512 バイトのパケットを順に返す
  */
@@ -108,7 +107,6 @@ internal sealed class Dt295Fake : IUsbDevice
     /// <summary>body を動かす前にレジスタを仕込む</summary>
     public Action<Fr30Machine>? CpuSetup;
 
-
     public Dt295Fake()
     {
         Put(0xEA3D8, 4, 0x00F00000);
@@ -117,13 +115,6 @@ internal sealed class Dt295Fake : IUsbDevice
         Put(0x1600000, 4, 0x000200FF);
         Put(0x1600004, 4, 0x01000000);
         Put(0xF001F0, 4, 0);                  // 実機は設定の前に 0
-        Put(0x1700000, 4, 0x000200FF);      // 補助 CPU を起動する前提 (仕様書 6 章)
-        Put(0x1700004, 4, 0x0D8F7FF3);
-        Put(0xF1010C, 4, 0x00010000);       // 16 ビットの 0x0001 は上半分
-        Put(0xFDBD14, 4, 0x00141004);       // 実機の読み値
-        Put(0xFDBD1C, 4, 0x0015000C);
-        Put(0xFD8300, 4, 1);
-        Put(0xFD8320, 4, 1);
         Put(0xF10118, 4, 0x90000000);
         Put(0xF1011C, 4, 0x479F0000);
         Put(0xF10004, 4, 0x8A010000);       // 実機の読み値。16 ビットの 0x8A01 は、4 の倍数のアドレスでは上半分
@@ -194,10 +185,10 @@ internal sealed class Dt295Fake : IUsbDevice
     /// <summary>true なら制御転送がすべて時間切れになる (実機の USB が止まった様子)</summary>
     public bool Wedged;
 
-    /// <summary>0xF10080〜0xF100FF を読んだ回数。実機では読むと常駐イメージが壊れる語なので、エージェントは読まない</summary>
+    /// <summary>0xF10080〜0xF100FF を読んだ回数。以前の方式では読むと実機の常駐イメージが時間切れになった語なので、エージェントは読まない</summary>
     public int ReadsF10080;
 
-    /// <summary>カードの UART のモデル。ATR・受信 FIFO・挿入・送ったブロックへの応答 (仕様書 §10)</summary>
+    /// <summary>カードの UART のモデル。ATR・受信 FIFO・挿入・送ったブロックへの応答 (仕様書 10 章)</summary>
     public byte[]? CardAtr;
 
     public readonly Queue<byte> CardRx = [];
@@ -222,7 +213,7 @@ internal sealed class Dt295Fake : IUsbDevice
                 return FifoReady ? 4u : 0;
             case 0x1902028:
                 return Wp;
-            // カードの UART (仕様書 §10): 受信済みの数は上半分、受信 FIFO、割り込みの状態の bit10 (実機の観測: F00224 = 0 で挿さっていれば 1)
+            // カードの UART (仕様書 10 章): 受信済みの数は上半分、受信 FIFO、割り込みの状態の bit10 (実機の観測: F00224 = 0 で挿さっていれば 1)
             case 0xFEA014:
                 return (uint)CardRx.Count << 16;
             case 0xFEA02C:
@@ -268,17 +259,6 @@ internal sealed class Dt295Fake : IUsbDevice
             case 0xFD814C:
                 _protect = value;
                 break;
-            case 0xFD8300 or 0xFD8320:
-                // パルス: 0 を書いた直後でも 1 が読める (実機)
-                Put(address, size, 1);
-                return;
-            case 0xFDBD1C:
-                Put(address, size, value | (Get(address, size) & 0xC));
-                return;
-            case 0xFDBD14:
-                // 実機では 0x1004 のビットが、0 を書いても残った (読み取り専用らしい)
-                Put(address, size, value | (Get(address, size) & 0x1004));
-                return;
             case 0xF10118:
                 _clockOn = (value >> 16) == 0xFFFF;
                 break;
@@ -303,9 +283,6 @@ internal sealed class Dt295Fake : IUsbDevice
             case 0x1902028:
                 // 取り込みを止めて設定を戻すとき、書き込み位置は 0 に書き戻される (取り込みを始めると WpOnStart になる)
                 if (!CaptureStarted) Wp = value;
-                return;
-            case 0xFDBD10 or 0xFDBD38 when value == 1:
-                Put(address, 4, 0);          // 書くと 0 に戻る (仕様書 8.4 の 6・7)
                 return;
         }
         Put(address, size, value);

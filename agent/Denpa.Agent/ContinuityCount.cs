@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// PID ごとの continuity_counter を覚え、パケットごとに飛んだかを返す (<see cref="ContinuityCount"/> と、TSMF で選ぶ前後の数え (<see cref="TsmfSelector"/>) が使う)。
+/// PID ごとの continuity_counter を覚え、パケットごとに飛んだかを返す (<see cref="ContinuityCount"/> と、TSMF で選ぶ前後を数える <see cref="TsmfSelector"/> が使う)。
 ///
 /// <list type="bullet">
 /// <item>ペイロードの無いパケット (adaptation_field_control が 2) は数を進めないので、比べない</item>

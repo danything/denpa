@@ -55,7 +55,7 @@ public class Cxd2856Tests
         var (frontend, bus, clock) = Make();
         frontend.Init();
         await Assert.That(bus.Log).IsEquivalentTo(InitLog);
-        // 仕様書 2.2 のクロックのあと 4 ms、50 と リセットを解いたあと 1 ms ずつ、4.2 の 9B のあと 10 ms、VCO の電流のあと 1 ms
+        // 仕様書 2.2 のクロックのあと 4 ms、50 とリセットを解除したあと 1 ms ずつ、4.2 の 9B のあと 10 ms、VCO の電流のあと 1 ms
         await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 4, 1, 1, 10, 1 });
         await Assert.That(frontend.ChipId).IsEqualTo((byte)0x90);
     }
@@ -246,7 +246,7 @@ public class Cxd2856Tests
         var signal = frontend.Signal()!;
         await Assert.That(signal.Locked).IsFalse();
         await Assert.That(signal.Cn).IsNull();
-        // 固めるのは解く (仕様書 2.3)
+        // 固めた値は読み終えたら戻す (仕様書 2.3)
         await Assert.That(bus.Log.Take(4)).IsEquivalentTo(new[] { "T 01=01", "T 00=60", "T 10?", "T 01=00" });
     }
 

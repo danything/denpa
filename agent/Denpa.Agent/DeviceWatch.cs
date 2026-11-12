@@ -3,7 +3,7 @@ namespace Denpa.Agent;
 /// <summary>
 /// 機材の抜き差しを受け取って <c>changed</c> を呼ぶ (Program.cs の Rescan)。続けて起きた変化は 2 秒待ってまとめる
 /// (挿してからドライバがデバイスのファイルを作り終えるまでの間)。
-/// 受け取り方は OS ごとで、<see cref="IUsbHost.Watch"/> に任せる (Linux は <c>/dev/bus/usb</c> の inotify、Windows は 2 秒ごとの見比べ、macOS は 10 秒ごと)
+/// 受け取り方は OS ごとで、<see cref="IUsbHost.Watch"/> に任せる (Linux は <c>/dev/bus/usb</c> の inotify、Android はアプリからの attached・detached、Windows は 2 秒ごとの見比べ、macOS は 10 秒ごと)
 /// </summary>
 internal sealed class DeviceWatch : IDisposable
 {

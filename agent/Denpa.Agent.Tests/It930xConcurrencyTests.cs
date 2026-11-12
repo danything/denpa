@@ -45,7 +45,7 @@ public partial class It930xConcurrencyTests
             () => It930xDevice.Acquire(port, () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code),
             () => It930xDevice.CloseIfIdle(port, TimeSpan.Zero));
 
-    /// <summary>受信機ごとのスレッドを、そろって始めて走らせる。どれかが投げた例外を返す (固まったら失敗)</summary>
+    /// <summary>受信機ごとのスレッドを、そろって始めて走らせる。どれかが送出した例外を返す (固まったら失敗)</summary>
     private static List<Exception> Together(int count, Action<int> body)
     {
         var errors = new List<Exception>();
@@ -515,7 +515,6 @@ public partial class It930xConcurrencyTests
         lock (usb.Log) return usb.Log.Count(line => line.StartsWith("W D8C3=", StringComparison.Ordinal));
     }
 
-    /// <summary>EP 0x84 の読みを閉じたか (機材を閉じた)</summary>
     /// <summary>
     /// 機材を閉じ終えた (USB を閉じた)。読みのスレッドが残す「TS 閉じる」は、閉じる処理が電源を切るより前に出るので、
     /// それを待つと最後の書き込み (電源を切る) より先に確かめてしまう (Windows の CI で時々落ちていた)

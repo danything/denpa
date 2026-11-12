@@ -78,7 +78,7 @@ internal static class SplitTlvFake
         return output;
     }
 
-    /// <summary>録り (qc26.ts) の 1,082 単位 (TSMF から選んだ分割 TLV の単位のまま)</summary>
+    /// <summary>録画 (qc26.ts) の 1,082 単位 (TSMF から選んだ分割 TLV の単位のまま)</summary>
     public static byte[] Capture()
     {
         using var stream = typeof(SplitTlvFake).Assembly.GetManifestResourceStream("qc26-split-tlv.bin")
@@ -93,7 +93,7 @@ internal static class SplitTlvFake
 }
 
 /*
- * 分割 TLV の単位から TLV パケットを組み立て直す処理 (SplitTlv.cs)。単位の並びは QC26 の録りで確かめたもの (docs/agent.md「TSMF」)。
+ * 分割 TLV の単位から TLV パケットを組み立て直す処理 (SplitTlv.cs)。単位の並びは QC26 の録画で確かめたもの (docs/agent.md「IT930x の機材を直に持つ作り」)。
  */
 public class SplitTlvTests
 {
@@ -242,14 +242,14 @@ public class SplitTlvTests
     }
 
     [Test]
-    public async Task 録りの単位は読み飛ばさずに組み立てられ_数がほかの数え方と合う()
+    public async Task 録画の単位は読み飛ばさずに組み立てられ_数がほかの数え方と合う()
     {
         var units = SplitTlvFake.Chunk(SplitTlvFake.Capture()).ToList();
         var tlv = new SplitTlv();
 
         var output = SplitTlvFake.Assemble(tlv, units);
 
-        // 375 は、別に書いた数え方 (単位の中身をつなぎ、最初の開始の単位から TLV の長さで区切る。録りを解析したスクリプトと同じ読み方) で数えた値
+        // 375 は、別に書いた数え方 (単位の中身をつなぎ、最初の開始の単位から TLV の長さで区切る。録画を解析したスクリプトと同じ読み方) で数えた値
         await Assert.That(units.Count).IsEqualTo(1082);
         await Assert.That(tlv.Packets).IsEqualTo(375);
         await Assert.That(output.Count).IsEqualTo(375);

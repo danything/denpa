@@ -7,15 +7,15 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// macOS の IOKit の <see cref="IUsbDevice"/>。カーネルの拡張も DriverKit も使わず、ユーザーの側の IOUSBLib を P/Invoke で呼ぶ
-/// (Apple の公開しているヘッダー IOUSBLib.h・USB.h の形どおり)。
+/// (Apple の公開しているヘッダー IOUSBLib.h・USB.h の定義どおり)。
 ///
 /// <para>
 /// 並べるのは <c>IOServiceMatching("IOUSBHostDevice")</c> に <c>idVendor</c>・<c>idProduct</c> を足したもの。ポートの名前は
-/// <c>locationID</c> から Linux の sysfs と同じ形にする (<see cref="UsbDevices.MacPort"/>)。**挿すポートを変えると別の名前になる。**
+/// <c>locationID</c> から Linux の sysfs と同じ形式にする (<see cref="UsbDevices.MacPort"/>)。**挿すポートを変えると別の名前になる。**
 /// </para>
 ///
 /// <para>
-/// IOUSBLib のインターフェースは関数の表 (COM に似た形) なので、表の何番目かで関数ポインタを取って呼ぶ
+/// IOUSBLib のインターフェースは関数の表 (COM に似た仕組み) なので、表の何番目かで関数ポインタを取って呼ぶ
 /// (<c>delegate* unmanaged</c>。リフレクションも <c>Marshal.GetDelegateForFunctionPointer</c> も使わないので Native AOT で通る)。
 /// 表の先頭の 4 つは IUnknown (予約・QueryInterface・AddRef・Release)。番号は IOUSBDeviceInterface182・IOUSBInterfaceInterface182 のもの。
 /// </para>
@@ -276,7 +276,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         {
             foreach (var (service, _) in services) IOObjectRelease(service);
         }
-        if (device is null) throw new IOException($"{name} を開けません (見当たらないか、IOKit が開かせません)");
+        if (device is null) throw new IOException($"{name} を開けません (見当たらないか、IOKit でプラグインを作れません)");
 
         var open = ((delegate* unmanaged[Cdecl]<void*, int>)Slot(device, DeviceOpen))(device);
         if (open != Success)

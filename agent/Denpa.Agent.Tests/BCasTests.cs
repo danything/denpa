@@ -277,7 +277,7 @@ public class BCasTests
     }
 
     [Test]
-    public async Task 契約が無くても投げずに返り値で返す()
+    public async Task 契約が無くても例外にせず返り値で返す()
     {
         var link = new FakeLink("reader", _ => EcmResponse(0xa102));
         using var card = BCas.Open(() => [Candidate(link)]);
@@ -312,7 +312,7 @@ public class BCasTests
     }
 
     [Test]
-    public async Task どれも駄目なら理由を並べて投げる()
+    public async Task どれも駄目なら理由を並べた例外にする()
     {
         var empty = new FakeLink("empty") { Int = () => throw new IOException("カードが挿さっていません") };
         var error = Assert.Throws<IOException>(() => BCas.Open(() => [Candidate(empty)]));
@@ -340,7 +340,7 @@ public class BCasTests
     }
 
     [Test]
-    public async Task 繋ぎ直しても駄目なら投げて次の呼び出しでまた探す()
+    public async Task 繋ぎ直しても駄目なら例外にして次の呼び出しでまた探す()
     {
         var broken = new FakeLink("broken", _ => throw new IOException("USB が外れました"));
         var finds = 0;
@@ -454,8 +454,8 @@ public class BCasTests
     }
 
     /// <summary>
-    /// **起動したときに開けなくても、最初の選局は探し直す。** 常駐がまだ起動していないだけかもしれないので、
-    /// 断った記録を残して <see cref="BCas.RetryAfter"/> のあいだ断り続けてはいけない
+    /// **起動したときに開けなくても、最初の選局は探し直す。** 起動の直後に開けなかっただけで、
+    /// <see cref="BCas.RetryAfter"/> のあいだ断り続けない
     /// </summary>
     [Test]
     public async Task 起動したときに開けなくても最初の選局で探し直す()

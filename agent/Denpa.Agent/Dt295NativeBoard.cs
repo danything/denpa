@@ -210,7 +210,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     public void SetUpF10080()
     {
         foreach (var address in WordsF10080) link.Write32(address, 0x00010000);
-        log?.Invoke("0xF10080〜0xF10098 に 0x00010000 を書きました (この語は読むと常駐イメージが壊れるので、読み戻しません)");
+        log?.Invoke("0xF10080〜0xF10098 に 0x00010000 を書きました (以前の方式では、この語を読むと常駐イメージが時間切れになったので、読み戻しません)");
     }
 
     /// <summary><see cref="SetUpF10080"/> の語を 0 に戻す (冷えた機材の値。読んで確かめない)</summary>
@@ -253,7 +253,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     /// <summary>保存した値を書き戻す (仕様書 6 章の 0x80396F90 と同じ順: 0xF10018 → 0xF10014 → 0xF001F0 → 0x1600004・0x1600000 → 0x1600404 → 0xF1011C → 0xF10118)</summary>
     public void Restore(Saved saved)
     {
-        // 読めていなかった値(手順がそこまで進まなかったもの)は書かない
+        // 読めていなかった値 (手順がそこまで進まなかったもの) は書かない
         // 0xF1001C は仕様書の戻しの順に無い。最後に書いたものなので最初に戻す (実機の常駐イメージも SHUTDOWN で冷えた値に戻した)
         if (saved.RF1001C is { } r1c0) link.Write16(0xF1001C, r1c0);
         if (saved.R00F10018 is { } r18) link.Write16(0xF10018, r18);

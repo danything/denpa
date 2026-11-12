@@ -6,8 +6,8 @@ namespace Denpa.Agent;
 /// 電源の投入・切断と速さの設定は、いつもホストが書く。
 ///
 /// <para>
-/// 電源投入・切断の手順は仕様書 §10 の表 (投入 17 段・切断 5 段)。各段のあとに 20 ms 待つ (投入の 15 段目の 0xFEA014 = 0x0D は 50 ms)。
-/// 0xFEA004 に書く値の 4 つは、カードの端子の極性 (0xF00223) と、いまの 0xFEA004 から決める (§10 の設定確認)。
+/// 電源投入・切断の手順は仕様書 10 章の表 (投入 17 段・切断 5 段)。各段のあとに 20 ms 待つ (投入の 15 段目の 0xFEA014 = 0x0D は 50 ms)。
+/// 0xFEA004 に書く値の 4 つは、カードの端子の極性 (0xF00223) と、いまの 0xFEA004 から決める (10 章の設定確認)。
 /// ATR を受ける・速さを変える・T=1 のブロックを送受信する手順は、CECH-ZD1 J の差し込み口と共通にしている (<see cref="CardUart"/>。UART のレジスタが同じ)。
 /// ATR と T=1 のブロックの送受信は、機材のプログラムが使えれば (<see cref="Dt295NativeLink.CardProgram"/>) 機材の中で実行させる
 /// (<see cref="Dt295NativeLink.CardSend"/>・<see cref="Dt295NativeLink.CardReceive"/>。1 バイトごとの制御転送を、1 ブロック数回にする)。
@@ -19,7 +19,7 @@ public sealed class Dt295NativeCard : ICardLink
 {
     private const uint Enable = CardUart.Enable, Lines = CardUart.Lines, Count = CardUart.Count, Status = CardUart.Status;
 
-    /// <summary>カードの端子の極性の読み出し (仕様書 §10 の 0xF00223・0xF00224・0xF0022E)。4 の倍数のアドレスの語から取る</summary>
+    /// <summary>カードの端子の極性の読み出し (仕様書 10 章の 0xF00223・0xF00224・0xF0022E)。4 の倍数のアドレスの語から取る</summary>
     private const uint PinWordA = 0xF00220, PinWordB = 0xF00224, PinWordC = 0xF0022C;
 
     private readonly Func<Dt295NativeLink> _acquire;
@@ -58,7 +58,7 @@ public sealed class Dt295NativeCard : ICardLink
         }
     }
 
-    /// <summary>端子の読み値。F00223 (極性)・F00224・F0022E は 1 バイトずつ (仕様書 §10)</summary>
+    /// <summary>端子の読み値。F00223 (極性)・F00224・F0022E は 1 バイトずつ (仕様書 10 章)</summary>
     private (byte Polarity, byte Insert, byte Other) Pins()
     {
         var a = Link.Read32(PinWordA);
@@ -68,7 +68,7 @@ public sealed class Dt295NativeCard : ICardLink
     }
 
     /// <summary>
-    /// カードが挿さっているか。0xFEA01C の bit10 と 0xF00224 の XOR (仕様書 §10)。XOR が 1 なら挿さっている。
+    /// カードが挿さっているか。0xFEA01C の bit10 と 0xF00224 の XOR (仕様書 10 章)。XOR が 1 なら挿さっている。
     /// 実機の観測 (仕様書に無い): カードを挿すと、0xF00224 = 0 のまま 0xFEA01C の bit10 が 1 になる
     /// (CECH-ZD1 J の MB86H47 は逆に、bit10 が 0 のとき挿さっている)
     /// </summary>
@@ -82,7 +82,7 @@ public sealed class Dt295NativeCard : ICardLink
 
     private void Write(uint address, uint value) => Link.Write32(address, value);
 
-    /// <summary>電源を切る (仕様書 §10 の切断の表 5 段)</summary>
+    /// <summary>電源を切る (仕様書 10 章の切断の表 5 段)</summary>
     private void PowerOff()
     {
         foreach (var (address, value) in new (uint, uint)[] { (Lines, 2), (Count, 0), (Enable, 3), (Lines, 0), (Lines, 8) })
@@ -94,7 +94,7 @@ public sealed class Dt295NativeCard : ICardLink
     }
 
     /// <summary>
-    /// 電源を入れる (仕様書 §10 の投入の 17 段)。0xFEA004 の 4 つの値は設定確認で決まる:
+    /// 電源を入れる (仕様書 10 章の投入の 17 段)。0xFEA004 の 4 つの値は設定確認で決まる:
     /// 段 1 = いまの 0xFEA004 の bit2 を落とした値、段 5 = (0xF00223 が 0) を bit3 にした値、段 7 = 段 5 | 2、段 16 = 段 5 | 6
     /// </summary>
     private void PowerOn()

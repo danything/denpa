@@ -135,7 +135,7 @@ internal sealed class It930xTsDemux
 }
 
 /// <summary>
-/// 受信機 1 つぶんの TS の出口。<see cref="Pipe"/> (8 MB) に詰め、読み出し側は <see cref="DeviceStream"/>。Pipe は asicend・CECH-ZD1 J と同じ <see cref="TsBuffer"/> で作る。
+/// 受信機 1 つぶんの TS の出口。<see cref="Pipe"/> (8 MB) に詰め、読み出し側は <see cref="DeviceStream"/>。Pipe は asicend・CECH-ZD1 J・PIX-DT295・Siano と同じ <see cref="TsBuffer"/> で作る。
 /// 選局のたびに新しく作り、前の選局のパケットと混ぜない。
 ///
 /// <para>

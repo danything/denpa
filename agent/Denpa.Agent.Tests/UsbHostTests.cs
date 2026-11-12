@@ -3,7 +3,7 @@ namespace Denpa.Agent.Tests;
 /*
  * USB の境目 (UsbHost.cs)。機材ごとのコードは偽の IUsbHost で、SysfsUsbHost は作った sysfs で確かめる。
  * Windows と macOS の実装 (WinUsbHost・IoKitUsbHost) は OS の一覧をそのまま包むだけなので、偽の IUsbHost が
- * その形 (ID の順に返す・ドライバもインターフェースも分からない) を真似る。
+ * その返し方 (ID の順に返す・ドライバもインターフェースも分からない) を真似る。
  */
 public class UsbHostTests
 {
@@ -194,7 +194,7 @@ public class UsbHostTests
             await Assert.That(Assert.Throws<IOException>(() => host.OpenCcid("1-2", 0x0511, 0x084E, 1, 1)).Message).Contains("001/005");
             await Assert.That(Assert.Throws<IOException>(() => host.OpenCcid("1-3", 0x0511, 0x0051, 1, 0)).Message).Contains("1-3 に機材がありません");
             await Assert.That(host.PowerCycle).IsNotNull();
-            // usbfs の置き場が無ければ、抜き差しは受け取らない (止めても転ばない)
+            // usbfs の置き場が無ければ、抜き差しは受け取らない (止めても例外にならない)
             host.Watch(() => { }).Dispose();
         }
         finally

@@ -8,12 +8,12 @@ namespace Denpa.Agent;
 /// 手順は ITE の SDK (<c>api/IT9300.c</c> の <c>IT9300_bcas*</c>) を元に書いた。コメントの関数名は SDK のもの。
 /// カードがあるかは GPIOH6 (0 ならある。<c>IT9300_bcasDetectCard</c>)、リセットは GPIOH14 (<c>IT9300_bcasResetCard</c>)。
 /// SDK は ITE の評価基板の配線で、PX-MLT5PE の実機ではこの GPIO でカードをリセットして読めた。
-/// ほかの機種も同じつなぎ方 (ブリッジの UART と GPIOH6・GPIOH14) とされている (IT930x の仕様書 9) が、このドライバーでは実機で確かめていない (#1578)。
+/// ほかの機種も同じつなぎ方 (ブリッジの UART と GPIOH6・GPIOH14) とされている (IT930x の仕様書 9)。PX-Q3PE4 の実機でも読めた。ほかの機種は実機で確かめていない (#1578)。
 /// T=1 の枠組みは <see cref="T1Protocol"/>、ATR と応答のブロックを受け切る手順は <see cref="CardUart"/> と共通にしている。
 /// </para>
 ///
 /// <para>
-/// **電源が GPIOH7 の機種は、カードが受信機と同じ電源を使う** (IT930x の仕様書 7.2、IT930x の仕様書 9)。機材 (<see cref="It930xDevice"/>) は最初に使うときに取り、使っている間は返さないので、
+/// **電源が GPIOH7 の機種は、カードが受信機と同じ電源を使う** (IT930x の仕様書 7.2・9)。機材 (<see cref="It930xDevice"/>) は最初に使うときに取り、使っている間は返さないので、
 /// 受信機を全部閉じても電源は切れない。カードだけを使うときも、機材を開いて電源を入れる。閉じたら機材を返し、受信機も使っていなければ機材を閉じる。
 /// 電源が GPIOH3 の機種 (受信機が 1 つの機種) は、機材を開いても電源を入れず、電源を切ったままカードを読む (IT930x の仕様書 7.3)。
 /// Q3 のカードスロットは、シリアル番号の末尾が 1 の側だけにつながっているとされる (IT930x の仕様書 9。<see cref="It930x.Cards()"/> はその側だけを挙げる)
@@ -52,7 +52,7 @@ public sealed class It930xCard : ICardLink
     /// <summary>ブリッジから読んで、まだ渡していないバイト</summary>
     private readonly Queue<byte> _received = new();
 
-    /// <summary>リセットから T=1 までの流れ、送受信、閉じるを 1 つずつ通す</summary>
+    /// <summary>リセットから T=1 の準備まで、送受信、閉じるを 1 つずつ通す</summary>
     private readonly Lock _session = new();
 
     private It930xDevice? _device;
@@ -243,7 +243,7 @@ public sealed class It930xCard : ICardLink
     }
 
     /// <summary>
-    /// 前のやり取りの残り (時間切れのあとに遅れて届いた応答) を捨てる。仕様書と SDK に無い:
+    /// 前のやり取りの残り (時間切れのあとに遅れて届いた応答) を捨てる (仕様書と SDK に無い)。
     /// 遅れて届いたバイトが次の応答の先頭に混ざらないように、送る前に受けた数を読んで、残っていれば読み捨てる
     /// </summary>
     private void Discard(It930xBridge bridge)

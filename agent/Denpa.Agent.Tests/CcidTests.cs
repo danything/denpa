@@ -14,7 +14,7 @@ internal static class CcidAnswer
  * USB の CCID リーダーを直接扱うところ。
  *
  * 本物のリーダーは無い。ディスクリプタは Gemalto (Gemplus) PC Twin Reader (08e6:3437) の
- * 値で組み (CCID ドライバの readers/GemPCTwin.txt)、リーダーはバルク転送の入口ごと偽物にする。
+ * 値で組み (CCID ドライバの readers/GemPCTwin.txt)、リーダーはバルク転送のパイプごと偽物にする。
  * 偽物は USB の振る舞い (パケットの倍数で終わるメッセージは ZLP が無いと返らない) も再現する。
  * 実機で当てるのは Ccid.Describe() (`denpa-agent --card`)。
  */
@@ -120,7 +120,7 @@ public class CcidTests
 
     /// <summary>
     /// 偽のリーダー。命令を受けると <c>handler</c> が返す応答を積む。
-    /// 読み方が USB として無理なら (ZLP 無しでは返らない・パケットの途中で切る) その場で例外を投げる
+    /// 読み方が USB として無理なら (ZLP 無しでは返らない・パケットの途中で切る) その場で例外を送出する
     /// </summary>
     private sealed class FakeReader(Func<CcidReply, IEnumerable<byte[]>> handler, int packet = 64) : IBulkPipe
     {
@@ -215,7 +215,7 @@ public class CcidTests
     }
 
     [Test]
-    public async Task カードが無ければ投げる()
+    public async Task カードが無ければ例外にする()
     {
         var reader = new FakeReader(command => command.Type == CcidMessage.PowerOn
             ? [Reply(CcidAnswer.SlotStatus, command.Seq, 0x42, CcidMessage.IccMute, [])]

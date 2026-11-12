@@ -212,7 +212,7 @@ public class TsObservationTests
     }
 
     [Test]
-    public async Task 化けた_PMT_は読まない()
+    public async Task CRC_の合わない_PMT_は読まない()
     {
         var pmt = new Ts().Pmt(PmtPid, 0x0101, Ca(OtherSystem, EcmPid), []).Bytes.ToArray();
         // CA_system_id の 1 バイトを変える (CRC が合わなくなる)
