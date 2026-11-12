@@ -52,6 +52,10 @@ internal data class AgentStatus(val tuners: Int, val recording: Boolean) {
 internal class AgentClient(private val tlsDir: File, private val port: Int) {
     private var context: Pair<SSLContext, ByteArray>? = null
 
+    /** エージェントの証明書の指紋 (SHA-256 の小文字の 16 進)。最後に読めたときのもので、まだ読めていなければ null。LAN に知らせる `id` の元 ([Advertiser]) */
+    val fingerprint: String?
+        get() = context?.second?.joinToString("") { "%02x".format(it) }
+
     /** 読めなければ例外 (起動の途中、止まっている、鍵がまだ無い)。次は鍵から読み直す (鍵を作り直されても追える) */
     fun status(): AgentStatus = try {
         read()

@@ -18,6 +18,7 @@
         <Compile Include="../Denpa.Agent/Json.cs" />
         <Compile Include="../Denpa.Agent/AgentTls.cs" />
         <Compile Include="../Denpa.Agent/Qr.cs" />
+        <Compile Include="../Denpa.Agent/Mdns.cs" />
         <Compile Include="../Denpa.Agent/Config.cs" />
         <Compile Include="../Denpa.Agent/TunerPool.cs" />
         <Compile Include="../Denpa.Agent/TunerSignal.cs" />

@@ -7,11 +7,14 @@ import {
   AgentAdminError,
   agentEntries,
   agentState,
+  followAgent,
+  forgetFollowTries,
   moveAgent,
   removeAgent,
   renameAgent,
+  unregistered,
 } from "./agent-admin";
-import { createIdentity } from "./agent-identity";
+import { createIdentity, fingerprint, pemToDer } from "./agent-identity";
 import { agentCert, listAgents } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
@@ -230,6 +233,101 @@ describe("agentState", () => {
       );
       expect(changed.trouble).toBe("changed");
       expect(changed.tuners).toBeNull();
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
+describe("followAgent (LAN で見つけたエージェントのアドレスを追う)", () => {
+  const id = fingerprint(pemToDer(fakeAgentIdentity().cert)).slice(0, 16);
+
+  beforeEach(() => forgetFollowTries());
+
+  test("今の宛先で繋がらず、新しいアドレスで保存した証明書のまま繋がれば付け替える", async () => {
+    const old = serve("書斎");
+    const moved = serve("書斎");
+    try {
+      const agent = await addAgent(fakeAgentUrl(old.port!));
+      old.stop(true);
+      expect(
+        await followAgent({ id, host: "127.0.0.1", port: moved.port! }),
+      ).toBe(true);
+      expect(listAgents()[0]?.origin).toBe(`https://127.0.0.1:${moved.port}`);
+      expect(agentCert(agent.id)).toBe(fakeAgentIdentity().cert);
+    } finally {
+      moved.stop(true);
+    }
+  });
+
+  test("今の宛先で繋がる・指紋が合わない・環境変数のものは付け替えない", async () => {
+    const current = serve("書斎");
+    const elsewhere = serve("書斎");
+    try {
+      await addAgent(fakeAgentUrl(current.port!));
+      // 今の宛先で繋がる (名前で登録していて、まだ引ける)
+      expect(
+        await followAgent({ id, host: "127.0.0.1", port: elsewhere.port! }),
+      ).toBe(false);
+      expect(listAgents()[0]?.origin).toBe(`https://127.0.0.1:${current.port}`);
+
+      // 指紋の合う行が無い
+      forgetFollowTries();
+      current.stop(true);
+      expect(
+        await followAgent({
+          id: "0000000000000000",
+          host: "127.0.0.1",
+          port: elsewhere.port!,
+        }),
+      ).toBe(false);
+
+      // 環境変数のものは環境変数が持ち主
+      orm().delete(agents).run();
+      config.agentUrl = fakeAgentUrl(9);
+      listAgents();
+      const cert = fakeAgentIdentity().cert;
+      orm()
+        .update(agents)
+        .set({ cert, fingerprint: fingerprint(pemToDer(cert)) })
+        .run();
+      expect(
+        await followAgent({ id, host: "127.0.0.1", port: elsewhere.port! }),
+      ).toBe(false);
+      expect(listAgents()[0]?.origin).toBe("https://127.0.0.1:9");
+    } finally {
+      current.stop(true);
+      elsewhere.stop(true);
+    }
+  });
+
+  test("新しいアドレスで別の証明書が答えたら付け替えない (偽の答え)", async () => {
+    const old = serve("書斎");
+    const impostor = serve("書斎", createIdentity("denpa-agent"));
+    try {
+      const port = old.port!;
+      await addAgent(fakeAgentUrl(port));
+      old.stop(true);
+      expect(
+        await followAgent({ id, host: "127.0.0.1", port: impostor.port! }),
+      ).toBe(false);
+      expect(listAgents()[0]?.origin).toBe(`https://127.0.0.1:${port}`);
+      // 続けては試さない (偽の答えが続いても、繋ぎに行くのは 5 分に 1 回)
+      calls = [];
+      await followAgent({ id, host: "127.0.0.1", port: impostor.port! });
+      expect(calls).toEqual([]);
+    } finally {
+      impostor.stop(true);
+    }
+  });
+
+  test("候補には、どの行の指紋とも合わないものだけを残す", async () => {
+    const server = serve("書斎");
+    try {
+      await addAgent(fakeAgentUrl(server.port!));
+      expect(unregistered([{ id }, { id: "0123456789abcdef" }])).toEqual([
+        { id: "0123456789abcdef" },
+      ]);
     } finally {
       server.stop(true);
     }

@@ -2,8 +2,10 @@ import { mkdirSync } from "node:fs";
 
 import { SOCKET_PATH } from "#lib/live.js";
 
+import { followAgent } from "./agent-admin";
 import { forgetAgentCard } from "./agent-cards";
 import { listen } from "./agent-events";
+import { startDiscovery } from "./agent-mdns";
 import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
@@ -180,6 +182,17 @@ export function start(): void {
   nowAndEvery(config.epgCollectInterval, "epg-collect", collectOnce);
 
   listenToAgents();
+
+  /*
+   * **LAN でエージェントを見つける** (mDNS。agent-mdns.ts)。設定の「エージェントを追加」に候補を出し、
+   * 画面から登録したエージェントのアドレスが変わったら、保存した証明書で繋がるときだけ付け替える (agent-admin.followAgent)。
+   * マルチキャストが届かない構成 (コンテナのブリッジ・Pod) では何も見つからないだけ
+   */
+  startDiscovery((found) => {
+    void followAgent(found).catch((error: unknown) => {
+      console.warn(`[agent] アドレスを追えませんでした: ${error}`);
+    });
+  });
 
   every(config.schedulerTick, "scheduler", async () => {
     await tick();

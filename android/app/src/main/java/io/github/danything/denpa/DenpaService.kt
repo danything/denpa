@@ -14,6 +14,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.Uri
+import android.net.nsd.NsdManager
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -52,6 +53,8 @@ class DenpaService : Service() {
     private lateinit var wakeLock: PowerManager.WakeLock
     private lateinit var home: File
     private lateinit var client: AgentClient
+    /** LAN の denpa にエージェントを知らせる (mDNS。[Advertiser]) */
+    private lateinit var advertiser: Advertiser
     private lateinit var agentFile: File
 
     internal var broker: UsbBroker? = null
@@ -169,6 +172,7 @@ class DenpaService : Service() {
         )
         home = File(filesDir, "denpa")
         client = AgentClient(File(home, "config/tls"), AGENT_PORT)
+        advertiser = Advertiser(getSystemService(NsdManager::class.java))
         agentFile = File(applicationInfo.nativeLibraryDir, AGENT_LIBRARY)
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "denpa:agent")
         acquireWakeLock()
@@ -219,6 +223,7 @@ class DenpaService : Service() {
         instance = null
         broker?.stop()
         broker = null
+        advertiser.stop()
         // 止めると決める前にシステムに止められたときも、部品を残さない
         for (slot in slots) slot.part?.terminate()
         worker.removeCallbacksAndMessages(null)
@@ -289,6 +294,7 @@ class DenpaService : Service() {
         Log.i(TAG, "部品がすべて終了したため、常駐サービスを止めます")
         // 様子の読み取りと起動し直しの待ちが通知を出し直さないよう、先に止める
         worker.removeCallbacksAndMessages(null)
+        advertiser.stop()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -319,7 +325,10 @@ class DenpaService : Service() {
         override fun run() {
             if (agent.part != null) {
                 status = try {
-                    client.status()
+                    client.status().also {
+                        // 鍵が読めて応答したら LAN に知らせる (指紋が変わったら知らせ直す)
+                        client.fingerprint?.let { print -> advertiser.update(print, deviceName(), AGENT_PORT) }
+                    }
                 } catch (error: Exception) {
                     Log.d(TAG, "エージェントの GET /denpa/tuners を取得できませんでした: $error")
                     null

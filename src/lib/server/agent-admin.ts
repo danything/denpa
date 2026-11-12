@@ -429,3 +429,80 @@ export async function agentState(
     recordings: [...recordings],
   };
 }
+
+/** 付け替えを試した時刻 (`agents.id` →)。偽の答えが続いても、繋ぎに行くのは 1 台 5 分に 1 回まで */
+const followTried = new Map<number, number>();
+const FOLLOW_GAP = 5 * 60_000;
+
+/**
+ * **登録したエージェントのアドレスが変わったら付け替える** (LAN で見つけたとき。`agent-mdns.ts`)。
+ *
+ * - 見つけたものの `id` (証明書の指紋の先頭 16 字) と指紋が合う、画面から登録した行だけを見る。環境変数のものは環境変数が持ち主なので追わない
+ * - 今の宛先で保存した証明書のまま繋がるなら何もしない (名前で登録していて、名前がまだ引けるとき)
+ * - 繋がらなければ、新しいアドレスで**保存した証明書のまま繋がったときだけ**宛先を書き換える (`moveAgent` の `#pair=` の無い付け替えと同じ)。
+ *   `id` が合うだけの偽の答えでは書き換わらない
+ */
+export async function followAgent(found: {
+  id: string;
+  host: string;
+  port: number;
+}): Promise<boolean> {
+  const origin = `https://${found.host}:${found.port}`;
+  const row = orm()
+    .select({
+      id: agents.id,
+      name: agents.name,
+      origin: agents.origin,
+      cert: agents.cert,
+      fingerprint: agents.fingerprint,
+    })
+    .from(agents)
+    .where(eq(agents.from_env, false))
+    .all()
+    .find(
+      (agent) =>
+        agent.cert !== null && agent.fingerprint?.startsWith(found.id) === true,
+    );
+  if (row === undefined || row.cert === null || row.origin === origin)
+    return false;
+  const now = Date.now();
+  if (now - (followTried.get(row.id) ?? 0) < FOLLOW_GAP) return false;
+  followTried.set(row.id, now);
+  try {
+    await fetchAt(row.origin, row.cert, "/denpa/about", {
+      signal: AbortSignal.timeout(5000),
+    });
+    return false;
+  } catch {
+    // 今の宛先では繋がらない (アドレスが変わった・ほかの機械が答えた)
+  }
+  try {
+    await moveAgent(row.id, origin);
+  } catch (error) {
+    console.warn(
+      `[agent] ${row.name} を LAN で ${found.host} に見つけましたが、付け替えられませんでした: ${error instanceof Error ? error.message : error}`,
+    );
+    return false;
+  }
+  console.log(
+    `[agent] ${row.name} のアドレスが変わったため、${new URL(origin).host} に付け替えました`,
+  );
+  return true;
+}
+
+/** 試験から。付け替えを試した時刻を忘れる */
+export function forgetFollowTries(): void {
+  followTried.clear();
+}
+
+/** LAN で見つけたもののうち、まだ登録していないもの (指紋の先頭が、どの行の指紋とも合わない)。環境変数のものも登録済みに数える */
+export function unregistered<T extends { id: string }>(found: T[]): T[] {
+  const prints = orm()
+    .select({ fingerprint: agents.fingerprint })
+    .from(agents)
+    .all()
+    .flatMap((row) => (row.fingerprint === null ? [] : [row.fingerprint]));
+  return found.filter(
+    (agent) => !prints.some((print) => print.startsWith(agent.id)),
+  );
+}

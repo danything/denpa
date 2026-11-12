@@ -1,6 +1,6 @@
 <script lang="ts">
   import "@anyblades/blades/components/modal";
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
   import ScanLine from "~icons/lucide/scan-line";
 
   import { submitting } from "#lib/actions.js";
@@ -15,10 +15,13 @@
    */
   let {
     target,
+    found = [],
     onclose,
   }: {
     /** 開く窓。`add` は登録、`move` は「URL を変える」。null で閉じる */
     target: { kind: "add" } | { kind: "move"; id: number; name: string } | null;
+    /** LAN で見つかった、まだ登録していないエージェント (登録の窓にだけ出す。`agent-mdns.ts`) */
+    found?: { id: string; name: string; host: string; port: number }[];
     onclose: () => void;
   } = $props();
 
@@ -26,6 +29,8 @@
   let input = $state<HTMLInputElement | null>(null);
   let url = $state("");
   let message = $state<string | null>(null);
+  /** 候補から選んだエージェントの名前 (合言葉を足すよう案内する) */
+  let chosen = $state<string | null>(null);
 
   /** QR を読めるか。開くたびに確かめる (サーバで描くときは無い) */
   let canScan = $state(false);
@@ -48,6 +53,7 @@
       }
       url = "";
       message = null;
+      chosen = null;
       canScan =
         window.isSecureContext &&
         "BarcodeDetector" in window &&
@@ -102,15 +108,34 @@
       void detector
         .detect(video)
         .then((codes) => {
-          const found = codes.find((code) =>
-            /^https:\/\//i.test(code.rawValue),
-          );
-          if (found === undefined) return;
-          url = found.rawValue;
+          const read = codes.find((code) => /^https:\/\//i.test(code.rawValue));
+          if (read === undefined) return;
+          url = read.rawValue;
           stopScan();
         })
         .catch(() => {});
     }, 300);
+  }
+
+  /**
+   * 候補を選ぶ。宛先と `#pair=` までを欄に入れ、合言葉だけを足してもらう (合言葉は LAN に知らせていない)。
+   * エージェントが出した URL をそのまま貼れば、欄ごと置き換わる (下の `paste`)
+   */
+  async function choose(agent: { name: string; host: string; port: number }) {
+    url = `https://${agent.host}:${agent.port}#pair=`;
+    chosen = agent.name;
+    message = null;
+    await tick();
+    input?.focus();
+    input?.setSelectionRange(url.length, url.length);
+  }
+
+  /** `https://` で始まるものを貼ったら、欄の中身ごと置き換える (候補を選んだあとに登録用の URL を貼ったとき) */
+  function paste(event: ClipboardEvent) {
+    const text = event.clipboardData?.getData("text")?.trim() ?? "";
+    if (!/^https:\/\//i.test(text) || url === "") return;
+    event.preventDefault();
+    url = text;
   }
 
   const title = $derived(
@@ -179,8 +204,33 @@
           class="mono"
           placeholder="https://ホスト:25252#pair=…"
           data-testid="agent-url"
+          onpaste={paste}
         />
       </label>
+      {#if chosen !== null}
+        <p class="small muted hint" data-testid="agent-found-hint">
+          #pair= の後ろに合言葉を足すか、{chosen} が出した登録用の URL を貼ります。
+        </p>
+      {/if}
+      {#if target?.kind === "add" && found.length > 0}
+        <div class="found" data-testid="agent-found">
+          <span class="small muted">LAN で見つかったエージェント</span>
+          <ul>
+            {#each found as agent (agent.id)}
+              <li>
+                <button
+                  type="button"
+                  class="small ghost"
+                  onclick={() => void choose(agent)}
+                  data-testid="agent-found-item"
+                >
+                  {agent.name}<span class="mono muted">{agent.host}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
       {#if canScan}
         <div class="scan">
           {#if scanning}
@@ -247,6 +297,27 @@
     margin-top: var(--dp-space-2);
   }
   .scan button {
+    margin: 0;
+  }
+  .hint {
+    margin: var(--dp-space-1) 0 0;
+  }
+  .found {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dp-space-1);
+    margin-top: var(--dp-space-3);
+  }
+  .found ul {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .found button {
+    gap: var(--dp-space-2);
     margin: 0;
   }
   video {
