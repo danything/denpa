@@ -3,12 +3,13 @@
 
   import {
     CHANNEL_NOTICE_ACTION,
+    CHANNEL_NOTICE_SECTION,
     CHANNEL_NOTICE_TEXT,
     type ChannelNotice,
   } from "#lib/channel-notice.js";
 
   /**
-   * 局が無いときの案内 (局が 1 つも無い・どれも復号できない) と、設定の「チャンネル」へのリンク (`#lib/channel-notice.ts`)。
+   * 局が無いときの案内 (エージェントが無い・局が 1 つも無い・どれも復号できない) と、設定の「受信」へのリンク (`#lib/channel-notice.ts`)。
    *
    * - `bar` … 画面の上に貼る 1 行 (録画・番組表・ライブ。`+layout.svelte`)。閉じるボタンは無い
    * - `center` … 空の番組表の真ん中に置く。文とボタンを縦に積む
@@ -34,7 +35,7 @@
 >
   <p>{text}</p>
   <a
-    href={`${resolve("settings/reception")}#channels`}
+    href={`${resolve("settings/reception")}#${CHANNEL_NOTICE_SECTION[kind]}`}
     class="button small {variant === 'bar' ? 'secondary outline' : ''}"
     >{CHANNEL_NOTICE_ACTION[kind]}</a
   >

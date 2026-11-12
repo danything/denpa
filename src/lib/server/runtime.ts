@@ -40,8 +40,8 @@ let started = false;
 /** スリープの様子を見る間隔 (ms。power.ts)。起こしてから録画を始めるまで (`WAKE_LEAD`。3 分) より十分短くする */
 const POWER_CHECK = 30_000;
 const timers: ReturnType<typeof setInterval>[] = [];
-/** エージェントごとの通知の購読を止めるもの */
-let unlisten: (() => void)[] = [];
+/** エージェントごとの通知の購読を止めるもの (`agents.id` →) */
+const unlisten = new Map<number, () => void>();
 
 async function guard(
   name: string,
@@ -308,7 +308,24 @@ function listenToAgents(): void {
     );
     return;
   }
-  unlisten = all.map((agent) => listenToAgent(agent));
+  for (const agent of all) watchAgent(agent);
+}
+
+/**
+ * 1 台のエージェントの通知を購読する。もう購読していれば止めてから繋ぎ直す (付け替えで宛先が変わったとき)。
+ * 起動したときの全部のエージェントと、設定の「エージェント」で登録・付け替えしたときに呼ぶ (`agent-admin.ts`)。
+ * 自動の処理を止めている (`DENPA_AUTOSTART=0`) ときは購読しない
+ */
+export function watchAgent(agent: Agent): void {
+  if (!started || !config.autostart) return;
+  unlisten.get(agent.id)?.();
+  unlisten.set(agent.id, listenToAgent(agent));
+}
+
+/** 1 台のエージェントの購読を止める (設定の「エージェント」で削除したとき) */
+export function unwatchAgent(agent: number): void {
+  unlisten.get(agent)?.();
+  unlisten.delete(agent);
 }
 
 function listenToAgent(agent: Agent): () => void {
@@ -377,8 +394,8 @@ function listenToAgent(agent: Agent): () => void {
 function stop(): void {
   for (const timer of timers) clearInterval(timer);
   timers.length = 0;
-  for (const off of unlisten) off();
-  unlisten = [];
+  for (const off of unlisten.values()) off();
+  unlisten.clear();
   // Mac: 録画の前に起こす予約を取り消す (止まった本体のために起こさない。power.ts)
   forgetWake();
   started = false;

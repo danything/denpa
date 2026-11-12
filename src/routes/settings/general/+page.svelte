@@ -33,6 +33,24 @@
     (tuners.value?.list ?? []).filter((tuner) => !tuner.disabled),
   );
 
+  /** 選択肢をエージェントごとにまとめたもの (一覧の並び = エージェントの並び) */
+  const agentGroups = $derived.by(() => {
+    const groups: {
+      agent: number;
+      name: string;
+      tuners: typeof liveTuners;
+    }[] = [];
+    for (const tuner of liveTuners) {
+      let group = groups.find((g) => g.agent === tuner.agent);
+      if (group === undefined) {
+        group = { agent: tuner.agent, name: tuner.agentName, tuners: [] };
+        groups.push(group);
+      }
+      group.tuners.push(tuner);
+    }
+    return groups;
+  });
+
   // 覚えている名指しが一覧に無い (チューナーを外した、エージェントに繋がらない)。届く前は「一覧にありません」を付けない
   const unlisted = $derived(
     liveTuner.pin !== null &&
@@ -161,10 +179,15 @@
               : " (一覧にありません)"}</option
           >
         {/if}
-        {#each liveTuners as tuner (tuner.pin)}
-          <option value={tuner.pin} selected={liveTuner.pin === tuner.pin}
-            >{tuner.name} ({typeNames(tuner.types)})</option
-          >
+        <!-- エージェントごとに見出しを付けて分ける (1 台でも付ける。設定の「チューナー」の表と同じ形) -->
+        {#each agentGroups as group (group.agent)}
+          <optgroup label={group.name}>
+            {#each group.tuners as tuner (tuner.pin)}
+              <option value={tuner.pin} selected={liveTuner.pin === tuner.pin}
+                >{tuner.name} ({typeNames(tuner.types)})</option
+              >
+            {/each}
+          </optgroup>
         {/each}
       </select>
       <Lead>

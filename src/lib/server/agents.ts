@@ -220,7 +220,7 @@ export function listAgents(): Agent[] {
 
 /** エージェントが 1 台も無いときの理由 */
 export const NO_AGENT =
-  "エージェントがありません。TUNER_AGENT_URL に https://ホスト:25252#pair=<合言葉> を書きます (docs/agent.md)";
+  "エージェントがありません。設定の「受信」の「エージェントを追加」に登録用の URL を貼るか、TUNER_AGENT_URL に https://ホスト:25252#pair=<合言葉> を書きます (docs/agent.md)";
 
 /**
  * 並びの先頭のエージェント。カード・復号・チャンネルスキャンはここに送る。
@@ -267,4 +267,14 @@ export function rememberAgentCert(
     .set({ cert, fingerprint })
     .where(eq(agents.id, id))
     .run();
+}
+
+/** 登録したエージェントの数。局が無いときの案内が、エージェントの追加とスキャンのどちらへ送るかに使う (`#lib/channel-notice.ts`) */
+export function agentCount(): number {
+  try {
+    return listAgents().length;
+  } catch {
+    // TUNER_AGENT_URL が読めない。書いてあるので、エージェントの追加へは送らない
+    return 1;
+  }
 }

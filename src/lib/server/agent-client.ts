@@ -133,10 +133,90 @@ function makeTlsOptions(identity: Identity, ca: string) {
   };
 }
 
+/** 組めた相手の証明書 (PEM) と指紋 */
+export interface PeerCert {
+  cert: string;
+  fingerprint: string;
+}
+
+/**
+ * **組めなかったわけ。** 画面から登録するとき (`agent-admin.ts`) は、`kind` で出す文を決める。
+ * `unreachable` は繋がらない、`refused` はエージェントが断った (`message` はエージェントの `error`。200 字まで)、
+ * `proof` は相手の合言葉が違う (別の相手に繋がっている)
+ */
+export class PairError extends Error {
+  constructor(
+    readonly kind: "unreachable" | "refused" | "proof",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/** エージェントが返した文。長いものは切る (人が書いた宛先の相手が返した本文なので、画面に出すのは 200 字まで) */
+const agentText = (text: string): string =>
+  text.length > 200 ? `${text.slice(0, 200)}…` : text;
+
+/**
+ * **合言葉で組み、相手の証明書を返す。** 保存はしない (環境変数のエージェントは `pair` が行に、画面から登録するものは
+ * `agent-admin.ts` が新しい行に保存する)。相手の証明書は確かめずに取り、合言葉の証し (pairProof) が合ったときだけ返す
+ */
+export async function handshake(
+  origin: string,
+  token: string,
+): Promise<PeerCert> {
+  const identity = ownIdentity();
+  let peer: Uint8Array;
+  try {
+    peer = await peerCertificate(origin, identity);
+  } catch (error) {
+    throw new PairError(
+      "unreachable",
+      `エージェントに繋がりません: ${error instanceof Error ? error.message : error}`,
+    );
+  }
+  const agent = fingerprint(peer);
+  const peerPem = derToPem(peer);
+  let res: Response;
+  try {
+    res = await fetch(`${origin}/denpa/pair`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client: identity.fingerprint,
+        proof: pairProof(token, "client", agent, identity.fingerprint),
+      }),
+      signal: AbortSignal.timeout(10_000),
+      tls: tlsOptions(identity, peerPem),
+    });
+  } catch (error) {
+    throw new PairError(
+      "unreachable",
+      `エージェントに繋がりません: ${error instanceof Error ? error.message : error}`,
+    );
+  }
+  const body = (await res.json().catch(() => null)) as {
+    proof?: unknown;
+    error?: unknown;
+  } | null;
+  if (!res.ok) {
+    const why =
+      typeof body?.error === "string" ? agentText(body.error) : `${res.status}`;
+    throw new PairError("refused", why);
+  }
+  if (body?.proof !== pairProof(token, "agent", agent, identity.fingerprint)) {
+    throw new PairError(
+      "proof",
+      "相手の合言葉が違います (別の相手に繋がっているかもしれません)",
+    );
+  }
+  return { cert: peerPem, fingerprint: agent };
+}
+
 /** 組んでいる途中のもの (行の ID ごと)。別のエージェントとは同時に組める */
 const pairing = new Map<number, Promise<void>>();
 
-/** 合言葉で組み、相手の証明書を行に保存する。同じエージェントに同時に呼ばれても 1 度だけ */
+/** 環境変数の合言葉で組み、相手の証明書を行に保存する。同じエージェントに同時に呼ばれても 1 度だけ */
 function pair(target: Agent): Promise<void> {
   const running = pairing.get(target.id);
   if (running !== undefined) return running;
@@ -147,39 +227,17 @@ function pair(target: Agent): Promise<void> {
         "エージェントとまだ組んでいません。TUNER_AGENT_URL に #pair=<合言葉> を付けてください (エージェントのログか `denpa-agent --pair` に出ます。docs/agent.md)",
       );
     }
-    const identity = ownIdentity();
-    const peer = await peerCertificate(target.origin, identity);
-    const agent = fingerprint(peer);
-    const peerPem = derToPem(peer);
-    const res = await fetch(`${target.origin}/denpa/pair`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client: identity.fingerprint,
-        proof: pairProof(token, "client", agent, identity.fingerprint),
-      }),
-      signal: AbortSignal.timeout(10_000),
-      tls: tlsOptions(identity, peerPem),
-    });
-    const body = (await res.json().catch(() => null)) as {
-      proof?: unknown;
-      error?: unknown;
-    } | null;
-    if (!res.ok) {
-      const why =
-        typeof body?.error === "string" ? body.error : `${res.status}`;
-      throw new Error(`エージェントと組めません: ${why}`);
-    }
-    if (
-      body?.proof !== pairProof(token, "agent", agent, identity.fingerprint)
-    ) {
+    let peer: PeerCert;
+    try {
+      peer = await handshake(target.origin, token);
+    } catch (error) {
       throw new Error(
-        "エージェントと組めません: 相手の合言葉が違います (別の相手に繋がっているかもしれません)",
+        `エージェントと組めません: ${error instanceof Error ? error.message : error}`,
       );
     }
-    rememberAgentCert(target.id, peerPem, agent);
+    rememberAgentCert(target.id, peer.cert, peer.fingerprint);
     console.log(
-      `[agent] エージェント (${target.name}・${agent.slice(0, 16)}) と組みました`,
+      `[agent] エージェント (${target.name}・${peer.fingerprint.slice(0, 16)}) と組みました`,
     );
   })();
   pairing.set(target.id, done);
@@ -211,10 +269,49 @@ async function notPaired(res: Response): Promise<boolean> {
 }
 
 /**
+ * **画面から登録したエージェントと、保存した証明書で繋がらない** (合言葉を持たないので組み直せない)。
+ * `changed` は相手の証明書が変わった、`unpaired` はエージェントに組んでいないと断られた (`tls/clients` から消された)。
+ * どちらも登録用の URL を貼り直してもらう (設定の「エージェント」の「URL を変える」)
+ */
+export class AgentTrustError extends Error {
+  constructor(readonly kind: "changed" | "unpaired") {
+    super(
+      kind === "changed"
+        ? "エージェントの証明書が変わりました。登録用の URL を貼り直してください"
+        : "エージェントにこの denpa の登録がありません。登録用の URL を貼り直してください",
+    );
+  }
+}
+
+/**
+ * 保存した証明書 (`cert`) で、行の無い宛先を呼ぶ。付け替え (`agent-admin.moveAgent`) で、新しいアドレスの相手が
+ * 同じエージェントかを確かめるときに使う。証明書が合わなければ `AgentTrustError` (`changed`)
+ */
+export async function fetchAt(
+  origin: string,
+  cert: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  try {
+    return await fetch(`${origin}${path}`, {
+      ...init,
+      tls: tlsOptions(ownIdentity(), cert),
+    });
+  } catch (error) {
+    if (isTrustError(error)) throw new AgentTrustError("changed");
+    throw error;
+  }
+}
+
+/**
  * 決まったエージェントを呼ぶ。`path` は `/denpa/...`。返すのはふつうの `fetch` の応答。
  * どのエージェントに送るかは呼ぶ側が決める (`agents.ts` の `listAgents`・`primaryAgent`。選局は `tuner.openChannel` が振り分ける)。
  * まだ組んでいない・保存した証明書と合わない・組んでいないと断られた、のどれかなら、合言葉で組み直して 1 度だけ試し直す。
- * 試し直すので、`init.body` は文字列など何度でも送れるものにする (いまの呼び出し元はどれも JSON の文字列か本文なし)
+ * 試し直すので、`init.body` は文字列など何度でも送れるものにする (いまの呼び出し元はどれも JSON の文字列か本文なし)。
+ *
+ * **合言葉を持たないエージェント (画面から登録したもの) は組み直さない。** 証明書が合わなければ `AgentTrustError` を送出し、
+ * 組んでいないと断られた 403 はそのまま返す
  */
 export async function fetchAgent(
   target: Agent,
@@ -240,10 +337,19 @@ export async function fetchAgent(
     if (!(await notPaired(res))) return res;
   } catch (error) {
     if (!(error instanceof NeedsPairing)) throw error;
+    if (target.pair === null && agentCert(target.id) !== null)
+      throw new AgentTrustError("changed");
   }
   if (init.signal?.aborted) throw init.signal.reason;
   await pair(target);
   return attempt();
+}
+
+/**
+ * 組んでいないと断られた応答か (403 の `paired: false`)。画面から登録したエージェントの状態に使う (`agent-admin.ts`)
+ */
+export async function refusedAsUnpaired(res: Response): Promise<boolean> {
+  return res.status === 403 && (await notPaired(res));
 }
 
 class NeedsPairing extends Error {}

@@ -7,7 +7,7 @@ import {
   serverLogLines,
 } from "#lib/server/diagnostics.js";
 import { cardStatus } from "#lib/server/scramble.js";
-import { tunerList } from "#lib/server/tuner.js";
+import { getTuners, pinKey } from "#lib/server/tuner.js";
 
 /**
  * 「バージョンと環境」と「ログ」の節 (前の「診断」)。動いている環境 (denpa とエージェントのバージョン・OS・チューナー・カードリーダー) と、サーバとエージェントのログ。
@@ -39,12 +39,14 @@ export function load(url: URL) {
     // エージェント待ちのものは promise のまま返して後から流し込む (待つと画面が出ない)
     agentLogs: Promise.all(all.map((agent) => agentLogs(agent, known))),
     agentAbout: Promise.all(all.map((agent) => agentAbout(agent, known))),
-    // 「その他」のライブのチューナーの選択肢もこれから作る (`/denpa/tuners` を 1 回だけ呼ぶ)
-    tuners: tunerList()
+    // 「その他」のライブのチューナーの選択肢もこれから作る (エージェントごとに `/denpa/tuners` を 1 回だけ呼ぶ)。名指しは `<エージェントの ID>:<pin>`
+    tuners: getTuners()
       .then((got) => ({
-        list: got.tuners.map((tuner) => ({
+        list: got.map((tuner) => ({
           name: tuner.name,
-          pin: tuner.pin,
+          pin: pinKey(tuner),
+          agent: tuner.agent,
+          agentName: all.find((agent) => agent.id === tuner.agent)?.name ?? "",
           types: tuner.types,
           disabled: tuner.disabled,
           error: tuner.error,

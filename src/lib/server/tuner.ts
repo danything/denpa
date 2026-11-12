@@ -631,7 +631,7 @@ export async function openChannel(
   });
   // 引き継ぐ利用者は全部渡す。送った先にいなければ、エージェントはふつうに選ぶ (docs/agent.md「選ぶ順の約束」の 4)
   for (const leaving of after) query.append("after", leaving);
-  if (pin !== null) query.set("tuner", pin);
+  if (pin !== null) query.set("tuner", splitPin(pin).pin);
   if (service !== null) query.set("service", String(service));
   const answer = new AbortController();
   const timer =
@@ -799,6 +799,22 @@ function usable(
   );
 }
 
+/**
+ * **デバッグ用の名指しは `<エージェントの ID>:<pin>`** (設定の「その他」の「この端末」のライブのチューナー)。
+ * エージェントごとに pin が重なりうるので、どのエージェントのチューナーかを前に付ける
+ */
+export function pinKey(tuner: Pick<AgentTuner, "agent" | "pin">): string {
+  return `${tuner.agent}:${tuner.pin}`;
+}
+
+/** 名指しを、エージェントの ID と pin に分ける。前に ID が付いていなければ、どのエージェントでもよい */
+export function splitPin(named: string): { agent: number | null; pin: string } {
+  const found = /^(\d+):(.+)$/s.exec(named);
+  return found === null
+    ? { agent: null, pin: named }
+    : { agent: Number(found[1]), pin: found[2]! };
+}
+
 /** カードが分からないエージェントの順 (`agent-cards.cardRanks` の、使えるカードが無いものと同じ) */
 const NO_KEY = 3;
 
@@ -829,9 +845,12 @@ export function route(
   );
   if (up.length === 0) return request.places[0]!;
   if (pin !== null) {
+    const named = splitPin(pin);
     return (
-      up.find((place) =>
-        listOf.get(place.agent)!.tuners.some((t) => t.pin === pin),
+      up.find(
+        (place) =>
+          (named.agent === null || place.agent === named.agent) &&
+          listOf.get(place.agent)!.tuners.some((t) => t.pin === named.pin),
       ) ?? up[0]!
     );
   }

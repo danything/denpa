@@ -8,6 +8,7 @@ import { jikkyoChannel } from "#lib/jikkyo/channels.js";
 import { type BroadcastCodec, broadcastCodec } from "#lib/live-choice.js";
 import { LAST_COOKIE } from "#lib/live.js";
 import { serviceChannel } from "#lib/server/agent-channels.js";
+import { agentCount } from "#lib/server/agents.js";
 import { orm } from "#lib/server/db.js";
 import {
   airing,
@@ -174,7 +175,11 @@ export function load(event) {
   return {
     channels,
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
-    channelNotice: channelNotice(serviceCounts(), listedServices()),
+    channelNotice: channelNotice(
+      serviceCounts(),
+      listedServices(),
+      agentCount(),
+    ),
     start,
     /**
      * WebSocket に繋ぐチケット (`server/tickets.ts`)。**最初の 1 回はこれで繋ぎ**、`/api/live/ticket` の往復 (100ms ほど) を省く。

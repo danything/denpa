@@ -146,6 +146,27 @@ public class AgentTlsTests
         await Assert.That(tls.Clients.Count).IsEqualTo(0);
     }
 
+
+    [Test]
+    public async Task 組んだ_denpa_が呼べば登録を消し_ほかの登録は残す()
+    {
+        var tls = AgentTls.Load(Fresh(), "t");
+        tls.Clients.Add(D);
+        tls.Clients.Add(A);
+
+        // 組んだ相手からの DELETE は普通の API と同じく通す (組んでいなければ 403)
+        await Assert.That(tls.Decide(D, "DELETE", "/denpa/pair")).IsEqualTo(AgentTls.Gate.Pass);
+        await Assert.That(tls.Decide("ff", "DELETE", "/denpa/pair")).IsEqualTo(AgentTls.Gate.Refuse);
+
+        await Assert.That(tls.Unpair(D)).IsTrue();
+        await Assert.That(tls.Clients.Contains(D)).IsFalse();
+        await Assert.That(File.ReadAllText(Path.Combine(tls.Dir, "clients"))).IsEqualTo(A + "\n");
+        // 2 度目と名乗りの無い相手は何もしない
+        await Assert.That(tls.Unpair(D)).IsFalse();
+        await Assert.That(tls.Unpair(null)).IsFalse();
+        await Assert.That(tls.Clients.Count).IsEqualTo(1);
+    }
+
     /*
      * 組む API は組む前の相手からも受けるので、本文は要る大きさ (130 バイトほど) に余裕を足したところで切る。
      * 越えた本文は上限の 1 バイト先までしか読まない

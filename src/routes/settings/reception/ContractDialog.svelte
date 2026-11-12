@@ -11,16 +11,22 @@
 
   let {
     open,
+    agent,
     cardId,
     initialContracts = [],
     onclose,
   }: {
     open: boolean;
+    /** どのエージェントのカードか (契約の一覧と復号を確かめるカード。`tuners.server.ts`) */
+    agent: number;
     cardId: string | null;
     initialContracts: ContractRow[];
     onclose: () => void;
   } = $props();
 
+  // エージェントごとに 1 つずつ置くので、見出しの ID を窓ごとに分ける
+  const uid = $props.id();
+  const titleId = `contract-dialog-title-${uid}`;
   let dialog = $state<HTMLDialogElement | null>(null);
   let box = $state<HTMLElement | null>(null);
 
@@ -49,6 +55,7 @@
     done?: (payload: Record<string, unknown>) => string | null,
   ): Promise<void> {
     if (busy !== null) return;
+    form.set("agent", String(agent));
     busy = key;
     errorMessage = null;
     resultMessage = null;
@@ -130,7 +137,7 @@
 <dialog
   bind:this={dialog}
   {onclose}
-  aria-labelledby="contract-dialog-title"
+  aria-labelledby={titleId}
   data-testid="contract-dialog"
 >
   <!-- 幕を押したら閉じる (`app.css` の `.modal-backdrop`) -->
@@ -142,7 +149,7 @@
     onclick={() => dialog?.close()}
   ></button>
   <article class="modal-box modal-box-wide" bind:this={box} tabindex="-1">
-    <h2 id="contract-dialog-title">有料契約の確認</h2>
+    <h2 id={titleId}>有料契約の確認</h2>
     <p class="small muted intro">
       {#if cardId}
         <span class="mono">B-CAS: {cardId}</span><br />

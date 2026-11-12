@@ -148,10 +148,13 @@ function agentLogLines(): { at: number; text: string }[] {
  * `off` は答えを返せないエージェント (500)、`mac` は macOS のエージェントで、バージョンが denpa と違う
  */
 let aboutMode: "normal" | "off" | "mac" = "normal";
+/** 画面に出す名前の元 (本物の `AGENT_NAME` と同じ)。無ければ `fake-agent` */
+const AGENT_NAME = process.env["AGENT_NAME"] ?? "fake-agent";
 
 function agentAbout() {
   if (aboutMode === "mac") {
     return {
+      name: AGENT_NAME,
       version: "v0.9.0",
       os: "macos",
       arch: "arm64",
@@ -160,6 +163,7 @@ function agentAbout() {
     };
   }
   return {
+    name: AGENT_NAME,
     version: process.env["DENPA_VERSION"] ?? "dev",
     os: "linux",
     arch: "x64",

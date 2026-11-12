@@ -30,7 +30,7 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 2 つが組むときの合言葉 ([agent.md](agent.md)) はエージェント自身の置き場 (`~/denpa/config/tls/pair-token`) に無いときだけ作り、エージェントはそこから読み
 (手で `denpa-agent --pair` を流しても同じ URL が出る)、denpa には `TUNER_AGENT_URL` (`https://127.0.0.1:25252#pair=<合言葉>`) で渡します。
 上げ直しても変えません。
-`-AgentOnly` では、別の機械の denpa の `TUNER_AGENT_URL` に書く `https://<この PC の名前>:25252#pair=<合言葉>` を最後に出します。
+`-AgentOnly` では、別の機械の denpa に登録する `https://<この PC の名前>:25252#pair=<合言葉>` を最後に出します。denpa の設定の「受信」の「エージェントを追加」に貼るか、`TUNER_AGENT_URL` に書きます ([agent.md](agent.md#エージェントを足す))。
 
 - 録画中に上げ直す・外すと、install.ps1 が録画の終わりを待ってから止めます (録画中かは `denpa-agent --status` で確かめる。
   エージェントの API は組んだ denpa にしか応答しないので、エージェント自身の証明書で呼ぶもの)。エンコードの途中なら、次に起きたときにやり直します

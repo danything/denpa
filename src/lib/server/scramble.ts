@@ -552,8 +552,8 @@ export async function probeRaw(agent: Agent): Promise<boolean | null> {
   }
 }
 
-/** 置き場が見えるか。控えがあればそれ、無ければ確かめる (`probeRaw`) */
-async function rawVisible(agent: Agent): Promise<boolean | null> {
+/** 置き場が見えるか。控えがあればそれ、無ければ確かめる (`probeRaw`)。設定の「エージェント」の行にも出す (`agent-admin.ts`) */
+export async function rawVisible(agent: Agent): Promise<boolean | null> {
   const kept = probed.get(agent.id);
   if (kept !== undefined) return kept;
   const seen = await probeRaw(agent);

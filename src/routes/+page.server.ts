@@ -19,6 +19,7 @@ import { channelNotice } from "#lib/channel-notice.js";
 import { capacityLabel } from "#lib/format.js";
 import { GROUPED_COOKIE, storedGrouped } from "#lib/grouping.js";
 import { parseId } from "#lib/id.js";
+import { agentCount } from "#lib/server/agents.js";
 import { fileSize } from "#lib/server/chase.js";
 import { clipCountsByRecording } from "#lib/server/clips.js";
 import { now, orm } from "#lib/server/db.js";
@@ -328,7 +329,11 @@ export function load({ url, cookies }) {
 
   return {
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
-    channelNotice: channelNotice(serviceCounts(), listedServices()),
+    channelNotice: channelNotice(
+      serviceCounts(),
+      listedServices(),
+      agentCount(),
+    ),
     reservations,
     recordings,
     missed,

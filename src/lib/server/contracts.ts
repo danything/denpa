@@ -400,15 +400,17 @@ export function groupByChannel<
 
 /**
  * **復号を確かめるカードと、そのカードで復号するエージェント** (`testDecode`・`testDecodeUnverified`)。
- * カードは設定のダイアログに出すもの (並びの先頭のエージェントのカード)。エージェントは、手元に持つものも鍵を貰うものも入れる。
- * 先頭のエージェントがカードを読めなければ null
+ * カードは設定のダイアログを開いたエージェント (`agent`。渡さなければ並びの先頭) のカード。エージェントは、手元に持つものも鍵を貰うものも入れる。
+ * そのエージェントがカードを読めなければ null
  */
-async function decodeCard(): Promise<{
+async function decodeCard(agent?: number): Promise<{
   card: string;
   agents: ReadonlySet<number>;
 } | null> {
   const cards = await readAgentCards();
-  const card = cards[0]?.card ?? null;
+  const card =
+    (agent === undefined ? cards[0] : cards.find((c) => c.agent === agent))
+      ?.card ?? null;
   if (card === null) return null;
   return {
     card,
@@ -443,8 +445,12 @@ function notPaidNow(serviceId: number, now: number): string | null {
  * 対象局のストリームを数秒間開いて TS パケットのスクランブルビットを検証し、
  * 復号可否 (decode_ok) を更新する。
  */
-export async function testDecode(serviceId: number): Promise<DecodeResult> {
-  const card = await decodeCard();
+export async function testDecode(
+  serviceId: number,
+  /** どのエージェントのカードで確かめるか (設定のダイアログを開いたエージェント)。渡さなければ並びの先頭 */
+  agent?: number,
+): Promise<DecodeResult> {
+  const card = await decodeCard(agent);
   if (card === null) return { ok: false, decodeOk: false, error: NO_CARD };
 
   const targetService = orm()
@@ -481,20 +487,23 @@ let decodingUnverified = false;
  * 対象は `getContractRows` で「確かめていない」(`unverified`) の局のうち、いま有料の番組を流している局。
  * ほかの局は確かめずに、理由を付けて返す。チャンネルは 1 つずつ順に選局する (チューナーを 1 台しか使わない)
  */
-export async function testDecodeUnverified(): Promise<DecodeAll> {
+export async function testDecodeUnverified(
+  /** どのエージェントのカードで確かめるか。渡さなければ並びの先頭 */
+  agent?: number,
+): Promise<DecodeAll> {
   // 別のタブから重ねて押されたら断る (同じチャンネルを 2 回選局してチューナーを取り合う)
   if (decodingUnverified)
     return { ok: false, error: "ほかの画面でまとめて確かめています" };
   decodingUnverified = true;
   try {
-    return await decodeUnverified();
+    return await decodeUnverified(agent);
   } finally {
     decodingUnverified = false;
   }
 }
 
-async function decodeUnverified(): Promise<DecodeAll> {
-  const card = await decodeCard();
+async function decodeUnverified(agent?: number): Promise<DecodeAll> {
+  const card = await decodeCard(agent);
   if (card === null) return { ok: false, error: NO_CARD };
 
   const now = Date.now();

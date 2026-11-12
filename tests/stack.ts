@@ -542,6 +542,47 @@ export async function bootSpare(
   };
 }
 
+/** 2 台目の偽エージェント (`bootSecondAgent`) */
+export interface SecondAgent {
+  /** 平文のポート。テストが `/__control/...` を呼ぶ */
+  agentUrl: string;
+  /** 登録用の URL (TLS。`#pair=` 付き)。画面の「エージェントを追加」に貼る */
+  pairUrl: string;
+  shutdown: () => Promise<void>;
+}
+
+/**
+ * **2 台目の偽エージェント** (`66-agents`)。別の鍵と証明書で立ち (プロセスごとに作る)、名前は `name` (`AGENT_NAME`)。
+ * 範囲の +2 と +3 (1 台目の偽エージェントの平文と TLS の次)。元の TS の置き場は `rawDir` (denpa と同じものを見せる)
+ */
+export async function bootSecondAgent(
+  index: number,
+  rawDir: string,
+  name: string,
+): Promise<SecondAgent> {
+  const port = AGENT_PORT + index * STRIDE + 2;
+  const agent = start(["bun", "tests/fake/agent.ts"], {
+    FAKE_AGENT_PORT: String(port),
+    FAKE_AGENT_TLS_PORT: String(port + 1),
+    AGENT_NAME: name,
+    DENPA_VERSION: "v1.0.0",
+    FAKE_SLOTS: "30",
+    RAW_DIR: rawDir,
+  });
+  const agentUrl = `http://127.0.0.1:${port}`;
+  try {
+    await waitFor(`${agentUrl}/denpa/tuners`, agent, "2 台目の偽エージェント");
+  } catch (error) {
+    await stop(agent);
+    throw error;
+  }
+  return {
+    agentUrl,
+    pairUrl: fakeAgentUrl(port + 1),
+    shutdown: () => stop(agent),
+  };
+}
+
 /**
  * **ライブを MPEG-2 をデコードできない端末として開く。** E2E は 127.0.0.1 で開くので家の中で、「自動」は
  * MPEG-2 → H.264 → AV1 の順 (`#lib/live-choice.ts` の `autoOrder`)。ライブの試験の多くは `<video>` (MSE) の H.264 で

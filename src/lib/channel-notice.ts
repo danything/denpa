@@ -3,6 +3,7 @@
  *
  * - **画面が空になるわけ** (`ChannelNotice`) は、録画・番組表・ライブの上に 1 行で出す (`ChannelNotice.svelte`)。
  *   局が無いので中身も無く、1 行が中身の場所を取らない。その画面ですることを言う
+ *   - `agent` … エージェントが 1 台も無い。設定の「受信」の「エージェントを追加」へ案内する。登録すると、スキャンへの案内に替わる
  *   - `all` … どの種別にも局が無い。スキャンへ案内する。スキャンして局が入れば消える
  *   - `undecodable` … 局はあるが、どれもスクランブルを復号できず、番組表もスクランブルされていて読めない (スカパー！プレミアムの局と、
  *     B-CAS 以外の方式でスクランブルされたケーブルの局だけ)。番組表とライブに出す局が無いわけを言う。番組表に出せる局が入れば消える
@@ -13,7 +14,7 @@
  *   - `ground` … 地上波のチャンネルを続けて選局できない・局の顔ぶれがスキャンの結果と違う (`server/ground-watch.ts`)。
  *     スキャンし直すか、ライブ・録画・番組表の取得がそのチャンネルを選局できれば消える
  */
-export type ChannelNotice = "all" | "undecodable";
+export type ChannelNotice = "agent" | "all" | "undecodable";
 
 /** ヘッダーの印に畳むお知らせ (`server/channel-alert.ts` が渡す) */
 export type ChannelAlertKind = "changed" | "ground";
@@ -34,23 +35,31 @@ type ServiceCounts = Record<string, number>;
 export function channelNotice(
   counts: ServiceCounts,
   listed: number,
+  /** 登録したエージェントの数 (`server/agents.ts` の `agentCount`) */
+  agents = 1,
 ): ChannelNotice | null {
   const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
   if (total > 0) return null;
+  if (agents === 0) return "agent";
   return listed === 0 ? "all" : "undecodable";
 }
 
 export const CHANNEL_NOTICE_TEXT: Record<ChannelNotice, string> = {
+  agent: "エージェントがありません。エージェントを追加してください",
   all: "チャンネルがありません。チャンネルスキャンをしてください",
   undecodable:
     "受信できる局は、どれもスクランブルを復号できないため、番組表とライブに出せません",
 };
 
-/** 文の後ろのボタン。局が無いときの 1 行も印の文も、設定の「受信」の「チャンネル」へ行く */
+/**
+ * 文の後ろのボタン。局が無いときの 1 行も印の文も、設定の「受信」の「チャンネル」へ行く。
+ * エージェントが無いときだけ「エージェント」へ (`CHANNEL_NOTICE_SECTION`)
+ */
 export const CHANNEL_NOTICE_ACTION: Record<
   ChannelNotice | ChannelAlertKind,
   string
 > = {
+  agent: "追加へ",
   all: "スキャンへ",
   undecodable: "確認",
   changed: "確認",
@@ -61,4 +70,11 @@ export const CHANNEL_NOTICE_ACTION: Record<
 export const CHANNEL_ALERT_LABEL: Record<ChannelAlertKind, string> = {
   changed: "チャンネルを書き換えたお知らせ",
   ground: "地上波のチャンネルのお知らせ",
+};
+
+/** 局が無いときの 1 行のボタンの行き先 (設定の「受信」の節) */
+export const CHANNEL_NOTICE_SECTION: Record<ChannelNotice, string> = {
+  agent: "agents",
+  all: "channels",
+  undecodable: "channels",
 };
