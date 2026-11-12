@@ -35,6 +35,14 @@ val sianoLicence = rootProject.layout.projectDirectory.file("../agent/Denpa.Agen
 val asicen = System.getenv("DENPA_ASICEN")?.takeIf { it.isNotEmpty() }
     ?: rootProject.layout.projectDirectory.dir("asicen-userland").asFile.path
 
+/*
+ * bun (2 段目から。サーバを動かす) の置き場。CI が .github/bun-android.sh で、公式の Android 版を `jniLibs/<ABI>/libbun.so` に、
+ * ライセンスの文書を `assets/licenses/bun/` に並べる。既定は android/bun/ (リポジトリには入れない)。`DENPA_BUN` で別の置き場を渡せる。
+ * 無ければ入れずに組む (サーバは起動しない)
+ */
+val bun = System.getenv("DENPA_BUN")?.takeIf { it.isNotEmpty() }
+    ?: rootProject.layout.projectDirectory.dir("bun").asFile.path
+
 /** ライセンスの文書を `licenses/` に並べた assets の置き場を作る */
 abstract class LicenseAssets : DefaultTask() {
     @get:InputFiles
@@ -107,6 +115,12 @@ android {
              * 実行できず、nativeLibraryDir のものは実行できる。APK の中に置いたままでは exec できない
              */
             useLegacyPackaging = true
+            /*
+             * bun は公式の配布物のまま入れる (SHA-256 で確かめたものと同じ中身にする)。113 MB を llvm-strip に通す時間もかからない。
+             * APK の中では圧縮される (useLegacyPackaging のとき jniLibs は deflate で入る) ので、APK に増えるのは arm64 で約 49 MB。
+             * 端末には展開した 113 MB が置かれる。展開しないと exec できないので、ここは縮められない
+             */
+            keepDebugSymbols += "**/libbun.so"
         }
     }
 
@@ -125,8 +139,10 @@ androidComponents {
     onVariants { variant ->
         variant.sources.jniLibs?.addStaticSourceDirectory(agentLibs)
         variant.sources.jniLibs?.addStaticSourceDirectory("$asicen/jniLibs")
+        variant.sources.jniLibs?.addStaticSourceDirectory("$bun/jniLibs")
         variant.sources.assets?.addGeneratedSourceDirectory(licenseAssets, LicenseAssets::output)
         variant.sources.assets?.addStaticSourceDirectory("$asicen/assets")
+        variant.sources.assets?.addStaticSourceDirectory("$bun/assets")
     }
 }
 

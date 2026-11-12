@@ -63,8 +63,8 @@ while IFS= read -r f; do
     agent/*) windows=true macos=true android=true ;;
     tray/Denpa.Tray/* | tray/Denpa.Tray.Tests/* | install.ps1 | scripts/build-wdi-simple.ps1) windows=true ;;
     tray/mac/* | install.sh) macos=true ;;
-    android/* | .github/workflows/android.yml | .github/openssl-android.sh | .github/asicen-android.sh | .github/android-agent-smoke.sh | \
-      .github/android-app-smoke.sh | .github/fake-usb-broker.c) android=true ;;
+    android/* | .github/workflows/android.yml | .github/openssl-android.sh | .github/asicen-android.sh | .github/bun-android.sh | \
+      .github/android-agent-smoke.sh | .github/android-app-smoke.sh | .github/fake-usb-broker.c) android=true ;;
   esac
 
   # 配布物 (windows-server.yml・macos-server.yml) と、それを確かめる server-windows・server-macos が使うもの。

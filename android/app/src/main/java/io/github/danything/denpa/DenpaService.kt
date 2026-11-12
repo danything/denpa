@@ -27,11 +27,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /**
- * 常駐サービス (種類は connectedDevice)。部品 ([Part]) を子プロセスとして起動し、通知を出し続ける。1 段目の部品はエージェントだけ。
+ * 常駐サービス (種類は connectedDevice)。部品 ([Part]) を子プロセスとして起動し、通知を出し続ける。部品はエージェントと、
+ * APK にサーバが入っていれば bun で動かすサーバ ([Server]。2 段目のリリースの APK には入っていない)。
  *
  * - **動いている間は partial wake lock を持ち続ける。** 別の機械の denpa がいつ選局を求めるか分からず、画面を消すと CPU が止まって録画が欠けるため
- * - **エージェントが自分で終わったら、待ってから起動し直す。** 通知の「終了」のあとは起動し直さない
- * - **「終了」は SIGTERM を 1 回送る。** 録画中ならエージェントは録画が終わるまで待ち、そのあいだ通知は「録画が終わったら終了します」にして、
+ * - **部品が自分で終わったら、待ってから起動し直す。** 通知の「終了」のあとは起動し直さない
+ * - **「終了」は部品のそれぞれに SIGTERM を 1 回送り、すべて終わったら常駐サービスを止める。** 録画中ならエージェントは録画が終わるまで待ち、そのあいだ通知は「録画が終わったら終了します」にして、
  *   ボタンを「すぐ終了」(2 回目の SIGTERM) に替える
  * - 通知の本文 (チューナーの台数・録画中か) は、エージェントの `GET /denpa/tuners` を 10 秒ごとに読んで決める ([AgentClient])
  * - 状態はどれも [worker] のスレッドで触る
@@ -47,18 +48,86 @@ class DenpaService : Service() {
     internal var broker: UsbBroker? = null
         private set
 
-    @Volatile
-    private var agent: Part? = null
+    private lateinit var agent: Slot
+
+    /** 動かす部品。エージェントと、APK にサーバが入っていればそれも ([Server]) */
+    private lateinit var slots: List<Slot>
 
     /** 動いているエージェントの PID (動いていなければ 0)。debug の受け口が使う */
-    internal val agentPid: Int get() = agent?.pid ?: 0
+    internal val agentPid: Int get() = agent.part?.pid ?: 0
 
     private var status: AgentStatus? = null
     private var stopping = false
-    private var restarting = false
-    private var startedAt = 0L
-    private var backoff = RESTART_MIN
     private var shown: String? = null
+
+    /** [Part.start] に渡すもの。起動するたびに作る */
+    private class Launch(val arguments: List<String>, val environment: Map<String, String>, val directory: File? = null)
+
+    /**
+     * 部品 1 つ分の起動と起動し直し。状態は [worker] のスレッドで触る。
+     * 自分で終わったら (落ちたら) 5 秒から 1 分 (倍々) 待って起動し直し、1 分より長く動いてから終わったら 5 秒に戻す。「終了」のあとは起動し直さない
+     *
+     * @param label 記録の文に入れる名前 (エージェント・サーバ)
+     * @param tag 部品の出力を流す logcat のタグ
+     * @param prepare 起動する前に呼ぶ ([worker] のスレッド)。IOException なら起動せず、待ってからやり直す
+     */
+    private inner class Slot(
+        val label: String,
+        val tag: String,
+        val executable: File,
+        val prepare: () -> Launch,
+    ) {
+        @Volatile
+        var part: Part? = null
+            private set
+        var restarting = false
+            private set
+        private var startedAt = 0L
+        private var backoff = RESTART_MIN
+
+        fun start() {
+            restarting = false
+            if (stopping || part != null) return
+            if (!executable.canExecute()) {
+                Log.e(TAG, "${label}がありません: $executable")
+                refresh()
+                return
+            }
+            val next = try {
+                val launch = prepare()
+                Part(tag, executable, launch.arguments, launch.environment, launch.directory) { code -> worker.post { onExit(code) } }
+                    .also { it.start() }
+            } catch (error: IOException) {
+                Log.e(TAG, "${label}を起動できませんでした", error)
+                scheduleRestart()
+                return
+            }
+            part = next
+            startedAt = SystemClock.elapsedRealtime()
+            refresh()
+        }
+
+        private fun onExit(code: Int) {
+            part = null
+            if (this === agent) status = null
+            if (stopping) {
+                Log.i(TAG, "${label}が終了しました (終了コード $code)")
+                if (slots.all { it.part == null }) finish()
+                return
+            }
+            // 長く動いてから異常終了したなら、すぐ起動し直す。続けて終了するなら間を延ばす
+            if (SystemClock.elapsedRealtime() - startedAt > RESTART_MAX) backoff = RESTART_MIN
+            Log.w(TAG, "${label}が終了しました (終了コード $code)。${backoff / 1000} 秒後に起動し直します")
+            scheduleRestart()
+        }
+
+        private fun scheduleRestart() {
+            restarting = true
+            refresh()
+            worker.postDelayed({ start() }, backoff)
+            backoff = (backoff * 2).coerceAtMost(RESTART_MAX)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -79,7 +148,9 @@ class DenpaService : Service() {
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "denpa:agent")
         acquireWakeLock()
         broker = UsbBroker(this, File(dataDir, "u"), DeviceFilter.load(this)).also { it.start() }
-        worker.post { startAgent() }
+        agent = Slot("エージェント", AGENT_TAG, agentFile) { Launch(emptyList(), agentEnvironment()) }
+        slots = listOfNotNull(agent, serverSlot())
+        for (slot in slots) worker.post { slot.start() }
         worker.post(poll)
     }
 
@@ -102,10 +173,11 @@ class DenpaService : Service() {
             ACTION_STOP_NOW -> worker.post { stopNow() }
             ACTION_COPY_URL -> worker.post { copyPairUrl() }
             else -> worker.post {
-                // アイコンか挿入で起こされた。終了の途中なら取りやめ、エージェントが終わったら起動し直す
+                // アイコンか挿入で起こされた。終了の途中なら取りやめ、まだ動いている部品は終わったら起動し直す。もう終わった部品はすぐ起動する
                 if (stopping) {
                     stopping = false
                     Prefs.setStartOnBoot(this, true)
+                    for (slot in slots) if (slot.part == null && !slot.restarting) slot.start()
                     refresh()
                 }
                 broker?.scan()
@@ -118,102 +190,81 @@ class DenpaService : Service() {
         instance = null
         broker?.stop()
         broker = null
-        // 止めると決める前にシステムに止められたときも、エージェントを残さない
-        agent?.terminate()
+        // 止めると決める前にシステムに止められたときも、部品を残さない
+        for (slot in slots) slot.part?.terminate()
         worker.removeCallbacksAndMessages(null)
         thread.quitSafely()
         if (wakeLock.isHeld) wakeLock.release()
         super.onDestroy()
     }
 
-    private fun environment(): Map<String, String> {
+    /** 部品に共通の環境変数。置き場 (`DENPA_HOME`) はエージェントとサーバで同じ */
+    private fun baseEnvironment(): Map<String, String> = mapOf(
+        "DENPA_HOME" to home.path,
+        "TMPDIR" to cacheDir.path,
+        "HOME" to filesDir.path,
+    )
+
+    private fun agentEnvironment(): Map<String, String> {
         val config = File(home, "config").apply { mkdirs() }
         val media = File(home, "media").apply { mkdirs() }
-        return mapOf(
-            "DENPA_HOME" to home.path,
+        return baseEnvironment() + mapOf(
             "TUNERS_FILE" to File(config, "tuners.json").path,
             "CHANNELS_FILE" to File(config, "channels.json").path,
             "MEDIA_DIR" to media.path,
             "USB_BROKER" to File(dataDir, "u").path,
             "AGENT_PORT" to AGENT_PORT.toString(),
-            "TMPDIR" to cacheDir.path,
-            "HOME" to filesDir.path,
         ) + Asicen.environment(this, asicenFirmware)
     }
 
     /** ASICEN のファームウェアを書き出した先 (最初にエージェントを起動するときに書き出す)。APK に入っていなければ null */
     private val asicenFirmware by lazy { Asicen.firmware(this) }
 
-    private fun startAgent() {
-        restarting = false
-        if (stopping) return
-        if (!agentFile.canExecute()) {
-            Log.e(TAG, "エージェントがありません: $agentFile")
-            refresh()
-            return
+    /**
+     * bun で動かすサーバの部品 ([Server])。APK の assets にサーバが入っていなければ null (2 段目のリリースの APK)。
+     * 起動するたびに assets を書き出し (APK が同じなら書き直さない)、`bun --version` を記録に出す
+     */
+    private fun serverSlot(): Slot? {
+        if (!Server.bundled(this)) return null
+        return Slot("サーバ", Server.TAG, Server.bun(this)) {
+            val entry = Server.extract(this, home)
+            Log.i(Server.TAG, "bun ${Server.version(Server.bun(this)) ?: "(--version に答えません)"}")
+            Launch(listOf(entry.path), baseEnvironment() + ("PORT" to Server.PORT.toString()), entry.parentFile)
         }
-        val part = Part("denpa-agent", agentFile, environment()) { code -> worker.post { onAgentExit(code) } }
-        try {
-            part.start()
-        } catch (error: IOException) {
-            Log.e(TAG, "エージェントを起動できませんでした", error)
-            scheduleRestart()
-            return
-        }
-        agent = part
-        startedAt = SystemClock.elapsedRealtime()
-        refresh()
     }
 
-    private fun onAgentExit(code: Int) {
-        agent = null
-        status = null
-        if (stopping) {
-            Log.i(TAG, "エージェントが終了したため、常駐サービスを止めます (終了コード $code)")
-            // 様子の読み取りが通知を出し直さないよう、先に止める
-            worker.removeCallbacksAndMessages(null)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return
-        }
-        // 長く動いてから異常終了したなら、すぐ起動し直す。続けて終了するなら間を延ばす
-        if (SystemClock.elapsedRealtime() - startedAt > RESTART_MAX) backoff = RESTART_MIN
-        Log.w(TAG, "エージェントが終了しました (終了コード $code)。${backoff / 1000} 秒後に起動し直します")
-        scheduleRestart()
+    /** 部品がすべて終わった (「終了」のあと)。常駐サービスを止める */
+    private fun finish() {
+        Log.i(TAG, "部品がすべて終了したため、常駐サービスを止めます")
+        // 様子の読み取りと起動し直しの待ちが通知を出し直さないよう、先に止める
+        worker.removeCallbacksAndMessages(null)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
-    private fun scheduleRestart() {
-        restarting = true
-        refresh()
-        worker.postDelayed({ startAgent() }, backoff)
-        backoff = (backoff * 2).coerceAtMost(RESTART_MAX)
-    }
-
-    /** 通知の「終了」。止めたら次の端末の起動では始めない */
+    /** 通知の「終了」。部品のそれぞれに SIGTERM を 1 回送る。止めたら次の端末の起動では始めない */
     private fun requestStop() {
         Prefs.setStartOnBoot(this, false)
         stopping = true
-        val part = agent
-        if (part == null || !part.terminate()) {
-            // 起動し直す前の待ちのあいだ。止めるものが無い
-            worker.removeCallbacksAndMessages(null)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+        val sent = slots.filter { it.part?.terminate() == true }
+        if (sent.isEmpty()) {
+            // どれも起動し直す前の待ちのあいだ。止めるものが無い
+            finish()
             return
         }
-        Log.i(TAG, "通知の「終了」で、エージェントに SIGTERM を送りました")
+        Log.i(TAG, "通知の「終了」で、${sent.joinToString("・") { it.label }}に SIGTERM を送りました")
         refresh()
     }
 
     /** 録画を待っているあいだの「すぐ終了」。2 回目の SIGTERM で、エージェントは録画を待たずに終わる */
     private fun stopNow() {
         if (!stopping) return requestStop()
-        if (agent?.terminate() == true) Log.i(TAG, "通知の「すぐ終了」で、エージェントにもう一度 SIGTERM を送りました")
+        if (agent.part?.terminate() == true) Log.i(TAG, "通知の「すぐ終了」で、エージェントにもう一度 SIGTERM を送りました")
     }
 
     private val poll = object : Runnable {
         override fun run() {
-            if (agent != null) {
+            if (agent.part != null) {
                 status = try {
                     client.status()
                 } catch (error: Exception) {
@@ -239,7 +290,7 @@ class DenpaService : Service() {
             !agentFile.canExecute() -> getString(R.string.state_missing_agent)
             stopping && current?.recording == true -> getString(R.string.state_stopping_after_recording)
             stopping -> getString(R.string.state_stopping)
-            restarting -> getString(R.string.state_restarting)
+            agent.restarting -> getString(R.string.state_restarting)
             current == null -> getString(R.string.state_starting)
             current.recording -> getString(R.string.state_recording)
             else -> getString(R.string.state_tuners, current.tuners)
@@ -299,12 +350,12 @@ class DenpaService : Service() {
 
     private fun pairUrl(): String? {
         val process = ProcessBuilder(agentFile.path, "--pair")
-            .apply { environment().putAll(this@DenpaService.environment()) }
+            .apply { environment().putAll(agentEnvironment()) }
             .start()
         process.outputStream.close()
         // 標準エラー (鍵を作ったなどの記録) は logcat に流す。終わるか destroy で切れたら、このスレッドも終わる
         thread(name = "denpa-agent-pair", isDaemon = true) {
-            runCatching { process.errorStream.bufferedReader().forEachLine { Log.i("denpa-agent", it) } }
+            runCatching { process.errorStream.bufferedReader().forEachLine { Log.i(AGENT_TAG, it) } }
         }
         // 出力は URL の 1 行だけでパイプに収まるので、終わるのを先に待ってから読む (止まったまま worker を塞がない)
         if (!process.waitFor(10, TimeUnit.SECONDS)) {
@@ -332,6 +383,9 @@ class DenpaService : Service() {
 
         /** APK の jniLibs に入れるエージェントの名前 (中身は実行ファイル。nativeLibraryDir に展開される) */
         const val AGENT_LIBRARY = "libdenpa_agent.so"
+
+        /** エージェントの出力を流す logcat のタグ */
+        const val AGENT_TAG = "denpa-agent"
         const val AGENT_PORT = 25252
         const val POLL_INTERVAL = 10_000L
         const val RESTART_MIN = 5_000L
