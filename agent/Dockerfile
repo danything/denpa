@@ -132,7 +132,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 #
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
 # asicend のソケットを /run/asicen-userland に作るので、今までどおり root で動かす
-FROM gcr.io/distroless/cc-debian13:latest@sha256:e1f5543d45a2cd7c02a5b43dda5f0ff30729b4832113759d01ed39b0b152cddb AS runtime
+FROM gcr.io/distroless/cc-debian13:latest@sha256:809d04afa1be033c441f76bb0051878c342fb76d0ea236bc6dc94b655fa0fbd6 AS runtime
 
 # **実行イメージの glibc で実行ファイルを読み込めることを、組むときに確かめる。**
 # 実行ファイルが要求する GLIBC のバージョンが土台に無ければ、ローダーがここで止めてビルドが落ちる
