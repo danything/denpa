@@ -54,7 +54,9 @@ class Context {
   destination = new Node();
   sources: Node[] = [];
   onstatechange: (() => void) | null = null;
-  constructor() {
+  sampleRate: number;
+  constructor(options: { sampleRate?: number } = {}) {
+    this.sampleRate = options.sampleRate ?? 44_100;
     Context.all.push(this);
   }
   createGain() {

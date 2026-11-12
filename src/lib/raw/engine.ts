@@ -25,6 +25,7 @@ import { Outlet, playbackSession } from "#lib/sound.js";
 
 import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
 import { type Chunk, Playout, type Scheduled } from "./playout";
+import { audioContext, Seam } from "./seam";
 
 /** 刻み (ms)。音の予約と時計の配り直しをここで回す */
 const TICK = 20;
@@ -85,6 +86,8 @@ export class RawEngine {
   private readonly outlet: Outlet;
   private readonly playout: Playout<AudioChunk>;
   private readonly nodes = new Set<AudioBufferSourceNode>();
+  /** 予約したコマを継ぎ目なく並べる (`seam.ts`)。止めたら一緒に忘れる (`stopAll`) */
+  private readonly seam: Seam;
   private readonly timer: ReturnType<typeof setInterval>;
   /** 画面の切り替わりを worker へ知らせる requestAnimationFrame (`cadence.ts`) */
   private frame = 0;
@@ -171,7 +174,8 @@ export class RawEngine {
        * (`background`)。切っているのに言うと、裏で鳴らす音として扱われる
        */
       playbackSession(background);
-      this.context = context = new AudioContext({ latencyHint: "playback" });
+      this.context = context = audioContext("playback");
+      this.seam = new Seam(context.sampleRate);
       this.gain = context.createGain();
       this.outlet = new Outlet(
         context,
@@ -628,11 +632,16 @@ export class RawEngine {
     node.buffer = buffer;
     node.connect(this.gain);
     node.onended = () => this.nodes.delete(node);
-    node.start(scheduled.when, scheduled.offset);
+    const when = this.seam.place(
+      scheduled.when,
+      frames / chunk.sampleRate - scheduled.offset,
+    );
+    node.start(when, scheduled.offset);
     this.nodes.add(node);
   }
 
   private stopAll(): void {
+    this.seam.reset();
     for (const node of this.nodes) {
       try {
         node.stop();
