@@ -125,11 +125,6 @@
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
-  import {
-    forgetSlow,
-    rememberSlow,
-    slowDevice,
-  } from "#lib/raw/slow-device.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
     heardOf,
@@ -292,11 +287,6 @@
   let broadcastHevc = false;
   /** MPEG-2 を描いている途中で打ち切ったか。**選び直すまで MPEG-2 にしない** (`canvasFallBack`) */
   let rawGaveUp = $state(false);
-  /**
-   * この端末で MPEG-2 のデコードが間に合わずに打ち切ったことを覚えているか (`raw/slow-device.ts`。ライブと同じ記憶)。
-   * 覚えている間は「自動」で MPEG-2 を選ばない (`ability`)。メニューで MPEG-2 を選べば忘れる。開いてから読む (`onMount`)
-   */
-  let rawSlow = false;
   /** この端末で描ける形式 (`raw/support.ts`)。調べるまで null */
   let canvasAbility = $state.raw<CanvasAbility | null>(null);
   /** いま canvas に描いている形式。描いていなければ null (`<video>` で観ている・まだ始めていない) */
@@ -539,27 +529,23 @@
    * 互換モードでないのに描いているのは MPEG-2 を選んだときだけ (`pickOffer` の `raw`)。打ち切ったらこの画面を開いている間は
    * MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で `<video>` に戻す。
    *
-   * 間に合わずに打ち切ったとき (`slow` がある) は、掛かった条件をコンソールに出力する。MPEG-2 なら端末にも覚える (`rawSlow`)
+   * 間に合わずに打ち切ったとき (`slow` がある) は、掛かった条件をコンソールに出力する
    */
   function canvasFallBack(reason: string, slow?: string): void {
     const failed = canvasCodec;
     const position = mediaTime();
     const wasLocal = localMkv !== null;
     stopCanvas();
-    if (slow !== undefined) {
+    if (slow !== undefined)
       console.warn(`[watch] ${failed ?? ""} を打ち切りました: ${slow}`);
-      if (failed === "mpeg2") {
-        rememberSlow();
-        rawSlow = true;
-      }
-    }
     // 描けなくなったのは端末のデコードの都合 (`raw/budget.ts`)。回線の段とは混ぜず、段 0 から決め直す
     step = 0;
     stepCodec = null;
     stepFrom = null;
     if (!compat) {
       rawGaveUp = true;
-      const fresh = info === null ? null : offer(info, "auto");
+      const fresh =
+        info === null ? null : pickOffer(info, ability(), "auto", data.indoor);
       note(
         fresh === null
           ? reason
@@ -684,36 +670,21 @@
     if (video !== null) video.muted = !video.muted;
   }
 
-  /**
-   * ブラウザへの問い合わせ (`ts/playback.ts`)。DOM が要るので開いてから。`slow` は打ち切ったことを覚えているか (`rawSlow`) で、
-   * 覚えていれば自動では MPEG-2 を選ばない。選んだ MPEG-2 は試す
-   */
-  function ability(slow = rawSlow): MediaAbility {
+  /** ブラウザへの問い合わせ (`ts/playback.ts`)。DOM が要るので開いてから */
+  function ability(): MediaAbility {
     return {
       play: (type) => document.createElement("video").canPlayType(type) !== "",
       mse: (type) =>
         type === BROADCAST_HEVC
           ? broadcastHevc
           : (pickMediaSource()?.Source.isTypeSupported(type) ?? false),
-      mpeg2: rawCapable && !rawGaveUp && !(choice === "auto" && slow),
+      mpeg2: rawCapable && !rawGaveUp,
     };
-  }
-
-  /** 観方を選ぶ (`pickOffer`)。打ち切ったことを覚えていても (`rawSlow`)、ほかに観方が無ければ MPEG-2 を使う (ライブと同じ) */
-  function offer(
-    got: PlaybackInfo,
-    wanted: CodecChoice | "mpeg2",
-  ): Picked | null {
-    return (
-      pickOffer(got, ability(), wanted, data.indoor) ??
-      (rawSlow ? pickOffer(got, ability(false), wanted, data.indoor) : null)
-    );
   }
 
   onMount(() => {
     localLookup = loadOffline(rec.id).catch(() => null);
     const asked = stored(CODEC_KEY);
-    rawSlow = slowDevice();
     // メニューに並べない H.264・H.265 (`HIDDEN_CODECS`) を前に選んでいた端末は、自動として扱う
     choice = asked === "av1" || asked === "mpeg2" ? asked : "auto";
     void (async () => {
@@ -751,7 +722,7 @@
        */
       picked =
         got !== null
-          ? offer(got, choice)
+          ? pickOffer(got, ability(), choice, data.indoor)
           : rec.library_path?.endsWith(".mkv") === true ||
               localCopy?.video !== undefined
             ? { way: "file", codec: "av1", source: "encoded" }
@@ -1438,13 +1409,8 @@
       return;
     }
     // 選んだものは打ち切っていても試す (互換モードの `chooseCanvas` と同じ)
-    if (next === "mpeg2") {
-      rawGaveUp = false;
-      // 打ち切ったことも忘れて試し直す (`raw/slow-device.ts`)。また打ち切れば覚え直す
-      forgetSlow();
-      rawSlow = false;
-    }
-    const fresh = offer(info, next);
+    if (next === "mpeg2") rawGaveUp = false;
+    const fresh = pickOffer(info, ability(), next, data.indoor);
     if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy && step === 0)
       return;
     warning = null;

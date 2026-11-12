@@ -97,7 +97,6 @@ import { separateLiveAudio } from "#lib/native-audio-choice.js";
 import { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { NativeAudio } from "#lib/raw/native-audio.js";
-import { forgetSlow, rememberSlow, slowDevice } from "#lib/raw/slow-device.js";
 import {
   type CanvasSupport,
   canvasSupport,
@@ -613,15 +612,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let rawChosen = false;
   /**
    * MPEG-2 をやめたか (デコードするのが間に合わない・音がデコードできない・デコーダが無い)。**この画面を開いている
-   * 間はリクエストし直さない**。MPEG-2 に戻すたびに同じ理由でまたやめることになり、そのたびに映像が止まる。
-   * 間に合わずにやめたことは、開き直しても効くように端末にも覚える (`rawSlow`)
+   * 間はリクエストし直さない**。MPEG-2 に戻すたびに同じ理由でまたやめることになり、そのたびに映像が止まる
    */
   let rawGaveUp = false;
-  /**
-   * この端末で MPEG-2 のデコードが間に合わずに打ち切ったことを覚えているか (`raw/slow-device.ts`。30 日)。
-   * 覚えている間は「自動」で MPEG-2 を後回しにする (`decideFormat`)。メニューで MPEG-2 を選べば忘れる
-   */
-  let rawSlow = slowDevice();
   /** この端末でデコードできない理由 (`raw/support.ts`)。調べるまでは undefined */
   let rawProblem: string | null | undefined;
   /** 映像の入れ物。RawEngine の canvas はここに差し込む (`attach`) */
@@ -1981,11 +1974,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     av1GaveUp = false;
     hevcGaveUp = false;
     rawGaveUp = false;
-    // MPEG-2 を選んだなら、打ち切ったことを忘れて試し直す (`raw/slow-device.ts`)。また打ち切れば覚え直す
-    if (next === "raw" && broadcastKind() === "mpeg2") {
-      forgetSlow();
-      rawSlow = false;
-    }
     rungOff.clear();
     // 手で選んだものは段を下げない (`adapt`)。下げていたら元の画質でリクエストし直す
     if (next !== "auto") asked = 0;
@@ -2056,12 +2044,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       compat,
       broadcast: kind,
     };
-    if (choice === "auto") {
-      const auto = (rawOk: boolean) =>
-        autoCodec({ ...can, rawOk, indoor: options.indoor === true });
-      // 打ち切ったことを覚えていれば MPEG-2 を後回しにする (`rawSlow`)。ほかに使える形式が無ければ MPEG-2 を使う
-      return (rawSlow ? auto(false) : null) ?? auto(can.rawOk);
-    }
+    if (choice === "auto")
+      return autoCodec({ ...can, indoor: options.indoor === true });
     const wanted = choice === "raw" ? broadcastFormat(kind) : choice;
     const ok = wanted === "raw" ? can.rawOk : can[wanted];
     return ok ? wanted : autoCodec({ ...can, indoor: false });
@@ -3065,19 +3049,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * - 互換モードのエンコードしたものをやめた … MPEG-2 で描けるならそちらへ、無理なら理由を出して止まる。
    *   **`<video>` には戻らない** (テスラでは止まってしまう)
    *
-   * 間に合わずにやめたとき (`slow` がある) は、掛かった条件をコンソールに出力する。MPEG-2 なら端末にも覚える (`rawSlow`)
+   * 間に合わずにやめたとき (`slow` がある) は、掛かった条件をコンソールに出力する
    */
   function fallBack(reason: string, input: RawInput, slow?: string): void {
     stopRaw();
-    if (slow !== undefined) {
+    if (slow !== undefined)
       console.warn(
         `[live] ${input === "fmp4" ? "互換モードの描画" : "MPEG-2"} を打ち切りました: ${slow}`,
       );
-      if (input === "ts-mpeg2") {
-        rememberSlow();
-        rawSlow = true;
-      }
-    }
     if (input === "fmp4") {
       compatGaveUp = true;
       if (rawProblem === null && !rawGaveUp) {
