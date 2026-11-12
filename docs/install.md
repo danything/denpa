@@ -1,7 +1,7 @@
 # 立てる
 
 README の手順の細かいところ。用意するもの、入れ方 (1 行・Compose・1 コンテナ・Helm・Talos Linux・Android)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
-Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md) に、Android の端末をチューナーエージェントにするなら [install-android.md](install-android.md) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
+Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md) に、Android の端末で動かすなら [install-android.md](install-android.md) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
 
 ## 用意するもの
 
@@ -132,10 +132,10 @@ PT3 を挿した機械を Talos Linux の 1 台のクラスタにして、OS の
 curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.sh | sh -s -- --node <IP>
 ```
 
-### Android の端末をチューナーエージェントに
+### Android の端末で動かす
 
-チューナーを挿した Android の端末 (Android 10 以上、arm64) を、別の機械で動かす denpa のチューナーエージェントにできます
-(実機では確かめていない)。リリースの `denpa-<バージョン>-android-arm64.apk` を入れ、通知の「URL をコピー」で取った URL を denpa の `TUNER_AGENT_URL` に書きます。
+チューナーを挿した Android の端末 (Android 10 以上、arm64) の 1 台で、denpa 本体とチューナーエージェントを動かせます
+(実機では確かめていない)。リリースの `denpa-<バージョン>-android-arm64.apk` を入れ、通知の「URL をコピー」で取った `http://<端末のアドレス>:3000` を同じ LAN のブラウザで開きます。
 手順は [install-android.md](install-android.md)。
 
 ### イメージのタグ

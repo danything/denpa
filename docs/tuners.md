@@ -29,7 +29,7 @@
 
 - **B-CASカード** と USB のカードリーダー (IT930x の機材・CECH-ZD1 J・PIX-DT295 は内蔵リーダーでもよい。asicen-userland の機材の内蔵リーダーは使えない。[下記](#カードリーダー))
 - **OS**: Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)。Talos Linux の 1 台に OS ごと入れるなら [install-talos.md](install-talos.md) (amd64・PT3。実機で確かめていない)。
-  Android (10 以上、arm64) の端末は、チューナーエージェントとして使えます。挿せるのはエージェントが USB を直に持つ機材、ASICEN 系 (試験的)、USB のカードリーダーです
+  Android (10 以上、arm64) の端末は、1 台で denpa 本体とチューナーエージェントを動かせます。挿せるのはエージェントが USB を直に持つ機材、ASICEN 系 (試験的)、USB のカードリーダーです
   (どれも Android の実機で確かめていない。[install-android.md](install-android.md))
 - **Docker** (Linux。Compose 込み)。Mac と Windows は要らない (denpa 本体もエージェントも OS の上でそのまま動かす)。
   Kubernetes なら Helm
