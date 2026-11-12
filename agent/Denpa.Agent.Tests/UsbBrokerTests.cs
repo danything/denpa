@@ -218,7 +218,7 @@ public sealed partial class UsbBrokerTests
         app.Send("""{"type":"synced"}""");
         await agent.Changed();
 
-        // 並べた順と逆に頼んでも、頼んだ順に並ぶ
+        // 並べた順と逆に指定しても、指定した順に並ぶ
         var fds = agent.Host.Lend(["003-005", "003-004"]);
         var numbers = fds.Numbers.ToArray();
         await Assert.That(numbers.All(fd => fd > 2)).IsTrue();
