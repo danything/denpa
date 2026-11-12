@@ -14,9 +14,11 @@ namespace Denpa.Agent;
  *
  * 取り決め (denpa-spec の android/design.md 3 章)
  * - エージェントが USB_BROKER のパスで待ち受け (AF_UNIX・SOCK_STREAM・0600)、アプリが繋ぐ。uid が自分と違う相手は切る
+ *   (bind から chmod までの間に umask の権限で繋がれても、uid で切る。置き場はアプリだけが読める dataDir)
  * - 1 行 1 つの JSON (UTF-8)。`type` が attached・detached・synced。1 行は 1 回の write で送り、attached の write に fd を SCM_RIGHTS で 1 つ付ける
  *   (fd がどの行のものかは、fd を受け取った読みの中で始まった最後の行で決める)
- * - 繋がるたびに受け取った機材を捨てる。synced (許可のある機材を全部送り終えた印) を受けたら探し直してもらう (changed)。
+ * - 繋がるたびに、前の接続で受け取った機材を捨てる。接続が切れただけでは捨てない (アプリが落ちても受け取った fd は使える)。
+ *   synced (許可のある機材を全部送り終えた印) を受けたら探し直してもらう (changed)。
  *   synced のあとの attached・detached も、受けるたびに changed を呼ぶ
  */
 
@@ -35,7 +37,7 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
     /// <summary>1 行の上限。超える行を送る相手は切る</summary>
     private const int MaxLine = 64 * 1024;
 
-    /// <summary>止まる合図と、新しい接続を見に行く間隔</summary>
+    /// <summary>止まる合図と、新しい接続や行が届いたかを確かめる間隔</summary>
     private const int PollMs = 200;
 
     private readonly Lock _gate = new();
@@ -62,7 +64,7 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
         lock (_gate) return [.. Sorted().Where(found => found.Interfaces.Any(entry => entry.Class == Ccid.InterfaceClass))];
     }
 
-    // 開くあいだは表を握る (抜かれたと受けて閉じる fd を dup しないように)
+    // 開くあいだは表のロックを取る (detached で閉じる fd を複製しないように)
     public IUsbDevice Open(string port, int vendor, int product, bool selectAlternate = true)
     {
         lock (_gate) return UsbFsDevice.Open(Received(port), port, vendor, product, selectAlternate);
@@ -112,6 +114,8 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
         lock (_gate)
         {
             if (_connection >= 0) Native.Shutdown(_connection, ShutReadWrite);
+            // 受けている途中の行が、閉じたあとの表に fd を足さないように
+            _generation++;
             Drop();
         }
     }
@@ -152,6 +156,12 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
                 long generation;
                 lock (_gate)
                 {
+                    // 止めたあとに受けた接続は使わない
+                    if (_stopped)
+                    {
+                        Sys.Close(fd);
+                        return;
+                    }
                     // 繋ぎ直したアプリは許可のある機材を全部送り直すので、前の接続で受け取ったものは捨てる
                     if (_connection >= 0) Native.Shutdown(_connection, ShutReadWrite);
                     _connection = fd;
