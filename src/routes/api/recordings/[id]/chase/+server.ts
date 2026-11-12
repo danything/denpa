@@ -31,7 +31,8 @@ import {
 export function GET({ params, url }) {
   const id = parseId(params.id);
   if (id === null) error(400, "録画 ID が不正です");
-  const asked = askedFormat(url, "chase", {}, chaseTransport(id));
+  const transport = chaseTransport(id);
+  const asked = askedFormat(url, "chase", {}, transport);
   if (asked === null) error(406, NO_FORMAT);
   const { codec, rung } = asked;
   const from = Number(url.searchParams.get("from") ?? 0);
@@ -50,7 +51,7 @@ export function GET({ params, url }) {
       "Content-Type":
         codec !== "raw"
           ? "video/mp4"
-          : chaseTransport(id) === "tlv"
+          : transport === "tlv"
             ? TLV_TYPE
             : "video/mp2t",
       "Cache-Control": "no-store",

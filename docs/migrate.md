@@ -262,11 +262,12 @@ EPGStation の履歴と同じく、「録ったことのある回」として移
 1. **新しい機械に denpa とエージェントを入れ、チャンネルスキャンまで済ませる** (まだ何も録らない。ルールも作らない)。
    環境変数 (`TRUSTED_NETWORKS`・`ALLOWED_HOSTS`・OIDC・`PWA_NAMES` など) は書き出しに入らないので、新しい機械へ手で書き移す。
    置き場は Mac と Windows なら `denpa.env` (Mac は `/Library/Application Support/denpa/data/`、Windows は `%ProgramData%\denpa\`)、
+   Android ならアプリの置き場の `denpa.env` ([install-android.md](install-android.md#環境変数を足す-denpaenv))、
    Docker Compose なら `compose.override.yml`、Helm なら values
 2. 古い denpa の「denpa を別の機械へ移す」で **「書き出す」** を押す。`denpa-export-<日時>.tar.zst` がブラウザでダウンロードされます
 3. **古い denpa を止める。** 動かしたままだと、新しい denpa と同じ番組を二重に録ります。録画中なら終わってから止めます
    (Mac なら install.sh を `--uninstall`、Windows なら install.ps1 を `-Uninstall` で流す。録画中なら終わるまで待ち、DB と録画は残す。
-   Docker Compose なら `docker compose stop denpa`)。
+   Android なら通知の「終了」、Docker Compose なら `docker compose stop denpa`)。
    書き出したあとに古い denpa が録ったもの・足したルールは移りません
 4. **録画のフォルダを新しい機械へ写す** ([下記](#録画のフォルダを写す))
 5. 新しい denpa の「denpa を別の機械へ移す」で書き出したファイルを選び、**「送って確かめる」** を押す。
@@ -285,7 +286,7 @@ EPGStation の履歴と同じく、「録ったことのある回」として移
 
 - **書き出しのファイルは人に渡さず、移し終えたら消してください。** 通知先の URL (知っていれば誰でも投稿できる)・郵便番号・
   録画とルールの一覧が入っています。アクセストークンは SHA-256 しか入っていないので、ファイルからトークンは作れません
-- ログインの控え・ペアリングの途中・ニコニコとの連携・つないだエージェント (`agents`。移した先で組み直す) は、書き出す写しから消し、消した行の中身もファイルに残しません
+- ログインの控え・ペアリングの途中・ニコニコとの連携・つないだエージェント (`agents`。移した先で組み直す) と、そのチャンネルの写しと受信の記録 (`agent_channels`・`channel_reception`) は、書き出す写しから消し、消した行の中身もファイルに残しません
 - 書き出しは録画中でもできます。DB は動いたままで一貫した写しを取ります (`VACUUM INTO`)。写しの中で録画中だった録画は、
   新しい denpa の起動で回収します (放送が終わっていれば中断として失敗、まだ放送中なら新しいチューナーで録り直す)
 - **録画中・エンコード中の録画があるときは、終わってから書き出して写すのが確実です。** 「書き出す」の上に件数を出します
@@ -299,7 +300,7 @@ EPGStation の履歴と同じく、「録ったことのある回」として移
 ### 取り込めるのは、まだ使っていない denpa だけ
 
 **録画・ルール・手動予約・録画の履歴のどれかがある denpa には取り込めません** (画面にそう出ます)。番組表と局は
-入れたばかりでも持っていますが、数えずに丸ごと置き換えます。混ぜて取り込むことはしません。
+入れたばかりでも持っていますが、数えずに丸ごと置き換えます。切り抜きも数えずに置き換わります (撮った画像は `clips/` に残る)。混ぜて取り込むことはしません。
 
 やり直したいときは、新しい denpa の DB の置き場を空にしてから入れ直します (Docker Compose なら
 `docker compose down` のあと `docker volume rm denpa_denpa-data`、Helm なら data の PVC を消す。
@@ -357,6 +358,6 @@ Mac と Windows なら denpa を止めて、`denpa.env` と同じフォルダの
 - テレビのアプリ (URL が変わったならアプリで直す)
 - OIDC を使っているなら、ログインし直す
 
-**自動で再起動しない環境では、自分で起動します。** compose (`restart: unless-stopped`)・Helm・Mac (LaunchDaemon の `KeepAlive`)・Windows (install.ps1 が書く `denpa.cmd` のループ) は、
+**自動で再起動しない環境では、自分で起動します。** compose (`restart: unless-stopped`)・Helm・Mac (LaunchDaemon の `KeepAlive`)・Windows (install.ps1 が書く `denpa.cmd` のループ)・Android (アプリの常駐サービス) は、
 取り込むと denpa が終了して自動で起動し直します。自動で起動し直さないときは、画面に「再起動してください」と出るので、
 起動し直します。入れ替えは起動の最初にするので、手で起動しても同じです。

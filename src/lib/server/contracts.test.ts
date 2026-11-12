@@ -23,6 +23,7 @@ config.dataDir = testDir;
 config.dbPath = join(testDir, "denpa.db");
 
 const { contractStatus, DECODE_VALID_MS } = await import("./contract-status");
+const { listAgents } = await import("./agents");
 const { orm } = await import("./db");
 const { placeServices } = await import("./fake-channels");
 const { cardContracts, programs, services } = await import("./schema");
@@ -149,7 +150,11 @@ describe("confirmCardContract", () => {
 
     try {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
-      const res = await confirmCardContract("dGVzdA==", 60000);
+      const res = await confirmCardContract(
+        "dGVzdA==",
+        60000,
+        listAgents()[0]!,
+      );
       expect(res.ok).toBe(true);
       expect(res.code).toBe(0x0800);
     } finally {
@@ -164,7 +169,11 @@ describe("confirmCardContract", () => {
 
     try {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
-      const res = await confirmCardContract("dGVzdA==", 60000);
+      const res = await confirmCardContract(
+        "dGVzdA==",
+        60000,
+        listAgents()[0]!,
+      );
       expect(res.ok).toBe(false);
       expect(res.code).toBe(0);
       expect(res.error).toContain("500");
@@ -1038,6 +1047,36 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
     expect(rows.get(2)?.state).toBe("unsubscribed");
     expect(rows.get(2)?.decodeOk).toBe(false);
     expect(paidAllowed()(2)).toBe(false);
+  });
+
+  test("下げるのは復号に使ったカードの行だけ。ほかのカードで確かめた契約は残す", () => {
+    orm()
+      .insert(services)
+      .values({
+        id: 1,
+        service_id: 1,
+        network_id: 7,
+        name: "CS1",
+        type: "CS",
+        updated_at: Date.now(),
+      })
+      .run();
+    row(1, { code: null, decode_ok: true, decoded_at: Date.now() });
+    orm()
+      .insert(cardContracts)
+      .values({
+        card_id: "9999",
+        service_id: 1,
+        state: "subscribed",
+        decode_ok: true,
+        decoded_at: Date.now(),
+        checked_at: Date.now(),
+      })
+      .run();
+    noteStillScrambled(1, "9999");
+    expect(getContractRows(card)[0]?.state).toBe("subscribed");
+    expect(getContractRows("9999")[0]?.state).toBe("unsubscribed");
+    expect(paidAllowed()(1)).toBe(true);
   });
 
   test("手で予約した有料の番組が録ってよい局でなければ、理由を付けて知らせる", () => {

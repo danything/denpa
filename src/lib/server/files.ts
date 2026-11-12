@@ -5,7 +5,7 @@ import {
   rmdirSync,
   statSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
   and,
@@ -209,6 +209,8 @@ export function reconcile(): {
 /** 動画そのものの拡張子。これの隣に置くものが「サイドカー」 */
 const VIDEO_EXTENSIONS = ["m2ts", "mmts", "ts", "mkv", "mp4"];
 const VIDEO = new RegExp(`\\.(?:${VIDEO_EXTENSIONS.join("|")})$`, "i");
+/** EPGStation の引き継ぎの書きかけ (`migrate.ts` の `TEMPORARY`)。`.epgstation-12.m2ts.migrating` は下の `TRAILING` にも当たる */
+const MIGRATING = /^\.epgstation-\d+\..+\.migrating$/;
 /** 作業ファイル。動画の名前をまるごと先頭に持つ (`….m2ts.chapters.txt`) */
 const TRAILING = new RegExp(
   `^(.+\\.(?:${VIDEO_EXTENSIONS.join("|")}))\\.[^/]+$`,
@@ -352,6 +354,8 @@ function orphan(
   videos: Set<string>,
   running: Set<number>,
 ): boolean {
+  // 引き継ぎの書きかけは次の実行で続きから取るので触らない。片付けは引き継ぎがする (`migrate.sweepTemporaries`)
+  if (MIGRATING.test(basename(path))) return false;
   const working = WORKING.exec(path);
   if (working?.[1] !== undefined) return !running.has(Number(working[1]));
   const trailing = TRAILING.exec(path);

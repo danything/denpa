@@ -9,6 +9,7 @@ import { MOVED_SECTIONS } from "#lib/settings-sections.js";
  */
 export function GET({ params, url }) {
   // 自分のキーだけ (`constructor` などの継承したキーで飛ばない)
-  if (!Object.hasOwn(MOVED_SECTIONS, params.moved)) error(404, "Not Found");
+  if (!Object.hasOwn(MOVED_SECTIONS, params.moved))
+    error(404, "設定の節が見つかりません");
   redirect(308, relative(url, `/settings/${MOVED_SECTIONS[params.moved]}`));
 }

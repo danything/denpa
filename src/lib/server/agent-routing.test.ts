@@ -28,15 +28,21 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const { createIdentity } = await import("./agent-identity");
 const { fakeAgentUrl, serveFakeAgent } = await import("./fake-agent");
 const { listAgents } = await import("./agents");
-const { getTuners, openChannel, openWhenFree, TunerBusyError, tunerSnapshot } =
-  await import("./tuner");
+const {
+  getTuners,
+  openChannel,
+  openWhenFree,
+  pinGone,
+  TunerBusyError,
+  tunerSnapshot,
+} = await import("./tuner");
 const { forgetAgentCard } = await import("./agent-cards");
 const { checkContracts, getContractRows, testDecode } =
   await import("./contracts");
 const { orm } = await import("./db");
 const { placeServices } = await import("./fake-channels");
 const { cardContracts, programs, services } = await import("./schema");
-const { descramble, forgetRawProbe } = await import("./scramble");
+const { descramble, forgetRawProbe, probeRaw } = await import("./scramble");
 
 /** `/denpa/card` の答え。カードも `CARD_URL` も無い */
 const NO_CARD = {
@@ -174,7 +180,9 @@ class FakePool {
   /** 本物 (RawProbe.cs) と同じく、置き場の中身の SHA-256 を返す。置き場は denpa と同じ `config.rawDir` */
   private async probe(request: Request): Promise<Response> {
     this.probes++;
-    if (this.raw === "old") return new Response("", { status: 404 });
+    // 古いエージェントは知らない API に、ほかの知らない API と同じ答えを返す (エージェントの `MapFallback`)
+    if (this.raw === "old")
+      return Response.json({ ok: false, error: "not found" }, { status: 404 });
     const { path } = (await request.json()) as { path: string };
     const full = join(config.rawDir, path);
     if (this.raw === "missing" || !existsSync(full))
@@ -707,6 +715,32 @@ describe("契約を確かめる先", () => {
   });
 });
 
+describe("名指しのチューナーがもう無いか (ライブの名指しを自動に戻すか)", () => {
+  test("名指しのエージェントだけを見る。そのエージェントが落ちていれば無いとはみなさない", async () => {
+    const [a, b] = startAgents(
+      new FakePool([{ name: "gr", types: ["GR"], rank: 0 }]),
+      new FakePool([{ name: "bs", types: ["BS"], rank: 0 }]),
+    );
+    expect(await pinGone(`${a}:gr`)).toBe(false);
+    expect(await pinGone(`${b}:gr`)).toBe(true);
+    pools[0]!.stop();
+    expect(await pinGone(`${a}:gr`)).toBe(false);
+    // もう無いエージェントの名指しは無い
+    expect(await pinGone(`${b! + 100}:gr`)).toBe(true);
+  });
+
+  test("エージェントの ID の無い前の名指しは全部のエージェントで探し、返さないエージェントがあれば無いとはみなさない", async () => {
+    startAgents(
+      new FakePool([{ name: "gr", types: ["GR"], rank: 0 }]),
+      new FakePool([{ name: "bs", types: ["BS"], rank: 0 }]),
+    );
+    expect(await pinGone("bs")).toBe(false);
+    expect(await pinGone("cs")).toBe(true);
+    pools[1]!.stop();
+    expect(await pinGone("cs")).toBe(false);
+  });
+});
+
 describe("後から復号させる先", () => {
   /** 置き場に掛かったままの TS を置く */
   async function scrambled(): Promise<{ input: string; output: string }> {
@@ -751,6 +785,15 @@ describe("後から復号させる先", () => {
     const { input, output } = await scrambled();
     await descramble(input, output);
     expect(pools.map((p) => p.decodes)).toEqual([0, 1]);
+  });
+
+  test("API の無い古いエージェント (知らない API への 404) は確かめられない。ファイルが無い 404 は見えない", async () => {
+    startAgents(pool(localCard(CARD_X)), pool(localCard(CARD_X)));
+    pools[0]!.raw = "missing";
+    pools[1]!.raw = "old";
+    const [missing, old] = listAgents();
+    expect(await probeRaw(missing!)).toBe(false);
+    expect(await probeRaw(old!)).toBeNull();
   });
 
   test("エージェントが 1 台なら、確かめずにそこへ送る (1 台のときの動きは変えない)", async () => {

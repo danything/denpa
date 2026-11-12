@@ -40,7 +40,7 @@ export const HC_TOKEN = "[0-9a-f]{32}";
  * - **ペアリングコードとアクセストークンの受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
  *   まだ何の資格も持っていない。コードを出すだけでは入れず、許すのは `/device` (ここは守る)。
  *   誰でも呼べるので、有効なコードの数に上限がある (device-auth.ts の `MAX_PENDING`)
- * - **http の Hybridcast のアプリの中継** (`/api/bml/hc/<トークン>/…`)。アプリは使い捨てのオリジンの iframe にいて、
+ * - **Hybridcast のアプリの中継** (`/api/bml/hc/<トークン>/…`)。アプリは使い捨てのオリジンの iframe にいて、
  *   そこからの読み込みにはログインの cookie が付かない。推測できないトークンが許可証で、出すのはログインした人にだけ
  *   (`POST /api/bml/hc`。hc-relay.ts)
  */
@@ -141,6 +141,7 @@ export function sameOrigin(request: Request, url: URL): boolean {
  * - DB を持ち出す・入れ替える (denpa を別の機械へ移す、EPGStation・EDCB からの引き継ぎ)
  * - 録画の通知を送る先 (Webhook) を追加・切り替え・削除・テスト送信する
  * - 世帯のニコニコのアカウントを差し替える
+ * - ほかのテレビのアプリのアクセストークンを取り消す
  * - エージェントを登録・名前の変更・URL の変更・削除する (設定の「受信」)
  */
 export function tokenRefusal(locals: { token?: number }): string | null {

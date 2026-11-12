@@ -56,6 +56,15 @@ describe("材料の控え", () => {
     expect(after.logoModel).toBe("枠 1290,30,92,67、型 312 画素");
   });
 
+  test("境目のすぐ下の値は、控えから読んでも境目に乗らない (切り下げる)", () => {
+    const before = material(300);
+    before.cuts[1] = 7.96;
+    before.logo!.scores[1] = 0.245;
+    const after = decodeMaterial(encodeMaterial(before))!;
+    expect(after.cuts[1]).toBeLessThan(8);
+    expect(after.logo!.scores[1]).toBeLessThan(0.25);
+  });
+
   test("ロゴが使えなかったものは理由ごと戻る", () => {
     const after = decodeMaterial(encodeMaterial(material(300, false)))!;
     expect(after.logo).toBeNull();

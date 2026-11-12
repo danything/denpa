@@ -134,7 +134,7 @@ export function normalizePostalCode(value: string): string {
   return digits.length === 7 ? digits : "";
 }
 
-/** 設定の表の 1 つを読む。画面の設定でない控え (`restore-width` の済んだ所) もここ */
+/** 設定の表の 1 つを読む。画面の設定でない控え (`restore-width` の済んだ所・`satellite-lineup` の消した種別) もここ */
 export function stored(key: string): string | undefined {
   return orm()
     .select({ value: settingsTable.value })

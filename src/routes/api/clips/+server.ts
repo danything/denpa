@@ -64,7 +64,8 @@ export async function POST({ url, request }) {
       if (raw !== null && source === null) error(400, "source が不正です");
       scene = recordingScene(recording, place, at, source);
     } else if (place === "live") {
-      const service = number(url, "service");
+      // 局は ID なので、ほかの ID と同じく 10 進の整数だけ読む (`1e3`・`0x10` は通さない。docs/api.md)
+      const service = parseId(url.searchParams.get("service"));
       if (service === null) error(400, "局が不正です");
       const aired = number(url, "aired");
       // 端末の時計は信じすぎない。1 日より離れていれば受け取った時刻にする

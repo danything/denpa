@@ -27,7 +27,7 @@ import { orm } from "./db";
 import { recordingUntil } from "./recorder";
 import { recordings } from "./schema";
 import { displayTitle } from "./title";
-import { type AgentTuner, getTuners, recordingOf } from "./tuner";
+import { type AgentTuner, recordingOf } from "./tuner";
 
 type Listed = Pick<AgentTuner, "index" | "channel" | "users">;
 
@@ -113,7 +113,8 @@ function lookup(id: number): YieldedRecording | null {
  */
 export async function yieldedTo(
   index: number | null,
-  list: () => Promise<readonly Listed[]> = getTuners,
+  /** 覚えておいたチューナーのエージェントの一覧 (`index` はエージェントごとの番号) */
+  list: () => Promise<readonly Listed[]>,
   find: (id: number) => YieldedRecording | null = lookup,
   wait: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
 ): Promise<YieldedRecording | null> {

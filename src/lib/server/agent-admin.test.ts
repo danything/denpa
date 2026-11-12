@@ -15,6 +15,7 @@ import {
   unregistered,
 } from "./agent-admin";
 import { createIdentity, fingerprint, pemToDer } from "./agent-identity";
+import { adoptName } from "./agent-name";
 import { agentCert, listAgents } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
@@ -133,6 +134,23 @@ describe("addAgent", () => {
       await expect(addAgent(fakeAgentUrl(server.port!))).rejects.toThrow(
         "環境変数 (TUNER_AGENT_URL) で登録してあります",
       );
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
+describe("環境変数のエージェントの名前 (adoptName)", () => {
+  test("ホスト名のままなら名乗る名前にし、画面で変えた名前は変えない", async () => {
+    const server = serve("書斎");
+    try {
+      config.agentUrl = fakeAgentUrl(server.port!);
+      const [env] = listAgents();
+      expect(await adoptName(env!)).toBe(true);
+      expect(listAgents()[0]?.name).toBe("書斎");
+      renameAgent(env!.id, "居間");
+      expect(await adoptName(env!)).toBe(false);
+      expect(listAgents()[0]?.name).toBe("居間");
     } finally {
       server.stop(true);
     }

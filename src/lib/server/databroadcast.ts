@@ -26,8 +26,6 @@ import type { ResponseMessage } from "@danything/arib/bml-protocol";
 
 import { Carousel } from "#lib/ts/carousel.js";
 
-export type { ResponseMessage };
-
 /**
  * TS を渡すと、組み立て終わったものを返す。
  *

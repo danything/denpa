@@ -1,5 +1,5 @@
 /**
- * **エージェントごとのカード** (docs/architecture.md「エージェントを何台もつなぐ」)。
+ * **エージェントごとのカード** (docs/architecture.md「全体」、docs/agent.md「エージェントが何台もあるとき」)。
  *
  * どのカードで復号するかは、エージェントの `/denpa/card` から読む。手元のカード (`source: local`) ならそのカードの番号、
  * 鍵を配る相手から貰う (`source: remote`。`CARD_URL`) なら配る相手のカードの番号 (`scramble.getActiveCardId`)。
@@ -112,6 +112,9 @@ async function routeCards(
   );
 }
 
+/** 復号に使うカードが無いエージェントの順 (`cardRanks` の表の 3)。カードが分からないエージェントもこの順にする (`tuner.route`) */
+export const NO_KEY = 3;
+
 /**
  * **有料の局を、そのエージェントで復号できる見込みの順** (小さいほど先)。振り分けは、いちばん小さいエージェントに絞る (`tuner.route` の手順 1)。
  *
@@ -132,7 +135,7 @@ export function cardRanks(
   const ranks = new Map<number, number>();
   for (const entry of cards) {
     if (entry.card === null) {
-      ranks.set(entry.agent, 3);
+      ranks.set(entry.agent, NO_KEY);
       continue;
     }
     const status = statusOf(entry.card);

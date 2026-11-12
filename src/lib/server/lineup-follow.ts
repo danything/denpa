@@ -166,9 +166,14 @@ async function compare(
    */
   const plans: { agent: Agent; keep: AgentChannel[]; diff: LineupDiff }[] = [];
   let next: AgentChannel[] | null = null;
+  /** 控えを読めなかったエージェントがある。この version を比べ終えたことにしない (戻ってから比べる) */
+  let missed = false;
   for (const agent of listAgents()) {
     const all = await getChannels(agent).catch(() => null);
-    if (all === null) continue;
+    if (all === null) {
+      missed = true;
+      continue;
+    }
     const mine = all.filter((channel) => channel.type === type);
     if (mine.length === 0) continue;
     next ??= lineupFrom(
@@ -192,8 +197,10 @@ async function compare(
   }
   if (next === null) return false;
   if (plans.length === 0) {
-    checked.set(key, network.version);
-    sighted.delete(key);
+    if (!missed) {
+      checked.set(key, network.version);
+      sighted.delete(key);
+    }
     return false;
   }
   const first = sighted.get(key);
@@ -208,7 +215,7 @@ async function compare(
 
   for (const plan of plans)
     await putChannels([...plan.keep, ...next], [type], plan.agent);
-  checked.set(key, network.version);
+  if (!missed) checked.set(key, network.version);
   sighted.delete(key);
   // 知らせる文は最初に書き換えたエージェントの差分から (放送の一覧は同じなので、どのエージェントもふつうは同じ差分)
   record(type, changeText(type, plans[0]!.diff));

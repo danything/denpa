@@ -371,9 +371,9 @@ function failed(message: string): CardStatus {
  */
 export async function putCardReaders(
   disabled: string[],
-  agent?: Agent,
+  agent: Agent,
 ): Promise<void> {
-  const res = await fetchAgent(agent ?? primaryAgent(), "/denpa/card/readers", {
+  const res = await fetchAgent(agent, "/denpa/card/readers", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ disabled }),
@@ -390,7 +390,8 @@ export async function putCardReaders(
 const DECODED = object({ ok: optional(boolean), error: optional(string) });
 
 /**
- * カードリーダーの状態。設定画面に出す。`agent` を渡さなければ並びの先頭のエージェント (`putCardReaders`・`descramble` も同じ)。
+ * カードリーダーの状態。設定画面に出す。`agent` を渡さなければ並びの先頭のエージェント。
+ * 渡さないのは、どのエージェントか分からないときだけ (録ったエージェントの分からない録画・エージェントが 1 台も無いときの理由)。
  *
  * リーダーが見えていてもカードを読めていないことがある (挿さっていない・USB が黙る)。
  * そのまま録ると上に書いた壊れ方になるので、画面から見えるようにしてある。
@@ -432,7 +433,15 @@ export async function descramble(
   output: string,
   signal?: AbortSignal,
   agent?: Agent,
-): Promise<{ ok: boolean; error: string; stillScrambled?: boolean }> {
+): Promise<{
+  ok: boolean;
+  error: string;
+  /** 復号させたエージェント (`agents.id`)。送る前に失敗したら無い */
+  agent?: number;
+  stillScrambled?: boolean;
+  /** 掛かったまま終わったときに、そのエージェントが使っていたカードの番号 (`contracts.noteStillScrambled`) */
+  cardId?: string | null;
+}> {
   /*
    * 向こうのマウント先はこちらと同じとは限らないので、元の TS の置き場からの相対で渡す。
    * 掛かったままの TS は必ずここにある (引き継いだ録画も、移行のときに
@@ -472,6 +481,7 @@ export async function descramble(
     if (!res.ok || body.ok !== true) {
       return {
         ok: false,
+        agent: chosen.id,
         error:
           body.error ??
           `エージェントへの復号のリクエストが失敗しました (${res.status})`,
@@ -490,11 +500,13 @@ export async function descramble(
     // カードは読めていて掛かったまま = 鍵を貰えなかった (契約が無い・切れたことが多い。`contracts.noteStillScrambled`)
     return {
       ok: false,
+      agent: chosen.id,
       error: `復号してもスクランブルが残っています。${why}`,
       stillScrambled: card.ok,
+      cardId: card.ok ? getActiveCardId(card) : null,
     };
   }
-  return { ok: true, error: "" };
+  return { ok: true, agent: chosen.id, error: "" };
 }
 
 /** `POST /denpa/raw/probe` の答え。見つかれば中身の SHA-256、無ければ `error` */
@@ -502,6 +514,9 @@ const RAW_PROBE = object({
   sha256: optional(string),
   error: optional(string),
 });
+
+/** エージェントが知らない API に返す `error` (エージェントの Program.cs の `MapFallback`) */
+const UNKNOWN_API = "not found";
 
 /** 確かめた結果 (メモリだけ)。見えた・見えなかったものだけ控え、確かめられなかったものは次に訊き直す */
 const probed = new Map<number, boolean>();
@@ -539,12 +554,17 @@ export async function probeRaw(agent: Agent): Promise<boolean | null> {
       signal: AbortSignal.timeout(10_000),
     });
     const raw: unknown = await res.json().catch(() => null);
-    // 古いエージェントは知らない API に JSON を返さない (404・405)
+    // 本文が JSON でない (405 など) なら確かめられない
     if (raw === null) return null;
     const body = tolerate(RAW_PROBE, raw, "エージェントの /denpa/raw/probe");
     if (res.ok && typeof body.sha256 === "string")
       return body.sha256 === createHash("sha256").update(content).digest("hex");
-    return res.status === 404 && typeof body.error === "string" ? false : null;
+    // 無いのがファイルなら見えない。知らない API には、古いエージェントも 404 と `not found` を返す (`MapFallback`) ので、それは確かめられない
+    return res.status === 404 &&
+      typeof body.error === "string" &&
+      body.error !== UNKNOWN_API
+      ? false
+      : null;
   } catch {
     return null;
   } finally {

@@ -18,7 +18,7 @@ import {
   strictPlaces,
 } from "./agent-channels";
 import { fetchAgent } from "./agent-client";
-import { type Agent, listAgents, primaryAgent } from "./agents";
+import { type Agent, listAgents } from "./agents";
 import { config } from "./config";
 import {
   type ContractState,
@@ -89,27 +89,23 @@ export function isCodeSubscribed(code: number): boolean {
 }
 
 /**
- * B-CAS カードの契約確認コマンド (0x90 0x3C) をエージェント経由で呼び出す。`agent` を渡さなければ並びの先頭のエージェント。
+ * B-CAS カードの契約確認コマンド (0x90 0x3C) を、そのカードを使うエージェント経由で呼び出す
  */
 export async function confirmCardContract(
   verificationBase64: string,
   dateMjd: number,
-  agent?: Agent,
+  agent: Agent,
 ): Promise<ConfirmResult> {
   try {
-    const res = await fetchAgent(
-      agent ?? primaryAgent(),
-      "/denpa/card/confirm",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          verification: verificationBase64,
-          date: dateMjd,
-        }),
-        signal: AbortSignal.timeout(5_000),
-      },
-    );
+    const res = await fetchAgent(agent, "/denpa/card/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        verification: verificationBase64,
+        date: dateMjd,
+      }),
+      signal: AbortSignal.timeout(5_000),
+    });
     if (!res.ok) {
       const err = await res.text().catch(() => "");
       return {
@@ -674,7 +670,7 @@ function saveDecode(
  * **有料の番組を復号できて録れた。** その局を、復号テストで確かめたときと同じく契約中にする (`encoder.ts`。`noteStillScrambled` の反対)。
  * 番組表に契約の情報 (0xCB) が無い局は、手で予約した録画でも契約中になり、録り続けている間は 31 日 (`DECODE_VALID_MS`) を過ぎても録られなくならない。
  *
- * 書くのは、録ったエージェント (`recordings.agent_id`) がいま使っているカードの行。録ったエージェントが分からない (上げる前の録画)・
+ * 書くのは、復号したエージェント (後から復号させたエージェント、無ければ録ったエージェントの `recordings.agent_id`) がいま使っているカードの行。録ったエージェントが分からない (上げる前の録画)・
  * もう無いときは並びの先頭のエージェントのカード。カードが読めないときは書かない (どのカードで観られたか分からない)。
  * カードが答えた行 (`code` がある) の状態は変えない (`saveDecode`)
  */
@@ -811,9 +807,14 @@ export async function scrambledLiveNotice(
  * (`encoder.ts`)。契約が切れたあとも 31 日待たずに、次の回から録らなくなる。
  *
  * 下げるのは、カードに聞けない局 (`code` が無い行) だけ。カードが契約中と答えた局は、掛かったままの理由が
- * ほかにある (ECM が流れていない など) ので、カードの答えを信じる (次の定期の確認で確かめ直す)
+ * ほかにある (ECM が流れていない など) ので、カードの答えを信じる (次の定期の確認で確かめ直す)。
+ * 下げるのは復号に使ったカード (`cardId`) の行だけ。ほかのカードで契約を確かめた局まで録らなくならないように。
+ * カードが分からなければ全部のカードの行
  */
-export function noteStillScrambled(serviceId: number): void {
+export function noteStillScrambled(
+  serviceId: number,
+  cardId: string | null = null,
+): void {
   orm()
     .update(cardContracts)
     .set({
@@ -825,6 +826,7 @@ export function noteStillScrambled(serviceId: number): void {
     .where(
       and(
         eq(cardContracts.service_id, serviceId),
+        cardId === null ? undefined : eq(cardContracts.card_id, cardId),
         eq(cardContracts.state, "subscribed"),
         isNull(cardContracts.code),
       ),

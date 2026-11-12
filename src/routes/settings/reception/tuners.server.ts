@@ -115,7 +115,7 @@ function withLabels(
 export type Lists = Map<number, Promise<TunerList>>;
 
 /**
- * カードを配る側の URL を、登録したエージェントの名前に直す (ホストとポートが同じもの)。どれでもなければ null
+ * カードを配る側の URL を、登録したエージェントの名前に直す (ホスト名が同じもの。配るポートは `CARD_SHARE_PORT` で 25252 と違う)。どれでもなければ null
  */
 function remoteName(remote: string | undefined, all: Agent[]): string | null {
   if (remote === undefined || !URL.canParse(remote)) return null;
@@ -195,9 +195,9 @@ function agentFrom(form: FormData): Agent | null {
 
 const NO_SUCH_AGENT = "このエージェントはもうありません";
 
-/** ダイアログを開いたエージェントのカードの契約の一覧。エージェントが分からなければ並びの先頭 */
-async function rowsOf(agent: Agent | null) {
-  return contractRows(await cardStatus(agent ?? undefined));
+/** ダイアログを開いたエージェントのカードの契約の一覧 */
+async function rowsOf(agent: Agent) {
+  return contractRows(await cardStatus(agent));
 }
 
 export const actions = {
@@ -331,6 +331,7 @@ export const actions = {
   /** B-CAS カード内の CA 契約情報を確認し、各有料局の契約・有効期限を更新する */
   checkContracts: async ({ request }) => {
     const agent = agentFrom(await request.formData());
+    if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
     try {
       await verifyContracts();
       return { success: true, contracts: await rowsOf(agent) };
@@ -345,12 +346,13 @@ export const actions = {
   testDecode: async ({ request }) => {
     const form = await request.formData();
     const agent = agentFrom(form);
+    if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
     const serviceId = parseId(form.get("serviceId"));
     if (serviceId === null || serviceId < 1) {
       return fail(400, { message: "局 ID が不正です" });
     }
     try {
-      const result = await testDecodeStream(serviceId, agent?.id);
+      const result = await testDecodeStream(serviceId, agent.id);
       if (!result.ok) {
         return fail(500, {
           message:
@@ -374,8 +376,9 @@ export const actions = {
   /** 確かめていない有料の局を、物理チャンネルごとに 1 回の選局でまとめて確かめる */
   testDecodeUnverified: async ({ request }) => {
     const agent = agentFrom(await request.formData());
+    if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
     try {
-      const result = await testDecodeUnverified(agent?.id);
+      const result = await testDecodeUnverified(agent.id);
       if (!result.ok) {
         return fail(500, {
           message: `復号を確かめられませんでした: ${result.error}`,

@@ -1399,7 +1399,16 @@ function mmtsPassthrough(
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       const since = Date.now();
-      const { done, value } = await reader.read();
+      let read: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        read = await reader.read();
+      } catch (error) {
+        // 読んでいる途中で録画を消されたなど。送り出しの具合の登録を残さない
+        opened.close();
+        controller.error(error);
+        return;
+      }
+      const { done, value } = read;
       pace.wait(Date.now() - since);
       if (done) {
         opened.close();

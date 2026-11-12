@@ -6,6 +6,7 @@ import { followAgent } from "./agent-admin";
 import { forgetAgentCard } from "./agent-cards";
 import { listen } from "./agent-events";
 import { startDiscovery } from "./agent-mdns";
+import { adoptName } from "./agent-name";
 import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
@@ -340,6 +341,15 @@ export function unwatchAgent(agent: number): void {
   unlisten.delete(agent);
 }
 
+/** 行の今の名前 (画面で変えたら、購読を繋ぎ直さずに通知に入れる)。読めなければ購読を始めたときの名前 */
+function nameOf(agent: Agent): string {
+  try {
+    return listAgents().find((a) => a.id === agent.id)?.name ?? agent.name;
+  } catch {
+    return agent.name;
+  }
+}
+
 function listenToAgent(agent: Agent): () => void {
   return listen(
     agent,
@@ -387,16 +397,18 @@ function listenToAgent(agent: Agent): () => void {
         // 落ちている間にカードや置き場が変わったかもしれない。振り分けと後からの復号の前に訊き直す
         forgetAgentCard(agent.id);
         forgetRawProbe(agent.id);
-        console.log(`[agent] ${agent.name} に繋がりました`);
+        const name = nameOf(agent);
+        console.log(`[agent] ${name} に繋がりました`);
         notify({
           event: "agent.up",
-          text: `エージェント「${agent.name}」に繋がりました`,
+          text: `エージェント「${name}」に繋がりました`,
         });
       } else {
-        console.error(`[agent] ${agent.name} に繋がりません`);
+        const name = nameOf(agent);
+        console.error(`[agent] ${name} に繋がりません`);
         notify({
           event: "agent.down",
-          text: `エージェント「${agent.name}」に繋がりません。このエージェントのチューナーでは録画できません`,
+          text: `エージェント「${name}」に繋がりません。このエージェントのチューナーでは録画できません`,
         });
       }
     },
@@ -406,6 +418,10 @@ function listenToAgent(agent: Agent): () => void {
      * 待つと、局は次の定期の取り込みまで、番組表は次の取得の周期まで入らない。読み直すのはこのエージェントの控えだけ
      */
     () => {
+      // 環境変数から足したエージェントの名前を、エージェントが名乗る名前にする (`AGENT_NAME`。画面で変えた名前は残す)
+      void adoptName(agent).then((changed) => {
+        if (changed) emit("tuners");
+      });
       if (!syncPending(agent.id)) return;
       console.log(
         `[epg] ${agent.name} の通知に繋がりました。読めていなかった局と番組表を取り込み直します`,

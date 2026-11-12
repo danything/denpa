@@ -28,12 +28,10 @@ import { reservations, rules as ruleTable } from "./schema";
  *
  * @param rule そのルールだけを当てる。**足したときにしか使えない。**
  *   新しいルールは他の予約を外せないので、範囲を絞れる (`rules.applyRules`)
- * @returns どのルールにも当たらなくなって消した予約の数
  */
-export async function reapply(rule?: number): Promise<number> {
-  const { dropped } = applyRules(rule === undefined ? {} : { rule });
+export async function reapply(rule?: number): Promise<void> {
+  applyRules(rule === undefined ? {} : { rule });
   await resolveConflicts();
-  return dropped;
 }
 
 /** フォームの `id` (直す・消すルール)。ID として読めなければ null (`parseId`) */

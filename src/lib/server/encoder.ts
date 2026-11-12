@@ -1462,6 +1462,8 @@ async function runJob(jobId: number): Promise<void> {
   // スクランブルが掛かったまま録れていたら、ここで復号する (scramble.ts)
   /** 後始末で消す作業ファイル。元の TS を置き換えたときは残す側になるので null のまま */
   let decoded: string | null = null;
+  /** 後から復号させたエージェント (`agents.id`)。有料の番組を復号できたとき、契約中にするのはこのエージェントのカード */
+  let decodedBy: number | null = null;
   let sourceTs = input;
   /** 4K の局の録画 (`.mmts`)。ffmpeg に渡す前に MP4 に詰め替える (`remuxForEncode`) */
   const uhd = recordedTransport(input) === "tlv";
@@ -1488,7 +1490,7 @@ async function runJob(jobId: number): Promise<void> {
       if (canceled.has(jobId)) return finishCanceled(jobId, target);
       // 有料の番組が、カードは読めているのに掛かったまま。その局は次の回から録らない (`contracts.noteStillScrambled`)
       if (result.stillScrambled === true && paidRecording(recording))
-        noteStillScrambled(recording.service_id);
+        noteStillScrambled(recording.service_id, result.cardId ?? null);
       fail(
         jobId,
         recording,
@@ -1497,6 +1499,7 @@ async function runJob(jobId: number): Promise<void> {
       return;
     }
     // 元の TS を残すかは録画ごとではなく全体設定 (settings.keepOriginal)
+    decodedBy = result.agent ?? null;
     if (settings().keepOriginal) {
       // 元の TS を残す設定なら、残すのは復号できたほうだけにする。
       // 掛かったままの TS を取っておいても、あとから復号できる保証は無い
@@ -1516,7 +1519,7 @@ async function runJob(jobId: number): Promise<void> {
    * `cardStatus` は失敗を答えで返すので、カードが読めなくてもエンコードは止まらない (`noteDecoded` が何も書かないだけ)
    */
   if (!uhd && paidRecording(recording) && isDecoded(sourceTs))
-    await noteDecoded(recording.service_id, recording.agent_id);
+    await noteDecoded(recording.service_id, decodedBy ?? recording.agent_id);
 
   // コマ数 (`smoothMotion`) は、局ロゴを開いたあとに本編映像から実測して入れる (measureSmoothMotion)
   const encodeOptions: EncodeOptions = {

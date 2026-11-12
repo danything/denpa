@@ -5,10 +5,10 @@ import type { Place } from "./agent-order";
 import { config } from "./config";
 import { chunks } from "./stream";
 import {
-  getTuners,
   openChannelStream,
   type StreamUse,
   type TunerSignal,
+  tunersOf,
 } from "./tuner";
 
 /**
@@ -44,12 +44,11 @@ async function readSignal(
     limit.addEventListener("abort", () => resolve(null), { once: true }),
   );
   try {
-    const tuners = await Promise.race([getTuners(), gaveUp]);
+    // 測っているエージェントにだけ訊く (ほかのエージェントが遅くても C/N を落とさない)
+    const tuners = await Promise.race([tunersOf(agent, READ_LIMIT), gaveUp]);
     return (
-      tuners?.find(
-        (tuner) =>
-          tuner.agent === agent && tuner.users.some((user) => user.use === use),
-      )?.signal ?? null
+      tuners?.find((tuner) => tuner.users.some((user) => user.use === use))
+        ?.signal ?? null
     );
   } catch {
     return null;
