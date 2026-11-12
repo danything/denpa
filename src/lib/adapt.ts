@@ -1,3 +1,4 @@
+// CI の時間を測るための行 (マージしない)
 import {
   ENCODE_SLOW,
   LOWEST_RUNG,
