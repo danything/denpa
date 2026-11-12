@@ -12,7 +12,7 @@ import { config } from "./config";
 import { pruneCodes } from "./device-auth";
 import { checkDisk } from "./disk";
 import { pump, requeueOrphanedJobs } from "./encoder";
-import { readChannels, sync, syncServicesOnly } from "./epg";
+import { readChannels, sync, syncPending, syncServicesOnly } from "./epg";
 import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
 import { pruneHistory, reconcile } from "./files";
@@ -399,6 +399,21 @@ function listenToAgent(agent: Agent): () => void {
           text: `エージェント「${agent.name}」に繋がりません。このエージェントのチューナーでは録画できません`,
         });
       }
+    },
+    /*
+     * 局と番組表の取り込みで、このエージェントの控えを読めていなかったなら、通知に繋がったところでやり直す。
+     * denpa とエージェントを同時に入れ替えると、denpa の起動直後はエージェントがまだ立っていない。
+     * 待つと、局は次の定期の取り込みまで、番組表は次の取得の周期まで入らない。読み直すのはこのエージェントの控えだけ
+     */
+    () => {
+      if (!syncPending(agent.id)) return;
+      console.log(
+        `[epg] ${agent.name} の通知に繋がりました。読めていなかった局と番組表を取り込み直します`,
+      );
+      void guard("epg", async () => {
+        await sync(agent);
+        await collectOnce();
+      });
     },
   );
 }

@@ -928,8 +928,21 @@ export function settle(): SettleResult {
 }
 
 /**
+ * **局と番組表の取り込み (`sync`) で、控えを読めなかったエージェント** (`agents.id`)。読めたら消す。
+ * denpa とエージェントを同時に入れ替えると、起動直後はエージェントがまだ立っていないことがある。
+ * そのエージェントの通知に繋がったときに取り込み直す (`runtime.ts`)。
+ * 定期の局の取り込み (`syncServicesOnly`) では消さない。あちらは予約を組み直さないため
+ */
+const unsynced = new Set<number>();
+
+/** このエージェントの控えを、局と番組表の取り込み (`sync`) でまだ読めていないか */
+export function syncPending(agent: number): boolean {
+  return unsynced.has(agent);
+}
+
+/**
  * 局と番組表を取り込み直す。E2E と docs の画像を撮るスクリプトが呼ぶとき (`/api/sync`)・起動直後・スキャンのあと・
- * エージェントの `channels` の通知 (`runtime.ts`)・種別を消したとき (`scan.removeType`)。
+ * エージェントの `channels` の通知と、読めていなかったエージェントの通知に繋がったとき (`runtime.ts`)・種別を消したとき (`scan.removeType`)。
  *
  * 番組そのものを集めるのは `epg-collect.ts` で、こちらは**溜まっているものを
  * 使って予約を組み直すだけ**。
@@ -938,7 +951,24 @@ export async function sync(
   /** 渡せば、このエージェントの控えだけを読み直す (ほかのエージェントは前の写しのまま。`channels` の通知) */
   only?: Agent,
 ): Promise<SettleResult & { services: number }> {
-  const services = syncServices(await readChannels(only));
+  const targets = only === undefined ? listAgents() : [only];
+  let read: AgentChannels[];
+  try {
+    read = await readChannels(only);
+  } catch (error) {
+    for (const agent of targets) unsynced.add(agent.id);
+    throw error;
+  }
+  for (const agent of targets) {
+    if (read.some((entry) => entry.agent === agent.id))
+      unsynced.delete(agent.id);
+    else unsynced.add(agent.id);
+  }
+  /*
+   * 局の数が変わったら画面に知らせる (`syncServicesOnly`)。通知に繋がったときの取り込み直しは
+   * 画面を開いたあとに来ることがあり、そのあとの定期の取り込みでは数が変わらないので知らせない
+   */
+  const services = syncServicesOnly(read);
   const result = { services, ...settle() };
   await resolveConflicts();
   return result;

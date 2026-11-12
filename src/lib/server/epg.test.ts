@@ -44,13 +44,29 @@ let offered = [
   channel(700, "ＭＸデータ１", 192),
 ];
 
+/** 立ち上がる前のエージェントのように、局の一覧を返さない間は true */
+let starting = false;
+
 const server = Bun.serve({
   port: 0,
   tls: fakeAgentTls(),
   fetch(request) {
     const path = new URL(request.url).pathname;
     asked.push(path);
-    if (path === "/denpa/channels") return Response.json(offered);
+    if (path === "/denpa/channels")
+      return starting
+        ? new Response("starting", { status: 503 })
+        : Response.json(offered);
+    // 通知は繋いだまま、心拍のコメント行だけ流す (本物と同じく、繋いだ時点でヘッダが届く)
+    if (path === "/denpa/events")
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(": keep-alive\n\n"));
+          },
+        }),
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
     return new Response("not found", { status: 404 });
   },
 });
@@ -69,6 +85,8 @@ const {
   serviceCounts,
   settle,
   readChannels,
+  sync,
+  syncPending,
   syncServicesOnly,
   typeRank,
   unlistType,
@@ -1312,5 +1330,47 @@ describe("ケーブルの局", () => {
       ),
     ).toBe(1);
     expect(owners().map((row) => row.service_id)).toContain(CABLE_4K);
+  });
+});
+
+describe("読めなかったエージェントの取り込み直し", () => {
+  test("控えを読めなかったエージェントは、読めるまで取り込み直しを待つ", async () => {
+    // denpa とエージェントを同時に入れ替えると、起動直後の取り込みはエージェントに繋がらない
+    const { listAgents } = await import("./agents");
+    const agent = listAgents()[0]!;
+    expect(syncPending(agent.id)).toBe(false);
+
+    starting = true;
+    await expect(sync()).rejects.toThrow();
+    expect(syncPending(agent.id)).toBe(true);
+
+    // 定期の局の取り込みが読めても、予約を組み直していないので残す
+    starting = false;
+    syncServicesOnly(await readChannels());
+    expect(syncPending(agent.id)).toBe(true);
+
+    await sync(agent);
+    expect(syncPending(agent.id)).toBe(false);
+  });
+
+  test("起動して最初に購読が始まったときも知らせる", async () => {
+    const { listAgents } = await import("./agents");
+    const { listen } = await import("./agent-events");
+    const agent = listAgents()[0]!;
+    let subscribed = 0;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const stop = listen(
+      agent,
+      () => {},
+      undefined,
+      () => {
+        subscribed += 1;
+        resolve();
+      },
+    );
+    await promise;
+    stop();
+    // 繋ぎ直しと同じく知らせる (`onReachable` は起動時に呼ばない)。起動時の取り込みが読めなかったときに使うため
+    expect(subscribed).toBe(1);
   });
 });

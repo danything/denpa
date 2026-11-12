@@ -68,7 +68,7 @@ docker compose up -d
 (NAS や、ほかの仕組みに載せるとき) 向け。中身は 2 つのイメージと同じです。
 
 ```sh
-docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
+docker run -d --name denpa --hostname "$(hostname)" --restart unless-stopped --stop-timeout 21900 \
   --device-cgroup-rule 'c 189:* rmw' --device-cgroup-rule 'c 212:* rmw' \
   -v /dev/bus/usb:/dev/bus/usb -v /dev/dvb:/dev/dvb \
   -e TRUSTED_NETWORKS=192.168.0.0/16,10.0.0.0/8 \
@@ -79,6 +79,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
 - エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、録画は `/media` の下
   (元の TS は `raw`、エンコードしたものは `encoded`)。前のバージョンから上げるときは [config.md](config.md#置き場を変えた-前のバージョンから上げるとき)
 - 本体とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、入口が `/config/tls/pair-token` に無いときだけ作って両方に渡します
+- `--hostname` は、設定の「受信」の「エージェント」に出す名前の元です。無いとコンテナの ID になり、コンテナを作り直すたびに変わります
 - `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
 - 止めるときは録画の終わりを待つので、`--stop-timeout` を長くしておきます (compose の `stop_grace_period` と同じ)。
   どちらかのプロセスが落ちたらコンテナごと終わり、起動し直すのは `--restart` の役目です

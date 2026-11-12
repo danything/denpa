@@ -97,6 +97,8 @@ agent:
   # 秘密を SOPS などで別に持ち、ArgoCD が Secret を同期しない設定 (resource.exclusions) なら、chart の Secret はそもそも作られない
   # (このリポジトリの deploy/application.yaml と deploy/pair.sops.yaml)
   pairSecret: ""
+  # denpa の設定の「受信」の「エージェント」に出す名前と、mDNS で知らせる名前の元 (エージェントの AGENT_NAME)。空ならノードの名前
+  name: ""
   # チューナーとカードリーダーに触るために特権が要る
   privileged: true
   # ホストのデバイス。/dev/bus (USB) と /dev/dvb (DVB 型のチューナー)
