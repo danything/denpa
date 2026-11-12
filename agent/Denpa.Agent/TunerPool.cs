@@ -203,7 +203,7 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// **同期しなければ、同じ組の空いている別のチューナーで選局し直してから答える** (<see cref="SyncTries"/>。docs/agent.md「同期しなかったら別のチューナーで選局し直す」)。
-    /// どれでも同期しなければ、試したチューナーの名前を並べて同じ文言で投げる
+    /// どれでも同期しなければ、試したチューナーの名前を「・」で並べ、1 台のときと同じ文言の <see cref="IOException"/> を送出する
     /// </para>
     /// </summary>
     public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null, int? service = null) =>
@@ -211,7 +211,7 @@ public sealed class TunerPool(
 
     /// <summary>
     /// **1 回の選局で試すチューナーの数の上限** (最初の 1 台を含む)。同期しないと分かるまでに機材ごとの待ち (DVB は 5 秒、PIX-DT295 は 10 秒) が掛かり、
-    /// ライブは画面の前で人が待っている。2 台目でも同期しなければ、チューナーよりチャンネル (放送休止・その地域に無い周波数) を疑うほうが当たりやすい
+    /// ライブは画面の前で人が待っている。2 台目でも同期しなければ、チューナーよりチャンネル (放送休止・その地域に無い周波数) を疑うほうが当たりやすいと推定している
     /// </summary>
     public const int SyncTries = 2;
 
@@ -228,7 +228,7 @@ public sealed class TunerPool(
     private bool Unsynced(int index, string type, string channel) =>
         _unsynced.TryGetValue((index, type, channel), out var at) && Environment.TickCount64 - at < (long)UnsyncedFor.TotalMilliseconds;
 
-    /// <summary>同期しなかったときの失敗か (どの方式も <see cref="ITuneDevice.SyncFailed"/> を投げる)</summary>
+    /// <summary>同期しなかったときの失敗か (どの方式も <see cref="ITuneDevice.SyncFailed"/> の文言で例外を送出する)</summary>
     private static bool IsUnsynced(Exception error) => error.Message.Contains(ITuneDevice.SyncFailed, StringComparison.Ordinal);
 
     /// <param name="tried">この選局で、もう試して同期しなかったチューナー (番号と名前)。空でなければ、最初のチューナーと同じ組の空いているものだけから選ぶ</param>
@@ -467,7 +467,7 @@ public sealed class TunerPool(
     /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など。It930xDevice.cs)。エージェントが USB を直に持つ。受けられる種別は受信機ごとに決まっている (地上波・衛星・J.83B (SKY)。LNB の給電は 15V だけ)</item>
     /// </list>
     ///
-    /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>
+    /// <para>それ以外は例外を送出する。<c>px4_drv</c> の chardev はもう受け取らない</para>
     /// </summary>
     /// <param name="followZd1j">CECH-ZD1 J が設定のポートに見当たらなければ、ほかに 1 台だけ挿さっているものを使う (<see cref="Zd1j.Follow(string)"/>)</param>
     public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false)
@@ -667,7 +667,7 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// **<paramref name="tried"/> が空でなければ、同期しなかったあとの選局し直し。** 最初のチューナーと同じ組で、まだ試していない、
-    /// 空いているもの (余韻だけのものも) から選ぶ。優先度の低い利用者からは取り上げない (届くかどうか分からない選局のために切断しない)。
+    /// 空いているもの (余韻だけのものも) から選ぶ。優先度の低い利用者からは取り上げない (同期するか分からない選局のために切断しない)。
     /// ほかの組へは移らない (同じ組ならどれを使ってもよいという約束 2 の内に収め、denpa の割り振りを崩さない)
     /// </para>
     /// </summary>

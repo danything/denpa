@@ -526,7 +526,7 @@ public partial class It930xConcurrencyTests
         It930xDevice.Acquire(port, () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
 
     [Test]
-    public async Task 返してから待つ間に取り直すと_電源を入り切りせずに同じ機材を使う()
+    public async Task 返してから待つ間に取り直すと_電源を切らずに同じ機材を使う()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();

@@ -951,8 +951,8 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 最後の利用者が返してから閉じるまでの間。**電源を切って入れ直すのを続けて繰り返さない。**
-    /// 本番では、カードの状態を確かめるたび (使っていない内蔵カードリーダーを開いて閉じる) に電源を切って入れ直し、続けて 13 回入り切りしたあと、
-    /// 全受信機の TS が電源を抜くまで止まった (CXD2856 の仕様書 12.5)。短い間の入り切りを、いちばん疑っている
+    /// 本番では、カードの状態を確かめるたび (使っていない内蔵カードリーダーを開いて閉じる) に電源を切って入れ直し、続けて 13 回オン/オフしたあと、
+    /// 全受信機の TS が電源を抜くまで止まった (CXD2856 の仕様書 12.5)。短い間のオン/オフを、いちばん疑っている
     /// </summary>
     public static readonly TimeSpan IdleGrace = TimeSpan.FromSeconds(30);
 
@@ -993,7 +993,7 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 電源を切ったあと USB を閉じるまでの待ち (ms。ふだんは <see cref="PowerOffSettleMs"/>)。
-    /// 0 にするのは、待たずに入り切りを繰り返した前の動きを再現する <c>--it930x-cycle --no-wait</c> だけ
+    /// 0 にするのは、待たずにオン/オフを繰り返した前の動きを再現する <c>--it930x-cycle --no-wait</c> だけ
     /// </summary>
     internal int PowerOffWaitMs { get; set; } = PowerOffSettleMs;
 
