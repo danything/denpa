@@ -362,3 +362,5 @@ USB の機材はエミュレータに挿せないので、usbfs の fd (許可�
   (`licenseAssets`。OpenSSL のものは CI が `android/agent-licenses/` に置く。`DENPA_AGENT_LICENSES` で替えられる)
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。
+
+<!-- CI の時間を測るための行 (マージしない) -->
