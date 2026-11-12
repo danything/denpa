@@ -58,16 +58,14 @@ public static class Siano
         Models.FirstOrDefault(model => model.Vendor == vendor && model.Product == product);
 
     /// <summary>
-    /// 挿さっているポートと機種。**開かない。** Linux はカーネルのドライバ (smsusb) が使っているものを並べない
+    /// 挿さっているポートと機種。**開かない。** カーネルのドライバ (Linux の smsusb) が使っているものを並べない
     /// (動いているドライバから機材を取ると、カーネルの側で異常が出た記録がある。仕様書 1.4)
     /// </summary>
     public static List<(string Port, SianoModel Model)> Found(Action<string>? warn = null)
     {
         try
         {
-            return OperatingSystem.IsLinux()
-                ? Found(UsbSysfs.Devices, warn)
-                : [.. Models.SelectMany(model => UsbDevices.List(model.Vendor, model.Product).Select(found => (found.Port, model)))];
+            return Found(UsbHost.Current, warn);
         }
         catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
         {
@@ -76,22 +74,14 @@ public static class Siano
         }
     }
 
-    /// <summary>Linux の sysfs から (場所を渡せるのはテストのため)</summary>
-    internal static List<(string Port, SianoModel Model)> Found(string sysfs, Action<string>? warn) =>
-        UsbDevices.Scan(sysfs, dir => Identify(sysfs, Path.GetFileName(dir)), model => model.Name, warn);
+    /// <summary>渡した <see cref="IUsbHost"/> から (渡せるのはテストのため)</summary>
+    internal static List<(string Port, SianoModel Model)> Found(IUsbHost host, Action<string>? warn) =>
+        [.. UsbHost.Scan(host, Models, Id, model => model.Name, warn).Select(item => (item.Found.Port, item.Model))];
 
-    internal static SianoModel? Identify(string sysfs, string port)
-    {
-        var dir = Path.Combine(sysfs, port);
-        return Hex(UsbSysfs.Read(dir, "idVendor")) is { } vendor && Hex(UsbSysfs.Read(dir, "idProduct")) is { } product ? Find(vendor, product) : null;
-    }
+    private static UsbId Id(SianoModel model) => new(model.Vendor, model.Product);
 
-    /// <summary>そのポートの機種 (Linux は sysfs、Windows・macOS は OS に問い合わせる)。**開かない**</summary>
-    public static SianoModel? Identify(string port) =>
-        OperatingSystem.IsLinux() ? Identify(UsbSysfs.Devices, port) : Found().FirstOrDefault(item => item.Port == port).Model;
-
-    private static int? Hex(string? text) =>
-        int.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value) ? value : null;
+    /// <summary>そのポートの機種。扱う機種でなければ null。**開かない**</summary>
+    public static SianoModel? Identify(string port) => UsbHost.Identify(UsbHost.Current, Models, Id, port);
 
     /// <summary>設定に書いたのと同じ形式で (<c>siano:&lt;USB のポート&gt;</c>)。種別は地上波だけ</summary>
     public static List<TunerSpec> Detect() => Specs(Found(Log.Write));
@@ -104,9 +94,7 @@ public static class Siano
     /// ほかのソフトやカーネルのドライバが使っていれば、OS の理由のまま失敗する (横から取らない)
     /// </summary>
     internal static IUsbDevice OpenUsb(string port, SianoModel model) =>
-        OperatingSystem.IsLinux()
-            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product, selectAlternate: false)
-            : UsbDevices.Open(port, model.Vendor, model.Product, selectAlternate: false);
+        UsbHost.Current.Open(port, model.Vendor, model.Product, selectAlternate: false);
 
     /// <summary>未確認の値を記録に出したポート。エージェントが動いている間、ポートごとに 1 回だけ出す</summary>
     private static readonly HashSet<string> Described = [];

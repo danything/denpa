@@ -691,7 +691,7 @@ public class It930xDeviceTests
             }
             Usb("3-1", "0511", "024e");
             Usb("3-2", "0511", "0051");
-            var found = It930x.Specs(It930x.Found(dir.FullName, null));
+            var found = It930x.Specs(It930x.Found(new SysfsUsbHost(dir.FullName), null));
             await Assert.That(found.Count).IsEqualTo(5);
             await Assert.That(found[4].Device).IsEqualTo("it930x:3-1:4");
             // 受けられる種別も返す (設定の画面が SKY を選ばせる)

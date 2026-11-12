@@ -2,8 +2,8 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// USB デバイスが並ぶ sysfs (Linux)。USB ポートごとのディレクトリに、属性が 1 つずつファイルで置かれている。
-/// 機材を探すところ (<see cref="AsicenUserland"/>・<see cref="Ccid"/>・<see cref="Siano"/>・<see cref="Zd1j"/>・<see cref="Dt295"/>・<see cref="It930x"/>) と
-/// 開くところ (<see cref="UsbFsDevice"/>) で同じ読み方をする
+/// 機材を並べるところ (<see cref="SysfsUsbHost"/>) と開くところ (<see cref="UsbFsDevice"/>) で同じ読み方をする。
+/// ポートの名前の形 (<see cref="IsPort"/>) は、どの OS の <see cref="IUsbHost"/> も同じ
 /// </summary>
 public static class UsbSysfs
 {

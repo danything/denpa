@@ -751,7 +751,7 @@ if (tune.FakeTune is null)
     _ = Task.Run(() =>
     {
         lock (tunersGate) seen = [.. DeviceProbe.Detect().Select(tuner => tuner.Device)];
-        Interlocked.Exchange(ref watch, new DeviceWatch(Rescan));
+        Interlocked.Exchange(ref watch, new DeviceWatch(UsbHost.Current, Rescan));
         // 受け取り始める前に止まり始めていたら、ここで手放す
         if (app.Lifetime.ApplicationStopping.IsCancellationRequested) Interlocked.Exchange(ref watch, null)?.Dispose();
     });

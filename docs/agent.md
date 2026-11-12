@@ -420,6 +420,28 @@ ioctl は通り、同期しないだけなので気付きにくい。
 `strengthDbm` は電波の強度 (dBm) で、dBm で返す機材 (DVB のドライバが `FE_SCALE_DECIBEL` で返すもの・CECH-ZD1 J・IT930x の機材の地上波と J.83B) だけ入り、ほかは null (IT930x の機材の衛星の強度は dBm と言えないので入れない)。古いエージェントは `strengthDbm` を返さないので、サーバは無いものも null と同じに読む (古いサーバは読まずに捨てる)。
 `atTune` は選局したときに測った値 (asicend)。測れない機材と空いているチューナーは `signal: null` です。どの機材で何が出るかは [tuners.md](tuners.md#信号レベル)。
 
+### USB の機材を探す・開く境目 (`IUsbHost`)
+
+**エージェントが USB を直に持つ機材は、OS との境目 `IUsbHost` (`UsbHost.cs`) だけを通して探し、開きます。**
+OS を見分けるのは起動のときの 1 回 (`UsbHost.Current`) だけです。機材ごとのコード (Siano・CECH-ZD1 J・PIX-DT295・IT930x・USB の CCID のカードリーダー・
+asicen-userland のファームウェア待ち) と、抜き挿しの受け取り (`DeviceWatch`) は OS を見ません。
+
+| 実装                   | 並べる                                                                         | 開く                   | 抜き挿し                              | 電源の入れ直し        |
+| ---------------------- | ------------------------------------------------------------------------------ | ---------------------- | ------------------------------------- | --------------------- |
+| `SysfsUsbHost` (Linux) | `/sys/bus/usb/devices` の ID・シリアル番号・文字列・インターフェース・ドライバ | usbfs (`/dev/bus/usb`) | `/dev/bus/usb` の inotify             | ハブの `port/disable` |
+| `WinUsbHost` (Windows) | SetupAPI (ID ごと。シリアル番号はデバイスのパスから)                           | WinUSB                 | 挿さっている機材を 2 秒ごとに見比べる | できない              |
+| `IoKitUsbHost` (macOS) | IOKit (ID ごと)                                                                | IOUSBLib               | 受け取らず、10 秒ごとに探し直す       | できない              |
+
+- 並べる (`List`) ときは USB の ID で絞り、開きません。カーネルのドライバが使っている機材も並べ、使わないと決めて記録に出すのは機材の側です (`UsbHost.Scan`)。
+  並びは、sysfs ならポートの名前の順、Windows と macOS は機種の表の順に OS が返した順です
+- ポートの名前は、どの OS でも sysfs と同じ形 (`1-2.3`) に作ります。`tuners.json` の `device` (`it930x:1-2.3:0`) もこの形です
+- 1 つのポートだけを読む (`Peek`) のは sysfs だけです。Windows と macOS は並べて探します。設定の画面に返す受けられる種別 (`receivable`) は、
+  1 つのポートだけを読めない OS では最後に探した結果だけから決め、一覧を返すたびに OS に聞き直しません
+- USB のカードリーダーを自前の CCID で開くのは、`Readers` が null でない OS (Linux) だけです。Windows と macOS は PC/SC を使います (`CardLinks`)
+- ポートの電源の入れ直し (`PowerCycle`) は Linux だけです。ほかの OS では null で、PIX-DT295 は挿し直しを求めて断ります
+- Android の bionic でも .NET は OS を Linux と答えるので、今は `SysfsUsbHost` が選ばれます。sysfs が見えなければ、機材を何も並べずに続けます
+- テストは `UsbHostTests.cs` です。機材ごとの探し方は偽の `IUsbHost` で、`SysfsUsbHost` は作った sysfs で確かめます
+
 ### Siano の機材を直に持つ作り (実機で確かめていない)
 
 **PX-S1UD などの Siano RIO 系の機材は、エージェントが USB を直に持って動かします。** 外のドライバは起動しません。

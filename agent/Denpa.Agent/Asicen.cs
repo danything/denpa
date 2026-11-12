@@ -268,7 +268,7 @@ public static class AsicenUserland
     /// <summary>ファームウェア待ちの USB ID (上流の HARDWARE-VALIDATION.md)</summary>
     private static readonly string[] Loaders = ["1738:5211", "1738:5216"];
 
-    /// <summary>USB 機能 1 つ (sysfs のデバイス 1 つ)</summary>
+    /// <summary>USB 機能 1 つ (USB のデバイス 1 つ)</summary>
     public sealed record Function(string Usb, string Port, bool Loader)
     {
         /// <summary>内蔵ハブのポート (<c>1-2.1</c> → <c>1-2</c>)。ハブの下に無ければ null</summary>
@@ -279,21 +279,17 @@ public static class AsicenUserland
     }
 
     /// <summary>
-    /// sysfs から ASICEN の USB 機能を探す。**ファームウェア待ちの機材を見つけるためだけに使う** (<see cref="Boot"/>)。
-    /// 5 機種 (<see cref="Models"/>) と、ファームウェア待ち (<c>1738:5211</c> / <c>1738:5216</c>)。読めないデバイスは飛ばす
+    /// ASICEN の USB 機能を探す。**ファームウェア待ちの機材を見つけるためだけに使う** (<see cref="Boot"/>)。
+    /// 5 機種 (<see cref="Models"/>) と、ファームウェア待ち (<c>1738:5211</c> / <c>1738:5216</c>)。ID の読めないデバイスは飛ばす。
+    /// カーネルのドライバが使っているものも並べる (流し込むかは asicend が決める)
     /// </summary>
-    public static List<Function> Scan(string root = UsbSysfs.Devices)
+    public static List<Function> Scan(IUsbHost host)
     {
-        if (!Directory.Exists(root)) return [];
         var found = new List<Function>();
-        foreach (var dir in Directory.EnumerateDirectories(root).Order(StringComparer.Ordinal))
+        foreach (var item in host.List([.. Loaders.Concat(Models.Select(model => model.Usb)).Select(UsbId.Parse).Distinct()]))
         {
-            var port = Path.GetFileName(dir);
-            if (!UsbSysfs.IsPort(port)) continue;
-            var usb = $"{UsbSysfs.Read(dir, "idVendor")}:{UsbSysfs.Read(dir, "idProduct")}";
-            var loader = Loaders.Contains(usb);
-            if (!loader && Models.All(model => model.Usb != usb)) continue;
-            found.Add(new Function(usb, port, loader));
+            var usb = $"{item.Vendor:x4}:{item.Product:x4}";
+            found.Add(new Function(usb, item.Port, Loaders.Contains(usb)));
         }
         return found;
     }
@@ -334,7 +330,7 @@ public static class AsicenUserland
     {
         lock (BootGate)
         {
-            var waiting = Waiting(Scan());
+            var waiting = Waiting(Scan(UsbHost.Current));
             Booted.IntersectWith(waiting.Select(enclosure => enclosure.Id));
             foreach (var (id, ports) in waiting)
             {

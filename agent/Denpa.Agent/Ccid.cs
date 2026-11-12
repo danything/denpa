@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Globalization;
 using System.Text;
 
 namespace Denpa.Agent;
@@ -420,43 +419,32 @@ public sealed class CcidLink : ICardLink
 /// <summary>USB の CCID リーダーを探す</summary>
 public static class Ccid
 {
+    /// <summary>CCID のインターフェースの bInterfaceClass</summary>
+    public const int InterfaceClass = 0x0B;
+
     /// <summary>
     /// 挿さっている CCID のインターフェース (bInterfaceClass 0x0b) を並べる。**開かない。**
-    /// sysfs だけを読むので、別のプロセスが使っていても並ぶ (開くときに断られる)
+    /// 並べるだけなので、別のプロセスが使っていても並ぶ (開くときに断られる)。
+    /// カードリーダーを自前の CCID で開かない OS (Windows・macOS は PC/SC。<see cref="IUsbHost.Readers"/>) は null
     /// </summary>
-    public static IReadOnlyList<CardLinkCandidate> Find() => Find(UsbSysfs.Devices, UsbSysfs.DevUsb);
+    public static IReadOnlyList<CardLinkCandidate>? Find() => Find(UsbHost.Current);
 
-    internal static List<CardLinkCandidate> Find(string sysfs, string devUsb)
+    internal static List<CardLinkCandidate>? Find(IUsbHost host)
     {
+        if (host.Readers() is not { } readers) return null;
+        // 並びは sysfs のインターフェースの名前 (4-11:1.0 → 機材 4-11、構成 1、インターフェース 0) の順
+        var interfaces = readers
+            .SelectMany(device => device.Interfaces.Where(entry => entry.Class == InterfaceClass).Select(entry => (Device: device, entry.Config, entry.Number)))
+            .OrderBy(item => $"{item.Device.Port}:{item.Config}.{item.Number}", StringComparer.Ordinal);
         var found = new List<CardLinkCandidate>();
-        if (!Directory.Exists(sysfs)) return found;
-        foreach (var entry in Directory.EnumerateFileSystemEntries(sysfs, "*:*").Order(StringComparer.Ordinal))
+        foreach (var (device, config, number) in interfaces)
         {
-            // 4-11:1.0 → 機材 4-11、構成 1、インターフェース 0
-            var name = Path.GetFileName(entry);
-            var colon = name.IndexOf(':');
-            var dot = name.IndexOf('.', colon + 1);
-            if (colon <= 0 || dot < 0 || !int.TryParse(name.AsSpan(colon + 1, dot - colon - 1), out var config)) continue;
-            if (UsbSysfs.Read(entry, "bInterfaceClass") != "0b") continue;
-            if (!int.TryParse(UsbSysfs.Read(entry, "bInterfaceNumber"), NumberStyles.HexNumber, null, out var number)) continue;
-
-            var port = name[..colon];
-            var device = Path.Combine(sysfs, port);
-            if (!int.TryParse(UsbSysfs.Read(device, "busnum"), out var bus)
-                || !int.TryParse(UsbSysfs.Read(device, "devnum"), out var address)
-                || !int.TryParse(UsbSysfs.Read(device, "idVendor"), NumberStyles.HexNumber, null, out var vendor)
-                || !int.TryParse(UsbSysfs.Read(device, "idProduct"), NumberStyles.HexNumber, null, out var product))
-            {
-                continue;
-            }
-
-            var label = Label(UsbSysfs.Read(device, "manufacturer"), UsbSysfs.Read(device, "product"), vendor, product);
-            var where = number == 0 ? port : $"{port}:{config}.{number}";
+            var label = Label(device.Manufacturer, device.ProductName, device.Vendor, device.Product);
+            var where = number == 0 ? device.Port : $"{device.Port}:{config}.{number}";
             var display = $"{label} (usb {where})";
-            var path = $"{devUsb}/{bus:000}/{address:000}";
             found.Add(new CardLinkCandidate(display, () =>
             {
-                var pipe = UsbFsPipe.Open(path, vendor, product, config, number);
+                var pipe = host.OpenCcid(device.Port, device.Vendor, device.Product, config, number);
                 return new CcidLink(display, pipe, pipe.Interface);
             }));
         }
@@ -474,11 +462,12 @@ public static class Ccid
     /// <summary>
     /// 診断用 (<c>denpa-agent --card</c>)。見つかったリーダーを並べ、最初の 1 台のカードに
     /// 電源を入れて ATR とリーダーの種類を書く。**実機で最初に当てるのはここ。**
+    /// 自前の CCID で開かない OS (<see cref="Find()"/> が null) は null
     /// </summary>
-    public static string Describe()
+    public static string? Describe()
     {
         var text = new StringBuilder();
-        var found = Find();
+        if (Find() is not { } found) return null;
         if (found.Count == 0)
         {
             return $"CCID のカードリーダーが見つかりません ({UsbSysfs.Devices} に bInterfaceClass 0b のインターフェースがありません)";

@@ -105,7 +105,7 @@ public sealed class Dt295NativeDevice
     /// <paramref name="timeline"/> と <paramref name="trace"/> は --dt295-probe だけが渡す (開くときだけ効く)
     /// </summary>
     public static Dt295NativeDevice Acquire(string port, Dt295Timeline? timeline = null, Action<string>? trace = null) =>
-        Acquire(port, () => Dt295.OpenUsb(port), OperatingSystem.IsLinux() ? () => UsbSysfs.PowerCycle(UsbSysfs.Devices, port, TimeSpan.FromSeconds(10)) : null,
+        Acquire(port, () => Dt295.OpenUsb(port), UsbHost.Current.PowerCycle is { } cycle ? () => cycle(port, TimeSpan.FromSeconds(10)) : null,
             timeline: timeline, trace: trace);
 
     /// <param name="open">USB を開く</param>

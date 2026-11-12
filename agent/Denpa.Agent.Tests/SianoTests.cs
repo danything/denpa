@@ -978,7 +978,7 @@ public class SianoTests
         try
         {
             var warnings = new List<string>();
-            var found = Siano.Found(sysfs, warnings.Add);
+            var found = Siano.Found(new SysfsUsbHost(sysfs), warnings.Add);
             await Assert.That(string.Join(", ", found.Select(item => $"{item.Port}={item.Model.Name}"))).IsEqualTo("1-2=PLEX PX-S1UD, 2-1.4=Siano RIO");
             await Assert.That(string.Join("\n", warnings)).IsEqualTo("PLEX PX-S1UD 1-3 はカーネルのドライバ (smsusb) が使っているので使いません");
 

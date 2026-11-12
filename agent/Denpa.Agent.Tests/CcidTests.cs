@@ -312,7 +312,7 @@ public class CcidTests
             Write("1-2:1.0", "bInterfaceClass", "03");
             Write("1-2:1.0", "bInterfaceNumber", "00");
 
-            var found = Ccid.Find(root, Path.Combine(root, "dev"));
+            var found = Ccid.Find(new SysfsUsbHost(root, Path.Combine(root, "dev")))!;
             await Assert.That(found.Select(c => c.Name)).IsEquivalentTo(["Gemplus USB SmartCard Reader (usb 4-11)"]);
             // 開くのは Open を呼んだときだけ。ここでは /dev/bus/usb/004/007 が無い
             await Assert.That(Assert.Throws<IOException>(() => found[0].Open()).Message).Contains("004/007");
