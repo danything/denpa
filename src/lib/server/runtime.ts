@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { SOCKET_PATH } from "#lib/live.js";
 
 import { listen } from "./agent-events";
+import { syncEnvAgents } from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
 import { pruneCodes } from "./device-auth";
@@ -100,6 +101,21 @@ export function start(): void {
   }
   mkdirSync(config.rawDir, { recursive: true });
   mkdirSync(config.encodedDir, { recursive: true });
+
+  /*
+   * **`TUNER_AGENT_URL` と DB の `agents` を突き合わせる** (agents.ts)。環境変数から消したエージェントの行はここで消える。
+   * 読めない書き方なら起動は止めず、エージェントを呼ぶたびに同じ誤りを返す
+   */
+  try {
+    syncEnvAgents();
+    if (config.agentUrl.trim() === "") {
+      console.warn(
+        "[agent] TUNER_AGENT_URL が空のため、つなぐエージェントがありません (docs/config.md)",
+      );
+    }
+  } catch (error) {
+    console.error(`[agent] ${error instanceof Error ? error.message : error}`);
+  }
 
   /*
    * **ログインする方法が無ければ、無いことを起動ログに出す。** 何も設定していなければ

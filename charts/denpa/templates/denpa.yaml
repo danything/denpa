@@ -48,7 +48,7 @@ spec:
           env:
             - name: TZ
               value: {{ .Values.denpa.timezone | quote }}
-            # エージェントの場所は既定 (https://tuner-agent:25252) と同じで、組むときの合言葉 (pair.yaml) を
+            # エージェントの場所 (同じ名前空間の tuner-agent:25252) に、組むときの合言葉 (pair.yaml) を
             # #pair= で足す。AGENT_PAIR_TOKEN は denpa 自身は読まず、下の $(…) で URL に埋めるためだけ
             # (Kubernetes が展開するのは、同じコンテナで先に書いた変数だけなので、この順のまま)
             - name: AGENT_PAIR_TOKEN

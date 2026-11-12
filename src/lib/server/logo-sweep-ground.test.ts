@@ -5,7 +5,8 @@ import { join } from "node:path";
 
 import { packetize, patSection, stream } from "@danything/arib/synth";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * 「ロゴをいますぐ集める」を、**地上波のチューナー 1 台と衛星のチューナー 2 台**で回す。

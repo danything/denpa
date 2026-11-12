@@ -13,7 +13,8 @@ import {
   stream,
 } from "@danything/arib/synth";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * **当たりの中継を「外れ」と控えてしまっても、「ロゴをいますぐ集める」で当たり直せる** (`logo.sweepNow`)。
