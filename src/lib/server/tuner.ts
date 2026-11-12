@@ -22,6 +22,7 @@ import {
   tolerate,
 } from "../shape";
 import {
+  ALL_CHANNEL_TYPES,
   type ChannelType,
   decodableService,
   epgReadableService,
@@ -30,6 +31,7 @@ import {
 import { agentFetch } from "./agent-client";
 import { config } from "./config";
 import type { Busy } from "./conflict";
+import { recordReceived } from "./reception";
 
 /*
  * **エージェントが返すものの形式は、ここで確かめてから型にする** (`shape.ts`)。
@@ -465,11 +467,31 @@ export async function openChannel(
       throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
     throw new TuneError(`選局できません (${res.status}) ${detail}`);
   }
+  recordTuned(type, channel);
   return {
     stream: res.body,
     tsmfStreams: tsmfStreams(res.headers),
     transport: streamTransport(res.headers),
   };
+}
+
+/**
+ * **選局できたら、誰の選局でも「受信できた」と残す** (`reception.recordReceived`)。
+ * エージェントは最初の塊を書くときに答えのヘッダを送るので、答えが返った時点でそのチャンネルから TS が届いている。
+ * 番組表の取得の成否だけを残していた頃は、番組表の取得が 1 台のチューナーで選局できなかった地上波のチャンネルを、
+ * 同じ日にライブがほかのチューナーで選局できていても「続けて選局できません」と知らせ続けていた。
+ * 書けなくても選局は止めない (受信の記録は知らせるためのもの)
+ */
+function recordTuned(type: string, channel: string): void {
+  const known = ALL_CHANNEL_TYPES.find((t) => t === type);
+  if (known === undefined) return;
+  try {
+    recordReceived(known, channel);
+  } catch (error) {
+    console.warn(
+      `[tuner] ${type}:${channel} を受信できたと書けませんでした: ${error}`,
+    );
+  }
 }
 
 /** `X-Denpa-Tsmf-Streams` を読む。無い・読めなければ 1 (TSMF ではない) */
