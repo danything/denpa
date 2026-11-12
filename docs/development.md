@@ -316,4 +316,4 @@ CI は x86_64 の実行ファイルを Android 10 (API 29。minSdk) と Android 
 偽のアプリ (`.github/fake-usb-broker.c`) から `synced` と、ファイルの fd を付けた `attached` を受け取れることを見ます ([agent.md](agent.md#android-でアプリから-usb-を受け取る))。
 アプリの子プロセス (SELinux の `untrusted_app` と、アプリに掛かる seccomp) では、まだ動かしていません。USB の機材はエミュレータに挿せないので、usbfs の fd は CI では見ません。
 
-文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。
+文書 (CI の時間を測る PR。マージしない) の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。
