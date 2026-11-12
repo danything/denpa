@@ -29,8 +29,7 @@
 - 大きさ: 85,840 バイト
 - SHA-256: `054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818` (単体テストが埋め込んだファイルと突き合わせる)
 - 出どころ: [linux-firmware](https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git) の
-  コミット `a2dcb924f0897368b0b4f305cbf9808cdda90ce0` (タグ `20261019`) にある `isdbt_rio.inp` をそのまま。
-  前のバージョンまで siano-userland の配布アーカイブから取っていたファイルと、SHA-256 が同じです
+  コミット `a2dcb924f0897368b0b4f305cbf9808cdda90ce0` (タグ `20261019`) にある `isdbt_rio.inp` をそのまま
 - 許諾: 同じコミットの `LICENSES/LICENCE.siano` (Siano Mobile Silicon Ltd.)。無改変のバイナリの再配布と使用を認めていて、
   著作権表示と免責の文面を配布物に添えること、解析しないことを求めています。文面は [LICENCE.siano](LICENCE.siano) にそのまま置いてあり、
   エージェントのイメージ (`/usr/share/doc/denpa-agent/`) と、Mac・Windows の配布物 (実行ファイルの隣) と、Android の APK (`assets/licenses/`) に入れています

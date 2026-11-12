@@ -424,7 +424,7 @@ public static class Ccid
 
     /// <summary>
     /// 挿さっている CCID のインターフェース (bInterfaceClass 0x0b) を並べる。**開かない。**
-    /// 並べるだけなので、別のプロセスが使っていても並ぶ (開くときに断られる)。
+    /// 並べるだけなので、ほかのソフトが使っていても並ぶ (開くときに断られる)。
     /// カードリーダーを自前の CCID で開かない OS (Windows・macOS は PC/SC。<see cref="IUsbHost.Readers"/>) は null
     /// </summary>
     public static IReadOnlyList<CardLinkCandidate>? Find() => Find(UsbHost.Current);

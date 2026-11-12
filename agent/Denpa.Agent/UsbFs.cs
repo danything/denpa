@@ -300,7 +300,7 @@ public sealed unsafe class UsbFsPipe : ICcidPipe
             {
                 var errno = Marshal.GetLastPInvokeError();
                 throw new IOException(errno == UsbFs.Ebusy
-                    ? "別のプロセスがカードリーダーを使用中です (動いているエージェント自身か、ホストの pcscd など)"
+                    ? "カードリーダーはほかのソフトが使っています (動いているエージェント自身か、ホストの pcscd など)"
                     : $"カードリーダーのインターフェースを確保できません ({Marshal.GetPInvokeErrorMessage(errno)})");
             }
             return new UsbFsPipe(path, fd, info);

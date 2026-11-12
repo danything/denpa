@@ -348,6 +348,41 @@ public class It930xDeviceTests
     }
 
     /// <summary>
+    /// **流している間に全体の溢れが立ち、次の選局を断るときは、前の選局で開いた受信機を閉じて LNB の給電を切ってから機材を返す** (捨てるときと同じ手順)。
+    /// ほかの受信機が流していて機材が開いたままでも、断った受信機のために給電を入れたままにしない
+    /// </summary>
+    [Test]
+    public async Task 溢れで選局を断るときは前に開いた受信機を閉じ_給電を切ってから機材を返す()
+    {
+        var (usb, _, bus3) = Fake();
+        var clock = new FakeClock();
+        var satellite = new It930xTuner("test 0", 0, () => Open(usb, "9-52", clock), () => It930xDevice.CloseIfIdle("9-52", TimeSpan.Zero), "15v");
+        var terrestrial = new It930xTuner("test 1", 1, () => Open(usb, "9-52", clock), () => It930xDevice.CloseIfIdle("9-52", TimeSpan.Zero));
+        try
+        {
+            satellite.Tune(ChannelTable.Parse("BS15:16625")!);
+            terrestrial.Tune(ChannelTable.Parse("T27")!);
+            await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01" });
+            var sleepsBefore = bus3.Log.Count(line => line == "65 X 28=13");
+            var powerOffsBefore = usb.Log.Count(line => line == "W D8C3=01");
+            // 流している間に全体の溢れが立つ。次の選局で TS を止めるときに読む
+            usb.Registers[It930xBridge.SysBufOverflow] = 1;
+            var error = Assert.Throws<TunerUnusableException>(() => satellite.Tune(ChannelTable.Parse("BS01:16400")!));
+            await Assert.That(error.Message).Contains("全体の溢れ (0xDA39) 1");
+            // 受信機 0 をスリープにし、給電を切った。受信機 1 が使っているので、機材は開いたまま
+            await Assert.That(bus3.Log.Count(line => line == "65 X 28=13")).IsGreaterThan(sleepsBefore);
+            await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01", "W D8D3=00" });
+            await Assert.That(terrestrial.Device!.LnbUsers).IsEqualTo(0);
+            await Assert.That(usb.Log.Count(line => line == "W D8C3=01")).IsEqualTo(powerOffsBefore);
+        }
+        finally
+        {
+            satellite.Dispose();
+            terrestrial.Dispose();
+        }
+    }
+
+    /// <summary>
     /// **受信機が流しているまま機材を閉じても (エージェントを止めるとき)、入力を閉じて EP 0x84 をリセットしてから読み出しを止め、そのあと受信機をスリープにして電源を切る。**
     /// 読む側がいないまま、入力に TS を入れない (読み出しを先に止めると、ブリッジのバッファが溢れて電源を抜くまで戻らない)
     /// </summary>

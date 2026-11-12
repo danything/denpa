@@ -59,24 +59,20 @@ public static class Userland
     /// </summary>
     internal const int MaxSocketPath = 107;
 
-    /// <summary>fd を継がせて起動する間は、ほかの常駐を起動しない (<c>Start</c>)</summary>
-    private static readonly Lock SpawnGate = new();
-
     /// <summary>
     /// 常駐かそのコマンドを起動する。標準出力と標準エラーは受け取る。
     /// fd を継がせて起動するときは、<paramref name="lend"/> で継がせる fd の複製を作り、その番号から <paramref name="args"/> で引数を組む。
     /// 複製は起動し終えたところで閉じる (子プロセスは自分の写しを持つ)。起動できなかったときも閉じる。
     ///
     /// <para>
-    /// **複製を作ってから起動し終えるまでは、ほかの常駐を起動しない** (複製を作るのもこのロックの中)。同じ時にほかの子プロセスを起動すると、
-    /// その子も同じ fd を継ぐ (.NET の Process.Start は close-on-exec の無い fd を閉じない)。asicend が別の筐体の fd を持ち続けると、
-    /// その筐体の USB の確保が外れない。<see cref="Shell.Run"/> で起動する asicenctl などの短いコマンドはこのロックを取らないので、
-    /// 同じ時に起動すると継ぐことがあるが、終わるまでの間だけ
+    /// **複製を作ってから起動し終えるまでは、ほかの子プロセスを起動しない** (<see cref="Shell.SpawnGate"/>。複製を作るのもこのロックの中)。
+    /// 同じ時にほかの子プロセスを起動すると、その子も同じ fd を継ぐ (.NET の Process.Start は close-on-exec の無い fd を閉じない)。
+    /// asicend が別の筐体の fd を持ち続けると、その筐体の USB の確保が外れない。エージェントの子プロセスはどれも <see cref="Shell.Start"/> で起動し、同じロックを取る
     /// </para>
     /// </summary>
     internal static Process Start(string program, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, Func<InheritedFds>? lend)
     {
-        lock (SpawnGate)
+        lock (Shell.SpawnGate)
         {
             using var inherit = lend?.Invoke();
             var start = new ProcessStartInfo(program, args(inherit?.Numbers ?? []))
@@ -87,7 +83,7 @@ public static class Userland
                 StandardErrorEncoding = System.Text.Encoding.UTF8,
                 UseShellExecute = false,
             };
-            return Process.Start(start) ?? throw new IOException($"{Path.GetFileName(program)} を起動できません");
+            return Shell.Start(start);
         }
     }
 }

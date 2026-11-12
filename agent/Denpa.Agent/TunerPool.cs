@@ -186,7 +186,7 @@ public sealed class TunerPool(
             }
             /*
              * 別の機材になったかもしれないので、デバイスは取り直す。**選局していなくても、開いたままのデバイスは手放す。**
-             * PIX-DT295 のように最初の選局で開いたまま持つ機材は、無効にしても USB を握ったままで、ほかのソフトから使えなかった
+             * PIX-DT295 のように最初の選局で開いたまま持つ機材は、無効にしても USB を開いたままで、ほかのソフトから使えなかった
              */
             closing = Retire(index => !Kept(index));
         }
@@ -1454,12 +1454,12 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
     /// </summary>
     public void Start(string command, Action onExit)
     {
-        var child = Process.Start(new ProcessStartInfo("setsid", ["sh", "-c", $"{command} \"$1\" \"$2\"", "sh", Type, Channel])
+        var child = Shell.Start(new ProcessStartInfo("setsid", ["sh", "-c", $"{command} \"$1\" \"$2\"", "sh", Type, Channel])
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-        })!;
+        });
         _child = child;
 
         _ = Task.Run(async () =>

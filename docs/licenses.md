@@ -76,7 +76,6 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 | 土台 (glibc・libssl・ca-certificates・libstdc++・tzdata)                                          | エージェントを動かす。libssl はエージェントのポートの HTTPS (denpa と証明書で確かめ合う) で常に使い、`CARD_URL` を https で指したときにも使う。ca-certificates はその相手の証明書の検証                                                                                                          | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ)                                                                                                                                                                         | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、OpenSSL は Apache-2.0、ca-certificates は MPL-2.0、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、tzdata はパブリックドメイン                                                                                    |
 
 IT930x と Siano のファームウェアは、エージェントの実行ファイルに埋め込んであります ([下](#チューナーエージェントに同梱するファームウェア))。
-siano-userland と px4-userland は、前のバージョンまで同梱していました。いまは入っていません。
 
 ### ASICEN のファームウェアを同梱している判断
 

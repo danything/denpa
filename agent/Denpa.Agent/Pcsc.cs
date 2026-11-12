@@ -259,7 +259,7 @@ public sealed partial class PcscLink : ICardLink
     /// <summary>よく出るものだけ言葉にする (pcsc-lite の pcsclite.h と同じ番号。Windows の winerror.h も同じ)</summary>
     private static string Explain(int result) => unchecked((uint)result) switch
     {
-        SharingViolation => ": 他のアプリが使用中です",
+        SharingViolation => ": ほかのソフトが使っています",
         NoSmartcard or RemovedCard => ": カードが挿さっていません",
         0x8010000F => ": カードと方式が合いません",
         0x80100013 => ": カードリーダーとの通信に失敗しました",

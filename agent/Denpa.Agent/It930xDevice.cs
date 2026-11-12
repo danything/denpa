@@ -1355,9 +1355,11 @@ public sealed class It930xTuner : ITuneDevice
                     Check(tuning, _model);
                 }
                 // 全体の溢れが立ったままの機材は、ロックしても TS が届かない。30 秒待たせずに断り、ほかのチューナーへ回させる (TunerPool)。
-                // 機材は返す (カードも受信機も使っていなければ、待ってから閉じる。次に取るときに開き直して溢れを読み直す)
+                // 前の選局で開いた受信機は閉じてから (LNB の給電の要求も取り下げて)、機材を返す。カードもほかの受信機も使っていなければ、待ってから閉じる。
+                // 次に取るときに開き直して溢れを読み直す
                 if (_device.Jammed is { } jammed)
                 {
+                    if (_frontend is not null) Rest(_device);
                     Drop();
                     _closeIdle?.Invoke();
                     throw new TunerUnusableException(
@@ -1499,6 +1501,20 @@ public sealed class It930xTuner : ITuneDevice
         }
     }
 
+    /// <summary>受信機を閉じ、LNB の給電の要求を取り下げる (<see cref="It930xDevice.Rest(int)"/>)。失敗は機材に記録して続ける (このあと機材を返すため)</summary>
+    private void Rest(It930xDevice device)
+    {
+        try
+        {
+            device.Rest(_receiver);
+        }
+        catch (IOException error)
+        {
+            device.Fail(error);
+            Log.Write($"[{_name}] スリープにできませんでした ({error.Message})");
+        }
+    }
+
     /// <summary>機材を返す (使えなくなったとき・捨てるとき)</summary>
     private void Drop()
     {
@@ -1515,18 +1531,7 @@ public sealed class It930xTuner : ITuneDevice
         lock (_gate)
         {
             StopOutput();
-            if (_device is { Faulted: false } device)
-            {
-                try
-                {
-                    device.Rest(_receiver);
-                }
-                catch (IOException error)
-                {
-                    device.Fail(error);
-                    Log.Write($"[{_name}] スリープにできませんでした ({error.Message})");
-                }
-            }
+            if (_device is { Faulted: false } device) Rest(device);
             Drop();
         }
         _closeIdle?.Invoke();
