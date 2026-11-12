@@ -59,6 +59,7 @@ import {
   services,
 } from "./schema";
 import { parseTitle } from "./title";
+import { busy as transferBusy, BUSY_MESSAGE } from "./transfer";
 
 export interface MigrateOptions {
   /** false なら何が起きるかを出すだけでファイルも DB も触らない */
@@ -1229,8 +1230,9 @@ export async function start(
         message:
           "EPGStation v1 には対応していません。v2 か v3 にしてから実行してください",
       };
-    // 訊いている間に EDCB の引き継ぎが走り出していたら譲る (startEdcb と同じ)
+    // 訊いている間に EDCB の引き継ぎか、別の機械へ移す書き出し・取り込みが走り出していたら譲る (startEdcb と同じ)
     if (running()) return { started: false, message: "すでに実行中です" };
+    if (transferBusy()) return { started: false, message: BUSY_MESSAGE };
     controller = new AbortController();
     void runEpgstation(client, version, options, controller.signal);
     return {

@@ -2,6 +2,7 @@ import { error } from "@sveltejs/kit";
 
 import { activeEncodeJob } from "#lib/server/encoder.js";
 import { encodedFile } from "#lib/server/library.js";
+import { aribServiceId } from "#lib/server/live.js";
 import { fileAudioBody } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { serveFile } from "#lib/server/serve.js";
@@ -14,11 +15,17 @@ import {
 } from "#lib/source.js";
 
 /** **音声だけ** (`?audio=only`。中身は `playback.fileAudioBody`) */
-function audioOnly(path: string, request: Request): Response {
+async function audioOnly(
+  path: string,
+  serviceId: number,
+  request: Request,
+): Promise<Response> {
   const headers = { "Content-Type": "audio/aac", "Cache-Control": "no-store" };
   // HEAD はヘッダーだけ答える。再エンコードを起こさない
   if (request.method === "HEAD") return new Response(null, { headers });
-  return new Response(fileAudioBody(path), { headers });
+  const body = await fileAudioBody(path, serviceId);
+  if (body === null) error(404, "録画を読めませんでした");
+  return new Response(body, { headers });
 }
 
 /**
@@ -30,7 +37,7 @@ function respond(
   request: Request,
   source: FileSource | null,
   audio = false,
-): Response {
+): Response | Promise<Response> {
   const recording = recordingOr404(id);
 
   /*
@@ -68,7 +75,8 @@ function respond(
               : // 置き場から消えたエンコード済みは選ばない (`encodedFiles`。観る画面と同じ判定)
                 (encodedFile(recording) ?? tsPathOf(recording));
   if (path === null) error(404, "ファイルがありません");
-  if (audio) return audioOnly(path, request);
+  if (audio)
+    return audioOnly(path, aribServiceId(recording.service_id), request);
 
   /*
    * 再生のためのエンドポイントなので、添付 (`Content-Disposition: attachment`) にはしない。

@@ -140,6 +140,17 @@ describe("古い履歴の片付け", () => {
     expect(ids(recordings)).toEqual([2, 3]);
   });
 
+  test("録画の行が指している予約は、古くても残す (何で録れたかを予約から引くため)", () => {
+    seed();
+    orm()
+      .update(recordings)
+      .set({ reservation_id: 1 })
+      .where(eq(recordings.id, 3))
+      .run();
+    expect(pruneHistory().reservations).toBe(1);
+    expect(ids(reservations)).toEqual([1, 3, 4]);
+  });
+
   test("録画の行と一緒にエンコードの記録も消える", () => {
     seed();
     pruneHistory();

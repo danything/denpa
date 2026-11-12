@@ -13,6 +13,7 @@ import { orm } from "./db";
 import { airing, currentServices, SERVICE_ORDER } from "./epg";
 import {
   latestRecordingId,
+  latestReservationRecordingId,
   programs as programTable,
   recordings,
   reservations,
@@ -115,6 +116,7 @@ export function programsOf(
   const p = alias(programTable, "p");
   const r = alias(reservations, "r");
   const rec = alias(recordings, "rec");
+  const done = alias(recordings, "done");
   return (
     orm()
       .select({
@@ -134,7 +136,7 @@ export function programsOf(
          * 出していた頃は、録り終えた番組が「予約済み」のまま並び、
          * 取消ボタンまで出ていた (予約側は録り始めた時刻しか持たないため)
          */
-        reservation_state: sql<ReservationState | null>`CASE WHEN ${r.id} IS NULL THEN NULL ELSE ${reservationState(r, rec)} END`,
+        reservation_state: sql<ReservationState | null>`CASE WHEN ${r.id} IS NULL THEN NULL ELSE ${reservationState(r, done)} END`,
         // 外から使う API (`GET /api/programs`) が予約の中身として返す
         conflict_reason: r.conflict_reason,
         rule_id: r.rule_id,
@@ -148,6 +150,8 @@ export function programsOf(
       .leftJoin(r, and(eq(r.program_id, p.id), ne(r.state, "canceled")))
       // 録り直すと同じ番組に複数ぶら下がる。いちばん新しい現存分だけ見る
       .leftJoin(rec, eq(rec.id, latestRecordingId(p.id)))
+      // 状態はその予約で録れたいちばん新しい録画から決める。消したものも含める (消しても「予約済み」に戻さない)
+      .leftJoin(done, eq(done.id, latestReservationRecordingId(r.id)))
       .where(
         and(
           eq(serviceTable.type, type),
