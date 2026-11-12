@@ -9,3 +9,5 @@ agent-libs/
 agent-licenses/
 # asicen-userland の上流の Android 版 (CI が .github/asicen-android.sh で置く。app/build.gradle.kts の DENPA_ASICEN)
 asicen-userland/
+# bun の公式の Android 版 (CI が .github/bun-android.sh で置く。app/build.gradle.kts の DENPA_BUN)
+bun/

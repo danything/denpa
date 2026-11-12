@@ -14,8 +14,10 @@
 # - denpa と同じ手順で組み (POST /denpa/pair)、/denpa/about (os が android)・/denpa/tuners (0 台)・/denpa/card が答える
 # - アプリの LocalSocket から、ファイルの fd を付けた attached を送ると、エージェントが fd ごと受け取る (setFileDescriptorsForSend と 1 回の write)
 # - エージェントが APK の asicend (libasicend.so) を起動でき (--version)、ファームウェア待ちの ID の fd を asicend --fd に継がせる
+# - bun (libbun.so) がアプリの子プロセスとして untrusted_app で動き、debug の APK に入れた確かめ用のサーバ (android/app/src/debug/assets/server/) が
+#   3000 番で答える。GET /check で、JIT・名前を引けるか・/proc から読むもの・子プロセスの起動・bun:sqlite を bun の中から試す
 # - エージェントが異常終了すると、アプリが起動し直し、繋ぎ直して synced を送り直す
-# - 通知の「終了」で SIGTERM が届き、エージェントも常駐サービスも残らない
+# - 通知の「終了」で SIGTERM が届き、エージェントも bun も常駐サービスも残らない
 # - アイコンで始めたあとに端末を起動し直すと、BOOT_COMPLETED で常駐サービスが始まる
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -33,17 +35,17 @@ on_exit() {
   timeout 30 adb logcat -d > "$logs/logcat.txt" 2>/dev/null || true
   timeout 30 adb shell dumpsys activity services "$pkg" > "$logs/services.txt" 2>/dev/null || true
   timeout 30 adb shell dumpsys notification --noredact > "$logs/notification.txt" 2>/dev/null || true
-  echo "--- logcat (denpa・denpa-agent)"
-  timeout 30 adb logcat -d -s denpa denpa-agent 2>/dev/null | tail -n 80 || true
+  echo "--- logcat (denpa・denpa-agent・denpa-server)"
+  timeout 30 adb logcat -d -s denpa denpa-agent denpa-server 2>/dev/null | tail -n 80 || true
   exit "$status"
 }
 trap on_exit EXIT
 
-# ログの denpa (アプリ) と denpa-agent (エージェントの出力) に、その文言が出るまで待つ (30 秒まで)
+# ログの denpa (アプリ)、denpa-agent (エージェントの出力)、denpa-server (bun の出力) に、その文言が出るまで待つ (30 秒まで)
 wait_log() {
   for _ in $(seq 60); do
     # 先に全部を読んでから探す (grep -q が途中で閉じると、pipefail で tr の SIGPIPE が失敗になる)
-    adb logcat -d -s denpa denpa-agent | tr -d '\r' > "$host/logcat.txt"
+    adb logcat -d -s denpa denpa-agent denpa-server | tr -d '\r' > "$host/logcat.txt"
     grep -qF "$1" "$host/logcat.txt" && return 0
     sleep 0.5
   done
@@ -54,6 +56,11 @@ wait_log() {
 # エージェントの PID (動いていなければ空)
 agent_pid() {
   adb shell ps -A -o PID,NAME | tr -d '\r' | awk '$2 == "libdenpa_agent.so" { print $1 }'
+}
+
+# bun の PID (動いていなければ空)
+bun_pid() {
+  adb shell ps -A -o PID,NAME | tr -d '\r' | awk '$2 == "libbun.so" { print $1 }'
 }
 
 # 常駐サービスが動いているか。種類 (types) は API 30 から出るので、出ていれば connectedDevice (0x10) か見る
@@ -74,6 +81,8 @@ wait_until() {
 no_agent() { [ -z "$(agent_pid)" ]; }
 service_gone() { ! adb shell dumpsys activity services "$pkg" | tr -d '\r' | grep -q "ServiceRecord.*$pkg/.DenpaService"; }
 has_agent() { [ -n "$(agent_pid)" ]; }
+no_bun() { [ -z "$(bun_pid)" ]; }
+has_bun() { [ -n "$(bun_pid)" ]; }
 # 通知の本文に出ているか
 notified() { adb shell dumpsys notification --noredact | tr -d '\r' | grep -A60 "pkg=$pkg" | grep -qF "android.text=String ($1)"; }
 
@@ -164,6 +173,34 @@ if grep -qE '\{ (execute|execute_no_trans) \}' "$logs/asicen-avc.txt"; then
   exit 1
 fi
 
+# --- bun。常駐サービスが APK の assets のサーバを書き出し、bun をアプリの子プロセス (untrusted_app) で起動する。
+# GET /check は bun の中から JIT などを試した結果を返す (android/app/src/debug/assets/server/app/server.js)
+echo "=== bun"
+wait_until has_bun
+wait_log "が 3000 番で待ち受けています"
+adb shell ps -A -o LABEL,USER,PID,PPID,NAME | tr -d '\r' | grep -F libbun.so | tee "$logs/bun-process.txt"
+grep -qE "^u:r:untrusted_app:[^ ]+ +[^ ]+ +$(bun_pid) +$app +libbun.so$" "$logs/bun-process.txt"
+adb forward tcp:3000 tcp:3000
+curl -fsS --max-time 60 http://127.0.0.1:3000/check | tee "$logs/bun-check.json"; echo
+version=$(jq -r .version "$logs/bun-check.json")
+wait_log "bun $version"
+# JIT (DFG で組まれた回数が 1 回以上)、localhost を引ける、/proc から読める、bun が自分を子プロセスで起動できる、bun:sqlite で書ける。
+# 外の名前 (github.com) と HTTPS は、ランナーのネットワークに左右されるので、結果を残すだけにする
+jq -e --arg v "$version" '
+  .platform == "android" and .arch == "x64"
+  and .jit.dfgCompiles > 0
+  and .dns.localhost.ok
+  and .proc.stat.ok and .proc.openFiles.ok and .proc.cpus.ok and .proc.totalmem.ok and .proc.rss.ok
+  and .spawn.ok and .spawn.value.exitCode == 0 and .spawn.value.stdout == $v
+  and .sqlite.value >= 1' "$logs/bun-check.json"
+jq -c '{dns: .dns.external, fetch, interfaces: .proc.interfaces, root: .proc.root}' "$logs/bun-check.json"
+# bun の SELinux の拒否は記録に残す。API 36 では `/` の一覧を読むことが断られる。実行そのものや、実行できるメモリを断られたら止める
+adb logcat -d | tr -d '\r' | grep -E 'avc: +denied' | grep -F 'libbun' | tee "$logs/bun-avc.txt" || true
+if grep -qE '\{ (execute|execute_no_trans|execmem) \}' "$logs/bun-avc.txt"; then
+  echo "SELinux が bun の実行を断りました" >&2
+  exit 1
+fi
+
 # --- エージェントが異常終了したら、アプリが起動し直して繋ぎ直す
 echo "=== エージェントに SIGKILL を送る"
 adb logcat -c
@@ -175,14 +212,15 @@ test "$(agent_pid)" != "$pid"
 pid=$(agent_pid)
 wait_log "アプリから USB の機材を 0 台受け取りました"
 
-# --- 通知の「終了」。SIGTERM が届き、エージェントも常駐サービスも残らない
+# --- 通知の「終了」。SIGTERM が届き、エージェントも bun も常駐サービスも残らない
 echo "=== 通知の「終了」"
 adb logcat -c
 broadcast PRESS_STOP
-wait_log "通知の「終了」で、エージェントに SIGTERM を送りました"
+wait_log "通知の「終了」で、エージェント・サーバに SIGTERM を送りました"
 wait_until no_agent
+wait_until no_bun
 wait_until service_gone
-wait_log "エージェントが終了したため、常駐サービスを止めます"
+wait_log "部品がすべて終了したため、常駐サービスを止めます"
 
 # --- アイコンで始め直し、端末を起動し直すと BOOT_COMPLETED で始まる
 echo "=== 端末を起動し直す"
@@ -197,8 +235,10 @@ for _ in $(seq 120); do
 done
 wait_until service_running
 wait_until has_agent
+wait_until has_bun
 wait_log "アプリから USB の機材を 0 台受け取りました"
 broadcast PRESS_STOP
 wait_until no_agent
+wait_until no_bun
 wait_until service_gone
-echo "常駐サービスが始まり、エージェントがアプリの子プロセスで答え、USB_BROKER で fd を受け取り、「終了」と端末の起動で止まり・始まりました"
+echo "常駐サービスが始まり、エージェントと bun がアプリの子プロセスで答え、USB_BROKER で fd を受け取り、「終了」と端末の起動で止まり・始まりました"

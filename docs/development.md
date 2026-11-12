@@ -282,7 +282,8 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 
 ffmpeg・SVT-AV1・emsdk・Denpa Font・asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
-Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` にバージョンを書いています。
+Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
+`bun-android.sh` のバージョンは Dockerfile の `oven/bun` と別に Renovate が上げ、ずれている間は Android の CI が警告を出します。
 
 **土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は
 `名前:タグ@sha256:…`、ワークフローの `uses:` は `@<コミットの SHA> # vX.Y.Z` の形にします。
@@ -324,6 +325,12 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 - asicen-userland は `android/asicen-userland/` に置くと APK に入ります (`DENPA_ASICEN` で別の置き場も渡せます)。`bash .github/asicen-android.sh android/asicen-userland arm64 x86_64` が、
   上流の Android 版を SHA-256 で確かめて取り、`jniLibs/<ABI>/libasicend.so`・`libasicenctl.so`、ファームウェア、ライセンスの文書を並べます。
   バージョンが `agent/Dockerfile` と、組んだコミットが test.yml の `ASICEN_USERLAND_REF` と違えば止まります。置かなければ asicen-userland の無い APK になります
+- bun は `android/bun/` に置くと APK に入ります (`DENPA_BUN` で別の置き場も渡せます)。`bash .github/bun-android.sh android/bun arm64 x86_64` が、
+  公式の Android 版を SHA-256 で確かめて取り、`jniLibs/<ABI>/libbun.so` とライセンスの文書を並べます。x86_64 は CI のエミュレータ用で、AVX2 を使わない baseline を入れます。
+  bun は配布物のまま入れます (`keepDebugSymbols`)。jniLibs は APK の中では圧縮されるので、増えるのは arm64 で約 53 MB です。端末には展開した 113 MB が置かれます
+- 常駐サービスは、APK の assets に `server/` があれば、それを `files/denpa/server/` に書き出して `bun server/…/app/server.js` を部品として起動します (`Server.kt`)。
+  置き場 (`DENPA_HOME`)・`HOME`・`TMPDIR` はエージェントと同じで、待ち受けるのは `PORT` (3000) です。出力は logcat の `denpa-server` に出ます。
+  いまのリリースの APK には `server/` が無く、bun は起動しません。debug の APK にだけ、確かめ用の小さなサーバ (`src/debug/assets/server/app/server.js`) が入ります
 - 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と asicen-userland の機材
   (`AsicenUserland.UsbIds`) と食い違わないことを、エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
 - debug の APK にだけ、エミュレータで確かめるための受け口 (`src/debug/` の `DebugReceiver`) が入ります。USB の機材の代わりにファイルの fd を送ること、
@@ -333,6 +340,7 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 
 ```sh
 mkdir -p android/agent-libs/arm64-v8a && cp out/denpa-agent android/agent-libs/arm64-v8a/libdenpa_agent.so
+bash .github/bun-android.sh android/bun arm64
 cd android && ./gradlew lintDebug testDebugUnitTest assembleDebug
 ```
 
@@ -344,7 +352,9 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
 - アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
 - エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
-- エージェントが落ちたらアプリが起動し直すこと、通知の「終了」でエージェントも常駐サービスも残らないこと、端末を起動し直すと常駐サービスが始まること
+- bun がアプリの子プロセスで動き、確かめ用のサーバが 3000 番で答えること。サーバの `GET /check` で、JIT が動くこと、`localhost` を引けること、
+  `/proc` から読めること、bun が自分を子プロセスで起動できること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
+- エージェントが落ちたらアプリが起動し直すこと、通知の「終了」でエージェントも bun も常駐サービスも残らないこと、端末を起動し直すと常駐サービスが始まること
 
 エミュレータの列は必須チェックではありません (起動や応答の時間がばらつき、コードと関係なく落ちることがあるため)。
 USB の機材はエミュレータに挿せないので、usbfs の fd (許可・`USBDEVFS_CONNINFO_EX`・確保) は CI では見ません。

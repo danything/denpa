@@ -9,9 +9,10 @@ name: Android
 # 2. エージェントを NDK の clang で組む。ASP.NET Core は linux の実行時パックの IL を使わせる (csproj の説明)
 # 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。asicen-userland の上流の Android 版も
 #    `libasicend.so`・`libasicenctl.so` の名前で入れる (.github/asicen-android.sh。SHA-256 を固定して取る)。CI は両方の ABI を入れ、
-#    lint と単体テストも流し、R8 で縮める release も debug の鍵で組む。リリースは arm64 だけを入れ、リリースの鍵で署名する
+#    lint と単体テストも流し、R8 で縮める release も debug の鍵で組む。リリースは arm64 だけを入れ、リリースの鍵で署名する。
+#    bun の公式の Android 版も `libbun.so` の名前で入れる (.github/bun-android.sh。SHA-256 を固定して取る)。x86_64 は CI のエミュレータ用
 # 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・asicend の起動・
-#    「終了」・端末の起動を確かめる (.github/android-app-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)。
+#    bun の起動・「終了」・端末の起動を確かめる (.github/android-app-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)。
 #    リリースでは流さない (同じコミットを main で確かめてある)
 #
 # 組むのは呼んだ workflow のコミット (リリースならタグ)。コミットを入力で受けて取り出すことはしない (windows-server.yml と同じく、キャッシュを汚させない)
@@ -171,19 +172,25 @@ jobs:
           cp ../agent-out/arm64/LICENSE.openssl agent-licenses/
           # asicen-userland は android/asicen-userland/ に (android/app/build.gradle.kts の DENPA_ASICEN)
           bash ../.github/asicen-android.sh asicen-userland arm64 x86_64
+          # bun は android/bun/ に (android/app/build.gradle.kts の DENPA_BUN)
+          bash ../.github/bun-android.sh bun arm64 x86_64
           # release は R8 で縮めたものが組めるかを見る (鍵を渡さないので debug の鍵で署名される)
           ./gradlew lintDebug testDebugUnitTest assembleDebug assembleRelease --console=plain
-          # 両方の ABI のエージェントと asicen-userland、ファームウェア、ライセンスの文書が入っていること
+          # 両方の ABI のエージェントと asicen-userland と bun、ファームウェア、ライセンスの文書が入っていること
           for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
             unzip -l "$apk" > apk.txt
             for abi in arm64-v8a x86_64; do
-              for lib in libdenpa_agent libasicend libasicenctl; do grep -E " lib/$abi/$lib\.so$" apk.txt; done
+              for lib in libdenpa_agent libasicend libasicenctl libbun; do grep -E " lib/$abi/$lib\.so$" apk.txt; done
             done
             grep -E ' assets/asicen/asicen-loader\.bin$' apk.txt
             grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
             grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt
+            grep -E ' assets/licenses/bun/LICENSE\.md$' apk.txt
             grep -E ' assets/licenses/asicen-userland/(LICENSE|SOURCE\.txt|COPYING\.libusb|VENDOR-FIRMWARE-NOTICE\.txt)$' apk.txt | wc -l | grep -qx 4
           done
+          # bun で動かす確かめ用のサーバは debug にだけ入る (android/app/src/debug/assets/server/)
+          if unzip -l app/build/outputs/apk/release/app-release.apk | grep -E ' assets/server/'; then exit 1; fi
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -E ' assets/server/app/server\.js$'
           ls -l app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK
@@ -220,16 +227,20 @@ jobs:
           cp ../agent-out/arm64/denpa-agent agent-libs/arm64-v8a/libdenpa_agent.so
           cp ../agent-out/arm64/LICENSE.openssl agent-licenses/
           bash ../.github/asicen-android.sh asicen-userland arm64
+          bash ../.github/bun-android.sh bun arm64
           ./gradlew assembleRelease --console=plain
           rm -f "$RUNNER_TEMP/release.p12"
           apk=app/build/outputs/apk/release/app-release.apk
-          # 入っているネイティブのライブラリは arm64 のエージェントと asicen-userland だけ。ファームウェアとライセンスの文書も入っていること
+          # 入っているネイティブのライブラリは arm64 のエージェントと asicen-userland と bun だけ。ファームウェアとライセンスの文書も入っていること
           unzip -l "$apk" > apk.txt
-          test "$(grep -oE ' lib/[^ ]+$' apk.txt | sort | tr '\n' ' ')" = " lib/arm64-v8a/libasicenctl.so  lib/arm64-v8a/libasicend.so  lib/arm64-v8a/libdenpa_agent.so "
+          test "$(grep -oE ' lib/[^ ]+$' apk.txt | sort | tr '\n' ' ')" = " lib/arm64-v8a/libasicenctl.so  lib/arm64-v8a/libasicend.so  lib/arm64-v8a/libbun.so  lib/arm64-v8a/libdenpa_agent.so "
           grep -E ' assets/asicen/asicen-loader\.bin$' apk.txt
           grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
           grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt
           grep -E ' assets/licenses/asicen-userland/SOURCE\.txt$' apk.txt
+          grep -E ' assets/licenses/bun/LICENSE\.md$' apk.txt
+          # 確かめ用のサーバ (debug にだけ入る) が無いこと。3 段目で denpa 本体が入るまで、リリースの APK は bun を起動しない
+          if grep -E ' assets/server/' apk.txt; then exit 1; fi
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
           "$apksigner" verify --print-certs "$apk" | tee certs.txt
           test "$(sed -nE 's/^Signer #1 certificate SHA-256 digest: //p' certs.txt)" = "$CERT_SHA256"

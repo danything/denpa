@@ -35,6 +35,14 @@
       ]
     },
     {
+      "description": ".github/bun-android.sh の `# renovate:` 付きの変数 (`BUN_VERSION=1.4.4`)。Android のアプリに入れる bun の公式の Android 版のバージョン。別のグループの PR になる (下の packageRules)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/bun-android\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+[A-Z0-9_]+=(?<currentValue>\\S+)"
+      ]
+    },
+    {
       "description": "Talos Linux の入れ方 (docs/install-talos.md)。talos/install.sh の Talos と Kubernetes のバージョン (`NAME=v1.2.3`) と、talos/patch.yaml に埋めた local-path-provisioner のイメージ。上がったら CI (test.yml の talos) が gen config と validate を通し直す",
       "customType": "regex",
       "managerFilePatterns": ["/^talos/(install\\.sh|patch\\.yaml)$/"],
@@ -97,6 +105,15 @@
       "allowedVersions": "<3.6",
       "groupName": "openssl-android",
       "groupSlug": "openssl-android",
+      "automerge": false,
+      "addLabels": ["needs-review"]
+    },
+    {
+      "description": "bun の Android 版 (.github/bun-android.sh。Android のアプリに入れる) は、スクリプトにアーカイブと LICENSE.md の SHA-256 も固定してあり、バージョンだけ上げると組めない。SHA-256 を人が入れ替えるので、自動ではマージせず、別の PR に分ける。Dockerfile の oven/bun (docker) はこれまでどおり共有の設定で上がり、ずれている間は Android の CI が警告を出す",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["oven-sh/bun"],
+      "groupName": "bun-android",
+      "groupSlug": "bun-android",
       "automerge": false,
       "addLabels": ["needs-review"]
     }

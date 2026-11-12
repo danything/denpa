@@ -9,19 +9,22 @@ import java.io.IOException
 import kotlin.concurrent.thread
 
 /**
- * 常駐サービスが子プロセスとして起動する「部品」。1 段目はエージェントだけで、2・3 段目で bun と denpa 本体が足される。
+ * 常駐サービスが子プロセスとして起動する「部品」。エージェント (1 段目) と、bun で動かすサーバ (2 段目から。[Server]) がある。
  *
  * - **`/system/bin/sh -c 'echo $$; exec "$0" "$@"'` で起動し、最初の行で PID を受け取る。** `Process.pid()` は minSdk 29 では使えない。
  *   exec は PID を変えないので、受け取った PID に [Os.kill] で SIGTERM を送れば部品に届く
  * - 標準出力と標準エラーは logcat に流す (タグは [name])
  * - 止めるのは [terminate] (SIGTERM を 1 回)。エージェントは 1 回目で録画が終わるまで待ち、2 回目で待たずに終わる (docs/agent.md)
+ * - [directory] を渡すと、そこを作業ディレクトリにして起動する
  *
  * @param onExit 部品が終わったときに、読み出し側のスレッドから終了コードで呼ぶ
  */
 internal class Part(
     val name: String,
     private val executable: File,
+    private val arguments: List<String>,
     private val environment: Map<String, String>,
+    private val directory: File?,
     private val onExit: (code: Int) -> Unit,
 ) {
     /** 動いている間の PID。終わったら 0 (終わったあとに同じ PID の別のプロセスへ送らないため) */
@@ -31,8 +34,10 @@ internal class Part(
 
     /** 起動して PID を受け取るまで待つ。起動できなければ IOException */
     fun start() {
-        val process = ProcessBuilder("/system/bin/sh", "-c", "echo \$\$; exec \"\$0\" \"\$@\"", executable.path)
+        val command = listOf("/system/bin/sh", "-c", "echo \$\$; exec \"\$0\" \"\$@\"", executable.path) + arguments
+        val process = ProcessBuilder(command)
             .redirectErrorStream(true)
+            .directory(directory)
             .apply { environment().putAll(this@Part.environment) }
             .start()
         process.outputStream.close()
