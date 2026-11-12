@@ -154,8 +154,11 @@ wait_log "アプリから USB の機材を受け取りました: 001-004 (1738:5
 wait_log "ファームウェアの流し込みで asicend が終了しました"
 adb logcat -d -s denpa-agent | tr -d '\r' | grep -F "ファームウェアの流し込みで asicend が終了しました" | tee -a "$logs/asicen.txt"
 grep -qF "file descriptor model: USB_IO" "$logs/asicen.txt"
-if adb logcat -d | grep -E 'avc: +denied' | grep -qF 'libasicen'; then
-  echo "SELinux が asicend を断りました" >&2
+# asicend の SELinux の拒否は記録に残す。API 36 では、/dev/bus/usb の一覧を読むことと、普通のファイルへの usbfs の ioctl が断られる
+# (一覧を読めなくても asicend は fd を使うところまで進む。実機の usbfs の fd への ioctl は確かめていない)。実行そのものを断られたら止める
+adb logcat -d | tr -d '\r' | grep -E 'avc: +denied' | grep -F 'libasicen' | tee "$logs/asicen-avc.txt" || true
+if grep -qE '\{ (execute|execute_no_trans) \}' "$logs/asicen-avc.txt"; then
+  echo "SELinux が asicend の実行を断りました" >&2
   exit 1
 fi
 

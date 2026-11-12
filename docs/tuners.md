@@ -225,9 +225,10 @@ Android のアプリ ([install-android.md](install-android.md)) は、上流の 
 
 Android のエミュレータ (x86_64。CI の `agent-android`) で確かめたこと:
 
-- エージェントがアプリの子プロセスで、APK の `asicend --version` を起動できること (SELinux に断られない)
+- エージェントがアプリの子プロセスで、APK の `asicend --version` を起動できること (SELinux に実行を断られない)
 - ファームウェア待ちの USB ID でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせ、asicend が受け取ること
-  (usbfs でないので、asicend は USB の読み書きの失敗で終わる)
+  (usbfs でないので、asicend は USB の読み書きの失敗で終わる)。このとき SELinux は、asicend が `/dev/bus/usb` の一覧を読むことと、
+  普通のファイルへの usbfs の ioctl を断る (API 36 で確かめた。一覧を読めなくても asicend は fd を使うところまで進む)
 
 確かめていないこと:
 
