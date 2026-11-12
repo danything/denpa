@@ -82,11 +82,15 @@ export function agentDownSince(agent: number): number | null {
  * すんなり繋がったときは何も呼ばない (「復帰」ではないため)。`false` を出した
  * あとに繋がったときだけ `true`。エージェントが黙って落ちても、録画が失敗するまで
  * 気付けなかったのを埋める (webhook は `runtime.ts` が繋ぐ)
+ *
+ * `onSubscribe` は購読が始まるたびに (起動時の 1 回目も、切れて繋ぎ直したときも) 呼ぶ。
+ * 起動時に局を読めなかったエージェントを、繋がったところで取り込み直すのに使う (`runtime.ts`)
  */
 export function listen(
   agent: Agent,
   onEvent: (event: AgentEvent) => void,
   onReachable?: (up: boolean) => void,
+  onSubscribe?: () => void,
 ): () => void {
   let stopped = false;
   const controller = new AbortController();
@@ -115,6 +119,7 @@ export function listen(
         if (reachable === false) onReachable?.(true);
         reachable = true;
         console.log(`[agent] ${agent.name} の通知の購読を開始しました`);
+        onSubscribe?.();
 
         for await (const block of blocks(res.body)) {
           const event = parseBlock(block);

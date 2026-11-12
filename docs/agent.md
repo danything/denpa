@@ -1554,7 +1554,7 @@ compose と Helm は同じ合言葉を環境変数で両方に渡し、Mac と W
   コンテナの機械の名前は既定でコンテナの ID になるので、compose は `hostname` に `.env` の `AGENT_HOSTNAME` (install.sh がこの機械の名前を書く) を渡します
 - ホストの名前が denpa から引けないときは、URL のホストを IP に書き換えて貼ります (denpa は組んだときの証明書そのもので確かめるので、名前は見ない)
 
-**名前は `AGENT_NAME`、無ければ機械の名前です。** compose はコンテナの機械の名前 (`AGENT_HOSTNAME`)、Helm の `charts/denpa-agent` は values の `name` (空ならノードの名前)、
+**名前は `AGENT_NAME`、無ければ機械の名前です。** compose はコンテナの機械の名前 (`AGENT_HOSTNAME`)、Helm は values の名前 (`charts/denpa` は `agent.name`、`charts/denpa-agent` は `name`。空ならノードの名前)、`denpa-aio` はコンテナの機械の名前 (`--hostname`)、
 Android のアプリは端末の名前を渡します。
 
 #### LAN で見つける

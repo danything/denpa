@@ -41,6 +41,15 @@ spec:
             - name: AGENT_PAIR_TOKEN
               valueFrom:
                 secretKeyRef: { name: {{ include "denpa.pairSecretName" . }}, key: token }
+            # denpa の設定に出すエージェントの名前と、mDNS で知らせる名前の元 (values.yaml の agent.name。空ならノードの名前)。
+            # 渡さないと Pod の機械の名前 (Pod の名前) になり、入れ替えるたびに変わる
+            - name: AGENT_NAME
+              {{- if .Values.agent.name }}
+              value: {{ .Values.agent.name | quote }}
+              {{- else }}
+              valueFrom:
+                fieldRef: { fieldPath: spec.nodeName }
+              {{- end }}
           volumeMounts:
             - name: agent-config
               mountPath: /config
