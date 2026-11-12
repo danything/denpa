@@ -13,7 +13,7 @@
 #   アプリがそこに繋いで synced を送る
 # - denpa と同じ手順で組み (POST /denpa/pair)、/denpa/about (os が android)・/denpa/tuners (0 台)・/denpa/card が答える
 # - アプリの LocalSocket から、ファイルの fd を付けた attached を送ると、エージェントが fd ごと受け取る (setFileDescriptorsForSend と 1 回の write)
-# - エージェントが落ちると、アプリが起動し直し、繋ぎ直して synced を送り直す
+# - エージェントが異常終了すると、アプリが起動し直し、繋ぎ直して synced を送り直す
 # - 通知の「終了」で SIGTERM が届き、エージェントも常駐サービスも残らない
 # - アイコンで始めたあとに端末を起動し直すと、BOOT_COMPLETED で常駐サービスが始まる
 # ---------------------------------------------------------------------------
@@ -29,11 +29,11 @@ host=$(mktemp -d)
 
 on_exit() {
   status=$?
-  adb logcat -d > "$logs/logcat.txt" 2>/dev/null || true
-  adb shell dumpsys activity services "$pkg" > "$logs/services.txt" 2>/dev/null || true
-  adb shell dumpsys notification --noredact > "$logs/notification.txt" 2>/dev/null || true
+  timeout 30 adb logcat -d > "$logs/logcat.txt" 2>/dev/null || true
+  timeout 30 adb shell dumpsys activity services "$pkg" > "$logs/services.txt" 2>/dev/null || true
+  timeout 30 adb shell dumpsys notification --noredact > "$logs/notification.txt" 2>/dev/null || true
   echo "--- logcat (denpa・denpa-agent)"
-  adb logcat -d -s denpa denpa-agent 2>/dev/null | tail -n 80 || true
+  timeout 30 adb logcat -d -s denpa denpa-agent 2>/dev/null | tail -n 80 || true
   exit "$status"
 }
 trap on_exit EXIT
@@ -77,13 +77,21 @@ broadcast() { adb shell am broadcast -n "$pkg/.DebugReceiver" -a "$pkg.debug.$1"
 
 adb shell getprop ro.build.version.release | tee "$logs/android-version.txt"
 adb shell uname -r | tee "$logs/kernel.txt"
-adb install -r -g "$apk" > /dev/null
+# 起きた直後はパッケージの管理が答えず、adb install が戻らないことがある (API 29)。答えるのを待ち、上限を付けて入れ直す
+for _ in $(seq 60); do timeout 10 adb shell pm path android > /dev/null 2>&1 && break; sleep 2; done
+for try in 1 2 3; do
+  timeout 120 adb install -r -g "$apk" > /dev/null && break
+  echo "adb install が通らないため入れ直します ($try 回目)" >&2
+  [ "$try" = 3 ] && exit 1
+  sleep 5
+done
 # 省電力の対象から外すよう求める画面を出さない (最初の起動で出る。CI では押せない)
 adb shell dumpsys deviceidle whitelist "+$pkg" > /dev/null
 adb logcat -c
 
 # --- アイコンで起動する
-adb shell am start -W -n "$pkg/.StartActivity" > /dev/null
+echo "=== アイコンで起動する"
+timeout 60 adb shell am start -W -n "$pkg/.StartActivity" > /dev/null
 wait_until service_running
 wait_until has_agent
 pid=$(agent_pid)
@@ -98,6 +106,7 @@ grep -qE '^srw------- .* u:object_r:app_data_file:' "$logs/socket.txt"
 wait_until notified "チューナー 0 台"
 
 # --- denpa と同じように組む (test.yml の agent-macos と同じ手順)。鍵と合言葉はアプリの置き場にあるので run-as で読む
+echo "=== denpa と同じように組む"
 adb forward "tcp:$port" "tcp:$port"
 adb shell run-as "$pkg" cat files/denpa/config/tls/agent.crt | tr -d '\r' > "$host/agent.crt"
 token=$(adb shell run-as "$pkg" cat files/denpa/config/tls/pair-token | tr -d '\r\n')
@@ -120,6 +129,7 @@ call "$url/denpa/card" | tee "$logs/card.json"; echo
 jq -e '.ok == false' "$logs/card.json"
 
 # --- アプリの LocalSocket から、ファイルの fd を付けた attached を送る。fd が別の write に付けば、エージェントは「fd の付いていない attached」で捨てる。
+echo "=== ファイルの fd を付けた attached を送る"
 # どの機種でもない ID なのでチューナーには出ない。ファイルの fd には CONNINFO_EX が使えないので、ポートは名前から作る
 broadcast ATTACH_FILE
 wait_log "アプリから USB の機材を受け取りました: 001-004 (1234:5678)"
@@ -129,7 +139,8 @@ if adb logcat -d -s denpa-agent | grep -qF "fd の付いていない attached"; 
   exit 1
 fi
 
-# --- エージェントが落ちたら、アプリが起動し直して繋ぎ直す (run-as はアプリと同じユーザーなので kill できる)
+# --- エージェントが異常終了したら、アプリが起動し直して繋ぎ直す (run-as はアプリと同じユーザーなので kill できる)
+echo "=== エージェントを kill -9 する"
 adb logcat -c
 adb shell run-as "$pkg" kill -9 "$pid"
 wait_log "起動し直します"
@@ -140,6 +151,7 @@ pid=$(agent_pid)
 wait_log "アプリから USB の機材を 0 台受け取りました"
 
 # --- 通知の「終了」。SIGTERM が届き、エージェントも常駐サービスも残らない
+echo "=== 通知の「終了」"
 adb logcat -c
 broadcast PRESS_STOP
 wait_log "通知の「終了」で、エージェントに SIGTERM を送りました"
@@ -148,11 +160,12 @@ wait_until service_gone
 wait_log "エージェントが終了したため、常駐サービスを止めます"
 
 # --- アイコンで始め直し、端末を起動し直すと BOOT_COMPLETED で始まる
-adb shell am start -W -n "$pkg/.StartActivity" > /dev/null
+echo "=== 端末を起動し直す"
+timeout 60 adb shell am start -W -n "$pkg/.StartActivity" > /dev/null
 wait_until service_running
 wait_until has_agent
 adb reboot
-adb wait-for-device
+timeout 300 adb wait-for-device
 for _ in $(seq 120); do
   [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break
   sleep 2
