@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ランチャーのアイコンの前景。static/icon.svg の電波塔 (32 の枠) を、108dp の中の安全な丸 (直径 66dp) に収まるよう
+  56dp ほどに縮めて真ん中に置く (denpa-tv の ic_launcher_foreground と同じ置き方)
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="12.4" android:translateY="11.75" android:scaleX="2.6" android:scaleY="2.6">
+        <path android:pathData="M11,9a8,8 0,0 0,0 10" android:strokeColor="#7DD3FC" android:strokeWidth="2" android:strokeLineCap="round" />
+        <path android:pathData="M21,9a8,8 0,0 1,0 10" android:strokeColor="#7DD3FC" android:strokeWidth="2" android:strokeLineCap="round" />
+        <path android:pathData="M7.5,5.5a13,13 0,0 0,0 17" android:strokeColor="#7DD3FC" android:strokeWidth="2" android:strokeLineCap="round" />
+        <path android:pathData="M24.5,5.5a13,13 0,0 1,0 17" android:strokeColor="#7DD3FC" android:strokeWidth="2" android:strokeLineCap="round" />
+        <path android:pathData="M16,14m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0" android:fillColor="#7DD3FC" />
+        <path android:pathData="M16,16.5L13,27h6z" android:fillColor="#7DD3FC" />
+    </group>
+</vector>

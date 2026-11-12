@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  denpa を端末で動かすアプリ。画面は持たず、常駐サービス (DenpaService) がエージェントを子プロセスとして起動する。
+  作りは docs/install-android.md と docs/agent.md「Android でアプリから USB を受け取る」
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- エミュレータ (CI) は USB のホストを持たないので、無い端末にも入れられるようにする -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
+    <!-- エージェントが LAN の denpa から選局を受ける -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- denpa と組む URL に入れる Wi-Fi のアドレスを読む -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--
+      常駐サービスの種類 connectedDevice の前提を、USB の許可が無い起動 (端末の起動直後) でも満たすため。通常の権限で、使いはしない
+    -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 画面を消しても CPU を止めない (いつ選局を受けるか分からないため) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 省電力の対象から外すよう求める。Play では配らない (この使い方は Play の決まりと合わない) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!--
+      バックアップに載せない。config/tls/ の鍵と合言葉をクラウドに上げないためと、録画が大きすぎるため。
+      Android 11 までは allowBackup だけで止まるので、fullBackupContent は書かない
+    -->
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:ignore="DataExtractionRules"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name">
+
+        <!--
+          アイコンとチューナーの挿入で起こされ、常駐サービスを始めてすぐ閉じる。画面は持たない。
+          「常にこのアプリで開く」を選んだ機材は、挿すたびに許可の画面を出さずにここが起こされる
+        -->
+        <activity
+            android:name=".StartActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+        </activity>
+
+        <service
+            android:name=".DenpaService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- 端末の起動とアプリの更新で、前に動いていれば常駐サービスを始める -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

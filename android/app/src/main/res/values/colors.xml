@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- denpa のアイコン (static/icon.svg) と同じ色 -->
+    <color name="ic_launcher_background">#1D232A</color>
+</resources>

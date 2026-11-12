@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 画面に出る文言。言葉の決まりは docs/writing.md -->
+<resources>
+    <string name="app_name">denpa</string>
+    <string name="channel_name">動作の状態</string>
+    <string name="channel_description">denpa のエージェントが動いている間、チューナーの台数と録画中かを出します</string>
+    <string name="state_starting">エージェントを起動しています</string>
+    <string name="state_tuners">チューナー %d 台</string>
+    <string name="state_recording">録画中</string>
+    <string name="state_stopping_after_recording">録画が終わったら終了します</string>
+    <string name="state_stopping">終了しています</string>
+    <string name="state_restarting">エージェントが終了したため、起動し直します</string>
+    <string name="state_missing_agent">エージェントが APK に入っていないため、起動できません</string>
+    <string name="action_stop">終了</string>
+    <string name="action_stop_now">すぐ終了</string>
+    <string name="action_copy_url">URL をコピー</string>
+    <string name="url_copied">denpa と組む URL をコピーしました</string>
+    <string name="url_no_address">Wi-Fi のアドレスが無いため、denpa と組む URL を作れません</string>
+    <string name="url_failed">denpa と組む URL を取得できませんでした</string>
+</resources>

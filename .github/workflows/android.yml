@@ -1,14 +1,15 @@
-name: Android agent
+name: Android
 
-# **Android で動かすエージェント** (`linux-bionic-arm64`・`linux-bionic-x64` の Native AOT) を組み、エミュレータで起動して確かめる。
-# CI (test.yml) が呼ぶ。まだ配らない (リリースに載せるのは APK ができてから)。組み方は docs/development.md「Android 向けのエージェント」。
+# **Android で denpa を動かすアプリ** (android/。debug の APK) と、中に入れるエージェント (`linux-bionic-arm64`・`linux-bionic-x64` の Native AOT) を組み、
+# エミュレータで入れて起動して確かめる。CI (test.yml) が呼ぶ。まだ配らない (リリースに載せるのは署名の鍵を入れてから)。
+# 組み方は docs/development.md「Android 向けのエージェント」「Android のアプリ」。
 #
 # 1. OpenSSL を NDK で静的ライブラリに組む (.github/openssl-android.sh)。**組んだものは actions/cache に置き、バージョン・組み方・NDK が
 #    変わるまで使い回す**
 # 2. エージェントを NDK の clang で組む。ASP.NET Core は linux の実行時パックの IL を使わせる (csproj の説明)
-# 3. x86_64 をエミュレータ (minSdk の API 29 と、新しい API 35) に `adb push` して起動し、組んで HTTP に答えるかと、
-#    偽のアプリ (.github/fake-usb-broker.c) から USB_BROKER で fd を受け取れるかを見る
-#    (.github/android-agent-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)
+# 3. アプリを Gradle で組む。2 の両方の ABI を `libdenpa_agent.so` の名前で APK に入れる。lint と単体テストもここで流す
+# 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・「終了」・
+#    端末の起動を確かめる (.github/android-app-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)
 #
 # 組むのは呼んだ workflow のコミット。コミットを入力で受けて取り出すことはしない (windows-server.yml と同じく、キャッシュを汚させない)
 
@@ -90,27 +91,77 @@ jobs:
           for align in $($readelf -lW out/denpa-agent | awk '$1 == "LOAD" { print $NF }'); do test "$((align))" -ge 16384; done
           ls -l out/denpa-agent
 
-      # エミュレータで USB_BROKER に繋ぐ偽のアプリ (.github/fake-usb-broker.c)。動かすのは x86_64 だけ
-      - name: Build fake USB broker
-        if: matrix.abi == 'x86_64'
-        run: |
-          set -euo pipefail
-          "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android29-clang" -O2 -Wall -Werror \
-            -o out/fake-usb-broker .github/fake-usb-broker.c
-
       - name: Upload agent
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: denpa-agent-android-${{ matrix.abi }}
-          path: |
-            out/denpa-agent
-            out/fake-usb-broker
+          path: out/denpa-agent
           retention-days: 3
 
-  # **必須チェックにはしない** (エミュレータは起動や応答の時間がばらつき、コードと関係なく落ちることがある。docs/development.md「Android 向けのエージェント」)
+  # アプリ (android/)。debug の鍵で署名する (リリースの鍵は secrets に入れてから)
+  app:
+    needs: agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # JDK はその時点の最新の安定版 (Gradle 9.8 から 27 で動く)。Android SDK はランナーに入っている。足りない platform は AGP が取ってくる
+      - name: Set up JDK
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          # renovate: datasource=java-version depName=java-jdk
+          java-version: "27"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Download agent (arm64)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-agent-android-arm64
+          path: agent-out/arm64
+
+      - name: Download agent (x86_64)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-agent-android-x86_64
+          path: agent-out/x86_64
+
+      # エージェントは jniLibs の `<ABI>/libdenpa_agent.so` に置く (android/app/build.gradle.kts の DENPA_AGENT_LIBS)
+      - name: Build APK (lint, unit tests, debug)
+        working-directory: android
+        run: |
+          set -euo pipefail
+          mkdir -p agent-libs/arm64-v8a agent-libs/x86_64
+          cp ../agent-out/arm64/denpa-agent agent-libs/arm64-v8a/libdenpa_agent.so
+          cp ../agent-out/x86_64/denpa-agent agent-libs/x86_64/libdenpa_agent.so
+          ./gradlew lintDebug testDebugUnitTest assembleDebug --console=plain
+          # 両方の ABI のエージェントが入っていること
+          unzip -l app/build/outputs/apk/debug/app-debug.apk > apk.txt
+          grep -E ' lib/arm64-v8a/libdenpa_agent\.so$' apk.txt
+          grep -E ' lib/x86_64/libdenpa_agent\.so$' apk.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-reports
+          path: android/app/build/reports/
+          retention-days: 7
+
+  # **必須チェックにはしない** (エミュレータは起動や応答の時間がばらつき、コードと関係なく落ちることがある。docs/development.md「Android のアプリ」)
   emulator:
     name: emulator (API ${{ matrix.api-level }})
-    needs: agent
+    needs: app
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -122,11 +173,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Download agent
+      - name: Download APK
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: denpa-agent-android-x86_64
-          path: agent-out
+          name: denpa-android-debug
+          path: apk
 
       # android-emulator-runner の README のとおり
       - name: Enable KVM
@@ -147,9 +198,9 @@ jobs:
           emulator-boot-timeout: 300
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash .github/android-agent-smoke.sh agent-out/denpa-agent agent-out/fake-usb-broker smoke-results
+          script: bash .github/android-app-smoke.sh apk/app-debug.apk smoke-results
 
-      # 通っても落ちても残す (エージェントのログ・logcat・応答)
+      # 通っても落ちても残す (logcat・常駐サービスと通知の様子・応答)
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

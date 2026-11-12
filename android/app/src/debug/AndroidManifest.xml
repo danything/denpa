@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  debug の APK にだけ入れる、エミュレータで確かめるための受け口 (.github/android-app-smoke.sh)。
+  DUMP の権限を持つもの (adb shell) からしか送れない
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name=".DebugReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="io.github.danything.denpa.debug.ATTACH_FILE" />
+                <action android:name="io.github.danything.denpa.debug.PRESS_STOP" />
+                <action android:name="io.github.danything.denpa.debug.KILL_AGENT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
