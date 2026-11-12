@@ -275,9 +275,8 @@ function store(
       if (!replacesLogo(storedLogoType(id), logoType)) continue;
       writeWhole(logoPath(id), data);
       /*
-       * **`updated_at` は触らない。** あれは「最後に取り込んだ時刻」で、番組表は
-       * *いちばん新しいものと同じ時刻の局だけ* を出す (`currentServices`)。
-       * 進めると、その局だけが「いまの局」になって番組表から他が消える
+       * **`updated_at` は触らない。** あれは「最後に取り込みで見かけた時刻」で、見かけない時間が長い局の
+       * 番組表と予約を片付けるのに使う (`epg.forgetMissing`)。進めると、選局できなくなった局が片付かない
        */
       orm()
         .update(services)
@@ -949,6 +948,10 @@ function update(patch: Partial<SweepState>): void {
  *
  * 1 つ取りかかるたびに空きを見る。録画が始まったのに開きに行くと、使えないまま
  * 待つことを人数ぶん繰り返すことになる。
+ *
+ * **空きが無いのが同じ取得のもう一方のワーカーのせいなら、その種別を取りやめない。** その種別の残りはもう一方のワーカーが取り、
+ * このワーカーはほかの種別へ進む (無ければ終える)。地上波の空きが 1 台だけの環境で、もう一方が開いている地上波を
+ * 「空きが無い」と取り違え、地上波を 1 チャンネルで止めていた
  */
 async function drain(
   queue: Target[],
@@ -959,12 +962,20 @@ async function drain(
 ): Promise<void> {
   /** 空きが無くなった種別。**その種別だけ**諦める (衛星の満杯で地上波を止めない) */
   const full = new Set<string>();
+  /** いま開いている種別ごとの数 (この取得の中だけ) */
+  const open = new Map<string, number>();
   const worker = async (index: number) => {
-    /** この手で閉じたばかりの選局。次を開くときに引き継ぐ (`freeTuners`) */
+    /** このワーカーが閉じたばかりの選局。次を開くときに引き継ぐ (`freeTuners`) */
     let left: readonly StreamUse[] = index === 0 ? leaving : [];
+    /** もう一方のワーカーが取る種別。このワーカーは取らない (もう一方が開いていなければ戻す) */
+    const handedOver = new Set<string>();
     for (;;) {
-      const target = queue.shift();
-      if (target === undefined || signal.aborted) return;
+      // もう一方のワーカーが開いていない種別は戻す (先に終えたなら、残りはこのワーカーが取る)
+      for (const type of handedOver)
+        if ((open.get(type) ?? 0) === 0) handedOver.delete(type);
+      const at = queue.findIndex((target) => !handedOver.has(target.type));
+      if (at < 0 || signal.aborted) return;
+      const target = queue.splice(at, 1)[0]!;
       // 諦めたぶんも見終えたものとして数える。進み具合が総数に届かなくなる
       /*
        * 衛星は当たりの中継 1 つで BS と CS の全局ぶんが揃う。揃ったあと (読み切ったあと) は、残りの中継を開いて
@@ -978,6 +989,11 @@ async function drain(
         continue;
       }
       if ((await freeTuners(target.type, left)) === 0) {
+        if ((open.get(target.type) ?? 0) > 0) {
+          queue.unshift(target);
+          handedOver.add(target.type);
+          continue;
+        }
         full.add(target.type);
         update({
           done: state.done + 1,
@@ -985,6 +1001,7 @@ async function drain(
         });
         continue;
       }
+      open.set(target.type, (open.get(target.type) ?? 0) + 1);
       update({ channels: [...state.channels, target.channel] });
       // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
       const limit =
@@ -992,6 +1009,20 @@ async function drain(
       const startedAt = Date.now();
       const { found, outcome, carrier, received, openedMs, counts } =
         await collect(target, limit, signal, left, carouselPriority(target));
+      open.set(target.type, (open.get(target.type) ?? 1) - 1);
+      /*
+       * もう一方のワーカーと同じ空きを取り合って開けなかった。その中継は読んでいないので列へ戻し、この種別はもう一方のワーカーが取る
+       */
+      if (outcome === "busy" && (open.get(target.type) ?? 0) > 0) {
+        queue.unshift(target);
+        handedOver.add(target.type);
+        update({
+          channels: state.channels.filter(
+            (channel) => channel !== target.channel,
+          ),
+        });
+        continue;
+      }
       // 記録の「7 時間あけて開き直します」と合わせる。「いますぐ」で開けた回も、定期チェックの間合いはここから数える
       if (carrier) markTried(outcome, startedAt);
       const note = carrier

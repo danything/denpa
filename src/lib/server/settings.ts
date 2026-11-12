@@ -228,13 +228,19 @@ function saveRaw(
     .run();
 }
 
-/** `encode` と `codecs` はコーデックの選択 (`codec` にカンマ区切りで書く) から決まるだけなので書かない */
-export function saveSettings(
-  patch: Partial<Omit<Settings, "encode" | "codecs">>,
-): Settings {
+/**
+ * 設定を書く。**コーデックの選択は `codecs` で渡す** (設定の表の `codec` にカンマ区切りで書く。どれも選ばなければ `none`)。
+ * `codec` (主) と `encode` は `codecs` から決まるだけなので書かない
+ */
+export function saveSettings({
+  codecs,
+  ...rest
+}: Partial<Omit<Settings, "encode" | "codec">>): Settings {
   const at = now();
   orm().transaction((tx) => {
-    for (const [key, value] of Object.entries(patch)) {
+    if (codecs !== undefined)
+      saveRaw(tx, "codec", codecs.length > 0 ? codecs.join(",") : "none", at);
+    for (const [key, value] of Object.entries(rest)) {
       if (value === undefined) continue;
       // デバイスごとの GPU の設定と NG ワードの並びは JSON。自動 (null) は空。ほかは文字列で足りる
       const text =

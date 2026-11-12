@@ -1,7 +1,7 @@
 import { error } from "@sveltejs/kit";
 
 import { activeEncodeJob } from "#lib/server/encoder.js";
-import { encodedFile } from "#lib/server/library.js";
+import { encodedFile, encodedFiles } from "#lib/server/library.js";
 import { aribServiceId } from "#lib/server/live.js";
 import { fileAudioBody } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
@@ -52,7 +52,7 @@ function respond(
   /*
    * **どれを寄越すか、名指しもできる** (`?source=ts` / `encoded` / `hevc` / `alt`)。
    *
-   * - `ts` … 元の TS
+   * - `ts` … 元の TS (「エンコードしない」録画は置き場の TS。`tsPathOf`)
    * - `encoded` … 主のエンコード済み (AV1 → H.265 → H.264 の先頭)
    * - `hevc` … H.265。AV1 と一緒にエンコードした録画でだけ在る (H.265 が主なら `encoded`)
    * - `alt` … H.264。ほかのコーデックと一緒にエンコードした録画でだけ在る。古いテレビはこちら
@@ -63,17 +63,15 @@ function respond(
    */
   const path =
     source === "ts"
-      ? recording.ts_path
-      : source === "alt"
-        ? recording.alt_path
-        : source === "hevc"
-          ? recording.hevc_path
-          : source === "encoded"
-            ? recording.library_path
-            : encoding && recording.ts_path !== null
-              ? recording.ts_path
-              : // 置き場から消えたエンコード済みは選ばない (`encodedFiles`。観る画面と同じ判定)
-                (encodedFile(recording) ?? tsPathOf(recording));
+      ? tsPathOf(recording)
+      : source !== null
+        ? // 名指しのエンコード済みも、録画の一覧の `files` に出すもの (置き場に在る Matroska) だけ
+          (encodedFiles(recording).find((entry) => entry.source === source)
+            ?.path ?? null)
+        : encoding && recording.ts_path !== null
+          ? recording.ts_path
+          : // 置き場から消えたエンコード済みは選ばない (`encodedFiles`。観る画面と同じ判定)
+            (encodedFile(recording) ?? tsPathOf(recording));
   if (path === null) error(404, "ファイルがありません");
   if (audio)
     return audioOnly(path, aribServiceId(recording.service_id), request);

@@ -594,7 +594,10 @@ async function decodeOnChannel(
 }
 
 /**
- * 復号を確かめた結果を card_contracts に書く (`decodeOnChannel`、`noteDecoded`)。復号できたら契約中にする
+ * 復号を確かめた結果を card_contracts に書く (`decodeOnChannel`、`noteDecoded`)。
+ *
+ * **カードに聞けない行 (`code` が無い) の状態は、復号の結果で決める** (できたら契約中、できなければ未契約)。新しく作る行も
+ * 前からある行も同じ。録画が復号し直しても掛かったままだったときに未契約に下げる (`noteStillScrambled`) のと同じ物差し
  */
 function saveDecode(
   cardId: string,
@@ -602,12 +605,13 @@ function saveDecode(
   decodeOk: boolean,
   now = Date.now(),
 ): void {
+  const state: ContractState = decodeOk ? "subscribed" : "unsubscribed";
   orm()
     .insert(cardContracts)
     .values({
       card_id: cardId,
       service_id: serviceId,
-      state: decodeOk ? "subscribed" : "unsubscribed",
+      state,
       code: null,
       valid_until: null,
       decode_ok: decodeOk,
@@ -621,11 +625,7 @@ function saveDecode(
         decoded_at: decodeOk ? now : null,
         // **カードが答えた行 (code がある) は状態を変えない。** カードが期限切れと答えた局を、
         // 復号できたことで契約中に戻すと、定期の確認まで録ってしまう (カードの答えを信じる)
-        ...(decodeOk
-          ? {
-              state: sql`CASE WHEN ${cardContracts.code} IS NULL THEN 'subscribed' ELSE ${cardContracts.state} END`,
-            }
-          : {}),
+        state: sql`CASE WHEN ${cardContracts.code} IS NULL THEN ${state} ELSE ${cardContracts.state} END`,
         checked_at: now,
       },
     })

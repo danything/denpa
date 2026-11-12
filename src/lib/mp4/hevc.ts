@@ -103,12 +103,18 @@ export function parseSps(nal: Uint8Array): HevcSps | null {
 }
 
 /**
- * `hvcC` の中身 (ボックスのヘッダーを除く)。VPS・SPS・PPS を 1 つずつ入れる。
- * サンプルの中にも VPS・SPS・PPS が来るので (放送は頭出しできる所ごとに送る)、array_completeness は 0 にする (`hev1`)
+ * `hvcC` の中身 (ボックスのヘッダーを除く)。頭出しできるコマにあった VPS・SPS・PPS を全部入れる。
+ *
+ * **パラメータセットは `hvcC` にだけ置く** (入れ物の名前は `hvc1`。array_completeness は 1)。Safari は `hev1` を受け取らないので、
+ * 放送がコマの中に送ってくる VPS・SPS・PPS は、ここに入れたものと同じならサンプルから外す (`mp4/mmt.ts`)
  */
 export function hvcC(
   sps: HevcSps,
-  parameterSets: { vps: Uint8Array; sps: Uint8Array; pps: Uint8Array },
+  parameterSets: {
+    vps: readonly Uint8Array[];
+    sps: readonly Uint8Array[];
+    pps: readonly Uint8Array[];
+  },
 ): Uint8Array {
   const arrays = [
     [NAL_VPS, parameterSets.vps],
@@ -130,13 +136,15 @@ export function hvcC(
     // constantFrameRate 0、numTemporalLayers、temporalIdNested、lengthSizeMinusOne 3
     ((sps.subLayers & 0x07) << 3) | (sps.temporalIdNesting ? 0x04 : 0) | 0x03,
     arrays.length,
-    ...arrays.flatMap(([type, nal]) => [
-      type & 0x3f,
-      0x00,
-      0x01,
-      (nal.length >> 8) & 0xff,
-      nal.length & 0xff,
-      ...nal,
+    ...arrays.flatMap(([type, nals]) => [
+      0x80 | (type & 0x3f), // array_completeness 1
+      (nals.length >> 8) & 0xff,
+      nals.length & 0xff,
+      ...nals.flatMap((nal) => [
+        (nal.length >> 8) & 0xff,
+        nal.length & 0xff,
+        ...nal,
+      ]),
     ]),
   ]);
 }

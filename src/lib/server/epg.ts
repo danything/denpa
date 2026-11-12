@@ -10,6 +10,7 @@ import {
   lt,
   lte,
   ne,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
@@ -48,16 +49,42 @@ import {
  *
  * 局の行は消さない。消すと、その局で録った録画や過去の予約が辿れなくなるため
  * ([data.md](../../../docs/data.md))。代わりに、**直近の取り込みで見かけなかった
- * 局は画面に出さない**。
- *
- * 取り込みでは同じ時刻を全件に入れるので、いちばん新しい `updated_at` が
- * 「最後に取り込んだ時刻」になる。それに満たないものが取り残しにあたる。
+ * 局と、設定から消した種別の局は画面に出さない** (`services.listed`)。
  *
  * 実機では、スキャンをやり直した結果、エージェントの一覧は 32 局なのに denpa 側には
  * 120 局が残っていて、番組表に空の列が並んでいた。
  */
 export function currentServices() {
-  return sql`${services.updated_at} >= (SELECT MAX(${services.updated_at}) FROM ${services})`;
+  return eq(services.listed, true);
+}
+
+/**
+ * **設定から消した種別の局を、その場で一覧から外す** (`scan.removeType`)。番組表と、まだ始めていない予約も片付ける。
+ *
+ * 取り込みに任せないのは、最後の 1 種別を消すとエージェントの一覧が空になり、取り込みが何もしないため
+ * (空の一覧は不調でも返るので、`syncServices` は 1 局も取れなかった回を読まない)。局の行と録画は残る
+ *
+ * @returns 取り消した予約の数
+ */
+export function unlistType(type: ChannelType): number {
+  const at = now();
+  let canceled = 0;
+  orm().transaction((tx) => {
+    const ids = tx
+      .select({ id: services.id })
+      .from(services)
+      .where(and(eq(services.type, type), eq(services.listed, true)))
+      .all()
+      .map((row) => row.id);
+    for (const id of ids) canceled += clearBelongings(at, id).reservations;
+    tx.update(services)
+      .set({ listed: false })
+      .where(eq(services.type, type))
+      .run();
+  });
+  if (canceled > 0) emit("reservations");
+  emit("programs");
+  return canceled;
 }
 
 /**
@@ -257,6 +284,7 @@ export function syncServices(channels: AgentChannel[]): number {
             decodable: abilities.decodable,
             epg_readable: abilities.epgReadable,
             transport: channel.transport ?? "ts",
+            listed: true,
             // ロゴは放送波から取得したときに立てる (logo.ts)
             has_logo: false,
             updated_at: at,
@@ -274,6 +302,7 @@ export function syncServices(channels: AgentChannel[]): number {
               decodable: sql`excluded.decodable`,
               epg_readable: sql`excluded.epg_readable`,
               transport: sql`excluded.transport`,
+              listed: true,
               updated_at: sql`excluded.updated_at`,
             },
           })
@@ -293,8 +322,15 @@ export function syncServices(channels: AgentChannel[]): number {
       clearBelongings(at, id);
       tx.delete(services).where(eq(services.id, id)).run();
     }
-    // この回で見かけなかった局の持ち物を片付ける
-    if (count > 0) canceled = forgetMissing(at, seen);
+    // この回で見かけなかった局を一覧から外し、長く見かけない局の持ち物を片付ける
+    if (count > 0) {
+      // 1 局も取れなかった回は外さない (不調で空の一覧が返ることがある)
+      tx.update(services)
+        .set({ listed: false })
+        .where(notInArray(services.id, [...seen]))
+        .run();
+      canceled = forgetMissing(at, seen);
+    }
   });
   // 取り消した予約は一覧に出ている。同じものを見ている端末が食い違わないように
   if (canceled > 0) emit("reservations");

@@ -434,6 +434,8 @@ export class MmtMediaReader {
   private tracks = new Map<string, Track>();
   /** 選んだアセットの並び (変わったかを見る) */
   private selection = "";
+  /** 選んだアセットの MMTP のパケット (MPU) の数。スクランブルされていたもの (`scrambled`) も数える */
+  media = 0;
   /** スクランブルされていて読めなかった MMTP のパケットの数 */
   scrambled = 0;
   /** 時刻が分からずに捨てたアクセスユニットの数 */
@@ -471,6 +473,7 @@ export class MmtMediaReader {
       if (mmtp.payloadType !== PAYLOAD_MPU) continue;
       const track = this.tracks.get(`${datagram.flow}/${mmtp.packetId}`);
       if (track === undefined) continue;
+      this.media++;
       // パケットが欠けたら、組み立て中のアクセスユニットはもう組めない
       if (
         track.sequence !== null &&

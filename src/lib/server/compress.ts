@@ -109,7 +109,9 @@ export function compress(request: Request, response: Response): Response {
   const out = new Headers(headers);
   out.set("content-encoding", encoding);
   out.delete("content-length");
-  out.append("vary", "Accept-Encoding");
+  // 先に付けてあれば足さない (配る側が縮めずに返した `api/live/mpeg2` は自分で付けている)
+  if (!/(^|,)\s*accept-encoding\s*(,|$)/i.test(out.get("vary") ?? ""))
+    out.append("vary", "Accept-Encoding");
   return new Response(body, {
     status: response.status,
     statusText: response.statusText,

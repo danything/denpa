@@ -260,6 +260,13 @@
       "when": 1794388366349,
       "tag": "0036_services-epg-readable",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1794468974536,
+      "tag": "0037_services-listed",
+      "breakpoints": true
     }
   ]
 }

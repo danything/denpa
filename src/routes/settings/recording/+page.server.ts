@@ -26,7 +26,6 @@ import {
   TRANSCODE_LIMIT_MAX,
 } from "#lib/server/settings.js";
 import { transcodeAuto } from "#lib/server/transcode.js";
-import type { VideoCodec } from "#lib/types.js";
 
 /** 画面に渡す形式。GPU ごとの一言 (`summary`) と、testid に使う GPU の名前 (`port`) を添える */
 function forScreen(hw: HwEncode) {
@@ -121,7 +120,7 @@ export const actions = {
     );
     saveSettings({
       // 並びは HW_CODECS のまま (AV1 → H.265 → H.264)
-      codec: (codecs.length > 0 ? codecs.join(",") : "none") as VideoCodec,
+      codecs,
       keepOriginal: form.get("keepOriginal") === "on",
       hwAllow,
       liveHwAllow,

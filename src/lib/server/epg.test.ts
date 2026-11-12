@@ -69,6 +69,7 @@ const {
   settle,
   syncServicesOnly,
   typeRank,
+  unlistType,
   unwatchableServices,
   widenServices,
 } = await import("./epg");
@@ -219,6 +220,17 @@ describe("消えた局の片付け", () => {
       .run();
   }
 
+  /** いま一覧にある局 (`services.listed`) */
+  function listedIds(): number[] {
+    return orm()
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.listed, true))
+      .all()
+      .map((row) => row.id)
+      .sort((a, b) => a - b);
+  }
+
   /** その局を「しばらく見かけていない」ことにする。時計を進める代わり */
   function unseenFor(serviceId: number, ms: number): void {
     orm()
@@ -304,6 +316,42 @@ describe("消えた局の片付け", () => {
     ).toEqual({
       state: "scheduled",
     });
+  });
+
+  test("見かけなかった局は、すぐに一覧から外す (片付けるのは待つ)", async () => {
+    offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ"), channel(23609, "別の局")];
+    syncServicesOnly(await getChannels());
+    offered = [channel(23609, "別の局")];
+    syncServicesOnly(await getChannels());
+    expect(listedIds()).toEqual([3239123609]);
+    // 1 局も返ってこなかった回は、一覧をそのままにする
+    offered = [];
+    syncServicesOnly(await getChannels());
+    expect(listedIds()).toEqual([3239123609]);
+  });
+
+  /*
+   * 最後の 1 種別を消すとエージェントの一覧が空になり、取り込みは何もしない。
+   * 「いちばん新しい取り込みの時刻」で決めていた頃は、消した局が「いまの局」のまま残っていた
+   */
+  test("種別を消すと、最後の 1 種別でもその場で一覧から外し、番組表と予約を片付ける", async () => {
+    offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
+    syncServicesOnly(await getChannels());
+    seed(3239123608);
+
+    expect(unlistType("GR")).toBe(1);
+    offered = [];
+    syncServicesOnly(await getChannels());
+
+    expect(listedIds()).toEqual([]);
+    expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 0 });
+    // 局の行は残す (録画を辿るため)。スキャンし直せば戻る
+    expect(
+      orm().select({ n: count() }).from(services).get()!.n,
+    ).toBeGreaterThan(0);
+    offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
+    syncServicesOnly(await getChannels());
+    expect(listedIds()).toEqual([3239123608]);
   });
 });
 

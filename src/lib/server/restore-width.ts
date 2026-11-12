@@ -24,6 +24,7 @@ import { type EitEvent, EpgReader } from "@danything/arib/eit";
 import { asc, eq, gt } from "drizzle-orm";
 
 import { foldForSearch, toHalfWidth } from "../fold";
+import { tsPathOf } from "../source";
 import { now, orm } from "./db";
 import { emit } from "./events";
 import { openRecording, type RecordingHandle } from "./recording-io";
@@ -229,6 +230,7 @@ async function walk(): Promise<RestoreResult> {
       description: recordings.description,
       extended: recordings.extended,
       ts_path: recordings.ts_path,
+      library_path: recordings.library_path,
       finished_at: recordings.finished_at,
     })
     .from(recordings)
@@ -256,10 +258,13 @@ async function restoreOne(
     program_id: number | null;
     service_id: number;
     ts_path: string | null;
+    library_path: string | null;
   },
 ): Promise<boolean> {
   // 取り込んだ録画 (負の番組 ID) は放送から録っていない
-  if (row.ts_path === null || row.program_id === null || row.program_id < 0)
+  // 元の TS は、エンコードしない録画なら置き場にある (`tsPathOf`)
+  const ts = tsPathOf(row);
+  if (ts === null || row.program_id === null || row.program_id < 0)
     return false;
   const service = orm()
     .select({ service_id: services.service_id })
@@ -269,7 +274,7 @@ async function restoreOne(
   // 局の行が無くても、局の内部 ID の下 5 桁が ARIB のサービス ID (`tuner.serviceKey`)
   const serviceId = service?.service_id ?? row.service_id % 100000;
   const read = await readBroadcastText(
-    row.ts_path,
+    ts,
     serviceId,
     row.program_id % 100000,
     row.extended !== null,

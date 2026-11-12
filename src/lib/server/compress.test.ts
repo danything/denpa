@@ -53,6 +53,17 @@ describe("縮めて返す", () => {
     );
   });
 
+  test("Vary に Accept-Encoding が付いていれば、もう 1 つ足さない", () => {
+    const out = compress(
+      ask("br"),
+      json(big, { vary: "Origin, accept-encoding" }),
+    );
+    expect(out.headers.get("vary")).toBe("Origin, accept-encoding");
+    expect(
+      compress(ask("br"), json(big, { vary: "Origin" })).headers.get("vary"),
+    ).toBe("Origin, Accept-Encoding");
+  });
+
   test("縮めないもの", () => {
     const same = (request: Request, response: Response) =>
       expect(compress(request, response)).toBe(response);

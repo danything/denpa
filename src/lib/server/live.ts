@@ -91,6 +91,7 @@ import {
   recordedSec,
   resumeFrom,
   resumePlan,
+  tlvStart,
   tsFileHead,
 } from "./chase";
 import { config } from "./config";
@@ -121,6 +122,7 @@ import {
   getTuners,
   openWhenFree,
   type StreamUse,
+  TransportChangedError,
   TuneError,
   TunerBusyError,
 } from "./tuner";
@@ -1977,7 +1979,11 @@ class Session {
    */
   private async notTuned(label: string, error: unknown): Promise<void> {
     const why = String(error);
-    const plain = whyNotTuned(why, resting(this.serviceId));
+    // 形式が変わったのはスキャンし直せば直るので、そう伝える (番組表の取得・録画と同じ文)
+    const plain =
+      error instanceof TransportChangedError
+        ? error.message
+        : whyNotTuned(why, resting(this.serviceId));
     const pin = this.pin;
     if (
       pin === null ||
@@ -2020,9 +2026,13 @@ class Session {
    * 理由はカードと契約の状態から決める (`contracts.scrambledLiveMessage`)
    */
   private async endScrambled(scrambled: number, total: number): Promise<void> {
-    const message = await scrambledLiveNotice(this.serviceId).catch(
-      () => "スクランブルを復号できませんでした",
-    );
+    // 4K の局のスクランブルは ACAS で、まだ復号できない (`types.DESCRAMBLABLE`)。カードと契約の状態は関係ない
+    const message =
+      this.transport === "tlv"
+        ? undecodableReason(this.channelType, "tlv")
+        : await scrambledLiveNotice(this.serviceId).catch(
+            () => "スクランブルを復号できませんでした",
+          );
     if (this.stopped) return;
     console.warn(
       `[live] ${this.channelType}:${this.channel}: 局の映像・音声がスクランブルされたまま届きました (${scrambled} / ${total} パケット): ${message}`,
@@ -2051,6 +2061,7 @@ class Session {
       this.use,
       config.priority.live,
       () => this.stopped,
+      this.transport,
       this.pin,
       this.program > 0 ? this.program : null,
       LIVE_ANSWER_WAIT,
@@ -2434,22 +2445,21 @@ class Session {
 
   /**
    * 4K の局の塊を読んだ結果のうち、fMP4 のほかのもの (`live-mmt.ts`)。字幕の文字の配置を配り、時計の組を覚え、MH-EIT[p/f] を読む (`followTlv`)。
-   * 続けてよければ true。番組が替わってアセットの並びが変わったら作り直し (`restart`)、映像・音声がスクランブルされたまま
-   * 届いていたら理由を伝えて畳む (どちらも false)。4K の局のスクランブルは ACAS で、まだ復号できない (`types.DESCRAMBLABLE`)
+   * 続けてよければ true。番組が替わってアセットの並びが変わったら作り直す (`restart`。false)。映像・音声がスクランブルされたまま
+   * 届き続けていたら理由を伝えて畳む (`judgeScrambled`。畳み終えるまでは読み続ける)
    */
   private takeMmt(read: MmtOut, mmt: MmtLive, consumed: number): boolean {
     if (read.changed) {
       this.restart(consumed);
       return false;
     }
-    if (!this.produced && mmt.scrambled >= SCRAMBLE_PACKETS) {
-      this.died(
-        `${this.channelType}:${this.channel}`,
-        `4K の局の映像・音声がスクランブルされたまま届きました (${mmt.scrambled} パケット)`,
-        undecodableReason(this.channelType, "tlv"),
-      );
-      this.stop();
-      return false;
+    /*
+     * スクランブルは TS の局と同じ決まりで決める (`LastingScramble`。窓ごとに数え、掛かったままの窓が 3 秒続いたら理由を伝えて畳む)。
+     * 追っかけ (録画のファイル) は数えない
+     */
+    if (this.source === undefined && this.scramble !== null) {
+      this.scramble.add(read.media.total, read.media.scrambled, Date.now());
+      if (this.scramble.verdict !== null) this.judgeScrambled(SCRAMBLE_PACKETS);
     }
     this.followTlv(read.tlv);
     if (mmt.hasCaptions && this.list.add(null))
@@ -3222,7 +3232,12 @@ export function chaseStream(
   if (codec === "raw") {
     const { rec, path, size } = source;
     const plan = chasePlan(size, recordedSec(rec, path), at);
-    return followFile(path, plan.offset, plan.paceBytesPerSec, () =>
+    // 4K の局の録画 (TLV) は、パケットの先頭から送る (`tlvStart`)
+    const offset =
+      recordedTransport(path) === "tlv"
+        ? tlvStart(path, plan.offset)
+        : plan.offset;
+    return followFile(path, offset, plan.paceBytesPerSec, () =>
       recordingDone(rec.id),
     );
   }

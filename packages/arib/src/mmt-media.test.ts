@@ -346,6 +346,7 @@ describe("MmtMediaReader", () => {
     );
     expect(reader.untimed).toBe(1);
     expect(reader.scrambled).toBe(1);
+    expect(reader.media).toBeGreaterThan(reader.scrambled);
     // 欠けたコマ (sample 1) と、スクランブルのパケットが割り込んだコマ (sample 2)
     expect(reader.dropped).toBe(2);
   });

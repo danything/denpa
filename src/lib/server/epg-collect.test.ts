@@ -516,6 +516,38 @@ describe("列を引き切る (drain)", () => {
     expect(dropped).toHaveLength(2);
     expect(agent.log.every((entry) => entry.outcome === "busy")).toBe(true);
   });
+
+  /*
+   * 衛星のチューナーが録画で塞がっていると、`laneTypes` は地上波の処理しか並べない。
+   * 並びに入らなかった衛星が、待ちも「読みませんでした」の記録も無く抜けていた
+   */
+  test("引く処理の無い種別も待って読み、待ちきれなければ落としたと知らせる", async () => {
+    const dropped: { channel: { channel: string } }[] = [];
+    const ground = fakeAgent([{ types: ["GR"], rank: 0 }]);
+    await drain(
+      [job("GR", "T1"), job("BS", "BS1"), job("GR", "T2")],
+      [["GR"]],
+      ground.attempt,
+      { backoff: 1, idleLimit: 3, dropped: (gone) => dropped.push(...gone) },
+    );
+    expect(ground.log.filter((entry) => entry.outcome === "read")).toHaveLength(
+      2,
+    );
+    expect(ground.log.some((entry) => entry.name === "BS1")).toBe(true);
+    expect(dropped.map((gone) => gone.channel.channel)).toEqual(["BS1"]);
+
+    // 塞がっていた衛星のチューナーが空けば、その処理が読む
+    const both = fakeAgent([
+      { types: ["GR"], rank: 0 },
+      { types: ["BS", "CS"], rank: 1 },
+    ]);
+    await drain([job("GR", "T1"), job("BS", "BS1")], [["GR"]], both.attempt, {
+      backoff: 1,
+    });
+    expect(
+      both.log.filter((entry) => entry.outcome === "read").map((e) => e.name),
+    ).toContain("BS1");
+  });
 });
 
 describe("受信できなかったと数える回 (receptionFailed)", () => {

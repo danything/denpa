@@ -32,12 +32,15 @@ import { fillTsHead, recordingSummary } from "./recording";
 import { appendRecording } from "./recording-io";
 import { duplicateAtStart } from "./rules";
 import { programs, recordings, reservations, rules, services } from "./schema";
+import { settings } from "./settings";
 import { chunks } from "./stream";
 import { parseTitle } from "./title";
 import {
-  openChannelStream,
+  expectTransport,
+  openChannel,
   recordingUse,
   type StreamUse,
+  TransportChangedError,
   TuneError,
 } from "./tuner";
 import { notify } from "./webhook";
@@ -348,6 +351,8 @@ async function openWithRetry(
     try {
       return await open(signal);
     } catch (error) {
+      // 形式が変わったのは、掛け直しても変わらない (スキャンし直すまで)
+      if (error instanceof TransportChangedError) throw error;
       last = error;
       if (attempt < OPEN_RETRIES - 1) {
         await Bun.sleep(OPEN_RETRY_WAIT);
@@ -466,6 +471,8 @@ async function pump(
     recording.program_id === null ? null : recording.program_id % 100000;
 
   let written = 0;
+  /** 選局の答えの形式が控えと違った (`expectTransport`)。そこで録画を終える */
+  let transportChanged: TransportChangedError | null = null;
   /** いまコピー禁止で保存を止めているか (変わり目でだけログに出す) */
   let copyNever = false;
   /**
@@ -539,7 +546,7 @@ async function pump(
           handoff = [];
           stream = await openWithRetry(
             (signal) =>
-              openChannelStream(
+              openChannel(
                 service.type,
                 // 掛け直すたびに引き直す。放送の一覧が変わってチャンネルを書き換えたら、新しいほうへ行く
                 channelOf(service.id) ?? service.channel,
@@ -547,16 +554,19 @@ async function pump(
                 use,
                 undefined,
                 leaving,
-              ).catch((error: unknown) => {
-                /*
-                 * **衛星で選局できなかったら、放送の一覧を読み直す** (`lineup-follow.refreshLineup`)。
-                 * 再編で TS が移ったのなら、書き換えたあとの掛け直しで録れる
-                 */
-                if (error instanceof TuneError && isSatellite(service.type)) {
-                  void refreshLineup(service.type).catch(() => undefined);
-                }
-                throw error;
-              }),
+              )
+                // 選局の答えの形式が控えと違えば録らない。TS の読み方で TLV を読んでも、その逆でも、1 バイトも書けない
+                .then((opened) => expectTransport(opened, service.transport))
+                .catch((error: unknown) => {
+                  /*
+                   * **衛星で選局できなかったら、放送の一覧を読み直す** (`lineup-follow.refreshLineup`)。
+                   * 再編で TS が移ったのなら、書き換えたあとの掛け直しで録れる
+                   */
+                  if (error instanceof TuneError && isSatellite(service.type)) {
+                    void refreshLineup(service.type).catch(() => undefined);
+                  }
+                  throw error;
+                }),
             controller.signal,
           );
         } catch (error) {
@@ -565,6 +575,14 @@ async function pump(
           // 「終了時刻まで掛け直す」という上の約束を破って番組を丸ごと
           // 落とす。終了時刻 (自分での abort) が来るまでは待って掛け直す
           if (controller.signal.aborted) break;
+          /*
+           * **形式が変わったと分かったら、そこで諦める。** スキャンし直すまで何度掛け直しても同じ答えが返り、
+           * そのたびにチューナーを取る。それまでに録れたぶんは残す
+           */
+          if (error instanceof TransportChangedError) {
+            transportChanged = error;
+            break;
+          }
           interrupted++;
           console.warn(
             `[recorder] 録画 ${recording.id}: 選局を取り直せません (${interrupted} 回目: ${error})。` +
@@ -720,9 +738,17 @@ async function pump(
 
   // 統計が取れなくても書き込み量で代用する
   const size = fileSize(path) ?? written;
+  if (transportChanged !== null)
+    console.warn(
+      `[recorder] 録画 ${recording.id}: ${transportChanged.message}。ここで録画を終えます`,
+    );
 
   if (size === 0) {
-    fail(recording.id, "ストリームから 1 バイトも受信できませんでした");
+    fail(
+      recording.id,
+      transportChanged?.message ??
+        "ストリームから 1 バイトも受信できませんでした",
+    );
     return;
   }
 
@@ -756,7 +782,11 @@ function finish(recordingId: number, size: number): void {
     recording: recordingSummary(recording),
   });
 
-  if (reservation === undefined || reservation.encode) {
+  /*
+   * **エンコードするのは、予約と録り終えたときの設定のどちらもエンコードするときだけ。** 予約したあとに
+   * 設定を「エンコードしない」に変えたら、前からある予約も元の TS をそのまま置く (`encoder.runJob` と同じ決まり)
+   */
+  if ((reservation?.encode ?? true) && settings().encode) {
     enqueue(recording.id);
     return;
   }

@@ -623,6 +623,7 @@ const BUSY_WAIT = 700;
  *
  * **待っているのは前のチャンネルが離れるまで**なので、長くは掛からない。
  * 掛け直すのは空き待ちのときだけ。選局そのものが駄目なら何度試しても同じ。
+ * **答えの形式が局の行の形式と違えば止める** (`expectTransport`。番組表の取得・録画と同じ)。TS の読み方で TLV を流しても何も出ない
  *
  * 録画には使わない。録画は自前で掛け直す (`recorder.openWithRetry`。空き待ちに
  * 限らず、終了時刻まで取り直す)。
@@ -634,6 +635,8 @@ export function openWhenFree(
   use: StreamUse,
   priority: number,
   giveUp: () => boolean,
+  /** 局の行の形式 (`services.transport`) */
+  expected: Transport,
   pin: string | null = null,
   /** 観る局 (放送の service_id)。`openChannelStream` の `service` */
   service: number | null = null,
@@ -641,17 +644,20 @@ export function openWhenFree(
   answerWithin: number | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
   return retryWhileBusy(
-    () =>
-      openChannelStream(
-        type,
-        channel,
-        signal,
-        use,
-        priority,
-        [],
-        pin,
-        service,
-        answerWithin,
+    async () =>
+      expectTransport(
+        await openChannel(
+          type,
+          channel,
+          signal,
+          use,
+          priority,
+          [],
+          pin,
+          service,
+          answerWithin,
+        ),
+        expected,
       ),
     giveUp,
   );

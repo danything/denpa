@@ -49,7 +49,7 @@ describe("MmtLive", () => {
     );
     const tracks = readInit(segments[0]!.data);
     expect(tracks.map((t) => [t.kind, t.codec])).toEqual([
-      ["video", "hev1.2.4.L30.90"],
+      ["video", "hvc1.2.4.L30.90"],
       ["audio", "mp4a.40.2"],
     ]);
   });

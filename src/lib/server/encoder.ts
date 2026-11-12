@@ -1425,8 +1425,15 @@ async function runJob(jobId: number): Promise<void> {
    * 「GPU 無し」で H.265 を飛ばし、H.264 を CPU でエンコードしないように
    */
   await hwReady();
-  const chosen: readonly HwCodec[] =
-    settings().codecs.length > 0 ? settings().codecs : ["av1"];
+  /*
+   * **「エンコードしない」(どれも選んでいない) ならエンコードしない。** 待っている間に設定を変えたジョブは、
+   * ホームの再エンコードと同じ理由で失敗にする。元の TS は残るので、コーデックを選べばやり直せる
+   */
+  const chosen = settings().codecs;
+  if (chosen.length === 0) {
+    fail(jobId, recording, NO_CODEC);
+    return;
+  }
   const hevcReady = hwChain("hevc", settings().hwAllow).length > 0;
   if (chosen.includes("hevc") && !hevcReady && chosen.length > 1) {
     console.warn(
@@ -2405,6 +2412,10 @@ const CUT_SHORTER = 5;
 /** CM を切ってエンコードした録画は、エンコードしたものから CM を戻せない。やり直すなら元の TS から再エンコードする */
 export const CM_CUT_ALREADY =
   "CM をカットした録画です。CM を検出し直すには再エンコードしてください";
+
+/** 映像コーデックをどれも選んでいない (「エンコードしない」)。エンコードするジョブも、ホームの再エンコードも断る */
+export const NO_CODEC =
+  "映像コーデックが選ばれていません。設定で選んでください";
 
 /**
  * 段階の中の進み具合 (CM 検出だけやり直すとき)。読んだコマの時刻 ÷ 尺。

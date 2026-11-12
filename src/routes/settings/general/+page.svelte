@@ -8,6 +8,7 @@
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { dateTime, typeNames } from "#lib/format.js";
   import { liveTuner } from "#lib/live-tuner.svelte.js";
+  import { held } from "#lib/live-updates.svelte.js";
   import { measure } from "#lib/measure.svelte.js";
   import {
     theme,
@@ -23,10 +24,19 @@
   // この端末で覚えている名指しを読む (サーバには置かない)
   $effect(() => liveTuner.load());
 
-  // 覚えている名指しが一覧に無い (チューナーを外した、エージェントに繋がらない)
+  /**
+   * ライブのチューナーの選択肢。無効なものは出さない。画面を先に出し、エージェントの答えが届いたら入れる
+   * (「バージョンと環境」のチューナーと同じ 1 回の問い合わせ。届くまでは `undefined`)
+   */
+  const tuners = held(() => data.tuners);
+  const liveTuners = $derived(
+    (tuners.value?.list ?? []).filter((tuner) => !tuner.disabled),
+  );
+
+  // 覚えている名指しが一覧に無い (チューナーを外した、エージェントに繋がらない)。届く前は「一覧にありません」を付けない
   const unlisted = $derived(
     liveTuner.pin !== null &&
-      !data.liveTuners.some((tuner) => tuner.pin === liveTuner.pin),
+      !liveTuners.some((tuner) => tuner.pin === liveTuner.pin),
   );
 
   const notices = $derived.by(() => {
@@ -146,10 +156,12 @@
         <!-- 覚えている名指しが一覧に無いとき (チューナーを外した、エージェントに繋がらない) は、効いたまま「自動」に見せない -->
         {#if unlisted}
           <option value={liveTuner.pin} selected
-            >{liveTuner.pin} (一覧にありません)</option
+            >{liveTuner.pin}{tuners.value === undefined
+              ? ""
+              : " (一覧にありません)"}</option
           >
         {/if}
-        {#each data.liveTuners as tuner (tuner.pin)}
+        {#each liveTuners as tuner (tuner.pin)}
           <option value={tuner.pin} selected={liveTuner.pin === tuner.pin}
             >{tuner.name} ({typeNames(tuner.types)})</option
           >

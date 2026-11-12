@@ -27,13 +27,9 @@ let following: SynthEvent;
 const actualTuner = await import("./tuner");
 mock.module("./tuner", () => ({
   ...actualTuner,
-  openChannelStream: async (
-    _type: string,
-    _channel: string,
-    signal: AbortSignal,
-  ): Promise<ReadableStream<Uint8Array>> => {
+  openChannel: async (_type: string, _channel: string, signal: AbortSignal) => {
     let timer: ReturnType<typeof setInterval> | undefined;
-    return new ReadableStream<Uint8Array>({
+    const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         const push = () => controller.enqueue(pfPackets(following));
         push();
@@ -47,6 +43,7 @@ mock.module("./tuner", () => ({
         clearInterval(timer);
       },
     });
+    return { stream, tsmfStreams: 1, transport: "ts" as const };
   },
 }));
 

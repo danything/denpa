@@ -1074,13 +1074,13 @@ describe("段を下げた映像の引数", () => {
       "bwdif=mode=send_frame:deint=interlaced,fps=30000/1001,scale=-2:720,format=nv12",
     );
     expect(args.encoder.join(" ")).toBe(
-      "-c:v hevc_rkmpp -rc avbr -b:v 3000000 -maxrate 3187500 -minrate 187500 -g 30 -tag:v hvc1",
+      "-c:v hevc_rkmpp -rc avbr -b:v 2823529 -maxrate 3000000 -minrate 176471 -g 30 -tag:v hvc1",
     );
   });
 
-  test("NVENC は段の上限を VBR の平均に渡す", () => {
+  test("NVENC は段の値を VBR の平均と上限に渡す (上限を超えない)", () => {
     expect(videoArgs("h264", nvenc, true, 3).encoder.join(" ")).toContain(
-      "-rc vbr -b:v 600000 -maxrate 1200000 -bufsize 1200000",
+      "-rc vbr -b:v 600000 -maxrate 600000 -bufsize 600000",
     );
   });
 
@@ -1383,9 +1383,9 @@ describe("4K の局のライブ", () => {
     expect(liveRungCodec(["hevc", "h264"], "ts", rk)).toBe("hevc");
   });
 
-  test("詰め替えた fMP4 の codecs は Main 10・Level 5.1 の hev1", () => {
+  test("詰め替えた fMP4 の codecs は Main 10・Level 5.1 の hvc1", () => {
     expect(codecsFor("hevc", "hevc")).toBe(BROADCAST_HEVC);
-    expect(BROADCAST_HEVC).toContain("hev1.2.4.L153");
+    expect(BROADCAST_HEVC).toContain("hvc1.2.4.L153");
     // TS の局の H.265 (GPU でエンコードしたもの) は今までどおり
     expect(codecsFor("hevc")).toContain("hvc1.1.6.L123");
   });

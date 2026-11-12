@@ -16,7 +16,7 @@ const { orm } = await import("./db");
 const { rules, services } = await import("./schema");
 const { orphanedRules, remapRule } = await import("./rule-remap");
 
-/** 局の行。`updated_at` が最新のものが、いまの局の一覧 (`epg.currentServices`) */
+/** 局の行。`updated_at` が最新 (NOW) のものが、いまの局の一覧 (`services.listed`。`epg.currentServices`) */
 function station(
   id: number,
   name: string,
@@ -35,6 +35,7 @@ function station(
       service_type: 1,
       channel,
       updated_at: updatedAt,
+      listed: updatedAt >= NOW,
     })
     .run();
 }

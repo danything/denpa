@@ -816,7 +816,8 @@ AV1・H.265 の VBR がどのドライバでも通るか、段を下げた変換
 - **H.265 にはエンコードしません。** 4K の局の `hevc` は詰め替えだけを指し、GPU は要りません。メニューの「MPEG-2」の行は、4K の局では「H.265」と出します
 - HEVC を再生できるかは、MSE で受け取れるか (`isTypeSupported`) に加えて、`mediaCapabilities.decodingInfo` に放送の値 (3840x2160・59.94 コマ・10 ビット・HLG・BT.2020) を
   渡して決めます (`#lib/hevc-4k.ts`)。受け取れると答えても 4K の 10 ビットをデコードできない端末があるためです (推定)。画面は 4K の局を初めて開くときに 1 回だけ調べます
-- 渡す codecs は `hev1.2.4.L153.B0` (Main 10・Level 5.1) と AAC です (`#lib/live.ts` の `BROADCAST_HEVC`)。入れ物の中の名前は `hev1` で、Safari が受け取るかは確かめていません
+- 渡す codecs は `hvc1.2.4.L153.B0` (Main 10・Level 5.1) と AAC です (`#lib/live.ts` の `BROADCAST_HEVC`)。入れ物の中の名前は `hvc1` で (Safari は `hev1` を受け取らない)、VPS・SPS・PPS は `hvcC` にだけ置きます。
+  放送はコマの中にも送ってくるので、`hvcC` に入れたものと同じならサンプルから外します。違うものが来たら (番組が替わって符号化の設定が変わった、など) init から作り直します (`mp4/mmt.ts` の `parametersChanged`)。録画 (`.mmts`) は 1 本の fMP4 にするので作り直さず、違うものはサンプルに残します
 - 局の行の伝送の形式 (`services.transport`) から決めます。画面は局の一覧の `broadcast` で知り (`live/+page.server.ts`)、サーバは選局の指示の
   `raw` を 4K の局では `hevc` に読み替えます (`live.liveForm`)
 
@@ -846,6 +847,7 @@ AV1・H.265 の VBR がどのドライバでも通るか、段を下げた変換
 - 音声は MPT の最初の音声のアセットだけです。詰め替えでは選べず (放送のまま)、エンコードするときはデュアルモノの左右を選べます
 - 番組が替わってアセットの並び (MPT) が変わったら、TS の PMT と同じく作り直します ([番組が替わって並びが変わったら作り直す](#番組が替わって並びが変わったら作り直す))
 - 映像・音声がスクランブルされたまま届いたら (ACAS)、「4K の放送のスクランブル (ACAS) には、まだ対応していないため観られません」を伝えて畳みます。
+  決め方は TS の局と同じです ([上](#エンコードできなくなったらその場で言う)。500 個ずつ数え、3 秒続いたら止める)。数えるのは局の映像・音声・字幕の MMTP のパケットです (`MmtMediaReader.media`)。
   ふつうは選局の前に断っています (ACAS の局は `services.decodable` が false)
 - 番組の切り替わりと延長には、TS の局と同じく追従します。観ている局の MH-EIT[p/f] を読み (`@danything/arib/mh-eit` の `MmtPresentFollowing`)、
   番組表と違えば番組表に写して `programs` を通知します (`live.followTlv` → `epg.followOnAir`。[data.md](data.md#放送の延長に追従する))。

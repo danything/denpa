@@ -305,7 +305,7 @@ describe("何を出せるか (playbackPlan)", () => {
     expect(plan?.info.axis).toBe("ts");
     expect(plan?.info.broadcast).toBe("hevc");
     expect(plan?.info.offers).toEqual([
-      { codec: "hevc", way: "stream", codecs: "hev1.2.4.L153.B0,mp4a.40.2" },
+      { codec: "hevc", way: "stream", codecs: "hvc1.2.4.L153.B0,mp4a.40.2" },
       { codec: "h264", way: "stream", codecs: "avc1.640029,mp4a.40.2" },
       { codec: "av1", way: "stream", codecs: "av01.0.08M.08,Opus" },
     ]);

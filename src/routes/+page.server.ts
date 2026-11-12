@@ -28,6 +28,7 @@ import {
   CM_CUT_ALREADY,
   enqueue,
   isCanceling,
+  NO_CODEC,
   pump,
 } from "#lib/server/encoder.js";
 import { listedServices, serviceCounts } from "#lib/server/epg.js";
@@ -376,7 +377,7 @@ export const actions = {
      */
     if (settings().codec === "none") {
       return fail(400, {
-        message: "映像コーデックが選ばれていません。設定で選んでください",
+        message: NO_CODEC,
       });
     }
     enqueue(recording.id);

@@ -33,10 +33,11 @@ import { type FoundService, ServiceReader } from "@danything/arib/psi";
 import { type ChannelType, isSatellite, type Transport } from "../types";
 import { CaObserver, describe, hex, type Observed } from "./ca-observe";
 import { config } from "./config";
-import { savePrograms, settle, sync, typeRank } from "./epg";
+import { savePrograms, settle, sync, typeRank, unlistType } from "./epg";
 import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
 import { knownNames, readLineup, type SatelliteType } from "./satellite";
+import { markRemoved } from "./satellite-lineup";
 import { resolveConflicts } from "./scheduler";
 import { readUntil } from "./stream";
 import {
@@ -894,12 +895,12 @@ async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
 
     push("チャンネルを保存しています...", {}, { phase: "保存" });
     // 放送の一覧を読めなかった衛星の種別は置き換えない (今のチャンネルを消さない)
-    await putChannels(
-      found,
-      targets
-        .map(([type]) => type)
-        .filter((type) => !isSatellite(type) || scanner.lineups.has(type)),
-    );
+    const replaced = targets
+      .map(([type]) => type)
+      .filter((type) => !isSatellite(type) || scanner.lineups.has(type));
+    await putChannels(found, replaced);
+    // 設定から消していた衛星の種別も、スキャンで入れ直したら放送の一覧から入れる側に戻す
+    markRemoved(replaced.filter(isSatellite), false);
     // 回した種別のぶんだけ、分かったことを入れ替える (チャンネルと同じく、回していない種別は残す)
     for (const [type] of targets) {
       for (const key of [...observations.keys()])
@@ -1018,7 +1019,8 @@ export function stop(): { stopped: boolean; message: string } {
  * **局がある種別なら、チューナーの有無によらず消せる** (種別ごとの例外は作らない)。スキャンは 1 件も見つからない結果を書かない
  * (アンテナを抜いたまま回して全部消えるのを防ぐ) ので、チューナーが挿さったまま回線だけが無くなったとき (引っ越しでケーブルが無くなったなど) は、
  * スキャンし直しても消えないため。スキャンの実行中だけ断る。
- * 局の行は消さず、取り込み直したときに見かけなかった局として画面から外れる (録画は残る。`currentServices`)。スキャンし直せば戻る
+ * 局の行は消さず、その場で一覧から外す (録画は残る。`epg.unlistType`)。BS と CS は放送の一覧からも入れ直さない
+ * (`removedSatellites`)。その種別をスキャンし直せば戻る
  */
 export async function removeType(
   type: ChannelType,
@@ -1026,6 +1028,8 @@ export async function removeType(
   if (current.state === "running")
     return { removed: false, message: "スキャンの実行中は削除できません" };
   await deleteChannels(type);
+  if (isSatellite(type)) markRemoved([type], true);
+  unlistType(type);
   for (const key of [...observations.keys()])
     if (key.startsWith(`${type}:`)) observations.delete(key);
   await sync().catch(() => undefined);

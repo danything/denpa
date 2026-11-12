@@ -123,7 +123,7 @@ describe("伏せる (Issue に貼る前)", () => {
       expect(redact("connect nas-box:445 failed")).toBe(
         `connect ${MASK.host}:445 failed`,
       );
-      expect(redact("dp.l.doany.io に繋がりません")).toBe(
+      expect(redact("lan.example.com に繋がりません")).toBe(
         `${MASK.host} に繋がりません`,
       );
       expect(redact("mDNS denpa.local")).toBe(`mDNS ${MASK.host}`);

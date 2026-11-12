@@ -16,18 +16,14 @@ const SERVICE_ID = 0x65;
 const actualTuner = await import("./tuner");
 mock.module("./tuner", () => ({
   ...actualTuner,
-  openChannelStream: async (
-    _type: string,
-    _channel: string,
-    signal: AbortSignal,
-  ): Promise<ReadableStream<Uint8Array>> => {
+  openChannel: async (_type: string, _channel: string, signal: AbortSignal) => {
     const av = new SynthMmtAv({
       serviceId: SERVICE_ID,
       mptPacketId: 0x9000,
       startMs: Date.now(),
     });
     let timer: ReturnType<typeof setInterval> | undefined;
-    return new ReadableStream<Uint8Array>({
+    const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         timer = setInterval(() => controller.enqueue(av.next()), 10);
         signal.addEventListener("abort", () => {
@@ -39,6 +35,8 @@ mock.module("./tuner", () => ({
         clearInterval(timer);
       },
     });
+    // エージェントは 4K の局を TLV と答える (`tuner.streamTransport`)
+    return { stream, tsmfStreams: 1, transport: "tlv" as const };
   },
 }));
 

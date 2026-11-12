@@ -10,26 +10,26 @@ import { appName, manifest } from "./manifest";
 describe("ホーム画面に置いたときの名前", () => {
   const original = config.pwaNames;
   beforeEach(() => {
-    config.pwaNames = "dp.l.doany.io=denpa 宅内";
+    config.pwaNames = "lan.denpa.example=denpa 宅内";
   });
   afterEach(() => {
     config.pwaNames = original;
   });
 
   test("載っている名前で来たら、その表示名", () => {
-    expect(appName("dp.l.doany.io")).toBe("denpa 宅内");
+    expect(appName("lan.denpa.example")).toBe("denpa 宅内");
     // ブラウザが送ってくるものをそのまま見るので、大文字小文字は問わない
-    expect(appName("DP.L.DOANY.IO")).toBe("denpa 宅内");
+    expect(appName("LAN.DENPA.EXAMPLE")).toBe("denpa 宅内");
   });
 
   test("載っていない名前は denpa のまま", () => {
-    expect(appName("dp.doany.io")).toBe("denpa");
+    expect(appName("denpa.example")).toBe("denpa");
     expect(appName("localhost")).toBe("denpa");
   });
 
   test("何も書かなければ全部 denpa", () => {
     config.pwaNames = "";
-    expect(appName("dp.l.doany.io")).toBe("denpa");
+    expect(appName("lan.denpa.example")).toBe("denpa");
   });
 
   test("いくつでも並べられる", () => {
@@ -39,12 +39,12 @@ describe("ホーム画面に置いたときの名前", () => {
   });
 
   test("= が無い書き方は読み捨てる", () => {
-    config.pwaNames = "dp.l.doany.io";
-    expect(appName("dp.l.doany.io")).toBe("denpa");
+    config.pwaNames = "lan.denpa.example";
+    expect(appName("lan.denpa.example")).toBe("denpa");
   });
 
   test("名前は name と short_name の両方に入る", () => {
-    const out = manifest("dp.l.doany.io") as {
+    const out = manifest("lan.denpa.example") as {
       name: string;
       short_name: string;
     };
@@ -54,8 +54,8 @@ describe("ホーム画面に置いたときの名前", () => {
   });
 
   test("id を名前ごとに分ける。片方がもう片方の入れ直しにならないように", () => {
-    const lan = manifest("dp.l.doany.io") as { id: string };
-    const outside = manifest("dp.doany.io") as { id: string };
+    const lan = manifest("lan.denpa.example") as { id: string };
+    const outside = manifest("denpa.example") as { id: string };
     expect(lan.id).not.toBe(outside.id);
   });
 });
@@ -66,7 +66,7 @@ describe("ホーム画面に置いたときの名前", () => {
  */
 describe("テーマの地の色", () => {
   test("既定はダークの地", () => {
-    const out = manifest("dp.doany.io") as {
+    const out = manifest("denpa.example") as {
       background_color: string;
       theme_color: string;
     };
@@ -75,7 +75,7 @@ describe("テーマの地の色", () => {
   });
 
   test("ライトなら白", () => {
-    const out = manifest("dp.doany.io", "light") as {
+    const out = manifest("denpa.example", "light") as {
       background_color: string;
       theme_color: string;
     };
@@ -84,8 +84,8 @@ describe("テーマの地の色", () => {
   });
 
   test("テーマで id は変わらない (ライトで入れ直しても別のアプリにならない)", () => {
-    const dark = manifest("dp.doany.io") as { id: string };
-    const light = manifest("dp.doany.io", "light") as { id: string };
+    const dark = manifest("denpa.example") as { id: string };
+    const light = manifest("denpa.example", "light") as { id: string };
     expect(light.id).toBe(dark.id);
   });
 });

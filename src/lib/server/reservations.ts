@@ -75,7 +75,7 @@ export async function reserve(programId: number): Promise<Reservation> {
     throw new Error(undecodableReason(service.type, service.transport));
   // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
   const priority = 2;
-  // 録画のしかたは全体で 1 つ。「エンコードするか否か」だけ予約時に固定する。
+  // 録画のしかたは全体で 1 つ。「エンコードするか否か」は予約時の設定を写す (録り終えたときの設定が「エンコードしない」なら、こちらが true でもエンコードしない)。
   // エンコードの細目 (元の TS を残すか・コーデック) はエンコードするときに settings を見る
   const encode = settings().encode;
 

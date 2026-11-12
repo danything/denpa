@@ -74,11 +74,9 @@ async function build(argv: string[], ts: boolean): Promise<Made> {
   const out = joinBytes(parts);
   if (out.length === 0) return { missing: MISSING };
   const pages = pagesFromMkv(out);
+  // 画像の字幕 (PGS) は読まない (null)。字幕の無い録画と同じに返す
   return pages === null
-    ? {
-        missing:
-          "画像の字幕 (PGS) には対応していません。元の TS が残っていれば、再エンコードすると字幕が入ります",
-      }
+    ? { missing: MISSING }
     : { json: JSON.stringify(pages) };
 }
 

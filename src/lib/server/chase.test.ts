@@ -21,6 +21,7 @@ import {
   recordedSec,
   resumeFrom,
   resumePlan,
+  tlvStart,
   tsFileHead,
 } from "./chase";
 import { chunks } from "./stream";
@@ -53,6 +54,35 @@ describe("どこから読み始めるか (chasePlan)", () => {
     const size = 600 * 2_000_000; // 2MB/s の 10 分
     const plan = chasePlan(size, 600, 0);
     expect(plan.paceBytesPerSec).toBeGreaterThan(size / 600);
+  });
+});
+
+/*
+ * 4K の局の録画 (TLV) は、`chasePlan` の 188 バイトに切った位置がパケットの途中に当たる。
+ * HTTP の追っかけの `codec=raw` はパケットの先頭から送る
+ */
+describe("TLV のパケットの先頭 (tlvStart)", () => {
+  /** 0x7F・種類 (ヌル)・長さ・中身 (0) の TLV パケット */
+  const tlv = (length: number) => {
+    const packet = new Uint8Array(4 + length);
+    packet.set([0x7f, 0xff, length >> 8, length & 0xff]);
+    return packet;
+  };
+
+  test("途中の位置から、次のパケットの先頭へ進める", () => {
+    const dir = mkdtempSync(join(tmpdir(), "denpa-tlv-start-"));
+    const path = join(dir, "a.mmts");
+    writeFileSync(path, Buffer.concat([tlv(300), tlv(500), tlv(400), tlv(10)]));
+    try {
+      expect(tlvStart(path, 0)).toBe(0);
+      expect(tlvStart(path, 188)).toBe(304);
+      expect(tlvStart(path, 304)).toBe(304);
+      expect(tlvStart(path, 376)).toBe(808);
+      // 先頭が見つからなければ渡した位置のまま
+      expect(tlvStart(join(dir, "none.mmts"), 188)).toBe(188);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
