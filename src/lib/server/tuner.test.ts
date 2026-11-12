@@ -265,44 +265,105 @@ describe("recordingHolds", () => {
 });
 
 /**
+ * 偽のエージェントを立て、`config` をそちらへ向けて `run` を呼ぶ。終われば戻す。
+ * 証明書と DB は一時ディレクトリに置く (既定の /data は CI では書けない)
+ */
+async function withAgent(
+  answer: (request: Request) => Response,
+  run: () => Promise<void>,
+): Promise<void> {
+  const agent = Bun.serve({ port: 0, tls: fakeAgentTls(), fetch: answer });
+  const { config } = await import("./config");
+  const before = { ...config };
+  const dir = mkdtempSync(join(tmpdir(), "denpa-tuner-"));
+  config.agentUrl = fakeAgentUrl(agent.port!);
+  config.dataDir = dir;
+  config.dbPath = join(dir, "denpa.db");
+  trustFakeAgent();
+  try {
+    await run();
+  } finally {
+    config.agentUrl = before.agentUrl;
+    config.dataDir = before.dataDir;
+    config.dbPath = before.dbPath;
+    agent.stop(true);
+  }
+}
+
+/**
  * **引き継ぎ (`after`) は、選局の API にそのまま並べて渡す。** エージェントは何度でも書ける
  * `after` を読み、その利用者をもう離れたものとして選ぶ (docs/agent.md「選ぶ順の約束」の 4)
  */
 describe("openChannelStream の引き継ぎ", () => {
   test("止めた録画の利用者を after に並べる", async () => {
     const asked: URLSearchParams[] = [];
-    const agent = Bun.serve({
-      port: 0,
-      tls: fakeAgentTls(),
-      fetch(request) {
+    await withAgent(
+      (request) => {
         asked.push(new URL(request.url).searchParams);
         return new Response("");
       },
-    });
-    const { config } = await import("./config");
-    const before = config.agentUrl;
-    const beforeData = config.dataDir;
-    config.agentUrl = fakeAgentUrl(agent.port!);
-    // 組んだエージェントの証明書を置く所。既定の /data は CI では書けない
-    config.dataDir = mkdtempSync(join(tmpdir(), "denpa-tuner-"));
-    trustFakeAgent();
-    try {
-      const aborter = new AbortController();
-      await openChannelStream(
-        "BS",
-        "BS11_0",
-        aborter.signal,
-        recordingUse(9),
-        10,
-        [recordingUse(7), recordingUse(8)],
-      );
-      aborter.abort();
-    } finally {
-      config.agentUrl = before;
-      config.dataDir = beforeData;
-      agent.stop(true);
-    }
+      async () => {
+        const aborter = new AbortController();
+        await openChannelStream(
+          "BS",
+          "BS11_0",
+          aborter.signal,
+          recordingUse(9),
+          10,
+          [recordingUse(7), recordingUse(8)],
+        );
+        aborter.abort();
+      },
+    );
     expect(asked[0]?.getAll("after")).toEqual(["rec 7", "rec 8"]);
     expect(asked[0]?.get("use")).toBe("rec 9");
+  });
+});
+
+/**
+ * **誰の選局でも、選局できたら受信できたと残す** (`reception.ts`)。番組表の取得が 1 台のチューナーで
+ * 選局できなかった地上波のチャンネルも、ライブがほかのチューナーで選局できれば「続けて選局できません」が消える
+ */
+describe("選局できたら受信できたと残す", () => {
+  const HOUR = 60 * 60_000;
+
+  test("ライブで選局できたら、続けて選局できなかった記録を消す", async () => {
+    const { recordFailed, recordReceived, failingGround } =
+      await import("./reception");
+    let ok = false;
+    await withAgent(
+      () =>
+        ok
+          ? new Response("ts")
+          : Response.json(
+              { error: "adapter1: 同期しませんでした" },
+              { status: 500 },
+            ),
+      async () => {
+        const at = Date.now() - 4 * HOUR;
+        recordReceived("GR", "T16", at);
+        recordFailed("GR", "T26", at + HOUR);
+        recordReceived("GR", "T16", at + 2 * HOUR);
+        recordFailed("GR", "T26", at + 3 * HOUR);
+        expect(failingGround()).toEqual(["T26"]);
+
+        // 選局できなかった回は何も残さない (失敗を数えるのは番組表の取得だけ)
+        await expect(
+          openChannelStream(
+            "GR",
+            "T26",
+            new AbortController().signal,
+            "live T26",
+          ),
+        ).rejects.toThrow("選局できません (500)");
+        expect(failingGround()).toEqual(["T26"]);
+
+        ok = true;
+        const aborter = new AbortController();
+        await openChannelStream("GR", "T26", aborter.signal, "live T26");
+        aborter.abort();
+        expect(failingGround()).toEqual([]);
+      },
+    );
   });
 });

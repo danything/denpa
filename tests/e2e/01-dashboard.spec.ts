@@ -1,4 +1,20 @@
+import { spawnSync } from "node:child_process";
+
 import { expect, goto, homeTools, syncEpg, test } from "./helpers";
+
+/** このワーカーの DB に直に書く (46 と同じ) */
+function sqlite(db: string, script: string): void {
+  const done = spawnSync(
+    "bun",
+    [
+      "-e",
+      `import { Database } from 'bun:sqlite'; const db = new Database(process.env.SEED_DB); db.exec('PRAGMA busy_timeout = 5000'); ${script}`,
+    ],
+    { env: { ...process.env, SEED_DB: db }, encoding: "utf8" },
+  );
+  if (done.status !== 0)
+    throw new Error(`DB に書けませんでした: ${done.stderr}`);
+}
 
 test.describe("ホームと画面遷移", () => {
   test("データ放送のチャンネルは取り込まない", async ({ page, request }) => {
@@ -176,6 +192,46 @@ test.describe("ホームと画面遷移", () => {
     for (const path of ["/", "/guide", "/live"]) {
       await goto(page, path);
       await expect(page.getByTestId("channel-notice"), path).toHaveCount(0);
+    }
+  });
+
+  /*
+   * **お知らせの 1 行はヘッダーに重ねない。** 広い形のヘッダーは浮かせて流れから外しているので、流れの頭に置いた 1 行が
+   * ヘッダーの裏に入り、文がロゴに、ボタンがナビに重なっていた (幅 1885px の実機)。ヘッダーの下から始め、中身はその下に続く
+   */
+  test("お知らせの 1 行はヘッダーの下に出て、中身にも重ならない", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await syncEpg(request);
+    const text =
+      "T26 を続けて選局できません。周波数が変わった場合は、地上波をスキャンし直すと選局できます";
+    sqlite(
+      `${stack.root}/denpa.db`,
+      `db.run("INSERT INTO channel_changes (type, text, at) VALUES ('GR', '${text}', ${Date.now()})")`,
+    );
+    try {
+      await page.setViewportSize({ width: 1885, height: 900 });
+      for (const [path, below] of [
+        ["/", "[data-testid=timeline]"],
+        ["/guide", ".guide-bar"],
+        ["/live", "[data-player-layout]"],
+      ] as const) {
+        await goto(page, path);
+        const notice = page.getByTestId("channel-notice");
+        await expect(notice, path).toHaveText(new RegExp(text));
+        const box = (await notice.boundingBox())!;
+        const header = (await page.locator(".navbar").boundingBox())!;
+        expect(box.y, path).toBeGreaterThanOrEqual(header.y + header.height);
+        const next = (await page.locator(below).first().boundingBox())!;
+        expect(next.y, path).toBeGreaterThanOrEqual(box.y + box.height);
+      }
+    } finally {
+      sqlite(
+        `${stack.root}/denpa.db`,
+        `db.run("DELETE FROM channel_changes WHERE text = '${text}'")`,
+      );
     }
   });
 

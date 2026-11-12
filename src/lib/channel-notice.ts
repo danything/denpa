@@ -8,7 +8,7 @@
  * - `changed` … 放送の一覧が変わり、受信できるチャンネルを書き換えた (`server/lineup-follow.ts`)。文は書き換えた中身で、
  *   設定の「受信」を開くか 24 時間たつと消える
  * - `ground` … 地上波のチャンネルを続けて選局できない・局の顔ぶれがスキャンの結果と違う (`server/ground-watch.ts`)。
- *   スキャンし直すと消える
+ *   スキャンし直すか、ライブ・録画・番組表の取得がそのチャンネルを選局できれば消える
  */
 export type ChannelNotice = "all" | "undecodable" | "changed" | "ground";
 

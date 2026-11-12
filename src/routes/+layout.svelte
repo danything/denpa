@@ -1124,6 +1124,19 @@
   :global(:where(html:not([data-phone]))) main {
     --dp-page-top: var(--dp-header-space);
   }
+  /*
+   * **お知らせの 1 行は、ヘッダーの下から始める。** 広い形のヘッダーは中身の上に浮かせて流れから外している (`position: fixed`) ので、
+   * 流れの頭に置くとヘッダーの裏に入って重なる。中身と同じくヘッダーの下端から `--dp-bar-gap` 空け、中身はお知らせのすぐ下から始める。
+   * 巻けば中身と一緒にヘッダーの裏を流れる。自分で巻き取る画面 (`.shell.fill`) は箱の頭を空けてあるので、そちらは下の 1000px の所
+   */
+  :global(:where(html:not([data-phone]))) .shell:not(.fill) .notice-slot {
+    margin-top: var(--dp-header-space);
+  }
+  :global(:where(html:not([data-phone])))
+    .shell:not(.fill):has(.notice-slot)
+    main {
+    --dp-page-top: var(--dp-space-2);
+  }
   :global(:where(html:not([data-phone]))) .navbar {
     position: fixed;
     top: 0.5rem;
@@ -1241,6 +1254,28 @@
          */
     .shell.fill.guide .navbar {
       --navbar-shadow: var(--dp-shadow-tight);
+    }
+    /*
+         * **お知らせの 1 行がある間は、表をヘッダーの裏まで伸ばさない** (広い形)。1 行は箱の頭に置くので、伸ばすとマスが 1 行の上を流れる。
+         * 1 行はほかの画面と同じくヘッダーの下端から `--dp-bar-gap` 空けて置き、操作の 1 行と表はそのすぐ下から始める (`--dp-fill-top` を
+         * ヘッダーの下端にそろえると、操作の 1 行 (`app.css` の `.guide-bar`) はヘッダーの裏へ引き上げない)。
+         * 裏に何も来ないので、ヘッダーは表を巻いても平らなまま
+         */
+    :global(:where(html:not([data-phone]))) .shell.fill:has(.notice-slot) {
+      padding-top: var(--dp-header-space);
+    }
+    :global(:where(html:not([data-phone]))) .shell.fill:has(.notice-slot) main {
+      --dp-fill-top: var(--dp-header-bottom);
+    }
+    :global(:where(html:not([data-phone])))
+      .shell.fill:has(.notice-slot)
+      :global(.guide-frame) {
+      --guide-head: 0px;
+    }
+    :global(:where(html:not([data-phone])))
+      .shell.fill.guide:has(.notice-slot)
+      .navbar {
+      animation-name: none;
     }
   }
 </style>

@@ -30,7 +30,7 @@ import {
 import { emit } from "./events";
 import { alertGround, forgetGround, GroundWatch } from "./ground-watch";
 import { LineupWatch } from "./lineup-follow";
-import { checkedAt, recordFailed, recordReceived } from "./reception";
+import { checkedAt, recordFailed } from "./reception";
 import { resolveConflicts } from "./scheduler";
 import { programs, services } from "./schema";
 import { chunks } from "./stream";
@@ -414,7 +414,8 @@ async function collectChannel(
   }
 
   /*
-   * **受信できたかを残す** (`reception.ts`)。BS と CS は放送の一覧から作るので、受信できないチャンネルも入る。
+   * **受信できなかったことを残す** (`reception.ts`)。BS と CS は放送の一覧から作るので、受信できないチャンネルも入る。
+   * 受信できたことは、選局できたときに `tuner.openChannel` が残す (ライブや録画の選局も同じ)。
    * 選局できなかった回も「行った」と覚える (受信できないチャンネルを周回のたびに選び直さない)。
    * 開けたのに何も来ないまま終わった回は、上限まで待ったときだけ数える (録画やライブに譲った・止めたときは数えない)。
    * 選局できなかった回も、この周回で読み直すとき (`last` が false) はまだ数えない
@@ -422,9 +423,7 @@ async function collectChannel(
   lineup?.follow();
   ground?.compare();
   const failed = receptionFailed({ received, refused, opened, timedOut, last });
-  if (received) {
-    recordReceived(channel.type, channel.channel);
-  } else if (failed) {
+  if (failed) {
     collected.set(key(channel), Date.now());
     if (recordFailed(channel.type, channel.channel)) {
       console.warn(
