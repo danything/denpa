@@ -110,7 +110,7 @@ export const config = {
   fontDir: str("FONT_DIR", "/usr/share/denpa-font"),
   /** 録ったあとのエンコードを同時に走らせる本数。**ジョブではなく ffmpeg の本数で数える** (コーデックごとに 1 本。`encode-slots.ts`) */
   encodeConcurrency: num("ENCODE_CONCURRENCY", 2),
-  /** 先頭が壊れていて初期化に失敗したときに先頭を捨てて再試行する秒数 (enc.js 由来) */
+  /** 先頭が壊れていて初期化に失敗したときに先頭を捨てて再試行する秒数 */
   encodeRetrySeek: 0.2,
   /**
    * 1 つのエンコードを何回まで試すか。**毒ジョブでキューを止めないため。**

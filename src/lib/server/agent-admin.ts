@@ -292,9 +292,9 @@ export async function removeAgent(id: number): Promise<Removed> {
   unwatchAgent(id);
   orm().transaction((tx) => {
     tx.delete(agents).where(eq(agents.id, id)).run();
+    // 外部キーは効かせていないので、チャンネルの写しと受信の記録も一緒に消す (`agents.syncEnvAgents` と同じ)
+    forgetMissingAgents();
   });
-  // 外部キーは効かせていないので、チャンネルの写しと受信の記録もここで消す
-  forgetMissingAgents();
   forgetAgentCard(id);
   forgetRawProbe(id);
   console.log(

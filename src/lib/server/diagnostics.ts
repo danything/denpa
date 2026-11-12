@@ -14,7 +14,7 @@ import { webhooks } from "./schema";
  * **設定の「その他」の「バージョンと環境」と「ログ」に出すもの。** サーバとエージェントのログ、動いている環境。
  *
  * エージェントのログは `GET /denpa/logs` (`{"lines":[{"at":<epoch ms>,"text":"…"}]}`。新しいほうから 2000 行まで、古い順)。
- * エージェント自身のことは `GET /denpa/about` (`{"version","os","arch","runtime","ccidDriver"}`。agent/Denpa.Agent/About.cs)。
+ * エージェント自身のことは `GET /denpa/about` (`{"version","name","os","arch","runtime","ccidDriver"}`。agent/Denpa.Agent/About.cs)。
  * 取れなければ理由を返して画面は止めない
  */
 

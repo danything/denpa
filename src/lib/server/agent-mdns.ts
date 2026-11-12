@@ -328,12 +328,12 @@ function interfaces(): string[] {
 let socket: Socket | null = null;
 /** 5353 を開けず、空いたポートで問うているか (答えはこちらにだけ返る) */
 let legacy = false;
-let sightings = new Sightings();
+const sightings = new Sightings();
 let lastQuery = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
 let onFound: ((agent: FoundAgent) => void) | null = null;
 /** SRV と TXT を問い直した時刻 (インスタンス →)。PTR だけのパケットが続いても、1 つにつき `QUERY_GAP` に 1 回しか問わない */
-let asked = new Map<string, number>();
+const asked = new Map<string, number>();
 
 /** 224.0.0.251 に、全部のインターフェースで入る (もう入っていれば何もしない) */
 function join(): void {
@@ -447,18 +447,6 @@ export function startDiscovery(found: (agent: FoundAgent) => void): void {
     query();
   }, QUERY_EVERY);
   timer.unref?.();
-}
-
-/** やめる (試験から) */
-export function stopDiscovery(): void {
-  if (timer !== null) clearInterval(timer);
-  timer = null;
-  socket?.close();
-  socket = null;
-  onFound = null;
-  sightings = new Sightings();
-  asked = new Map();
-  lastQuery = 0;
 }
 
 /**

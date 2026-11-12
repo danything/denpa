@@ -153,7 +153,7 @@ const open = new Map<string, () => Pace>();
 /**
  * 具合を読めるようにする。id を応答のヘッダ (`#lib/ts/playback.ts` の `PACE_HEADER`) で返し、閉じたら `close` を呼ぶ。
  * id はランダムな UUID (v4。122 ビット) で、連番のように推測できない。読む `GET /api/playback/pace` はほかの API と同じく
- * 認証を通る (`hooks.server.ts`。素通しの `OPEN_PATHS` に入れていない)。返すのは数だけで、録画の中身や名前は出さない
+ * 認証を通る (`hooks.server.ts`。`auth.ts` の素通しの `OPEN_PATHS` に入れていない)。返すのは数だけで、録画の中身や名前は出さない
  */
 export function openPace(read: () => Pace): { id: string; close: () => void } {
   const id = crypto.randomUUID();

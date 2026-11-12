@@ -115,7 +115,7 @@ function withLabels(
 export type Lists = Map<number, Promise<TunerList>>;
 
 /**
- * カードを配る側の URL を、登録したエージェントの名前に直す (ホストとポートが同じもの)。どれでもなければ null
+ * カードを配る側の URL を、登録したエージェントの名前に直す (ホスト名が同じもの。配るポートは `CARD_SHARE_PORT` で 25252 と違う)。どれでもなければ null
  */
 function remoteName(remote: string | undefined, all: Agent[]): string | null {
   if (remote === undefined || !URL.canParse(remote)) return null;

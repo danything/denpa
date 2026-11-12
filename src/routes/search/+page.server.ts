@@ -1,13 +1,14 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { parseId } from "#lib/id.js";
-import { serviceChannel } from "#lib/server/agent-channels.js";
 import { countClips, findClips } from "#lib/server/clips.js";
 import { reserveWarning } from "#lib/server/contracts.js";
 import { now, orm } from "#lib/server/db.js";
 import {
   currentServices,
+  SERVICE_ORDER,
+  SERVICE_TYPE_ORDER,
   unwatchableServices,
   watchableServices,
 } from "#lib/server/epg.js";
@@ -154,7 +155,7 @@ export function load({ url }) {
     fields.set("keyword", origin?.prefill?.keyword ?? q);
   const seed = editing ?? draftRule(fields);
 
-  // 取り残しの局は選ばせない (currentServices)。もう録れない局が並ぶだけ
+  // 取り残しの局は選ばせない (currentServices)。もう録れない局が並ぶだけ。並びは番組表・ライブと同じ
   const services = orm()
     .select({
       id: serviceTable.id,
@@ -163,7 +164,7 @@ export function load({ url }) {
     })
     .from(serviceTable)
     .where(currentServices())
-    .orderBy(serviceTable.type, serviceChannel())
+    .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
     .all();
 
   const options = { limit: LIMIT, count: true };

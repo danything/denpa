@@ -334,6 +334,15 @@ describe("実体との照合", () => {
     expect(existsSync(working)).toBe(true);
   });
 
+  test("EPGStation の引き継ぎの書きかけは、時間が経っても残す (次の実行で続きから取る)", () => {
+    fresh();
+    const raw = put(config.rawDir, ".epgstation-12.m2ts.migrating");
+    const encoded = put(config.encodedDir, "番組/.epgstation-13.mp4.migrating");
+
+    expect(reconcile().swept).toBe(0);
+    expect([existsSync(raw), existsSync(encoded)]).toEqual([true, true]);
+  });
+
   test("落ちて取り残された .encoding は、時間が経てば片付く", () => {
     fresh();
     const left = put(config.encodedDir, "番組/番組 - 1.mkv.encoding");
