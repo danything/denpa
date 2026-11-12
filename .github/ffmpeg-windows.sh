@@ -18,6 +18,12 @@
 # それぞれ抱える)。DLL にすると、libavfilter の DLL が libavformat の関数 (metadata フィルタの avio_closep) を解決できず組めない
 # (Linux の共有ライブラリは解決を実行時まで待つので組める)。
 #
+# **ffprobe は ffmpeg とは別に、読む部品だけで組む。** 同じ configure で組むと、libavcodec の部品の一覧が全部のエンコーダ
+# (SVT-AV1・Opus・x264 と GPU のもの) を指しているので、エンコードしない ffprobe.exe にもそれが静的に入り、ffmpeg.exe と同じ大きさになる。
+# ffprobe に入れるのは Dockerfile の一覧のうちデコーダ・デマクサ・パーサ・bsf・プロトコルと、デコーダの使う dav1d・zlib だけで、
+# エンコーダ・マクサ・フィルタ・libavfilter・libavdevice は入れない。読める部品が ffmpeg と同じかは、組んだあとで一覧を比べる。
+# ライセンスの設定 (`--enable-gpl --enable-version3`) は ffmpeg とそろえる
+#
 # **自動で見つけるもの (`--disable-autodetect`) は全部切ってから、要るものだけ足す。** 切らないと、MSYS2 に
 # 入っているものや Windows の API (Media Foundation・D3D11 など) を configure が勝手に繋ぎ、ランナーの中身しだいで
 # 出来上がりが変わる。スレッド (`w32threads`) と zlib (PNG のデコーダが使う) は自動で見つけるものに入っているので、明示する。
@@ -66,9 +72,10 @@ echo "ffmpeg ${FFMPEG_VERSION} / SVT-AV1 ${SVT_AV1_VERSION} / Opus ${OPUS_VERSIO
 CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 temp=$(cygpath -u "${RUNNER_TEMP:-/tmp}")
 prefix="$temp/ffmpeg-prefix"
+probe_prefix="$temp/ffprobe-prefix"
 work="$temp/ffmpeg-work"
-rm -rf "$prefix" "$work" "$out"
-mkdir -p "$prefix" "$work" "$out/licenses"
+rm -rf "$prefix" "$probe_prefix" "$work" "$out"
+mkdir -p "$prefix" "$probe_prefix" "$work" "$out/licenses"
 # Opus と SVT-AV1 は ffmpeg とは別の入れ先 (`deps/<名前>`) に組む (下)
 deps="$temp/ffmpeg-deps"
 mkdir -p "$deps"
@@ -118,11 +125,14 @@ fi
 if [ "$only" = svt-av1 ]; then exit 0; fi
 cp -r "$deps/opus/licenses/." "$deps/svt-av1/licenses/." "$out/licenses/"
 
-# FFmpeg (キャッシュの鍵はこのスクリプト全体。ここから下を変えても、上の Opus と SVT-AV1 は組み直さない)
-mkdir "$work/ffmpeg" && cd "$work/ffmpeg"
+# FFmpeg (キャッシュの鍵はこのスクリプト全体。ここから下を変えても、上の Opus と SVT-AV1 は組み直さない)。
+# ffmpeg と ffprobe は同じソースから、別々の場所で組む (configure の出力をソースの中に書かない)
+src="$work/ffmpeg"
+mkdir "$src" && cd "$src"
 fetch_tar "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2" j
 for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 --fuzz=0 < "$p"; done
-./configure \
+mkdir "$work/build-ffmpeg" && cd "$work/build-ffmpeg"
+"$src/configure" \
   --prefix="$prefix" \
   --enable-gpl \
   --enable-version3 \
@@ -138,6 +148,7 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
   --enable-libdav1d \
   --enable-libzimg \
   "${gpu[@]}" \
+  --disable-ffprobe \
   --disable-everything \
   --disable-network \
   --disable-doc \
@@ -155,11 +166,52 @@ filters=$("$prefix/bin/ffmpeg.exe" -hide_banner -filters)
 for f in setparams zscale tonemap; do
   grep -qw "$f" <<< "$filters" || { echo "ffmpeg に $f が組み込まれていません" >&2; exit 1; }
 done
-mkdir -p "$out/licenses/ffmpeg" && cp COPYING.GPLv3 LICENSE.md "$out/licenses/ffmpeg/"
+mkdir -p "$out/licenses/ffmpeg" && cp "$src/COPYING.GPLv3" "$src/LICENSE.md" "$out/licenses/ffmpeg/"
+
+# ffprobe (読む部品だけ。冒頭の説明)
+mapfile -t probe_components < <(printf '%s\n' "${components[@]}" | grep -E -- '^--enable-(decoder|demuxer|parser|bsf|protocol)=')
+mkdir "$work/build-ffprobe" && cd "$work/build-ffprobe"
+"$src/configure" \
+  --prefix="$probe_prefix" \
+  --enable-gpl \
+  --enable-version3 \
+  --disable-shared \
+  --enable-static \
+  --pkg-config-flags="--static" \
+  --disable-autodetect \
+  --enable-w32threads \
+  --enable-zlib \
+  --enable-libdav1d \
+  --disable-programs \
+  --enable-ffprobe \
+  --disable-avdevice \
+  --disable-avfilter \
+  --disable-everything \
+  --disable-network \
+  --disable-doc \
+  "${probe_components[@]}"
+make -j"$jobs"
+make install
+# ffprobe が読める部品が ffmpeg と同じか (configure は、組めない部品を黙って外す)。デコーダとデマクサは行ごと比べる
+# (名前・説明・印が同じになる)。lavfi は ffmpeg の入力の装置 (libavdevice) で、`-demuxers` に載るが ffprobe には組まない。
+# bsf は、ffmpeg にはマクサとエンコーダが自分で足すもの (mpegts の hevc_mp4toannexb など) も載るので、Dockerfile の一覧にあるものだけを見る
+for kind in decoders demuxers; do
+  missing=$(comm -23 <("$prefix/bin/ffmpeg.exe" -hide_banner "-$kind" | tr -d '\r' | LC_ALL=C sort) \
+    <("$probe_prefix/bin/ffprobe.exe" -hide_banner "-$kind" | tr -d '\r' | LC_ALL=C sort) | grep -vw lavfi || true)
+  if [ -n "$missing" ]; then
+    echo "ffprobe に、ffmpeg にある $kind がありません:" >&2
+    echo "$missing" >&2
+    exit 1
+  fi
+done
+bsfs=$("$probe_prefix/bin/ffprobe.exe" -hide_banner -bsfs | tr -d '\r')
+for b in $(printf '%s\n' "${probe_components[@]}" | sed -nE 's/^--enable-bsf=//p' | tr ',' ' '); do
+  grep -qx "$b" <<< "$bsfs" || { echo "ffprobe に bsf の $b が組み込まれていません" >&2; exit 1; }
+done
 
 # 実行ファイルと、それが読む DLL。DLL は取り込み表から辿る (Windows の API の集まり api-ms-win-* と、
 # System32 にあるものは置かない)。見つからないものがあれば止める (起動してからエンコードで落ちるより早く分かる)
-cp "$prefix/bin/ffmpeg.exe" "$prefix/bin/ffprobe.exe" "$out/"
+cp "$prefix/bin/ffmpeg.exe" "$probe_prefix/bin/ffprobe.exe" "$out/"
 declare -A seen=()
 queue=("$out/ffmpeg.exe" "$out/ffprobe.exe")
 from_msys=()

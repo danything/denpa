@@ -732,7 +732,7 @@ jobs:
     uses: ./.github/workflows/windows-server.yml
 
   # 配布物を Windows のランナーで確かめる。**必須チェックにはしない** (agent-windows と同じ理由)。
-  # 1. 同梱の ffmpeg で denpa の経路を流し、名前付きパイプで受ける進み具合と、スリープを止める呼び出しを見る (tests/native-smoke.ts)
+  # 1. 同梱の ffmpeg で denpa の経路を流し、同梱の ffprobe で denpa が読む形式を読み、名前付きパイプで受ける進み具合と、スリープを止める呼び出しを見る (tests/native-smoke.ts)
   # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
   # 3. install.ps1 で本体ごと入れて (タスクは SYSTEM)、本体がエージェントと組めるか。上げ直して、外す
   server-windows:
@@ -880,7 +880,7 @@ jobs:
 
   # 配布物を Mac のランナーで確かめる。**必須チェックにはしない** (agent-macos と同じ理由)。
   # Mac のランナーは混むので、確かめることは 1 つのジョブにまとめる (server-windows と同じ並び)。
-  # 1. 同梱の ffmpeg で denpa の経路を流し、VideoToolbox が組み込まれていること、GPU で試せなければソフトウェアに戻ること、
+  # 1. 同梱の ffmpeg で denpa の経路を流し、同梱の ffprobe で denpa が読む形式を読み、VideoToolbox が組み込まれていること、GPU で試せなければソフトウェアに戻ること、
   #    fd 3 の進み具合、スリープを止める呼び出しと、録画の前に起こす予約を見る (tests/native-smoke.ts。予約は root が要るので sudo で)
   # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
   # 3. 前のバージョン (本体が Docker) から移る形で install.sh を流し (偽の docker。tests/install-mac-migrate.sh)、本体ごと入れて

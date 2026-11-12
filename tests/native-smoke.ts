@@ -6,6 +6,7 @@
  *
  * - 同梱の ffmpeg で、denpa が使う経路の主なもの (.github/image-smoke.sh と同じ素材と引数) を流す。
  *   部品を Dockerfile から読んで組んでいるので、足りなければここで落ちる。4K の局の HLG を SDR に直すフィルタ (uhd.HLG_TO_SDR) も流す
+ * - 同梱の ffprobe で、TS・m2ts・mkv・mp4・fMP4 (HEVC Main10・AAC・ARIB 字幕、H.264・AV1・Opus) を読めるか (tests/native-ffprobe.ts)
  * - GPU のエンコーダ (Windows は NVENC・QSV・AMF、Mac は VideoToolbox) が組み込まれ、denpa が渡すオプションを持つか。
  *   GPU で試せないランナーでは、試しのエンコードが全部落ちて、ソフトウェアでエンコードするか
  * - ffmpeg の 4 本目の出口 (stream.sideOutput。Windows では名前付きパイプ、Mac は `pipe:3`) で、進み具合と matroska を受けられるか
@@ -19,6 +20,7 @@ import { join } from "node:path";
 import { holdAwake, macPower } from "../src/lib/server/awake.ts";
 import { sideOutput } from "../src/lib/server/stream.ts";
 import { HLG_TO_SDR } from "../src/lib/server/uhd.ts";
+import { probeSmoke } from "./native-ffprobe.ts";
 
 const [root, work] = process.argv.slice(2);
 if (root === undefined || work === undefined) {
@@ -245,6 +247,8 @@ await ff(
   at("chapters.mkv"),
 );
 console.log("ffmpeg: ok");
+// ffprobe は ffmpeg と別に、読む部品だけで組んである。denpa が読む形式を、denpa と同じ引数で読めるか
+await probeSmoke(ffprobe, ff, at);
 
 /*
  * GPU のエンコーダ。Windows のランナーに GPU は無いのでエンコードは通らない。Mac のランナーでは VideoToolbox が通る。
