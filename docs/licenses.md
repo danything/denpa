@@ -134,7 +134,7 @@ Windows (下) と同じく、上のコンテナイメージ `denpa` と同じも
 | SVT-AV1・Opus (ソースから組み、静的リンク)                                     | イメージと同じ                                                             | 上の表のとおり                                                                                                              | 上の表のとおり                                                   |
 | x264・dav1d・zimg (ソースから組み、静的リンク。Debian trixie と同じバージョン) | H.264 のエンコード・AV1 のデコード・4K の局の HLG を SDR に直す (`zscale`) | <https://code.videolan.org/videolan/x264>・<https://code.videolan.org/videolan/dav1d>・<https://github.com/sekrit-twc/zimg> | GPL-2.0+・BSD-2-Clause・WTFPL。`ffmpeg/licenses/` に文書         |
 
-VideoToolbox (GPU でのエンコード)・zlib・スレッドは macOS の一部を呼ぶので、tar.gz には入れません。
+VideoToolbox (GPU でのエンコード)・zlib・スレッド・C++ の標準ライブラリ (zimg が使う libc++) は macOS の一部を呼ぶので、tar.gz には入れません。
 ソースは Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball と、.github/ffmpeg-macos.sh に書いた x264 のコミット・dav1d と zimg のバージョンです。
 
 ### Windows に入れるもの (`install.ps1`)
@@ -168,6 +168,7 @@ asicen-userland は入れません (上流には Windows 用の配布物があ�
 
 zip に入れる DLL は、組むときに ffmpeg.exe・ffprobe.exe の取り込み表から辿って決めます (.github/ffmpeg-windows.sh)。MSYS2 から写した DLL は、
 そのパッケージのライセンスの文書を `ffmpeg/licenses/<パッケージ>/` に、パッケージとバージョンを `ffmpeg/licenses/msys2-packages.txt` に書きます。
+パッケージに文書が無い x264 と zimg は、x264 には FFmpeg のソースにある GPLv2 の文を、zimg には上流の同じバージョンのタグの `COPYING` を置きます。
 ソースは、自分で組むもの (FFmpeg・SVT-AV1・Opus) は Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball、MSYS2 のパッケージは
 [msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) のヘッダとライブラリも MSYS2 のパッケージです。
 

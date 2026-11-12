@@ -207,6 +207,14 @@ for file in "${from_msys[@]}"; do
   fi
   # x264 は MSYS2 のパッケージに文書が入っていない。ライセンスは GPL-2.0-or-later だけなので、FFmpeg のソースにある GPLv2 の文を置く
   if [ "${#texts[@]}" -eq 0 ] && [ "${name:-}" = x264 ]; then texts=("$work/ffmpeg/COPYING.GPLv2"); fi
+  # zimg も MSYS2 のパッケージに文書が入っていない。上流の同じバージョンのタグ (release-<バージョン>) から COPYING (WTFPL) を取る
+  if [ "${#texts[@]}" -eq 0 ] && [ "${name:-}" = zimg ]; then
+    version=$(pacman -Q "$pkg" | awk '{ print $2 }')
+    version=${version%-*}
+    mkdir -p "$work/zimg-license"
+    $CURL -o "$work/zimg-license/COPYING" "https://raw.githubusercontent.com/sekrit-twc/zimg/release-${version}/COPYING"
+    texts=("$work/zimg-license/COPYING")
+  fi
   # winpthreads は MinGW-w64 の一部で、文書は MinGW-w64 の CRT のパッケージにある
   if [ "${#texts[@]}" -eq 0 ] && [[ "${name:-}" == winpthread* ]]; then
     mapfile -t texts < <(find /ucrt64/share/licenses/crt -type f 2>/dev/null || true)
