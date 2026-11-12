@@ -125,8 +125,7 @@ OIDC_GROUP=6f1b2c3d-4e5f-6789-abcd-ef0123456789
 テレビがコードを貰って `device?code=…` を QR に出し、スマホで開くと、いつものログイン方法
 (信頼するネットワーク、無ければ OIDC のログイン) を通ったうえで**端末の名前とコードが出ます。テレビに出ているコードと
 同じなら「ペアリング」を押す**と済みます。テレビは待っていたアクセストークンを 1 度だけ受け取り、
-以後は `Authorization: Bearer denpa_…` でどのエンドポイントにも入る。ただし、`/device` で別の端末を済ませること、denpa を別の機械へ移すこと、
-EPGStation・EDCB からの引き継ぎ、通知先 (Webhook) を変えること、ニコニコとの連携を始める・外すことは断る (下記)。
+以後は `Authorization: Bearer denpa_…` でどのエンドポイントにも入る。ただし、下に挙げる操作は断る。
 
 **開いただけでは済ませず、ボタンを押してもらいます。** コードを発行するエンドポイントは誰でも呼べるので、
 開いただけで済むと、**悪意のある人が自分の端末でコードを作り、その `device?code=…` を denpa に入れる人に開かせる**だけで
@@ -202,7 +201,7 @@ denpa と同じネットワークに置くと、前段越しの人が全員そ�
 docker-proxy が IPv6 の接続を Docker のゲートウェイのアドレスから繋ぎ直すときも同じです。
 そのため、denpa を動かしているマシンのブラウザから `localhost` で入ると (送信元が Docker のゲートウェイに見える)、
 既定では通りません。`http://<そのマシンの IP>:3000` で開くか、断られた画面に出る接続元を足します。
-Mac と Windows は denpa を OS の上でそのまま動かすので、その機械のブラウザはループバック (`127.0.0.0/8`・`::1`) から来ます。install.sh と install.ps1 がそこを信頼します ([install-mac.md](install-mac.md#環境変数を足す-denpaenv)・[install-windows.md](install-windows.md#環境変数を足す-denpaenv))。
+Mac・Windows・Android は denpa を OS の上でそのまま動かすので、その機械のブラウザはループバック (`127.0.0.0/8`・`::1`) から来ます。install.sh と install.ps1 (Android はアプリ) がそこを信頼します ([install-mac.md](install-mac.md#環境変数を足す-denpaenv)・[install-windows.md](install-windows.md#環境変数を足す-denpaenv)・[install-android.md](install-android.md))。
 
 ### ログインなしで開ける名前 (`ALLOWED_HOSTS`)
 
@@ -239,7 +238,7 @@ ALLOWED_HOSTS=denpa.example.com,.tail1234.ts.net
 書かないと接続元が前段のアドレスになり、`TRUSTED_NETWORKS` が誰にも当たりません (=全員が認証を
 求められます)。**ただし、前段のアドレスが `TRUSTED_NETWORKS` に入っていると、前段越しの全員が当たって
 開いてしまいます。** `TRUSTED_PROXIES` が空で、`TRUSTED_NETWORKS` が denpa 自身のネットワークと重なっていると、
-起動ログに警告を出します (Mac と Windows では出しません。自分のネットワークが LAN そのものなので)。
+起動ログに警告を出します (Mac・Windows・Android では出しません。自分のネットワークが LAN そのものなので)。
 前段が無い (ブラウザが直に denpa へ来る) なら何も要りません。
 
 ```text

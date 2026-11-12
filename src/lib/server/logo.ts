@@ -1090,7 +1090,7 @@ async function drain(
         done: state.done + 1,
         found: writtenSince(stamps),
         /*
-         * 当たりの中継を取り上げられたら、そう言う。黙って次へ進むと、最後に「0 局のロゴを取得しました」
+         * 当たりの中継を取り上げられたら、そう言う。黙って次へ進むと、最後に「0 局のロゴを集めました」
          * とだけ出て、読み切って何も無かったのか途中で切れたのか見分けが付かなかった
          */
         ...(note !== "" ? { message: note } : {}),
@@ -1265,7 +1265,8 @@ async function awaitCarousel(): Promise<number> {
         attempt.period ? carouselPriority(target) : SWEEP_PRIORITY,
       );
       found += result.found;
-      markTried(result.outcome, startedAt);
+      // 当たりの中継と分かった回だけ控える (`drain` と同じ。外れか、PAT を見る前に切れた回で 7 時間あけない)
+      if (result.carrier) markTried(result.outcome, startedAt);
       const line = result.carrier
         ? waitedMessage(
             target.channel,

@@ -691,7 +691,7 @@ export function liveHw(
  * デコードとインタレ解除を GPU に寄せる (`full`) のは VA-API だけで、NVENC は実機で確かめてから
  *
  * **QSV・AMF (Windows) は低遅延の速い段で、CPU のデコードのまま。** QSV は `-preset veryfast -bf 0 -async_depth 1` (ICQ は録画と同じ値、
- * 段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。**どちらも実機では見ていない。**
+ * 段を下げたときは `-b:v` と `-maxrate` に段の値。2 つが同じなので CBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。**どちらも実機では見ていない。**
  * AMF のライブの指定は `high_quality` の無い頃からある値なので、録画が古い世代向けの指定になった GPU (`HwWay.amfTranscoding`) にも同じものを渡す。
  * 落ちればソフトウェアでエンコードし直し、その方式を 15 分外す (`live.ts` の `blameLiveHw`)
  *

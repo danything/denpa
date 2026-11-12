@@ -25,6 +25,7 @@ import {
   APPLICATION_TYPE_HTML5,
   CONTROL,
 } from "@danything/arib/ait";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
 import {
   CAPTION_TEXT_VERSION,
   type CaptionLanguage,
@@ -98,7 +99,7 @@ import {
 } from "./chase";
 import { config } from "./config";
 import { scrambledLiveNotice } from "./contracts";
-import { DataBroadcast, type ResponseMessage } from "./databroadcast";
+import { DataBroadcast } from "./databroadcast";
 import { orm } from "./db";
 import { deinterlace } from "./encoder";
 import { followOnAir } from "./epg";
