@@ -201,7 +201,7 @@ public sealed class Dt295NativeLink
     public HashSet<uint> AllowedCoreWrites { get; } = [];
 
     /// <summary>
-    /// true なら、カードの UART (0xFEA000〜0xFEA03F。仕様書 §10) に書ける。カードの電源投入・切断の表と ATR・T=1 の送受信だけが使う。
+    /// true なら、カードの UART (0xFEA000〜0xFEA03F。仕様書 10 章) に書ける。カードの電源投入・切断の表と ATR・T=1 の送受信だけが使う。
     /// false のままなら書けない (仕様書に無い。USB コアのレジスタと同じく、使う所だけ明示して許す)。
     /// 機材のプログラムに UART へ書かせる送り (<see cref="CardSend"/>) も、これが立っていなければ例外にして要求を出さない
     /// </summary>
@@ -223,7 +223,7 @@ public sealed class Dt295NativeLink
 
     private void Guard(uint address)
     {
-        // カードの端子の向き・極性 (0xF00222〜0xF0022E。仕様書 §10 の設定確認) は、仕様書の常駐イメージも読んで確かめるだけ。書かない
+        // カードの端子の向き・極性 (0xF00222〜0xF0022E。仕様書 10 章の設定確認) は、仕様書の常駐イメージも読んで確かめるだけ。書かない
         if (address is >= 0xF00200 and <= 0xF002FF)
         {
             throw new Dt295NativeException($"0x{address:X} はカードの端子の向きのレジスタで、読むだけです。書きません");

@@ -60,7 +60,7 @@ internal sealed record SianoFirmware(uint Address, uint Length, byte[] Data)
         return buffer.ToArray();
     }
 
-    /// <summary>ファイルが 12 バイトより短い・本体の長さがファイルに収まらないときは投げる (機材に何も送らずに失敗にする。仕様書 4.2・10)</summary>
+    /// <summary>ファイルが 12 バイトより短い・本体の長さがファイルに収まらないときは <see cref="InvalidDataException"/> を送出する (機材に何も送らずに失敗にする。仕様書 4.2・10)</summary>
     public static SianoFirmware Parse(ReadOnlySpan<byte> file)
     {
         if (file.Length < HeaderSize) throw new InvalidDataException($"ファームウェアのファイルが {file.Length} バイトで、短すぎます");

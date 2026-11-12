@@ -5,7 +5,7 @@ namespace Denpa.Agent.Tests;
 
 /*
  * USB の層 (UsbDevice.cs・UsbFs.cs・UsbFsDevice.cs)。機材なしで確かめられる所: usbfs の ioctl の番号と構造体の大きさ
- * (カーネルの uapi の linux/usbdevice_fs.h の形)、Windows と macOS のポートの名前の作り方、
+ * (カーネルの uapi の linux/usbdevice_fs.h の定義)、Windows と macOS のポートの名前の作り方、
  * interrupt の読みを出し続ける UsbReadPump (UsbDevice.cs)。
  */
 public class UsbDeviceTests
@@ -57,7 +57,7 @@ public class UsbDeviceTests
         await Assert.That(UsbDevices.MacPort(0x14320000)).IsEqualTo("20-3.2");
         await Assert.That(UsbDevices.MacPort(0x01100000)).IsEqualTo("1-1");
         await Assert.That(UsbDevices.MacPort(0x14000000)).IsNull();
-        // どれも sysfs の名前と同じ形なので、zd1j: の device にそのまま書ける
+        // どれも sysfs の名前と同じ形式なので、zd1j: の device にそのまま書ける
         await Assert.That(Zd1j.Parse($"zd1j:{UsbDevices.MacPort(0x14320000)}")).IsEqualTo("20-3.2");
     }
 
@@ -109,7 +109,7 @@ public class UsbDeviceTests
         await Assert.That(pump.Read(buffer, 10)).IsEqualTo(0);
         await Assert.That(cancels).IsEqualTo(0);
 
-        // 時間切れのあとに届いた応答は、次の読みで受け取れる (落とさない)
+        // 時間切れのあとに届いた応答は、次の読みで受け取れる (捨てない)
         endpoint.Answers.Add([0xA5, 1, 2, 3]);
         await Assert.That(pump.Read(buffer, 1000)).IsEqualTo(4);
         await Assert.That(buffer[0]).IsEqualTo((byte)0xA5);
@@ -139,7 +139,7 @@ public class UsbDeviceTests
     }
 
     [Test]
-    public async Task interrupt_の読みが失敗したら_届いていた応答を渡してから投げる()
+    public async Task interrupt_の読みが失敗したら_届いていた応答を渡してから例外を送出する()
     {
         var answers = new Queue<Func<byte[], int>>();
         answers.Enqueue(buffer =>

@@ -196,7 +196,7 @@ function call(
 
 /**
  * 組む。`client` は名乗る指紋 (既定は `as` のもの)。**接続は使い回さない。**
- * 別の証明書で張った接続に乗ると、エージェントが見る相手が変わってしまう
+ * 別の証明書で張った接続を使い回すと、エージェントが見る相手が変わってしまう
  */
 function pair(
   agent: Agent,
@@ -790,7 +790,7 @@ describe("通知 (SSE)", () => {
     aborter.abort();
   });
 
-  test("チューナーが動くと tuners が飛ぶ", async () => {
+  test("チューナーが動くと tuners の通知が届く", async () => {
     const aborter = new AbortController();
     const res = await get("/denpa/events", aborter.signal);
     expect(res.headers.get("content-type")).toContain("text/event-stream");

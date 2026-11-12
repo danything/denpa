@@ -88,7 +88,7 @@ internal sealed class Dt295NativeStream
 
     private const int ReadTimeoutMs = 100;
 
-    /// <summary>1 回の要求で送らせるパケット数 (512 バイトずつ)。カードが使っていないとき</summary>
+    /// <summary>1 回の要求で送らせるパケット数 (512 バイトずつ)。カードが読み書きしていないとき</summary>
     internal const uint KickPackets = 512;
 
     /// <summary>

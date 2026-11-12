@@ -34,7 +34,7 @@ internal static class TlvFake
 }
 
 /*
- * カードが無くても TLV から分かること (TlvObservation.cs)。録りの 1,082 単位 (SplitTlvFake.Capture) と、組み立てた MMT-SI で確かめる
+ * カードが無くても TLV から分かること (TlvObservation.cs)。録画の 1,082 単位 (SplitTlvFake.Capture) と、組み立てた MMT-SI で確かめる
  */
 public class TlvObservationTests
 {
@@ -45,11 +45,11 @@ public class TlvObservationTests
         return observation;
     }
 
-    /// <summary>録りの単位を組み立てた TLV パケット</summary>
+    /// <summary>録画の単位を組み立てた TLV パケット</summary>
     private static List<byte[]> Captured() => SplitTlvFake.Assemble(new SplitTlv(), SplitTlvFake.Chunk(SplitTlvFake.Capture()));
 
     [Test]
-    public async Task 録りの_MPT_から_CA_system_id_と_ECM_の_packet_id_を読み_ECM_を取っておく()
+    public async Task 録画の_MPT_から_CA_system_id_と_ECM_の_packet_id_を読み_ECM_を取っておく()
     {
         var observation = Observe(Captured());
 

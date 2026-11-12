@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// 読むのは、TLV パケット (ARIB STD-B32 第 3 部) の種類、ヘッダー圧縮した IP と IPv6 の UDP、MMTP (ARIB STD-B60) のヘッダーとスクランブルの印、
 /// スクランブルされていない信号 (PA メッセージの MPT、M2 セクションメッセージの MH-EIT・MH-SDT・ECM)、伝送制御信号の TLV-NIT。
 /// MPT のアクセス制御記述子 (<c>0x8004</c>) から CA_system_id と ECM の packet_id を読み、その packet_id に来た ECM のセクション (table_id <c>0x82</c>) を 1 つ取っておく
-/// (<see cref="Ecm"/>。<c>--ecm-test</c> がカードに渡す)。オフセットのうち、QC26 の録りで確かめたのは MPT・ECM・MH-EIT・MH-SDT・TLV-NIT の読み方で、ほかは規格の要約からの推定。
+/// (<see cref="Ecm"/>。<c>--ecm-test</c> がカードに渡す)。オフセットのうち、QC26 の録画で確かめたのは MPT・ECM・MH-EIT・MH-SDT・TLV-NIT の読み方で、ほかは規格の要約からの推定。
 /// </para>
 ///
 /// <para>
@@ -149,8 +149,8 @@ public sealed class TlvObservation
         var header = body[2];
         _headerTypes[header] = _headerTypes.GetValueOrDefault(header) + 1;
         /*
-         * 0x60 は IPv6 のヘッダーから payload_length を除いた 38 バイトと、UDP のヘッダーからポートだけを残した 4 バイト (QC26 の録りで、そのあとに MMTP のヘッダーが続くのを確かめた)。
-         * 0x61 はヘッダー無し。IPv4 の 0x20・0x21 は録りに無く、並びを確かめていないので数えるだけにする
+         * 0x60 は IPv6 のヘッダーから payload_length を除いた 38 バイトと、UDP のヘッダーからポートだけを残した 4 バイト (QC26 の録画で、そのあとに MMTP のヘッダーが続くのを確かめた)。
+         * 0x61 はヘッダー無し。IPv4 の 0x20・0x21 は録画に無く、並びを確かめていないので数えるだけにする
          */
         var payload = header switch
         {

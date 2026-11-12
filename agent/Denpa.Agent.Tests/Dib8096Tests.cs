@@ -73,7 +73,7 @@ public class Dib8096Tests
     }
 
     [Test]
-    public async Task DiB0090_のリセットとデジタル部と確かめ()
+    public async Task DiB0090_をリセットし_デジタル部を設定して型番を確かめる()
     {
         var (dib, i2c, _, time) = Make();
         dib.Initialize();

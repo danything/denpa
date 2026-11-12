@@ -238,7 +238,7 @@ public sealed partial class PcscLink : ICardLink
     }
 
     /// <summary>
-    /// 失敗なら投げる。**カードが挿さっていないだけなら <see cref="CardAbsentException"/>** (画面では「カードなし」)。
+    /// 失敗なら例外を送出する。**カードが挿さっていないだけなら <see cref="CardAbsentException"/>** (画面では「カードなし」)。
     /// macOS でカードとやり取りできなかったときは、ドライバを切り替える案内を足す (docs/install-mac.md「カードが読めないとき」)
     /// </summary>
     private static void Check(int result, string name, string what)

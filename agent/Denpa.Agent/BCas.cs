@@ -21,9 +21,9 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **接続が切れたら繋ぎ直す。** カードを抜き差しした・リーダーを挿し直した・
-/// asicend を起動し直した、のどれでも、次の ECM で探し直して INT からやり直す。
-/// 1 回繋ぎ直して駄目なら理由を添えて投げる。
+/// **接続が切れたら繋ぎ直す。** カードを抜き差ししても、リーダーを挿し直しても、
+/// 次の ECM で探し直して INT からやり直す。
+/// 1 回繋ぎ直して駄目なら理由を添えた例外を送出する。
 /// </para>
 /// </summary>
 public sealed class BCas : IKeySource, IDisposable
@@ -93,7 +93,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// 見つかったリーダーを順に試し、**カードが挿さっていて INT に応答した最初の 1 つ**で開く。
-    /// どれも駄目なら理由を並べて投げる。
+    /// どれも駄目なら理由を並べた例外を送出する。
     /// </summary>
     /// <param name="find">
     /// リーダーを探す。**繋ぎ直すたびに呼び直す。** 挿し直した USB リーダーは
@@ -117,7 +117,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// 使っているリーダーが <paramref name="names"/> にあれば手放し、**すぐに次のリーダーで繋ぎ直す**
-    /// (画面で使わない設定にしたとき。<see cref="CardChoice"/>)。繋ぎ直せなくても投げない。
+    /// (画面で使わない設定にしたとき。<see cref="CardChoice"/>)。繋ぎ直せなくても例外を送出しない。
     /// 次の ECM で、ふだんと同じく探し直す
     /// </summary>
     public void Release(IReadOnlySet<string> names)
@@ -150,7 +150,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// **いまカードとやり取りできるか**、INT を 1 回通して確かめる (画面の「カードリーダー」行)。
-    /// 切れていれば繋ぎ直し、駄目なら投げる
+    /// 切れていれば繋ぎ直し、駄目なら例外を送出する
     /// </summary>
     public CardInit Check()
     {
@@ -180,8 +180,8 @@ public sealed class BCas : IKeySource, IDisposable
     /// </para>
     ///
     /// <para>
-    /// 契約が無いなどでカードが断ったときは投げずに <see cref="EcmAnswer.Code"/> で返す。
-    /// 投げるのはカードとやり取りできなかったときだけ。
+    /// 契約が無いなどでカードが断ったときは例外にせず、<see cref="EcmAnswer.Code"/> で返す。
+    /// 例外を送出するのはカードとやり取りできなかったときだけ。
     /// </para>
     /// </summary>
     public EcmAnswer Ecm(ReadOnlySpan<byte> ecm)
@@ -374,7 +374,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// 開いた接続でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ投げる。**
+    /// 開いた接続でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ例外を送出する。**
     /// 予備のリーダーを確かめるのにも使う (Card.cs の Peek、Probe.cs の `--card zd1j:`・`--card dt295:`・`--card it930x:`、Dt295NativeProbe.cs)
     /// </summary>
     internal static CardInit Read(ICardLink link)
@@ -392,7 +392,7 @@ public sealed class BCas : IKeySource, IDisposable
         }
         catch (Exception error)
         {
-            // もう切れている接続を閉じようとして投げることがある。捨てるのが目的なので構わない
+            // もう切れている接続は、閉じるときに例外を送出することがある。捨てるのが目的なので構わない
             Log.Write($"カードリーダーを閉じられません: {error.Message}");
         }
         _link = null;

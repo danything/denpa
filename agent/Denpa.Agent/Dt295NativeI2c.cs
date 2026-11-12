@@ -230,10 +230,6 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         return [.. results];
     }
 
-    public void Write(int address, params byte[] bytes) => Transfer(address, bytes, 0);
-
-    public byte[] Read(int address, int count) => Transfer(address, [], count);
-
     private void Stop(uint control)
     {
         _control = control & ~0x39u;

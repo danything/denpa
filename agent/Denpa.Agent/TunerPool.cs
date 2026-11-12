@@ -544,7 +544,7 @@ public sealed class TunerPool(
     /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など。It930xDevice.cs)。エージェントが USB を直に持つ。受けられる種別は受信機ごとに決まっている (地上波・衛星・J.83B (SKY)。LNB の給電は 15V だけ)</item>
     /// </list>
     ///
-    /// <para>それ以外は例外を送出する。<c>px4_drv</c> の chardev はもう受け取らない</para>
+    /// <para>それ以外は例外を送出する</para>
     /// </summary>
     /// <param name="followZd1j">CECH-ZD1 J が設定のポートに見当たらなければ、ほかに 1 台だけ挿さっているものを使う (<see cref="Zd1j.Follow(string)"/>)</param>
     public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false)

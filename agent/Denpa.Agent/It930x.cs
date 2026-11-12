@@ -86,14 +86,11 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
     /// <summary>自動で見つけたときに最初に選ぶ種別。<c>CATV</c> と <c>SKY</c> は受けられても最初からは選ばない (<see cref="It930x.DetectedTypes"/>)</summary>
     public string[] DetectedTypes => [.. Types.Where(It930x.DetectedTypes.Contains)];
 
-    /// <summary>種別を受けられるか (<c>GR</c>・<c>BS</c>・<c>CS</c>・<c>SKY</c>)</summary>
-    public bool Takes(string type) => Types.Contains(type);
-
     /// <summary>
-    /// その選局を受けられるか。ISDB-C (種別は <c>CATV</c>。<c>--tune</c> だけで選局する) は、受けられる種別には入れておらず、CXD2856ER の受信機だけが受けられる (CXD2856 の仕様書 8)。
-    /// ほかは種別で決める
+    /// その選局を受けられるか。選局表の種別 (ISDB-C は <c>CATV</c>) が <see cref="Types"/> に入っているかで決める。
+    /// <c>CATV</c> と <c>SKY</c> を種別に持つのは CXD2856ER の受信機だけ (CXD2856 の仕様書 7・8)
     /// </summary>
-    public bool Takes(ChannelTable.Tuning tuning) => tuning.IsdbC ? Demod == It930xDemod.Cxd2856 : Takes(tuning.Type);
+    public bool Takes(ChannelTable.Tuning tuning) => Types.Contains(tuning.Type);
 }
 
 /// <summary>
@@ -102,7 +99,7 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
 public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnlyList<It930xReceiver> Receivers)
 {
     /// <summary>
-    /// LNB に給電できるか (ブリッジの GPIOH11。15 V だけ。IT930x の仕様書 8、IT930x の仕様書 8)。
+    /// LNB に給電できるか (ブリッジの GPIOH11。15 V だけ。IT930x の仕様書 8)。
     /// 受信機が 1 つの機種 (IT930x の仕様書 8) は給電の操作が無いので false (15 V の指定は断る)
     /// </summary>
     public bool Lnb { get; init; } = true;
@@ -119,7 +116,7 @@ public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnly
     /// </summary>
     public int PowerPin { get; init; } = 7;
 
-    /// <summary>電源を入れてからリセットを解くまでの待ち (ms)。GPIOH7 の機種は 80、GPIOH3 の機種は 100 (IT930x の仕様書 10)</summary>
+    /// <summary>電源を入れてからリセットを解除するまでの待ち (ms)。GPIOH7 の機種は 80、GPIOH3 の機種は 100 (IT930x の仕様書 10)</summary>
     public int PowerWaitMs => PowerPin == 7 ? 80 : 100;
 
     /// <summary>機材を開いている間、電源を入れておく機種か</summary>
@@ -129,7 +126,7 @@ public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnly
     public It930xDemod Demod => Receivers[0].Demod;
 
     /// <summary>
-    /// LNB の給電の短絡の検出の GPIOH (入力。1 で正常、0 で短絡)。Q3・W3 系だけ (IT930x の仕様書 7.1・8。PLEX の公開ドライバーだけにある情報で、実機で確かめた記録は無い)。
+    /// LNB の給電の短絡を検出する GPIOH (入力。1 で正常、0 で短絡)。Q3・W3 系だけ (IT930x の仕様書 7.1・8。PLEX の公開ドライバーだけにある情報で、実機で確かめた記録は無い)。
     /// 選局には使わず、<c>--tune</c> の出力にだけ出す
     /// </summary>
     public int? LnbSensePin => Demod is It930xDemod.Tc90522T or It930xDemod.Tc90522S ? 10 : null;
@@ -234,12 +231,13 @@ public static class It930x
     ];
 
     /// <summary>
-    /// いま扱う機種。px4_drv と px4-userland が扱う USB の ID の全部 (CXD2856 の仕様書 1.1、IT930x の仕様書 1.1)。
+    /// いま扱う機種。px4_drv が扱う USB の ID の全部 (CXD2856 の仕様書 1.1、IT930x の仕様書 1.1)。
     ///
     /// <list type="bullet">
     /// <item>MLT5 系 (CXD2856ER + CXD2858ER): PX-MLT5PE は、USB の ID と受信機 0〜4 の割り当てを実機で確かめた (5 台とも選局できた)。
     /// PX-MLT5U と DTV02A-5TS-P は実機で確かめていない。DTV02A-5TS-P は PX-MLT5PE と同じ割り当てとして扱う (CXD2856 の仕様書 1.2 も未確認としている)</item>
-    /// <item>Q3・W3 系 (TC90522 + R850 + RT710): どの機種も、このドライバーでは実機で確かめていない (#1578)</item>
+    /// <item>Q3・W3 系 (TC90522 + R850 + RT710): PX-Q3PE4 は Linux の実機で、8 つの受信機の同時受信と内蔵カードリーダーを確かめた。
+    /// ほかの機種は実機で確かめていない (#1578)</item>
     /// <item>PX-MLT8PE・DTV02A-4TS-P (MLT5 系と同じチップで、割り当てだけが違う): 実機で確かめていない</item>
     /// <item>受信機が 1 つの機種 (ISDB2056・ISDB2056N・PX-M1UR・PX-S1UR・DTV03A-1TU): 実機で確かめていない。
     /// 電源は GPIOH3 で、LNB には給電できない (IT930x の仕様書 7.3・8)</item>
@@ -377,7 +375,7 @@ public static class It930x
 
     /// <summary>
     /// 挿さっている機材から (渡せるのはテストのため)。カードリーダーの無い機種 (PX-MLT8PE の 3 受信機の側) は挙げない。
-    /// Q3 は、シリアル番号の末尾が 1 の側だけを挙げる (IT930x の仕様書 9。PX-Q3PE4・PX-Q3PE5 でも末尾 1 の側につながっているかは未確認。
+    /// Q3 は、シリアル番号の末尾が 1 の側だけを挙げる (IT930x の仕様書 9。PX-Q3PE4 は末尾 1 の側で読めた。PX-Q3PE5 は未確認。
     /// 末尾 2 の側は、<c>--card it930x:&lt;ポート&gt;</c> で名指しすれば試せる)。
     /// **シリアル番号から側が分からない Q3 (macOS ではいつも読めない。Windows の読み方は未確認) は、どちらの側かを決められないので両方を挙げる。**
     /// カードの無い側は、カードが挿さっていないリーダーとして飛ばされる (<see cref="CardLinks"/>)。理由はポートごとに 1 度だけ <paramref name="warn"/> に出す
@@ -465,7 +463,7 @@ public static class It930x
     public static It930xModel? Identify(string port) => UsbHost.Identify(UsbHost.Current, Family, Id, port);
 
     /// <summary>
-    /// そのポートの機材の USB のシリアル番号 (<see cref="UsbFound.Serial"/>)。**開かない。** 読めなければ null。
+    /// そのポートにある機材の、USB のシリアル番号 (<see cref="UsbFound.Serial"/>)。**開かない。** 読めなければ null。
     /// 最後に探したとき (<see cref="Found(Action{string}?)"/>) のもので、まだ探していないポートなら探してから。
     /// Linux は sysfs の <c>serial</c>、Windows はデバイスのパスから (<see cref="UsbDevices.WindowsSerial"/>)。macOS は読まない
     /// </summary>

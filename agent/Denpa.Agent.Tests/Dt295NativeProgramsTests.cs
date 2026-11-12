@@ -85,7 +85,6 @@ public class Dt295NativeProgramsTests
         {
             var fake = Rig();
             fake.CpuSetup = _ => { };
-            var link = new Dt295NativeLink(fake);
             // wValue 下位 1 はマスク付き、0 は普通の書き込み、5 は ldub の値が 1 でないので普通の書き込みの側
             fake.Put(0x300000, 4, 0);
             fake.ControlOut(0x40, 0xBC, (ushort)(0x3000 | low), 0, low == 1 ? new byte[8] : new byte[4], 1000);
@@ -98,7 +97,6 @@ public class Dt295NativeProgramsTests
                 if (i is 12 or 13) continue;
                 await Assert.That(cpu.R[i]).IsEqualTo(i == 11 ? Dt295NativePrograms.Work : i == 15 ? 0xC8000u : 0x11110000u * (uint)i);
             }
-            _ = link;
         }
     }
 

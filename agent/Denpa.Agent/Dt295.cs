@@ -49,10 +49,6 @@ public static class Dt295
         new(0x04C5, 0x202F, "PIX-DTxxx (SPI モード)", "公式 INF で DT295 と構成が違う (SPI モード)"),
     ];
 
-    /// <summary>USB の ID から。同じドライバーの機材でなければ null</summary>
-    public static Dt295Model? Find(int vendor, int product) =>
-        Family.FirstOrDefault(model => model.Vendor == vendor && model.Product == product);
-
     /// <summary>設定の <c>device</c> の接頭辞 (<c>dt295:4-12.1</c>。シリアルは使わずポートで指す。<see cref="Zd1j"/> と同じ形)</summary>
     public const string Scheme = "dt295:";
 

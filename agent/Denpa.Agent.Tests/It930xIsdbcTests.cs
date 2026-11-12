@@ -1,7 +1,7 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * IT930x の受信機の ISDB-C の選局 (It930xDevice.cs の It930xTuner)。ロックのあとに TS 入力を開け、受け取った TS から TSMF の TS を選ぶ (CXD2856 の仕様書 8.4・8.7)。
+ * IT930x の受信機の ISDB-C の選局 (It930xDevice.cs の It930xTuner)。ロックのあとに受信機の出口を付け、受け取った TS から TSMF の TS を選ぶ (CXD2856 の仕様書 8.4・8.7)。
  * 偽のブリッジ (It930xFakes.cs) の EP 0x84 に、流れ続ける TS を作って渡す。ロックの状態は偽の復調器 (Cxd2856Fakes.cs) の CableStatus で決める。
  *
  * **固まったら失敗にする。** 各テストは最初に `await Task.Yield()` する
@@ -76,7 +76,7 @@ public class It930xIsdbcTests
         demod.Tuner.GetValueOrDefault((byte)0x70) | (demod.Tuner.GetValueOrDefault((byte)0x71) << 8) | ((demod.Tuner.GetValueOrDefault((byte)0x72) & 0x0F) << 16);
 
     [Test]
-    public async Task ISDB_C_はロックのあとに_TS_入力を開け_TSMF_の_k_本目の_TS_だけを流す()
+    public async Task ISDB_C_はロックのあとに出口を付け_TSMF_の_k_本目の_TS_だけを流す()
     {
         await Task.Yield();
         var (usb, bus1, bus3) = Fake();

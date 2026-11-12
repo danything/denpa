@@ -127,7 +127,7 @@ internal sealed class SianoDevice : IDisposable
 
     /// <summary>
     /// 開いたあとの手順 (仕様書 2.2 の 2〜6): 端点を見つけ、ストールをクリアし、読みを出してから、起動する。
-    /// 失敗したら投げる (呼ぶ側が <see cref="Dispose"/> する)
+    /// 失敗したら例外を送出する (呼ぶ側が <see cref="Dispose"/> する)
     /// </summary>
     public void Start()
     {
@@ -263,7 +263,7 @@ internal sealed class SianoDevice : IDisposable
 
     /// <summary>
     /// <paramref name="done"/> が true を返すまで、長くても <paramref name="timeoutMs"/> 待つ (<see cref="_sync"/> を取った中で呼ばれる)。
-    /// 読みが失敗していれば投げる
+    /// 読みが失敗していれば <see cref="IOException"/>、閉じていれば <see cref="ObjectDisposedException"/> を送出する
     /// </summary>
     private bool Wait(Func<bool> done, int timeoutMs)
     {
@@ -282,7 +282,7 @@ internal sealed class SianoDevice : IDisposable
         }
     }
 
-    /// <summary>要求を送って、その応答 (番号 + 1) を待つ。応答の中身は読まず、届いたことだけを成功とする (仕様書 3.4)。届かなければ投げる</summary>
+    /// <summary>要求を送って、その応答 (番号 + 1) を待つ。応答の中身は読まず、届いたことだけを成功とする (仕様書 3.4)。届かなければ <see cref="SianoSilentException"/> を送出する</summary>
     private void Request(byte[] message, string what)
     {
         var response = (ushort)(System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(message) + 1);
@@ -340,7 +340,7 @@ internal sealed class SianoDevice : IDisposable
     /// <summary>ファームウェアを送る (仕様書 4.2 の手順 1〜3)。USB はつながったままで、同じ端点を使い続ける</summary>
     private void SendFirmware()
     {
-        // ファイルが無い・形式が違うときは、ここで投げて機材には何も送らない (仕様書 10)
+        // ファイルが無い・形式が違うときは、ここで例外になり、機材には何も送らない (仕様書 10)
         var firmware = _firmware();
         var started = Stopwatch.StartNew();
         var sent = 0;
@@ -369,7 +369,7 @@ internal sealed class SianoDevice : IDisposable
 
     /// <summary>
     /// 選局してロックを待つ (仕様書 5.3)。ロックしたら true、期限までにロックしなければ false (機材は開いたままで、次の選局を受け付ける)。
-    /// 選局の応答が届かない・送れないときは投げる。呼ぶ前に <see cref="Detach"/> しておく (ロックを確かめるまでの TS は捨てる。仕様書 6.3)
+    /// 選局の応答が届かない・送れないときは例外を送出する。呼ぶ前に <see cref="Detach"/> しておく (ロックを確かめるまでの TS は捨てる。仕様書 6.3)
     /// </summary>
     public bool Tune(uint frequencyHz)
     {
