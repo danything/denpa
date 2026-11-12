@@ -1554,7 +1554,7 @@ public class B25Tests
         var fed = FedUntilOutput(descrambler, wire, output);
         await Assert.That(fed).IsEqualTo(2);
         await Assert.That(Pids(output.WrittenSpan.ToArray())).IsEquivalentTo(new[] { 0, PmtPid, EcmPid, VideoPid }, CollectionOrdering.Matching);
-        await Assert.That(descrambler.HeldAt()).StartsWith("PAT 覚え / PMT 覚え (局 1024) / ");
+        await Assert.That(descrambler.HeldAt()).StartsWith("PAT 覚えたもの / PMT 覚えたもの (局 1024) / ");
         await Assert.That(descrambler.TakeChecked()).IsNull();
 
         descrambler.Decode(wire.AsSpan(fed * 188), output);
@@ -1565,6 +1565,34 @@ public class B25Tests
         await Assert.That(descrambler.Undecodable).IsEqualTo(0);
         await Assert.That(Generations(cards)).IsEqualTo("1");
         await Assert.That(descrambler.TakeChecked()).Matches(@"^覚えた PAT・PMT は本物と同じでした \(本物の PAT \d+ms・PMT \d+ms・捨てたのは 0 パケット\)$");
+        await Assert.That(descrambler.TakeChecked()).IsNull();
+    }
+
+    /// <summary>
+    /// **覚えた PAT・PMT を読み込んだが、本物の PAT・PMT が ECM より先にそろったら、本物で流し始め、記録の 1 行に読み込んだことを出す。**
+    /// PMT の時刻は本物の PAT がそろってからのもので、覚えた PMT を読み込んだ時刻を入れない (本番で PMT が PAT より前の時刻になっていた)
+    /// </summary>
+    [Test]
+    public async Task 覚えたものを読み込んで本物で流し始めたら記録に出し_PMT_の時刻は本物の_PAT_より前にしない()
+    {
+        var slot = Remember(Channel());
+        // 本番と同じく、本物の PMT が本物の PAT より先に来る
+        var first = new Ts().Pmt(PmtPid, Service, Ca(EcmPid), (VideoPid, []), (AudioPid, []));
+        var rest = new Ts().Pat((Service, PmtPid)).Ecm(EcmPid, 1).Videos(2, 1);
+        var descrambler = new Descrambler(new Cards(), services: () => Watched, memory: slot);
+        var output = new ArrayBufferWriter<byte>();
+
+        descrambler.Decode(first.Wire.ToArray(), output);
+        Thread.Sleep(30);
+        descrambler.Decode(rest.Wire.ToArray(), output);
+
+        var held = descrambler.HeldAt();
+        var match = System.Text.RegularExpressions.Regex.Match(held, @"^PAT (\d+)ms / PMT (\d+)ms \(局 1024\) / .* / 覚えた PAT・PMT は読み込み済み \(本物で開始\)$");
+        await Assert.That(match.Success).IsTrue();
+        await Assert.That(long.Parse(match.Groups[1].Value)).IsGreaterThanOrEqualTo(30);
+        await Assert.That(long.Parse(match.Groups[2].Value)).IsGreaterThanOrEqualTo(long.Parse(match.Groups[1].Value));
+        // 覚えたもので流し始めていないので、先頭に差し込まず、確かめ終わりの 1 行も無い
+        await Assert.That(Pids(output.WrittenSpan.ToArray())[0]).IsEqualTo(PmtPid);
         await Assert.That(descrambler.TakeChecked()).IsNull();
     }
 
@@ -1655,7 +1683,7 @@ public class B25Tests
         var output = Run(descrambler, ts.Wire.ToArray());
 
         await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
-        await Assert.That(descrambler.HeldAt()).DoesNotContain("覚え");
+        await Assert.That(descrambler.HeldAt()).DoesNotContain("覚えたもの");
         await Assert.That(slot.Recall(Watched)).IsNull();
     }
 
@@ -1700,7 +1728,7 @@ public class B25Tests
         descrambler.Flush(output);
 
         await Assert.That(Diff(output.WrittenSpan.ToArray(), Expected(ts))).IsEqualTo(-1);
-        await Assert.That(descrambler.HeldAt()).DoesNotContain("覚え");
+        await Assert.That(descrambler.HeldAt()).DoesNotContain("覚えたもの");
     }
 
     /// <summary>**本物の PAT・PMT が来ないまま溜める上限と同じ量を読んだら、捨てるのをやめて流す**</summary>

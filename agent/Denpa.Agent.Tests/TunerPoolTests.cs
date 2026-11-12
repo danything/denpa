@@ -21,6 +21,9 @@ public class TunerPoolTests
         private int _busy;
         private volatile bool _closed;
 
+        /// <summary>選局すると同期せずに投げる (電波が届いていないチューナー)</summary>
+        public bool Deaf { get; init; }
+
         public FakeTuner(string path, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null)
         {
             Path = path;
@@ -62,6 +65,7 @@ public class TunerPoolTests
             try
             {
                 Interlocked.Increment(ref Tunes);
+                if (Deaf) throw new IOException(ITuneDevice.SyncFailed);
                 Tuning.Set();
                 Thread.Sleep(_tune);
             }
@@ -132,11 +136,12 @@ public class TunerPoolTests
     {
         private readonly List<FakeTuner> _opened = [];
 
-        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null)
+        /// <param name="deaf">選局しても同期しないデバイス</param>
+        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null, IReadOnlySet<string>? deaf = null)
         {
             Pool = new TunerPool(specs, () => { }, new TuneOptions(), spec =>
             {
-                var tuner = new FakeTuner(spec.Device!, tune, read, format, content);
+                var tuner = new FakeTuner(spec.Device!, tune, read, format, content) { Deaf = deaf?.Contains(spec.Device!) == true };
                 lock (_opened) _opened.Add(tuner);
                 return tuner;
             });
@@ -381,6 +386,140 @@ public class TunerPoolTests
         {
             rig.Pool.CloseAll();
         }
+    }
+
+    /*
+     * 同期しなかったら別のチューナーで選局し直す (Open の SyncTries・Pick の tried)。
+     * 偽のチューナーの Deaf は、選局すると「同期しませんでした」で投げる
+     */
+    private static Rig Deaf(IReadOnlyList<TunerSpec> specs, params string[] deaf) =>
+        new(specs, TimeSpan.Zero, TimeSpan.FromMilliseconds(1), deaf: deaf.ToHashSet());
+
+    private static int Tunes(Rig rig, string path) => rig.Opened(path).Sum(tuner => tuner.Tunes);
+
+    /// <summary>**同期しなければ、同じ組の空いているチューナーで選局し直してから答える**</summary>
+    [Test]
+    public async Task 同期しなければ同じ組の空いているチューナーで選局し直す(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var rig = Deaf([Spec("A", "fake:a"), Spec("B", "fake:b")], "fake:a");
+        try
+        {
+            var sink = rig.Pool.Open("GR", "T26", 3, "epg T26");
+            await FirstChunk(sink, cancel);
+
+            await Assert.That(Tunes(rig, "fake:a")).IsEqualTo(1);
+            await Assert.That(Tunes(rig, "fake:b")).IsEqualTo(1);
+            await Assert.That(rig.Pool.Status()[1]!["channel"]!["channel"]!.GetValue<string>()).IsEqualTo("T26");
+            await Assert.That(rig.Pool.Status()[0]!["channel"]).IsNull();
+            sink.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// **どのチューナーでも同期しなければ、試したチューナーの名前を並べて同じ文言で返す。** 試すのは <see cref="TunerPool.SyncTries"/> 台まで
+    /// </summary>
+    [Test]
+    public async Task どれでも同期しなければ試したチューナーを並べて返し_上限より多くは試さない()
+    {
+        await Task.Yield();
+        var rig = Deaf([Spec("A", "fake:a"), Spec("B", "fake:b"), Spec("C", "fake:c")], "fake:a", "fake:b", "fake:c");
+        try
+        {
+            var error = Assert.Throws<IOException>(() => rig.Pool.Open("GR", "T26", 3, "epg T26"));
+
+            await Assert.That(error.Message).IsEqualTo($"A・B: {ITuneDevice.SyncFailed}");
+            await Assert.That(Tunes(rig, "fake:c")).IsEqualTo(0);
+            await Assert.That(rig.Pool.Status().All(tuner => tuner!["channel"] is null)).IsTrue();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// **選局し直すのは、同じ組の空いているチューナーだけ。** 受けられる種別の違うチューナー (別の組) へは移らず、
+    /// 優先度の低い利用者がいるチューナーからも取り上げない。名指しとスキャンは選局し直さない。どれも最初の失敗をそのまま返す
+    /// </summary>
+    [Test]
+    [Arguments("other group")]
+    [Arguments("in use")]
+    [Arguments("pin")]
+    [Arguments("scan")]
+    public async Task 別の組_使用中_名指し_スキャンでは選局し直さない(string scene, CancellationToken cancel)
+    {
+        await Task.Yield();
+        TunerSpec b = scene == "other group" ? new("B", ["GR", "BS"], false, "fake:b") : Spec("B", "fake:b");
+        var rig = Deaf([Spec("A", "fake:a"), b], "fake:a");
+        try
+        {
+            Sink? logo = null;
+            if (scene == "in use")
+            {
+                logo = rig.Pool.Open("GR", "T27", 1, "logo T27", pin: "fake:b");
+                await FirstChunk(logo, cancel);
+            }
+            var use = scene == "scan" ? "scan T26" : "epg T26";
+            string? pin = scene == "pin" ? "fake:a" : null;
+
+            var error = Assert.Throws<IOException>(() => rig.Pool.Open("GR", "T26", 3, use, pin: pin));
+
+            await Assert.That(error.Message).IsEqualTo($"A: {ITuneDevice.SyncFailed}");
+            await Assert.That(Tunes(rig, "fake:b")).IsEqualTo(scene == "in use" ? 1 : 0);
+            logo?.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// **同期しなかったチューナーは、同じチャンネルでは組の後ろに回す。** 次の選局は、空いていても先に試さない。ほかのチャンネルの順は変えない
+    /// </summary>
+    [Test]
+    public async Task 同期しなかったチューナーは同じチャンネルでは後ろに回す(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var rig = Deaf([Spec("A", "fake:a"), Spec("B", "fake:b")], "fake:a");
+        try
+        {
+            var first = rig.Pool.Open("GR", "T26", 3, "epg T26");
+            await FirstChunk(first, cancel);
+            // 選局を畳み、デバイスも手放す (もう合っているチューナーを先に使う段を外す)
+            rig.Pool.CloseAll();
+
+            var again = rig.Pool.Open("GR", "T26", 3, "epg T26");
+            await FirstChunk(again, cancel);
+            await Assert.That(Tunes(rig, "fake:a")).IsEqualTo(1);
+            await Assert.That(Tunes(rig, "fake:b")).IsEqualTo(2);
+            rig.Pool.CloseAll();
+
+            // ほかのチャンネルは元の順で A から試す
+            var other = rig.Pool.Open("GR", "T28", 3, "epg T28");
+            await FirstChunk(other, cancel);
+            await Assert.That(Tunes(rig, "fake:a")).IsEqualTo(2);
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// **設定に <c>px4:</c> が残っていれば、開かずに断る。** px4d は外した (#2559)。Windows では、Windows で使えるデバイスではないと断る
+    /// </summary>
+    [Test]
+    public async Task 設定に_px4_が残っていれば対応していないデバイスとして断る()
+    {
+        var error = Assert.Throws<IOException>(() => TunerPool.OpenDevice("px4:0:1", null));
+
+        await Assert.That(error.Message).StartsWith(OperatingSystem.IsWindows() ? "px4:0:1 は Windows では使えません" : "px4:0:1 は対応していないデバイスです");
     }
 
     /*
