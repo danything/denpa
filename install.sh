@@ -27,7 +27,8 @@
 # 置き場:
 #   Linux        ~/denpa (DENPA_HOME で変えられる)    compose.yml (上げ直すたびに上書き)・compose.override.yml
 #                                                     (手を入れるならここ。無いときだけ雛形を作り、あれば触らない)・config/・
-#                                                     .env (denpa とエージェントが組むときの合言葉 AGENT_PAIR_TOKEN。無いときだけ足す)
+#                                                     .env (denpa とエージェントが組むときの合言葉 AGENT_PAIR_TOKEN と、
+#                                                     エージェントのコンテナの機械の名前 AGENT_HOSTNAME。無いときだけ足す)
 #   Mac          /Library/Application Support/denpa/  エージェント (bin/)・本体 (server/。bun・アプリ・ffmpeg・
 #                                                     字・デコーダ)・data/ (DB とその隣のもの・denpa.env・
 #                                                     本体を起こす denpa.sh。root だけが読み書きできる)
@@ -195,6 +196,15 @@ pair_token() {
   )
 }
 
+# エージェントのコンテナの機械の名前 (compose.prod.yml の hostname) に、この機械の名前を .env へ**一度だけ**足す。
+# 無いとコンテナの ID になり、denpa の設定に出すエージェントの名前と、denpa-agent --pair が出す登録用の URL がそれになる
+agent_hostname() {
+  envfile="$DENPA_DIR/.env"
+  if grep -q '^AGENT_HOSTNAME=' "$envfile" 2>/dev/null; then return 0; fi
+  if [ -s "$envfile" ] && [ -n "$(tail -c 1 "$envfile")" ]; then echo >> "$envfile"; fi
+  echo "AGENT_HOSTNAME=$(hostname)" >> "$envfile"
+}
+
 # ~/denpa で docker compose。-f を付けないので compose.yml と compose.override.yml を Compose が自分で重ねる
 compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
 
@@ -318,6 +328,7 @@ linux_main() {
   [ -n "$ip" ] || ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
   ref=$(version)
   pair_token
+  agent_hostname
   start_denpa compose.prod.yml "$ref" "${ip:-$(hostname)}"
 }
 
@@ -423,6 +434,8 @@ mac_stop_tray() {
 
 # メニューバーのアプリ (denpa-tray)。**ログインしたら起きる**ように /Library/LaunchAgents に載せる (誰がログインしても出る)。
 # 出すのは本体の様子と新しいバージョンで、更新はメニューから人が選んだときにこの install.sh を Terminal で流す (docs/install-mac.md)。
+# --agent-only では引数 --agent-only とエージェントの TUNERS_FILE を渡す。出すのはエージェントが応答するかと、
+# 登録用の URL と QR (メニューから人が選んだときに sudo denpa-agent --pair を Terminal で流す)。
 # KeepAlive は付けない (メニューの「終了」で終えたら、次のログインまで出さない)。
 # sudo を流した人がログインしていれば (gui のドメインがあれば) ここで起こす。無ければ次のログインを待つ。
 # tar.gz に入っていなければ (手元で組んだ DENPA_AGENT_TARBALL など) 載せず、前に載せたものも消す
@@ -432,6 +445,10 @@ mac_register_tray() {
     rm -f "$TRAY_PLIST"
     return 0
   fi
+  tray_args=""
+  if [ "$agent_only" = yes ]; then
+    tray_args="<string>--agent-only</string><string>$DENPA_DIR/config/tuners.json</string>"
+  fi
   mkdir -p /Library/LaunchAgents
   cat > "$TRAY_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -439,7 +456,7 @@ mac_register_tray() {
 <plist version="1.0">
 <dict>
   <key>Label</key><string>$TRAY_LABEL</string>
-  <key>ProgramArguments</key><array><string>$PREFIX/bin/denpa-tray</string></array>
+  <key>ProgramArguments</key><array><string>$PREFIX/bin/denpa-tray</string>$tray_args</array>
   <key>RunAtLoad</key><true/>
   <key>LimitLoadToSessionType</key><string>Aqua</string>
   <key>ProcessType</key><string>Interactive</string>
@@ -721,10 +738,13 @@ mac_main() {
   mac_pair_token
   mac_register_agent
 
-  host="$(scutil --get LocalHostName 2>/dev/null || hostname).local"
   if [ "$agent_only" = yes ]; then
-    say "エージェントだけ入れました。denpa の TUNER_AGENT_URL に次を書いてください (#pair= の後ろは合言葉。人に見せない):"
-    say "  https://$host:$PORT#pair=$pair"
+    mac_register_tray
+    say "エージェントだけ入れました。denpa の設定の「受信」にある「エージェントを追加」に、次の URL を貼るか QR を読ませてください (#pair= の後ろは合言葉。人に見せない)。"
+    say "後から出すときは、メニューバーのアイコンの「登録用の URL を表示…」を選んでください"
+    # 端末に出すなら、エージェントが URL の下に QR を描く (docs/agent.md「登録用の URL を出す」)
+    AGENT_PORT="$PORT" TUNERS_FILE="$DENPA_DIR/config/tuners.json" "$PREFIX/bin/denpa-agent" --pair 2>/dev/null \
+      || say "  https://$(scutil --get LocalHostName 2>/dev/null || hostname).local:$PORT#pair=$pair"
     return 0
   fi
   mac_register_server "$server_version"

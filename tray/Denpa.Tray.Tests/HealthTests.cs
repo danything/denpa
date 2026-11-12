@@ -99,4 +99,23 @@ public class HealthTests
         var encoded = args.Split(' ')[^1];
         await Assert.That(Encoding.Unicode.GetString(Convert.FromBase64String(encoded))).IsEqualTo("Write-Host '更新'");
     }
+    [Test]
+    public async Task エージェントだけのときは応答するかを出す()
+    {
+        await Assert.That(AgentWords.Summary(true)).IsEqualTo("エージェントが応答しています");
+        await Assert.That(AgentWords.Summary(false)).IsEqualTo("エージェントが応答しません");
+    }
+
+    [Test]
+    public async Task 登録用の_URL_は_TUNERS_FILE_を渡して_denpa_agent_の_pair_を端末のまま流す()
+    {
+        var script = Pairing.Script(@"C:\Program Files\denpa\bin\denpa-agent.exe", @"C:\Users\o'neil\denpa\config\tuners.json");
+        // 引用符は '' に重ねる
+        await Assert.That(script).Contains(@"$env:TUNERS_FILE = 'C:\Users\o''neil\denpa\config\tuners.json'");
+        // 出力を横取りすると --pair が QR を描かない
+        await Assert.That(script).Contains(@"Start-Process -FilePath 'C:\Program Files\denpa\bin\denpa-agent.exe' -ArgumentList '--pair' -NoNewWindow -Wait");
+        await Assert.That(script).Contains("Read-Host");
+        // TUNERS_FILE を渡されていなければ書かない (エージェントの既定の置き場)
+        await Assert.That(Pairing.Script("denpa-agent.exe", "")).DoesNotContain("TUNERS_FILE");
+    }
 }

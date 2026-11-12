@@ -25,6 +25,9 @@ services:
   tuner-agent:
     image: ghcr.io/danything/denpa-agent:latest
     restart: unless-stopped
+    # コンテナの機械の名前。denpa の設定に出すエージェントの名前 (AGENT_NAME が無いとき) と、denpa-agent --pair が出す
+    # 登録用の URL のホストになる。install.sh が .env の AGENT_HOSTNAME にこの機械の名前を書く (書かなければ tuner-agent)
+    hostname: ${AGENT_HOSTNAME:-tuner-agent}
     # denpa と同じ (下の説明)。TS を流しているのはこちらなので、先に消えると録画ごと切れる
     stop_grace_period: 6h5m
     # チューナーとカードリーダーに触るため。PX-Q3U4・PX-S1UD・CECH-ZD1 J などの USB の機材は
@@ -51,7 +54,8 @@ services:
     ports:
       # denpa は compose のネットワークの中で tuner-agent:25252 に繋ぐので、ホストにはループバックにだけ出す。
       # 別の機械の denpa から繋ぐなら、compose.override.yml で ports: !override ["25252:25252"] と書き直し、
-      # その denpa の TUNER_AGENT_URL に https://<この機械>:25252#pair=<.env の合言葉> を書く (docs/agent.md)
+      # docker compose exec tuner-agent denpa-agent --pair で出る登録用の URL (と QR) を、その denpa の設定の「受信」にある
+      # 「エージェントを追加」に貼る (docs/agent.md)
       - "127.0.0.1:25252:25252"
       # 鍵を同じ世帯の別の機器 (LAN の中) へ配るなら (docs/agent.md「鍵を配るのは LAN の中だけ」)、
       # compose.override.yml で鍵を配るポートを IPv4 だけで出し、environment に

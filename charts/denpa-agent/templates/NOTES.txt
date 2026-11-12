@@ -4,7 +4,8 @@ tuner-agent を {{ .Release.Namespace }} に入れました。答えるのは合
 
    kubectl -n {{ .Release.Namespace }} get secret {{ include "denpa-agent.pairSecretName" . }} -o jsonpath='{.data.token}' | base64 -d
 
-2. denpa の TUNER_AGENT_URL に次を書く (<合言葉> は 1. で読んだもの):
+2. denpa の設定の「受信」にある「エージェントを追加」に、次の登録用の URL を貼る (<合言葉> は 1. で読んだもの)。
+   denpa の TUNER_AGENT_URL に書いても登録できます:
 {{ if eq .Values.service.type "ClusterIP" }}
    https://tuner-agent.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}#pair=<合言葉>
 {{- else if eq .Values.service.type "NodePort" }}

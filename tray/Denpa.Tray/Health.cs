@@ -1,5 +1,5 @@
 // denpa の様子と、それを通知領域に出す文言。Win32 に触らないので、テスト (tray/Denpa.Tray.Tests) は Linux でも流れる。
-// Mac のメニューバーのアプリ (tray/mac/Sources/DenpaTrayCore/Health.swift) も、メニューと確認の文言はそろえる (更新の知らせ方は Mac だけ違う)。
+// Mac のメニューバーのアプリ (tray/mac/Sources/DenpaTrayCore/Health.swift) も、メニューと確認の文言はそろえる (更新の知らせ方と、登録用の URL を出す窓は Mac だけ違う)。
 
 using System.Text;
 using System.Text.Json;
@@ -100,4 +100,46 @@ public static class Installer
     /// </summary>
     public static string Arguments(string script) =>
         "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+}
+
+/// <summary>
+/// エージェントだけ入れたとき (install.ps1 -AgentOnly) の文言。denpa はこの PC にいないので、エージェントが応答するかと、
+/// 別の機械の denpa に登録するための URL を出す (docs/agent.md「denpa と組む」)
+/// </summary>
+public static class AgentWords
+{
+    /// <summary>メニューの先頭に出す 1 行 (選べない)。組んだ denpa があるかは出さない (このアプリは組んだ相手の一覧を読めない)</summary>
+    public static string Summary(bool answering) => answering ? "エージェントが応答しています" : "エージェントが応答しません";
+
+    /// <summary>メニューの、登録用の URL を出す項目</summary>
+    public const string PairItem = "登録用の URL を表示…";
+}
+
+public static class Pairing
+{
+    /// <summary>エージェントのポート (install.ps1 の $Port と同じ)。応答を見るときに TLS で繋ぐ</summary>
+    public const int Port = 25252;
+
+    /// <summary>
+    /// 登録用の URL と QR を出す PowerShell。管理者の窓で <c>denpa-agent --pair</c> を流す (合言葉の入ったファイルを読むため)。
+    /// <paramref name="tunersFile"/> はエージェントの <c>TUNERS_FILE</c> (install.ps1 が渡す。合言葉はその隣の tls\pair-token)。
+    /// <c>--pair</c> は標準出力が端末のときだけ QR を描くので、出力を横取りしない <c>Start-Process -NoNewWindow</c> で起こす。
+    /// 読み終えるまで窓は閉じない
+    /// </summary>
+    public static string Script(string agent, string? tunersFile)
+    {
+        static string Quote(string text) => "'" + text.Replace("'", "''") + "'";
+        var script = new StringBuilder("$ErrorActionPreference = 'Stop'\n");
+        if (tunersFile is { Length: > 0 }) script.Append($"$env:TUNERS_FILE = {Quote(tunersFile)}\n");
+        script.Append(
+            "try {\n" +
+            $"    Start-Process -FilePath {Quote(agent)} -ArgumentList '--pair' -NoNewWindow -Wait\n" +
+            "    Write-Host ''\n" +
+            "    Write-Host 'denpa の設定の「受信」にある「エージェントを追加」に、この URL を貼るか QR を読ませてください。#pair= の後ろは合言葉なので、人に見せないでください'\n" +
+            "} catch {\n" +
+            "    Write-Host $_ -ForegroundColor Red\n" +
+            "}\n" +
+            "Read-Host 'Enter で閉じます'\n");
+        return script.ToString();
+    }
 }

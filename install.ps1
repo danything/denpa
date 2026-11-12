@@ -612,17 +612,46 @@ function Register-Server([string]$Ref, [string]$Token) {
     throw "denpa が応答しません。ログを見てください: $ServerLog"
 }
 
+# 登録用の URL を出す。エージェントの --pair は、標準出力が端末なら URL の下に QR を描く (docs/agent.md「登録用の URL を出す」)。
+# 出力を横取りしないよう Start-Process -NoNewWindow で起こす (& で呼ぶと関数の出力として受け取り、端末ではなくなる)。
+# 起こせなければ、合言葉から URL を組んで出す
+function Show-PairUrl([string]$Token) {
+    $saved = $env:TUNERS_FILE
+    try {
+        $env:TUNERS_FILE = "$DenpaDir\config\tuners.json"
+        $pair = Start-Process -FilePath "$Prefix\bin\denpa-agent.exe" -ArgumentList '--pair' -NoNewWindow -Wait -PassThru
+        if ($pair.ExitCode -eq 0) { return }
+    } catch {
+        Say "denpa-agent --pair を起こせませんでした: $_"
+    } finally {
+        $env:TUNERS_FILE = $saved
+    }
+    Say "  https://$($env:COMPUTERNAME):$Port#pair=$Token"
+}
+
 # 通知領域のアイコン (denpa-tray.exe)。**サインインしたら起きる**ように HKLM の Run に載せる (誰がサインインしても出る)。
 # 出すのは本体の様子と新しいバージョンで、更新はメニューから人が選んだときにこの install.ps1 を流す (docs/install-windows.md)。
+# -AgentOnly では引数 --agent-only とエージェントの TUNERS_FILE を渡す。出すのはエージェントが応答するかと、
+# 登録用の URL と QR (メニューから人が選んだときに管理者の PowerShell で denpa-agent --pair を流す)。
 # いまサインインしている人にはここで起こす。管理者の窓から起こすと管理者で動いてしまうので、エクスプローラーに起こさせる
-# (ブラウザを開くのと同じ)。この窓のセッションにエクスプローラーがいなければ (CI など) 起こさず、次のサインインを待つ。
+# (ブラウザを開くのと同じ)。エクスプローラーは引数を渡せないので、引数を書いたショートカットを開かせる。
+# この窓のセッションにエクスプローラーがいなければ (CI など) 起こさず、次のサインインを待つ。
 # zip に入っていなければ (手元で組んだ DENPA_AGENT_ZIP など) 載せない
-function Register-Tray {
+function Register-Tray([switch]$AgentOnly) {
     if (-not (Test-Path -LiteralPath $TrayExe)) { return }
-    New-ItemProperty -Path $RunKey -Name $RunName -Value "`"$TrayExe`"" -PropertyType String -Force | Out-Null
+    $arguments = if ($AgentOnly) { "--agent-only `"$DenpaDir\config\tuners.json`"" } else { '' }
+    New-ItemProperty -Path $RunKey -Name $RunName -Value ("`"$TrayExe`" $arguments".TrimEnd()) -PropertyType String -Force | Out-Null
     $session = (Get-Process -Id $PID).SessionId
     if (Get-Process explorer -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session }) {
-        Start-Process "$env:WINDIR\explorer.exe" "`"$TrayExe`""
+        $target = $TrayExe
+        if ($arguments) {
+            $target = Join-Path ([IO.Path]::GetTempPath()) 'denpa-tray.lnk'
+            $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($target)
+            $shortcut.TargetPath = $TrayExe
+            $shortcut.Arguments = $arguments
+            $shortcut.Save()
+        }
+        Start-Process "$env:WINDIR\explorer.exe" "`"$target`""
     }
 }
 
@@ -676,8 +705,8 @@ function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly) {
     Register-Agent
     if (-not $AgentOnly) {
         Register-Server $(if ($Ref) { $Ref } elseif ($env:DENPA_SERVER_ZIP) { '' } else { Get-Version }) $Token
-        Register-Tray
     }
+    Register-Tray -AgentOnly:$AgentOnly
 }
 
 function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [switch]$WinUsb, [switch]$Yes) {
@@ -742,8 +771,9 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [s
     Install-Denpa $ref $token -AgentOnly:$AgentOnly
     Show-Tuner
     if ($AgentOnly) {
-        Say 'エージェントだけ入れました。denpa の TUNER_AGENT_URL に次を書いてください (#pair= の後ろは合言葉。人に見せない):'
-        Say "  https://$($env:COMPUTERNAME):$Port#pair=$token"
+        Say 'エージェントだけ入れました。denpa の設定の「受信」にある「エージェントを追加」に、次の URL を貼るか QR を読ませてください (#pair= の後ろは合言葉。人に見せない)。'
+        Say '後から出すときは、通知領域のアイコンの「登録用の URL を表示…」を選んでください'
+        Show-PairUrl $token
         Say "(LAN から繋ぐなら、Windows ファイアウォールでポート $Port への受信を許してください)"
         return
     }

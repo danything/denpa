@@ -74,4 +74,21 @@ final class HealthTests: XCTestCase {
             "curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | sudo bash -s -- --no-open"
         ))
     }
+    func testエージェントだけのときは応答するかを出す() {
+        XCTAssertEqual(AgentWords.summary(true), "エージェントが応答しています")
+        XCTAssertEqual(AgentWords.summary(false), "エージェントが応答しません")
+    }
+
+    func test登録用のURLはTUNERS_FILEを渡してsudoでdenpa_agentのpairを流す() {
+        let command = Pairing.command(
+            agent: "/Library/Application Support/denpa/bin/denpa-agent",
+            tunersFile: "/Users/o'neil/denpa/config/tuners.json"
+        )
+        XCTAssertTrue(command.hasPrefix("#!/bin/bash\n"))
+        XCTAssertTrue(command.contains(
+            "sudo env TUNERS_FILE='/Users/o'\''neil/denpa/config/tuners.json' '/Library/Application Support/denpa/bin/denpa-agent' --pair\n"
+        ))
+        // TUNERS_FILE を渡されていなければ書かない (エージェントの既定の置き場)
+        XCTAssertTrue(Pairing.command(agent: "/bin/denpa-agent", tunersFile: nil).contains("sudo '/bin/denpa-agent' --pair\n"))
+    }
 }

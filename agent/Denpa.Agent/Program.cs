@@ -61,14 +61,22 @@ var config = Config.FromEnvironment();
 
 /*
  * denpa と組むときの URL を出して終わる。サーバは立てない (鍵と合言葉が無ければここで作る。AgentTls.cs)。
- * 組んだ相手がいて起動のログに出なくなってからも、これで見られる
+ * 組んだ相手がいて起動のログに出なくなってからも、これで見られる。合言葉が入るので /denpa/logs には残さない (Log.Write を使わない)
  */
 if (args is ["--pair"])
 {
-    // 標準出力には URL だけを出す (スクリプトで読めるように)。鍵を作ったなどのメッセージは標準エラーへ
+    // 標準出力には URL と QR だけを出す (スクリプトで読めるように)。鍵を作ったなどのメッセージは標準エラーへ
     var stdout = Console.Out;
     Console.SetOut(Console.Error);
-    stdout.WriteLine(AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN")).PairUrl(port));
+    var pairUrl = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN")).PairUrl(port);
+    stdout.WriteLine(pairUrl);
+    // 標準出力が端末なら、URL の下に QR を描く (denpa の「エージェントを追加」で読む。Qr.cs)。スクリプトが読むときは URL だけ
+    if (!Console.IsOutputRedirected)
+    {
+        Qr.EnableTerminalColors();
+        stdout.WriteLine();
+        stdout.Write(Qr.Terminal(Qr.Encode(pairUrl)));
+    }
     return 0;
 }
 /*
@@ -99,7 +107,7 @@ if (args.Length > 0)
     Console.Error.WriteLine($"対応していない引数です: {string.Join(" ", args)}");
     Console.Error.WriteLine("usage: denpa-agent                     (引数なしでサーバとして立ち上がる)");
     Console.Error.WriteLine("       denpa-agent --version");
-    Console.Error.WriteLine("       denpa-agent --pair                (denpa と組むときの URL を出す)");
+    Console.Error.WriteLine("       denpa-agent --pair                (denpa と組むときの URL を出す。端末なら QR も)");
     Console.Error.WriteLine("       denpa-agent --status              (動いているエージェントの /denpa/tuners を出す)");
     Console.Error.WriteLine("       denpa-agent --usb-ids             (エージェントが USB を直に持つ機材の USB ID を出す)");
     Console.Error.WriteLine($"       {Probe.TuneUsage}");

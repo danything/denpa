@@ -81,3 +81,43 @@ public enum Installer {
 
         """
 }
+
+/// エージェントだけ入れたとき (install.sh --agent-only) の文言。denpa はこの Mac にいないので、エージェントが応答するかと、
+/// 別の機械の denpa に登録するための URL を出す (docs/agent.md「denpa と組む」)。Windows (tray/Denpa.Tray/Health.cs の AgentWords) とそろえる
+public enum AgentWords {
+    /// メニューの先頭に出す 1 行 (選べない)。組んだ denpa があるかは出さない (このアプリは組んだ相手の一覧を読めない)
+    public static func summary(_ answering: Bool) -> String {
+        answering ? "エージェントが応答しています" : "エージェントが応答しません"
+    }
+
+    /// メニューの、登録用の URL を出す項目
+    public static let pairItem = "登録用の URL を表示…"
+}
+
+public enum Pairing {
+    /// エージェントのポート (install.sh の PORT と同じ)。応答を見るときに TLS で繋ぐ
+    public static let port: UInt16 = 25252
+
+    /// 登録用の URL と QR を出すシェルスクリプト (Terminal で開く .command)。`sudo denpa-agent --pair` を流す
+    /// (合言葉の入ったファイルは root だけが読めるので)。`tunersFile` はエージェントの `TUNERS_FILE` (install.sh が渡す。
+    /// 合言葉はその隣の tls/pair-token)。`--pair` は標準出力が端末のときだけ QR を描くので、出力はそのまま Terminal に出す。
+    /// 読み込まれたら自分を消す。読み終えるまで閉じない
+    public static func command(agent: String, tunersFile: String?) -> String {
+        let environment = tunersFile.map { $0.isEmpty ? "" : "env TUNERS_FILE=\(quote($0)) " } ?? ""
+        return """
+            #!/bin/bash
+            # denpa-tray が書いた (エージェントの登録用の URL を出すために Terminal で開く)
+            rm -f "$0"
+            sudo \(environment)\(quote(agent)) --pair
+            echo
+            echo 'denpa の設定の「受信」にある「エージェントを追加」に、この URL を貼るか QR を読ませてください。#pair= の後ろは合言葉なので、人に見せないでください'
+            read -r -p 'Enter で閉じます'
+
+            """
+    }
+
+    /// シェルの 1 語にする ('…' で囲み、中の ' は '\'' にする)
+    static func quote(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: "'\''") + "'"
+    }
+}
