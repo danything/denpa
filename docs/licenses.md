@@ -174,6 +174,17 @@ CI は zip を作る前に、DLL が上の表のもの (x264・dav1d・zimg・zl
 ソースは、自分で組むもの (FFmpeg・SVT-AV1・Opus) は Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball、MSYS2 のパッケージは
 [msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) のヘッダとライブラリも MSYS2 のパッケージです。
 
+### Android 向けのエージェント (まだ配らない)
+
+CI が `linux-bionic-arm64`・`linux-bionic-x64` の Native AOT で組みます ([.github/workflows/android.yml](../.github/workflows/android.yml))。リリースにはまだ載せません。
+中身は上の `denpa-agent` と同じ .NET のバイナリで、ファームウェア (IT930x と Siano) も同じく埋め込んであります。
+Android には OpenSSL が無いので、土台の libssl の代わりに OpenSSL を静的に入れます。asicen-userland はまだ入れません。
+
+| 名前                                                     | 何に                                                              | 出どころ                                                                                 | ライセンス                                                                          |
+| -------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| ASP.NET Core (linux の実行時パックの IL を AOT で埋める) | エージェントのポートの HTTPS (Kestrel)                            | <https://github.com/dotnet/aspnetcore>                                                   | MIT                                                                                 |
+| OpenSSL (3.5 系。NDK で組み、静的リンク)                 | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`) | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、配るときはそれを添える |
+
 ### `denpa-aio`
 
 上の `denpa` に、`denpa-agent` の実行ファイルと `/opt/asicen-userland`・Siano の許諾の文面 (`/usr/share/doc/denpa-agent/`) を

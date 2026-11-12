@@ -42,4 +42,31 @@
         <EmbeddedResource Include="firmware/isdbt_rio.inp" LogicalName="isdbt_rio.inp" />
     </ItemGroup>
 
+    <!--
+        Android 向け (`-r linux-bionic-arm64`・`linux-bionic-x64`)。組み方は docs/development.md「Android 向けのエージェント」。
+
+        - .NET の SDK は ASP.NET Core の実行時パックを bionic 向けに出していない (`RuntimePackExcludedRuntimeIdentifiers="android;linux-bionic"`)。
+          除外を外すと、RID の継承関係 (linux-bionic-arm64 は linux-arm64 を継ぐ) で linux の ASP.NET Core のパックが選ばれる。
+          ILC は IL から組むので、パックの中の R2R のコードは使わない。SDK が対応していない使い方なので、SDK を上げたら Android の CI を見る
+        - Android には OpenSSL が無い (端末の libssl は BoringSSL で、名前も中身も違う)。NDK で組んだ OpenSSL の静的ライブラリ
+          (`OPENSSL_ROOT_DIR` が指す置き場) を実行ファイルに入れる。暗号の部品は組むときにソースから組まれ、cmake がそこを読む
+        - C の部品とリンクは NDK の clang で組む (NDK の `toolchains/llvm/prebuilt/linux-x86_64/bin` を PATH の先頭に置く)
+    -->
+    <PropertyGroup Condition="$(RuntimeIdentifier.StartsWith('linux-bionic-'))">
+        <DisableUnsupportedError>true</DisableUnsupportedError>
+        <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>
+        <StaticOpenSslLinking>true</StaticOpenSslLinking>
+        <CppCompilerAndLinker Condition="'$(RuntimeIdentifier)' == 'linux-bionic-arm64'">aarch64-linux-android24-clang</CppCompilerAndLinker>
+        <CppCompilerAndLinker Condition="'$(RuntimeIdentifier)' == 'linux-bionic-x64'">x86_64-linux-android24-clang</CppCompilerAndLinker>
+    </PropertyGroup>
+    <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux-bionic-'))">
+        <KnownFrameworkReference Update="Microsoft.AspNetCore.App" RuntimePackExcludedRuntimeIdentifiers="" />
+        <LinkerArg Include="-L$(OPENSSL_ROOT_DIR)/lib" />
+        <!-- 16 KB ページの端末でも読み込めるように (ILC の targets は共有ライブラリにしか付けない) -->
+        <LinkerArg Include="-Wl,-z,max-page-size=16384" />
+    </ItemGroup>
+    <Target Name="DenpaCheckAndroidOpenSsl" BeforeTargets="Build" Condition="$(RuntimeIdentifier.StartsWith('linux-bionic-'))">
+        <Error Condition="'$(OPENSSL_ROOT_DIR)' == '' or !Exists('$(OPENSSL_ROOT_DIR)/lib/libssl.a')" Text="OPENSSL_ROOT_DIR に、NDK で組んだ OpenSSL の置き場 (lib/libssl.a と include/) を渡してください" />
+    </Target>
+
 </Project>

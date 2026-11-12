@@ -19,6 +19,14 @@
       ]
     },
     {
+      "description": ".github/openssl-android.sh の `# renovate:` 付きの変数 (`OPENSSL_VERSION=3.5.9`)。Android 向けのエージェントに静的に入れる OpenSSL のバージョン",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/openssl-android\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+[A-Z0-9_]+=(?<currentValue>\\S+)"
+      ]
+    },
+    {
       "description": "Talos Linux の入れ方 (docs/install-talos.md)。talos/install.sh の Talos と Kubernetes のバージョン (`NAME=v1.2.3`) と、talos/patch.yaml に埋めた local-path-provisioner のイメージ。上がったら CI (test.yml の talos) が gen config と validate を通し直す",
       "customType": "regex",
       "managerFilePatterns": ["/^talos/(install\\.sh|patch\\.yaml)$/"],
@@ -64,6 +72,16 @@
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["danything/denpa-font"],
       "allowedVersions": "/^v\\d+\\.\\d+$/"
+    },
+    {
+      "description": "OpenSSL (.github/openssl-android.sh。Android 向けのエージェントに静的に入れる) は 3.5 系 (LTS) に留める。スクリプトにはアーカイブの SHA-256 も固定してあり、バージョンだけ上げると組めない。SHA-256 を人が入れ替えるので、自動ではマージせず、別の PR に分ける (Android の CI は必須チェックではないので、落ちても自動マージは止まらない)",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["openssl/openssl"],
+      "allowedVersions": "<3.6",
+      "groupName": "openssl-android",
+      "groupSlug": "openssl-android",
+      "automerge": false,
+      "addLabels": ["needs-review"]
     }
   ]
 }
