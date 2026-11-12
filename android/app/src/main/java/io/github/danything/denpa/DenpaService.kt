@@ -10,6 +10,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
@@ -20,6 +22,7 @@ import android.os.Looper
 import android.os.PersistableBundle
 import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import java.io.File
@@ -30,7 +33,7 @@ import kotlin.concurrent.thread
  * APK に denpa 本体が入っていれば bun で動かす denpa ([Server])。
  *
  * - **エージェントは全部のインターフェースで待ち受ける。** 同じ端末の denpa は `https://127.0.0.1:25252#pair=<合言葉>` で、
- *   別の機械の denpa は通知の「組む URL をコピー」の URL で、同じ合言葉で組む (組んだ denpa しか通さないのは今と同じ)。
+ *   別の機械の denpa は通知の「QR を表示」で出す登録用の URL で、同じ合言葉で組む (組んだ denpa しか通さないのは今と同じ)。
  *   合言葉はアプリが `config/tls/pair-token` に作り、エージェントはそこから読む (Mac の install.sh と同じ)
  * - **動いている間は partial wake lock を持ち続ける。** いつ録画が始まるか分からず、画面を消すと CPU が止まって録画が欠けるため
  * - **部品が自分で終わったら、待ってから起動し直す。** 通知の「終了」のあとは起動し直さない
@@ -38,7 +41,9 @@ import kotlin.concurrent.thread
  *   ボタンを「すぐ終了」(2 回目の SIGTERM) に替える
  * - 通知の本文 (チューナーの台数・録画中か) は、エージェントの `GET /denpa/tuners` を 10 秒ごとに読んで決める ([AgentClient])。
  *   denpa が起動の途中か起動し直しているあいだは、本文をそちらにする。denpa が `GET /api/health` に答えたら、通知に LAN の URL を出し、
- *   通知を押すとこの端末のブラウザで denpa を開く。「URL をコピー」はその URL を、「組む URL をコピー」はエージェントと組む URL をクリップボードに渡す
+ *   通知を押すとこの端末のブラウザで denpa を開く。「URL をコピー」はその URL をクリップボードに渡す
+ * - **「QR を表示」は、2 分だけ通知を大きな画像の形にして、登録用の URL の QR を出す。** そのあいだのボタンは「終了」「登録用の URL をコピー」「閉じる」。
+ *   合言葉が入るので、ロック画面には QR の無い通知を出す (ボタンは 3 つまでしか出ないので、登録用の URL のコピーはこちらに置く)
  * - 状態はどれも [worker] のスレッドで触る
  */
 class DenpaService : Service() {
@@ -68,8 +73,15 @@ class DenpaService : Service() {
     /** denpa が `GET /api/health` に答えたか (最後に読んだとき) */
     private var serverUp = false
     private var stopping = false
-    /** 出している通知の本文と URL */
-    private var shown: Pair<String, String?>? = null
+    /** 出している通知の本文と URL と、QR を出しているか */
+    private var shown: Triple<String, String?, Boolean>? = null
+
+    /** 「QR を表示」で出している登録用の URL の QR。出していなければ null。[QR_SHOWN] たったら消す */
+    private var qr: Bitmap? = null
+    private val hideQr = Runnable {
+        qr = null
+        refresh()
+    }
 
     /** [Part.start] に渡すもの。起動するたびに作る */
     private class Launch(val arguments: List<String>, val environment: Map<String, String>, val directory: File? = null)
@@ -187,6 +199,8 @@ class DenpaService : Service() {
             ACTION_STOP_NOW -> worker.post { stopNow() }
             ACTION_COPY_URL -> worker.post { copyUrl() }
             ACTION_COPY_PAIR_URL -> worker.post { copyPairUrl() }
+            ACTION_SHOW_QR -> worker.post { showQr() }
+            ACTION_HIDE_QR -> worker.post { hideQr.run() }
             else -> worker.post {
                 // アイコンか挿入で起こされた。終了の途中なら取りやめ、まだ動いている部品は終わったら起動し直す。もう終わった部品はすぐ起動する
                 if (stopping) {
@@ -237,8 +251,14 @@ class DenpaService : Service() {
             "MEDIA_DIR" to media.path,
             "USB_BROKER" to File(dataDir, "u").path,
             "AGENT_PORT" to AGENT_PORT.toString(),
+            // denpa の設定に出すエージェントの名前の元。エージェントの機械の名前は Android では localhost になるので、端末の名前を渡す
+            "AGENT_NAME" to deviceName(),
         ) + Asicen.environment(this, asicenFirmware)
     }
+
+    /** 端末の名前 (設定の「デバイス名」)。無ければ機種の名前 */
+    private fun deviceName(): String =
+        Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)?.takeIf { it.isNotBlank() } ?: Build.MODEL
 
     /** ASICEN のファームウェアを書き出した先 (最初にエージェントを起動するときに書き出す)。APK に入っていなければ null */
     private val asicenFirmware by lazy { Asicen.firmware(this) }
@@ -277,6 +297,8 @@ class DenpaService : Service() {
     private fun requestStop() {
         Prefs.setStartOnBoot(this, false)
         stopping = true
+        worker.removeCallbacks(hideQr)
+        qr = null
         val sent = slots.filter { it.part?.terminate() == true }
         if (sent.isEmpty()) {
             // どれも起動し直す前の待ちのあいだ。止めるものが無い
@@ -311,7 +333,7 @@ class DenpaService : Service() {
 
     /** 通知の本文か URL が変わったときだけ出し直す */
     private fun refresh() {
-        if (text() to url() == shown) return
+        if (Triple(text(), url(), qr != null) == shown) return
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
     }
 
@@ -340,7 +362,30 @@ class DenpaService : Service() {
     private fun notification(): Notification {
         val body = text()
         val url = url()
-        shown = body to url
+        val picture = qr
+        shown = Triple(body, url, picture != null)
+        val builder = baseNotification(body, url)
+        if (stopping) {
+            builder.addAction(action(ACTION_STOP_NOW, R.string.action_stop_now))
+        } else if (picture != null) {
+            builder.setContentText(getString(R.string.qr_text))
+                .setStyle(Notification.BigPictureStyle().bigPicture(picture).setSummaryText(getString(R.string.qr_text)))
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                // ロック画面には QR とボタンの無い通知を出す (QR には合言葉が入る)。build() は作りかけの通知そのものを返すので、別に組む
+                .setPublicVersion(baseNotification(body, url).build())
+            builder.addAction(action(ACTION_STOP, R.string.action_stop))
+            builder.addAction(action(ACTION_COPY_PAIR_URL, R.string.action_copy_pair_url))
+            builder.addAction(action(ACTION_HIDE_QR, R.string.action_hide_qr))
+        } else {
+            builder.addAction(action(ACTION_STOP, R.string.action_stop))
+            if (url != null) builder.addAction(action(ACTION_COPY_URL, R.string.action_copy_url))
+            builder.addAction(action(ACTION_SHOW_QR, R.string.action_show_qr))
+        }
+        return builder.build()
+    }
+
+    /** 通知の本文・URL・押したときに開くもの。ボタンと大きな画像は足さない */
+    private fun baseNotification(body: String, url: String?): Notification.Builder {
         val builder = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.app_name))
@@ -356,14 +401,7 @@ class DenpaService : Service() {
             val open = Intent(Intent.ACTION_VIEW, Uri.parse("http://127.0.0.1:${Server.PORT}/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             builder.setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE))
         }
-        if (stopping) {
-            builder.addAction(action(ACTION_STOP_NOW, R.string.action_stop_now))
-        } else {
-            builder.addAction(action(ACTION_STOP, R.string.action_stop))
-            if (url != null) builder.addAction(action(ACTION_COPY_URL, R.string.action_copy_url))
-            builder.addAction(action(ACTION_COPY_PAIR_URL, R.string.action_copy_pair_url))
-        }
-        return builder.build()
+        return builder
     }
 
     private fun action(name: String, label: Int): Notification.Action {
@@ -380,17 +418,60 @@ class DenpaService : Service() {
     private fun copyUrl() = copy(url(), R.string.url_copied, sensitive = false)
 
     /**
-     * 通知の「組む URL をコピー」。別の機械の denpa の `TUNER_AGENT_URL` に書く `https://<LAN のアドレス>:25252#pair=<合言葉>` をクリップボードに渡す。
+     * 登録用の URL。別の機械の denpa の設定の「エージェントを追加」に貼る `https://<LAN のアドレス>:25252#pair=<合言葉>`。
+     * LAN につながっていなければ null
+     */
+    private fun pairUrl(): String? = try {
+        Lan.address(getSystemService(ConnectivityManager::class.java))?.let { Lan.pairUrl(it, AGENT_PORT, Server.pairToken(home)) }
+    } catch (error: Exception) {
+        Log.w(TAG, "登録用の URL を作れませんでした", error)
+        null
+    }
+
+    /**
+     * 「QR を表示」の画面の「登録用の URL をコピー」。登録用の URL をクリップボードに渡す。
      * 合言葉が入るので通知の本文には出さず、クリップボードには機密の印を付ける
      */
-    private fun copyPairUrl() {
-        val url = try {
-            Lan.address(getSystemService(ConnectivityManager::class.java))?.let { Lan.pairUrl(it, AGENT_PORT, Server.pairToken(home)) }
-        } catch (error: Exception) {
-            Log.w(TAG, "エージェントと組む URL を作れませんでした", error)
-            null
+    private fun copyPairUrl() = copy(pairUrl(), R.string.pair_url_copied, sensitive = true)
+
+    /**
+     * 通知の「QR を表示」。登録用の URL の QR を、[QR_SHOWN] のあいだ通知の大きな画像に出す。
+     * LAN につながっていなければ、そう出す
+     */
+    private fun showQr() {
+        val url = pairUrl()
+        if (url == null) {
+            Handler(Looper.getMainLooper()).post { Toast.makeText(this, R.string.qr_no_address, Toast.LENGTH_LONG).show() }
+            return
         }
-        copy(url, R.string.pair_url_copied, sensitive = true)
+        qr = qrBitmap(url)
+        worker.removeCallbacks(hideQr)
+        worker.postDelayed(hideQr, QR_SHOWN)
+        refresh()
+    }
+
+    /**
+     * 通知に出す QR の画像。大きな画像の形 (BigPictureStyle) は横長の枠に収めて上下を切るので、横 2・縦 1 の白地の真ん中に置く。
+     * 通知の画像はプロセスをまたいで渡すので、小さく (1 モジュール [QR_MODULE] ピクセル・RGB_565) 作り、表示するときに拡大させる
+     */
+    private fun qrBitmap(text: String): Bitmap {
+        val modules = Qr.encode(text)
+        val cells = modules.size + QR_QUIET * 2
+        val height = cells * QR_MODULE
+        val width = height * 2
+        val pixels = IntArray(width * height) { Color.WHITE }
+        val left = (width - height) / 2 + QR_QUIET * QR_MODULE
+        val top = QR_QUIET * QR_MODULE
+        for (row in modules.indices) {
+            for (column in modules.indices) {
+                if (!modules[row][column]) continue
+                for (y in 0 until QR_MODULE) {
+                    val start = (top + row * QR_MODULE + y) * width + left + column * QR_MODULE
+                    pixels.fill(Color.BLACK, start, start + QR_MODULE)
+                }
+            }
+        }
+        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.RGB_565)
     }
 
     /** [url] をクリップボードに渡す。null (LAN につながっていない) ならそう出す */
@@ -416,6 +497,15 @@ class DenpaService : Service() {
         const val ACTION_STOP_NOW = "io.github.danything.denpa.STOP_NOW"
         const val ACTION_COPY_URL = "io.github.danything.denpa.COPY_URL"
         const val ACTION_COPY_PAIR_URL = "io.github.danything.denpa.COPY_PAIR_URL"
+        const val ACTION_SHOW_QR = "io.github.danything.denpa.SHOW_QR"
+        const val ACTION_HIDE_QR = "io.github.danything.denpa.HIDE_QR"
+
+        /** 「QR を表示」で QR を出しておく時間 */
+        const val QR_SHOWN = 120_000L
+
+        /** QR の 1 モジュールのピクセル数と、周りの余白のモジュール数 */
+        const val QR_MODULE = 8
+        const val QR_QUIET = 4
 
         /** APK の jniLibs に入れるエージェントの名前 (中身は実行ファイル。nativeLibraryDir に展開される) */
         const val AGENT_LIBRARY = "libdenpa_agent.so"

@@ -8,6 +8,11 @@
 // PowerShell で流す (UAC を通す)。録画中・エンコード中なら先に確かめる (Words.AskBeforeUpdate)。
 // install.ps1 は録画の終わりを待ってから、このアプリごと入れ替えて起こし直す。
 //
+// **エージェントだけ入れたとき** (install.ps1 -AgentOnly) は、引数 `--agent-only <TUNERS_FILE>` で起こされる。
+// denpa はこの PC にいないので、10 秒ごとにエージェント (127.0.0.1:25252) へ TLS で繋ぎ、証明書が返るかだけを見る
+// (組んでいないので API は呼べない)。メニューは、応答するかの 1 行・登録用の URL を表示…・終了。
+// 「登録用の URL を表示…」は、管理者の PowerShell (UAC を通す) で denpa-agent --pair を流し、URL と QR を出す (Pairing.Script)。
+//
 // WinForms は Native AOT に対応していないので、Shell_NotifyIcon と隠しウィンドウを Win32 で直に呼ぶ
 // (作りは danything/mado の tray/ と同じ)。
 
@@ -22,7 +27,7 @@ internal static unsafe partial class Program
     const uint WmTrayIcon = 0x8000 + 1; // WM_APP + 1。アイコンの上のマウス
     const uint WmHealth = 0x8000 + 2; // WM_APP + 2。バックグラウンドで取得した様子を出す
     const uint WmUpdate = 0x8000 + 3; // WM_APP + 3。更新の前に取得し直した様子で確かめる
-    const int MenuOpen = 1, MenuUpdate = 2, MenuExit = 9;
+    const int MenuOpen = 1, MenuUpdate = 2, MenuPair = 3, MenuExit = 9;
 
     static nint hwnd, appIcon, warnIcon;
     static uint taskbarCreated;
@@ -36,9 +41,15 @@ internal static unsafe partial class Program
     static volatile Health? asked;
     static bool updating;
 
+    /// <summary>エージェントだけ入れたときに、エージェントの TUNERS_FILE (無ければ空)。denpa の様子の代わりにエージェントの応答を見る。null なら denpa を見る</summary>
+    static string? agentOnly;
+    /// <summary>エージェントが最後に応答したか (agentOnly のとき)。バックグラウンドのスレッドが書く</summary>
+    static volatile bool agentUp;
+
     [STAThread]
-    static int Main()
+    static int Main(string[] args)
     {
+        if (args is ["--agent-only", ..]) agentOnly = args.ElementAtOrDefault(1) ?? "";
         // サインインし直したときや install.ps1 が起こしたときに、二重に出さない
         CreateMutexW(0, 0, "Local\\denpa-tray");
         if (Marshal.GetLastPInvokeError() == 183 /* ERROR_ALREADY_EXISTS */) return 0;
@@ -132,6 +143,17 @@ internal static unsafe partial class Program
     {
         if (fetching) return;
         fetching = true;
+        if (agentOnly is not null)
+        {
+            // Net.AgentAnswers は例外を出さない
+            _ = Net.AgentAnswers().ContinueWith(t =>
+            {
+                agentUp = t.Result;
+                fetching = false;
+                PostMessageW(hwnd, WmHealth, 0, 0);
+            }, TaskScheduler.Default);
+            return;
+        }
         // Net.Get は例外を出さない。答えなければ null
         _ = Net.Get().ContinueWith(t =>
         {
@@ -144,6 +166,11 @@ internal static unsafe partial class Program
     /// <summary>取得した様子をアイコンと説明に出す。新しいバージョンが出ていれば、そのバージョンでは 1 回だけ通知する</summary>
     static void Apply()
     {
+        if (agentOnly is not null)
+        {
+            Modify(agentUp ? appIcon : warnIcon, AgentWords.Summary(agentUp));
+            return;
+        }
         var now = health;
         Modify(now is null ? warnIcon : appIcon, Words.Tip(now));
         if (now?.Latest is { } latest && latest != noticed)
@@ -156,6 +183,11 @@ internal static unsafe partial class Program
 
     static void ShowMenu()
     {
+        if (agentOnly is not null)
+        {
+            ShowAgentMenu();
+            return;
+        }
         var now = health;
         var menu = CreatePopupMenu();
         AppendMenuW(menu, 1 /* MF_GRAYED */, 0, Words.Summary(now));
@@ -164,6 +196,33 @@ internal static unsafe partial class Program
         if (now?.Latest is { } latest) AppendMenuW(menu, 0, MenuUpdate, Words.UpdateItem(latest));
         AppendMenuW(menu, 0x800, 0, null);
         AppendMenuW(menu, 0, MenuExit, "終了");
+        switch (Track(menu))
+        {
+            case MenuOpen: Open(); break;
+            case MenuUpdate: Update(now!); break;
+            case MenuExit: Quit(); break;
+        }
+    }
+
+    /// <summary>エージェントだけ入れたときのメニュー。応答するかの 1 行・登録用の URL を表示…・終了</summary>
+    static void ShowAgentMenu()
+    {
+        var menu = CreatePopupMenu();
+        AppendMenuW(menu, 1 /* MF_GRAYED */, 0, AgentWords.Summary(agentUp));
+        AppendMenuW(menu, 0x800 /* MF_SEPARATOR */, 0, null);
+        AppendMenuW(menu, 0, MenuPair, AgentWords.PairItem);
+        AppendMenuW(menu, 0x800, 0, null);
+        AppendMenuW(menu, 0, MenuExit, "終了");
+        switch (Track(menu))
+        {
+            case MenuPair: ShowPairUrl(); break;
+            case MenuExit: Quit(); break;
+        }
+    }
+
+    /// <summary>メニューを出し、選ばれた項目を返す (選ばなければ 0)</summary>
+    static int Track(nint menu)
+    {
         POINT p;
         GetCursorPos(&p);
         // 前に出しておかないと、メニューの外をクリックしても閉じない
@@ -171,12 +230,17 @@ internal static unsafe partial class Program
         var cmd = TrackPopupMenu(menu, 0x100 /* TPM_RETURNCMD */ | 0x80 /* TPM_NONOTIFY */ | 0x2 /* TPM_RIGHTBUTTON */, p.X, p.Y, 0, hwnd, 0);
         PostMessageW(hwnd, 0, 0, 0);
         DestroyMenu(menu);
-        switch (cmd)
-        {
-            case MenuOpen: Open(); break;
-            case MenuUpdate: Update(now!); break;
-            case MenuExit: Quit(); break;
-        }
+        return cmd;
+    }
+
+    /// <summary>
+    /// 登録用の URL と QR を、管理者の PowerShell で denpa-agent --pair を流して出す (同じ bin にある denpa-agent.exe)。
+    /// UAC で断られたら何もしない (ShellExecute がエラーを返すだけ)
+    /// </summary>
+    static void ShowPairUrl()
+    {
+        var agent = Path.Combine(AppContext.BaseDirectory, "denpa-agent.exe");
+        ShellExecuteW(hwnd, "runas", "powershell.exe", Installer.Arguments(Pairing.Script(agent, agentOnly)), null, 1);
     }
 
     static void Open() => ShellExecuteW(0, "open", Url, null, null, 1 /* SW_SHOWNORMAL */);
@@ -219,8 +283,16 @@ internal static unsafe partial class Program
     {
         var d = Data(0x1 /* NIF_MESSAGE */ | 0x2 /* NIF_ICON */ | 0x4 /* NIF_TIP */);
         d.uCallbackMessage = WmTrayIcon;
-        d.hIcon = health is null ? warnIcon : appIcon;
-        Copy(Words.Tip(health), d.szTip, 128);
+        if (agentOnly is not null)
+        {
+            d.hIcon = agentUp ? appIcon : warnIcon;
+            Copy(AgentWords.Summary(agentUp), d.szTip, 128);
+        }
+        else
+        {
+            d.hIcon = health is null ? warnIcon : appIcon;
+            Copy(Words.Tip(health), d.szTip, 128);
+        }
         Shell_NotifyIconW(0 /* NIM_ADD */, &d);
     }
 
@@ -378,6 +450,36 @@ internal static unsafe partial class Program
 internal static class Net
 {
     static readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(3) };
+
+    /// <summary>
+    /// エージェントが応答するか。TLS で繋ぎ、エージェントの証明書が返れば応答したとみなす。エージェントはクライアント証明書を求めるので、
+    /// 証明書を持たないこちらとの握手はそのあと断られるが、それは見ない (組んでいないので API は呼べない)
+    /// </summary>
+    public static async Task<bool> AgentAnswers()
+    {
+        var answered = false;
+        try
+        {
+            using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var tcp = new System.Net.Sockets.TcpClient();
+            await tcp.ConnectAsync("127.0.0.1", Pairing.Port, cancel.Token);
+            await using var tls = new System.Net.Security.SslStream(tcp.GetStream());
+            await tls.AuthenticateAsClientAsync(new System.Net.Security.SslClientAuthenticationOptions
+            {
+                TargetHost = "denpa-agent",
+                RemoteCertificateValidationCallback = (_, certificate, _, _) =>
+                {
+                    answered = certificate is not null;
+                    return true;
+                },
+            }, cancel.Token);
+        }
+        catch
+        {
+            // 繋がらない・握手を断られた。証明書が返っていたかで決める
+        }
+        return answered;
+    }
 
     public static async Task<Health?> Get()
     {

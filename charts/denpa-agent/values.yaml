@@ -17,6 +17,9 @@ image:
 # 入れ替えの合図 (charts/denpa の imageMarks と同じ)。固定タグなら空でよい
 imageMark: ""
 
+# denpa の設定の「受信」の「エージェント」に出す名前の元 (エージェントの AGENT_NAME)。空ならノードの名前
+name: ""
+
 # チューナーとカードリーダーに触るために特権が要る。PX-Q3U4・PX-S1UD・CECH-ZD1 J などの
 # USB の機材はホストにドライバを入れず、/dev/bus (USB) が見えればエージェントが扱う (docs/tuners.md「要るもの」)
 privileged: true

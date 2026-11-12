@@ -828,8 +828,15 @@ jobs:
           # -AgentOnly installs no server
           if (Get-ScheduledTask -TaskName denpa -ErrorAction SilentlyContinue) { throw 'denpa task with -AgentOnly' }
           if (Test-Path "$prefix\server") { throw 'server installed with -AgentOnly' }
-          # No tray at sign-in either (it shows the server)
-          if (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name denpa -ErrorAction SilentlyContinue) { throw 'tray registered with -AgentOnly' }
+          # The tray starts at sign-in in the agent-only mode: it shows whether the agent answers and the URL to pair with
+          $entry = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name denpa).denpa
+          "tray at sign-in: $entry"
+          if ($entry -ne "`"$prefix\bin\denpa-tray.exe`" --agent-only `"$env:USERPROFILE\denpa\config\tuners.json`"") { throw "unexpected Run entry: $entry" }
+          # Redirected, --pair prints only the URL (a terminal also gets the QR below it)
+          $env:TUNERS_FILE = "$env:USERPROFILE\denpa\config\tuners.json"
+          $pair = @(& "$prefix\bin\denpa-agent.exe" --pair)
+          Remove-Item Env:TUNERS_FILE
+          if ($pair.Count -ne 1 -or $pair[0] -ne "https://$($env:COMPUTERNAME):25252#pair=$token") { throw "unexpected --pair output: $pair" }
 
           # libwdi's wdi-simple.exe comes in the agent zip (bin\libwdi) with its license files, and the agent lists
           # the USB IDs install.ps1 -WinUsb reads

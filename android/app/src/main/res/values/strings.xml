@@ -17,7 +17,11 @@
     <string name="action_stop_now">すぐ終了</string>
     <string name="action_copy_url">URL をコピー</string>
     <string name="url_copied">denpa の URL をコピーしました</string>
-    <string name="action_copy_pair_url">組む URL をコピー</string>
-    <string name="pair_url_copied">エージェントと組む URL をコピーしました</string>
+    <string name="action_show_qr">QR を表示</string>
+    <string name="action_hide_qr">閉じる</string>
+    <string name="qr_text">denpa の「エージェントを追加」の「QR を読む」で読み取れます。2 分で消えます</string>
+    <string name="qr_no_address">Wi-Fi か有線の LAN につながっていないため、QR を出せません</string>
+    <string name="action_copy_pair_url">登録用の URL をコピー</string>
+    <string name="pair_url_copied">登録用の URL をコピーしました</string>
     <string name="url_no_address">Wi-Fi か有線の LAN につながっていないため、URL をコピーできません</string>
 </resources>

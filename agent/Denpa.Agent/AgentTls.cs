@@ -67,7 +67,19 @@ public sealed class AgentTls
     }
 
     /// <summary>組むときの URL。denpa の <c>TUNER_AGENT_URL</c> にそのまま書ける</summary>
-    public string PairUrl(int port) => $"https://{Environment.MachineName}:{port}#pair={Token}";
+    public string PairUrl(int port) => $"https://{PairHost()}:{port}#pair={Token}";
+
+    /// <summary>
+    /// URL に書く名前。機械の名前で、macOS だけは Bonjour の名前 (<c>scutil --get LocalHostName</c> に <c>.local</c>) にする。
+    /// .NET の機械の名前は最初の <c>.</c> までなので、Mac では LAN のほかの機械から引けない (install.sh の案内と同じ名前にそろえる)
+    /// </summary>
+    public static string PairHost()
+    {
+        if (!OperatingSystem.IsMacOS()) return Environment.MachineName;
+        var (code, output) = Shell.Run("scutil", ["--get", "LocalHostName"], TimeSpan.FromSeconds(5));
+        var name = code == 0 ? output.Trim() : "";
+        return $"{(name.Length > 0 ? name : Environment.MachineName)}.local";
+    }
 
     // --- 言葉 ----------------------------------------------------------------
 

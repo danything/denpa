@@ -1480,7 +1480,8 @@ compose と Helm は同じ合言葉を環境変数で両方に渡し、Mac と W
 [agent] denpa と組むときの URL: https://<マシン名>:25252#pair=<合言葉>
 ```
 
-- **後から URL を見る:** `denpa-agent --pair`。サーバは立てずに同じ URL を出して終わります (鍵と合言葉が無ければ作る)
+- **後から URL を見る:** `denpa-agent --pair`。サーバは立てずに同じ URL を出して終わります (鍵と合言葉が無ければ作る)。
+  標準出力が端末なら、URL の下に QR を描きます ([登録用の URL を出す](#登録用の-url-を出す))。起動のログと同じく標準出力にだけ出し、`/denpa/logs` には載せません
 - **様子を見る:** `denpa-agent --status`。動いているエージェントに**自分の証明書** (`agent.key`) で繋いで `/denpa/tuners` を
   そのまま出します (繋がらなければ理由を出して 1 で終わる)。インストーラが使います。自分の証明書で来た相手は組んでいなくても
   通します。`agent.key` を読めるのはその機械の管理者 (Windows は `~/denpa` の持ち主) だけだからです
@@ -1533,3 +1534,24 @@ compose と Helm は同じ合言葉を環境変数で両方に渡し、Mac と W
 | 「…この denpa の登録がありません…」 | エージェントに組んでいないと断られた (`tls/clients` から消された) |
 | 「denpa とバージョンが違います」    | `GET /denpa/about` のバージョンが denpa と違う                    |
 | 「元の TS の置き場が見えません」    | 置き場を確かめて見えなかった (録画のあとで復号できない)           |
+
+#### 登録用の URL を出す
+
+**どの端末でも、出すのは登録用の URL とその QR です。** 合言葉が入るので、ふだんは出さず、人が求めたときだけ出します。QR の中身は URL の文字そのものなので、
+「QR を読む」を出さない画面には、スマートフォンのカメラで読んで出た URL を貼れます。
+
+| 端末                         | 出し方                                                                                                                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linux (コンテナ・手で動かす) | `docker compose exec tuner-agent denpa-agent --pair`。端末なら URL の下に QR を上下半分のブロックの字で描く。色は黒地に白と決めて描くので、端末の背景が明るくても暗くても読める                               |
+| Mac (`--agent-only`)         | install.sh が最後に URL と QR を出す。後からはメニューバーのアイコンの「登録用の URL を表示…」。ターミナルで `sudo denpa-agent --pair` を流す ([install-mac.md](install-mac.md#メニューバーのアプリ))         |
+| Windows (`-AgentOnly`)       | install.ps1 が最後に URL と QR を出す。後からは通知領域のアイコンの「登録用の URL を表示…」。管理者の PowerShell で `denpa-agent --pair` を流す ([install-windows.md](install-windows.md#通知領域のアイコン)) |
+| Android                      | 通知の「QR を表示」。2 分だけ通知を大きな画像の形にして QR を出す ([install-android.md](install-android.md#家の-denpa-と組む))                                                                                |
+| Helm (`charts/denpa-agent`)  | `helm install` のあとに出る手順 (NOTES) で、Secret から合言葉を読んで URL を組む                                                                                                                              |
+
+- QR は誤り訂正のレベル M・8 ビットバイトのモードで、バージョン 1〜10 (213 バイトまで) だけを扱います。ライブラリを使わず、エージェント (`Qr.cs`) と Android のアプリ (`Qr.kt`) に同じ作りで書いています
+- URL のホストは機械の名前です。Mac は Bonjour の名前 (`scutil --get LocalHostName` に `.local`)、Android は LAN の IPv4 のアドレスにします。
+  コンテナの機械の名前は既定でコンテナの ID になるので、compose は `hostname` に `.env` の `AGENT_HOSTNAME` (install.sh がこの機械の名前を書く) を渡します
+- ホストの名前が denpa から引けないときは、URL のホストを IP に書き換えて貼ります (denpa は組んだときの証明書そのもので確かめるので、名前は見ない)
+
+**名前は `AGENT_NAME`、無ければ機械の名前です。** compose はコンテナの機械の名前 (`AGENT_HOSTNAME`)、Helm の `charts/denpa-agent` は values の `name` (空ならノードの名前)、
+Android のアプリは端末の名前を渡します。
