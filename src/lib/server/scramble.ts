@@ -1,4 +1,6 @@
-import { isAbsolute, relative, sep } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import { PACKET, SYNC } from "@danything/arib/psi";
 
@@ -13,7 +15,7 @@ import {
   tolerate,
 } from "../shape";
 import { fetchAgent } from "./agent-client";
-import { type Agent, primaryAgent } from "./agents";
+import { type Agent, listAgents, primaryAgent } from "./agents";
 import { config } from "./config";
 import { openRecordingSync, type RecordingSyncHandle } from "./recording-io";
 
@@ -297,6 +299,15 @@ export type CardStatus = {
   readers: CardReader[];
 };
 
+/** そのエージェントが復号に使うカードの番号 (16 桁)。鍵を配る相手のカード、使用中のリーダー、カードのあるリーダーの順に探す */
+export function getActiveCardId(card: CardStatus): string | null {
+  if (card.source === "remote" && card.ids.length > 0)
+    return card.ids[0] ?? null;
+  const reader =
+    card.readers.find((r) => r.state === "active" && r.ids.length > 0) ??
+    card.readers.find((r) => r.ids.length > 0);
+  return reader?.ids[0] ?? null;
+}
 function strings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((v): v is string => typeof v === "string")
@@ -384,10 +395,14 @@ const DECODED = object({ ok: optional(boolean), error: optional(string) });
  * リーダーが見えていてもカードを読めていないことがある (挿さっていない・USB が黙る)。
  * そのまま録ると上に書いた壊れ方になるので、画面から見えるようにしてある。
  */
-export async function cardStatus(agent?: Agent): Promise<CardStatus> {
+export async function cardStatus(
+  agent?: Agent,
+  /** 答えを待つ上限 (ms) */
+  wait = 10_000,
+): Promise<CardStatus> {
   try {
     const res = await fetchAgent(agent ?? primaryAgent(), "/denpa/card", {
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(wait),
     });
     if (!res.ok) {
       return failed(
@@ -409,6 +424,8 @@ export async function cardStatus(agent?: Agent): Promise<CardStatus> {
  * 大きいものを渡すと詰まる)。
  *
  * **返事だけでは信じない。** 出来上がったものを読み、掛かったままなら失敗にする。
+ *
+ * 送る先は `agent`、渡さなければ `decodeAgent` が選ぶ (カードの準備ができていて、置き場が見えるエージェント)
  */
 export async function descramble(
   input: string,
@@ -437,9 +454,11 @@ export async function descramble(
     };
   }
 
+  let chosen: Agent;
   try {
+    chosen = agent ?? (await decodeAgent());
     // 復号は数十分かかることがある。中止を押されたらここで切る
-    const res = await fetchAgent(agent ?? primaryAgent(), "/denpa/decode", {
+    const res = await fetchAgent(chosen, "/denpa/decode", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input: from, output: to }),
@@ -464,7 +483,7 @@ export async function descramble(
 
   if (isScrambled(output)) {
     // 素通しされた。ほぼカードが読めていない
-    const card = await cardStatus();
+    const card = await cardStatus(chosen);
     const why = card.ok
       ? "カードは読めているので、鍵が合わないか ECM が流れていません"
       : card.message;
@@ -476,4 +495,90 @@ export async function descramble(
     };
   }
   return { ok: true, error: "" };
+}
+
+/** `POST /denpa/raw/probe` の答え。見つかれば中身の SHA-256、無ければ `error` */
+const RAW_PROBE = object({
+  sha256: optional(string),
+  error: optional(string),
+});
+
+/** 確かめた結果 (メモリだけ)。見えた・見えなかったものだけ控え、確かめられなかったものは次に訊き直す */
+const probed = new Map<number, boolean>();
+
+/** 置き場を確かめた結果を捨てる。`agent` を渡さなければ全部 (エージェントに繋がり直したとき。runtime.ts) */
+export function forgetRawProbe(agent?: number): void {
+  if (agent === undefined) probed.clear();
+  else probed.delete(agent);
+}
+
+/**
+ * **元の TS の置き場 (`RAW_DIR`) が、エージェントから見えるか。** denpa が `RAW_DIR/.denpa/probe-<エージェントの ID>` に乱数を書き、
+ * エージェントに `POST /denpa/raw/probe` でその中身の SHA-256 を返させて比べる。書いたファイルは確かめ終えたら消す。
+ *
+ * true は見える、false は見えない (ファイルが無い・中身が違う)、null は確かめられない (繋がらない・`/denpa/raw/probe` の無い古いエージェント)
+ */
+export async function probeRaw(agent: Agent): Promise<boolean | null> {
+  const name = `.denpa/probe-${agent.id}`;
+  const path = join(config.rawDir, ".denpa", `probe-${agent.id}`);
+  const content = randomBytes(32).toString("hex");
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, content);
+  } catch (error) {
+    console.warn(`[decode] 元の TS の置き場に書けません (${path}): ${error}`);
+    return null;
+  }
+  try {
+    const res = await fetchAgent(agent, "/denpa/raw/probe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: name }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const raw: unknown = await res.json().catch(() => null);
+    // 古いエージェントは知らない API に JSON を返さない (404・405)
+    if (raw === null) return null;
+    const body = tolerate(RAW_PROBE, raw, "エージェントの /denpa/raw/probe");
+    if (res.ok && typeof body.sha256 === "string")
+      return body.sha256 === createHash("sha256").update(content).digest("hex");
+    return res.status === 404 && typeof body.error === "string" ? false : null;
+  } catch {
+    return null;
+  } finally {
+    rmSync(path, { force: true });
+  }
+}
+
+/** 置き場が見えるか。控えがあればそれ、無ければ確かめる (`probeRaw`) */
+async function rawVisible(agent: Agent): Promise<boolean | null> {
+  const kept = probed.get(agent.id);
+  if (kept !== undefined) return kept;
+  const seen = await probeRaw(agent);
+  if (seen !== null) probed.set(agent.id, seen);
+  return seen;
+}
+
+/**
+ * **後から復号させるエージェント** (`descramble`)。カードの準備ができている (`/denpa/card` の `ok` とカードの番号がある) エージェントのうち、
+ * 置き場が見える (`probeRaw`) ものを並びの順に選ぶ。見えるものが無ければ確かめられないもの、それも無ければカードの準備ができている先頭
+ * (エージェントが「見つかりません」と断り、今までどおり復号できなかった録画として残る)。カードの準備ができているものが無ければ並びの先頭。
+ *
+ * **エージェントが 1 台なら、確かめずにそこへ送る** (1 台のときの動きは変わらない)
+ */
+export async function decodeAgent(): Promise<Agent> {
+  const all = listAgents();
+  if (all.length <= 1) return primaryAgent();
+  const cards = await Promise.all(all.map((agent) => cardStatus(agent)));
+  const ready = all.filter(
+    (_, i) => cards[i]!.ok && getActiveCardId(cards[i]!) !== null,
+  );
+  if (ready.length === 0) return all[0]!;
+  let unknown: Agent | null = null;
+  for (const agent of ready) {
+    const seen = await rawVisible(agent);
+    if (seen === true) return agent;
+    if (seen === null) unknown ??= agent;
+  }
+  return unknown ?? ready[0]!;
 }

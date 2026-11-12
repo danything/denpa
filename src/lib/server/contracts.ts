@@ -10,15 +10,27 @@ import { PACKET } from "@danything/arib/psi";
 import { ServiceFilter } from "@danything/arib/service-filter";
 import { and, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
-import { NO_CHANNEL, serviceAgent, serviceChannel } from "./agent-channels";
+import { contractAgents, readAgentCards } from "./agent-cards";
+import {
+  NO_CHANNEL,
+  serviceChannel,
+  servicePlaces,
+  strictPlaces,
+} from "./agent-channels";
 import { fetchAgent } from "./agent-client";
-import { type Agent, primaryAgent } from "./agents";
+import { type Agent, listAgents, primaryAgent } from "./agents";
 import { config } from "./config";
+import {
+  type ContractState,
+  type ContractStatus,
+  contractStatus,
+  freshDecode,
+} from "./contract-status";
 import { orm } from "./db";
 import { cardContracts, programs, services } from "./schema";
 import {
-  type CardStatus,
   cardStatus,
+  getActiveCardId,
   mediaPids,
   ScrambleCount,
 } from "./scramble";
@@ -29,30 +41,6 @@ interface ConfirmResult {
   code: number;
   error?: string | undefined;
 }
-
-type ContractState = "subscribed" | "unsubscribed" | "expired";
-
-/**
- * **復号テストで確かめた契約を信じる長さ (31 日)。** 番組表に契約の情報 (0xCB) が無い局はカードに聞けないので、
- * 復号できたことだけが手がかりになる。CS の月額は月ごとに切れるので、確かめてから 1 か月を過ぎたら確かめ直すまで録らない。
- * 有料の番組を復号できて録れたら、確かめた日を新しくする (`noteDecoded`)。録画が復号できずに終わったときは、31 日を待たずに下げる (`noteStillScrambled`)
- */
-export const DECODE_VALID_MS = 31 * 86_400_000;
-
-/** 復号テストで確かめた契約が、まだ信じられる新しさか */
-function freshDecode(
-  decodedAt: number | null | undefined,
-  now = Date.now(),
-): boolean {
-  return decodedAt != null && now - decodedAt < DECODE_VALID_MS;
-}
-
-/**
- * **ダイアログに出す契約の状態。** `ContractState` に、まだ確かめていない (`unverified`) を足したもの。
- * 行が無い局と、カードが答えておらず (`code` が無い)、新しい復号の結果も無い局が `unverified`。
- * `subscribed` は、`paidAllowed` が録ってよいとする局と同じ
- */
-export type ContractStatus = ContractState | "unverified";
 
 export interface ContractRow {
   cardId: string;
@@ -70,37 +58,13 @@ export interface ContractRow {
   checkedAt: number | null;
 }
 
-/** 行から、ダイアログに出す状態を決める (`ContractStatus`) */
-export function contractStatus(
-  row: {
-    state: ContractState;
-    code: number | null;
-    decodeOk: boolean | null;
-    decodedAt: number | null;
-  },
-  now = Date.now(),
-): ContractStatus {
-  // カードが答えた局は、その答えのまま
-  if (row.code !== null) return row.state;
-  if (row.state === "subscribed" && freshDecode(row.decodedAt, now))
-    return "subscribed";
-  // 復号を試して掛かったままだった局は未契約。31 日を過ぎた結果しか無い局と、試していない局は確かめていない
-  return row.decodeOk === false ? "unsubscribed" : "unverified";
-}
-
-/** いま使っている B-CAS カードの番号 (16 桁)。鍵を配る相手のカード、使用中のリーダー、カードのあるリーダーの順に探す */
-export function getActiveCardId(card: CardStatus): string | null {
-  if (card.source === "remote" && card.ids.length > 0)
-    return card.ids[0] ?? null;
-  const reader =
-    card.readers.find((r) => r.state === "active" && r.ids.length > 0) ??
-    card.readers.find((r) => r.ids.length > 0);
-  return reader?.ids[0] ?? null;
-}
-
 const NO_CARD = "B-CAS カードが認識されていません";
 
-/** いま使っているカードの番号。カードが読めなければ null */
+/** 確かめるカードで復号するエージェントが、どれも局を受けられないとき (`decodeOnChannel`) */
+const NO_CARD_PLACE =
+  "このカードで復号するエージェントの控えに、この局のチャンネルがありません";
+
+/** 並びの先頭のエージェントが使っているカードの番号 (設定のダイアログに出すカード)。カードが読めなければ null */
 async function usableCardId(): Promise<string | null> {
   const card = await cardStatus();
   return (card.ok && getActiveCardId(card)) || null;
@@ -170,14 +134,21 @@ export async function confirmCardContract(
 }
 
 /**
- * 有料放送局の最新の CA契約情報を B-CAS カードで確認し、card_contracts テーブルを更新する。
+ * 有料放送局の最新の CA契約情報を、カードごとに確かめて card_contracts テーブルを更新する。
+ *
+ * カードは全部のエージェントの `/denpa/card` から集め、1 枚につき 1 台に問い合わせる (`agent-cards.contractAgents`。
+ * そのカードを手元に持つエージェント、無ければそのカードから鍵を貰うエージェント)。カードは世帯で 1 枚の勧めどおりなら、問い合わせるのは 1 台。
+ * 1 枚で問い合わせに失敗しても、ほかのカードは確かめてから送出する。
+ * 返すのは、設定のダイアログに出すカード (並びの先頭のエージェントのカード。無ければ最初に見つけたカード) の行
  */
 export async function checkContracts(): Promise<ContractRow[]> {
-  const card = await cardStatus();
-  const cardId = getActiveCardId(card);
-  if (!card.ok || !cardId) {
+  const agents = listAgents();
+  const cards = await readAgentCards(agents);
+  const holders = contractAgents(cards);
+  if (holders.size === 0) {
     throw new Error(
-      card.message || "B-CAS カードが認識されていないため契約を確認できません",
+      cards[0]?.status.message ||
+        "B-CAS カードが認識されていないため契約を確認できません",
     );
   }
 
@@ -197,6 +168,26 @@ export async function checkContracts(): Promise<ContractRow[]> {
       serviceVerifications.set(prog.serviceId, prog.verification ?? null);
   }
   if (serviceVerifications.size === 0) return [];
+
+  let failure: unknown = null;
+  for (const [cardId, holder] of holders) {
+    const agent = agents.find((a) => a.id === holder)!;
+    try {
+      await checkCard(cardId, agent, serviceVerifications);
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (failure !== null) throw failure;
+  return getContractRows(cards[0]?.card ?? [...holders.keys()][0]!);
+}
+
+/** 1 枚のカード `cardId` の契約を、エージェント `agent` に問い合わせて書く (`checkContracts`) */
+async function checkCard(
+  cardId: string,
+  agent: Agent,
+  serviceVerifications: ReadonlyMap<number, string | null>,
+): Promise<void> {
   const serviceIds = [...serviceVerifications.keys()];
 
   // 前に復号を確かめた結果 (番組表に契約の情報が無い局は、これで決める)
@@ -229,7 +220,11 @@ export async function checkContracts(): Promise<ContractRow[]> {
     if (verification) {
       /** その日 (今日からの日数) に観られるか。カードに聞けなければ投げる (今の行を上書きしない) */
       const valid = async (days: number): Promise<boolean> => {
-        const res = await confirmCardContract(verification, todayMjd + days);
+        const res = await confirmCardContract(
+          verification,
+          todayMjd + days,
+          agent,
+        );
         if (!res.ok) {
           throw new Error(
             `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${res.error}`,
@@ -291,8 +286,6 @@ export async function checkContracts(): Promise<ContractRow[]> {
       })
       .run();
   }
-
-  return getContractRows(cardId);
 }
 
 /**
@@ -373,8 +366,7 @@ const DECODE_TARGET = {
   id: services.id,
   arib: services.service_id,
   type: services.type,
-  channel: serviceChannel(),
-  agent: serviceAgent(),
+  places: servicePlaces(),
 };
 
 /** 復号を確かめる局 (`DECODE_TARGET` で読んだ行) */
@@ -382,29 +374,46 @@ interface DecodeTarget {
   id: number;
   arib: number;
   type: string;
-  channel: string | null;
-  /** `channel` を控えに持つエージェント (`agent-channels.serviceAgent`)。契約を確かめる選局はここへ送る (振り分けない) */
-  agent: number | null;
+  /** 局を受けられる所 (`agent-channels.servicePlaces`)。どの控えにも無ければ null */
+  places: string | null;
 }
 
 /** 局ごとにパケットを数える長さ。これだけ数えたら、15 秒を待たずに判定する */
 const DECODE_PACKETS = 2000;
 
 /**
- * **同じ物理チャンネルの局を 1 つの組にまとめる** (`testDecodeUnverified`)。1 つの組は 1 回の選局で確かめる。
- * 組と組の中の並びは、渡した順
+ * **同じ TS の局を 1 つの組にまとめる** (`testDecodeUnverified`)。1 つの組は 1 回の選局で確かめる。
+ * 同じ TS は、局を受けられる所 (`places`。エージェントとそのチャンネル) が同じになる。組と組の中の並びは、渡した順
  */
 export function groupByChannel<
-  T extends { type: string; channel: string | null },
+  T extends { type: string; places: string | null },
 >(targets: T[]): T[][] {
   const groups = new Map<string, T[]>();
   for (const target of targets) {
-    const key = `${target.type} ${target.channel}`;
+    const key = `${target.type} ${target.places}`;
     const group = groups.get(key);
     if (group === undefined) groups.set(key, [target]);
     else group.push(target);
   }
   return [...groups.values()];
+}
+
+/**
+ * **復号を確かめるカードと、そのカードで復号するエージェント** (`testDecode`・`testDecodeUnverified`)。
+ * カードは設定のダイアログに出すもの (並びの先頭のエージェントのカード)。エージェントは、手元に持つものも鍵を貰うものも入れる。
+ * 先頭のエージェントがカードを読めなければ null
+ */
+async function decodeCard(): Promise<{
+  card: string;
+  agents: ReadonlySet<number>;
+} | null> {
+  const cards = await readAgentCards();
+  const card = cards[0]?.card ?? null;
+  if (card === null) return null;
+  return {
+    card,
+    agents: new Set(cards.filter((c) => c.card === card).map((c) => c.agent)),
+  };
 }
 
 /**
@@ -435,8 +444,8 @@ function notPaidNow(serviceId: number, now: number): string | null {
  * 復号可否 (decode_ok) を更新する。
  */
 export async function testDecode(serviceId: number): Promise<DecodeResult> {
-  const cardId = await usableCardId();
-  if (cardId === null) return { ok: false, decodeOk: false, error: NO_CARD };
+  const card = await decodeCard();
+  if (card === null) return { ok: false, decodeOk: false, error: NO_CARD };
 
   const targetService = orm()
     .select(DECODE_TARGET)
@@ -449,7 +458,7 @@ export async function testDecode(serviceId: number): Promise<DecodeResult> {
   const notPaid = notPaidNow(serviceId, Date.now());
   if (notPaid !== null) return { ok: false, decodeOk: false, error: notPaid };
 
-  const results = await decodeOnChannel(cardId, [targetService]);
+  const results = await decodeOnChannel(card, [targetService]);
   return (
     results.get(serviceId) ?? {
       ok: false,
@@ -485,12 +494,12 @@ export async function testDecodeUnverified(): Promise<DecodeAll> {
 }
 
 async function decodeUnverified(): Promise<DecodeAll> {
-  const cardId = await usableCardId();
-  if (cardId === null) return { ok: false, error: NO_CARD };
+  const card = await decodeCard();
+  if (card === null) return { ok: false, error: NO_CARD };
 
   const now = Date.now();
   const unverified = new Set(
-    getContractRows(cardId, now)
+    getContractRows(card.card, now)
       .filter((row) => row.status === "unverified")
       .map((row) => row.serviceId),
   );
@@ -507,30 +516,32 @@ async function decodeUnverified(): Promise<DecodeAll> {
     else results.set(target.id, { ok: false, decodeOk: false, error: notPaid });
   }
   for (const group of groupByChannel(targets))
-    for (const [id, result] of await decodeOnChannel(cardId, group))
+    for (const [id, result] of await decodeOnChannel(card, group))
       results.set(id, result);
   return { ok: true, results };
 }
 
 /**
- * **1 つの物理チャンネルを 1 回だけ選局し、その中の局ごとに復号できるかを確かめて card_contracts に書く。**
- * `targets` は同じチャンネルの局 (`groupByChannel`)。選局に失敗したら、どの局も確かめられなかったことにする
+ * **1 つの TS を 1 回だけ選局し、その中の局ごとに復号できるかを確かめて card_contracts に書く。**
+ * `targets` は同じ TS の局 (`groupByChannel`)。選局は、確かめるカードで復号するエージェント (`decodeCard`) のうち局を受けられる所に振り分ける
+ * (カードの無いエージェントや別のカードのエージェントで受けると、そのカードの契約を確かめたことにならない)。
+ * 選局に失敗したら、どの局も確かめられなかったことにする
  */
 async function decodeOnChannel(
-  cardId: string,
+  card: { card: string; agents: ReadonlySet<number> },
   targets: DecodeTarget[],
 ): Promise<Map<number, DecodeResult>> {
   const results = new Map<number, DecodeResult>();
   const first = targets[0];
   if (first === undefined) return results;
-  const channel = first.channel;
-  const agent = first.agent;
-  if (channel === null || agent === null) {
+  const places = first.places === null ? [] : strictPlaces(first.places);
+  const mine = places.filter((place) => card.agents.has(place.agent));
+  if (mine.length === 0) {
+    const error = places.length === 0 ? NO_CHANNEL : NO_CARD_PLACE;
     for (const target of targets)
-      results.set(target.id, { ok: false, decodeOk: false, error: NO_CHANNEL });
+      results.set(target.id, { ok: false, decodeOk: false, error });
     return results;
   }
-
   /*
    * **局ごとに、その局のパケットだけを数える** (`ServiceFilter`)。物理チャンネルには同じ中継器のほかの局も入っていて、
    * スクランブルの無い局のパケットまで数えると、復号できなくても割合が下がる
@@ -547,7 +558,7 @@ async function decodeOnChannel(
     // スキャンと同じ優先度でストリームを開く (WantsKeys が有効な live プレフィックス)
     const stream = await openChannelStream(
       first.type,
-      [{ agent, channel }],
+      mine,
       abortController.signal,
       "live test-decode",
       config.priority.scan,
@@ -605,7 +616,7 @@ async function decodeOnChannel(
     }
     // 0.5 未満なら復号成功とみなす (正常な復号 TS はスクランブル比率 0)
     const decodeOk = scrambled / total < 0.5;
-    saveDecode(cardId, target.id, decodeOk);
+    saveDecode(card.card, target.id, decodeOk);
     results.set(target.id, { ok: true, decodeOk });
   }
   return results;
@@ -705,7 +716,7 @@ export function reserveWarning(
   if (program === undefined || program.isFree) return null;
   if (paidAllowed(now)(program.serviceId)) return null;
   // カードが複数あれば、期限切れ → 未契約 → 確かめていない の順に強いほうを出す
-  const statuses = serviceContracts(program.serviceId, now);
+  const statuses = serviceContracts(program.serviceId, null, now);
   const tail = "録画がスクランブルのまま残ることがあります";
   if (statuses.has("expired"))
     return `予約しました。この局は契約の期限が切れているため、${tail}`;
@@ -715,9 +726,10 @@ export function reserveWarning(
   return `予約しました。この局の契約を確かめていないため、${tail}。設定の「受信」にある「有料契約を確認」で確かめられます`;
 }
 
-/** 局の契約の状態 (カードごと)。決め方はダイアログと同じ (`contractStatus`)。行が無ければ空 */
+/** 局の契約の状態 (カードごと)。決め方はダイアログと同じ (`contractStatus`)。`card` を渡せばそのカードの行だけ。行が無ければ空 */
 function serviceContracts(
   serviceId: number,
+  card: string | null = null,
   now = Date.now(),
 ): Set<ContractStatus> {
   return new Set(
@@ -729,7 +741,12 @@ function serviceContracts(
         decodedAt: cardContracts.decoded_at,
       })
       .from(cardContracts)
-      .where(eq(cardContracts.service_id, serviceId))
+      .where(
+        and(
+          eq(cardContracts.service_id, serviceId),
+          card === null ? undefined : eq(cardContracts.card_id, card),
+        ),
+      )
       .all()
       .map((row) => contractStatus(row, now)),
   );
@@ -759,10 +776,19 @@ export function scrambledLiveMessage(
   return `この局は契約されていないため、${tail}`;
 }
 
-/** `scrambledLiveMessage` を、いまのカードと契約の状態で */
-export async function scrambledLiveNotice(serviceId: number): Promise<string> {
-  const card = await cardStatus();
-  return scrambledLiveMessage(card.ok, serviceContracts(serviceId));
+/**
+ * `scrambledLiveMessage` を、いまのカードと契約の状態で。`agent` はライブの選局を送ったエージェント (`agents.id`) で、
+ * そのエージェントが復号に使うカードと、そのカードの契約で決める。分からなければ並びの先頭のエージェントと、全部のカードの契約
+ */
+export async function scrambledLiveNotice(
+  serviceId: number,
+  agent: number | null = null,
+): Promise<string> {
+  const target =
+    agent === null ? undefined : listAgents().find((a) => a.id === agent);
+  const card = await cardStatus(target);
+  const id = target === undefined ? null : getActiveCardId(card);
+  return scrambledLiveMessage(card.ok, serviceContracts(serviceId, id));
 }
 
 /**

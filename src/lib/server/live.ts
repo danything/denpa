@@ -2037,7 +2037,7 @@ class Session {
     const message =
       this.transport === "tlv"
         ? undecodableReason(this.channelType, "tlv")
-        : await scrambledLiveNotice(this.serviceId).catch(
+        : await scrambledLiveNotice(this.serviceId, this.agent).catch(
             () => "スクランブルを復号できませんでした",
           );
     if (this.stopped) return;
@@ -2073,7 +2073,9 @@ class Session {
       this.pin,
       this.program > 0 ? this.program : null,
       LIVE_ANSWER_WAIT,
+      this.serviceId,
     );
+    this.agent = place.agent;
     this.locating = this.locate(place);
     this.settle();
     return stream;
@@ -2081,6 +2083,8 @@ class Session {
 
   /** チューナーを使えたか、使えずに畳んだら呼ぶもの (`whenTuned`) */
   private readonly tuning: (() => void)[] = [];
+  /** 送ったエージェント (`agents.id`)。スクランブルされたまま届いた理由を、そのエージェントのカードで決める (`endScrambled`) */
+  private agent: number | null = null;
   private settled = false;
 
   /**

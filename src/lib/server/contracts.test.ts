@@ -11,7 +11,7 @@ import {
   stream,
 } from "@danything/arib/synth";
 
-import type { ContractStatus } from "./contracts";
+import type { ContractStatus } from "./contract-status";
 
 const { config } = await import("./config");
 const realAgent = config.agentUrl;
@@ -22,18 +22,17 @@ const testDir = mkdtempSync(join(tmpdir(), "denpa-contracts-"));
 config.dataDir = testDir;
 config.dbPath = join(testDir, "denpa.db");
 
+const { contractStatus, DECODE_VALID_MS } = await import("./contract-status");
 const { orm } = await import("./db");
 const { placeServices } = await import("./fake-channels");
 const { cardContracts, programs, services } = await import("./schema");
 const {
   checkContracts,
   confirmCardContract,
-  contractStatus,
   groupByChannel,
   testDecodeUnverified,
   fromMjd,
   getContractRows,
-  DECODE_VALID_MS,
   isCodeSubscribed,
   noteDecoded,
   noteStillScrambled,
@@ -687,14 +686,14 @@ describe("ダイアログに出す契約の状態", () => {
 });
 
 describe("確かめていない局の復号をまとめて確かめる (testDecodeUnverified)", () => {
-  test("同じ物理チャンネルの局は 1 つの組にまとめる。組と局の並びは渡した順", () => {
+  test("同じ TS (局を受けられる所が同じ) の局は 1 つの組にまとめる。組と局の並びは渡した順", () => {
     expect(
       groupByChannel([
-        { id: 1, type: "CS", channel: "CS2" },
-        { id: 2, type: "BS", channel: "BS01_0" },
-        { id: 3, type: "CS", channel: "CS2" },
-        { id: 4, type: "CS", channel: "CS4" },
-        { id: 5, type: "BS", channel: "BS01_0" },
+        { id: 1, type: "CS", places: "CS2" },
+        { id: 2, type: "BS", places: "BS01_0" },
+        { id: 3, type: "CS", places: "CS2" },
+        { id: 4, type: "CS", places: "CS4" },
+        { id: 5, type: "BS", places: "BS01_0" },
       ]).map((group) => group.map((target) => target.id)),
     ).toEqual([[1, 3], [2, 5], [4]]);
     expect(groupByChannel([])).toEqual([]);

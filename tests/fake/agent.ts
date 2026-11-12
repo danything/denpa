@@ -8,6 +8,7 @@
  * エージェント自身のふるまい (取り合い・止め方・スキャンの総当たり) は
  * ここでは試せない。それは `agent/conformance.test.ts` が本物に当てている。
  */
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -192,6 +193,24 @@ function unscramble(
   for (let i = 0; i + 188 <= buffer.length; i += 188) buffer[i + 3]! &= 0x3f;
   writeFileSync(to, buffer);
   return { ok: true, error: "" };
+}
+
+/** `POST /denpa/raw/probe`。本物 (RawProbe.cs) と同じく、置き場の `.denpa/` の下のファイルの中身の SHA-256 を返す */
+function probeRaw(path: unknown): Response {
+  const full = resolve(RECORDED, typeof path === "string" ? path : "");
+  if (!full.startsWith(`${RECORDED}/.denpa/`))
+    return Response.json(
+      { error: "読めるのは元の TS の保存先の .denpa/ の下だけです" },
+      { status: 400 },
+    );
+  if (!existsSync(full))
+    return Response.json(
+      { error: `${full} が見つかりません` },
+      { status: 404 },
+    );
+  return Response.json({
+    sha256: createHash("sha256").update(readFileSync(full)).digest("hex"),
+  });
 }
 
 /** 4K の局 (TLV) の搬送波か */
@@ -794,6 +813,11 @@ const options: Bun.ServeOptions = {
     if (url.pathname === "/denpa/about" && request.method === "GET") {
       if (aboutMode === "off") return new Response("failed", { status: 500 });
       return json(agentAbout());
+    }
+    if (url.pathname === "/denpa/raw/probe" && request.method === "POST") {
+      return request
+        .json()
+        .then((body: { path?: unknown }) => probeRaw(body.path));
     }
     if (url.pathname === "/denpa/decode" && request.method === "POST") {
       return request
