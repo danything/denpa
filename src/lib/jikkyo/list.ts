@@ -75,7 +75,7 @@ export function moreAhead(want: number, shown: number, most: number): number {
 /**
  * 並べ直して「いま」へ付いていくか。「いま」にいて (`stuck`)、一覧を使っていない (`held`) ときだけ。
  * 使っている間に増えたぶんは、離れてから付いていく。まだ 1 行も無ければ (`shown` が 0) いつも付いていく
- * (守る読みかけが無い。乗ったまま初めての行が来ても、頭に並べたまま待たない)。
+ * (守る読みかけが無い。乗ったまま初めての行が来ても、先頭に並べたまま待たない)。
  * 一覧から押して飛んだ直後 (`settling`) は、乗っていても付いていく (`LIST_SEEK_SETTLE`。その間にホイール・指・キーで巻けばやめる)
  */
 export function follows(

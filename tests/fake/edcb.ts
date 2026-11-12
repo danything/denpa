@@ -25,7 +25,7 @@ interface FakeEdcbMode {
   busy: number;
   /** 結果をこれにする (null なら 1 = 成功) */
   result: number | null;
-  /** 応答の頭の長さをこれに偽る (null なら本当の長さ)。本文は本当の長さだけ送って切る */
+  /** 応答の先頭の長さをこれに偽る (null なら本当の長さ)。本文は本当の長さだけ送って切る */
   claimSize: number | null;
 }
 
@@ -104,7 +104,7 @@ export class Writer {
       .u16(d.getUTCMilliseconds());
   }
 
-  /** 頭に `DWORD 全体の長さ` を付けた構造体 */
+  /** 先頭に `DWORD 全体の長さ` を付けた構造体 */
   struct(write: (w: Writer) => void): this {
     const inner = new Writer();
     write(inner);

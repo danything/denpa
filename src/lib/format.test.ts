@@ -164,7 +164,7 @@ describe("欠けの表示", () => {
     ).toBeNull();
   });
 
-  test("頭を譲ったら、どれだけ欠けるかを言う", () => {
+  test("先頭を譲ったら、どれだけ欠けるかを言う", () => {
     expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null })).toBe(
       "冒頭 15 分が欠けます (チューナー不足)",
     );
@@ -198,7 +198,7 @@ describe("カードリーダーの名前", () => {
 });
 
 describe("進み具合のバーの大きさ", () => {
-  test("1GB からは GB で小数1桁、それより小さければ MB", () => {
+  test("1 GB からは GB で小数 1 桁、それより小さければ MB", () => {
     const big = byteScale(30 * 1024 ** 3);
     expect(big.unit).toBe("GB");
     expect(big.scaled(1.26 * 1024 ** 3)).toBe(1.3);
@@ -210,34 +210,34 @@ describe("進み具合のバーの大きさ", () => {
 
 describe("空きと残り時間", () => {
   const GB = 1024 ** 3;
-  test("1TB からは TB で、時間は桁で丸める", () => {
+  test("1 TB からは TB で、時間は桁で丸める", () => {
     expect(capacityLabel(1.25 * 1024 * GB, 937.4)).toEqual({
-      free: "空き 1.3TB",
+      free: "空き 1.3 TB",
       hours: "約 930 時間",
     });
     expect(capacityLabel(512.7 * GB, 64.9)).toEqual({
-      free: "空き 512GB",
+      free: "空き 512 GB",
       hours: "約 64 時間",
     });
     expect(capacityLabel(4 * 1024 * GB, 2345)).toEqual({
-      free: "空き 4.0TB",
+      free: "空き 4.0 TB",
       hours: "約 2300 時間",
     });
   });
 
   test("目安が無ければ空きだけ、残りわずかはそう言う", () => {
     expect(capacityLabel(300 * GB, null)).toEqual({
-      free: "空き 300GB",
+      free: "空き 300 GB",
       hours: null,
     });
     expect(capacityLabel(0.5 * GB, 0.2)).toEqual({
-      free: "空き 1GB 未満",
+      free: "空き 1 GB 未満",
       hours: "1 時間未満",
     });
   });
 });
 
-describe("「いま」の線の一言", () => {
+describe("「いま」の行の一言", () => {
   // 18:01:20。線の時刻は 18:01
   const now = new Date(2026, 9, 19, 18, 1, 20).getTime();
   const at = (h: number, m: number) => new Date(2026, 9, 19, h, m).getTime();

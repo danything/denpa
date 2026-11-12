@@ -913,7 +913,7 @@ test.describe("ライブで実況に書き込む", () => {
 });
 
 test.describe("実況のコメントの一覧", () => {
-  test("右端の列のボタンで右の列の頭に出し、端末に覚える。「最新へ」は上へ巻いたときだけ出す", async ({
+  test("右端の列のボタンで右の列の先頭に出し、端末に覚える。「最新へ」は上へ巻いたときだけ出す", async ({
     page,
   }) => {
     await setJikkyo(page, true);
@@ -1236,7 +1236,7 @@ test.describe("「実況」タブ", () => {
     }
   });
 
-  test("読めないときは番号順で並べ、一覧の頭に 1 行だけ出す", async ({
+  test("読めないときは番号順で並べ、一覧の先頭に 1 行だけ出す", async ({
     page,
   }) => {
     await setJikkyo(page, true);

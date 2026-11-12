@@ -52,8 +52,8 @@ describe("月の升目", () => {
   });
 
   test("月の見出し", () => {
-    expect(monthLabel(monthOf(NOW))).toBe("2026年10月");
-    expect(monthLabel(2027 * 12)).toBe("2027年1月");
+    expect(monthLabel(monthOf(NOW))).toBe("2026 年 10 月");
+    expect(monthLabel(2027 * 12)).toBe("2027 年 1 月");
   });
 });
 
@@ -115,16 +115,18 @@ describe("日ごとの印", () => {
       today,
     );
     expect(dayAriaLabel(today, marks.get(today), today)).toBe(
-      "10月19日 (今日)、予約 3 件",
+      "10 月 19 日 (今日)、予約 3 件",
     );
-    expect(dayAriaLabel(day(10, 20), undefined, today)).toBe("10月20日、なし");
+    expect(dayAriaLabel(day(10, 20), undefined, today)).toBe(
+      "10 月 20 日、なし",
+    );
     expect(
       dayAriaLabel(
         day(10, 1),
         { recorded: 2, missed: 1, ended: 0, recording: 0, reserved: 0 },
         today,
       ),
-    ).toBe("10月1日、録画 2 件、録り逃し 1 件");
+    ).toBe("10 月 1 日、録画 2 件、録り逃し 1 件");
   });
 });
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * **状態** (エンコード・空き)。押せない並び。次の録画は「いま」の線に出す (`NowLine`)。広い形はサイドバーのカレンダーの下、
-   * スマホの形は「⋯」の頭に同じものを出す (`where` で testid を分ける)
+   * **状態** (エンコード・空き)。押せない並び。次の録画は「いま」の行に出す (`NowMark`)。広い形はサイドバーのカレンダーの下、
+   * スマホの形は「⋯」の先頭に同じものを出す (`where` で testid を分ける)
    */
   import { encodeLive } from "#lib/encode-live.svelte.js";
   import { encodeDetail } from "#lib/format.js";

@@ -312,7 +312,7 @@
     disabled={reloading}
     data-testid="logs-reload"
   >
-    {reloading ? "読み直しています…" : "読み直す"}
+    {reloading ? "読み込んでいます…" : "再読み込み"}
   </button>
   <button
     type="button"

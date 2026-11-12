@@ -16,14 +16,14 @@
     rememberGuideTabs,
   } from "#lib/components/GuidePending.svelte";
   import Menu from "#lib/components/Menu.svelte";
-  import NowLine from "#lib/components/NowLine.svelte";
+  import NowMark from "#lib/components/NowMark.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
   import ProgramActions from "#lib/components/ProgramActions.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
+  import ProgramState from "#lib/components/ProgramState.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, { warningNotice } from "#lib/components/Toasts.svelte";
   import {
-    badgeClass,
     channelNumber,
     date,
     playableRecordingId,
@@ -878,7 +878,8 @@
 
       <!--
                 **ジャンルの色の見本。** 押すとそのジャンルだけ目立たせる (ほかのマスを淡く)。もう一度押すか
-                「すべて」で戻す。見本の色はマスと同じ規則 (`:is(.program, .swatch)[data-genre]`) から
+                「すべて」で戻す。中の設定が既定から変わっている間 (ジャンルを目立たせている・中に入れたサブ ch を切った) は、
+                ボタンにほかのメニューと同じ短い下線 (`data-on`)。見本の色はマスと同じ規則 (`:is(.program, .swatch)[data-genre]`) から
             -->
       <Menu
         side={menuSide}
@@ -894,6 +895,9 @@
             aria-label={narrow && canSplit
               ? "サブチャンネルとジャンルの色"
               : "ジャンルの色"}
+            data-on={highlight !== null || (narrow && canSplit && !subchannels)
+              ? ""
+              : undefined}
             data-testid="guide-genres"
           >
             {#if highlight !== null}
@@ -982,7 +986,7 @@
       <p class="small muted">{sheet.failed}</p>
       <div class="actions">
         <button type="button" class="small secondary outline" onclick={reload}
-          >読み直す</button
+          >再読み込み</button
         >
       </div>
     </div>
@@ -1084,19 +1088,19 @@
 
         {#if nowSlots !== null}
           <!--
-                        「いま」の時刻 (ホームと同じ `NowLine`。表に重ねる `overlay`)。ホームのような一言は添えない。
+                        「いま」の時刻 (ホームと同じ `NowMark`。表に重ねる `overlay`)。ホームのような一言は添えない。
                         **時刻は時刻の列の中に置く**。列の外へ出すと番組名に被る。同じ時の数字とは重なるが、
                         時刻のカプセルの面で隠す。`sticky` (`left: 0`) で横に流しても左端に残る
                         (`absolute` だと枠 `grid-column: 1 / -1` の左端に付いて流れていく)
                     -->
-          <NowLine
+          <NowMark
             layout="overlay"
             class="now"
             time={time(clock)}
             labelWidth={TIME_COLUMN}
             style="grid-column: 1 / -1; grid-row: 2; translate: 0 calc({nowSlots} * {SLOT_HEIGHT});"
             bind:element={nowMark}
-            data-testid="now-line"
+            data-testid="now-mark"
           />
         {/if}
 
@@ -1249,21 +1253,10 @@
   {@const program = selected}
   <ProgramDetail program={facts} onclose={close}>
     {#snippet status()}
-      {#if program.reservation_state}
-        <!-- バッジの色は検索・ホームと同じ決め方 (`badgeClass`。予約済みは色を付けない) -->
-        <span
-          class="tag {badgeClass(program.reservation_state)}"
-          data-testid="detail-state"
-        >
-          {stateLabel(program.reservation_state)}
-        </span>
-      {:else if program.end_at <= clock}
-        <!--
-                    もう終わった番組。予約ボタンを出しても、押した先で
-                    「放送が終わっています」と断られるだけ (reservations.reserve)
-                -->
-        <span class="tag" data-testid="detail-ended">放送終了</span>
-      {/if}
+      <ProgramState
+        state={program.reservation_state ?? null}
+        ended={program.end_at <= clock}
+      />
     {/snippet}
     {#snippet actions()}
       <!--
@@ -1710,7 +1703,7 @@
     position: sticky;
     display: block;
   }
-  /* 「いま」の時刻 (`NowLine`)。時の列 (`.hour` の 10) より 1 つ上に。1 分ごとの移りを飛ばさずに (上の `nowSlots`)。場所が動くので `--dp-duration-move` (docs/design.md) */
+  /* 「いま」の時刻 (`NowMark`)。時の列 (`.hour` の 10) より 1 つ上に。1 分ごとの移りを飛ばさずに (上の `nowSlots`)。場所が動くので `--dp-duration-move` (docs/design.md) */
   .rows :global(.now) {
     z-index: 11;
     transition: translate var(--dp-duration-move) var(--dp-ease);

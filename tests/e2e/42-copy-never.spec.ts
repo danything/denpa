@@ -89,7 +89,7 @@ test.describe("コピー禁止の番組", () => {
       .getByTestId("reservation-row")
       .filter({ hasText: "テストアニメ" })
       .filter({ hasText: "フジテレビ" });
-    // いちばん先の予約 (一覧の頭)。線に近いものは放送が終わって消えることがある
+    // いちばん先の予約 (一覧の先頭)。線に近いものは放送が終わって消えることがある
     const row = rows.first();
     await expect(row.getByTestId("reservation-state")).toHaveText("録画しない");
     await expect(row).toContainText(REASON);

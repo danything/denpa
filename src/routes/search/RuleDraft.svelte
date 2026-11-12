@@ -249,7 +249,6 @@
         total: 0,
         skipped: 0,
         programs: [],
-        conflicts: 0,
         verdicts: {},
         failed: String(error),
       };

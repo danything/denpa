@@ -5,7 +5,7 @@
  * テストの一式 (`tests/stack.ts`) のアプリは 127.0.0.1 でしか待たないので、GPU のあるふだんの Chrome から
  * 測るときもここを通す (`0.0.0.0` で待つ。コンテナのポートを外へ出す)。
  *
- *     bun tests/bench/proxy.ts <アプリの URL> <映像の置き場> <ポート> <MPEG-2 の頭の PTS>
+ *     bun tests/bench/proxy.ts <アプリの URL> <映像の置き場> <ポート> <MPEG-2 の先頭の PTS>
  */
 
 import { appendFileSync } from "node:fs";

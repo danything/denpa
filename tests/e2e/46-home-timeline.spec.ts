@@ -37,7 +37,7 @@ function rows(page: Page) {
     );
 }
 
-/** 広い画面はサイドバー、狭い画面は頭の 1 行の、その絞り込みに添えた件数 */
+/** 広い画面はサイドバー、狭い画面は先頭の 1 行の、その絞り込みに添えた件数 */
 async function filterBox(page: Page) {
   const side = page.getByTestId("sidebar");
   return (await side.isVisible()) ? side : page.getByTestId("timeline-toolbar");
@@ -79,7 +79,7 @@ test.describe("ホームの 1 本の一覧", () => {
     );
   });
 
-  test("録れたものは「いま」の線の上、予約は下に、日付の見出しを挟んで時刻の順に並ぶ", async ({
+  test("録れたものは「いま」の行の上、予約は下に、日付の見出しを挟んで時刻の順に並ぶ", async ({
     page,
   }) => {
     await goto(page, "/");
@@ -93,7 +93,7 @@ test.describe("ホームの 1 本の一覧", () => {
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
 
-    // 予約と「いま」の線の上下
+    // 予約と「いま」の行の上下
     const now = await page.getByTestId("timeline-now").boundingBox();
     const reservation = await rows(page)
       .filter({ hasText: "一覧試験の予約" })
@@ -104,8 +104,8 @@ test.describe("ホームの 1 本の一覧", () => {
     expect(reservation!.y).toBeGreaterThan(now!.y);
     expect(recording!.y).toBeLessThan(now!.y);
 
-    // 「いま」の線と日付の見出しは見出しなので、読み上げの見出し移動で辿れる。
-    // 線には次の録画までを添える (隠した読み点の前後に空白が入ることがある)
+    // 「いま」の行と日付の見出しは見出しなので、読み上げの見出し移動で辿れる。
+    // 「いま」の行には次の録画までを添える (隠した読み点の前後に空白が入ることがある)
     await expect(
       page.getByRole("heading", {
         name: /^いま \d{1,2}:\d{2}\s*、\s*次の録画まで \d/,
@@ -147,10 +147,10 @@ test.describe("ホームの 1 本の一覧", () => {
   });
 
   /*
-   * **1000px 未満の頭の 1 行は、スマホと同じく下のタブのすぐ上に浮かぶ** (上のヘッダーは出さない)。
+   * **1000px 未満の先頭の 1 行は、スマホと同じく下のタブのすぐ上に浮かぶ** (上のヘッダーは出さない)。
    * 768px からは一覧が余白の外まで広がるので、窓の端から下のタブと同じだけ離す。日付の見出しは上に貼り付く
    */
-  test("広めの画面でも頭の 1 行は下のタブのすぐ上に浮かぶ", async ({
+  test("広めの画面でも先頭の 1 行は下のタブのすぐ上に浮かぶ", async ({
     page,
   }) => {
     for (const size of [
@@ -159,7 +159,7 @@ test.describe("ホームの 1 本の一覧", () => {
     ]) {
       await page.setViewportSize(size);
       await goto(page, "/");
-      // 開くと観ていない録画まで送り、下のタブが引っ込んでいることがあるので、頭に戻してから測る
+      // 開くと観ていない録画まで送り、下のタブが引っ込んでいることがあるので、先頭に戻してから測る
       await page.evaluate(() => window.scrollTo(0, 0));
       await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
       const at = `${size.width}px`;
@@ -184,12 +184,12 @@ test.describe("ホームの 1 本の一覧", () => {
   });
 
   /*
-   * **録画中の行は「いま」の線のすぐ上。** 並びは始まった時刻の順で、いまより前に始まったものは線の上に来る。
-   * あと何分かは行の 3 段目が言い、線は次の録画までを言う (録画中とは言わない)。
-   * **録画中は線を目に見せず** (読み上げの見出しには残す)、いまの時刻はいちばん上の録画中の行の進み具合のバーの先に出す。
+   * **録画中の行は「いま」の行のすぐ上。** 並びは始まった時刻の順で、いまより前に始まったものは「いま」の行の上に来る。
+   * あと何分かは行の 3 段目が言い、「いま」の行は次の録画までを言う (録画中とは言わない)。
+   * **録画中は「いま」の行を目に見せず** (読み上げの見出しには残す)、いまの時刻はいちばん上の録画中の行の進み具合のバーの先に出す。
    * 開いたときにその行が見えている
    */
-  test("録画中の行は線のすぐ上にあり、あと何分かは行の 3 段目が言う", async ({
+  test("録画中の行は「いま」の行のすぐ上にあり、あと何分かは行の 3 段目が言う", async ({
     page,
     stack,
   }) => {
@@ -197,8 +197,8 @@ test.describe("ホームの 1 本の一覧", () => {
     const MIN = 60_000;
     /*
      * **同じワーカーの他のスペックが残した観ていない録画は、いったん観終えたことにする** (足し試験と同じ。終わったら戻す)。
-     * ホームは観ていない録画のいちばん古いものを映すので、それが残っていると頭まで戻り、録画中の行が窓の外に出る。
-     * ここで映るのは、このファイルが入れた観ていない録画 (録画中の行のすぐ上) か「いま」の線
+     * ホームは観ていない録画のいちばん古いものを映すので、それが残っていると先頭まで戻り、録画中の行が窓の外に出る。
+     * ここで映るのは、このファイルが入れた観ていない録画 (録画中の行のすぐ上) か「いま」の行
      */
     const unwatched = spawnSync(
       "bun",
@@ -281,9 +281,9 @@ test.describe("ホームの 1 本の一覧", () => {
         expect(now.x).toBeGreaterThan(label.x + label.width);
 
         /*
-         * 線のすぐ上 (線の手前から上へ続く録画中の行に、この行がいる)。
-         * **線の手前の 1 行だけを見ない。** 同じワーカーの前のスペックが立てた予約が、ちょうど録画中のことがある
-         * (偽の番組は 10 分。この行より後に始まったので、線の側に並ぶ)。CI で時々落ちていた
+         * 「いま」の行のすぐ上 (「いま」の行の手前から上へ続く録画中の行に、この行がいる)。
+         * **「いま」の行の手前の 1 行だけを見ない。** 同じワーカーの前のスペックが立てた予約が、ちょうど録画中のことがある
+         * (偽の番組は 10 分。この行より後に始まったので、「いま」の行の側に並ぶ)。CI で時々落ちていた
          */
         const live = await page.getByTestId("timeline").evaluate((list) => {
           const all = [
@@ -309,7 +309,7 @@ test.describe("ホームの 1 本の一覧", () => {
         });
         expect(live.map((name) => name.trim())).toContain("録画中試験");
 
-        // 線は次の録画までを言い、録画中とは言わない。目には見せず、時刻は行のバーの先に出る
+        // 「いま」の行は次の録画までを言い、録画中とは言わない。目には見せず、時刻は行のバーの先に出る
         const line = page.getByTestId("timeline-now");
         await expect(line).toContainText(/次の録画まで|次まで/);
         await expect(line).not.toContainText("録画中");
@@ -350,7 +350,7 @@ test.describe("ホームの 1 本の一覧", () => {
         expect(seen).toEqual({ row: true, now: true });
       }
 
-      // 「録画中」に絞っても、行は線の上に残る
+      // 「録画中」に絞っても、行は「いま」の行の上に残る
       await homeFilter(page, "recording");
       const row = page
         .getByTestId("reservation-row")
@@ -487,17 +487,17 @@ test.describe("ホームの 1 本の一覧", () => {
 
   /*
    * **行は一覧の幅いっぱいの 2 段。** 広い幅では右にサイドバー (今日のまとめもそこ)。
-   * 行は 2 段で、2 段目に局と尺と説明の頭が入る
+   * 行は 2 段で、2 段目に局と尺と説明の先頭が入る
    */
   test("一覧は幅いっぱいの 2 段の行で、まとめは右のサイドバーに出る", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await goto(page, "/");
-    // 広い幅では右にサイドバー (上からカレンダー・状態・絞り込み・表示)。頭の 1 行は出さず、一覧はいちばん上から
+    // 広い幅では右にサイドバー (上からカレンダー・状態・絞り込み・表示)。先頭の 1 行は出さず、一覧はいちばん上から
     await expect(page.getByTestId("sidebar")).toBeVisible();
     await expect(page.getByTestId("timeline-toolbar")).toBeHidden();
-    // 次の録画は「いま」の線に出し、状態には残さない
+    // 次の録画は「いま」の行に出し、状態には残さない
     await expect(page.getByTestId("summary")).toContainText("空き");
     await expect(page.getByTestId("summary")).not.toContainText("次の録画");
 
@@ -537,7 +537,7 @@ test.describe("ホームの 1 本の一覧", () => {
     );
     // よく使うものほど上: カレンダー・状態・絞り込み・表示。失敗は絞り込みと同じ並びの、未視聴より後ろ
     await expect(side.locator("h2.side-label")).toHaveText([
-      /\d+年\d+月/,
+      /\d+ 年 \d+ 月/,
       "状態",
       "絞り込み",
       "表示",
@@ -578,7 +578,7 @@ test.describe("ホームの 1 本の一覧", () => {
     ]);
   });
 
-  test("狭い画面は頭の細い 1 行のチップで 1 回で絞る", async ({ page }) => {
+  test("狭い画面は先頭の細い 1 行のチップで 1 回で絞る", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await goto(page, "/");
     await homeFilter(page, "failed");
@@ -588,7 +588,7 @@ test.describe("ホームの 1 本の一覧", () => {
     await expect(
       rows(page).filter({ hasText: "一覧試験の未視聴" }),
     ).toHaveCount(0);
-    // 選んだチップが押された印になる。頭の 1 行は 44px に収まる
+    // 選んだチップが押された印になる。先頭の 1 行は 44px に収まる
     await expect(
       page.locator('[data-testid="filter-chip"][data-filter="failed"]'),
     ).toHaveAttribute("aria-pressed", "true");
@@ -706,8 +706,8 @@ test.describe("ホームの 1 本の一覧", () => {
   });
 
   /*
-   * **古い録画は一覧の頭に足し、足しても読んでいる所は動かない。** 録れたものは線の側 (新しいほう) から
-   * 描き、頭の「残り N 件」が見えたら古いほうを上へ足す。広い画面ではページの位置合わせを自分でするので
+   * **古い録画は一覧の先頭に足し、足しても読んでいる所は動かない。** 録れたものは「いま」の行の側 (新しいほう) から
+   * 描き、先頭の「残り N 件」が見えたら古いほうを上へ足す。広い画面ではページの位置合わせを自分でするので
    * (`overflow-anchor: none`)、何もしないと足したぶん中身が下へずれる
    */
   test("古い録画は上へ足し、足しても見ていた行は動かない", async ({
@@ -740,9 +740,9 @@ test.describe("ホームの 1 本の一覧", () => {
       const more = page.getByTestId("recording-more");
       await expect(more).toBeVisible();
       const list = page.getByTestId("timeline");
-      // 開いたときは線のあたり (頭の印は画面の外)
+      // 開いたときは「いま」の行のあたり (先頭の印は画面の外)
       await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
-      // 描いているうちでいちばん古い行を覚え、頭まで戻して印を画面に入れる。戻した直後の行の高さを覚えておく
+      // 描いているうちでいちばん古い行を覚え、先頭まで戻して印を画面に入れる。戻した直後の行の高さを覚えておく
       const first = list.locator("[data-key]").first();
       const key = await first.getAttribute("data-key");
       const count = await rows(page).count();
@@ -848,11 +848,11 @@ test.describe("ホームの 1 本の一覧", () => {
    * 行の操作は 44px 四方以上。タブレットの縦でも右に欄は出さず、同じ形の行
    */
   /*
-   * **今日の見出しは線をまたいで 1 つ。** 今日の録画、「いま」の線、今日の予約が 1 つの「今日」の下に並び、
-   * 見出しに予約か録画かは書かない。見出しは日ごとの包みの中で貼り付くので、線を越えて今日の予約を
-   * 読んでいる間も「今日」が頭に残る (広い画面は一覧の枠、スマホはページごと動く)
+   * **今日の見出しは「いま」の行をまたいで 1 つ。** 今日の録画、「いま」の行、今日の予約が 1 つの「今日」の下に並び、
+   * 見出しに予約か録画かは書かない。見出しは日ごとの包みの中で貼り付くので、「いま」の行を越えて今日の予約を
+   * 読んでいる間も「今日」が先頭に残る (広い画面は一覧の枠、スマホはページごと動く)
    */
-  test("今日の見出しは線をまたいで 1 つで、今日を読む間は頭に貼り付いたまま", async ({
+  test("今日の見出しは「いま」の行をまたいで 1 つで、今日を読む間は先頭に貼り付いたまま", async ({
     page,
     stack,
   }) => {
@@ -864,7 +864,7 @@ test.describe("ホームの 1 本の一覧", () => {
       "0 時の前後",
     );
     const MIN = 60_000;
-    // 日付が先の録画 (ほかのテストが見分けに使う 2099 年) は、時計のずれと同じく線の上に別の見出しを立てる。
+    // 日付が先の録画 (ほかのテストが見分けに使う 2099 年) は、時計のずれと同じく「いま」の行の上に別の見出しを立てる。
     // この間だけ消したことにして隠す (`deleted_at = 1` を印に、終わったら戻す)
     sqlite(
       `${stack.root}/denpa.db`,
@@ -887,10 +887,10 @@ test.describe("ホームの 1 本の一覧", () => {
           .getByTestId("timeline-day")
           .filter({ hasText: /^今日/ });
         await expect(today).toHaveCount(1);
-        // 予約か録画かは書かない (線の上下で分かる)
+        // 予約か録画かは書かない (「いま」の行の上下で分かる)
         // 年をまたいで溜まった録画を見分けられるように、西暦も出す (#1931)
         await expect(today).toHaveText(/^今日\s*\d{4}\/\d{1,2}\/\d{1,2}\(.\)$/);
-        // 今日の録画・線・今日の予約が、同じ見出しの包みに入る
+        // 今日の録画・「いま」の行・今日の予約が、同じ見出しの包みに入る
         const block = page.locator(".t-block").filter({ has: today });
         await expect(block.getByTestId("timeline-now")).toHaveCount(1);
         await expect(
@@ -900,7 +900,7 @@ test.describe("ホームの 1 本の一覧", () => {
           block.locator("[data-key]").filter({ hasText: "今日試験の予約5" }),
         ).toHaveCount(1);
 
-        // 今日の頭の録画から、線を越えて今日の最後の予約まで送る。包みの頭が上へ流れたあとも「今日」は頭に貼り付いている
+        // 今日の先頭の録画から、「いま」の行を越えて今日の最後の予約まで送る。包みの先頭が上へ流れたあとも「今日」は先頭に貼り付いている
         const pinned = async (name: string) => {
           const row = rows(page).filter({ hasText: name });
           await row.evaluate((node) =>
@@ -908,7 +908,7 @@ test.describe("ホームの 1 本の一覧", () => {
           );
           return today.evaluate((node, key) => {
             const list = node.closest<HTMLElement>('[data-testid="timeline"]')!;
-            // 見出しが貼り付く線 (広い画面は浮いたヘッダーの下端)
+            // 見出しが貼り付く位置 (広い画面は浮いたヘッダーの下端)
             const top = Number.parseFloat(getComputedStyle(node).top) || 0;
             const head = node.getBoundingClientRect();
             const line = [
@@ -934,10 +934,10 @@ test.describe("ホームの 1 本の一覧", () => {
           if (at.block < -1)
             expect(
               Math.abs(at.head),
-              `${name} のとき見出しは頭に`,
+              `${name} のとき見出しは先頭に`,
             ).toBeLessThan(2);
         }
-        // 今日の最後の予約まで送ると、包みの頭 (今日の録画) は上へ流れ、見出しだけが頭に残る
+        // 今日の最後の予約まで送ると、包みの先頭 (今日の録画) は上へ流れ、見出しだけが先頭に残る
         expect((await pinned("今日試験の予約5")).block).toBeLessThan(-1);
       }
     } finally {
@@ -949,8 +949,8 @@ test.describe("ホームの 1 本の一覧", () => {
   });
 
   /*
-   * **サイドバーのカレンダーで日を押すと、その日の見出しへ送る。** まだ描いていない古い日 (一覧の頭の「残り N 件」より先) は、
-   * そこまで描いてから送る。カレンダーは頭に貼り付いた日を薄く塗り、送った先に付いてくる
+   * **サイドバーのカレンダーで日を押すと、その日の見出しへ送る。** まだ描いていない古い日 (一覧の先頭の「残り N 件」より先) は、
+   * そこまで描いてから送る。カレンダーは先頭に貼り付いた日を薄く塗り、送った先に付いてくる
    */
   test.describe("サイドバーのカレンダー", () => {
     /** カレンダーをその日の月まで ‹ › で送る (行のある月だけを行き来する) */
@@ -962,7 +962,7 @@ test.describe("ホームの 1 本の一覧", () => {
       }, day);
       for (let i = 0; i < 60; i++) {
         const label = await calendar.getByTestId("calendar-month").innerText();
-        const [, y, m] = label.match(/(\d+)年(\d+)月/) ?? [];
+        const [, y, m] = label.match(/(\d+) 年 (\d+) 月/) ?? [];
         const at = Number(y) * 12 + Number(m) - 1;
         if (at === want) return;
         await calendar
@@ -975,7 +975,7 @@ test.describe("ホームの 1 本の一覧", () => {
     const startOf = (page: Page, at: number) =>
       page.evaluate((t) => new Date(t).setHours(0, 0, 0, 0), at);
 
-    test("まだ描いていない古い日を押すと、そこまで描いて見出しを頭に出す", async ({
+    test("まだ描いていない古い日を押すと、そこまで描いて見出しを先頭に出す", async ({
       page,
       stack,
     }) => {
@@ -1020,8 +1020,8 @@ test.describe("ホームの 1 本の一覧", () => {
           .and(page.locator(`[data-day="${day}"]`));
         await expect(head).toBeInViewport();
         await expect(oldest).toBeInViewport();
-        // 見出しは一覧の頭にあり、カレンダーはその日を頭の日として塗る
-        // 頭は見出しが貼り付く線 (浮いたヘッダーの下端)
+        // 見出しは一覧の先頭にあり、カレンダーはその日を先頭の日として塗る
+        // 先頭は見出しが貼り付く位置 (浮いたヘッダーの下端)
         const top = await head.evaluate(
           (node) => Number.parseFloat(getComputedStyle(node).top) || 0,
         );
@@ -1042,7 +1042,9 @@ test.describe("ホームの 1 本の一覧", () => {
       }
     });
 
-    test("先の日を押すと、その日の予約の見出しを頭に出す", async ({ page }) => {
+    test("先の日を押すと、その日の予約の見出しを先頭に出す", async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
       await goto(page, "/");
       const day = await startOf(page, FUTURE);
@@ -1110,7 +1112,7 @@ test.describe("ホームの 1 本の一覧", () => {
       expect(reservation!.y).toBeLessThan(now!.y);
       expect(recording!.y).toBeGreaterThan(now!.y);
 
-      // 線の上も下も、日付の見出しは新しい日から並ぶ
+      // 「いま」の行の上も下も、日付の見出しは新しい日から並ぶ
       const days = await page.getByTestId("timeline").evaluate((list) => {
         const line = list.querySelector('[data-testid="timeline-now"]')!;
         const above: number[] = [];
@@ -1149,7 +1151,7 @@ test.describe("ホームの 1 本の一覧", () => {
         await rows(page)
           .filter({ hasText: /逆切替試験45(?!\d)/ })
           .evaluate((node) => node.scrollIntoView({ block: "center" }));
-        // 見えている所のいちばん上の行 (貼り付いた見出しの下で、頭から見えている最初の行)
+        // 見えている所のいちばん上の行 (貼り付いた見出しの下で、先頭から見えている最初の行)
         const anchor = await page.getByTestId("timeline").evaluate((list) => {
           const day = list.querySelector<HTMLElement>(".t-day");
           const top = day ? Number.parseFloat(getComputedStyle(day).top) : 0;
@@ -1232,7 +1234,7 @@ test.describe("ホームの 1 本の一覧", () => {
       }
     });
 
-    test("カレンダーでまだ描いていない古い日を押すと、そこまで描いて見出しを頭に出す", async ({
+    test("カレンダーでまだ描いていない古い日を押すと、そこまで描いて見出しを先頭に出す", async ({
       page,
       stack,
     }) => {
@@ -1242,7 +1244,7 @@ test.describe("ホームの 1 本の一覧", () => {
         await page.goto("/");
         await page.locator('[data-hydrated="true"]').waitFor();
         await expect(page.getByTestId("recording-more")).toBeVisible();
-        // 下に 1 画面より多くの行が残る日を選ぶ (いちばん古い日は一覧の末尾なので頭まで送れない)
+        // 下に 1 画面より多くの行が残る日を選ぶ (いちばん古い日は一覧の末尾なので先頭まで送れない)
         const target = rows(page).filter({ hasText: /逆暦試験60(?!\d)/ });
         await expect(target).toHaveCount(0);
 
@@ -1259,7 +1261,7 @@ test.describe("ホームの 1 本の一覧", () => {
           const label = await calendar
             .getByTestId("calendar-month")
             .innerText();
-          const [, y, m] = label.match(/(\d+)年(\d+)月/) ?? [];
+          const [, y, m] = label.match(/(\d+) 年 (\d+) 月/) ?? [];
           const at = Number(y) * 12 + Number(m) - 1;
           if (at === want) break;
           await calendar

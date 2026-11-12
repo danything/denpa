@@ -85,7 +85,7 @@ async function hoverAll(
   const links = scope.locator(TEXTLIKE);
   let checked = 0;
   for (const link of await links.all()) {
-    // 同じ形のリンクが何十も並ぶ (ホームの行) ので、見えている頭の 12 本まで
+    // 同じ形のリンクが何十も並ぶ (ホームの行) ので、見えている先頭の 12 本まで
     if (checked >= 12) break;
     if (!(await link.isVisible())) continue;
     await page.mouse.move(0, 0);

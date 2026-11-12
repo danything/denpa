@@ -35,9 +35,9 @@ export function monthOf(at: number): number {
   return d.getFullYear() * 12 + d.getMonth();
 }
 
-/** 月の見出し (「2026年10月」) */
+/** 月の見出し (「2026 年 10 月」) */
 export function monthLabel(month: number): string {
-  return `${Math.floor(month / 12)}年${(month % 12) + 1}月`;
+  return `${Math.floor(month / 12)} 年 ${(month % 12) + 1} 月`;
 }
 
 /** その行が一覧でどの日の見出しの下に入るか。録画中と予約は今日より前に置かない (`timeline.ts` の `byDay`) */
@@ -119,14 +119,14 @@ export function moveDay(day: number, key: string): number | null {
   return d.getTime();
 }
 
-/** 読み上げの名前 (「10月19日 (今日)、予約 3 件」)。行が無ければ「なし」 */
+/** 読み上げの名前 (「10 月 19 日 (今日)、予約 3 件」)。行が無ければ「なし」 */
 export function dayAriaLabel(
   day: number,
   mark: DayMark | undefined,
   today: number,
 ): string {
   const d = new Date(day);
-  const name = `${d.getMonth() + 1}月${d.getDate()}日${day === today ? " (今日)" : ""}`;
+  const name = `${d.getMonth() + 1} 月 ${d.getDate()} 日${day === today ? " (今日)" : ""}`;
   const parts: string[] = [];
   if (mark !== undefined) {
     if (mark.recorded > 0) parts.push(`録画 ${mark.recorded} 件`);

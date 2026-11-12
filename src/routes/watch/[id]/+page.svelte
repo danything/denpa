@@ -773,7 +773,7 @@
   }
 
   /**
-   * プレイヤーを作るときに始める位置 (秒)。コーデックを切り替えた所か、この場面から観る位置か、続きの位置。頭からなら null。
+   * プレイヤーを作るときに始める位置 (秒)。コーデックを切り替えた所か、この場面から観る位置か、続きの位置。先頭からなら null。
    * **切り替えた所は 1 度読んだら忘れる**
    */
   function startFrom(duration: number): number | null {
@@ -804,7 +804,7 @@
     return info?.audios[index]?.id ?? info?.audios[0]?.id ?? "0";
   }
 
-  /** その場で流すなら、プレイヤーを作って流しはじめる。**続きの位置からリクエストする** (頭から読んで捨てない) */
+  /** その場で流すなら、プレイヤーを作って流しはじめる。**続きの位置からリクエストする** (先頭から読んで捨てない) */
   $effect(() => {
     const plan = picked;
     if (
@@ -1568,6 +1568,8 @@
   let mediaBox = $state<HTMLElement | null>(null);
   /** リモコンのキーを渡す関数と、d を文書へ渡す関数 (`DataBroadcast` の press / pressD) */
   let dataPress = $state<((code: number) => void) | null>(null);
+  /** データ放送の映像の上の通知 (`DataBroadcast` の `note`。舞台の通知の列に積む) */
+  let dataNote = $state("");
   let dataButton = $state<(() => boolean) | null>(null);
   /** データ放送を作り直す合図 (`DataBroadcast` の channel)。戻ったら変えて、その時点まで積み直す */
   let dataChannel = $state<string | null>(null);
@@ -2913,6 +2915,7 @@
           listen={listenData}
           bind:press={dataPress}
           bind:pressD={dataButton}
+          bind:note={dataNote}
           postal={data.broadcast.postalCode}
           prefecture={data.broadcast.prefecture}
           network={false}
@@ -3188,6 +3191,9 @@
 
       <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。黙って途中から始めたり飛んだりすると壊れて見える -->
       {#snippet notes()}
+        {#if dataNote !== ""}
+          <StageNote testid="watch-data-note">{dataNote}</StageNote>
+        {/if}
         {#if continued}
           <StageNote testid="watch-resumed">続きから再生しています</StageNote>
         {/if}

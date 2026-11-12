@@ -125,7 +125,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
       new URL((await dialog.getByTestId("issue-open").getAttribute("href"))!);
     /*
      * 開いたときのログの欄は、URL に入るぶんだけ選んであるので、そのまま入る。
-     * タイトルを書き足したあとは、サーバのログが多ければ頭の行が削られる (下の「ログが長くても」が見る)
+     * タイトルを書き足したあとは、サーバのログが多ければ先頭の行が削られる (下の「ログが長くても」が見る)
      */
     expect((await issueUrl()).searchParams.get("logs")).toBe(
       await logs.inputValue(),
@@ -147,7 +147,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
     );
     // 削られても、残りは欄の終わりのほうそのまま
     const [head, ...rest] = url.searchParams.get("logs")!.split("\n");
-    const kept = /^\(長いので頭の \d+ 行を省きました\)$/.test(head!)
+    const kept = /^\(長いので先頭の \d+ 行を省きました\)$/.test(head!)
       ? rest
       : [head, ...rest];
     expect((await logs.inputValue()).endsWith(kept.join("\n"))).toBe(true);
@@ -191,7 +191,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
     // 選べない長さでも、エラーの行 (50 行ごと) はふつうの行より先に入る
     expect(logs).toContain("偽チューナー1950: 選局できません");
 
-    // 書き足して上限を超えたら、頭から削って収める
+    // 書き足して上限を超えたら、先頭から削って収める
     await dialog
       .getByTestId("issue-field-logs")
       .fill(

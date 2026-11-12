@@ -133,7 +133,7 @@
     (絞り込み・並び・集計。ドキュメントの目次と同じ行)。スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、
     絞り込みと並びを細い 1 行にまとめ、画面の下、タブのすぐ上に置く (押すものは指の届く下に)
 -->
-<div class="rules-board">
+<div class="rules-board with-side">
   <div class="rules-list" data-testid="rule-list">
     <!-- スマホの形の集計。広い形ではサイドバーの「集計」 -->
     <p class="narrow-summary small muted" data-testid="rule-summary-narrow">
@@ -283,8 +283,8 @@
             </div>
           </li>
         {:else}
-          <li class="none small muted" data-testid="rule-none">
-            この絞り込みに当たるルールはありません
+          <li class="empty-state" data-testid="rule-none">
+            <p class="bold">当てはまるものはありません</p>
           </li>
         {/each}
         {#if paged.more}
@@ -298,7 +298,7 @@
 
   <!-- 広い形だけ。絞り込み・並び・集計 (ホームのサイドバーと同じ行) -->
   <aside
-    class="rules-side side-panel"
+    class="rules-side side-panel side-column"
     aria-label="絞り込みと並び"
     data-testid="rule-sidebar"
   >
@@ -412,42 +412,21 @@
      * 浮いたヘッダーの裏を流れる。768px からは左右と下を main の余白の外まで広げ、広い形では右にサイドバーを置いて
      * 窓の右端に付け、ヘッダーの下に貼り付ける (中身があふれたときだけサイドバーの中で巻き取る。`app.css` の `.side-panel`)
      */
-  .rules-board {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-space-3);
-  }
   .rules-list {
     min-width: 0;
-  }
-  .rules-side {
-    display: none;
   }
   @media (min-width: 768px) {
     .rules-board {
       margin: 0 calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
-      gap: 0;
     }
     .rules-list {
       padding: 0 var(--dp-gutter) var(--dp-gutter);
     }
   }
-  /* 広い形 (スマホの形でないとき。`#lib/phone-form.ts`)。テーブルトップは 1000px 以上でもスマホの形なので、幅では分けない */
-  :global(:where(html:not([data-phone]))) .rules-board {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 20rem;
-  }
-  :global(:where(html:not([data-phone]))) .rules-side {
-    display: flex;
-  }
+  /* 一覧と右の列の組み方は録画・切り抜きと同じ (`app.css` の `.with-side`)。広い形 (`#lib/phone-form.ts`) ではスマホの形の 1 行と集計を隠す */
   :global(:where(html:not([data-phone]))) .rules-bar,
   :global(:where(html:not([data-phone]))) .narrow-summary {
     display: none;
-  }
-  @media (min-width: 1600px) {
-    :global(:where(html:not([data-phone]))) .rules-board {
-      grid-template-columns: minmax(0, 1fr) 22rem;
-    }
   }
   .stats {
     margin: 0;

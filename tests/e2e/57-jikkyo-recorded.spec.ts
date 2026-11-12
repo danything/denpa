@@ -35,7 +35,7 @@ test.describe("録画の実況", () => {
       };
       const target = state.jikkyo;
       if (target === null) throw new Error("録画に実況のチャンネルが無い");
-      // 偽の過去ログ。録画の頭の前後に 0.2 秒おきのコメント (自分で作ったもの)
+      // 偽の過去ログ。録画の先頭の前後に 0.2 秒おきのコメント (自分で作ったもの)
       const asked: URL[] = [];
       await page.route(
         "https://jikkyo.tsukumijima.net/api/kakolog/**",
@@ -64,7 +64,7 @@ test.describe("録画の実況", () => {
       await deviceOn(page);
       /*
        * 偽 ffmpeg は映像を作らないので、録画は再生できない。映像の取得は返さずに待たせ (読めない形式で
-       * 別の再生方法へ移らないように)、再生位置は時計で進める。偽の録画は 5 秒ほどしかないので、頭からゆっくり (1/4 の速さで)
+       * 別の再生方法へ移らないように)、再生位置は時計で進める。偽の録画は 5 秒ほどしかないので、先頭からゆっくり (1/4 の速さで)
        */
       await page.route(/\/api\/recordings\/\d+\/(file|stream)/, () => {});
       await page.addInitScript(() => {
@@ -80,7 +80,7 @@ test.describe("録画の実況", () => {
         "録画のコメント",
         { timeout: 20_000 },
       );
-      // 開いたときに 1 回だけ、録画の頭から訊く
+      // 開いたときに 1 回だけ、録画の先頭から訊く
       expect(asked).toHaveLength(1);
       expect(asked[0]!.pathname).toBe(`/api/kakolog/${target.channel}`);
       expect(asked[0]!.searchParams.get("starttime")).toBe(
@@ -121,7 +121,7 @@ test.describe("録画の実況", () => {
       };
       const target = state.jikkyo;
       if (target === null) throw new Error("録画に実況のチャンネルが無い");
-      // 偽の過去ログ。録画の頭から 0.1 秒おきに、頭からの番号を本文にしたコメント
+      // 偽の過去ログ。録画の先頭から 0.1 秒おきに、先頭からの番号を本文にしたコメント
       await page.route(
         "https://jikkyo.tsukumijima.net/api/kakolog/**",
         (route) => {
@@ -214,7 +214,7 @@ test.describe("録画の実況", () => {
       };
       const target = state.jikkyo;
       if (target === null) throw new Error("録画に実況のチャンネルが無い");
-      // 偽の過去ログ。録画の頭から 0.1 秒おきに、頭からの番号を本文にしたコメント
+      // 偽の過去ログ。録画の先頭から 0.1 秒おきに、先頭からの番号を本文にしたコメント
       await page.route(
         "https://jikkyo.tsukumijima.net/api/kakolog/**",
         (route) => {

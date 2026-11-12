@@ -146,7 +146,7 @@ async function checkChase(
 
   /*
    * **スマホの縦 (360px・320px) でも、操作バーのボタンは 1 行** (観る画面・ライブと同じ)。
-   * 残すのは再生・最新・読みもの・⚙・全画面だけで、畳んだ音は ⚙ の頭の行から押せる
+   * 残すのは再生・最新・読みもの・⚙・全画面だけで、畳んだ音は ⚙ の先頭の行から押せる
    */
   for (const width of [360, 320]) {
     const context = await browser.newContext({
@@ -169,7 +169,7 @@ async function checkChase(
       path: test.info().outputPath(`chase-${width}.png`),
     });
 
-    // 畳んだ音は ⚙ の頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
+    // 畳んだ音は ⚙ の先頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
     const sound = tab.getByTestId("chase-sound");
     await expect(sound).toBeHidden();
     await expect(tab.getByTestId("chase-more")).toHaveCount(0);

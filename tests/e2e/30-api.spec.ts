@@ -40,7 +40,7 @@ test.describe("外から使う API", () => {
     expect(now.startAt).toBeLessThanOrEqual(Date.now());
     expect(now.endAt).toBeGreaterThan(Date.now());
 
-    // 元の TS はエンコードせずに流す。頭は同期バイト 0x47
+    // 元の TS はエンコードせずに流す。先頭は同期バイト 0x47
     const controller = new AbortController();
     const raw = await fetch(`${baseURL}/${first.live}?codec=raw`, {
       signal: controller.signal,

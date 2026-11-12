@@ -18,7 +18,7 @@ interface FakeMode {
   cutAt: number | null;
   /** 切るのは最初の何回か。0 なら切らない (取り直しが通るかを見る) */
   cutTimes: number;
-  /** Range を無視していつも頭から全部送る (Range を落とすプロキシの代わり) */
+  /** Range を無視していつも先頭から全部送る (Range を落とすプロキシの代わり) */
   ignoreRange: boolean;
   /** 送る中身をこれだけ短くする (`/recorded` の size とは食い違う)。ヘッダも短いほうに合わせる */
   shortBy: number;
@@ -32,7 +32,7 @@ interface FakeMode {
   drift: boolean;
   /** ルールを足して、ページ送りが要る数にする */
   extraRules: number;
-  /** ルールの一覧で offset を無視して、いつも頭のページを返す */
+  /** ルールの一覧で offset を無視して、いつも先頭のページを返す */
   ignoreOffset: boolean;
 }
 

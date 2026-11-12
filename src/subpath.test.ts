@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * **画面の中の URL は `resolve` (`$app/paths`) で頭を付ける** (前段の接頭辞の下でも動くように。server/paths.ts)。
+ * **画面の中の URL は `resolve` (`$app/paths`) で先頭を付ける** (前段の接頭辞の下でも動くように。server/paths.ts)。
  *
  * 根から書いた URL (`href="/guide"`・`` fetch(`/api/…`) ``) を 1 つ足すと、接頭辞の下で
  * その先だけが壊れる。根で動かしている限り気付けないので、ここで落とす。
@@ -16,7 +16,7 @@ const SERVER =
 // cookie の `path=/…` も同じ (接頭辞の下では、その画面に cookie が届かない)
 const ABSOLUTE =
   /(?:href|src|action|formaction)="\/|(?:href|src|action)=\{[^}]*['"`]\/(?!\/)|['"`]\/api\/|goto\(['`]\/|path=\//;
-/** 頭を呼ぶ側が付けるもの (Service Worker からも読まれる。offline-db.ts の downloadRequests) */
+/** 先頭を呼ぶ側が付けるもの (Service Worker からも読まれる。offline-db.ts の downloadRequests) */
 const PREFIXED_BY_CALLER = /^lib\/offline-db\.ts$/;
 /** 接頭辞を後から足して使う定数 (live.ts の SOCKET_PATH・raw/engine.ts の DECODER) */
 const ALLOWED = [

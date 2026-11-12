@@ -43,7 +43,7 @@ describe("Issue の URL", () => {
     expect(parsed.searchParams.has("steps")).toBe(false);
   });
 
-  test("書き足して上限を超えたら、ログの頭 (古いほう) から削って数を書く", () => {
+  test("書き足して上限を超えたら、ログの先頭 (古いほう) から削って数を書く", () => {
     const logs = Array.from({ length: 400 }, (_, i) => `ログの行 ${i}`).join(
       "\n",
     );

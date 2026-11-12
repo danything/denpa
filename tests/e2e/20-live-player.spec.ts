@@ -653,7 +653,7 @@ test.describe("ライブ視聴", () => {
 
     const gear = page.getByTestId("live-settings");
     const menu = page.getByTestId("live-settings-menu");
-    // 広い枠では何も畳まないので、⚙ の頭に操作バーのもの (消音・小窓) は並ばない
+    // 広い枠では何も畳まないので、⚙ の先頭に操作バーのもの (消音・小窓) は並ばない
     await expect(page.getByTestId("live-mute")).toHaveCount(0);
     await expect(page.getByTestId("live-pip-mode")).toHaveCount(0);
     await expect(gear).toHaveAttribute("aria-haspopup", "menu");
@@ -713,7 +713,7 @@ test.describe("ライブ視聴", () => {
    * **切り替えの間、前のコマを貼っておく場所を持っておく。**
    *
    * 選局にかかる 1.6 秒は削れない (電波の同期待ち 0.65 秒 + 放送の MPEG-2 が
-   * GOP の頭を待つ 0.75 秒)。待ちは変わらないが、その間を真っ黒にしないために
+   * GOP の先頭を待つ 0.75 秒)。待ちは変わらないが、その間を真っ黒にしないために
    * 直前の 1 枚を canvas へ写して重ねる。
    *
    * 貼っていない間は**押す邪魔をしてはいけない** — 映像の上に敷くものなので、
@@ -1227,7 +1227,7 @@ test.describe("スマホの横でライブ", () => {
 
 /**
  * **スマホの縦 (360px・320px) でも、操作バーのボタンは 1 行。** 残すのは再生・ライブ・読みもの・全画面と
- * ⚙ だけ。音・速さ・小窓などは ⚙ の頭に畳み、そこから押せる
+ * ⚙ だけ。音・速さ・小窓などは ⚙ の先頭に畳み、そこから押せる
  */
 test.describe("スマホの縦でライブ", () => {
   test.use({
@@ -1284,7 +1284,7 @@ test.describe("スマホの縦でライブ", () => {
         path: test.info().outputPath(`live-${width}.png`),
       });
 
-      // 畳んだ音は ⚙ の頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
+      // 畳んだ音は ⚙ の先頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
       const sound = page.getByTestId("live-sound");
       await expect(sound).toBeHidden();
       await expect(page.getByTestId("live-more")).toHaveCount(0);

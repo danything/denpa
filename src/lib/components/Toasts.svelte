@@ -159,14 +159,14 @@
     display: flex;
     align-items: flex-start;
     gap: var(--dp-space-3);
-    /* 操作の層に浮かぶので、面はメニューと同じ (`--dp-pop`)。縁は付けず影だけ。種類は頭のアイコン (app.css の .notice) */
+    /* 操作の層に浮かぶので、面はメニューと同じ (`--dp-pop`)。縁は付けず影だけ。種類は先頭のアイコン (app.css の .notice) */
     background: var(--dp-pop);
     box-shadow: var(--dp-shadow-pop);
   }
   .text {
     white-space: pre-wrap;
   }
-  /* 1 行目の真ん中にそろえる (頭のアイコンと同じ高さ)。指の端末でボタンが高くなっても字はずれない */
+  /* 1 行目の真ん中にそろえる (先頭のアイコンと同じ高さ)。指の端末でボタンが高くなっても字はずれない */
   .close {
     flex: none;
     margin-block: calc(

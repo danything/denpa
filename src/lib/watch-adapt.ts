@@ -9,9 +9,9 @@
 import {
   type AdaptDecision,
   type AdaptSample,
+  autoValue,
   RungAdapter,
   type Step,
-  stepLabel,
 } from "./adapt";
 import { CODEC_LABEL } from "./hw";
 import type { LiveCodec } from "./live";
@@ -28,14 +28,17 @@ export function rungQuery(rung: Rung, playable: readonly LiveCodec[]): string {
   return `&rung=${rung}&playable=${playable.join(",")}`;
 }
 
-/** コーデックのメニューの「自動」の行の値 (「自動 (H.264 540p)」)。段 0 は「自動」だけ */
+/**
+ * 観る画面のコーデックのメニューの「自動」の行の値 (組み立ては `adapt.ts` の `autoValue`)。
+ * 段 0 は「自動」だけ (いまの形式は添えない)
+ */
 export function autoLabel(step: Step, codec: string | null): string {
   if (step === 0) return "自動";
   const name =
     codec === "h264" || codec === "hevc" || codec === "av1"
       ? CODEC_LABEL[codec]
       : "";
-  return `自動 (${stepLabel(step, name)})`;
+  return autoValue(step, name);
 }
 
 /** 段を切り替えようとして、サーバが混んでいて断られたとき。`down` は下げようとしたか */

@@ -129,7 +129,7 @@ test.describe("ボタンの見た目", () => {
           id,
         ).toBeGreaterThanOrEqual(40);
       }
-      // アイコンのボタンは録画の画面の頭の 1 行の「⋯」で見る (ヘッダーのテーマのボタンは設定に移した)。頭の 1 行が出るのはスマホの幅
+      // アイコンのボタンは録画の画面の先頭の 1 行の「⋯」で見る (ヘッダーのテーマのボタンは設定に移した)。先頭の 1 行が出るのはスマホの幅
       await page.setViewportSize({ width: 390, height: 844 });
       await goto(page, "/");
       const toggle = await look(page.getByTestId("view-toggle"));

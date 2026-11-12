@@ -138,6 +138,8 @@
   let mediaBox = $state<HTMLElement | null>(null);
   /** リモコンのキーを渡す関数と、d を文書へ渡す関数 (`DataBroadcast` の press / pressD)。前者があれば指のリモコンを出す */
   let dataPress = $state<((code: number) => void) | null>(null);
+  /** データ放送の映像の上の通知 (`DataBroadcast` の `note`。舞台の通知の列に積む) */
+  let dataNote = $state("");
   let dataButton = $state<(() => boolean) | null>(null);
 
   /**
@@ -552,6 +554,7 @@
         listen={player.listenData}
         bind:press={dataPress}
         bind:pressD={dataButton}
+        bind:note={dataNote}
         postal={data.postalCode}
         prefecture={data.prefecture}
         network={data.bmlNetwork}
@@ -744,7 +747,7 @@
                     type="button"
                     class="relearn"
                     onclick={() => player.relearn()}
-                    data-testid="live-relearn">測り直す</button
+                    data-testid="live-relearn">再測定</button
                   >{/if}{#if player.stalls > 0}・<span data-testid="live-stalls"
                     >途切れ {player.stalls} 回</span
                   >{/if}{#if player.stalls > 0 || player.floor > FLOOR}・<span
@@ -882,9 +885,9 @@
             {#if player.yielded === null}
               <button
                 type="button"
-                class="small secondary"
+                class="small"
                 onclick={() => current && select(current)}
-                data-testid="live-retry">やり直す</button
+                data-testid="live-retry">再試行</button
               >
             {/if}
           {/snippet}
@@ -894,6 +897,9 @@
 
     <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。幕 (`PlayerVeil`) の文言は真ん中なので重ならない -->
     {#snippet notes()}
+      {#if dataNote !== ""}
+        <StageNote testid="live-data-note">{dataNote}</StageNote>
+      {/if}
       <!--
                     録画に譲った (`live-player` の `giveWay`)。「ライブに戻る」を置くので、この通知だけ押せる形で並べる
                     (見た目は StageNote と同じ。追っかけの「観る画面で」と同じ扱い)

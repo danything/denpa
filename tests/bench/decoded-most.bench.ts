@@ -152,7 +152,7 @@ test("DECODED_MOST を振って、コマの出方と持つ量を比べる", asyn
   const origin = tsHead(
     new Uint8Array(readFileSync(made.mpeg2).subarray(0, 4 * 1024 * 1024)),
   );
-  if (origin === null) throw new Error("作った TS の頭の時刻が読めません");
+  if (origin === null) throw new Error("作った TS の先頭の時刻が読めません");
   const proxy = spawn(
     "bun",
     [

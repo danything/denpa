@@ -72,8 +72,8 @@
   import { playbackAt } from "#lib/ts/watch.js";
 
   /**
-   * 追っかけ再生 (録画中の録画を頭から観る)。プレイヤーはライブと同じ (`live-player.svelte.ts` の chase モード)。
-   * ライブとの違いは、頭から観られる・シークできる・右端 (いま録れているところ) が壁時計で伸びる
+   * 追っかけ再生 (録画中の録画を先頭から観る)。プレイヤーはライブと同じ (`live-player.svelte.ts` の chase モード)。
+   * ライブとの違いは、先頭から観られる・シークできる・右端 (いま録れているところ) が壁時計で伸びる
    */
   let { data } = $props();
 
@@ -501,12 +501,12 @@
           {#snippet actions()}
             <button
               type="button"
-              class="small secondary"
+              class="small"
               onclick={() =>
                 video !== null &&
                 void player.openChase(video, data.rec.id, pos)}
             >
-              やり直す
+              再試行
             </button>
           {/snippet}
         </PlayerVeil>

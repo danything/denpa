@@ -153,7 +153,7 @@ function cadence(draws: Draw[], ticks: Tick[], vsyncs: number[]): Cadence {
     .sort((a, b) => a - b);
   /*
    * 半分より多く来ないこともあるので、中央値ではなく短い側 (下から 1 割) を 1 回ぶんとする。
-   * それでも 2 回ぶんを拾うほど来ないときのために、テストの画面 (60Hz) の 1.1 倍で頭を押さえる
+   * それでも 2 回ぶんを拾うほど来ないときのために、テストの画面 (60Hz) の 1.1 倍で頭打ちにする
    */
   const period = Math.min(
     periods[Math.floor(periods.length / 10)] ?? 1000 / 60,
@@ -316,7 +316,7 @@ test.describe("元の TS を出す間合い", () => {
       void instrument(worker);
     });
 
-    // 混んでいて当てにならなければ (`usable`)、開き直して頭から測り直す。偽の番組は 5 秒なので、1 回に測るのは 2.5 秒
+    // 混んでいて当てにならなければ (`usable`)、開き直して先頭から測り直す。偽の番組は 5 秒なので、1 回に測るのは 2.5 秒
     const results: Cadence[] = [];
     while (results.length < TRIES && !results.some(usable)) {
       await goto(page, `/watch/${id}`);

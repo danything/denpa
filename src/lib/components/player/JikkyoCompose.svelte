@@ -88,7 +88,7 @@
   );
   const BEHIND = "ライブに戻ると書けます";
   const WAIT = `${POST_GAP / 1000} 秒待ってください`;
-  const CLOSED = "(いまは書けません)";
+  const CLOSED = "実況に繋がっていないため、書けません";
   const UNLINKED =
     "ニコニコとの連携が切れました。設定の「連携」で連携し直してください";
 

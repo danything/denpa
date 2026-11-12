@@ -122,7 +122,7 @@ test.describe("互換モードの観る画面", () => {
     expect(asked.at(-1)?.searchParams.get("codec")).toBe("mpeg2");
     /*
      * **物差しに直せている。** 元の TS の PTS のままなら何時間にもなる。偽の番組は数秒なので、
-     * 位置は頭からの数秒に収まる
+     * 位置は先頭からの数秒に収まる
      */
     await expect
       .poll(() => where(page), { timeout: 15_000 })
@@ -365,7 +365,7 @@ test.describe("互換モードの観る画面", () => {
     const playable = lowered?.searchParams.get("playable")?.split(",") ?? [];
     expect(playable).toContain("h264");
     expect(playable).not.toContain("hevc");
-    // いまの位置から作り直す (頭からではない)
+    // いまの位置から作り直す (先頭からではない)
     expect(Number(lowered?.searchParams.get("from"))).toBeGreaterThan(0);
     await expectDrawn(page, "fmp4");
 

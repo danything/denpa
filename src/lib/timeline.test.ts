@@ -41,7 +41,7 @@ describe("側ごとの並び", () => {
     item("missed-1", "past", NOW - 26 * H),
   ];
 
-  test("どの側も時刻の早い順 (録画は古い順、予約は近い順)。どちらも「いま」に近いものが線の側に来る", () => {
+  test("どの側も時刻の早い順 (録画は古い順、予約は近い順)。どちらも「いま」に近いものが「いま」の行の側に来る", () => {
     const parts = sections(items);
     expect(parts.past.map((i) => i.key)).toEqual([
       "missed-1",
@@ -52,7 +52,7 @@ describe("側ごとの並び", () => {
     expect(parts.future.map((i) => i.key)).toEqual(["res-1", "res-2"]);
   });
 
-  test("日付の見出しはその日の頭に立ち、録画中は「いま」の線の上、予約は線の下に置く", () => {
+  test("日付の見出しはその日の先頭に立ち、録画中は「いま」の行の上、予約は「いま」の行の下に置く", () => {
     const { past, now, future } = byDayLines(items);
     expect(keys(past)).toEqual([
       `day-${yesterday}`,
@@ -62,11 +62,11 @@ describe("側ごとの並び", () => {
       "rec-2",
     ]);
     expect(keys(now)).toEqual(["res-now", "now"]);
-    // 今日の予約には見出しを立てない (今日の見出しは線の上の 1 つだけ)
+    // 今日の予約には見出しを立てない (今日の見出しは「いま」の行の上の 1 つだけ)
     expect(keys(future)).toEqual(["res-1", "res-2"]);
   });
 
-  test("何も無くても「いま」の線は残し、今日の見出しは線の上に立てる", () => {
+  test("何も無くても「いま」の行は残し、今日の見出しは「いま」の行の上に立てる", () => {
     const { past, now, future } = byDayLines([]);
     expect(keys(now)).toEqual([`day-${today}`, "now"]);
     expect(past).toEqual([]);
@@ -91,8 +91,8 @@ const today = dayStart(NOW);
 const yesterday = dayStart(NOW - 26 * H);
 const tomorrow = dayStart(NOW + 24 * H);
 
-describe("今日の見出しは線をまたいで1つ", () => {
-  test("今日の録画・録画中と線・今日の予約が1つの見出しの下に並び、ほかの日は上と下", () => {
+describe("今日の見出しは「いま」の行をまたいで1つ", () => {
+  test("今日の録画・録画中と「いま」の行・今日の予約が1つの見出しの下に並び、ほかの日は上と下", () => {
     const lines = byDayLines([
       item("rec-old", "past", NOW - 26 * H),
       item("rec-1", "past", NOW - 3 * H),
@@ -109,7 +109,7 @@ describe("今日の見出しは線をまたいで1つ", () => {
     ]);
   });
 
-  test("今日の録画が無ければ、見出しは線のすぐ上に立つ", () => {
+  test("今日の録画が無ければ、見出しは「いま」の行のすぐ上に立つ", () => {
     const lines = byDayLines([
       item("rec-old", "past", NOW - 26 * H),
       item("res-1", "future", NOW + H),
@@ -137,7 +137,7 @@ describe("今日の見出しは線をまたいで1つ", () => {
     ]);
   });
 
-  test("今日に録画も予約も無ければ、見出しは線だけを抱える", () => {
+  test("今日に録画も予約も無ければ、見出しは「いま」の行だけを抱える", () => {
     const lines = byDayLines([
       item("rec-old", "past", NOW - 26 * H),
       item("res-next", "future", NOW + 24 * H),
@@ -180,7 +180,7 @@ describe("今日の見出しは線をまたいで1つ", () => {
     expect(days).toEqual([`day-${today}`, `day-${tomorrow}`]);
   });
 
-  test("始まったのに録画に入っていない昨日の予約は、線の下の今日に入れる", () => {
+  test("始まったのに録画に入っていない昨日の予約は、「いま」の行の下の今日に入れる", () => {
     const lines = byDayLines([
       item("res-late", "future", NOW - 13 * H),
       item("res-1", "future", NOW + H),
@@ -193,7 +193,7 @@ describe("今日の見出しは線をまたいで1つ", () => {
     ]);
   });
 
-  test("日付が先の録れたもの (時計のずれ) は線の上に見出しを立て、鍵は予約の側と重ならない", () => {
+  test("日付が先の録れたもの (時計のずれ) は「いま」の行の上に見出しを立て、鍵は予約の側と重ならない", () => {
     const lines = byDayLines([
       item("rec-1", "past", NOW - 3 * H),
       item("rec-ahead", "past", NOW + 24 * H),
@@ -215,7 +215,7 @@ describe("今日の見出しは線をまたいで1つ", () => {
     expect(new Set(days).size).toBe(days.length);
   });
 
-  test("0 時を越えて読み直すと、前の日の行は「昨日」の見出しに移り、今日の見出しは線の上に立つ", () => {
+  test("0 時を越えて読み直すと、前の日の行は「昨日」の見出しに移り、今日の見出しは「いま」の行の上に立つ", () => {
     const list = [
       item("rec-1", "past", NOW - 3 * H),
       item("res-1", "future", NOW + 13 * H),
@@ -234,7 +234,7 @@ describe("今日の見出しは線をまたいで1つ", () => {
     ]);
   });
 
-  test("まとめて表示は側ごとに包み、録画中は「録画」の末尾に番組でまとめずに置き、線は見出しの無い包みにする", () => {
+  test("まとめて表示は側ごとに包み、録画中は「録画」の末尾に番組でまとめずに置き、「いま」の行は見出しの無い包みにする", () => {
     const lines = timelineLines(
       sections([
         item("rec-1", "past", NOW - 3 * H, "a"),
@@ -274,7 +274,7 @@ describe("今日の見出しは線をまたいで1つ", () => {
   });
 });
 
-describe("録れたものを線の側から描く頭", () => {
+describe("録れたものを「いま」の行の側から描く先頭", () => {
   const items = [
     item("rec-1", "past", NOW - 50 * H),
     item("rec-2", "past", NOW - 49 * H),
@@ -350,14 +350,14 @@ describe("まとめて表示", () => {
     ]);
   });
 
-  test("予約の番組は次の回の位置に置く (いちばん早い予約が線のすぐ下)", () => {
+  test("予約の番組は次の回の位置に置く (いちばん早い予約が「いま」の行のすぐ下)", () => {
     const { future } = timelineLines(sections(items), {
       now: NOW,
       grouped: true,
       isOpen: () => false,
     });
     const heads = future.filter((line) => line.kind === "head");
-    // アニメの次の回 (2 時間後) はドラマの次の回 (10 時間後) より早いので、線の側 (上) に来る
+    // アニメの次の回 (2 時間後) はドラマの次の回 (10 時間後) より早いので、「いま」の行の側 (上) に来る
     expect(heads.map((line) => line.key)).toEqual([
       "future-group-アニメ",
       "future-group-ドラマ",
@@ -423,7 +423,7 @@ describe("絞り込み", () => {
     expect(passes("failed", items[5]!, traits(items[5]!))).toBe(false);
   });
 
-  test("予約は線の下、録画中は線のすぐ上、未視聴と失敗は録れたものだけ", () => {
+  test("予約は「いま」の行の下、録画中は「いま」の行のすぐ上、未視聴と失敗は録れたものだけ", () => {
     expect(passes("reservations", items[0]!, plain)).toBe(true);
     expect(passes("reservations", items[1]!, plain)).toBe(false);
     expect(passes("recording", items[1]!, plain)).toBe(true);
@@ -446,7 +446,7 @@ describe("開いたときに映すもの", () => {
     expect(catchUp(past, (i) => i.key !== "rec-1")?.key).toBe("rec-2");
   });
 
-  test("全部観ていれば null (「いま」の線を映す)", () => {
+  test("全部観ていれば null (「いま」の行を映す)", () => {
     expect(catchUp(past, () => false)).toBeNull();
   });
 
@@ -551,7 +551,7 @@ describe("終わった予約と録画をまとめる", () => {
 });
 
 describe("新しい順で表示 (上下を返す)", () => {
-  /** 新しい順に並べ、上から描く順 (予約・線・録れたもの) につなぐ */
+  /** 新しい順に並べ、上から描く順 (予約・「いま」の行・録れたもの) につなぐ */
   function reversedLines(list: TimelineItem[], grouped = false) {
     return timelineLines(sections(list, true), {
       now: NOW,
@@ -588,7 +588,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     ]);
   });
 
-  test("日付の見出しは新しい日から並び、今日の見出しは今日の予約・線・録画中・今日の録画をまたいで1つ", () => {
+  test("日付の見出しは新しい日から並び、今日の見出しは今日の予約・「いま」の行・録画中・今日の録画をまたいで1つ", () => {
     const lines = reversedLines([
       item("rec-old", "past", NOW - 26 * H),
       item("rec-1", "past", NOW - 3 * H),
@@ -605,7 +605,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     ]);
   });
 
-  test("今日の予約が無ければ、今日の見出しは線のすぐ上に立ち、録画中は線の下 (前の日から録っている行も今日)", () => {
+  test("今日の予約が無ければ、今日の見出しは「いま」の行のすぐ上に立ち、録画中は「いま」の行の下 (前の日から録っている行も今日)", () => {
     const lines = reversedLines([
       item("rec-1", "past", NOW - 3 * H),
       item("res-night", "now", NOW - 13 * H),
@@ -623,7 +623,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     expect(keys(lines.past)).toEqual(["rec-1"]);
   });
 
-  test("何も無くても「いま」の線は残し、今日の見出しは線の上に立てる", () => {
+  test("何も無くても「いま」の行は残し、今日の見出しは「いま」の行の上に立てる", () => {
     const lines = reversedLines([]);
     expect(keys(top(lines))).toEqual([`day-${today}`, "now"]);
   });
@@ -652,7 +652,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     expect(new Set(days).size).toBe(days.length);
   });
 
-  test("まとめて表示は「これからの予約」・線・「録画」の順に包み、録画中は「録画」の頭に置く", () => {
+  test("まとめて表示は「これからの予約」・「いま」の行・「録画」の順に包み、録画中は「録画」の先頭に置く", () => {
     const lines = reversedLines(
       [
         item("rec-1", "past", NOW - 3 * H, "a"),
@@ -687,7 +687,7 @@ describe("新しい順で表示 (上下を返す)", () => {
       reversed: true,
       isOpen: (_zone, group) => group === "アニメ",
     });
-    // 予約は次の回が遠い番組が上。次に録る番組 (アニメ) が線のすぐ上
+    // 予約は次の回が遠い番組が上。次に録る番組 (アニメ) が「いま」の行のすぐ上
     expect(keys(future)).toEqual([
       "side-future",
       "future-group-ドラマ",
@@ -705,7 +705,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     ]);
   });
 
-  test("録れたものを線の側 (頭) から描く終わり: 開いた番組と日付の見出しの途中で切らない", () => {
+  test("録れたものを「いま」の行の側 (先頭) から描く終わり: 開いた番組と日付の見出しの途中で切らない", () => {
     const list = [
       item("rec-1", "past", NOW - 50 * H),
       item("rec-2", "past", NOW - 49 * H),
@@ -756,7 +756,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     expect(pageEnd(grouped, 5)).toBe(6);
   });
 
-  test("ふだんの並びの予約も線の側 (頭) から描き、日付の見出しと開いた番組の途中で切らない", () => {
+  test("ふだんの並びの予約も「いま」の行の側 (先頭) から描き、日付の見出しと開いた番組の途中で切らない", () => {
     const list = [
       item("res-1", "future", NOW + H),
       item("res-2", "future", NOW + 2 * H),
@@ -785,7 +785,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     }
   });
 
-  test("予約は線の側 (末尾) から描き、見出しの途中から描かない", () => {
+  test("予約は「いま」の行の側 (末尾) から描き、見出しの途中から描かない", () => {
     const { future } = reversedLines([
       item("res-1", "future", NOW + H),
       item("res-2", "future", NOW + 2 * H),

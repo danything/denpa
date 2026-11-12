@@ -2,7 +2,7 @@ import { seeDriveNotice } from "./canvas-video";
 
 /**
  * **運転中の注意** (互換モード。`canvas-video.ts`・`DriveNotice.svelte`)。UA の既定で互換モードに
- * 入っている端末 (テスラ) で、初めて canvas で再生する前に出す。**「わかりました」を押すまで再生を始めない。**
+ * 入っている端末 (テスラ) で、初めて canvas で再生する前に出す。**「了解」を押すまで再生を始めない。**
  * ライブ・追っかけ・観る画面で同じ。
  */
 export function driveGate() {

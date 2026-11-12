@@ -69,7 +69,7 @@ afterAll(() => {
 
 /** 番組の始まり */
 const T = Date.UTC(2026, 7, 12, 0, 0, 30);
-/** 頭の PCR (秒)。中身に意味は無い */
+/** 先頭の PCR (秒)。中身に意味は無い */
 const PCR = 500;
 
 /**
@@ -156,9 +156,10 @@ describe("saveRecordedBml / loadRecordedBml", () => {
     );
     if (done === undefined) throw new Error("moduleDownloaded が無い");
     expect(bmlBody(done.message)).toContain("ver1");
-    // **番組の名乗りが頭に入っている。** 描く側はこれが来るまで入口を開かない
+    // **番組の名乗りが先頭に入っている。** 描く側はこれが来るまで入口を開かない
     const info = loaded[0]!.message;
-    if (info.type !== "programInfo") throw new Error("programInfo が頭に無い");
+    if (info.type !== "programInfo")
+      throw new Error("programInfo が先頭に無い");
     expect(info.serviceId).toBe(1024);
     expect(info.eventName).toBe("録画のテスト");
     // 読む側でも足すが、既に在れば重ねない
@@ -170,10 +171,10 @@ describe("saveRecordedBml / loadRecordedBml", () => {
   });
 
   /*
-   * **時刻の基準は録画の頭で、番組の始まりではない。** 番組の始まり (`start_at`) を基準にしていた頃は、
+   * **時刻の基準は録画の先頭で、番組の始まりではない。** 番組の始まり (`start_at`) を基準にしていた頃は、
    * 前のマージン (10 秒) のぶん切り替わりが映像より早く出ていた
    */
-  test("録画の頭から数えて、頭から捨てたぶんを引いた位置で切り替わる", async () => {
+  test("録画の先頭から数えて、先頭から捨てたぶんを引いた位置で切り替わる", async () => {
     const ts = join(dir, "plain-cut.ts");
     const sidecar = join(dir, "plain-cut.bml.jsonl");
     writeFileSync(ts, recorded());
@@ -217,7 +218,7 @@ describe("saveRecordedBml / loadRecordedBml", () => {
   });
 });
 
-describe("saveRecordedBml と録画の頭の放送時刻", () => {
+describe("saveRecordedBml と録画の先頭の放送時刻", () => {
   /** 録画の行を 1 つ入れる (`ts_head` を見るため) */
   function row(tsHead: number | null): void {
     orm().delete(recordings).run();
@@ -242,12 +243,12 @@ describe("saveRecordedBml と録画の頭の放送時刻", () => {
       .where(eq(recordings.id, 1))
       .get()?.ts_head;
 
-  test("空なら、TS の頭の放送時刻を書く (データ放送の有る無しに関わらず)", async () => {
+  test("空なら、TS の先頭の放送時刻を書く (データ放送の有る無しに関わらず)", async () => {
     const ts = join(dir, "head.ts");
     writeFileSync(ts, recorded());
     row(null);
     await saveRecordedBml(ts, join(dir, "head.bml.jsonl"), recording(T), 0);
-    // 最初の TDT は録画の頭 (番組の始まりの 10 秒前) と同じ PCR に来ている
+    // 最初の TDT は録画の先頭 (番組の始まりの 10 秒前) と同じ PCR に来ている
     expect(tsHeadOf()).toBe(T - 10_000);
   });
 

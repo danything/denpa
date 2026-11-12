@@ -105,14 +105,14 @@ test("局名の行と時刻の列はマスより先に出て、届いても動�
   await expect(page.getByTestId("program-button")).toHaveCount(0);
   await expect(page.getByTestId("guide-service").first()).toBeVisible();
   await expect(page.locator(".hour-label").first()).toBeAttached();
-  await expect(page.getByTestId("now-line")).toBeVisible();
+  await expect(page.getByTestId("now-mark")).toBeVisible();
   // いまの位置まで、骨組みのうちに送ってある
   const now = await page.evaluate(() => {
     const grid = document.querySelector(
       '[data-testid="guide-grid"]',
     ) as HTMLElement;
     const line = document.querySelector(
-      '[data-testid="now-line"]',
+      '[data-testid="now-mark"]',
     ) as HTMLElement;
     const top =
       line.getBoundingClientRect().top - grid.getBoundingClientRect().top;
@@ -197,7 +197,7 @@ for (const [width, height] of [
     await page.goto("/guide?type=GR");
     await page.locator('[data-hydrated="true"]').waitFor();
     await expect(page.getByTestId("guide-skeleton")).toBeVisible();
-    await expect(page.getByTestId("now-line")).toBeVisible();
+    await expect(page.getByTestId("now-mark")).toBeVisible();
     const opened = await bottoms(page, '[data-testid="guide-toolbar"]');
     expect(
       Math.abs(opened.bottom - opened.limit),

@@ -119,6 +119,10 @@
   :global(.ov-btn:is(:hover, :focus-visible)) {
     --pico-background-color: var(--dp-on-video-hover);
   }
+  /* 焦点の線はテーマで変えない (`app.css` の `--dp-video-focus`) */
+  :global(:is(.ov, .ov-btn):focus-visible) {
+    outline-color: var(--dp-video-focus);
+  }
   /*
    * オン (`aria-pressed="true"`) は空色のアイコンと下の短い線。線はほかの所と同じ「入っている切り替え」の 1 本 (`app.css`) で、
    * 色だけ字に合わせる。戻せないものの 2 回目と「今」に張り付いた「ライブ」「最新」は赤 (塗らない)

@@ -230,6 +230,15 @@ export function stepLabel(step: Step, format: string): string {
 }
 
 /**
+ * **コーデックのメニューの「自動」の行の値** (「自動 (H.264 540p)」「自動 (MPEG-2)」)。ライブ・追っかけ・観る画面の 3 つともこれで組む。
+ * 添えるもの (`stepLabel`) が空なら「自動」だけ
+ */
+export function autoValue(step: Step, format: string): string {
+  const detail = stepLabel(step, format);
+  return detail === "" ? "自動" : `自動 (${detail})`;
+}
+
+/**
  * **断り書きに出す文** (docs/writing.md)。段を動かしたときは動かした先、`encode` と `pinned` は段を動かさない理由と、
  * 何をすればどうなるか。`from` は切り替える前の段。ライブも観る画面もこれを使う
  */

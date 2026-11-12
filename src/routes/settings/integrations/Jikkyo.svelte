@@ -60,6 +60,7 @@
         <label class="check-row">
           <input
             type="checkbox"
+            role="switch"
             name="jikkyo"
             checked={data.jikkyo}
             data-testid="jikkyo-setting"

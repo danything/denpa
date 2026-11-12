@@ -2,10 +2,10 @@
   import Lead from "./Lead.svelte";
 
   /**
-   * チェック + 見出し + 1 行の要点 (設定の画面の決まりの形)。
+   * オン/オフのスイッチ + 見出し + 1 行の要点 (設定の画面の決まりの形)。
    *
    * 要点と「詳しく」は label の外に置く。label の中に開け閉めを入れると、
-   * 「詳しく」を押したつもりでチェックまで切り替わりかねない
+   * 「詳しく」を押したつもりでスイッチまで切り替わりかねない
    */
   let {
     name,
@@ -27,7 +27,13 @@
 
 <div class="check-item">
   <label class="check-row">
-    <input type="checkbox" {name} {checked} data-testid={testid} />
+    <input
+      type="checkbox"
+      role="switch"
+      {name}
+      {checked}
+      data-testid={testid}
+    />
     <span>{title}</span>
   </label>
   {#if detail === ""}

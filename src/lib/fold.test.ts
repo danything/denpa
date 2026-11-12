@@ -56,8 +56,8 @@ describe("SQL の前絞りに掛けられる切れ端 (likePieces)", () => {
     expect(likePieces("[新")).toEqual([]);
   });
 
-  test("寄せ先の頭・尻と重なる端だけ抜く", () => {
-    // 「ha」(㏊) の尻と重なる a、「fax」(℻) の頭と重なる f
+  test("寄せ先の先頭・末尾と重なる端だけ抜く", () => {
+    // 「ha」(㏊) の尻と重なる a、「fax」(℻) の先頭と重なる f
     expect(likePieces("anf")).toEqual(["n"]);
     // 新番組 の「新」は「[新]」の真ん中とは並び方が合わないので残す
     expect(likePieces("新番組")).toEqual(["新番組"]);

@@ -5,12 +5,12 @@ import { expect, recordOne, setRecording, test } from "./helpers";
 /**
  * **録画をその場で流す API** (`GET /api/recordings/<id>/playback`・`/stream`。`server/playback.ts`)。
  *
- * エンコードしない設定で録った録画 (元の TS だけ) を使う。偽 ffmpeg は映像を作らず、頭の塊の時刻 (tfdt)
+ * エンコードしない設定で録った録画 (元の TS だけ) を使う。偽 ffmpeg は映像を作らず、先頭の塊の時刻 (tfdt)
  * だけ本物と同じ決め方で出す (`tests/fake/fmp4-out.ts`)。確かめるのは、サーバが TS の中で飛び先を
- * 引いて、物差し (TS の頭を 0) の時刻で流しはじめていること
+ * 引いて、物差し (TS の先頭を 0) の時刻で流しはじめていること
  */
 
-/** fMP4 の頭の moof の tfdt (90kHz の秒)。無ければ null */
+/** fMP4 の先頭の moof の tfdt (90kHz の秒)。無ければ null */
 function firstTfdt(bytes: Uint8Array): number | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const type = (at: number) =>
@@ -74,7 +74,7 @@ test.describe("録画をその場で流す", () => {
     expect(info.offers.some((offer) => offer.way === "file")).toBe(false);
 
     /*
-     * 頭の塊は、リクエストした位置の 1 秒手前 (キーフレームを含めるため) の映像から。偽の放送の映像は
+     * 先頭の塊は、リクエストした位置の 1 秒手前 (キーフレームを含めるため) の映像から。偽の放送の映像は
      * 毎コマがキーフレーム (I フレームだけ) なので、そこから 1 コマ以内
      */
     for (const from of [0, 3]) {

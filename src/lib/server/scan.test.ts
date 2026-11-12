@@ -55,7 +55,7 @@ function stream(
   half = false,
 ): Uint8Array {
   return Uint8Array.from([
-    // 頭に無関係なパケットを混ぜておく。すぐには揃わない状況にするため
+    // 先頭に無関係なパケットを混ぜておく。すぐには揃わない状況にするため
     ...packetize(0x0100, sdtSection(0x0408, 0x0004, services)),
     ...(half
       ? []

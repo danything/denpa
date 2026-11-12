@@ -2,7 +2,7 @@
  * **偽 ffmpeg の fMP4 の出口** (`ffmpeg.sh` から呼ぶ)。録画をその場で流す API (`/api/recordings/<id>/stream`。
  * `server/playback.ts`) の時刻の運び方を、本物の ffmpeg 無しで試すためのもの。
  *
- * 中身の映像は作らない。出すのは init (ftyp + moov の殻) と、**頭の塊の時刻 (tfdt) だけ正しい** moof + mdat。
+ * 中身の映像は作らない。出すのは init (ftyp + moov の殻) と、**先頭の塊の時刻 (tfdt) だけ正しい** moof + mdat。
  * tfdt は本物と同じ決め方で出す:
  *
  * - 入口が標準入力 (TS) なら、最初の映像の PES の PTS を `-copyts` のまま運ぶ。一周の手前 60 秒に
