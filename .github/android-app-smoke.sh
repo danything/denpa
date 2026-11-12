@@ -89,12 +89,22 @@ wait_until() {
 }
 
 no_agent() { [ -z "$(agent_pid)" ]; }
-service_gone() { ! adb shell dumpsys activity services "$pkg" | tr -d '\r' | grep -q "ServiceRecord.*$pkg/.DenpaService"; }
+# grep -q はパイプの後ろに置かず、一度ファイルに書いてから探す (wait_log と同じ)。grep -q が見つけて先に閉じると、前のコマンドが
+# 残りを書くときに SIGPIPE で終わり、pipefail で見つかったのに失敗になる。API 29 の通知の記録は、アプリの記録のあとに
+# post_frequency の行にもアプリの名前が出るので grep -A60 の出力が 4KB を超え、「チューナー 0 台」を待つ所が 4 回に 3 回ほど落ちていた
+service_gone() {
+  adb shell dumpsys activity services "$pkg" | tr -d '\r' > "$host/services.txt"
+  ! grep -q "ServiceRecord.*$pkg/.DenpaService" "$host/services.txt"
+}
 has_agent() { [ -n "$(agent_pid)" ]; }
 no_bun() { [ -z "$(bun_pid)" ]; }
 has_bun() { [ -n "$(bun_pid)" ]; }
 # 通知の本文に出ているか
-notified() { adb shell dumpsys notification --noredact | tr -d '\r' | grep -A60 "pkg=$pkg" | grep -qF "android.text=String ($1)"; }
+notified() {
+  adb shell dumpsys notification --noredact | tr -d '\r' > "$host/notification.txt"
+  grep -A60 "pkg=$pkg" "$host/notification.txt" > "$host/ours.txt" || return 1
+  grep -qF "android.text=String ($1)" "$host/ours.txt"
+}
 
 broadcast() { adb shell am broadcast -n "$pkg/.DebugReceiver" -a "$pkg.debug.$1" "${@:2}" > /dev/null; }
 
@@ -167,7 +177,8 @@ echo "=== ファイルの fd を付けた attached を送る"
 broadcast ATTACH_FILE
 wait_log "アプリから USB の機材を受け取りました: 001-004 (1234:5678)"
 wait_log "アプリから USB の機材を 1 台受け取りました"
-if adb logcat -d -s denpa-agent | grep -qF "fd の付いていない attached"; then
+adb logcat -d -s denpa-agent | tr -d '\r' > "$host/agent-log.txt"
+if grep -qF "fd の付いていない attached" "$host/agent-log.txt"; then
   echo "fd が attached の行に付いていません" >&2
   exit 1
 fi
