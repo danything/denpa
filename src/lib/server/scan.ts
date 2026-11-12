@@ -32,7 +32,8 @@ import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
 import { type ChannelType, isSatellite, type Transport } from "../types";
 import { storeAgentChannels } from "./agent-channels";
-import { listAgents, tuningAgents } from "./agents";
+import { type Place } from "./agent-order";
+import { listAgents, primaryAgent } from "./agents";
 import { CaObserver, describe, hex, type Observed } from "./ca-observe";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank, unlistType } from "./epg";
@@ -47,12 +48,20 @@ import {
   type AgentTuner,
   deleteChannels,
   getChannels,
-  getTuners,
   openChannel,
   openChannelStream,
   putChannels,
   TunerBusyError,
+  tunerList,
 } from "./tuner";
+
+/**
+ * スキャンで開く所。**スキャンは並びの先頭のエージェントで回す** (アンテナに何が映るかはエージェントごとに違うので、
+ * 振り分けずに結果を預けるエージェントで選局する)
+ */
+function onPrimary(channel: string): Place[] {
+  return [{ agent: primaryAgent().id, channel }];
+}
 
 /**
  * 1 チャンネルあたりの待ち時間。
@@ -486,9 +495,10 @@ class Scanner {
    * 同じ TS が 2 つの CATV のチャンネルで見つかったら、先のほうだけを返す (`dedupeCatv`)
    */
   async run(targets: [ChannelType, string[]][]): Promise<AgentChannel[]> {
-    const tuners = (await getTuners().catch(() => [])).filter(
-      (tuner) => !tuner.disabled,
-    );
+    // スキャンは並びの先頭のエージェントで回す (結果もそこに預ける)
+    const tuners = (
+      await tunerList(primaryAgent()).catch(() => ({ tuners: [] }))
+    ).tuners.filter((tuner) => !tuner.disabled);
     const satellites = targets
       .map(([type]) => type)
       .filter(isSatellite)
@@ -544,7 +554,7 @@ class Scanner {
       });
       return;
     }
-    const current = await getChannels(tuningAgents()[0]).catch(() => []);
+    const current = await getChannels(primaryAgent()).catch(() => []);
     const known = knownNames(current);
     const lineup = await readLineup(
       type,
@@ -590,7 +600,7 @@ class Scanner {
       try {
         return await openChannelStream(
           type,
-          channel,
+          onPrimary(channel),
           this.aborter.signal,
           `scan ${channel}`,
           config.priority.scan,
@@ -699,7 +709,7 @@ class Scanner {
       try {
         const opened = await openChannel(
           type,
-          channel,
+          onPrimary(channel),
           closer.signal,
           `scan ${channel}`,
           config.priority.scan,
@@ -900,8 +910,8 @@ async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
     const replaced = targets
       .map(([type]) => type)
       .filter((type) => !isSatellite(type) || scanner.lineups.has(type));
-    // 預ける先は選局に使ったエージェント (`openChannel` と同じ先頭の 1 台)
-    await putChannels(found, replaced, tuningAgents()[0]);
+    // 預ける先はスキャンを回したエージェント (並びの先頭の 1 台)
+    await putChannels(found, replaced, primaryAgent());
     // 設定から消していた衛星の種別も、スキャンで入れ直したら放送の一覧から入れる側に戻す
     markRemoved(replaced.filter(isSatellite), false);
     // 回した種別のぶんだけ、分かったことを入れ替える (チャンネルと同じく、回していない種別は残す)

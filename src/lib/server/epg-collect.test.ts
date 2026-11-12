@@ -33,6 +33,7 @@ afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 const {
+  byTransportStream,
   collectOnce,
   drain,
   firstSweepDone,
@@ -748,5 +749,38 @@ describe("番組表を読める局を集める", () => {
     } finally {
       server.stop(true);
     }
+  });
+});
+
+describe("全部のエージェントの控えをまとめる (byTransportStream)", () => {
+  const at = (name: string, ts: number): AgentChannel => ({
+    ...channel(name, [ts]),
+    transportStreamId: ts,
+  });
+
+  test("ほかのエージェントにもある TS は 1 回だけ回り、受けられる所に全部のエージェントのチャンネルを並べる", () => {
+    const t16 = at("T16", 1);
+    const t21 = at("T21", 2);
+    const { channels, placesOf, homeOf } = byTransportStream([
+      { agent: 1, channels: [t16, t21] },
+      // 中継局が違い、同じ TS を別のチャンネルで受ける。書斎だけが受ける TS もある
+      { agent: 2, channels: [at("T27", 1), at("T30", 3)] },
+    ]);
+    expect(channels.map((c) => c.channel)).toEqual(["T16", "T21", "T30"]);
+    expect(placesOf(t16)).toEqual([
+      { agent: 1, channel: "T16" },
+      { agent: 2, channel: "T27" },
+    ]);
+    expect(placesOf(channels[2]!)).toEqual([{ agent: 2, channel: "T30" }]);
+    expect(homeOf(channels[2]!)).toBe(2);
+  });
+
+  test("エージェントが 1 台なら控えのまま。同じ TS を指すチャンネルも、今までどおりそれぞれ回る", () => {
+    const list = [at("BS01_0", 1), at("BS01_1", 1), at("BS03_0", 2)];
+    const { channels, placesOf } = byTransportStream([
+      { agent: 1, channels: list },
+    ]);
+    expect(channels).toEqual(list);
+    expect(placesOf(list[1]!)).toEqual([{ agent: 1, channel: "BS01_1" }]);
   });
 });

@@ -254,7 +254,7 @@ describe("recordingHolds", () => {
       (id) => ends.get(id),
     );
     expect(holds).toEqual([
-      { type: "GR", channel: "T21", rank: 1, until: 2_000 },
+      { agent: 1, type: "GR", channel: "T21", rank: 1, until: 2_000 },
     ]);
   });
 
@@ -266,6 +266,12 @@ describe("recordingHolds", () => {
     expect(holds).toEqual([]);
   });
 });
+
+/** 偽のエージェント (並びの先頭) のチャンネル。選局はエージェントとそのチャンネルの組で渡す (`openChannel` の `places`) */
+async function primary(channel: string) {
+  const { primaryAgent } = await import("./agents");
+  return [{ agent: primaryAgent().id, channel }];
+}
 
 /**
  * 偽のエージェントを立て、`config` をそちらへ向けて `run` を呼ぶ。終われば戻す。
@@ -309,7 +315,7 @@ describe("openChannelStream の引き継ぎ", () => {
         const aborter = new AbortController();
         await openChannelStream(
           "BS",
-          "BS11_0",
+          await primary("BS11_0"),
           aborter.signal,
           recordingUse(9),
           10,
@@ -357,7 +363,7 @@ describe("選局できたら受信できたと残す", () => {
         await expect(
           openChannelStream(
             "GR",
-            "T26",
+            await primary("T26"),
             new AbortController().signal,
             "live T26",
           ),
@@ -366,7 +372,12 @@ describe("選局できたら受信できたと残す", () => {
 
         ok = true;
         const aborter = new AbortController();
-        await openChannelStream("GR", "T26", aborter.signal, "live T26");
+        await openChannelStream(
+          "GR",
+          await primary("T26"),
+          aborter.signal,
+          "live T26",
+        );
         aborter.abort();
         expect(failingGround()).toEqual([]);
       },
@@ -389,7 +400,7 @@ describe("openChannelStream の答えを待つ上限", () => {
         const aborter = new AbortController();
         const error = await openChannelStream(
           "GR",
-          "T27",
+          await primary("T27"),
           aborter.signal,
           "live GR/T27",
           4,
@@ -426,7 +437,7 @@ describe("openChannelStream の答えを待つ上限", () => {
         const aborter = new AbortController();
         const stream = await openChannelStream(
           "GR",
-          "T27",
+          await primary("T27"),
           aborter.signal,
           "live GR/T27",
           4,
@@ -455,7 +466,7 @@ describe("openChannelStream の答えを待つ上限", () => {
       async () => {
         const error = await openChannelStream(
           "BS",
-          "BS15_0",
+          await primary("BS15_0"),
           new AbortController().signal,
           "live BS/BS15_0",
           4,

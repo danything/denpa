@@ -10,7 +10,7 @@ import { PACKET } from "@danything/arib/psi";
 import { ServiceFilter } from "@danything/arib/service-filter";
 import { and, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
-import { NO_CHANNEL, serviceChannel } from "./agent-channels";
+import { NO_CHANNEL, serviceAgent, serviceChannel } from "./agent-channels";
 import { fetchAgent } from "./agent-client";
 import { type Agent, primaryAgent } from "./agents";
 import { config } from "./config";
@@ -374,6 +374,7 @@ const DECODE_TARGET = {
   arib: services.service_id,
   type: services.type,
   channel: serviceChannel(),
+  agent: serviceAgent(),
 };
 
 /** 復号を確かめる局 (`DECODE_TARGET` で読んだ行) */
@@ -382,6 +383,8 @@ interface DecodeTarget {
   arib: number;
   type: string;
   channel: string | null;
+  /** `channel` を控えに持つエージェント (`agent-channels.serviceAgent`)。契約を確かめる選局はここへ送る (振り分けない) */
+  agent: number | null;
 }
 
 /** 局ごとにパケットを数える長さ。これだけ数えたら、15 秒を待たずに判定する */
@@ -521,7 +524,8 @@ async function decodeOnChannel(
   const first = targets[0];
   if (first === undefined) return results;
   const channel = first.channel;
-  if (channel === null) {
+  const agent = first.agent;
+  if (channel === null || agent === null) {
     for (const target of targets)
       results.set(target.id, { ok: false, decodeOk: false, error: NO_CHANNEL });
     return results;
@@ -543,7 +547,7 @@ async function decodeOnChannel(
     // スキャンと同じ優先度でストリームを開く (WantsKeys が有効な live プレフィックス)
     const stream = await openChannelStream(
       first.type,
-      channel,
+      [{ agent, channel }],
       abortController.signal,
       "live test-decode",
       config.priority.scan,

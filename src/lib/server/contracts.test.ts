@@ -398,6 +398,7 @@ describe("testDecode", () => {
       }
       return new Response("Not Found", { status: 404 });
     });
+    config.agentUrl = fakeAgentUrl(server.port ?? 0);
 
     orm()
       .insert(services)
@@ -414,7 +415,6 @@ describe("testDecode", () => {
     airing(103);
 
     try {
-      config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(103);
       if (!res.ok) console.log("testDecode failed:", res);
       expect(res.ok).toBe(true);
@@ -432,6 +432,7 @@ describe("testDecode", () => {
       if (url.pathname === "/denpa/stream") return new Response(buf);
       return new Response("Not Found", { status: 404 });
     });
+    config.agentUrl = fakeAgentUrl(server.port ?? 0);
     orm()
       .insert(services)
       .values({
@@ -456,7 +457,6 @@ describe("testDecode", () => {
       })
       .run();
     try {
-      config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(107);
       expect(res.decodeOk).toBe(true);
       const row = getContractRows("0000111122223333")[0];
@@ -484,6 +484,7 @@ describe("testDecode", () => {
       }
       return new Response("Not Found", { status: 404 });
     });
+    config.agentUrl = fakeAgentUrl(server.port ?? 0);
 
     orm()
       .insert(services)
@@ -500,7 +501,6 @@ describe("testDecode", () => {
     airing(104);
 
     try {
-      config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(104);
       expect(res.ok).toBe(true);
       expect(res.decodeOk).toBe(false);
@@ -544,6 +544,7 @@ describe("testDecode", () => {
       }
       return new Response("Not Found", { status: 404 });
     });
+    config.agentUrl = fakeAgentUrl(server.port ?? 0);
 
     orm()
       .insert(services)
@@ -560,7 +561,6 @@ describe("testDecode", () => {
     airing(105);
 
     try {
-      config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(105);
       expect(res.ok).toBe(false);
       expect(res.error).toContain("十分なパケットを受信できませんでした");
@@ -582,6 +582,7 @@ describe("testDecode", () => {
       if (url.pathname === "/denpa/stream") return new Response(buf);
       return new Response("Not Found", { status: 404 });
     });
+    config.agentUrl = fakeAgentUrl(server.port ?? 0);
     orm()
       .insert(services)
       .values({
@@ -596,7 +597,6 @@ describe("testDecode", () => {
     placeServices([{ id: 108, channel: "BS11" }]);
     airing(108);
     try {
-      config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(108);
       expect(res.ok).toBe(false);
       expect(res.error).toContain("十分なパケットを受信できませんでした");
@@ -624,8 +624,8 @@ describe("testDecode", () => {
         ? Response.json(ONE_CARD)
         : new Response("Not Found", { status: 404 }),
     );
+    config.agentUrl = fakeAgentUrl(server.port ?? 0);
     try {
-      config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(106);
       expect(res.ok).toBe(false);
       expect(res.error).toContain("無料の番組");
@@ -717,6 +717,7 @@ describe("確かめていない局の復号をまとめて確かめる (testDeco
       }
       return new Response("Not Found", { status: 404 });
     });
+    config.agentUrl = fakeAgentUrl(server.port ?? 0);
     const service = (id: number, arib: number, channel: string) => {
       orm()
         .insert(services)
@@ -765,7 +766,6 @@ describe("確かめていない局の復号をまとめて確かめる (testDeco
       .run();
 
     try {
-      config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecodeUnverified();
       if (!res.ok) throw new Error(res.error);
       expect([...streams].sort()).toEqual(["BS05", "BS07"]);
@@ -815,6 +815,7 @@ describe("まとめて確かめるときの失敗と重なり", () => {
       if (url.pathname === "/denpa/card") return Response.json(ONE_CARD);
       return new Response("busy", { status: 503 });
     });
+    config.agentUrl = fakeAgentUrl(server.port ?? 0);
     const aribOf = new Map([
       [1, 103],
       [2, 9999],
@@ -835,7 +836,6 @@ describe("まとめて確かめるときの失敗と重なり", () => {
       airing(id);
     }
     try {
-      config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecodeUnverified();
       if (!res.ok) throw new Error(res.error);
       for (const id of [1, 2]) {

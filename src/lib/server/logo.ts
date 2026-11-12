@@ -20,7 +20,8 @@ import {
 import { type CarouselCounts, CarouselProgress } from "../ts/logo-dsmcc";
 import { withPalette } from "../ts/logo-palette";
 import type { ChannelType } from "../types";
-import { serviceChannel } from "./agent-channels";
+import { serviceChannel, servicePlaces, strictPlaces } from "./agent-channels";
+import { type Place, placesKey } from "./agent-order";
 import { config } from "./config";
 import { orm } from "./db";
 import { currentServices } from "./epg";
@@ -425,10 +426,15 @@ function repaint(serviceId: number): void {
   }
 }
 
-/** ロゴを取得する単位。1 つの物理チャンネルと、そこに入っている局 */
+/**
+ * ロゴを取得する単位。1 つの物理チャンネルと、そこに入っている局。
+ * `channel` は並びの先頭のエージェントでのチャンネルの名前 (`serviceChannel`。中継の当たり外れを書き留める名前)、
+ * `places` は局を受けられる所 (`servicePlaces`。開くときはここから振り分ける)
+ */
 interface Target {
   type: string;
   channel: string;
+  places: string;
   network_id: number;
 }
 
@@ -437,6 +443,7 @@ function targetOf(service: Target): Target {
   return {
     type: service.type,
     channel: service.channel,
+    places: service.places,
     network_id: service.network_id,
   };
 }
@@ -509,6 +516,7 @@ function tunableServices(): {
   id: number;
   type: string;
   channel: string;
+  places: string;
   network_id: number;
 }[] {
   return (
@@ -517,6 +525,7 @@ function tunableServices(): {
         id: services.id,
         type: services.type,
         channel: serviceChannel(),
+        places: servicePlaces(),
         network_id: services.network_id,
       })
       .from(services)
@@ -531,8 +540,12 @@ function tunableServices(): {
       .all()
       // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は選局できない
       .filter(
-        (service): service is typeof service & { channel: string } =>
-          service.channel !== null,
+        (
+          service,
+        ): service is typeof service & {
+          channel: string;
+          places: string;
+        } => service.channel !== null && service.places !== null,
       )
   );
 }
@@ -667,6 +680,8 @@ async function collect(
   signal?: AbortSignal,
   after: readonly StreamUse[] = [],
   priority: number = SWEEP_PRIORITY,
+  /** 開く所。渡さなければ局を受けられる所から振り分ける。共有 (`ride`) は開いている所だけを渡す */
+  places: readonly Place[] = strictPlaces(target.places),
 ): Promise<{
   found: number;
   outcome: Outcome;
@@ -708,7 +723,7 @@ async function collect(
   try {
     const stream = await openChannelStream(
       target.type,
-      target.channel,
+      places,
       controller.signal,
       // 何を使っているのかが設定の「チューナー」に出る
       logoUse(target),
@@ -882,7 +897,7 @@ async function freeTuners(
  * 0 と見て残りを諦めていた (17-logo が CI で時々落ちていた)
  */
 export function shareable(
-  tuners: readonly Pick<AgentTuner, "channel" | "users">[],
+  tuners: readonly Pick<AgentTuner, "agent" | "channel" | "users">[],
 ): Set<string> {
   const open = new Set<string>();
   for (const tuner of tuners) {
@@ -890,7 +905,9 @@ export function shareable(
       tuner.channel !== null &&
       tuner.users.some((user) => !user.use.startsWith("logo "))
     )
-      open.add(tuner.channel.channel);
+      open.add(
+        placesKey([{ agent: tuner.agent, channel: tuner.channel.channel }]),
+      );
   }
   return open;
 }
@@ -1170,11 +1187,17 @@ export async function ride(): Promise<number> {
 
       const open = shareable(await getTuners());
       for (const target of need) {
-        if (!open.has(target.channel)) continue;
+        // 開いているエージェントのその選局にだけ送る (ほかのエージェントで開き直さない)
+        const place = strictPlaces(target.places).find((p) =>
+          open.has(placesKey([p])),
+        );
+        if (place === undefined) continue;
         // 自分で開けたものは共有しない。同じチャンネルを二重に読むことになる
         // (`collect` は開きに行く前に `collecting` へ入れるので、選び直しても二重にならない)
         if (collecting.has(target.channel)) continue;
-        rides.push(collect(target, RIDE_TIMEOUT));
+        rides.push(
+          collect(target, RIDE_TIMEOUT, undefined, [], SWEEP_PRIORITY, [place]),
+        );
       }
     } while (replan);
   } catch {

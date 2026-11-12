@@ -19,6 +19,7 @@ config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-rules-")), "denpa.db");
 
 const { now, orm } = await import("./db");
 const { placeServices } = await import("./fake-channels");
+const { shareKey } = await import("./agent-channels");
 const { applyRules, keepsReservation, previewSkips } = await import("./rules");
 const {
   programs,
@@ -825,10 +826,17 @@ describe("同じ回は最初の放送だけ録る", () => {
   /** 下見に渡す形式 (`countPreview` が引くのと同じ列) */
   function hit(id: number, serviceId: number, type: string, channel: string) {
     const row = orm().select().from(programs).where(eq(programs.id, id)).get()!;
+    // 下見が読む共有のキー (エージェントとそのチャンネルの組。`agent-channels.shareKey`)
+    const key = orm()
+      .select({ key: shareKey() })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .get()?.key;
+    expect(key).toContain(channel);
     return {
       ...row,
       service_type: type,
-      service_channel: channel,
+      service_channel: key!,
       service_name: String(serviceId),
     };
   }

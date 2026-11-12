@@ -212,7 +212,7 @@ async function notPaired(res: Response): Promise<boolean> {
 
 /**
  * 決まったエージェントを呼ぶ。`path` は `/denpa/...`。返すのはふつうの `fetch` の応答。
- * どのエージェントに送るかは呼ぶ側が決める (`agents.ts` の `listAgents`・`tuningAgents`・`primaryAgent`)。
+ * どのエージェントに送るかは呼ぶ側が決める (`agents.ts` の `listAgents`・`primaryAgent`。選局は `tuner.openChannel` が振り分ける)。
  * まだ組んでいない・保存した証明書と合わない・組んでいないと断られた、のどれかなら、合言葉で組み直して 1 度だけ試し直す。
  * 試し直すので、`init.body` は文字列など何度でも送れるものにする (いまの呼び出し元はどれも JSON の文字列か本文なし)
  */

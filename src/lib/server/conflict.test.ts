@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { RECORDING, scenes } from "../../../tests/fake/tuner-scenes";
+import {
+  agentScenes,
+  RECORDING,
+  scenes,
+} from "../../../tests/fake/tuner-scenes";
+import { placesKey } from "./agent-order";
 import {
   type Accepted,
   assign,
@@ -572,8 +577,53 @@ describe("エージェントと同じ場面", () => {
           to: closed < 0 ? scene.steps.length : closed,
         };
       });
+      expect(
+        placements(holds, capacity).map((placed) => placed?.rank ?? null),
+      ).toEqual(opens.map(({ step }) => step.rank));
+    });
+  }
+});
+
+/**
+ * **エージェントが 2 台のときの場面** (`tests/fake/tuner-scenes.ts` の `agentScenes`)。
+ * 偽のエージェント 2 台への振り分け (`agent-routing.test.ts`) と同じ場面で、割り振りも同じエージェントの同じ組に入れる
+ */
+describe("エージェントが 2 台のときの場面", () => {
+  for (const scene of agentScenes) {
+    test(scene.name, () => {
+      // エージェントの行の ID は並びの順に 1 から
+      const idOf = (name: string) =>
+        scene.agents.findIndex((agent) => agent.name === name) + 1;
+      const capacity = capacityOf(
+        scene.agents.flatMap((agent, i) =>
+          agent.tuners.map((tuner) => ({ ...tuner, agent: i + 1 })),
+        ),
+      );
+      const opens = scene.steps.flatMap((step, at) =>
+        "open" in step && step.priority >= RECORDING ? [{ step, at }] : [],
+      );
+      const holds = opens.map(({ step, at }) => {
+        const closed = scene.steps.findIndex(
+          (s, i) => i > at && "close" in s && s.close === step.open,
+        );
+        return {
+          type: step.type,
+          channel: placesKey(
+            scene.agents.flatMap((agent, i) => {
+              const channel = agent.channels[step.ts];
+              return channel === undefined ? [] : [{ agent: i + 1, channel }];
+            }),
+          ),
+          from: at,
+          to: closed < 0 ? scene.steps.length : closed,
+        };
+      });
       expect(placements(holds, capacity)).toEqual(
-        opens.map(({ step }) => step.rank),
+        opens.map(({ step }) =>
+          step.at === null
+            ? null
+            : { agent: idOf(step.at.agent), rank: step.at.rank },
+        ),
       );
     });
   }
@@ -804,7 +854,7 @@ describe("兼用のチューナーがあるとき (#668)", () => {
         { types: ["GR"], rank: 0 },
         { types: ["GR"], rank: null },
       ]),
-    ).toEqual([{ rank: 0, types: new Set(["GR"]), count: 1 }]);
+    ).toEqual([{ agent: 0, rank: 0, types: new Set(["GR"]), count: 1 }]);
   });
 });
 

@@ -17,7 +17,7 @@
 import { NitReader, SdtReader } from "@danything/arib/psi";
 import { and, desc, gte, isNull, lt } from "drizzle-orm";
 
-import { tuningAgents } from "./agents";
+import { primaryAgent } from "./agents";
 import { config } from "./config";
 import { now, orm } from "./db";
 import { emit } from "./events";
@@ -160,8 +160,8 @@ async function compare(
   const key = `${type}:${network.networkId}`;
   if (checked.get(key) === network.version) return false;
 
-  // 読んだ表は選局に使ったエージェント (`openChannel` と同じ先頭の 1 台) のチャンネルのもの。控えもそこのものを書き換える
-  const agent = tuningAgents()[0]!;
+  // 読んだ表は並びの先頭のエージェント (`readFromAir` で開いた先) のチャンネルのもの。控えもそこのものを書き換える
+  const agent = primaryAgent();
   const all = await getChannels(agent);
   const mine = all.filter((channel) => channel.type === type);
   const next = lineupFrom(
@@ -252,7 +252,8 @@ export async function readFromAir(
     (channel) =>
       openChannelStream(
         type,
-        channel,
+        // 放送の一覧は、控えを書き換える並びの先頭のエージェントで読む (スキャンと同じ)
+        [{ agent: primaryAgent().id, channel }],
         AbortSignal.timeout(READ_TIMEOUT * 4),
         `scan ${channel}`,
         config.priority.scan,
