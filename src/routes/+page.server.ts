@@ -36,7 +36,7 @@ import { reconcile, removeRecording } from "#lib/server/files.js";
 import { seriesFolder } from "#lib/server/library.js";
 import { watchProgress } from "#lib/server/playback.js";
 import { recordingFromForm } from "#lib/server/recording.js";
-import { cancel, restore } from "#lib/server/reservations.js";
+import { cancelReservation, restore } from "#lib/server/reservations.js";
 import {
   activeEncodeJobId,
   encodeJobs,
@@ -490,7 +490,8 @@ export const actions = {
   cancel: async ({ request }) => {
     const id = await formId(request);
     if (id === null) return fail(400, { message: "予約 ID が不正です" });
-    await cancel(id);
+    const result = await cancelReservation(id);
+    if (!result.ok) return fail(result.status, { message: result.message });
     return { success: true };
   },
 };

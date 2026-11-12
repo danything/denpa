@@ -767,9 +767,20 @@ describe("録画ファイルの音声だけ (fileAudioBody)", () => {
     writeFileSync(echo, '#!/bin/sh\nprintf "%s " "$@"\n');
     chmodSync(echo, 0o755);
     config.ffmpeg = echo;
-    const argv = (await new Response(fileAudioBody(ts)).text()).trim();
+    const argv = (await new Response(await fileAudioBody(ts, 1)).text()).trim();
     expect(argv).toContain(`-i ${ts} -map 0:a:0 -vn -c:a aac`);
     expect(argv.endsWith("-f adts pipe:1")).toBe(true);
+  });
+
+  test("4K の局の元の録画 (.mmts) は、詰め替えた fMP4 を標準入力から読ませる (ffmpeg は TLV を読めない)", async () => {
+    const echo = join(dir, "echo-stdin-ffmpeg");
+    writeFileSync(echo, '#!/bin/sh\ncat >/dev/null\nprintf "%s " "$@"\n');
+    chmodSync(echo, 0o755);
+    config.ffmpeg = echo;
+    const body = await fileAudioBody(mmts, UHD_SERVICE);
+    const argv = (await new Response(body).text()).trim();
+    expect(argv).toContain("-f mp4 -i pipe:0 -map 0:a:0 -vn -c:a aac");
+    expect(argv).not.toContain(mmts);
   });
 
   test("ffmpeg が何も出さないまま上限を超えたら畳む", async () => {
@@ -777,8 +788,8 @@ describe("録画ファイルの音声だけ (fileAudioBody)", () => {
     writeFileSync(stuck, "#!/bin/sh\nexec sleep 30\n");
     chmodSync(stuck, 0o755);
     config.ffmpeg = stuck;
-    const body = fileAudioBody(ts, { limit: 200, every: 10 });
-    await expect(body.getReader().read()).rejects.toThrow("stalled");
+    const body = await fileAudioBody(ts, 1, { limit: 200, every: 10 });
+    await expect(body!.getReader().read()).rejects.toThrow("stalled");
   });
 });
 

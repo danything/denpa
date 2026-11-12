@@ -39,6 +39,7 @@ import {
   SlotWindows,
   track,
 } from "./migrate";
+import { busy as transferBusy, BUSY_MESSAGE } from "./transfer";
 
 /**
  * EDCB のジャンル 1 件を denpa の書き方 (`"7"` / `"7-0"`) に。写せないものは null。
@@ -470,8 +471,9 @@ export async function startEdcb(
   } finally {
     starting = false;
   }
-  // 読んでいる間に EPGStation の引き継ぎが走り出していたら譲る
+  // 読んでいる間に EPGStation の引き継ぎか、別の機械へ移す書き出し・取り込みが走り出していたら譲る
   if (running()) return { started: false, message: "すでに実行中です" };
+  if (transferBusy()) return { started: false, message: BUSY_MESSAGE };
   void runEdcb(lists, options);
   return {
     started: true,

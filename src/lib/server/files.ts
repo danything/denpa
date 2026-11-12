@@ -403,7 +403,10 @@ export function pruneHistory(): {
   /*
    * 録画中や予約中のものは、いつ立てたかに関係なく残す。
    * 「終わった予約」は**取り消し・録り逃し・録画しない (コピー禁止) か、もう録り始めたもの**。
-   * 録り始めたあとの顛末は録画の行が持っているので、予約側では見ない
+   * 録り始めたあとの顛末は録画の行が持っているので、予約側では見ない。
+   * **録画の行が指している予約は残す。** 何で録れたか (ルール・手動) は予約の行から引くので
+   * (`/` の一覧の `rule_id`、ルールの一覧の録れた数と最後に録れた日)、消すと 2 週間より前の録画がどれも引き継いだものと同じに見える。
+   * 録画の行を消した (`deleted_at` から 2 週間たった) あとの回で消える
    */
   const droppedReservations = affected(
     orm()
@@ -415,6 +418,13 @@ export function pruneHistory(): {
             isNotNull(reservations.started_at),
           ),
           lt(reservations.end_at, cutoff),
+          notInArray(
+            reservations.id,
+            orm()
+              .select({ id: recordings.reservation_id })
+              .from(recordings)
+              .where(isNotNull(recordings.reservation_id)),
+          ),
         ),
       ),
   );

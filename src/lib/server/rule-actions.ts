@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, not } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, not } from "drizzle-orm";
 
 import { parseId } from "../id";
 import { now, orm } from "./db";
@@ -135,8 +135,24 @@ export async function deleteRule(id: number): Promise<number> {
       and(eq(reservations.rule_id, id), isNotNull(reservations.started_at)),
     )
     .run();
+  // 数えるのはこのルールの予約だけ。`reapply` の答えには、同じ回で条件から外れたほかのルールの予約も入る
+  const pending = orm()
+    .select({ id: reservations.id })
+    .from(reservations)
+    .where(and(eq(reservations.rule_id, id), isNull(reservations.started_at)))
+    .all()
+    .map((row) => row.id);
   orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
-  const dropped = await reapply();
+  await reapply();
+  const left =
+    pending.length === 0
+      ? 0
+      : orm()
+          .select({ id: reservations.id })
+          .from(reservations)
+          .where(inArray(reservations.id, pending))
+          .all().length;
+  const dropped = pending.length - left;
   // 代わりに予約するルールを探したあとも消したルールを指している行 (録り逃し・番組表から消えた放送) は、紐付けを外して「(削除済み)」にする
   orm()
     .update(reservations)

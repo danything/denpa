@@ -18,7 +18,6 @@ import { now, orm } from "./db";
 import { ANY_PAID, compile, haystack, matchesCompiled } from "./rules";
 import {
   HELD_STATES,
-  latestRecordingId,
   latestReservationRecordingId,
   programs,
   recordings,
@@ -222,7 +221,7 @@ export function searchPrograms(q: string, options: SearchOptions) {
             r,
             and(eq(r.program_id, programs.id), inArray(r.state, HELD_STATES)),
           )
-          .leftJoin(rec, eq(rec.id, latestRecordingId(programs.id)))
+          .leftJoin(rec, eq(rec.id, latestReservationRecordingId(r.id)))
           .where(where)
           .orderBy(programs.start_at, programs.id)
           .limit(size)

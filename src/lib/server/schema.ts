@@ -176,13 +176,13 @@ export function activeEncodeJobId(recordingId: AnySQLiteColumn) {
         AND state IN ('queued','running') ORDER BY id DESC LIMIT 1)`;
 }
 
-/** 番組のいちばん新しい録画 (消したものは除く)。番組表と予約の一覧が状態を出すのに使う */
+/** 番組のいちばん新しい録画 (消したものは除く)。番組表が観るボタンに使う (状態は `latestReservationRecordingId` から決める) */
 export function latestRecordingId(programId: AnySQLiteColumn) {
   return sql<number>`(SELECT id FROM recordings WHERE program_id = ${programId} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1)`;
 }
 
 /**
- * 予約で録れたいちばん新しい録画。予約の一覧と検索が `reservationState` に渡すのに使う。
+ * 予約で録れたいちばん新しい録画。予約の一覧・番組表・検索が `reservationState` に渡すのに使う。
  * **消したものも含める。** 外すと、録り終えてから消した予約が「完了」でなく予約の状態のまま出る
  */
 export function latestReservationRecordingId(reservationId: AnySQLiteColumn) {

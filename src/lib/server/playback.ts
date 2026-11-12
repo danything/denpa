@@ -836,34 +836,44 @@ export function audioOnlyArgs(
 
 /**
  * **録画ファイルの音声だけ** (`GET /api/recordings/<id>/file?audio=only`。スマートスピーカーへの Cast など)。
- * 元がどれ (元の TS・AV1・H.265・H.264) でも同じ形式で出せるよう、主音声を AAC 192k に再エンコードして ADTS で流す。
- * 本文は `transcodeBody` で作る。止まった ffmpeg・読まれなくなった応答は、観る画面の変換と同じく畳む。
+ * 元がどれ (元の TS・4K の局の元の録画・AV1・H.265・H.264) でも同じ形式で出せるよう、主音声を AAC 192k に再エンコードして ADTS で流す。
+ * 4K の局の元の録画 (`.mmts`) は ffmpeg が読めないので、denpa が詰め替えた fMP4 を標準入力へ流す (`audioResponse` と同じ)。
+ * 読めなければ null。本文は `transcodeBody` で作る。止まった ffmpeg・読まれなくなった応答は、観る画面の変換と同じく畳む。
  * 音声だけなので、その場で変換する本数の枠は使わない (`audioResponse` と同じ理由)
  */
-export function fileAudioBody(
+export async function fileAudioBody(
   path: string,
+  serviceId: number,
   idle?: { limit: number; every: number },
-): ReadableStream<Uint8Array> {
+): Promise<ReadableStream<Uint8Array> | null> {
+  const output = ["-vn", "-c:a", "aac", "-b:a", "192k", "-f", "adts", "pipe:1"];
+  let attempt: Attempt;
+  if (recordedTransport(path) === "tlv") {
+    const mmts = await probeMmtsFile(path, serviceId);
+    if (mmts === null) return null;
+    attempt = {
+      argv: [
+        config.ffmpeg,
+        ...QUIET,
+        ...["-f", "mp4", "-i", "pipe:0", "-map", "0:a:0"],
+        ...output,
+      ],
+      input: () => mmtsFmp4(mmts, serviceId, 0),
+    };
+  } else {
+    attempt = {
+      argv: [
+        config.ffmpeg,
+        ...QUIET,
+        ...recordingInput(path),
+        "-map",
+        "0:a:0",
+        ...output,
+      ],
+    };
+  }
   return transcodeBody(
-    [
-      {
-        argv: [
-          config.ffmpeg,
-          ...QUIET,
-          ...recordingInput(path),
-          "-map",
-          "0:a:0",
-          "-vn",
-          "-c:a",
-          "aac",
-          "-b:a",
-          "192k",
-          "-f",
-          "adts",
-          "pipe:1",
-        ],
-      },
-    ],
+    [attempt],
     `[audio] 音声だけの取り出し ${path}`,
     () => undefined,
     idle,

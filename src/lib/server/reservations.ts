@@ -16,7 +16,7 @@ import { now, orm } from "./db";
 import { stopRecording } from "./recorder";
 import { resolveConflicts } from "./scheduler";
 import {
-  latestRecordingId,
+  latestReservationRecordingId,
   programs,
   recordings,
   reservations,
@@ -219,12 +219,9 @@ export async function cancel(reservationId: number): Promise<boolean> {
 export async function cancelProgram(
   programId: number,
   at = now(),
-): Promise<
-  | { ok: true; stopped: boolean }
-  | { ok: false; status: 404 | 409; message: string }
-> {
+): Promise<CancelResult> {
   const reservation = orm()
-    .select({ id: reservations.id, end_at: reservations.end_at })
+    .select({ id: reservations.id })
     .from(reservations)
     .where(
       and(
@@ -235,7 +232,27 @@ export async function cancelProgram(
     .get();
   if (reservation === undefined)
     return { ok: false, status: 404, message: "予約が見つかりません" };
-  const state = reservationStates([programId]).get(programId) ?? null;
+  return cancelReservation(reservation.id, at);
+}
+
+type CancelResult =
+  | { ok: true; stopped: boolean }
+  | { ok: false; status: 404 | 409; message: string };
+
+/**
+ * **予約を ID で取り消す** (ホームと検索の画面の取消)。決まりは {@link cancelProgram} と同じで、
+ * 予約が無いか取り消し済みなら 404、録り終えた・録り逃したものは 409
+ */
+export async function cancelReservation(
+  reservationId: number,
+  at = now(),
+): Promise<CancelResult> {
+  const reservation = byId(reservationId);
+  if (reservation === undefined || reservation.state === "canceled")
+    return { ok: false, status: 404, message: "予約が見つかりません" };
+  const state =
+    reservationStates([reservation.program_id]).get(reservation.program_id) ??
+    null;
   if (!cancelable(state, reservation.end_at, at))
     return { ok: false, status: 409, message: NOT_CANCELABLE_REASON };
   return { ok: true, stopped: await cancel(reservation.id) };
@@ -361,8 +378,8 @@ export function reservationStates(
   const rows = orm()
     .select({ programId: r.program_id, state: reservationState(r, rec) })
     .from(r)
-    // 録り直すと同じ番組に複数ぶら下がる。いちばん新しい現存分だけ見る (番組表と同じ)
-    .leftJoin(rec, eq(rec.id, latestRecordingId(r.program_id)))
+    // その予約で録れたいちばん新しい録画 (消したものも含める。`latestReservationRecordingId`)
+    .leftJoin(rec, eq(rec.id, latestReservationRecordingId(r.id)))
     .where(and(inArray(r.program_id, programIds), ne(r.state, "canceled")))
     .all();
   return new Map(rows.map((row) => [row.programId, row.state]));

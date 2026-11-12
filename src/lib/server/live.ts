@@ -1705,8 +1705,12 @@ class Session {
         remembered(captionless, this.serviceId)
           ? null
           : this.track;
-      // GPU でエンコードするか (`pickLiveHw`)。降りたらソフトウェアで再エンコードする (下)
-      let hw = this.codec === "audio" ? null : pickLiveHw(this.codec);
+      // GPU でエンコードするか (`pickLiveHw`)。降りたらソフトウェアで再エンコードする (下)。
+      // 4K の局はデコードを GPU に載せない (`uhdVideoArgs`) ので、降りたときに覚える経路もそれに合わせる
+      let hw =
+        this.codec === "audio"
+          ? null
+          : pickLiveHw(this.codec, this.transport !== "tlv");
       /*
        * H.265 と段を下げた AV1 はソフトウェアに降りられない (`softwareEncodes`)。画面は諦めて次の形式をリクエストし直す
        * (`live-player.svelte.ts`)。段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
@@ -2351,7 +2355,9 @@ class Session {
       rung: this.rung,
       light: this.light,
       software: this.software,
-      gpuReady: () => codec !== "audio" && liveHwAvailable(codec) !== null,
+      gpuReady: () =>
+        codec !== "audio" &&
+        liveHwAvailable(codec, this.transport !== "tlv") !== null,
     });
     if (verdict === null) return;
     if (verdict === "heavy") {
@@ -3325,6 +3331,8 @@ export function recordingCaptions(
   const source = chaseSource(recordingId);
   if (source === undefined || source.size === 0) return null;
   const { rec, path, size } = source;
+  // 4K の局の元の録画 (`.mmts`) は TLV で、TS の字幕の読み取りも ffmpeg も読めない (空のまま 200 にしない)
+  if (recordedTransport(path) === "tlv") return null;
   const recorded = recordedSec(rec, path);
   const plan = chasePlan(size, recorded, Math.max(0, at - CAPTION_LEAD));
   const burst = Math.round(
