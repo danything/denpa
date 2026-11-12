@@ -13,7 +13,7 @@ import { clearGpus, encodeRuns, forgetGpusAfterAll, wayOf } from "./hwenc";
 
 /**
  * GPU で H.265 をエンコードする (server/hwenc.ts)。GPU の偽物の作り方は `hwenc.ts`。
- * ほかの GPU のことは `26-hwenc` (1 本で CI の組の時間を押し上げていたので分けた)
+ * ほかの GPU のことは `26-hwenc`・`26-hwenc-vendors` (1 本で CI の組の時間を押し上げていたので分けた)
  */
 
 test.describe("GPU で H.265 をエンコードする", () => {

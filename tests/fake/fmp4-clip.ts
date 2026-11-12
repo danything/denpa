@@ -1,6 +1,6 @@
 /**
  * **作り置きの fMP4 (`live-h264.mp4` / `live-av1.mp4`) を、時刻をずらして並べ直す。** 偽 ffmpeg (`fmp4-loop.ts`・
- * `fmp4-out.ts`) と E2E (`40-watch-compat`) が使う。作り方は `fmp4-loop.ts` の先頭に。
+ * `fmp4-out.ts`) と E2E (`40-watch-compat-long`) が使う。作り方は `fmp4-loop.ts` の先頭に。
  *
  * 2 秒ぶんの媒体 (moof + mdat) の時刻 (tfdt) に足して、好きな位置から好きな長さだけ並べる。
  * 先頭 (ftyp + moov) はそのまま。Bun にも Node にも依らない (E2E は Playwright の中で読む)

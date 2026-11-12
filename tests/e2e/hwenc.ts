@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { setRecording, test } from "./helpers";
 
 /**
- * GPU でエンコードするスペックの部品 (`26-hwenc`・`26-hwenc-hevc`。server/hwenc.ts)。
+ * GPU でエンコードするスペックの部品 (`26-hwenc`・`26-hwenc-vendors`・`26-hwenc-hevc`。server/hwenc.ts)。
  *
  * **GPU は偽物** — `stack.hwDir` に `renderD128` のような名前でファイルを置くと
  * denpa にはデバイスとして見え、偽 ffmpeg は渡されたデバイスが在るのを見て VA-API の
