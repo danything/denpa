@@ -938,6 +938,7 @@ public class AsicenMockTests
     /// 模擬は <c>--fd</c> を受けないので、間に挟んだシェルのスクリプトが、継いだ fd を確かめて記録し、<c>--fd</c> と <c>--firmware</c> を落として模擬に替わる
     /// </summary>
     [Test]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
     public async Task Android_と同じく_fd_を継がせて起動した模擬の_asicend_で選局できる(CancellationToken cancel)
     {
         await Task.Yield();

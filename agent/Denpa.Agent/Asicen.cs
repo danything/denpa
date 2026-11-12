@@ -429,7 +429,7 @@ public static class AsicenUserland
                         + $"ファームウェア待ちの ASICEN の機材 (USB {where}) は使えません");
                     continue;
                 }
-                if (UsbHost.Current is BrokerUsbHost broker)
+                if (OperatingSystem.IsLinux() && UsbHost.Current is BrokerUsbHost broker)
                 {
                     Load(broker, id, ports, where, warn);
                     continue;
@@ -461,6 +461,7 @@ public static class AsicenUserland
     /// つながり直した機材は別の VID・PID でアプリから届き (<c>attached</c>)、探し直したときに <see cref="AsicenDaemon"/> が起動する。
     /// 終了コードは見ずに、asicend の出力を記録に出す
     /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     private static void Load(BrokerUsbHost broker, string id, IReadOnlyList<string> ports, string where, Action<string> warn)
     {
         try
@@ -556,7 +557,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         id, AsicenUserland.Dir, AsicenUserland.RuntimeDir,
         () => Hardware(
             id, AsicenUserland.Firmware, AsicenUserland.WantsLnb(id), () => AsicenUserland.Enclosures(_ => { }),
-            UsbHost.Current is BrokerUsbHost broker ? broker.Lend : null)));
+            OperatingSystem.IsLinux() && UsbHost.Current is BrokerUsbHost broker ? broker.Lend : null)));
 
     /// <summary>動いている asicend に問い合わせた機種と受信機。ready になるまで、問い合わせられなかったときも null</summary>
     public AsicenUserland.Listed? Listed { get; private set; }
