@@ -433,7 +433,7 @@ export function observedOf(
 ): Observed | undefined {
   return observations.get(`${type}:${channel}`);
 }
-/** 走っているスキャン。中断のために持っておく */
+
 /** 走っているスキャン (エージェントごとに 1 つ)。中断のために持っておく */
 let running: Scanner[] = [];
 
@@ -939,11 +939,16 @@ async function runScan(
   running = scanners;
   try {
     push("チャンネルを探しています...", {}, { phase: "スキャン中" });
+    // 1 台が例外で終わったら、ほかのエージェントのスキャンも止める (回し続けてチューナーを使わない)
     const results = await Promise.all(
-      scanners.map(async (scanner) => ({
-        scanner,
-        found: await scanner.run(targets),
-      })),
+      scanners.map(async (scanner) => {
+        try {
+          return { scanner, found: await scanner.run(targets) };
+        } catch (error) {
+          for (const other of scanners) other.stop();
+          throw error;
+        }
+      }),
     );
 
     /*
