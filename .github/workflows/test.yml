@@ -738,11 +738,11 @@ jobs:
       # wdi-simple.exe (libwdi。Zadig のコマンドライン版)。リリースと同じスクリプトで、決めたタグのソースからビルドする
       # (取ってくるものはコミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)。エージェントと同じ zip に入れる。
       # **組んだものは actions/cache に置き、スクリプトかランナーのイメージ (MSVC のバージョン) が変わるまで使い回す**
-      # (組むと 40 秒ほど。イメージは週に 1 回ほど上がるので、新しい MSVC で組めるかはそのたびに見る)
+      # (組むと 40 秒ほど。イメージは週に 1 回ほど上がるので、新しい MSVC で組めるかはそのたびに見る)。置くのは SDK と同じく main だけ
       - name: Restore wdi-simple
         if: env.RUN == 'true'
         id: wdi
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: out\libwdi
           key: wdi-simple-${{ steps.dirs.outputs.image }}-${{ hashFiles('scripts/build-wdi-simple.ps1') }}
@@ -751,6 +751,13 @@ jobs:
         if: env.RUN == 'true' && steps.wdi.outputs.cache-hit != 'true'
         shell: pwsh
         run: ./scripts/build-wdi-simple.ps1 -Out out\libwdi
+
+      - name: Save wdi-simple
+        if: env.RUN == 'true' && github.ref == 'refs/heads/main' && steps.wdi.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: out\libwdi
+          key: ${{ steps.wdi.outputs.cache-primary-key }}
 
       # 起こして、落ちずに動き続けることを見る (denpa はいないので、注意のアイコンのまま)。メニューは人が開くものなので見ない。
       # 2 つ目は二重に起こしたときで、すぐ終わる
@@ -1256,7 +1263,8 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          run=$(.github/ci-changes.sh | sed -n 's/^e2e=//p')
+          # 決められないとき (API が答えない) は回す。changes ジョブも、落ちたときは全部回す側に倒れる
+          run=$(.github/ci-changes.sh | sed -n 's/^e2e=//p') || run=true
           echo "RUN=$run" >> "$GITHUB_ENV"
           if [ "$run" != true ]; then
             echo "::notice::この PR はアプリを触っていない (エージェント・文書・入れ方だけ) ので、E2E を飛ばしました (.github/ci-changes.sh)"
