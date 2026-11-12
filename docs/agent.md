@@ -447,7 +447,7 @@ asicen-userland のファームウェア待ち) と、抜き差しの受け取�
 ### Android でアプリから USB を受け取る
 
 **Android では、アプリが開いた USB の機材の fd を、エージェントが UNIX ドメインソケットで受け取ります。** Android ではアプリしか USB の機材を開けない (`UsbManager` の許可が要る) ためです。
-エージェントは `USB_BROKER` のパスで待ち受け、アプリが繋ぎます (`UsbBroker.cs`)。
+エージェントは `USB_BROKER` のパスで待ち受け、アプリが繋ぎます (`UsbBroker.cs`)。アプリの側は `android/` の `UsbBroker.kt` です ([install-android.md](install-android.md))。
 
 - ソケットはファイルの名前空間の `AF_UNIX`・`SOCK_STREAM` で、作ったら 0600 にします。前に起動したときのソケットが残っていれば消して作り直します。
   繋いできた相手の uid (`SO_PEERCRED`) がエージェントと違えば切ります

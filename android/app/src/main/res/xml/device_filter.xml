@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  挿したときにこのアプリを起こす機材。エージェントが USB を直に持つ機材 (エージェントが引数 usb-ids で出すもの。agent/Denpa.Agent/WinUsbTargets.cs) と、
+  USB の CCID のカードリーダー (インターフェースのクラス 11) を並べる。DenpaService が許可を求める機材もこの表で決める (DeviceFilter.kt)。
+  **WinUsbTargets と食い違わないことを、エージェントの単体テスト (AndroidDeviceFilterTests.cs) で確かめる。** 機種を足したらここにも足す
+-->
+<resources>
+    <usb-device vendor-id="0x054c" product-id="0x04b2" /><!-- Sony CECH-ZD1 J -->
+    <usb-device vendor-id="0x06b8" product-id="0x103b" /><!-- PIXELA PIX-DT295 -->
+    <usb-device vendor-id="0x0511" product-id="0x084e" /><!-- PLEX PX-MLT5U -->
+    <usb-device vendor-id="0x0511" product-id="0x024e" /><!-- PLEX PX-MLT5PE -->
+    <usb-device vendor-id="0x0511" product-id="0x924e" /><!-- e-Better DTV02A-5TS-P -->
+    <usb-device vendor-id="0x0511" product-id="0x083f" /><!-- PLEX PX-W3U4 -->
+    <usb-device vendor-id="0x0511" product-id="0x023f" /><!-- PLEX PX-W3PE4 -->
+    <usb-device vendor-id="0x0511" product-id="0x073f" /><!-- PLEX PX-W3PE5 -->
+    <usb-device vendor-id="0x0511" product-id="0x084a" /><!-- PLEX PX-Q3U4 -->
+    <usb-device vendor-id="0x0511" product-id="0x024a" /><!-- PLEX PX-Q3PE4 -->
+    <usb-device vendor-id="0x0511" product-id="0x074a" /><!-- PLEX PX-Q3PE5 -->
+    <usb-device vendor-id="0x0511" product-id="0x0253" /><!-- PLEX PX-MLT8PE -->
+    <usb-device vendor-id="0x0511" product-id="0x0252" /><!-- PLEX PX-MLT8PE -->
+    <usb-device vendor-id="0x0511" product-id="0x0254" /><!-- e-Better DTV02A-4TS-P -->
+    <usb-device vendor-id="0x0511" product-id="0x004b" /><!-- Digibest ISDB2056 -->
+    <usb-device vendor-id="0x0511" product-id="0x084b" /><!-- Digibest ISDB2056N -->
+    <usb-device vendor-id="0x0511" product-id="0x0854" /><!-- PLEX PX-M1UR -->
+    <usb-device vendor-id="0x0511" product-id="0x0855" /><!-- PLEX PX-S1UR -->
+    <usb-device vendor-id="0x0511" product-id="0x0052" /><!-- e-Better DTV03A-1TU -->
+    <usb-device vendor-id="0x3275" product-id="0x0080" /><!-- PLEX PX-S1UD -->
+    <usb-device vendor-id="0x187f" product-id="0x0600" /><!-- Siano RIO -->
+    <!-- USB の CCID のカードリーダー (Gemalto PC Twin など) -->
+    <usb-device class="11" />
+</resources>

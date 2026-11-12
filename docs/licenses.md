@@ -174,9 +174,17 @@ CI は zip を作る前に、DLL が上の表のもの (x264・dav1d・zimg・zl
 ソースは、自分で組むもの (FFmpeg・SVT-AV1・Opus) は Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball、MSYS2 のパッケージは
 [msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) のヘッダとライブラリも MSYS2 のパッケージです。
 
-### Android 向けのエージェント (まだ配らない)
+### Android のアプリ (まだ配らない)
 
-CI が `linux-bionic-arm64`・`linux-bionic-x64` の Native AOT で組みます ([.github/workflows/android.yml](../.github/workflows/android.yml))。リリースにはまだ載せません。
+CI が組む APK (`io.github.danything.denpa`。[.github/workflows/android.yml](../.github/workflows/android.yml)) です。リリースにはまだ載せません。
+アプリ (`android/`) は denpa と同じ AGPL-3.0-or-later で、APK に入る依存は Kotlin の標準ライブラリだけです。
+
+| 名前                                                                 | 何に                        | 出どころ                                        | ライセンス |
+| -------------------------------------------------------------------- | --------------------------- | ----------------------------------------------- | ---------- |
+| Kotlin の標準ライブラリ (`org.jetbrains.kotlin:kotlin-stdlib`)       | アプリの Kotlin のコード    | <https://github.com/JetBrains/kotlin>           | Apache-2.0 |
+| JetBrains の注釈 (`org.jetbrains:annotations`。標準ライブラリが引く) | 型の注釈 (動作には使わない) | <https://github.com/JetBrains/java-annotations> | Apache-2.0 |
+
+エージェントは `lib/<ABI>/libdenpa_agent.so` の名前で入れます。CI が `linux-bionic-arm64`・`linux-bionic-x64` の Native AOT で組みます。
 中身は上の `denpa-agent` と同じ .NET のバイナリで、ファームウェア (IT930x と Siano) も同じく埋め込んであります。
 Android には OpenSSL が無いので、土台の libssl の代わりに OpenSSL を静的に入れます。asicen-userland はまだ入れません。
 

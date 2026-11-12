@@ -107,6 +107,8 @@
           中身は放送の信号とスクランブルされたままの映像・音声だけ (SplitTlvTests・TlvObservationTests)
         -->
         <EmbeddedResource Include="fixtures/qc26-split-tlv.bin" LogicalName="qc26-split-tlv.bin" />
+        <!-- Android のアプリが挿したときに起こされる機材の表 (AndroidDeviceFilterTests が WinUsbTargets と突き合わせる) -->
+        <EmbeddedResource Include="../../android/app/src/main/res/xml/device_filter.xml" LogicalName="device_filter.xml" />
     </ItemGroup>
 
     <ItemGroup>

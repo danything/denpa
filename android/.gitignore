@@ -1,0 +1,7 @@
+.gradle/
+.kotlin/
+.idea/
+*.iml
+local.properties
+# エージェントの実行ファイル (CI が置く。手元で組むときの置き方は docs/development.md「Android のアプリ」)
+agent-libs/

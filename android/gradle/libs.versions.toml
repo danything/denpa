@@ -1,0 +1,16 @@
+# バージョンは denpa-tv (danything/denpa-tv の gradle/libs.versions.toml) と揃える。上げるのは Renovate
+[versions]
+agp = "9.5.0"
+kotlin = "2.4.21"
+junit = "4.13.2"
+org-json = "20260814"
+
+[libraries]
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+# 単体テストで org.json を動かす (android.jar の org.json は中身の無い代わりもの)
+org-json = { group = "org.json", name = "json", version.ref = "org-json" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+# AGP 9 は Kotlin を自分で組む。ここで Kotlin の Gradle プラグインのバージョンだけを決める (どのモジュールにも当てない)
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

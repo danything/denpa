@@ -240,7 +240,7 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 
 ffmpeg・SVT-AV1・emsdk・Denpa Font・asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
-Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` にバージョンを書いています。
+Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` にバージョンを書いています。
 
 **土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は
 `名前:タグ@sha256:…`、ワークフローの `uses:` は `@<コミットの SHA> # vX.Y.Z` の形にします。
@@ -254,7 +254,7 @@ digest もタグと一緒に Renovate が上げ、タグだけで足した土台
 ## Android 向けのエージェント
 
 **Android で動かすエージェントは、Linux と同じソースを `linux-bionic-arm64` の Native AOT で組みます。** CI のエミュレータのために `linux-bionic-x64` も組みます。
-まだ配りません (APK を作る PR から配る)。組むのは `.github/workflows/android.yml` で、test.yml が呼びます。必須チェックではありません。
+組み上がりは Android のアプリ (下の節) の APK に入れます。組むのは `.github/workflows/android.yml` で、test.yml が呼びます。
 
 - .NET の SDK は ASP.NET Core の実行時パックを bionic 向けに出していません。csproj でその除外を外し、linux の実行時パックの IL を AOT で組ませています。
   SDK が対応していない使い方なので、SDK を上げたら Android の CI が通るかを見ます
@@ -270,10 +270,36 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
   dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r linux-bionic-arm64 -o out
 ```
 
-CI は x86_64 の実行ファイルを Android 10 (API 29。minSdk) と Android 15 (API 35) のエミュレータに `adb push` し、shell のユーザーで起動します
-(`.github/android-agent-smoke.sh`)。`--version`・`--pair`、サーバの起動、denpa と同じ手順で組むこと、`/denpa/about`・`/denpa/tuners`・`/denpa/card`、SIGTERM で終わることを見ます。
-そのあと SELinux を permissive にし (shell のユーザーの SELinux は `/data/local/tmp` にソケットのファイルを作らせない)、`USB_BROKER` を付けて起動し直して、
-偽のアプリ (`.github/fake-usb-broker.c`) から `synced` と、ファイルの fd を付けた `attached` を受け取れることを見ます ([agent.md](agent.md#android-でアプリから-usb-を受け取る))。
-アプリの子プロセス (SELinux の `untrusted_app` と、アプリに掛かる seccomp) では、まだ動かしていません。USB の機材はエミュレータに挿せないので、usbfs の fd は CI では見ません。
+## Android のアプリ
+
+**Android で denpa を動かすアプリは `android/` の Gradle のプロジェクトです (パッケージは `io.github.danything.denpa`)。** 画面は持たず、常駐サービスがエージェントを子プロセスとして起動します。
+使い方は [install-android.md](install-android.md)、エージェントとの取り決めは [agent.md](agent.md#android-でアプリから-usb-を受け取る) にあります。リリースにはまだ載せません。
+
+- Kotlin で、依存はありません (Kotlin の標準ライブラリだけ)。AGP・Gradle・JDK のバージョンは denpa-tv と揃えます
+- エージェントは `android/agent-libs/<ABI>/libdenpa_agent.so` に置くと APK に入ります (`DENPA_AGENT_LIBS` で別の置き場も渡せます)。
+  入れるときに `nativeLibraryDir` へ展開させ (`useLegacyPackaging`)、そこから exec します。Android 10 からは、アプリのデータの置き場のファイルは実行できません
+- 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と食い違わないことを、
+  エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
+- debug の APK にだけ、エミュレータで確かめるための受け口 (`src/debug/` の `DebugReceiver`) が入ります。USB の機材の代わりにファイルの fd を送ることと、
+  通知の「終了」を押すことを `adb shell am broadcast` で代えます。DUMP の権限を持つもの (adb shell) からしか送れません
+
+手元で組むなら、JDK と Android SDK を入れ、エージェント (上の節) を置いてから流します。
+
+```sh
+mkdir -p android/agent-libs/arm64-v8a && cp out/denpa-agent android/agent-libs/arm64-v8a/libdenpa_agent.so
+cd android && ./gradlew lintDebug testDebugUnitTest assembleDebug
+```
+
+CI は android.yml で両方の ABI を入れた debug の APK を組み (成果物の `denpa-android-debug`)、Android 10 (API 29。minSdk) と Android 15 (API 35) の
+x86_64 のエミュレータに入れて確かめます (`.github/android-app-smoke.sh`)。
+
+- アイコンで起動すると、常駐サービスが connectedDevice で始まり、通知が出て、本文が「チューナー 0 台」になること
+- エージェントがアプリの子プロセス (SELinux の `untrusted_app`) で動き、`<dataDir>/u` に USB_BROKER のソケット (0600) を作り、アプリが繋いで `synced` を送ること
+- denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
+- アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
+- エージェントが落ちたらアプリが起動し直すこと、通知の「終了」でエージェントも常駐サービスも残らないこと、端末を起動し直すと常駐サービスが始まること
+
+エミュレータの列は必須チェックではありません (起動や応答の時間がばらつき、コードと関係なく落ちることがあるため)。
+USB の機材はエミュレータに挿せないので、usbfs の fd (許可・`USBDEVFS_CONNINFO_EX`・確保) は CI では見ません。
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。
