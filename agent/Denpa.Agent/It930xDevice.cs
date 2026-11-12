@@ -312,12 +312,17 @@ public sealed class It930xDevice
         AppDomain.CurrentDomain.UnhandledException += (_, _) => CloseBeforeExit();
     }
 
+    /// <summary>終わる前に閉じ始めたか (<see cref="CloseBeforeExit"/> を 1 回だけ通す)</summary>
+    private static int _closingBeforeExit;
+
     /// <summary>
     /// 終わる前に全部閉じる (<see cref="CloseAll()"/>)。別のスレッドで閉じ、<see cref="ExitCloseLimit"/> で待つのをやめる。
     /// 落ちたスレッドが機材の一覧やブリッジのコマンドのロックを持ったまま止まっていても、プロセスが終わらなくならないため
     /// </summary>
     private static void CloseBeforeExit()
     {
+        // 落ちるときは UnhandledException のあとに ProcessExit も来る。2 回目は待たない
+        if (Interlocked.Exchange(ref _closingBeforeExit, 1) != 0) return;
         var closing = new Thread(() =>
         {
             if (!Registry.TryEnter(ExitCloseLimit)) return;
