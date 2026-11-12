@@ -46,7 +46,8 @@ public sealed class TunerPool(
     /// **選局を受けてから最初の TS が届くまでの上限。** 超えたら、その選局を失敗として畳んで利用者に理由を返し、
     /// そのチューナーはそのチャンネルで後回しにする (<see cref="Starve"/>)。前の読み出しを待つ 2 秒、デバイスを開く時間、
     /// 同期の待ち (機材によって 5〜15 秒) を含めた長さで、ふつうは 1 秒前後で届く。
-    /// 入れる前は、本番で PX-MLT8PE の受信機に入ったライブの選局が答えを返さないまま止まり、画面が「読み込み中」のままだった
+    /// この上限が無かったときは、本番で PX-MLT8PE の受信機に入ったライブの選局が答えを返さないまま止まり、画面が「読み込み中」のままだった。
+    /// 同期で止まっていると、選局したリクエストは同期が戻るまで返らない (返るのは共有に入った利用者だけ)。そのときは denpa が答えを待つ上限で打ち切る
     /// </summary>
     public static readonly TimeSpan FirstTsWait = TimeSpan.FromSeconds(30);
 
@@ -367,6 +368,15 @@ public sealed class TunerPool(
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                         lease.LockMs = (held.Device as It930xTuner)?.LockMs ?? -1;
                     }
+                    /*
+                     * **選局している間に畳まれたら、読み出しを始めない** (取り上げられた・TS を待つ上限を過ぎた)。利用者には畳んだ側が理由を伝えてある。
+                     * 上限を過ぎたのなら合っている印も消す。残すと、次の選局が選局し直さずに読み始める
+                     */
+                    if (lease.Stopped)
+                    {
+                        if (lease.Starved) held.Channel = null;
+                        return sink;
+                    }
                     // 選局し直さずに済んだときも、TSMF の判定はそのチャンネルを選局したときのまま残っている。読み出しを始める前に写す (Sink.TsmfStreams)
                     lease.TsmfStreams = (held.Device as It930xTuner)?.Tsmf?.Streams;
                     // 流すバイト列の形式 (Sink.Format)。TSMF の有効な TS の数と同じく、選局したときの判定のまま
@@ -374,8 +384,6 @@ public sealed class TunerPool(
                     lease.StartNative(held.Device, () => OnExit(lease));
                     // 閉じる側 (Held.Close) は、この読み出しが止まるのを待ってから閉じる
                     held.Reader = lease;
-                    // 選局している間に TS を待つ上限を過ぎて畳んだ。合っている印を残すと、次の選局が選局し直さずに読み始める
-                    if (lease.Starved) held.Channel = null;
                 }
             }
             else
@@ -427,8 +435,8 @@ public sealed class TunerPool(
             if (unsynced && tried.Count > 0) Log.Write($"[{spec.Name}] {channel}: {UnsyncedReason(attempts)}");
             throw new IOException(reason);
         }
-        // 同期した。前に同期しなかった印は消して、元の順に戻す
-        if (lease.TunedMs >= 0)
+        // 同期した。前に同期しなかった印は消して、元の順に戻す (TS を待つ上限を過ぎて付けた印は残す)
+        if (lease.TunedMs >= 0 && !lease.Starved)
         {
             lock (_gate) _unsynced.Remove((index, type, channel));
         }
