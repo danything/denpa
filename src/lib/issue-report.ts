@@ -25,7 +25,7 @@ export interface LogLine {
 }
 
 export interface LogSource {
-  /** 見出しに出す名前 (サーバ・エージェント) */
+  /** 見出しに出す名前 (「サーバ」「エージェント「<名前>」」) */
   label: string;
   lines: LogLine[];
   /** `level` が本物か。エージェントのログは字から推し量ったものなので、行に `[warn]` を付けない */
@@ -297,31 +297,47 @@ export function agentSystem(about: AgentAbout): string {
   return `${os ?? "—"}${about.arch === null ? "" : ` (${about.arch})`}`;
 }
 
-/** 報告の「環境」の欄。画面の「環境」の節と同じ中身を 1 行に */
+/** 1 台のエージェントのこと。`about` が届く前は undefined */
+export interface AgentEnvironment {
+  /** 画面に出す名前 (`agents.name`) */
+  name: string;
+  about: { about: AgentAbout | null; error: string | null } | undefined;
+}
+
+/** 1 台のエージェントの欄。CCID ドライバは macOS のエージェントだけ */
+function agentParts(denpaVersion: string, agent: AgentEnvironment): string[] {
+  const about = agent.about?.about ?? null;
+  let text = "—";
+  if (about !== null) {
+    const version = about.version ?? "不明";
+    const differs =
+      about.version !== null && !sameVersion(denpaVersion, about.version);
+    text = `${version}${differs ? " (denpa とバージョンが違います)" : ""}・${agentSystem(about)}`;
+  } else if (agent.about?.error) {
+    text = `— (${agent.about.error})`;
+  }
+  return [
+    `エージェント「${agent.name}」: ${text}`,
+    ...(about?.ccidDriver
+      ? [`CCID ドライバ「${agent.name}」: ${CCID_DRIVER[about.ccidDriver]}`]
+      : []),
+  ];
+}
+
+/** 報告の「環境」の欄。画面の「環境」の節と同じ中身を 1 行に。エージェントは 1 台ずつ並べ、1 台も無ければ「—」 */
 export function environmentText(parts: {
   denpaVersion: string;
   server: string;
-  agent: { about: AgentAbout | null; error: string | null } | undefined;
+  agents: readonly AgentEnvironment[];
   tuners: string;
   card: string;
   browser: string;
 }): string {
-  const about = parts.agent?.about ?? null;
-  let agent = "—";
-  if (about !== null) {
-    const version = about.version ?? "不明";
-    const differs =
-      about.version !== null && !sameVersion(parts.denpaVersion, about.version);
-    agent = `${version}${differs ? " (denpa とバージョンが違います)" : ""}・${agentSystem(about)}`;
-  } else if (parts.agent?.error) {
-    agent = `— (${parts.agent.error})`;
-  }
   return [
     `サーバ: ${parts.server}`,
-    `エージェント: ${agent}`,
-    ...(about?.ccidDriver
-      ? [`CCID ドライバ: ${CCID_DRIVER[about.ccidDriver]}`]
-      : []),
+    ...(parts.agents.length === 0
+      ? ["エージェント: —"]
+      : parts.agents.flatMap((agent) => agentParts(parts.denpaVersion, agent))),
     `チューナー: ${parts.tuners}`,
     `カードリーダー: ${parts.card}`,
     `ブラウザ: ${parts.browser}`,

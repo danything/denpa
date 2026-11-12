@@ -236,18 +236,38 @@ describe("環境の欄", () => {
     );
   });
 
+  const one = (
+    about: { about: AgentAbout | null; error: string | null } | undefined,
+  ) => [{ name: "tuner-agent", about }];
+
   test("サーバ・エージェント・チューナー・カードリーダー・ブラウザの順に 1 行で", () => {
     expect(
-      environmentText({ ...parts, agent: { about: linux, error: null } }),
+      environmentText({ ...parts, agents: one({ about: linux, error: null }) }),
     ).toBe(
-      "サーバ: Linux 6.12.0 (x64)・Bun 1.4.4 / エージェント: v1.2.3・Linux 6.12.0 #1 SMP (x64) / チューナー: PX-Q3U4 (GR) / カードリーダー: Reader (使用中) / ブラウザ: Firefox",
+      "サーバ: Linux 6.12.0 (x64)・Bun 1.4.4 / エージェント「tuner-agent」: v1.2.3・Linux 6.12.0 #1 SMP (x64) / チューナー: PX-Q3U4 (GR) / カードリーダー: Reader (使用中) / ブラウザ: Firefox",
+    );
+  });
+
+  test("エージェントは 1 台ずつ名前を付けて並べる。1 台も無ければ「—」", () => {
+    const text = environmentText({
+      ...parts,
+      agents: [
+        { name: "居間", about: { about: linux, error: null } },
+        { name: "書斎", about: { about: null, error: "繋がりません" } },
+      ],
+    });
+    expect(text).toContain(
+      " / エージェント「居間」: v1.2.3・Linux 6.12.0 #1 SMP (x64) / エージェント「書斎」: — (繋がりません) / ",
+    );
+    expect(environmentText({ ...parts, agents: [] })).toContain(
+      " / エージェント: — / ",
     );
   });
 
   test("macOS なら CCID ドライバも。denpa とバージョンが違えば書き添える", () => {
     const text = environmentText({
       ...parts,
-      agent: {
+      agents: one({
         about: {
           version: "v1.2.0",
           os: "macos",
@@ -256,34 +276,36 @@ describe("環境の欄", () => {
           ccidDriver: "ifd-ccid",
         },
         error: null,
-      },
+      }),
     });
     expect(text).toContain(
-      "エージェント: v1.2.0 (denpa とバージョンが違います)・Darwin 25.0.0 (arm64)",
+      "エージェント「tuner-agent」: v1.2.0 (denpa とバージョンが違います)・Darwin 25.0.0 (arm64)",
     );
-    expect(text).toContain(" / CCID ドライバ: 従来のもの (useIFDCCID) / ");
+    expect(text).toContain(
+      " / CCID ドライバ「tuner-agent」: 従来のもの (useIFDCCID) / ",
+    );
   });
 
   test("エージェントのことを取れなければ理由を、バージョンが読めなければ「不明」と書く", () => {
     expect(
       environmentText({
         ...parts,
-        agent: {
+        agents: one({
           about: null,
           error: "エージェントからバージョンを取得できません (500)",
-        },
+        }),
       }),
     ).toContain(
-      "エージェント: — (エージェントからバージョンを取得できません (500))",
+      "エージェント「tuner-agent」: — (エージェントからバージョンを取得できません (500))",
     );
-    expect(environmentText({ ...parts, agent: undefined })).toContain(
-      "エージェント: — / ",
+    expect(environmentText({ ...parts, agents: one(undefined) })).toContain(
+      "エージェント「tuner-agent」: — / ",
     );
     expect(
       environmentText({
         ...parts,
-        agent: { about: { ...linux, version: null }, error: null },
+        agents: one({ about: { ...linux, version: null }, error: null }),
       }),
-    ).toContain("エージェント: 不明・");
+    ).toContain("エージェント「tuner-agent」: 不明・");
   });
 });

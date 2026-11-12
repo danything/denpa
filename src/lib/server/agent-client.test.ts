@@ -3,11 +3,12 @@ import { X509Certificate } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-import { agentFetch } from "./agent-client";
+import { fetchAgent } from "./agent-client";
 import { createIdentity, pairProof } from "./agent-identity";
 import {
   agentCert,
   agentSecrets,
+  listAgents,
   parseAgentUrl,
   primaryAgent,
   rememberAgentCert,
@@ -47,6 +48,12 @@ describe("parseAgentUrl", () => {
 
   test("http:// は誤り (平文では繋がない)", () => {
     expect(() => parseAgentUrl("http://tuner-agent:25252")).toThrow("https://");
+  });
+
+  test("ホスト名は小文字にそろえる (大文字と小文字だけが違う URL を別のエージェントにしない)", () => {
+    expect(parseAgentUrl("HTTPS://Tuner-Agent:25252/#pair=abc").origin).toBe(
+      "https://tuner-agent:25252",
+    );
   });
 
   test("ホストが空なら、合言葉を出さずに誤りにする (アドレスを取れなかったインストールの起動スクリプト)", () => {
@@ -99,12 +106,15 @@ describe("pairProof", () => {
 /** 今のエージェントの行に保存した証明書 */
 const savedCert = () => agentCert(primaryAgent().id);
 
-describe("agentFetch", () => {
+/** 並びの先頭のエージェントを呼ぶ。先頭を決めるのも呼んだあと (エージェントが無ければ reject) */
+const toPrimary = async (path: string) => fetchAgent(primaryAgent(), path);
+
+describe("fetchAgent", () => {
   test("初めは合言葉で組み、相手の証明書を DB の行に保存してから呼ぶ", async () => {
     const server = serveFakeAgent(() => Response.json({ ok: true }));
     try {
       config.agentUrl = fakeAgentUrl(server.port!);
-      const res = await agentFetch("/denpa/tuners");
+      const res = await toPrimary("/denpa/tuners");
       expect(await res.json()).toEqual({ ok: true });
       expect(savedCert()).toBe(fakeAgentIdentity().cert);
       expect(existsSync(`${dir}/tls/denpa.key`)).toBe(true);
@@ -118,7 +128,7 @@ describe("agentFetch", () => {
     const server = serveFakeAgent(() => Response.json({ ok: true }));
     try {
       config.agentUrl = `https://127.0.0.1:${server.port}#pair=wrong`;
-      await expect(agentFetch("/denpa/tuners")).rejects.toThrow(
+      await expect(toPrimary("/denpa/tuners")).rejects.toThrow(
         "合言葉が違います",
       );
       expect(savedCert()).toBeNull();
@@ -136,7 +146,7 @@ describe("agentFetch", () => {
     });
     try {
       config.agentUrl = `https://127.0.0.1:${liar.port}#pair=${FAKE_AGENT_PAIR}`;
-      await expect(agentFetch("/denpa/tuners")).rejects.toThrow(
+      await expect(toPrimary("/denpa/tuners")).rejects.toThrow(
         "合言葉が違います",
       );
       expect(savedCert()).toBeNull();
@@ -151,7 +161,7 @@ describe("agentFetch", () => {
     try {
       config.agentUrl = fakeAgentUrl(server.port!);
       rememberAgentCert(primaryAgent().id, other.cert, other.fingerprint);
-      const res = await agentFetch("/denpa/tuners");
+      const res = await toPrimary("/denpa/tuners");
       expect(res.status).toBe(200);
       expect(savedCert()).toBe(fakeAgentIdentity().cert);
     } finally {
@@ -177,7 +187,7 @@ describe("agentFetch", () => {
       // 一度組んで証明書を保存してある
       const { cert, fingerprint } = fakeAgentIdentity();
       rememberAgentCert(primaryAgent().id, cert, fingerprint);
-      const res = await agentFetch("/denpa/tuners");
+      const res = await toPrimary("/denpa/tuners");
       expect(await res.json()).toEqual({ ok: true });
       expect(forgotten).toBe(false);
     } finally {
@@ -193,7 +203,7 @@ describe("agentFetch", () => {
     });
     try {
       config.agentUrl = fakeAgentUrl(server.port!);
-      const res = await agentFetch("/denpa/decode");
+      const res = await toPrimary("/denpa/decode");
       expect(res.status).toBe(403);
       expect(calls).toBe(1);
     } finally {
@@ -203,18 +213,42 @@ describe("agentFetch", () => {
 
   test("組んでいないのに合言葉も無ければ、付け方を言う", async () => {
     config.agentUrl = "https://127.0.0.1:9";
-    await expect(agentFetch("/denpa/tuners")).rejects.toThrow("#pair=");
+    await expect(toPrimary("/denpa/tuners")).rejects.toThrow("#pair=");
   });
 
   test("TUNER_AGENT_URL が空なら、書き方を言う", async () => {
     config.agentUrl = "";
-    await expect(agentFetch("/denpa/tuners")).rejects.toThrow(
+    await expect(toPrimary("/denpa/tuners")).rejects.toThrow(
       "エージェントがありません",
     );
   });
 
   test("書き方の誤りは、呼んだときに返す", async () => {
     config.agentUrl = "http://tuner-agent:25252";
-    await expect(agentFetch("/denpa/tuners")).rejects.toThrow("https://");
+    await expect(toPrimary("/denpa/tuners")).rejects.toThrow("https://");
+  });
+});
+
+describe("2 台のエージェント", () => {
+  test("どちらとも同時に組み、それぞれの行に証明書を保存して、それぞれを呼べる", async () => {
+    const second = createIdentity("denpa-agent");
+    const one = serveFakeAgent(() => Response.json({ from: "one" }));
+    const two = serveFakeAgent(() => Response.json({ from: "two" }), second);
+    try {
+      config.agentUrl = `${fakeAgentUrl(one.port!)},${fakeAgentUrl(two.port!)}`;
+      const [first, other] = listAgents();
+      // 組むのは行ごと。同時に呼んでも、片方の組む途中を待たされない
+      const [a, b] = await Promise.all([
+        fetchAgent(first!, "/denpa/tuners"),
+        fetchAgent(other!, "/denpa/tuners"),
+      ]);
+      expect(await a.json()).toEqual({ from: "one" });
+      expect(await b.json()).toEqual({ from: "two" });
+      expect(agentCert(first!.id)).toBe(fakeAgentIdentity().cert);
+      expect(agentCert(other!.id)).toBe(second.cert);
+    } finally {
+      one.stop(true);
+      two.stop(true);
+    }
   });
 });

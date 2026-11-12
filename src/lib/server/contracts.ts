@@ -10,7 +10,8 @@ import { PACKET } from "@danything/arib/psi";
 import { ServiceFilter } from "@danything/arib/service-filter";
 import { and, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
-import { agentFetch } from "./agent-client";
+import { fetchAgent } from "./agent-client";
+import { type Agent, primaryAgent } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
 import { cardContracts, programs, services } from "./schema";
@@ -122,22 +123,27 @@ export function isCodeSubscribed(code: number): boolean {
 }
 
 /**
- * B-CAS カードの契約確認コマンド (0x90 0x3C) をエージェント経由で呼び出す。
+ * B-CAS カードの契約確認コマンド (0x90 0x3C) をエージェント経由で呼び出す。`agent` を渡さなければ並びの先頭のエージェント。
  */
 export async function confirmCardContract(
   verificationBase64: string,
   dateMjd: number,
+  agent?: Agent,
 ): Promise<ConfirmResult> {
   try {
-    const res = await agentFetch("/denpa/card/confirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        verification: verificationBase64,
-        date: dateMjd,
-      }),
-      signal: AbortSignal.timeout(5_000),
-    });
+    const res = await fetchAgent(
+      agent ?? primaryAgent(),
+      "/denpa/card/confirm",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          verification: verificationBase64,
+          date: dateMjd,
+        }),
+        signal: AbortSignal.timeout(5_000),
+      },
+    );
     if (!res.ok) {
       const err = await res.text().catch(() => "");
       return {
