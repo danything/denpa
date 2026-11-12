@@ -33,7 +33,7 @@
   前のバージョンまで siano-userland の配布アーカイブから取っていたファイルと、SHA-256 が同じです
 - 許諾: 同じコミットの `LICENSES/LICENCE.siano` (Siano Mobile Silicon Ltd.)。無改変のバイナリの再配布と使用を認めていて、
   著作権表示と免責の文面を配布物に添えること、解析しないことを求めています。文面は [LICENCE.siano](LICENCE.siano) にそのまま置いてあり、
-  エージェントのイメージ (`/usr/share/doc/denpa-agent/`) と、Mac・Windows の配布物 (実行ファイルの隣) に入れています
+  エージェントのイメージ (`/usr/share/doc/denpa-agent/`) と、Mac・Windows の配布物 (実行ファイルの隣) と、Android の APK (`assets/licenses/`) に入れています
 
 リポジトリに置いているのは、IT930x のファームウェアと同じ扱いにして、実行ファイル 1 個で Linux・Mac・Windows のどれでも同じファームウェアを使うためです。
 イメージを組むときと `install.sh`・`install.ps1` が、外から取ってくるものが 1 つ減ります。
