@@ -442,7 +442,7 @@ function broadcastFilters(smooth: boolean): string[] {
  * ## 回線に合わせて下げた段
  *
  * `rung` が 1〜3 なら、段の表 (`#lib/rungs.ts`) の高さ・30 コマ以下・ビットレートの上限で変換する (`rungVideo`)。
- * 0 なら上のとおりで、今までと同じ引数になる
+ * 0 なら上のとおり
  *
  * ## エンコードが遅れたときの 30 コマ (`half`)
  *
@@ -895,7 +895,7 @@ export function pinnedNotTuned(
  * (`TunerPool.FirstTsWait`)。同期しなかったときに別のチューナーで選局し直すぶん (同期の待ちは機材によって 5〜15 秒) を足しても収まる長さ。
  * エージェントが答えを返さないまま止まっても、画面を「読み込み中」のままにしない
  */
-export const LIVE_ANSWER_WAIT = 60_000;
+const LIVE_ANSWER_WAIT = 60_000;
 
 interface Viewer {
   /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者は映像か字幕だけを流すエンドポイント (`sessionStream`・`liveCaptions`) */
@@ -1301,7 +1301,7 @@ class Session {
    * ffmpeg に渡すときも同じ fMP4 なので、`start:` を引けばエンコードしたものの物差しになる
    */
   private mmtAnchor: Anchor | null = null;
-  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f] で分け合う (`tap`) */
+  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f]・スクランブルの判定で分け合う (`tap`) */
   private readonly packets = new PacketStream();
   /** ffmpeg が入力で 0 に寄せたぶん (秒)。`start:` から読み取る */
   private startPts = Number.NaN;
@@ -2148,13 +2148,13 @@ class Session {
 
   /**
    * 届いた塊を 1 局に絞り (`pump` の説明)、**絞ったあとを** データ放送・時計・
-   * Hybridcast・EIT[p/f] の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
+   * Hybridcast・EIT[p/f]・スクランブルの判定の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
    */
   private tap(filter: ServiceFilter | null, chunk: Uint8Array): Uint8Array {
     const out = filter === null ? chunk : filter.filter(chunk);
     if (filter !== null) this.tsid = filter.transportStreamId;
     if (out.length === 0) return out;
-    // **188 バイトに切るのは 1 回だけ** (4 つのパーサで使い回す。ライブの処理でいちばん重いところ)
+    // **188 バイトに切るのは 1 回だけ** (5 つの読み取りで使い回す。ライブの処理でいちばん重いところ)
     const receivedAt = Date.now();
     const data = this.data;
     const ait =
@@ -3022,8 +3022,7 @@ class RawCaptions {
  *
  * 名指しのチューナー (`pin`) も入る (下の引数の説明)。
  *
- * **回線に合わせて下げた段 (`rung`) も入る。** 段は固定の表 (`#lib/rungs.ts`) なので、同じ段の人どうしは共有できる。
- * 段 0 の目印は段を足す前と同じ
+ * **回線に合わせて下げた段 (`rung`) も入る。** 段は固定の表 (`#lib/rungs.ts`) なので、同じ段の人どうしは共有できる
  */
 export const key = (
   type: string,
@@ -3768,18 +3767,17 @@ export function parseCommand(message: Record<string, unknown>): Asked | null {
        * 追っかけは段 0 では H.265 にエンコードしない (`#lib/live.ts` の `LiveCodec`)。段を下げるときは `playable` から選ぶ。
        * 4K の局の録画の H.265 は放送の HEVC の詰め替えなので通す (`openChase` が TS の録画では H.264 に読み替える)
        */
-      const chased = codec;
       return {
         type: "chase",
         recordingId: Number(message["recordingId"]),
         at: Number.isFinite(at) ? Math.max(0, at) : 0,
         audio,
-        codec: chased,
+        codec,
         caption,
         language,
         raw: message["raw"] === true,
         rung,
-        playable: parsePlayable(message["playable"], chased),
+        playable: parsePlayable(message["playable"], codec),
       };
     }
     case "tune": {

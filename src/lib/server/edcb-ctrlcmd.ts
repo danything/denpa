@@ -456,7 +456,7 @@ interface Reply {
 
 /**
  * 1 回繋いで 1 コマンド送り、応答を待つ。サーバは返したら切る。
- * 失敗の理由は、どこで止まったかで分ける (断られた・繋がらない・受けてすぐ切られた・途中で切れた・黙った・大きすぎる)
+ * 失敗の理由は、どこで止まったかで分ける (断られた・繋がらない・受けてすぐ切られた・途中で切れた・応答が無い・大きすぎる)
  */
 function send(
   target: EdcbTarget,
@@ -573,7 +573,7 @@ export class EdcbClient {
   private warned = false;
 
   constructor(
-    readonly target: EdcbTarget,
+    private readonly target: EdcbTarget,
     private readonly warn: (message: string) => void,
   ) {}
 

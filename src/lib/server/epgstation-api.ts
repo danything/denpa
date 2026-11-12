@@ -239,7 +239,7 @@ export class EpgstationClient {
     return `${this.source.base}/api${path}${query === "" ? "" : `?${query}`}`;
   }
 
-  /** JSON を 1 つ取る。本文まで含めて {@link timing.header} の 3 倍で諦める */
+  /** JSON を 1 つ取る。本文まで含めて {@link timing.header} の 3 倍で打ち切る */
   async json(
     path: string,
     params: Record<string, string | number> = {},

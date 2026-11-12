@@ -287,6 +287,8 @@ export interface YieldedRecording {
   serviceName: string;
   /** 録り終える時刻 (UNIX ミリ秒。終わりのマージン込み)。それまでそのチューナーは空かない */
   endAt: number;
+  /** 録画の放送のコーデック (4K の局の録画 `.mmts` は `hevc`)。追っかけをこの形式で開く */
+  broadcast: BroadcastCodec;
 }
 
 /**

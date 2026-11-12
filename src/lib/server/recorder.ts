@@ -328,15 +328,16 @@ function skipDuplicate(recording: Recording, reason: string): void {
   emit("reservations");
 }
 
+/** 選局を試す回数と、次に試すまでの間 (ms) */
+const OPEN_RETRIES = 5;
+const OPEN_RETRY_WAIT = 2000;
+
 /**
  * チューナーが空くのを少し待つ。
  *
  * 使えない理由は「本当に足りない」だけとは限らない。番組の先頭を数秒落としてでも
- * 録れたほうがいいので、すぐには諦めない。
+ * 録れたほうがいいので、すぐには打ち切らない。
  */
-const OPEN_RETRIES = 5;
-const OPEN_RETRY_WAIT = 2000;
-
 async function openWithRetry(
   open: (signal: AbortSignal) => Promise<ReadableStream<Uint8Array>>,
   signal: AbortSignal,

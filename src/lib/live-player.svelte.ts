@@ -2231,7 +2231,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     yielded = { recording, back, refused };
     // リクエストし直しで伸びた待ちは持ち越さない (追っかけが切れたら 1 秒から繋ぎ直す)
     attempts = 0;
-    void openChase(element, recording.id, CHASE_EDGE);
+    // 4K の局の録画は HEVC で開く (省くと MPEG-2 として開き、HEVC を受け取れない端末がリクエストし直しを繰り返す)
+    void openChase(
+      element,
+      recording.id,
+      CHASE_EDGE,
+      false,
+      recording.broadcast,
+    );
   }
 
   /** 「ライブに戻る」。同じ局をリクエストし直し、入れなければ追っかけに戻る (`giveWay`) */

@@ -3,7 +3,7 @@
  * ここで映像と音声を fMP4 に詰め替え、字幕 (TTML) を文字の配置にする。ffmpeg も ffprobe も TLV を読めないので、
  * 4K の録画を読む所はどこもここを通す。
  *
- * - 観る画面の詰め替えと変換 (`playback.ts` の `mmtsAttempts`・`mmtsBody`)
+ * - 観る画面の詰め替えと変換、録画ファイルの音声だけ (`playback.ts` の `mmtsAttempts`・`mmtsPassthrough`・`fileAudioBody`)
  * - エンコードの前の詰め替え (`encoder.ts` の `runJob`。`remuxMmts` で作業ファイルの MP4 を作り、あとは TS の録画と同じ)
  * - 字幕 (`api/recordings/<id>/captions.json`。`mmtsCaptions`)
  *
@@ -168,8 +168,8 @@ export async function probeMmts(
   return file;
 }
 
-/** 求められた時刻のこれだけ手前から読む (秒)。頭出しできるコマを 1 つ含めるため (TS の `playback.ts` の `LEAD` と同じ) */
-const LEAD = 1;
+/** 求められた時刻のこれだけ手前から読む (秒)。頭出しできるコマを 1 つ含めるため。TS の録画も同じ (`playback.ts`) */
+export const LEAD = 1;
 
 /**
  * 物差しの `from` 秒を出すために、ファイルのどこから読むか (バイト)。**バイト比例で当たりを付ける**

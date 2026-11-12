@@ -1263,7 +1263,8 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
 /**
  * デバイスごとの一言。「VA-API: AV1 (CQP) / H.264」か「GPU でエンコードできません」。
  * ICQ を持たないドライバで AV1 を CQP に落としたときだけ (CQP) を、AMF を古い世代向けの指定にしたときは
- * (古い世代向けの指定) を添え (H.264・H.265 はいつも CQP)、デコードから GPU で
+ * (古い世代向けの指定) を、QSV で CPU のメモリから渡すもの (`qsvSystem`) は (CPU のメモリから渡す) を添え
+ * (H.264・H.265 はいつも CQP)、デコードから GPU で
  * 通せるもの (ライブで使う) は最後に分けて書く
  */
 export function describeDevice(device: HwDevice): string {
