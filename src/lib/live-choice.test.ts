@@ -119,7 +119,7 @@ describe("覚えていた選択の読み方", () => {
 describe("4K の局の自動", () => {
   const uhd = { broadcast: "hevc" as const };
 
-  test("家の中は HEVC → H.264 → AV1、外は AV1 → H.264、互換モードは AV1 → H.264 → HEVC", () => {
+  test("家の中は HEVC → H.264 → AV1、外は AV1 → H.264、互換モードは AV1 → H.264 (canvas は HEVC を描かない)", () => {
     expect(autoOrder({ indoor: true, compat: false, ...uhd })).toEqual([
       "hevc",
       "h264",
@@ -132,7 +132,6 @@ describe("4K の局の自動", () => {
     expect(autoOrder({ indoor: true, compat: true, ...uhd })).toEqual([
       "av1",
       "h264",
-      "hevc",
     ]);
   });
 

@@ -575,6 +575,33 @@ describe("移れない文書へ移ろうとしても閉じない", () => {
     });
   }
 
+  test("a 要素の href が放送に無いモジュールを指す: 決定を押しても入口へ出直さず、今の文書のまま", async () => {
+    const visible: boolean[] = [];
+    const { bml, logs } = open({ onVisible: (on) => visible.push(on) });
+    const files = hiddenEntry("menu.bml");
+    files[1] = bmlFile(
+      "menu.bml",
+      '<a id="go" href="/40/0005/a.bml">x</a>',
+      'function start() { document.getElementById("go").focus(); browser.Ureg[2] = browser.getActiveDocument(); }',
+    );
+    feedAll(bml, [PROGRAM, ...carousel(files)]);
+    const { done } = await watch(() => inside(bml).ureg[2] !== "");
+    expect(done).toBe(true);
+    expect(bml.path).toBe("/40/0000/menu.bml");
+    bml.key(18, true);
+    bml.key(18, false);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(bml.path).toBe("/40/0000/menu.bml");
+    expect(visible.at(-1)).toBe(true);
+    expect(
+      logs.some(
+        (line) =>
+          line.includes("モジュールが放送に無い") &&
+          line.includes("/40/0005/a.bml"),
+      ),
+    ).toBe(true);
+  });
+
   /** 双方向をオンにして、決めた URL に決めたものを返す中継 (リクエストされた URL を控える) */
   function relay(
     pages: Record<string, { status?: number; type: string; body: string }>,

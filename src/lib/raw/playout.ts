@@ -34,7 +34,7 @@
  *
  * - **飛ぶ先** (`reset` の `from`)。サーバは飛び先の少し手前 (キーフレーム・1 秒前) から流してくるので、
  *   手前のぶんは鳴らさず、ここから鳴らし始める
- * - **終わり** (`finish`)。もう届かないと言われたら、貯めが `target` に届かなくても残りを鳴らし、
+ * - **終わり** (`finish`)。もう届かないと言われたら、バッファが `target` に届かなくても残りを鳴らし、
  *   使い切ったら貯め直さずに `end` を返す
  *
  * DOM も Web Audio も触らないので、ここだけ単体で確かめられる (`playout.test.ts`)。
@@ -177,7 +177,7 @@ export class Playout<T extends Chunk> {
         this.finished = false;
         return { kind: "end" };
       }
-      // 終わりまで届いていれば、貯めが足りなくても残りを鳴らす
+      // 終わりまで届いていれば、バッファが足りなくても残りを鳴らす
       if (this.held || lead < DRY || (lead < this.target && !this.finished))
         return { kind: "none" };
       return { kind: "start", schedule: this.startAt(now) };

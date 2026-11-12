@@ -17,7 +17,7 @@
  *
  * ## 貯めるのはデコードする前
  *
- * 貯め (0.2 秒〜) のぶんをデコードしたフレームで持つと、1080 のフレームは 1 枚 3MB あるので 1 秒で 90MB になる。
+ * バッファ (0.2 秒〜) のぶんをデコードしたフレームで持つと、1080 のフレームは 1 枚 3MB あるので 1 秒で 90MB になる。
  * **圧縮のまま持っておき、番の少し前 (`AHEAD`) にデコードする。** デコードするのは実測で 1 コマ 3〜5ms (重いもので 10ms 近く)
  * なので、0.3 秒前に始めれば間に合う。デコードできたフレームはデコーダの中で順番待ちさせる
  * (`dec_peek` / `dec_pop`)。
@@ -193,7 +193,7 @@ let early: Uint8Array[] | null = [];
 let earlyBytes = 0;
 /** `early` を溜めている間に末尾まで届いた (`end`)。溜めたぶんを渡しきってから出しきる */
 let earlyEnd = false;
-/** `early` に溜める上限 (箱の数)。1 秒に 20 個ほど来るので、読み込みが 10 秒掛かっても足りる */
+/** `early` に溜める上限 (ボックスの数)。1 秒に 20 個ほど来るので、読み込みが 10 秒掛かっても足りる */
 const EARLY_MOST = 200;
 let dropped = 0;
 let shown = 0;
@@ -536,7 +536,7 @@ function tick(): void {
    * (CM を飛ばしたなら本編の映像のまま)。1 回にデコードするのは `UNDER_PER_TICK` 枚まで
    *
    * **1 枚目の I は、デコーダが出すのを待たずに出す** (`still`)。デコーダは次の参照フレーム (P) を読むまで
-   * I を出さないので、届いてから 3〜4 コマぶん (0.1 秒ほど) 待っていた
+   * I を出さないので、届いてから 4 コマぶん (0.13 秒ほど) 待っていた
    */
   if (!shownSinceReset) {
     const seeking = floor !== null || floorRaw !== null;
@@ -935,7 +935,7 @@ async function init(
   schedule();
 }
 
-/** 届いたものを読む (fMP4 は箱ごと、Matroska は要素ごと、TS は PES に組んで) */
+/** 届いたものを読む (fMP4 はボックスごと、Matroska は要素ごと、TS は PES に組んで) */
 function feed(bytes: Uint8Array): void {
   if (mode === "fmp4") {
     fmp4?.feed(bytes);

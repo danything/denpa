@@ -76,8 +76,8 @@ export function crc32(data: Uint8Array): number {
 /**
  * セクション本体に CRC32 を付けて仕上げる。`section_length` も実長に直す。
  *
- * **書く側が 2 つある。** PAT を書き直して流す `service-filter.ts` と、
- * 偽の放送を組み立てる `synth.ts`。長さの直し方を間違えると読む側が黙って
+ * **書く側が 3 つある。** PAT を書き直して流す `service-filter.ts` と、
+ * 偽の放送を組み立てる `synth.ts`・`synth-mmt.ts`。長さの直し方を間違えると読む側が黙って
  * 捨てるだけなので、1 箇所に置く。
  */
 export function withCrc(body: number[]): Uint8Array {

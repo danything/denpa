@@ -148,6 +148,25 @@ describe("局の選り分け", () => {
    * テレ朝の TVer リンクはこれを TVer のサーバへ送り、無いと `DT-RE` で止まる
    * ([server/live.ts](https://github.com/danything/denpa/blob/main/src/lib/server/live.ts) の `programInfo`)
    */
+  test("PMT の PID が同じまま TSID が変わった PAT も、書き直す PAT に写す", () => {
+    const filter = new ServiceFilter(MX1);
+    filter.filter(Uint8Array.from([...pat(), ...pmt1()]));
+    const next = packetize(
+      0x0000,
+      patSection(
+        [
+          [MX1, PMT1],
+          [MX2, PMT2],
+        ],
+        0x7fe2,
+      ),
+    );
+    const out = filter.filter(Uint8Array.from(next));
+    expect(pids(out)[0]).toBe(0x0000);
+    // section の 3〜4 バイト目が TSID
+    expect((out[5 + 3]! << 8) | out[5 + 4]!).toBe(0x7fe2);
+  });
+
   test("中継の番号 (TSID) を PAT から覚える", () => {
     const filter = new ServiceFilter(MX1);
     // 読む前は分からない。**分からないことを 0 と言わない**

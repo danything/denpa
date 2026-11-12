@@ -42,7 +42,7 @@ export type ToWorker =
   /**
    * 届いたもの (TS、fMP4 の init・媒体 1 つ、Matroska)。**`offset` から読む** (WebSocket で届いたものは先頭の
    * 9 バイトが多重化のヘッダなので 9。録画を fetch で読んだもの (`canvas-player.ts`) は 0)。
-   * fMP4 は箱の切れ目で届く (ライブはサーバが、録画は `canvas-player.ts` が割る。`ts/fmp4.ts` の `Fmp4Splitter`)
+   * fMP4 はボックスの切れ目で届く (ライブはサーバが、録画は `canvas-player.ts` が割る。`ts/fmp4.ts` の `Fmp4Splitter`)
    */
   | { type: "data"; buffer: ArrayBuffer; offset: number }
   /**
@@ -82,7 +82,7 @@ export type ToWorker =
   /** 小窓へ書き込むか。出していない間は書かない (1 コマごとに写すぶん重い) */
   | { type: "pipFlow"; on: boolean }
   /**
-   * 画面が見えているか (`visibilitychange`)。**見えていない間は映像をデコードしない**。同じ端末で 2 本見ていると、
+   * 画面が見えているか (`visibilitychange`)。**見えていない間は映像をデコードしない** (放送のままの MPEG-2 のとき)。同じ端末で 2 本見ていると、
    * 裏に回したほうも 1 コマ 10ms 前後デコードし続けて、見ているほうが間に合わなくなっていた。音は流し続ける
    */
   | { type: "visible"; on: boolean }

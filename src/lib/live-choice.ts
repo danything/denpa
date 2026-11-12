@@ -68,7 +68,7 @@ type EncodedCodec = HwCodec;
  * | 場面 | 家の中 (`indoor`) | 外 | 互換モード (`compat`。canvas に描く) |
  * | --- | --- | --- | --- |
  * | その場でエンコード (ライブ・追っかけ) | MPEG-2 → H.264 → AV1 → H.265 | AV1 → H.265 → H.264 | AV1 → H.264 → MPEG-2 |
- * | 4K の局のライブ (`broadcast` が `hevc`) | HEVC → H.264 → AV1 | AV1 → H.264 | AV1 → H.264 → HEVC |
+ * | 4K の局のライブ (`broadcast` が `hevc`) | HEVC → H.264 → AV1 | AV1 → H.264 | AV1 → H.264 (canvas は HEVC を描かない) |
  * | エンコード済み (`encoded`。録画の観る画面) | AV1 → H.265 → H.264 | AV1 → H.265 → H.264 | 同じ形式の詰め替え → 上の互換モードの順 (`ts/playback.ts` の `pickCanvas`) |
  *
  * - 家の中は**開くまでの速さ**を採る。MPEG-2 はエンコードせずに済み、画質も放送のまま。次はエンコードの立ち上がりが速い H.264
@@ -91,7 +91,7 @@ export function autoOrder(
 ): readonly LiveFormat[] {
   if (scene === "encoded") return HW_CODECS;
   if (scene.broadcast === "hevc") {
-    if (scene.compat) return ["av1", "h264", "hevc"];
+    if (scene.compat) return ["av1", "h264"];
     return scene.indoor ? ["hevc", "h264", "av1"] : ["av1", "h264"];
   }
   if (scene.compat) return ["av1", "h264", "raw"];

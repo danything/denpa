@@ -167,7 +167,7 @@ export type Notice =
       /** いま出しているもの (`CaptionTrack.index`) */
       track: number;
       /**
-       * いまの字幕のストリームに載っている言語 (字幕管理データから)。**届くまでは省く**。知らない受け側は
+       * いまの字幕のストリームに載っている言語 (字幕管理データから)。**届くまでは省く**。読めない受け側は
        * 読み飛ばせばよく、そのときは第 1 言語だけが届く
        */
       languages?: CaptionLanguage[];
@@ -277,7 +277,7 @@ export type Notice =
  * **ライブがチューナーを譲った録画** (`Notice` の `lost`、通知の `yielded`)。
  *
  * 読むのはサーバ (`server/live-yield.ts`)。ライブは取り上げられる前に自分の利用者がいたチューナーを覚えておき、
- * 取り上げられたあとでそのチューナーの利用者にいる録画 (`rec <録画ID>`) を名指しする。エージェントは予約を知らない
+ * 取り上げられたあとでそのチューナーの利用者にいる録画 (`rec <録画ID>`) を名指しする。エージェントは予約を持たない
  */
 export interface YieldedRecording {
   /** 録画 ID。追っかけ (`chase` / `GET /api/recordings/<id>/chase`) に渡す */

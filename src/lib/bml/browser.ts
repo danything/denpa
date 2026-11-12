@@ -5,7 +5,7 @@
  *
  * 動かさないもの: 外のアプリ・予約・電話回線 (PPP)。選局 (epgTune) と Hybridcast の起動
  * (startAITControlledApp) は denpa の画面に任せる (エンジンは「この局へ」「アプリを」と知らせるだけ)。
- * Hybridcast を開けない (双方向がオフ・データ放送を開いていない・AIT にアプリが無い) ときは、AIT の問い合わせに 0 と答える。
+ * Hybridcast を開けない (双方向がオフ・データ放送を開いていない・AIT にアプリが無い) ときは、AIT の問い合わせに 0 と答える (XML の AIT を取得できるときは除く)。
  *
  * 通信の文書 (http・https から取った文書) からは、NVRAM の局の領域を読み書きさせない。使えるのは
  * 通信の文書向けの `nvram://local_web/` と、受信機の設定 (`nvram://receiverinfo/`) を読むことだけ

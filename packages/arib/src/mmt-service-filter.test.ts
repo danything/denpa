@@ -107,6 +107,21 @@ describe("MmtServiceFilter", () => {
     ]);
   });
 
+  test("PLT がほかの局だけを挙げた並びでも、後の PLT がこの局を挙げたら出し始める", () => {
+    const filter = new MmtServiceFilter(ONE);
+    const before = summary(
+      filter.filter(concatBytes([...signals(1, [TWO]), mpu(1, 0xf100, 1)])),
+    );
+    expect(before).toEqual([]);
+    const out = summary(
+      filter.filter(concatBytes([...signals(1, [ONE]), mpu(1, 0xf100, 2)])),
+    );
+    expect(out.filter(([, , mark]) => mark !== null)).toEqual([
+      ["cid:1", 0xf100, 2],
+    ]);
+    expect(filter.ready).toBe(true);
+  });
+
   test("MPT を読む前の MPU は取っておき、MPT の後ろに届いた順で出す", () => {
     const filter = new MmtServiceFilter(ONE);
     const early = filter.filter(

@@ -53,7 +53,7 @@ interface AudioChunk extends Chunk {
 interface RawEvents {
   /** 選局し直してから最初のフレームが出た */
   shown(): void;
-  /** 貯めを使い切って止まった (エンコードする経路の `waiting` にあたる) */
+  /** バッファを使い切って止まった (エンコードする経路の `waiting` にあたる) */
   stalled(): void;
   /**
    * **使えなくなった。** 次の方式に移るか止まるかは画面が決める (理由は画面に出す)。`slow` は間に合わずに打ち切ったときだけ付く、
@@ -234,7 +234,7 @@ export class RawEngine {
     this.outlet.want(background);
   }
 
-  /** 見えているかを worker へ (`visible`)。見えていない間は映像をデコードしない */
+  /** 見えているかを worker へ (`visible`)。見えていない間は映像をデコードしない (放送のままの MPEG-2 のとき) */
   private readonly onVisibility = (): void => {
     this.send({ type: "visible", on: document.visibilityState === "visible" });
   };

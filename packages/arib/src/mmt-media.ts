@@ -34,12 +34,12 @@ import {
   PAYLOAD_SIGNALING,
   SignalingAssembler,
 } from "./mmtp.js";
-import { ADTS_RATES } from "./pes.js";
+import { ADTS_RATES, CLOCK } from "./pes.js";
 import { TlvIpReader } from "./tlv-ip.js";
 import { TLV_COMPRESSED_IP, TlvStream } from "./tlv.js";
 
-/** 放送の時刻の物差し (TS の PTS と同じ) */
-export const CLOCK = 90_000;
+/** 放送の時刻の物差し (TS の PTS と同じ。`pes.ts` の `CLOCK`) */
+export { CLOCK };
 
 const DESC_MPU_TIMESTAMP = 0x0001;
 const DESC_MPU_EXTENDED_TIMESTAMP = 0x8026;

@@ -108,10 +108,10 @@
 サーバの経路は [stream.md](stream.md#4k-の局のライブ) にあります。
 
 - 局の一覧の `broadcast` (`#lib/live-choice.ts` の `BroadcastCodec`。4K の局は `hevc`) を `Tuned.broadcast` に入れて選局します。
-  追っかけは録画 (MPEG-2 の TS) を読むので、いつも MPEG-2 として扱います
+  追っかけは録画の放送のコーデック (`chase/[id]/+page.server.ts` の `broadcast`。4K の局の録画 `.mmts` は `hevc`) を使います
 - 4K の局を初めて開くときに 1 回だけ、`#lib/hevc-4k.ts` の `broadcastHevcPlayable` で調べて覚えます。MSE の `isTypeSupported` と、
   `mediaCapabilities.decodingInfo` に放送の値 (3840x2160・59.94 コマ・10 ビット・HLG・BT.2020) を渡した答えの両方で決めます
-- 自動の順は `autoOrder` に `broadcast` を渡して決めます (家の中は HEVC → H.264 → AV1)。MPEG-2 のデコードを確かめること (`raw/support.ts`) は 4K の局ではしません
+- 自動の順は `autoOrder` に `broadcast` を渡して決めます (家の中は HEVC → H.264 → AV1)。MPEG-2 のデコードを確かめること (`raw/support.ts`) は、互換モードでなければ 4K の局ではしません
 - メニューで「放送のまま」を選んでいると、4K の局では `codec: "hevc"` でリクエストします。メニューの行は「MPEG-2」ではなく「H.265」と出します (`components/player/settings.ts` の `liveCodecs`)
 - 段を上げ下げする仕組み (`adapt.ts`・`RungAdapter`) は TS の局と同じです。詰め替えた HEVC は段 0 で、段を下げるとサーバが AV1 か H.264 を選びます
   (4K の局は H.265 にエンコードしない)。MSE が HEVC を受け取れなかったら、ほかの形式と同じく打ち切って次の形式に移ります (`hevcGaveUp`)
