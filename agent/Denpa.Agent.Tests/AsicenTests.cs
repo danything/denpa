@@ -296,7 +296,8 @@ public class AsicenTests
     }
 
     [Test]
-    [ExcludeOn(OS.Windows)]
+    // fcntl は可変長引数で、macOS (arm64) では引数の渡し方が違う。fd を継がせるのは Android (Linux) だけ
+    [RunOn(OS.Linux)]
     public async Task Android_では_USB_機能の_fd_を_ポートの順に継がせ_device_の代わりに_fd_を渡す()
     {
         var firmware = Path.GetTempFileName();
