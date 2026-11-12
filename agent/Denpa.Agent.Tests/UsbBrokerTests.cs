@@ -219,10 +219,13 @@ public sealed partial class UsbBrokerTests
         await agent.Changed();
 
         // 並べた順と逆に指定しても、指定した順に並ぶ
-        var fds = agent.Host.Lend(["003-005", "003-004"]);
-        var numbers = fds.Numbers.ToArray();
+        int[] numbers = [];
+        using var child = Userland.Start("/bin/sh", fds =>
+        {
+            numbers = [.. fds];
+            return ["-c", string.Join("; ", fds.Select(fd => $"readlink /proc/self/fd/{fd}"))];
+        }, () => agent.Host.Lend(["003-005", "003-004"]));
         await Assert.That(numbers.All(fd => fd > 2)).IsTrue();
-        using var child = Userland.Start("/bin/sh", ["-c", string.Join("; ", numbers.Select(fd => $"readlink /proc/self/fd/{fd}"))], fds);
         var output = await child.StandardOutput.ReadToEndAsync();
         await child.WaitForExitAsync();
         await Assert.That(output.Split('\n', StringSplitOptions.RemoveEmptyEntries))

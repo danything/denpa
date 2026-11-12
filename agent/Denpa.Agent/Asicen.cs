@@ -468,9 +468,10 @@ public static class AsicenUserland
         {
             CheckSocketPath(RuntimeDir, id);
             Userland.CreateRuntimeDir(RuntimeDir);
-            var fds = broker.Lend(ports);
             using var process = Userland.Start(
-                Bin(Dir, "asicend"), [.. AsicenDaemon.FdArguments(fds.Numbers, Firmware, allowLnb: false), "--runtime-dir", RuntimeDir, "--instance", id], fds);
+                Bin(Dir, "asicend"),
+                fds => [.. AsicenDaemon.FdArguments(fds, Firmware, allowLnb: false), "--runtime-dir", RuntimeDir, "--instance", id],
+                () => broker.Lend(ports));
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
             if (!process.WaitForExit(LoadTimeout))
@@ -550,8 +551,11 @@ public static class AsicenUserland
 public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<AsicenDaemon.Selection> select, string program = "asicend")
     : UserlandDaemon("asicend", id)
 {
-    /// <summary>asicend に渡す、機材を選ぶ引数と、継がせる fd (Android)。fd は起動し終えたら閉じる</summary>
-    public sealed record Selection(string[] Args, InheritedFds? Inherit = null);
+    /// <summary>
+    /// asicend に渡す、機材を選ぶ引数。<paramref name="Lend"/> があれば (Android)、起動する直前にそれで fd の複製を作って継がせ、
+    /// その番号を <c>--fd</c> にして <paramref name="Args"/> の前に足す (<see cref="FdOptions"/>)
+    /// </summary>
+    public sealed record Selection(string[] Args, Func<InheritedFds>? Lend = null);
 
     public static AsicenDaemon For(string id) => For(id, () => new AsicenDaemon(
         id, AsicenUserland.Dir, AsicenUserland.RuntimeDir,
@@ -574,13 +578,16 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
     /// **ファームウェアは動いている機材にも渡す** (<c>--firmware</c> は必須。動いている機材には流し込まない。上流 README)
     /// </summary>
     internal static string[] FdArguments(IReadOnlyList<int> fds, string firmware, bool allowLnb) =>
-        [.. fds.SelectMany(fd => (string[])["--fd", fd.ToString(System.Globalization.CultureInfo.InvariantCulture)]),
-            "--firmware", firmware, .. allowLnb ? ["--allow-lnb-power"] : Array.Empty<string>()];
+        [.. FdOptions(fds), "--firmware", firmware, .. allowLnb ? ["--allow-lnb-power"] : Array.Empty<string>()];
+
+    /// <summary>継がせた fd の <c>--fd &lt;番号&gt;</c> を並べたもの (無ければ空)</summary>
+    internal static string[] FdOptions(IReadOnlyList<int> fds) =>
+        [.. fds.SelectMany(fd => (string[])["--fd", fd.ToString(System.Globalization.CultureInfo.InvariantCulture)])];
 
     /// <summary>
     /// 本物の機材を使う引数。**ファームウェアが無ければ起動しない** (asicend が <c>--firmware</c> を必須にしている)。
     /// 給電を許可するのは、設定に LNB 15V があり、上流が給電に対応としている機種のときだけ。
-    /// <paramref name="lend"/> があれば (Android)、筐体の USB 機能の fd を継がせる
+    /// <paramref name="lend"/> があれば (Android)、筐体の USB 機能の fd を継がせる (複製を作るのは起動する直前。<see cref="Userland"/> の Start)
     /// </summary>
     internal static Selection Hardware(
         string id, string firmware, bool wantsLnb, Func<IEnumerable<AsicenUserland.Enclosure>> enclosures,
@@ -594,8 +601,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
             ?? throw new IOException($"ASICEN の筐体 {id} が見つかりません (抜けたか、USB ポートを変えた?)");
         var allowLnb = wantsLnb && AsicenUserland.PowersLnb(enclosure.Model);
         if (lend is null) return new Selection(Arguments(enclosure.Ports, firmware, allowLnb));
-        var fds = lend(enclosure.Ports);
-        return new Selection(FdArguments(fds.Numbers, firmware, allowLnb), fds);
+        return new Selection(FdArguments([], firmware, allowLnb), () => lend(enclosure.Ports));
     }
 
     public override void Ensure()
@@ -611,14 +617,14 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         if (!File.Exists(asicend)) throw new IOException($"asicen-userland が入っていません: {asicend}");
         AsicenUserland.CheckSocketPath(runtimeDir, Id);
         // 機材を並べるのはロックの外で
-        var (args, inherit) = select();
+        var (args, lend) = select();
         var listed = "";
         // asicend は止まるときに給電を切る。前の給電の要求は消して、次の選局でオンにし直す
         AsicenLnb.Forget(Id);
         Listed = null;
         Receivers = null;
         _allowsLnb = args.Contains("--allow-lnb-power");
-        Launch(asicend, [.. args, "--runtime-dir", runtimeDir, "--instance", Id], runtimeDir,
+        Launch(asicend, fds => [.. FdOptions(fds), .. args, "--runtime-dir", runtimeDir, "--instance", Id], runtimeDir,
             () =>
             {
                 var (code, output) = Control("list", TimeSpan.FromSeconds(5));
@@ -637,7 +643,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
                 Write($"{Listed.Model} 受信機 {Listed.Receivers.Count} つ: "
                     + string.Join(", ", Listed.Receivers.Select(receiver => $"#{receiver.Index} {string.Join("/", receiver.Types)}")));
             },
-            hint: Hint, inherit: inherit);
+            Hint, lend);
     }
 
     /// <summary>asicend の終了コード (external-contract §3.7) に、どうすればいいかを添える</summary>

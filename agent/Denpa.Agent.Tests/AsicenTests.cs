@@ -314,13 +314,14 @@ public class AsicenTests
             }
 
             var selection = AsicenDaemon.Hardware("1-2", firmware, true, () => [w3u3], Lend);
-            using var inherit = selection.Inherit!;
+            // 複製を作るのは起動する直前 (Userland.Start の中)。選んだだけでは作らない
+            await Assert.That(lent).IsEmpty();
+            await Assert.That(selection.Args).IsEquivalentTo(new[] { "--firmware", firmware, "--allow-lnb-power" });
+            using var inherit = selection.Lend!();
             await Assert.That(lent).IsEquivalentTo(new[] { "1-2.1", "1-2.2" });
             await Assert.That(inherit.Numbers.Count).IsEqualTo(2);
             var (first, second) = (inherit.Numbers[0].ToString(), inherit.Numbers[1].ToString());
-            await Assert.That(selection.Args)
-                .IsEquivalentTo(new[] { "--fd", first, "--fd", second, "--firmware", firmware, "--allow-lnb-power" });
-            await Assert.That(selection.Args.Contains("--device")).IsFalse();
+            await Assert.That(AsicenDaemon.FdOptions(inherit.Numbers)).IsEquivalentTo(new[] { "--fd", first, "--fd", second });
         }
         finally
         {

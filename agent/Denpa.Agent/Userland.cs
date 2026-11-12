@@ -59,46 +59,44 @@ public static class Userland
     /// </summary>
     internal const int MaxSocketPath = 107;
 
-    /// <summary>fd を継がせて起動する間は、ほかの常駐を起動しない (<see cref="Start"/>)</summary>
+    /// <summary>fd を継がせて起動する間は、ほかの常駐を起動しない (<c>Start</c>)</summary>
     private static readonly Lock SpawnGate = new();
 
+    /// <summary>常駐かそのコマンドを起動する。標準出力と標準エラーは受け取る</summary>
+    internal static Process Start(string program, IReadOnlyList<string> args) => Start(program, _ => args, null);
+
     /// <summary>
-    /// 常駐かそのコマンドを起動する。標準出力と標準エラーは受け取る。<paramref name="inherit"/> があれば、起動し終えたところで閉じる
-    /// (子プロセスは自分の写しを持つ)。起動できなかったときも閉じる。
+    /// fd を継がせて起動する。<paramref name="lend"/> で継がせる fd の複製を作り、その番号から <paramref name="args"/> で引数を組む。
+    /// 複製は起動し終えたところで閉じる (子プロセスは自分の写しを持つ)。起動できなかったときも閉じる。
     ///
     /// <para>
-    /// **継がせる fd を作ってから起動し終えるまでは、ほかの常駐を起動しない。** 同じ時にほかの子プロセスを起動すると、その子も同じ fd を継ぐ
-    /// (.NET の Process.Start は close-on-exec の無い fd を閉じない)。asicend が別の筐体の fd を持ち続けると、その筐体の USB の確保が外れない。
-    /// asicenctl などの短いコマンドが継いでも、終わるまでの間だけ
+    /// **複製を作ってから起動し終えるまでは、ほかの常駐を起動しない** (複製を作るのもこのロックの中)。同じ時にほかの子プロセスを起動すると、
+    /// その子も同じ fd を継ぐ (.NET の Process.Start は close-on-exec の無い fd を閉じない)。asicend が別の筐体の fd を持ち続けると、
+    /// その筐体の USB の確保が外れない。<see cref="Shell.Run"/> で起動する asicenctl などの短いコマンドはこのロックを取らないので、
+    /// 同じ時に起動すると継ぐことがあるが、終わるまでの間だけ
     /// </para>
     /// </summary>
-    internal static Process Start(string program, IReadOnlyList<string> args, InheritedFds? inherit)
+    internal static Process Start(string program, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, Func<InheritedFds>? lend)
     {
-        var start = new ProcessStartInfo(program, args)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            // 診断は UTF-8 (パスに日本語が入りうる)
-            StandardErrorEncoding = System.Text.Encoding.UTF8,
-            UseShellExecute = false,
-        };
         lock (SpawnGate)
         {
-            try
+            using var inherit = lend?.Invoke();
+            var start = new ProcessStartInfo(program, args(inherit?.Numbers ?? []))
             {
-                return Process.Start(start) ?? throw new IOException($"{Path.GetFileName(program)} を起動できません");
-            }
-            finally
-            {
-                inherit?.Dispose();
-            }
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                // 診断は UTF-8 (パスに日本語が入りうる)
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
+                UseShellExecute = false,
+            };
+            return Process.Start(start) ?? throw new IOException($"{Path.GetFileName(program)} を起動できません");
         }
     }
 }
 
 /// <summary>
 /// 子プロセスに継がせる fd (Android でアプリから受け取った USB の機材)。**close-on-exec の無い複製**で、
-/// <see cref="Userland.Start"/> が起動し終えたら閉じる。受け取った元の fd は <see cref="BrokerUsbHost"/> が持ち続ける。
+/// <c>Userland.Start</c> が起動し終えたら閉じる。受け取った元の fd は <see cref="BrokerUsbHost"/> が持ち続ける。
 ///
 /// <para>
 /// .NET 11 の <c>ProcessStartInfo.InheritedHandles</c> は使わない。ほかの fd を閉じるのに <c>close_range</c> (Linux 5.9 から) を使い、
@@ -281,31 +279,24 @@ public abstract class UserlandDaemon(string name, string id)
     /// ここで作る (<see cref="Userland.CreateRuntimeDir"/>)
     /// </summary>
     /// <param name="hint">終了コードに添える手当て (<see cref="AsicenDaemon"/> の Hint など)</param>
-    /// <param name="inherit">継がせる fd (Android)。起動し終えたら閉じる。起動しなかったときも閉じる</param>
     internal void Launch(
-        string program, IReadOnlyList<string> args, string runtimeDir, Func<bool> ready, Action onReady, Func<int, string>? hint = null,
-        InheritedFds? inherit = null)
+        string program, IReadOnlyList<string> args, string runtimeDir, Func<bool> ready, Action onReady, Func<int, string>? hint = null) =>
+        Launch(program, _ => args, runtimeDir, ready, onReady, hint, null);
+
+    /// <param name="args">引数を、継がせた fd の番号から組む (<c>Userland.Start</c>)</param>
+    /// <param name="lend">継がせる fd の複製を作る (Android)。起動する直前に呼ぶ</param>
+    internal void Launch(
+        string program, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, string runtimeDir, Func<bool> ready, Action onReady,
+        Func<int, string>? hint, Func<InheritedFds>? lend)
     {
         lock (_gate)
         {
-            if (Running)
-            {
-                inherit?.Dispose();
-                return;
-            }
+            if (Running) return;
             _process?.Dispose();
             _process = null;
 
-            try
-            {
-                Userland.CreateRuntimeDir(runtimeDir);
-            }
-            catch
-            {
-                inherit?.Dispose();
-                throw;
-            }
-            var process = Userland.Start(program, args, inherit);
+            Userland.CreateRuntimeDir(runtimeDir);
+            var process = Userland.Start(program, args, lend);
             _process = process;
             _stderr = "";
             _ = Task.Run(async () =>
