@@ -36,7 +36,56 @@ permissions:
 # 1台3ワーカー (playwright.config.ts) なので、6台で18ワーカーぶん並びます
 # (中身は待ち時間が大半なので、割った分だけ効く。
 # docs/development.md「並べて流す」)。
+#
+# **PR では、触ったファイルに関係する重いジョブだけ中身を回します** (.github/ci-changes.sh)。
+# Windows・Mac・Android のエミュレータ・配布物 (ffmpeg) は、関係ない PR では回しません。
+# E2E も、エージェントや文書だけの PR では回しません。main への push では全部回します。
 jobs:
+  # 触ったファイルから、中身を回すジョブを決める (.github/ci-changes.sh)。
+  # 飛ばすジョブと理由は、このジョブの Summary に出す
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      e2e: ${{ steps.files.outputs.e2e }}
+      windows: ${{ steps.files.outputs.windows }}
+      macos: ${{ steps.files.outputs.macos }}
+      android: ${{ steps.files.outputs.android }}
+      bundle: ${{ steps.files.outputs.bundle }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/ci-changes.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Classify changed files
+        id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          .github/ci-changes.sh | tee -a "$GITHUB_OUTPUT" > "$RUNNER_TEMP/changes"
+          {
+            echo "| 中身を回すか | ジョブ |"
+            echo "| --- | --- |"
+            while IFS='=' read -r name value; do
+              case "$name" in
+                e2e) jobs="e2e (1)〜(6)" ;;
+                windows) jobs="agent-windows・agent-windows-install" ;;
+                macos) jobs="agent-macos・tray-macos" ;;
+                android) jobs="agent-android" ;;
+                bundle) jobs="server-windows-bundle・server-windows・server-macos-bundle・server-macos" ;;
+              esac
+              if [ "$value" = true ]; then echo "| 回す | $jobs |"; else echo "| 飛ばす (この PR は関係するファイルを触っていない) | $jobs |"; fi
+            done < "$RUNNER_TEMP/changes"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/changes"
+
   # リント・型・単体。**いちばん早く赤くなるところ**なので、先に見えるように分ける
   check:
     runs-on: ubuntu-latest
@@ -123,7 +172,7 @@ jobs:
   # asicen-userland (PX-W3U3 など。試験的) の模擬のデーモンと通信する (AsicenMockTests。機材にもファームウェアにも触らない)。
   # 模擬 (asicend-mock) は配布物に入っていないので、v1.0.0-beta のコミットをここで組む (組むだけで、ソースは変えない)。
   # エージェントが固定しているバージョン (agent/Dockerfile の ASICEN_USERLAND_VERSION) と同じコミットにする。
-  # **必須チェックにはしない** (上流の取得とビルドで揺れる・必須の context を増やさない)
+  # main の ruleset の必須チェックに入っている。上流の取得とビルドで揺れることがある
   agent-asicen-mock:
     runs-on: ubuntu-latest
     env:
@@ -155,8 +204,8 @@ jobs:
         run: ASICEN_USERLAND_DIR="$PWD/asicen-build" dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --treenode-filter '/*/*/AsicenMockTests/*'
 
   # 入れ方 (install.sh) を Linux で通しで。compose.prod.yml を置いて、本物のイメージを引いて起こし、
-  # denpa が答えるまで。最後に外す。**必須チェックにはしない** (イメージを引くので重く、
-  # レジストリの機嫌でも揺れる)。compose ファイルはこのコミットのものを取らせる (DENPA_VERSION)
+  # denpa が答えるまで。最後に外す。main の ruleset の必須チェックに入っている (イメージを引くので、
+  # レジストリの具合でも揺れる)。compose ファイルはこのコミットのものを取らせる (DENPA_VERSION)
   install-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -233,7 +282,7 @@ jobs:
   # Talos Linux の入れ方 (docs/install-talos.md)。実機は無いので、確かめるのは形だけ:
   # talos/install.sh のリント、install.sh と同じバージョンの talosctl で patch.yaml を重ねた
   # machine config を作って validate、install.sh が書く値で chart が描けるか。
-  # **必須チェックにはしない** (talosctl のイメージと Image Factory に頼るので)。Renovate が Talos を
+  # main の ruleset の必須チェックに入っている (talosctl のイメージと Image Factory に頼るので、外の具合で揺れることがある)。Renovate が Talos を
   # 上げたときにここが赤くなったら、docs の ISO の URL か patch.yaml を直す
   talos:
     runs-on: ubuntu-latest
@@ -289,6 +338,8 @@ jobs:
   # Android で動かすエージェント (android.yml が組み、x86_64 をエミュレータで起動して API が答えるかを見る。まだ配らない)。
   # **必須チェックにはしない** (エミュレータは起動や応答の時間がばらつき、コードと関係なく落ちることがある。docs/development.md「Android 向けのエージェント」)
   agent-android:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     uses: ./.github/workflows/android.yml
 
   # Mac (Apple Silicon) で動かすエージェント (docs/install-mac.md)。
@@ -296,16 +347,53 @@ jobs:
   # **Native AOT は Linux から macOS 向けにビルドできない** ので、Mac のランナーでビルドして起こす。
   # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起動して API が答える・入れ方が最後まで通る」まで。
   #
-  # **必須チェックにはしない** (main の ruleset に入れていない)。Mac のランナーは混むと待たされるので、
-  # ここで PR を止めない。赤くなったら Mac で壊れたということなので、見て直す
+  # **PR がエージェント・Mac のメニューバーのアプリ・install.sh を触っていなければ、ubuntu のランナーで走らせて中身を飛ばす**
+  # (.github/ci-changes.sh の macos)。必須チェックなので、ジョブは走らせて成功で終える。Mac のランナーは混むと待たされる。
+  #
+  # SDK と NuGet は actions/cache に置く (agent-windows と同じく、置くのは main だけ。SDK は毎回 30 秒ほどかけて落としていた)
   agent-macos:
-    runs-on: macos-26
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ${{ needs.changes.outputs.macos == 'false' && 'ubuntu-latest' || 'macos-26' }}
     timeout-minutes: 30
+    env:
+      RUN: ${{ needs.changes.outputs.macos != 'false' }}
     steps:
+      - name: Skip
+        if: env.RUN != 'true'
+        run: echo "::notice::この PR はエージェント・Mac のメニューバーのアプリ・install.sh を触っていないので、中身を飛ばしました (.github/ci-changes.sh)"
+
       - name: Checkout
+        if: env.RUN == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Put the SDK and NuGet in the runner's temp
+        if: env.RUN == 'true'
+        id: dirs
+        run: |
+          echo "DOTNET_INSTALL_DIR=$RUNNER_TEMP/dotnet" >> "$GITHUB_ENV"
+          echo "NUGET_PACKAGES=$RUNNER_TEMP/nuget" >> "$GITHUB_ENV"
+          echo "sdk=$(sed -nE 's/.*dotnet-version: "([^"]+)".*/\1/p' .github/workflows/test.yml | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the SDK
+        if: env.RUN == 'true'
+        id: sdk
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/dotnet
+          key: dotnet-sdk-macos-${{ steps.dirs.outputs.sdk }}
+
+      - name: Restore NuGet packages
+        if: env.RUN == 'true'
+        id: nuget
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nuget
+          key: nuget-macos-${{ hashFiles('agent/**/*.csproj') }}
+          restore-keys: nuget-macos-
+
       - name: Set up .NET
+        if: env.RUN == 'true'
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "11.0.100"
@@ -313,17 +401,34 @@ jobs:
       # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
       # 1 本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
       - name: Unit tests (.NET agent)
+        if: env.RUN == 'true'
         timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
 
       # 署名は ad-hoc (`codesign -s -`。リリースと同じ。curl で取ったものには隔離の印が付かないので、Developer ID は要らない)
       - name: Publish (Native AOT, osx-arm64)
+        if: env.RUN == 'true'
         run: |
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
           codesign --force -s - out/denpa-agent
           codesign -v out/denpa-agent
 
+      - name: Save the SDK
+        if: env.RUN == 'true' && github.ref == 'refs/heads/main' && steps.sdk.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/dotnet
+          key: ${{ steps.sdk.outputs.cache-primary-key }}
+
+      - name: Save NuGet packages
+        if: env.RUN == 'true' && github.ref == 'refs/heads/main' && steps.nuget.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nuget
+          key: ${{ steps.nuget.outputs.cache-primary-key }}
+
       - name: Lint install.sh
+        if: env.RUN == 'true'
         run: |
           bash -n install.sh
           brew install shellcheck >/dev/null
@@ -333,6 +438,7 @@ jobs:
       # リーダーが無いので ok:false が返るはず。**落ちずに答える**ことを見る。
       # PC/SC (PCSC.framework) と libc をここで実際に引く
       - name: Smoke test (published binary)
+        if: env.RUN == 'true'
         run: |
           set -euo pipefail
           ./out/denpa-agent --card || true
@@ -377,6 +483,7 @@ jobs:
       # root の LaunchDaemon に載せて API が答えるまで。最後に消す。
       # sudo は環境変数を落とすので -E で渡す (PATH も。ランナーの sudo は PATH を決め直しうる)
       - name: install.sh end to end
+        if: env.RUN == 'true'
         run: |
           set -euo pipefail
           cp agent/Denpa.Agent/firmware/LICENCE.siano out/
@@ -422,6 +529,7 @@ jobs:
 
       # 本体ごと入れるジョブ (server-macos) が同じエージェントを使う
       - name: Upload the agent tarball
+        if: env.RUN == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: denpa-agent-macos
@@ -430,8 +538,10 @@ jobs:
 
   # Mac のメニューバーのアプリ (tray/mac)。/api/health の読み方と文言をテストし、組んで起こし、落ちずに動き続けることを見る
   # (denpa はいないので、斜線の入ったアイコンのまま)。メニューは人が開くものなので見ない。
-  # **必須チェックにはしない** (agent-macos と同じ理由)
+  # **必須チェックにはしない** (Mac のランナーは混むと待たされる)
   tray-macos:
+    needs: changes
+    if: needs.changes.outputs.macos == 'true'
     runs-on: macos-26
     timeout-minutes: 15
     steps:
@@ -471,24 +581,39 @@ jobs:
   # agent-macos と同じく、Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーでビルドして起こす。
   # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起動して API が答える・入れ方が最後まで通る」まで。
   # 入れ方は denpa 本体ごと (下の server-windows-bundle が組んだ zip で)。
-  # **必須チェックにはしない** (agent-macos と同じ理由)
   #
   # **2 つのジョブに分けて同時に流す。** 1 本に並べていた頃は平均 3 分 (遅い回で 4 分半) で、
   # 中身はテスト (agent-windows) と、ビルドして起こす・入れ方を通す (agent-windows-install) の
   # 関係ない 2 つだった。install.ps1 のリントは Windows でなくてよいので install-linux へ移した。
   #
+  # **PR がエージェント・通知領域のアプリ・install.ps1 を触っていなければ、ubuntu のランナーで走らせて中身を飛ばす**
+  # (.github/ci-changes.sh の windows)。必須チェックなので、ジョブは走らせて成功で終える。
+  #
   # **SDK と NuGet は D: に置き、actions/cache で戻す。** setup-dotnet で入れる SDK はランナーの
   # イメージに入っていないので毎回 300MB を落として展開していて、C: への展開だけで 20 秒かかっていた
   # (D: なら 8 秒。ビルドと restore も C: より速い)。キャッシュに当たれば SDK の用意は 10 秒ほどで済む。
-  # 鍵は SDK のバージョンと csproj。バージョンは下の setup-dotnet の行から読む (Renovate が書き換えるのはそこ)
+  # SDK と NuGet は別のキャッシュに置く。SDK の鍵はバージョンだけ (下の setup-dotnet の行から読む。Renovate が書き換えるのはそこ)、
+  # NuGet の鍵は csproj。**置くのは main だけ** (PR が置いたキャッシュはその PR でしか使えず、1 回で 300〜500MB あって、
+  # 10GB の上限を超えるたびに ffmpeg や Playwright のキャッシュが追い出されていた)。csproj を変えた PR は、
+  # main の前の NuGet を戻して足りないぶんだけを取る (restore-keys)
   agent-windows:
-    runs-on: windows-latest
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ${{ needs.changes.outputs.windows == 'false' && 'ubuntu-latest' || 'windows-latest' }}
     timeout-minutes: 20
+    env:
+      RUN: ${{ needs.changes.outputs.windows != 'false' }}
     steps:
+      - name: Skip
+        if: env.RUN != 'true'
+        run: echo "::notice::この PR はエージェント・Windows の通知領域のアプリ・install.ps1 を触っていないので、中身を飛ばしました (.github/ci-changes.sh)"
+
       - name: Checkout
+        if: env.RUN == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Put the SDK and NuGet on D
+        if: env.RUN == 'true'
         id: dirs
         shell: pwsh
         run: |
@@ -497,32 +622,68 @@ jobs:
           $sdk = (Select-String -Path .github/workflows/test.yml -Pattern 'dotnet-version: "([^"]+)"').Matches[0].Groups[1].Value
           "sdk=$sdk" >> $env:GITHUB_OUTPUT
 
-      - name: Restore the SDK and NuGet packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore the SDK
+        if: env.RUN == 'true'
+        id: sdk
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ${{ runner.temp }}\dotnet
-            ${{ runner.temp }}\nuget
-          key: agent-windows-test-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj') }}
+          path: ${{ runner.temp }}\dotnet
+          key: dotnet-sdk-windows-${{ steps.dirs.outputs.sdk }}
+
+      - name: Restore NuGet packages
+        if: env.RUN == 'true'
+        id: nuget
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\nuget
+          key: nuget-windows-test-${{ hashFiles('agent/**/*.csproj') }}
+          restore-keys: nuget-windows-test-
 
       - name: Set up .NET
+        if: env.RUN == 'true'
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "11.0.100"
 
       # Linux でしか意味の無いテスト (sysfs・/dev のパス・libc の pipe・/bin/sh の偽物) は中で飛ばしてある。
       - name: Unit tests (.NET agent)
+        if: env.RUN == 'true'
         timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
 
+      # SDK はこのジョブだけが置く (agent-windows-install と同じ鍵なので、両方から置くと片方は「もうある」で断られる)
+      - name: Save the SDK
+        if: env.RUN == 'true' && github.ref == 'refs/heads/main' && steps.sdk.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\dotnet
+          key: ${{ steps.sdk.outputs.cache-primary-key }}
+
+      - name: Save NuGet packages
+        if: env.RUN == 'true' && github.ref == 'refs/heads/main' && steps.nuget.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\nuget
+          key: ${{ steps.nuget.outputs.cache-primary-key }}
+
   agent-windows-install:
-    runs-on: windows-latest
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ${{ needs.changes.outputs.windows == 'false' && 'ubuntu-latest' || 'windows-latest' }}
     timeout-minutes: 20
+    env:
+      RUN: ${{ needs.changes.outputs.windows != 'false' }}
     steps:
+      - name: Skip
+        if: env.RUN != 'true'
+        run: echo "::notice::この PR はエージェント・Windows の通知領域のアプリ・install.ps1 を触っていないので、中身を飛ばしました (.github/ci-changes.sh)"
+
       - name: Checkout
+        if: env.RUN == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Put the SDK and NuGet on D
+        if: env.RUN == 'true'
         id: dirs
         shell: pwsh
         run: |
@@ -530,38 +691,71 @@ jobs:
           "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" >> $env:GITHUB_ENV
           $sdk = (Select-String -Path .github/workflows/test.yml -Pattern 'dotnet-version: "([^"]+)"').Matches[0].Groups[1].Value
           "sdk=$sdk" >> $env:GITHUB_OUTPUT
+          # ランナーのイメージのバージョン (wdi-simple のキャッシュの鍵)
+          "image=$env:ImageOS-$env:ImageVersion" >> $env:GITHUB_OUTPUT
 
-      # 鍵はテストのジョブと分ける。中の NuGet が違う (こちらは ILCompiler、あちらは TUnit) ので、
-      # 同じ鍵だと先に置いたほうだけが残る
-      - name: Restore the SDK and NuGet packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # SDK は agent-windows と同じキャッシュ (置くのはあちら)
+      - name: Restore the SDK
+        if: env.RUN == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ${{ runner.temp }}\dotnet
-            ${{ runner.temp }}\nuget
-          key: agent-windows-publish-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj', 'tray/**/*.csproj') }}
+          path: ${{ runner.temp }}\dotnet
+          key: dotnet-sdk-windows-${{ steps.dirs.outputs.sdk }}
+
+      # NuGet の鍵はテストのジョブと分ける。中の NuGet が違う (こちらは ILCompiler、あちらは TUnit) ので、
+      # 同じ鍵だと先に置いたほうだけが残る
+      - name: Restore NuGet packages
+        if: env.RUN == 'true'
+        id: nuget
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\nuget
+          key: nuget-windows-publish-${{ hashFiles('agent/**/*.csproj', 'tray/**/*.csproj') }}
+          restore-keys: nuget-windows-publish-
 
       - name: Set up .NET
+        if: env.RUN == 'true'
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "11.0.100"
 
       - name: Publish (Native AOT, win-x64)
+        if: env.RUN == 'true'
         run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -o out
 
       # 通知領域のアイコン (tray/Denpa.Tray)。エージェントと同じ zip に入れる
       - name: Publish the tray (Native AOT, win-x64)
+        if: env.RUN == 'true'
         run: dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
 
+      - name: Save NuGet packages
+        if: env.RUN == 'true' && github.ref == 'refs/heads/main' && steps.nuget.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\nuget
+          key: ${{ steps.nuget.outputs.cache-primary-key }}
+
       # wdi-simple.exe (libwdi。Zadig のコマンドライン版)。リリースと同じスクリプトで、決めたタグのソースからビルドする
-      # (取ってくるものはコミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)。エージェントと同じ zip に入れる
+      # (取ってくるものはコミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)。エージェントと同じ zip に入れる。
+      # **組んだものは actions/cache に置き、スクリプトかランナーのイメージ (MSVC のバージョン) が変わるまで使い回す**
+      # (組むと 40 秒ほど。イメージは週に 1 回ほど上がるので、新しい MSVC で組めるかはそのたびに見る)
+      - name: Restore wdi-simple
+        if: env.RUN == 'true'
+        id: wdi
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: out\libwdi
+          key: wdi-simple-${{ steps.dirs.outputs.image }}-${{ hashFiles('scripts/build-wdi-simple.ps1') }}
+
       - name: Build wdi-simple (libwdi)
+        if: env.RUN == 'true' && steps.wdi.outputs.cache-hit != 'true'
         shell: pwsh
         run: ./scripts/build-wdi-simple.ps1 -Out out\libwdi
 
       # 起こして、落ちずに動き続けることを見る (denpa はいないので、注意のアイコンのまま)。メニューは人が開くものなので見ない。
       # 2 つ目は二重に起こしたときで、すぐ終わる
       - name: Smoke test (tray)
+        if: env.RUN == 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -579,6 +773,7 @@ jobs:
       # HTTPS (SChannel) で受けて、denpa と同じように組めることもここで見る (docs/agent.md「denpa とは TLS で組む」)。
       # 組む手順は .NET の暗号を直に使うので pwsh (PowerShell 7) で流す
       - name: Smoke test (published binary)
+        if: env.RUN == 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -639,6 +834,7 @@ jobs:
       # 1 回目は irm | iex と同じやり方 (取ってきた中身を scriptblock にして) で流す。2 回目は上げ直し
       # (動いているエージェントを止めて入れ替える)。最後に外す
       - name: install.ps1 end to end
+        if: env.RUN == 'true'
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -721,6 +917,7 @@ jobs:
 
       # 本体ごと入れるジョブ (server-windows) が同じエージェントを使う
       - name: Upload the agent zip
+        if: env.RUN == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: denpa-agent-windows
@@ -729,14 +926,17 @@ jobs:
 
   # **Windows でそのまま動かす denpa 本体の配布物** (windows-server.yml が組む。リリースと同じ組み方)
   server-windows-bundle:
+    needs: changes
+    if: needs.changes.outputs.bundle == 'true'
     uses: ./.github/workflows/windows-server.yml
 
-  # 配布物を Windows のランナーで確かめる。**必須チェックにはしない** (agent-windows と同じ理由)。
+  # 配布物を Windows のランナーで確かめる。**必須チェックにはしない** (Windows のランナーは混むと待たされる)。
   # 1. 同梱の ffmpeg で denpa の経路を流し、同梱の ffprobe で denpa が読む形式を読み、名前付きパイプで受ける進み具合と、スリープを止める呼び出しを見る (tests/native-smoke.ts)
   # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
   # 3. install.ps1 で本体ごと入れて (タスクは SYSTEM)、本体がエージェントと組めるか。上げ直して、外す
   server-windows:
-    needs: [server-windows-bundle, agent-windows-install]
+    needs: [changes, server-windows-bundle, agent-windows-install]
+    if: needs.changes.outputs.bundle == 'true'
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -876,9 +1076,11 @@ jobs:
 
   # **Mac でそのまま動かす denpa 本体の配布物** (macos-server.yml が組む。リリースと同じ組み方)
   server-macos-bundle:
+    needs: changes
+    if: needs.changes.outputs.bundle == 'true'
     uses: ./.github/workflows/macos-server.yml
 
-  # 配布物を Mac のランナーで確かめる。**必須チェックにはしない** (agent-macos と同じ理由)。
+  # 配布物を Mac のランナーで確かめる。**必須チェックにはしない** (Mac のランナーは混むと待たされる)。
   # Mac のランナーは混むので、確かめることは 1 つのジョブにまとめる (server-windows と同じ並び)。
   # 1. 同梱の ffmpeg で denpa の経路を流し、同梱の ffprobe で denpa が読む形式を読み、VideoToolbox が組み込まれていること、GPU で試せなければソフトウェアに戻ること、
   #    fd 3 の進み具合、スリープを止める呼び出しと、録画の前に起こす予約を見る (tests/native-smoke.ts。予約は root が要るので sudo で)
@@ -886,7 +1088,8 @@ jobs:
   # 3. 前のバージョン (本体が Docker) から移る形で install.sh を流し (偽の docker。tests/install-mac-migrate.sh)、本体ごと入れて
   #    (LaunchDaemon は root)、本体がエージェントと組めるか。上げ直して、外す
   server-macos:
-    needs: [server-macos-bundle, agent-macos, tray-macos]
+    needs: [changes, server-macos-bundle, agent-macos, tray-macos]
+    if: needs.changes.outputs.bundle == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -1037,30 +1240,53 @@ jobs:
         # **組を増やしたら、main の ruleset の必須チェックにも `e2e (n)` を足すこと** (足さないと
         # 増やした組が落ちていてもマージできてしまう。bump の PR は ruleset から引くので直さなくてよい)
         shard: [1, 2, 3, 4, 5, 6]
+    # 触ったファイルを読む (下の「中身を回すか」)
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # **PR がアプリを触っていなければ (エージェント・文書・入れ方だけなら)、中身を飛ばす** (.github/ci-changes.sh の e2e)。
+      # 必須チェックなので、ジョブは走らせて成功で終える。changes ジョブを待たずに、ここで決める (E2E の始まりを遅らせない)
+      - name: 中身を回すか
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          run=$(.github/ci-changes.sh | sed -n 's/^e2e=//p')
+          echo "RUN=$run" >> "$GITHUB_ENV"
+          if [ "$run" != true ]; then
+            echo "::notice::この PR はアプリを触っていない (エージェント・文書・入れ方だけ) ので、E2E を飛ばしました (.github/ci-changes.sh)"
+          fi
+
       - name: Read bun version from Dockerfile
+        if: env.RUN == 'true'
         id: bun
         run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
 
       - name: Set up bun
+        if: env.RUN == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ steps.bun.outputs.version }}
 
       - name: Install dependencies
+        if: env.RUN == 'true'
         run: bun install --frozen-lockfile
 
       # ブラウザは 270MB ほどあり、毎回落とすと1分近く持っていかれる。
       # 中身は Playwright のバージョンでしか変わらないので、それを鍵にする。
       # **割った先どうしで使い回せている** (実測で 269MB を7秒で復元)
       - name: Read Playwright version
+        if: env.RUN == 'true'
         id: playwright
         run: echo "version=$(bun pm ls | grep -oP '@playwright/test@\K[^\s]+' | head -1)" >> "$GITHUB_OUTPUT"
 
       - name: Restore Playwright browser
+        if: env.RUN == 'true'
         id: playwright-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1081,7 +1307,7 @@ jobs:
       # ランナーの中身が変わってライブラリが欠けたら、ブラウザが起動できずに
       # 落ちる。そのときは足りないものだけを apt で入れる (総当たりに戻さない)
       - name: Install Playwright browser
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        if: env.RUN == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
         timeout-minutes: 4
         run: bunx playwright install chromium
 
@@ -1091,6 +1317,7 @@ jobs:
       # 同じ行を取り合ってぶつかる。足した PR では 5 組に寄るだけなので、所要時間を見て
       # あとで割り直せばよい (どれが寄ったかは注記に出す)
       - name: 組分けの検算
+        if: env.RUN == 'true'
         id: specs
         env:
           SHARD: ${{ matrix.shard }}
@@ -1123,6 +1350,7 @@ jobs:
       # 上の2つを変えた PR と、それが main に入った直後の1回だけ。組が同時に組んでも
       # 置けるのは1つで、残りは「もうある」と言って置かずに進む)
       - name: Key for the MPEG-2 decoder (WASM)
+        if: env.RUN == 'true'
         id: mpeg2
         run: |
           stage=$(sed -n '/ AS mpeg2wasm$/,/^COPY --from=mpeg2wasm /p' Dockerfile)
@@ -1130,6 +1358,7 @@ jobs:
           echo "stage=$(printf '%s' "$stage" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
       - name: Restore the MPEG-2 decoder (WASM)
+        if: env.RUN == 'true'
         id: mpeg2-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1137,11 +1366,11 @@ jobs:
           key: mpeg2wasm-${{ steps.mpeg2.outputs.stage }}-${{ hashFiles('wasm/**') }}
 
       - name: Build the MPEG-2 decoder (WASM)
-        if: steps.mpeg2-cache.outputs.cache-hit != 'true'
+        if: env.RUN == 'true' && steps.mpeg2-cache.outputs.cache-hit != 'true'
         run: docker build --target mpeg2wasm-out --output "type=local,dest=$RUNNER_TEMP/mpeg2" .
 
       - name: Save the MPEG-2 decoder (WASM)
-        if: steps.mpeg2-cache.outputs.cache-hit != 'true'
+        if: env.RUN == 'true' && steps.mpeg2-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/mpeg2
@@ -1152,6 +1381,7 @@ jobs:
       # **6 組は 1 ワーカー。** ライブの貯め方 (50-live-pacing・51-live-gaps) は、ほかのワーカーが動くと届く間隔が乱れて
       # 落ちるので、2 本を順に流す (shards.json の注記)
       - name: E2E tests
+        if: env.RUN == 'true'
         env:
           MPEG2_DIR: ${{ runner.temp }}/mpeg2
           WORKERS: ${{ matrix.shard == 6 && '--workers=1' || '' }}
