@@ -117,7 +117,7 @@ android {
             useLegacyPackaging = true
             /*
              * bun は公式の配布物のまま入れる (SHA-256 で確かめたものと同じ中身にする)。113 MB を llvm-strip に通す時間もかからない。
-             * APK の中では圧縮される (useLegacyPackaging のとき jniLibs は deflate で入る) ので、APK に増えるのは arm64 で約 49 MB。
+             * APK の中では圧縮される (useLegacyPackaging のとき jniLibs は deflate で入る) ので、APK に増えるのは arm64 で約 53 MB。
              * 端末には展開した 113 MB が置かれる。展開しないと exec できないので、ここは縮められない
              */
             keepDebugSymbols += "**/libbun.so"

@@ -327,7 +327,7 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
   バージョンが `agent/Dockerfile` と、組んだコミットが test.yml の `ASICEN_USERLAND_REF` と違えば止まります。置かなければ asicen-userland の無い APK になります
 - bun は `android/bun/` に置くと APK に入ります (`DENPA_BUN` で別の置き場も渡せます)。`bash .github/bun-android.sh android/bun arm64 x86_64` が、
   公式の Android 版を SHA-256 で確かめて取り、`jniLibs/<ABI>/libbun.so` とライセンスの文書を並べます。x86_64 は CI のエミュレータ用で、AVX2 を使わない baseline を入れます。
-  bun は配布物のまま入れます (`keepDebugSymbols`)。jniLibs は APK の中では圧縮されるので、増えるのは arm64 で約 49 MB です。端末には展開した 113 MB が置かれます
+  bun は配布物のまま入れます (`keepDebugSymbols`)。jniLibs は APK の中では圧縮されるので、増えるのは arm64 で約 53 MB です。端末には展開した 113 MB が置かれます
 - 常駐サービスは、APK の assets に `server/` があれば、それを `files/denpa/server/` に書き出して `bun server/…/app/server.js` を部品として起動します (`Server.kt`)。
   置き場 (`DENPA_HOME`)・`HOME`・`TMPDIR` はエージェントと同じで、待ち受けるのは `PORT` (3000) です。出力は logcat の `denpa-server` に出ます。
   いまのリリースの APK には `server/` が無く、bun は起動しません。debug の APK にだけ、確かめ用の小さなサーバ (`src/debug/assets/server/app/server.js`) が入ります
