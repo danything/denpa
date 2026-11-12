@@ -9,7 +9,7 @@ import java.io.IOException
 import kotlin.concurrent.thread
 
 /**
- * 常駐サービスが子プロセスとして起動する「部品」。エージェント (1 段目) と、bun で動かすサーバ (2 段目から。[Server]) がある。
+ * 常駐サービスが子プロセスとして起動する「部品」。エージェントと、bun で動かす denpa 本体 ([Server]) がある。
  *
  * - **`/system/bin/sh -c 'echo $$; exec "$0" "$@"'` で起動し、最初の行で PID を受け取る。** `Process.pid()` は minSdk 29 では使えない。
  *   exec は PID を変えないので、受け取った PID に [Os.kill] で SIGTERM を送れば部品に届く

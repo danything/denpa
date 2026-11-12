@@ -13,3 +13,5 @@ asicen-userland/
 bun/
 # ffmpeg・ffprobe と libav* (CI が .github/ffmpeg-android.sh で組んで置く。app/build.gradle.kts の DENPA_FFMPEG)
 ffmpeg/
+# denpa 本体 (CI が Dockerfile の native-files 段を assets/server.zip にして置く。app/build.gradle.kts の DENPA_SERVER)
+server/

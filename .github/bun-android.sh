@@ -13,7 +13,8 @@
 # x86_64 は CI のエミュレータ用で、baseline (AVX2 を使わない版) を入れる。エミュレータの CPU が AVX2 を見せるとは限らないため。
 # アーカイブと LICENSE.md の SHA-256 は下に固定する (アーカイブは上流の SHASUMS256.txt にも同じ値がある)。バージョンを上げるときは一緒に入れ替える。
 # Renovate は別の PR に分け、自動ではマージしない (renovate.json。PR は SHA-256 が合わずに CI で落ちる)。
-# denpa の Dockerfile の bun (`oven/bun`) とバージョンがずれていたら警告を出す (3 段目で denpa 本体を動かすまでは止めない)
+# **denpa の Dockerfile の bun (`oven/bun`) とバージョンがずれていたら止める。** APK の denpa 本体はコンテナと同じ bun で動かすため
+# (Renovate がどちらか片方を上げた PR は、もう片方を揃えるまで CI が落ちる)
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -30,7 +31,8 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 
 docker=$(grep -oP 'oven/bun:\K[^-\s@]+' "$root/Dockerfile" | head -1)
 if [ "$docker" != "$BUN_VERSION" ]; then
-  echo "::warning::Dockerfile の bun ($docker) と、Android のアプリに入れる bun ($BUN_VERSION) のバージョンが違います (.github/bun-android.sh)"
+  echo "::error::Dockerfile の bun ($docker) と、Android のアプリに入れる bun ($BUN_VERSION) のバージョンが違います。揃えてください (.github/bun-android.sh)"
+  exit 1
 fi
 
 base="https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION"

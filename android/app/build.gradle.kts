@@ -27,6 +27,9 @@ val agentLicenses = System.getenv("DENPA_AGENT_LICENSES")?.takeIf { it.isNotEmpt
     ?: rootProject.layout.projectDirectory.dir("agent-licenses").asFile.path
 val sianoLicence = rootProject.layout.projectDirectory.file("../agent/Denpa.Agent/firmware/LICENCE.siano")
 
+/** denpa (アプリと denpa 本体) の LICENSE (AGPL-3.0-or-later)。同じく `assets/licenses/` に入れる */
+val denpaLicense = rootProject.layout.projectDirectory.file("../LICENSE")
+
 /*
  * asicen-userland (ASICEN 系。試験的) の置き場。CI が .github/asicen-android.sh で、上流の Android 版を `jniLibs/<ABI>/libasicend.so`・
  * `libasicenctl.so` に、ファームウェアを `assets/asicen/` に、ライセンスの文書とソースの入手先を `assets/licenses/asicen-userland/` に並べる。
@@ -36,20 +39,28 @@ val asicen = System.getenv("DENPA_ASICEN")?.takeIf { it.isNotEmpty() }
     ?: rootProject.layout.projectDirectory.dir("asicen-userland").asFile.path
 
 /*
- * bun (2 段目から。サーバを動かす) の置き場。CI が .github/bun-android.sh で、公式の Android 版を `jniLibs/<ABI>/libbun.so` に、
+ * bun (denpa 本体を動かす) の置き場。CI が .github/bun-android.sh で、公式の Android 版を `jniLibs/<ABI>/libbun.so` に、
  * ライセンスの文書を `assets/licenses/bun/` に並べる。既定は android/bun/ (リポジトリには入れない)。`DENPA_BUN` で別の置き場を渡せる。
- * 無ければ入れずに組む (サーバは起動しない)
+ * 無ければ入れずに組む (denpa 本体は起動しない)
  */
 val bun = System.getenv("DENPA_BUN")?.takeIf { it.isNotEmpty() }
     ?: rootProject.layout.projectDirectory.dir("bun").asFile.path
 
 /*
- * ffmpeg・ffprobe (3 段目から。denpa 本体がエンコードと読み取りに使う) の置き場。CI が .github/ffmpeg-android.sh で NDK で組み、
+ * ffmpeg・ffprobe (denpa 本体がエンコードと読み取りに使う) の置き場。CI が .github/ffmpeg-android.sh で NDK で組み、
  * 実行ファイルを `jniLibs/<ABI>/libffmpeg.so`・`libffprobe.so` に、共有ライブラリの libav* を同じ置き場に、ライセンスの文書とソースの入手先を
  * `assets/licenses/ffmpeg/` に並べる。既定は android/ffmpeg/ (リポジトリには入れない)。`DENPA_FFMPEG` で別の置き場を渡せる。無ければ入れずに組む
  */
 val ffmpeg = System.getenv("DENPA_FFMPEG")?.takeIf { it.isNotEmpty() }
     ?: rootProject.layout.projectDirectory.dir("ffmpeg").asFile.path
+
+/*
+ * denpa 本体 (3 段目) の置き場。CI が Dockerfile の `native-files` 段 (`app/`・`font/`・`mpeg2/`) を 1 つの zip にして `assets/server.zip` に置く
+ * (android.yml)。zip にするのは、AGP が assets の `_` で始まるディレクトリ (SvelteKit の `_app/`) を入れないため。
+ * 既定は android/server/ (リポジトリには入れない)。`DENPA_SERVER` で別の置き場を渡せる。無ければ入れずに組む (エージェントだけが動く)
+ */
+val server = System.getenv("DENPA_SERVER")?.takeIf { it.isNotEmpty() }
+    ?: rootProject.layout.projectDirectory.dir("server").asFile.path
 
 /** ライセンスの文書を `licenses/` に並べた assets の置き場を作る */
 abstract class LicenseAssets : DefaultTask() {
@@ -69,7 +80,7 @@ abstract class LicenseAssets : DefaultTask() {
 }
 
 val licenseAssets = tasks.register<LicenseAssets>("licenseAssets") {
-    sources.from(sianoLicence, fileTree(agentLicenses))
+    sources.from(denpaLicense, sianoLicence, fileTree(agentLicenses))
 }
 
 /*
@@ -153,6 +164,7 @@ androidComponents {
         variant.sources.assets?.addStaticSourceDirectory("$asicen/assets")
         variant.sources.assets?.addStaticSourceDirectory("$bun/assets")
         variant.sources.assets?.addStaticSourceDirectory("$ffmpeg/assets")
+        variant.sources.assets?.addStaticSourceDirectory("$server/assets")
     }
 }
 

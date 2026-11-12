@@ -11,9 +11,10 @@ name: Android
 #    `libasicend.so`・`libasicenctl.so` の名前で入れる (.github/asicen-android.sh。SHA-256 を固定して取る)。CI は両方の ABI を入れ、
 #    lint と単体テストも流し、R8 で縮める release も debug の鍵で組む。リリースは arm64 だけを入れ、リリースの鍵で署名する。
 #    bun の公式の Android 版も `libbun.so` の名前で入れる (.github/bun-android.sh。SHA-256 を固定して取る)。x86_64 は CI のエミュレータ用。
-#    ffmpeg・ffprobe は NDK で組み (.github/ffmpeg-android.sh。2 と並べて流す)、`libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリを入れる
+#    ffmpeg・ffprobe は NDK で組み (.github/ffmpeg-android.sh。2 と並べて流す)、`libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリを入れる。
+#    denpa 本体 (Dockerfile の native-files 段) を `assets/server.zip` に入れる。常駐サービスが書き出して bun で起動する
 # 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・asicend の起動・
-#    bun の起動・ffmpeg と ffprobe (tests/native-smoke.ts を bun で流す)・「終了」・端末の起動を確かめる (.github/android-app-smoke.sh)。
+#    bun の起動・ffmpeg と ffprobe (tests/native-smoke.ts を bun で流す)・denpa 本体の起動とエージェントと組むこと・更新・「終了」・端末の起動を確かめる (.github/android-app-smoke.sh)。
 #    arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)。リリースでは流さない (同じコミットを main で確かめてある)
 #
 # 組むのは呼んだ workflow のコミット (リリースならタグ)。コミットを入力で受けて取り出すことはしない (windows-server.yml と同じく、キャッシュを汚させない)
@@ -301,9 +302,35 @@ jobs:
           path: ffmpeg-out/
           retention-days: 3
 
+  # denpa 本体 (Dockerfile の `native-files` 段。アプリ・字・デコーダ)。macos-server.yml・windows-server.yml と同じく、main のビルドが置いたキャッシュ (amd64) から組む。
+  # OS に依らないので、どの ABI の APK にも同じものを入れる
+  files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build
+        run: |
+          docker buildx build --target native-files --platform linux/amd64 \
+            --cache-from "type=registry,ref=ghcr.io/${{ github.repository_owner }}/denpa:buildcache-amd64" \
+            --output type=local,dest=files .
+          find files -maxdepth 2 | sort
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-server-files
+          path: files
+          retention-days: 3
+
   # アプリ (android/)。CI は debug の鍵で署名する。リリースはリリースの鍵で署名し、arm64 の APK だけを渡す (release.yml が添える)
   app:
-    needs: [agent, ffmpeg]
+    needs: [agent, ffmpeg, files]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -348,6 +375,25 @@ jobs:
           name: ffmpeg-android-x86_64
           path: android/ffmpeg
 
+      # denpa 本体は 1 つの zip にして android/server/assets/server.zip に置く (android/app/build.gradle.kts の DENPA_SERVER)。
+      # zip にするのは、AGP が assets の `_` で始まるディレクトリ (SvelteKit の `_app/`) を APK に入れないため
+      - name: Download denpa
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-server-files
+          path: server-files
+
+      - name: Pack denpa
+        run: |
+          set -euo pipefail
+          for f in app/server.js app/build/index.js font/denpa-font.woff2 mpeg2/decoder.wasm; do
+            test -f "server-files/$f" || { echo "$f がありません" >&2; exit 1; }
+          done
+          mkdir -p android/server/assets
+          (cd server-files && zip -qrX ../android/server/assets/server.zip app font mpeg2)
+          echo "$(find server-files -type f | wc -l) ファイル"
+          ls -l android/server/assets/server.zip
+
       # エージェントは jniLibs の `<ABI>/libdenpa_agent.so` に、OpenSSL のライセンスの文書は agent-licenses/ に置く
       # (android/app/build.gradle.kts の DENPA_AGENT_LIBS・DENPA_AGENT_LICENSES)
       - name: Build APK (lint, unit tests, debug, release)
@@ -374,13 +420,13 @@ jobs:
             grep -E ' assets/asicen/asicen-loader\.bin$' apk.txt
             grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
             grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt
+            grep -E ' assets/licenses/LICENSE$' apk.txt
             grep -E ' assets/licenses/bun/LICENSE\.md$' apk.txt
             grep -E ' assets/licenses/ffmpeg/(SOURCE\.txt|versions\.txt|ffmpeg/COPYING\.GPLv3|x264/COPYING)$' apk.txt | wc -l | grep -qx 4
             grep -E ' assets/licenses/asicen-userland/(LICENSE|SOURCE\.txt|COPYING\.libusb|VENDOR-FIRMWARE-NOTICE\.txt)$' apk.txt | wc -l | grep -qx 4
+            # denpa 本体 (debug にも release にも入る)
+            grep -E ' assets/server\.zip$' apk.txt
           done
-          # bun で動かす確かめ用のサーバは debug にだけ入る (android/app/src/debug/assets/server/)
-          if unzip -l app/build/outputs/apk/release/app-release.apk | grep -E ' assets/server/'; then exit 1; fi
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -E ' assets/server/app/server\.js$'
           ls -l app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk
           # 証明書の突き合わせは、リリースと同じ手順 (.github/android-apk-cert.sh) で流す。比べるのは、AGP がこのランナーで作った debug の鍵の証明書
           debug_cert=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -alias androiddebugkey -storepass android | sha256sum | cut -c1-64)
@@ -430,11 +476,12 @@ jobs:
           grep -E ' assets/asicen/asicen-loader\.bin$' apk.txt
           grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
           grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt
+          grep -E ' assets/licenses/LICENSE$' apk.txt
           grep -E ' assets/licenses/asicen-userland/SOURCE\.txt$' apk.txt
           grep -E ' assets/licenses/bun/LICENSE\.md$' apk.txt
           grep -E ' assets/licenses/ffmpeg/(SOURCE\.txt|versions\.txt|ffmpeg/COPYING\.GPLv3|x264/COPYING)$' apk.txt | wc -l | grep -qx 4
-          # 確かめ用のサーバ (debug にだけ入る) が無いこと。3 段目で denpa 本体が入るまで、リリースの APK は bun を起動しない
-          if grep -E ' assets/server/' apk.txt; then exit 1; fi
+          # denpa 本体
+          grep -E ' assets/server\.zip$' apk.txt
           bash ../.github/android-apk-cert.sh "$apk" "$CERT_SHA256"
           mkdir -p ../dist
           asset="denpa-${TAG#v}-android-arm64.apk"

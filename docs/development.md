@@ -284,7 +284,7 @@ ffmpeg・SVT-AV1・emsdk・Denpa Font・asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
 Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
 アプリに入れる ffmpeg は Dockerfile の `ffmpeg` 段からバージョンと部品を読み、x264・dav1d・zimg のバージョンは `.github/ffmpeg-android.sh` に書いています (Mac の `ffmpeg-macos.sh` と同じ)。
-`bun-android.sh` のバージョンは Dockerfile の `oven/bun` と別に Renovate が上げ、ずれている間は Android の CI が警告を出します。
+`bun-android.sh` のバージョンは Dockerfile の `oven/bun` と別に Renovate が上げます。APK の denpa 本体もコンテナと同じ bun で動かすので、ずれている間は Android の CI が落ちます。両方の PR をそろえてからマージします。
 
 **土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は
 `名前:タグ@sha256:…`、ワークフローの `uses:` は `@<コミットの SHA> # vX.Y.Z` の形にします。
@@ -316,7 +316,7 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 
 ## Android のアプリ
 
-**Android で denpa を動かすアプリは `android/` の Gradle のプロジェクトです (パッケージは `io.github.danything.denpa`)。** 画面は持たず、常駐サービスがエージェントを子プロセスとして起動します。
+**Android で denpa を動かすアプリは `android/` の Gradle のプロジェクトです (パッケージは `io.github.danything.denpa`)。** 画面は持たず、常駐サービスがエージェントと denpa 本体 (bun) を子プロセスとして起動します。
 使い方は [install-android.md](install-android.md)、エージェントとの取り決めは [agent.md](agent.md#android-でアプリから-usb-を受け取る) にあります。
 
 - Kotlin で、Android の標準の API (`android.*`) だけで書きます。AndroidX も使わず、APK に入る依存は Kotlin の標準ライブラリだけです。
@@ -329,9 +329,11 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 - bun は `android/bun/` に置くと APK に入ります (`DENPA_BUN` で別の置き場も渡せます)。`bash .github/bun-android.sh android/bun arm64 x86_64` が、
   公式の Android 版を SHA-256 で確かめて取り、`jniLibs/<ABI>/libbun.so` とライセンスの文書を並べます。x86_64 は CI のエミュレータ用で、AVX2 を使わない baseline を入れます。
   bun は配布物のまま入れます (`keepDebugSymbols`)。jniLibs は APK の中では圧縮されるので、増えるのは arm64 で約 53 MB です。端末には展開した 113 MB が置かれます
-- 常駐サービスは、APK の assets に `server/` があれば、それを `files/denpa/server/` に書き出して `bun server/…/app/server.js` を部品として起動します (`Server.kt`)。
-  置き場 (`DENPA_HOME`)・`HOME`・`TMPDIR` はエージェントと同じで、待ち受けるのは `PORT` (3000) です。出力は logcat の `denpa-server` に出ます。
-  いまのリリースの APK には `server/` が無く、bun は起動しません。debug の APK にだけ、確かめ用の小さなサーバ (`src/debug/assets/server/app/server.js`) が入ります
+- denpa 本体は `android/server/assets/server.zip` に置くと APK に入ります (`DENPA_SERVER` で別の置き場も渡せます)。中身は Dockerfile の `native-files` 段 (`app/`・`font/`・`mpeg2/`) を
+  1 つの zip にしたものです。zip にするのは、AGP が assets の `_` で始まるディレクトリ (SvelteKit の `_app/`) を APK に入れないためです。
+  常駐サービスはこれを `files/denpa/server/<versionCode>-<更新した時刻>/` に書き出し、`bun app/server.js` を部品として起動します (`Server.kt`)。
+  環境変数は Mac の `denpa.sh` と同じ並びで、人が足すものは外部ストレージの `denpa.env` から読みます ([install-android.md](install-android.md#環境変数を足す-denpaenv))。
+  出力は logcat の `denpa-server` に出ます。置かなければ、エージェントだけが動く APK になります
 - ffmpeg は `android/ffmpeg/` に置くと APK に入ります (`DENPA_FFMPEG` で別の置き場も渡せます)。`.github/ffmpeg-android.sh` が NDK で組み、
   `jniLibs/<ABI>/libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリ、ライセンスの文書とソースの入手先を並べます ([encode.md](encode.md#android-でエンコードする))。
   CI は組み上がりを actions/cache に置き、Dockerfile の `ffmpeg` 段・組むスクリプト・NDK が変わるまで使い回します (依存は別のキャッシュ。Mac と同じ作り)。
@@ -339,13 +341,17 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 - 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と asicen-userland の機材
   (`AsicenUserland.UsbIds`) と食い違わないことを、エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
 - debug の APK にだけ、エミュレータで確かめるための受け口 (`src/debug/` の `DebugReceiver`) が入ります。USB の機材の代わりにファイルの fd を送ること、
-  通知の「終了」を押すこと、エージェントの異常終了の代わりに SIGKILL を送ることを `adb shell am broadcast` で代えます。DUMP の権限を持つもの (adb shell) からしか送れません
+  通知の「終了」を押すこと、エージェントの異常終了の代わりに SIGKILL を送ること、アプリの置き場のスクリプトを denpa 本体と同じ起動の仕方の bun で流すことを
+  `adb shell am broadcast` で代えます。DUMP の権限を持つもの (adb shell) からしか送れません
 
 手元で組むなら、JDK と Android SDK を入れ、エージェント (上の節) を置いてから流します。
 
 ```sh
 mkdir -p android/agent-libs/arm64-v8a && cp out/denpa-agent android/agent-libs/arm64-v8a/libdenpa_agent.so
 bash .github/bun-android.sh android/bun arm64
+# denpa 本体 (native-files 段) を zip にして置く。置かなければエージェントだけが動く
+docker buildx build --target native-files --output type=local,dest=files .
+mkdir -p android/server/assets && (cd files && zip -qr ../android/server/assets/server.zip app font mpeg2)
 cd android && ./gradlew lintDebug testDebugUnitTest assembleDebug
 ```
 
@@ -363,10 +369,13 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
 - アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
 - エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
-- bun がアプリの子プロセスで動き、確かめ用のサーバが 3000 番で答えること。サーバの `GET /check` で、JIT が動くこと、`localhost` を引けること、
-  `/proc` から読めること、bun が自分を子プロセスで起動できること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
+- denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・字・デコーダを返すこと。エージェントが 127.0.0.1 でだけ待ち受け、
+  denpa がアプリの作った合言葉でエージェントと組み、設定の「受信」の「チューナー」の一覧 (0 台) を読めること
+- アプリの子プロセスの bun で `.github/android-bun-check.js` を流し (debug の受け口)、JIT が動くこと、`localhost` を引けること、
+  `/proc` から読めること、bun が自分を子プロセスで起動できること、`TZ=Asia/Tokyo` を解けること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
 - bun が `FFMPEG`・`FFPROBE` の ffmpeg・ffprobe を起動できること。`tests/native-smoke.ts` を bun build で 1 つにまとめてアプリの置き場に置き、
-  確かめ用のサーバの `POST /smoke` で流す (エンコード、4K の局の HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec の H.264 のエンコード、4 本目の出口)
+  debug の受け口で流す (エンコード、4K の局の HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec の H.264 のエンコード、4 本目の出口)
+- 同じ APK を入れ直す (更新) と常駐サービスが始まり直し、書き出した置き場が入れ替わって古いものが消え、DB が残ること
 - エージェントが落ちたらアプリが起動し直すこと、通知の「終了」でエージェントも bun も常駐サービスも残らないこと、端末を起動し直すと常駐サービスが始まること
 
 エミュレータの列は必須チェックではありません (起動や応答の時間がばらつき、コードと関係なく落ちることがあるため)。

@@ -25,6 +25,7 @@
 # | bundle  | server-windows-bundle・server-windows・server-macos-bundle・server-macos | 配布物の組み方・ffmpeg・入れ方・native-smoke が使うもの |
 #
 # bundle が true なら windows と macos も true にする (配布物を確かめるジョブが、そちらで組んだエージェントを使う)。
+# android も true にする (Android のアプリの APK にも同じ denpa 本体を入れ、エミュレータで起動する)。
 # test.yml・このスクリプト・global.json (.NET の SDK の使い方) を触ったときは全部 true。
 set -euo pipefail
 
@@ -64,7 +65,7 @@ while IFS= read -r f; do
     tray/Denpa.Tray/* | tray/Denpa.Tray.Tests/* | install.ps1 | scripts/build-wdi-simple.ps1) windows=true ;;
     tray/mac/* | install.sh) macos=true ;;
     android/* | .github/workflows/android.yml | .github/openssl-android.sh | .github/asicen-android.sh | .github/bun-android.sh | \
-      .github/ffmpeg-android.sh | .github/android-agent-smoke.sh | .github/android-app-smoke.sh | .github/android-apk-cert.sh | .github/fake-usb-broker.c) android=true ;;
+      .github/ffmpeg-android.sh | .github/android-agent-smoke.sh | .github/android-app-smoke.sh | .github/android-apk-cert.sh | .github/android-bun-check.js | .github/fake-usb-broker.c) android=true ;;
     # Android の ffmpeg (Dockerfile の ffmpeg 段から組む) と、エミュレータで流す native-smoke が使うもの
     patches/* | Dockerfile | tests/native-* | packages/arib/src/* | src/lib/hw.ts | src/lib/server/config.ts | src/lib/server/awake.ts | \
       src/lib/server/stream.ts | src/lib/server/uhd.ts | src/lib/server/hwenc.ts) android=true ;;
@@ -85,7 +86,7 @@ while IFS= read -r f; do
   esac
 done <<< "$files"
 
-if [ "$bundle" = true ]; then windows=true macos=true; fi
+if [ "$bundle" = true ]; then windows=true macos=true android=true; fi
 echo "e2e=$e2e"
 echo "windows=$windows"
 echo "macos=$macos"
