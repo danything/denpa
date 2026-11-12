@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 
 import { eq } from "drizzle-orm";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * **外から使う番組表と予約** (`GET /api/programs`・`POST`/`DELETE /api/programs/<id>/record`。docs/api.md)。

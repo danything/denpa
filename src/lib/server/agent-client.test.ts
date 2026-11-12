@@ -3,7 +3,8 @@ import { X509Certificate } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-import { agentFetch, createIdentity, pairProof } from "./agent-client";
+import { agentFetch } from "./agent-client";
+import { createIdentity, pairProof } from "./agent-identity";
 import {
   agentCert,
   agentSecrets,

@@ -13,7 +13,8 @@ import {
   stream,
 } from "@danything/arib/synth";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * 「ロゴをいますぐ集める」を、**BS と CS で共通のチューナー 2 台**で回す (#1939)。

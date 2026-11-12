@@ -14,7 +14,8 @@ import {
   stream,
 } from "@danything/arib/synth";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * 衛星のロゴを流す中継で、**カルーセルが来るまで待つ** (`logo.awaitCarousel`・「いますぐ」)。

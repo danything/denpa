@@ -11,7 +11,8 @@ import {
   sdtSection,
 } from "@danything/arib/synth";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 import type { AgentChannel } from "./tuner";
 
 /**

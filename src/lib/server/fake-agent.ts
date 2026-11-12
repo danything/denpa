@@ -5,9 +5,7 @@
  * クライアント証明書を読めないので、denpa が名乗った指紋 (`client`) をそのまま信じて証しを返す。
  * denpa 側の確かめ (証しを確かめて証明書を覚える) は本物と同じに通る。
  */
-import { createIdentity, pairProof } from "./agent-client";
-import type { Identity } from "./agent-client";
-import { primaryAgent, rememberAgentCert } from "./agents";
+import { createIdentity, type Identity, pairProof } from "./agent-identity";
 
 /** 偽のエージェントの合言葉 */
 export const FAKE_AGENT_PAIR = "fake-agent-pair";
@@ -74,15 +72,6 @@ export function serveFakeAgent(
       return (await answerPairing(request)) ?? fetch(request);
     },
   });
-}
-
-/**
- * 単体テスト用: 偽のエージェントの証明書を、組んだものとして今のエージェントの行に保存する。`config.agentUrl` と `config.dbPath` を決めてから呼ぶ (組む受け答えを持たない
- * `Bun.serve` を偽のエージェントにするとき。`tls: fakeAgentTls()` と一緒に使う)
- */
-export function trustFakeAgent(): void {
-  const { cert, fingerprint } = fakeAgentIdentity();
-  rememberAgentCert(primaryAgent().id, cert, fingerprint);
 }
 
 /** `/denpa/card` の答え。カードが 1 枚読めていて、それを使っている (契約・EMM のテスト用) */

@@ -3,7 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 import {
   type AgentTuner,
   expectTransport,
