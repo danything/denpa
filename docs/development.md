@@ -344,3 +344,4 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 USB の機材はエミュレータに挿せないので、usbfs の fd (許可・`USBDEVFS_CONNINFO_EX`・確保) は CI では見ません。
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。
+
