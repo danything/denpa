@@ -224,22 +224,9 @@ test.describe("2 台のエージェント", () => {
           holders.push(agent);
       expect(holders).toHaveLength(1);
 
-      // ライブ: 局のライブのエンドポイントを開き、最初のバイトが届けばどちらかのエージェントが選局している
-      const services = (await (await request.get("/api/services")).json()) as {
-        id: number;
-        type: string;
-        live: string;
-      }[];
-      const target = services.find((service) => service.type === "GR")!;
-      const aborter = new AbortController();
-      // 変換せずに流す形 (偽の ffmpeg は fMP4 を作らない。30-api と同じ)
-      const res = await fetch(`${spare.appUrl}/${target.live}?codec=raw`, {
-        signal: aborter.signal,
-      });
-      expect(res.ok).toBe(true);
-      const reader = res.body!.getReader();
-      expect((await reader.read()).done).toBe(false);
-      aborter.abort();
+      // ライブ: 既定の H.264 (エンコードの経路) で開き、最初のバイトが届けばどちらかのエージェントが選局している
+      const [first] = await grServices(spare.appUrl);
+      await openLive(spare.appUrl, first!.live);
       const lives = [
         ...(await opened(living.agentUrl)),
         ...(await opened(study.agentUrl)),
@@ -250,4 +237,43 @@ test.describe("2 台のエージェント", () => {
       await context.close();
     }
   });
+
+  test("1 台目が止まっていれば、H.264 のライブを 2 台目で開く", async () => {
+    // 一覧を返さないエージェントには振り分けない (`tuner.route`)。開いたままのライブと同じ局を避け、別の局を開く
+    await living.shutdown();
+    const before = await opened(study.agentUrl);
+    const services = await grServices(spare.appUrl);
+    await openLive(spare.appUrl, services.at(-1)!.live);
+    const added = (await opened(study.agentUrl)).slice(before.length);
+    expect(added.some((use) => use.startsWith("live GR/"))).toBe(true);
+  });
 });
+
+/** 地上波の局 (`/api/services`) */
+async function grServices(
+  appUrl: string,
+): Promise<{ id: number; live: string }[]> {
+  const services = (await (await fetch(`${appUrl}/api/services`)).json()) as {
+    id: number;
+    type: string;
+    live: string;
+  }[];
+  return services.filter((service) => service.type === "GR");
+}
+
+/**
+ * 局のライブのエンドポイントを既定の H.264 で開き、最初のバイトが届いたら閉じる。
+ * `bootSpare` の偽 ffmpeg は作り置きの fMP4 を流す (`fmp4-loop.ts`)
+ */
+async function openLive(appUrl: string, live: string): Promise<void> {
+  const aborter = new AbortController();
+  try {
+    const res = await fetch(`${appUrl}/${live}`, { signal: aborter.signal });
+    expect(res.ok).toBe(true);
+    expect(res.headers.get("X-Denpa-Codec")).toBe("h264");
+    const reader = res.body!.getReader();
+    expect((await reader.read()).done).toBe(false);
+  } finally {
+    aborter.abort();
+  }
+}

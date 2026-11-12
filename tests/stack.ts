@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 
 import { type BrowserContext, test as base } from "@playwright/test";
 
@@ -506,6 +506,9 @@ export async function bootSpare(
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(spare.encodedDir, { recursive: true });
   mkdirSync(spare.rawDir, { recursive: true });
+  // ライブのエンコードした出口は、作り置きの fMP4 を流す (`fmp4-loop.ts`)。素通しの TS では最初の 1 バイトも返らない
+  const liveFmp4File = `${dir}/live-fmp4`;
+  writeFileSync(liveFmp4File, "");
   const launch = async (): Promise<Started> => {
     const app = start(["bun", "./server.js"], {
       TZ: "Asia/Tokyo",
@@ -515,6 +518,7 @@ export async function bootSpare(
       RAW_DIR: spare.rawDir,
       ENCODED_DIR: spare.encodedDir,
       FFMPEG: "./tests/fake/ffmpeg.sh",
+      FAKE_FFMPEG_LIVE_FMP4_FILE: liveFmp4File,
       TUNER_AGENT_URL: agentUrl,
       DENPA_AUTOSTART: autostart ? "1" : "0",
       DENPA_VERSION: "v1.0.0",
