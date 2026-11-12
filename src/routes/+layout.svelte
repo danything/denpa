@@ -16,6 +16,8 @@
   import Tv from "~icons/lucide/tv";
 
   import type { ChannelNotice as NoticeKind } from "#lib/channel-notice.js";
+  import ChannelAlert from "#lib/components/ChannelAlert.svelte";
+  import ChannelAlertDot from "#lib/components/ChannelAlertDot.svelte";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
   import GuidePending, {
     guideNavigation,
@@ -356,13 +358,12 @@
   const notice = $derived(
     (page.data["channelNotice"] ?? null) as NoticeKind | null,
   );
-  /** チャンネルのお知らせの 1 行 (書き換えた・地上波が変わったかもしれない)。同じ load が渡す (`server/channel-alert.ts`) */
-  const alert = $derived(
-    (page.data["channelAlert"] ?? null) as {
-      kind: NoticeKind;
-      text: string;
-    } | null,
-  );
+  /**
+   * チャンネルのお知らせ (書き換えた・地上波を続けて選局できない)。どの画面にも `+layout.server.ts` が渡す (`server/channel-alert.ts`)。
+   * 広い形はヘッダーの印 (`ChannelAlert`)、スマホの形はヘッダーを隠すので、設定の入口 (下のタブの「設定」、640px 未満は「その他」とその中の「設定」) に同じ印を付ける。
+   * 新しいバージョンの点と重なったら、印のほうを出す (1 つの入口に印は 1 つ)
+   */
+  const alert = $derived(data.channelAlert);
   let menuOpen = $state(false);
   /** 行き先を選んだら閉じる。開いたままだと次の画面の頭が隠れる */
   $effect(() => {
@@ -489,6 +490,12 @@
         <span class="visually-hidden">denpa</span>
       </a>
       <!--
+                **チャンネルのお知らせの印** (上の `alert`)。乗せるか押すと、文と設定の「チャンネル」へのボタンを印の下に出す
+            -->
+      {#if alert !== null}
+        <ChannelAlert kind={alert.kind} text={alert.text} />
+      {/if}
+      <!--
                 **新しいバージョンが出ている** (server/update.ts が GitHub のリリースを見比べる)。
                 押せばリリースのページ。閉じるボタンは無い。上げるか、リリースが消えれば引っ込む。
                 事実なのでバッジにせず控えた字 (docs/design.md の「印の意味」)。外へ出るリンクの印を添えて、押せることを示す
@@ -553,16 +560,12 @@
   {/if}
 
   <!--
-        **局が無いときの案内と、チャンネルのお知らせ** (録画・番組表・ライブ。`#lib/channel-notice.ts`)。閉じるボタンは無く、
-        元のことが片付けば消える。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
+        **局が無いときの案内** (録画・番組表・ライブ。`#lib/channel-notice.ts`)。閉じるボタンは無く、
+        元のことが片付けば消える。中身が動いている間に起きたお知らせはここに出さず、ヘッダーの印に畳む (`ChannelAlert`)。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
     -->
   {#if notice}
     <div class="notice-slot">
       <ChannelNotice kind={notice} />
-    </div>
-  {:else if alert}
-    <div class="notice-slot">
-      <ChannelNotice kind={alert.kind} text={alert.text} />
     </div>
   {/if}
 
@@ -596,7 +599,7 @@
         >
           <Icon icon={tab.icon} size="size-5" />
           <span
-            >{tab.label}{#if fresh && tab.href === "/settings"}{@render freshDot()}{/if}</span
+            >{tab.label}{#if tab.href === "/settings"}{@render entryMark()}{/if}</span
           >
         </a>
       {/each}
@@ -620,9 +623,7 @@
               aria-current={moreCurrent ? "page" : undefined}
             >
               <Icon icon={Ellipsis} size="size-5" />
-              <span
-                >その他{#if fresh}{@render freshDot()}{/if}</span
-              >
+              <span>その他{@render entryMark()}</span>
             </button>
           {/snippet}
           <ul class="more-list">
@@ -634,8 +635,8 @@
                   aria-current={here === link.href ? "page" : undefined}
                 >
                   {link.label}
-                  {#if fresh && link.href === "/settings"}
-                    {@render freshDot()}
+                  {#if link.href === "/settings"}
+                    {@render entryMark()}
                   {/if}
                 </a>
               </li>
@@ -659,6 +660,18 @@
     aria-label="新しいバージョンがあります"
     data-testid="update-dot"
   ></span>
+{/snippet}
+
+<!--
+    スマホの形の設定の入口の印 (上の `alert`・`fresh`)。チャンネルのお知らせがあればその印 (ヘッダーの印と同じ形を小さく)、
+    無くて新しいバージョンがあれば点
+-->
+{#snippet entryMark()}
+  {#if alert !== null}
+    <ChannelAlertDot kind={alert.kind} />
+  {:else if fresh}
+    {@render freshDot()}
+  {/if}
 {/snippet}
 
 <style>
@@ -998,6 +1011,13 @@
     top: 0.5rem;
     right: 0.3rem;
   }
+  /* チャンネルのお知らせの印 (上の `entryMark`。`app.css` の `.alert-dot`)。タブは点と同じく字の右上 */
+  .tabbar :global(.tab > span > .alert-dot) {
+    position: absolute;
+    top: -0.5rem;
+    left: 100%;
+    margin: 0;
+  }
   /* スマホの形 (`#lib/phone-form.ts`。1000px 未満とテーブルトップ。`<html data-phone>`) */
   :global(:where(html[data-phone]:has(.tabbar))) {
     --dp-tabbar: calc(4rem + 0.5rem + env(safe-area-inset-bottom));
@@ -1125,8 +1145,8 @@
     --dp-page-top: var(--dp-header-space);
   }
   /*
-   * **お知らせの 1 行は、ヘッダーの下から始める。** 広い形のヘッダーは中身の上に浮かせて流れから外している (`position: fixed`) ので、
-   * 流れの先頭に置くとヘッダーの裏に入って重なる。中身と同じくヘッダーの下端から `--dp-bar-gap` 空け、中身はお知らせのすぐ下から始める。
+   * **局が無いときの案内の 1 行は、ヘッダーの下から始める。** 広い形のヘッダーは中身の上に浮かせて流れから外している (`position: fixed`) ので、
+   * 流れの先頭に置くとヘッダーの裏に入って重なる。中身と同じくヘッダーの下端から `--dp-bar-gap` 空け、中身は案内のすぐ下から始める。
    * スクロールすれば中身と一緒にヘッダーの裏を流れる。自分で巻き取る画面 (`.shell.fill`) は箱の上端を空けてあるので、そちらは下の 1000px の所
    */
   :global(:where(html:not([data-phone]))) .shell:not(.fill) .notice-slot {
@@ -1256,7 +1276,7 @@
       --navbar-shadow: var(--dp-shadow-tight);
     }
     /*
-         * **お知らせの 1 行がある間は、表をヘッダーの裏まで伸ばさない** (広い形)。1 行は箱の上端に置くので、伸ばすとマスが 1 行の上を流れる。
+         * **案内の 1 行がある間は、表をヘッダーの裏まで伸ばさない** (広い形)。1 行は箱の上端に置くので、伸ばすとマスが 1 行の上を流れる。
          * 1 行はほかの画面と同じくヘッダーの下端から `--dp-bar-gap` 空けて置き、操作の 1 行と表はそのすぐ下から始める (`--dp-fill-top` を
          * ヘッダーの下端にそろえると、操作の 1 行 (`app.css` の `.guide-bar`) はヘッダーの裏へ引き上げない)。
          * 裏に何も来ないので、ヘッダーは表をスクロールしても平らなまま

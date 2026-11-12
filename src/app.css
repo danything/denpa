@@ -403,6 +403,23 @@
   border-radius: var(--dp-radius-full);
   background: var(--pico-primary-background);
 }
+/*
+ * ---- チャンネルのお知らせの印 (`.alert-dot`)。注意は ⚠、案内は ⓘ の小さなアイコンを状態の色で ----
+ * スマホの形の設定の入口 (下のタブ・「その他」・設定の左の一覧)。ヘッダーの印 (`ChannelAlert.svelte`) を小さくしたもの。
+ * 置き場は使う側で決める。点 (`.fresh-dot`) と同じ入口に重なったら、こちらを出す
+ */
+.alert-dot {
+  display: inline-flex;
+  flex-shrink: 0;
+  vertical-align: -0.125em;
+  margin-inline-start: 0.25rem;
+}
+.alert-dot.ground {
+  color: var(--dp-warn-text);
+}
+.alert-dot.changed {
+  color: var(--dp-info-text);
+}
 
 /*
  * ---- 自分の書き込みの縦線 (`.mine-line`)。字の頭に短い縦線 ----

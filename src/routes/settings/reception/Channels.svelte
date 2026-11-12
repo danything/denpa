@@ -29,6 +29,7 @@
   /*
    * **チャンネルを書き換えたお知らせは、この画面を開いたら消す** (書き換えたチャンネルはここに並んでいる)。
    * load で消すと先読みでも消えるので、開いた画面からリクエストする (`channels.server.ts` の `seenLineup`)
+   * 消したあとも読み直さない。この画面にいる間は、見出しの下の文 (下の `channelAlert`) とヘッダーの印を残して読めるようにし、次に画面を移ったときに消える
    */
   $effect(() => {
     if (!data.lineupChanged) return;
@@ -315,6 +316,21 @@
         </div>
       {/if}
     </div>
+
+    <!--
+            **チャンネルのお知らせ** (ヘッダーの印・スマホの形の設定の入口の印と同じ文。`server/channel-alert.ts`)。
+            スマホの形はヘッダーを隠すので、文はここで読む。スキャンは見出しの行のボタン
+        -->
+    {#if data.channelAlert !== null}
+      <p
+        class="notice {data.channelAlert.kind === 'ground'
+          ? 'warning'
+          : 'info'}"
+        data-testid="channel-alert-notice"
+      >
+        {data.channelAlert.text}
+      </p>
+    {/if}
 
     {#if coverage.length > 0}
       <!-- 番組表がもう入っている局の数。下の表の右端を全部見なくても分かるように -->

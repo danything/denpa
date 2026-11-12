@@ -1,16 +1,22 @@
 /**
- * **チャンネルのお知らせ** (録画・番組表・ライブの上に出す 1 行。`ChannelNotice.svelte`)。閉じるボタンは置かず、
- * 元のことが片付けば消える。
+ * **チャンネルのお知らせ。** 閉じるボタンは置かず、元のことが片付けば消える。出し方は、中身があるかで 2 つに分ける。
  *
- * - `all` … どの種別にも局が無い。スキャンへ案内する。スキャンして局が入れば消える
- * - `undecodable` … 局はあるが、どれもスクランブルを復号できず、番組表もスクランブルされていて読めない (スカパー！プレミアムの局と、
- *   B-CAS 以外の方式でスクランブルされたケーブルの局だけ)。番組表とライブに出す局が無いわけを言う。番組表に出せる局が入れば消える
- * - `changed` … 放送の一覧が変わり、受信できるチャンネルを書き換えた (`server/lineup-follow.ts`)。文は書き換えた中身で、
- *   設定の「受信」を開くか 24 時間たつと消える
- * - `ground` … 地上波のチャンネルを続けて選局できない・局の顔ぶれがスキャンの結果と違う (`server/ground-watch.ts`)。
- *   スキャンし直すか、ライブ・録画・番組表の取得がそのチャンネルを選局できれば消える
+ * - **画面が空になるわけ** (`ChannelNotice`) は、録画・番組表・ライブの上に 1 行で出す (`ChannelNotice.svelte`)。
+ *   局が無いので中身も無く、1 行が中身の場所を取らない。その画面ですることを言う
+ *   - `all` … どの種別にも局が無い。スキャンへ案内する。スキャンして局が入れば消える
+ *   - `undecodable` … 局はあるが、どれもスクランブルを復号できず、番組表もスクランブルされていて読めない (スカパー！プレミアムの局と、
+ *     B-CAS 以外の方式でスクランブルされたケーブルの局だけ)。番組表とライブに出す局が無いわけを言う。番組表に出せる局が入れば消える
+ * - **中身が動いている間に起きたこと** (`ChannelAlertKind`) は、ヘッダーの印に畳む (`ChannelAlert.svelte`)。
+ *   中身の上に 1 行を足さない。どの画面にも出す (スマホの形は設定の入口の印。`routes/+layout.svelte`)
+ *   - `changed` … 放送の一覧が変わり、受信できるチャンネルを書き換えた (`server/lineup-follow.ts`)。文は書き換えた中身で、
+ *     設定の「受信」を開くか 24 時間たつと消える
+ *   - `ground` … 地上波のチャンネルを続けて選局できない・局の顔ぶれがスキャンの結果と違う (`server/ground-watch.ts`)。
+ *     スキャンし直すか、ライブ・録画・番組表の取得がそのチャンネルを選局できれば消える
  */
-export type ChannelNotice = "all" | "undecodable" | "changed" | "ground";
+export type ChannelNotice = "all" | "undecodable";
+
+/** ヘッダーの印に畳むお知らせ (`server/channel-alert.ts` が渡す) */
+export type ChannelAlertKind = "changed" | "ground";
 
 /** いま選局できる局のうち、番組表に出す局の数 (種別ごと。`server/epg.ts` の `serviceCounts`) */
 type ServiceCounts = Record<string, number>;
@@ -38,16 +44,21 @@ export const CHANNEL_NOTICE_TEXT: Record<ChannelNotice, string> = {
   all: "チャンネルがありません。チャンネルスキャンをしてください",
   undecodable:
     "受信できる局は、どれもスクランブルを復号できないため、番組表とライブに出せません",
-  changed:
-    "チャンネルが放送で変わったため、受信できるチャンネルを書き換えました",
-  ground:
-    "地上波のチャンネルが受信できるチャンネルと違います。地上波をスキャンし直してください",
 };
 
-/** 文の後ろのボタン。どれも設定の「受信」の「チャンネル」へ行く */
-export const CHANNEL_NOTICE_ACTION: Record<ChannelNotice, string> = {
+/** 文の後ろのボタン。局が無いときの 1 行も印の文も、設定の「受信」の「チャンネル」へ行く */
+export const CHANNEL_NOTICE_ACTION: Record<
+  ChannelNotice | ChannelAlertKind,
+  string
+> = {
   all: "スキャンへ",
   undecodable: "確認",
   changed: "確認",
   ground: "スキャンへ",
+};
+
+/** 印の読み上げ (ヘッダーの印と、スマホの形の設定の入口の印) */
+export const CHANNEL_ALERT_LABEL: Record<ChannelAlertKind, string> = {
+  changed: "チャンネルを書き換えたお知らせ",
+  ground: "地上波のチャンネルのお知らせ",
 };

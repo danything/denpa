@@ -9,7 +9,7 @@ import { packetize, sdtSection } from "@danything/arib/synth";
 import type { AgentChannel } from "./tuner";
 
 /**
- * 地上波は付いていかず、知らせるだけ。合成の SDT と受信の記録で、お知らせの 1 行が出ることを見る
+ * 地上波は付いていかず、知らせるだけ。合成の SDT と受信の記録で、お知らせが出ることを見る
  */
 const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-ground-")), "denpa.db");

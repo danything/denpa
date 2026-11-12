@@ -2,7 +2,6 @@ import { fail } from "@sveltejs/kit";
 
 import { channelNotice } from "#lib/channel-notice.js";
 import { parseId } from "#lib/id.js";
-import { channelAlert } from "#lib/server/channel-alert.js";
 import { reserveWarning } from "#lib/server/contracts.js";
 import {
   listedServices,
@@ -72,7 +71,6 @@ export function load({ url, cookies }) {
     /** 種別のタブ (`guideTabs`)。CATV と SKY は番組表に出す局があるときだけ */
     types: guideTabs(counts, type),
     channelNotice: typeEmpty ? null : channelNotice(counts, listedServices()),
-    channelAlert: channelAlert(),
   };
 }
 
