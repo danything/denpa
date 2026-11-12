@@ -32,8 +32,9 @@ public static class About
         return environment?.Trim() is { Length: > 0 } outside ? outside : "dev";
     }
 
+    /// <summary><c>macos</c>・<c>windows</c>・<c>android</c> (アプリから USB を受け取っている Linux。bionic も OS は Linux と答える)・<c>linux</c></summary>
     public static string Os =>
-        OperatingSystem.IsMacOS() ? "macos" : OperatingSystem.IsWindows() ? "windows" : "linux";
+        OperatingSystem.IsMacOS() ? "macos" : OperatingSystem.IsWindows() ? "windows" : UsbHost.Brokered ? "android" : "linux";
 
     public static string Arch => RuntimeInformation.ProcessArchitecture switch
     {

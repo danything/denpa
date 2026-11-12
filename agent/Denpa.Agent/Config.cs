@@ -119,9 +119,10 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// <summary>
     /// 変数が無いときの置き場。Linux はコンテナの <c>/config</c>。Mac と Windows はインストーラと同じ
     /// <c>DENPA_HOME</c> (既定 <c>~/denpa</c>) の <c>config</c>。常駐を止めて手で <c>--tune</c> などを流したときに、
-    /// 書けない <c>/config</c> は使わず、常駐と同じファイルを使う
+    /// 書けない <c>/config</c> は使わず、常駐と同じファイルを使う。Android (アプリから USB を受け取っている Linux) も、アプリが渡す
+    /// <c>DENPA_HOME</c> の <c>config</c> にする (手で <c>--pair</c> を流したときに、常駐と同じ鍵を使う)
     /// </summary>
-    private static string DefaultDir() => OperatingSystem.IsLinux()
+    private static string DefaultDir() => OperatingSystem.IsLinux() && !UsbHost.Brokered
         ? "/config"
         : Path.Combine(
             Given("DENPA_HOME")

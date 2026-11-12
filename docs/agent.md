@@ -426,21 +426,48 @@ ioctl は通り、同期しないだけなので気付きにくい。
 OS を見分けるのは起動のときの 1 回 (`UsbHost.Current`) だけです。機材ごとのコード (Siano・CECH-ZD1 J・PIX-DT295・IT930x・USB の CCID のカードリーダー・
 asicen-userland のファームウェア待ち) と、抜き差しの受け取り (`DeviceWatch`) は OS を見ません。
 
-| 実装                   | 並べる                                                                         | 開く                   | 抜き差し                              | 電源の入れ直し        |
-| ---------------------- | ------------------------------------------------------------------------------ | ---------------------- | ------------------------------------- | --------------------- |
-| `SysfsUsbHost` (Linux) | `/sys/bus/usb/devices` の ID・シリアル番号・文字列・インターフェース・ドライバ | usbfs (`/dev/bus/usb`) | `/dev/bus/usb` の inotify             | ハブの `port/disable` |
-| `WinUsbHost` (Windows) | SetupAPI (ID ごと。シリアル番号はデバイスのパスから)                           | WinUSB                 | 挿さっている機材を 2 秒ごとに見比べる | できない              |
-| `IoKitUsbHost` (macOS) | IOKit (ID ごと)                                                                | IOUSBLib               | 受け取らず、10 秒ごとに探し直す       | できない              |
+| 実装                      | 並べる                                                                         | 開く                                 | 抜き差し                              | 電源の入れ直し        |
+| ------------------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ------------------------------------- | --------------------- |
+| `SysfsUsbHost` (Linux)    | `/sys/bus/usb/devices` の ID・シリアル番号・文字列・インターフェース・ドライバ | usbfs (`/dev/bus/usb`)               | `/dev/bus/usb` の inotify             | ハブの `port/disable` |
+| `WinUsbHost` (Windows)    | SetupAPI (ID ごと。シリアル番号はデバイスのパスから)                           | WinUSB                               | 挿さっている機材を 2 秒ごとに見比べる | できない              |
+| `IoKitUsbHost` (macOS)    | IOKit (ID ごと)                                                                | IOUSBLib                             | 受け取らず、10 秒ごとに探し直す       | できない              |
+| `BrokerUsbHost` (Android) | アプリから受け取った機材の表                                                   | 受け取った usbfs の fd を `dup` する | アプリから受け取る                    | できない              |
 
 - 並べる (`List`) ときは USB の ID で絞り、開きません。カーネルのドライバが使っている機材も並べ、使わないと決めて記録に出すのは機材の側です (`UsbHost.Scan`)。
-  並びは、sysfs ならポートの名前の順、Windows と macOS は機種の表の順に OS が返した順です
+  並びは、sysfs と Android ならポートの名前の順、Windows と macOS は機種の表の順に OS が返した順です
 - ポートの名前は、どの OS でも sysfs と同じ形 (`1-2.3`) に作ります。`tuners.json` の `device` (`it930x:1-2.3:0`) もこの形です
-- 1 つのポートだけを読む (`Peek`) のは sysfs だけです。Windows と macOS は並べて探します。設定の画面に返す受けられる種別 (`receivable`) は、
+- 1 つのポートだけを読む (`Peek`) のは sysfs と Android です。Windows と macOS は並べて探します。設定の画面に返す受けられる種別 (`receivable`) は、
   1 つのポートだけを読めない OS では最後に探した結果だけから決め、一覧を返すたびに OS に聞き直しません
-- USB のカードリーダーを自前の CCID で開くのは、`Readers` が null でない OS (Linux) だけです。Windows と macOS は PC/SC を使います (`CardLinks`)
+- USB のカードリーダーを自前の CCID で開くのは、`Readers` が null でない OS (Linux と Android) だけです。Windows と macOS は PC/SC を使います (`CardLinks`)
 - ポートの電源の入れ直し (`PowerCycle`) は Linux だけです。ほかの OS では null で、PIX-DT295 は挿し直しを求めて断ります
-- Android の bionic でも .NET は OS を Linux と答えるので、今は `SysfsUsbHost` が選ばれます。sysfs が見えなければ、機材を何も並べずに続けます
-- テストは `UsbHostTests.cs` です。機材ごとの探し方は偽の `IUsbHost` で、`SysfsUsbHost` は作った sysfs で確かめます
+- `USB_BROKER` が無い Linux は `SysfsUsbHost` です。Android の bionic でも .NET は OS を Linux と答えるので、Android かどうかは `USB_BROKER` で決めます。
+  `GET /denpa/about` の `os` は、`USB_BROKER` があれば `android` です
+- テストは `UsbHostTests.cs` と `UsbBrokerTests.cs` です。機材ごとの探し方は偽の `IUsbHost` で、`SysfsUsbHost` は作った sysfs で、`BrokerUsbHost` は偽のアプリが送る memfd の fd で確かめます
+
+### Android でアプリから USB を受け取る
+
+**Android では、アプリが開いた USB の機材の fd を、エージェントが UNIX ドメインソケットで受け取ります。** Android ではアプリしか USB の機材を開けない (`UsbManager` の許可が要る) ためです。
+エージェントは `USB_BROKER` のパスで待ち受け、アプリが繋ぎます (`UsbBroker.cs`)。
+
+- ソケットはファイルの名前空間の `AF_UNIX`・`SOCK_STREAM` で、作ったら 0600 にします。前に起動したときのソケットが残っていれば消して作り直します。
+  繋いできた相手の uid (`SO_PEERCRED`) がエージェントと違えば切ります
+- 待ち受けるのは抜き差しを受け取り始めたとき (`DeviceWatch`) からで、`--pair` や `--status` などを手で流したときは待ち受けません
+- 1 行 1 つの JSON (UTF-8) を、1 行ずつ 1 回の write で送ります。`attached` の write には fd を SCM_RIGHTS で 1 つ付けます
+
+  | `type`     | 中身                                                                                                                                                 | fd  |
+  | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+  | `attached` | `name` (`/dev/bus/usb/001/004`)・`vendor`・`product`・`serial`・`manufacturer`・`productName`・`interfaces` (`[{"config":1,"number":0,"class":11}]`) | 1   |
+  | `detached` | `name`                                                                                                                                               | 0   |
+  | `synced`   | 許可のある機材を全部送り終えた印                                                                                                                     | 0   |
+
+- 繋がるたびに、前の接続で受け取った機材を捨てます。`synced` を受けたら探し直し、そのあとの `attached`・`detached` も受けるたびに探し直します (2 秒まとめるのは `DeviceWatch`)。
+  接続が切れただけでは捨てません (受け取った fd はアプリが落ちても使えます)
+- ポートの名前は、受け取った fd の `USBDEVFS_CONNINFO_EX` (Linux 5.3 から) のバスとハブのポートの並びから作ります。使えないカーネルでは `name` から `001-004` を作るので、挿し直すと名前が変わります
+- シリアル番号と文字列は `attached` のものを使い、機材から読み直しません。カーネルのドライバは見ません。使われていれば、確保するときに「ほかのソフトが使っています」で断ります
+- 開くたびに受け取った fd を `dup` し、閉じるのは複製のほうです。受け取った fd は `detached` まで持ちます。
+  複製はファイルの位置を共有するので、ディスクリプタは `pread` で読みます (sysfs から開くときも同じ読み方です)
+- 読めない行、fd の付いていない `attached`、名前からポートを作れない `attached` は、記録に出して捨てます
+- `USB_BROKER` があるときは、`TUNERS_FILE` などが無いときの置き場も `/config` ではなく `DENPA_HOME` の `config` です
 
 ### Siano の機材を直に持つ作り (実機で確かめていない)
 

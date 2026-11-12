@@ -228,6 +228,9 @@ describe("環境の欄", () => {
     expect(agentSystem({ ...linux, runtime: null, os: "macos" })).toBe(
       "macOS (x64)",
     );
+    expect(agentSystem({ ...linux, runtime: null, os: "android" })).toBe(
+      "Android (x64)",
+    );
     expect(agentSystem({ ...linux, runtime: null, os: null, arch: null })).toBe(
       "—",
     );

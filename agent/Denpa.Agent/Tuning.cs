@@ -114,6 +114,19 @@ internal static unsafe partial class Sys
     [LibraryImport("libc", EntryPoint = "read", SetLastError = true)]
     public static partial nint ReadFd(int fd, byte* buffer, nuint count);
 
+    /// <summary>位置を動かさずに <paramref name="offset"/> から読む (64bit の off_t)</summary>
+    [LibraryImport("libc", EntryPoint = "pread", SetLastError = true)]
+    public static partial nint PRead(int fd, byte* buffer, nuint count, long offset);
+
+    [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static partial int Fcntl(int fd, int command, int argument);
+
+    /// <summary>F_DUPFD_CLOEXEC (Linux)</summary>
+    private const int DupFdCloseOnExec = 1030;
+
+    /// <summary>close-on-exec を付けた複製 (<c>fcntl(F_DUPFD_CLOEXEC)</c>)。失敗は負</summary>
+    public static int DupCloseOnExec(int fd) => Fcntl(fd, DupFdCloseOnExec, 0);
+
     [LibraryImport("libc", EntryPoint = "poll", SetLastError = true)]
     public static partial int Poll(byte* fds, nuint count, int timeout);
 

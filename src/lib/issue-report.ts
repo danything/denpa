@@ -274,6 +274,7 @@ export const CCID_DRIVER: Record<"apple" | "ifd-ccid", string> = {
 };
 
 const OS_NAME: Record<string, string> = {
+  android: "Android",
   linux: "Linux",
   macos: "macOS",
   windows: "Windows",
