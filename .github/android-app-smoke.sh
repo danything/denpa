@@ -17,7 +17,7 @@
 # - アプリの LocalSocket から、ファイルの fd を付けた attached を送ると、エージェントが fd ごと受け取る (setFileDescriptorsForSend と 1 回の write)
 # - エージェントが APK の asicend (libasicend.so) を起動でき (--version)、ファームウェア待ちの ID の fd を asicend --fd に継がせる
 # - denpa 本体 (bun。libbun.so) がアプリの子プロセスとして untrusted_app で動き、APK の assets/server.zip を書き出して 3000 番で答える
-#   (/api/health・画面・字・デコーダ)。エージェントは 127.0.0.1 でだけ待ち受け、denpa はアプリが作った合言葉で組んで、設定の「受信」の
+#   (/api/health・画面・字・デコーダ)。エージェントは全部のインターフェースで待ち受け (別の機械の denpa も組める)、denpa は 127.0.0.1 からアプリが作った合言葉で組んで、設定の「受信」の
 #   「チューナー」の一覧 (0 台) を読める
 # - アプリの子プロセスの bun で .github/android-bun-check.js を流し (debug の受け口の RUN_BUN)、JIT・名前を引けるか・/proc から読むもの・
 #   子プロセスの起動・TZ・bun:sqlite を bun の中から試す
@@ -209,9 +209,9 @@ jq -e '.ok and .version == "dev"' "$logs/health.json"
 for path in / /api/font/denpa-font.css /api/font/denpa-font.woff2 /api/live/mpeg2/decoder.wasm /settings/reception; do
   curl -fsS --max-time 30 -o "$host/page" -w "$path -> %{http_code} %{size_download} bytes\n" "http://127.0.0.1:3000$path" | tee -a "$logs/pages.txt"
 done
-# エージェントは 127.0.0.1 でだけ待ち受ける
-adb shell cat /proc/net/tcp | tr -d '\r' | awk '$4 == "0A" { print $2 }' | tee "$logs/listen.txt"
-grep -qx "0100007F:$(printf '%04X' "$port")" "$logs/listen.txt"
+# エージェントは全部のインターフェースで待ち受ける (別の機械の denpa も組めるように。組んだ denpa しか通さない)
+adb shell cat /proc/net/tcp /proc/net/tcp6 | tr -d '\r' | awk '$4 == "0A" { print $2 }' | tee "$logs/listen.txt"
+grep -qxE "0+:$(printf '%04X' "$port")" "$logs/listen.txt"
 # denpa がエージェントと組み (エージェントの tls/clients に、上で組んだ確かめの証明書と denpa の証明書の 2 つ)、設定の「受信」の「チューナー」の一覧を読めた (error が null)
 wait_log "エージェント ("
 for _ in $(seq 30); do

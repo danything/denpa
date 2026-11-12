@@ -60,6 +60,18 @@ class BrokerLinesTest {
     }
 }
 
+class LanTest {
+    @Test
+    fun 組む_URL_は_LAN_のアドレスと合言葉で作る() {
+        assertEquals("https://192.168.1.20:25252#pair=abc-_DEF", Lan.pairUrl("192.168.1.20", 25252, "abc-_DEF"))
+    }
+
+    @Test
+    fun IPv6_は角括弧で囲む() {
+        assertEquals("https://[fd00::1]:25252#pair=x", Lan.pairUrl("fd00::1", 25252, "x"))
+    }
+}
+
 class ServerTest {
     @Test
     fun denpa_env_は_KEY_値の行だけを読む() {

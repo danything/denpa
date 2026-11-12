@@ -135,7 +135,8 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.
 ### Android の端末で動かす
 
 チューナーを挿した Android の端末 (Android 10 以上、arm64) の 1 台で、denpa 本体とチューナーエージェントを動かせます
-(実機では確かめていない)。リリースの `denpa-<バージョン>-android-arm64.apk` を入れ、通知の「URL をコピー」で取った `http://<端末のアドレス>:3000` を同じ LAN のブラウザで開きます。
+(実機では確かめていない)。別の機械で動かす denpa のチューナーエージェントにもできます。リリースの `denpa-<バージョン>-android-arm64.apk` を入れ、
+通知の「URL をコピー」で取った `http://<端末のアドレス>:3000` を同じ LAN のブラウザで開きます。エージェントとして足すなら、「組む URL をコピー」で取った URL を denpa の `TUNER_AGENT_URL` に書きます。
 手順は [install-android.md](install-android.md)。
 
 ### イメージのタグ

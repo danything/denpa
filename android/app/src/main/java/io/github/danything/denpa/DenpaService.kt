@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
+import android.os.PersistableBundle
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
@@ -28,15 +29,16 @@ import kotlin.concurrent.thread
  * 常駐サービス (種類は connectedDevice)。部品 ([Part]) を子プロセスとして起動し、通知を出し続ける。部品はエージェントと、
  * APK に denpa 本体が入っていれば bun で動かす denpa ([Server])。
  *
- * - **denpa 本体が入っていれば、エージェントは 127.0.0.1 でだけ待ち受ける** (`AGENT_HOST`)。denpa は同じ端末から合言葉で組む。
- *   合言葉はアプリが作って両方に渡す (`config/tls/pair-token`。Mac の install.sh と同じ)
+ * - **エージェントは全部のインターフェースで待ち受ける。** 同じ端末の denpa は `https://127.0.0.1:25252#pair=<合言葉>` で、
+ *   別の機械の denpa は通知の「組む URL をコピー」の URL で、同じ合言葉で組む (組んだ denpa しか通さないのは今と同じ)。
+ *   合言葉はアプリが `config/tls/pair-token` に作り、エージェントはそこから読む (Mac の install.sh と同じ)
  * - **動いている間は partial wake lock を持ち続ける。** いつ録画が始まるか分からず、画面を消すと CPU が止まって録画が欠けるため
  * - **部品が自分で終わったら、待ってから起動し直す。** 通知の「終了」のあとは起動し直さない
  * - **「終了」は部品のそれぞれに SIGTERM を 1 回送り、すべて終わったら常駐サービスを止める。** 録画中ならエージェントは録画が終わるまで待ち、そのあいだ通知は「録画が終わったら終了します」にして、
  *   ボタンを「すぐ終了」(2 回目の SIGTERM) に替える
  * - 通知の本文 (チューナーの台数・録画中か) は、エージェントの `GET /denpa/tuners` を 10 秒ごとに読んで決める ([AgentClient])。
  *   denpa が起動の途中か起動し直しているあいだは、本文をそちらにする。denpa が `GET /api/health` に答えたら、通知に LAN の URL を出し、
- *   通知を押すとこの端末のブラウザで denpa を開く。「URL をコピー」はその URL をクリップボードに渡す
+ *   通知を押すとこの端末のブラウザで denpa を開く。「URL をコピー」はその URL を、「組む URL をコピー」はエージェントと組む URL をクリップボードに渡す
  * - 状態はどれも [worker] のスレッドで触る
  */
 class DenpaService : Service() {
@@ -184,6 +186,7 @@ class DenpaService : Service() {
             ACTION_STOP -> worker.post { requestStop() }
             ACTION_STOP_NOW -> worker.post { stopNow() }
             ACTION_COPY_URL -> worker.post { copyUrl() }
+            ACTION_COPY_PAIR_URL -> worker.post { copyPairUrl() }
             else -> worker.post {
                 // アイコンか挿入で起こされた。終了の途中なら取りやめ、まだ動いている部品は終わったら起動し直す。もう終わった部品はすぐ起動する
                 if (stopping) {
@@ -221,25 +224,20 @@ class DenpaService : Service() {
     internal fun bunEnvironment(): Map<String, String> = baseEnvironment() + Server.tools(this)
 
     /**
-     * エージェントの環境変数。denpa 本体が入っていれば、待ち受けを 127.0.0.1 に絞り、合言葉をアプリが作っておく
-     * (エージェントは `config/tls/pair-token` から読む。同じものを denpa に `TUNER_AGENT_URL` の `#pair=` で渡す)
+     * エージェントの環境変数。合言葉はアプリが先に作っておく (エージェントは `config/tls/pair-token` から読む。
+     * 同じものを同じ端末の denpa に `TUNER_AGENT_URL` の `#pair=` で渡し、別の機械の denpa には組む URL で渡す)
      */
     private fun agentEnvironment(): Map<String, String> {
         val config = File(home, "config").apply { mkdirs() }
         val media = File(home, "media").apply { mkdirs() }
-        val local = if (server != null) {
-            Server.pairToken(home)
-            mapOf("AGENT_HOST" to "127.0.0.1")
-        } else {
-            emptyMap()
-        }
+        Server.pairToken(home)
         return baseEnvironment() + mapOf(
             "TUNERS_FILE" to File(config, "tuners.json").path,
             "CHANNELS_FILE" to File(config, "channels.json").path,
             "MEDIA_DIR" to media.path,
             "USB_BROKER" to File(dataDir, "u").path,
             "AGENT_PORT" to AGENT_PORT.toString(),
-        ) + local + Asicen.environment(this, asicenFirmware)
+        ) + Asicen.environment(this, asicenFirmware)
     }
 
     /** ASICEN のファームウェアを書き出した先 (最初にエージェントを起動するときに書き出す)。APK に入っていなければ null */
@@ -363,6 +361,7 @@ class DenpaService : Service() {
         } else {
             builder.addAction(action(ACTION_STOP, R.string.action_stop))
             if (url != null) builder.addAction(action(ACTION_COPY_URL, R.string.action_copy_url))
+            builder.addAction(action(ACTION_COPY_PAIR_URL, R.string.action_copy_pair_url))
         }
         return builder.build()
     }
@@ -378,15 +377,33 @@ class DenpaService : Service() {
      * 通知の「URL をコピー」。通知に出している denpa の URL (LAN のアドレス) をクリップボードに渡す。
      * ボタンを出したあとに LAN から外れていたら、そう出す
      */
-    private fun copyUrl() {
-        val url = url()
+    private fun copyUrl() = copy(url(), R.string.url_copied, sensitive = false)
+
+    /**
+     * 通知の「組む URL をコピー」。別の機械の denpa の `TUNER_AGENT_URL` に書く `https://<LAN のアドレス>:25252#pair=<合言葉>` をクリップボードに渡す。
+     * 合言葉が入るので通知の本文には出さず、クリップボードには機密の印を付ける
+     */
+    private fun copyPairUrl() {
+        val url = try {
+            Lan.address(getSystemService(ConnectivityManager::class.java))?.let { Lan.pairUrl(it, AGENT_PORT, Server.pairToken(home)) }
+        } catch (error: Exception) {
+            Log.w(TAG, "エージェントと組む URL を作れませんでした", error)
+            null
+        }
+        copy(url, R.string.pair_url_copied, sensitive = true)
+    }
+
+    /** [url] をクリップボードに渡す。null (LAN につながっていない) ならそう出す */
+    private fun copy(url: String?, copied: Int, sensitive: Boolean) {
         if (url != null) {
             val clip = ClipData.newPlainText(getString(R.string.app_name), url)
+            // ClipDescription.EXTRA_IS_SENSITIVE (API 33)。古い Android は読まずに捨てる
+            if (sensitive) clip.description.extras = PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
             Handler(Looper.getMainLooper()).post { getSystemService(ClipboardManager::class.java).setPrimaryClip(clip) }
         }
         // Android 13 からはシステムがコピーしたことを出すので、重ねない
         if (url == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            val result = if (url == null) R.string.url_no_address else R.string.url_copied
+            val result = if (url == null) R.string.url_no_address else copied
             Handler(Looper.getMainLooper()).post { Toast.makeText(this, result, Toast.LENGTH_LONG).show() }
         }
     }
@@ -398,6 +415,7 @@ class DenpaService : Service() {
         const val ACTION_STOP = "io.github.danything.denpa.STOP"
         const val ACTION_STOP_NOW = "io.github.danything.denpa.STOP_NOW"
         const val ACTION_COPY_URL = "io.github.danything.denpa.COPY_URL"
+        const val ACTION_COPY_PAIR_URL = "io.github.danything.denpa.COPY_PAIR_URL"
 
         /** APK の jniLibs に入れるエージェントの名前 (中身は実行ファイル。nativeLibraryDir に展開される) */
         const val AGENT_LIBRARY = "libdenpa_agent.so"

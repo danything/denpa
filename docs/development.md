@@ -369,8 +369,8 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
 - アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
 - エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
-- denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・字・デコーダを返すこと。エージェントが 127.0.0.1 でだけ待ち受け、
-  denpa がアプリの作った合言葉でエージェントと組み、設定の「受信」の「チューナー」の一覧 (0 台) を読めること
+- denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・字・デコーダを返すこと。エージェントが全部のインターフェースで待ち受け、
+  denpa が 127.0.0.1 からアプリの作った合言葉でエージェントと組み、設定の「受信」の「チューナー」の一覧 (0 台) を読めること
 - アプリの子プロセスの bun で `.github/android-bun-check.js` を流し (debug の受け口)、JIT が動くこと、`localhost` を引けること、
   `/proc` から読めること、bun が自分を子プロセスで起動できること、`TZ=Asia/Tokyo` を解けること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
 - bun が `FFMPEG`・`FFPROBE` の ffmpeg・ffprobe を起動できること。`tests/native-smoke.ts` を bun build で 1 つにまとめてアプリの置き場に置き、
