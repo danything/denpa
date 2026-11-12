@@ -59,12 +59,21 @@ test.describe("実況のコメントの一覧", () => {
         scroller.evaluate(
           (el) => el.scrollHeight - el.scrollTop - el.clientHeight,
         );
-      // 行が少ないうちも下に寄せる (いちばん新しい行が一覧の下の端)
-      const fewRows = (await rows.last().boundingBox())!;
-      const fewBox = (await scroller.boundingBox())!;
-      expect(
-        fewBox.y + fewBox.height - (fewRows.y + fewRows.height),
-      ).toBeLessThan(2);
+      // 行が少ないうちも下に寄せる (いちばん新しい行が一覧の下の端)。行は次々に届くので、一覧と最後の行の
+      // 位置は 1 度の evaluate で読む (別々に読むと、間に届いた 1 行ぶんずれる)
+      await expect
+        .poll(() =>
+          scroller.evaluate((el) => {
+            const all = el.querySelectorAll("[data-testid=jikkyo-list-row]");
+            const last = all[all.length - 1];
+            if (last === undefined) return Infinity;
+            return (
+              el.getBoundingClientRect().bottom -
+              last.getBoundingClientRect().bottom
+            );
+          }),
+        )
+        .toBeLessThan(2);
       // 巻けるほど貯まるのを待つ。付いていく間は、増えても「最新へ」を出さない
       await expect
         .poll(() => rows.count(), { timeout: 20_000 })
