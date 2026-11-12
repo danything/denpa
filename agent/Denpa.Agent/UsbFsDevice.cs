@@ -102,14 +102,27 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
             throw new IOException($"USB のポート {port} に機材がありません (抜かれたか、コンテナに /sys が見えていません)");
         }
         var path = Path.Combine(devUsb, bus.ToString("D3", CultureInfo.InvariantCulture), device.ToString("D3", CultureInfo.InvariantCulture));
-        var fd = UsbFs.Open(path);
+        return OpenFd(UsbFs.Open(path), path, port, vendor, product, selectAlternate);
+    }
+
+    /// <summary>
+    /// アプリから受け取った usbfs の fd (<see cref="BrokerUsbHost"/>) で開く。受け取った fd は <c>dup</c> し、閉じるのは複製のほう
+    /// (受け取った fd は、抜かれるまで <see cref="BrokerUsbHost"/> が持ち続ける)。確かめることはパスから開くときと同じ
+    /// </summary>
+    public static UsbFsDevice Open(int received, string port, int vendor, int product, bool selectAlternate = true) =>
+        OpenFd(UsbFs.Dup(received, port), $"USB のポート {port}", port, vendor, product, selectAlternate);
+
+    /// <summary>開いた fd で ID を確かめ、インターフェース 0 を確保する。失敗したら fd を閉じて投げる</summary>
+    /// <param name="where">ID が違うときの文言に出す、開いたもの (パスかポート)</param>
+    private static UsbFsDevice OpenFd(int fd, string where, string port, int vendor, int product, bool selectAlternate)
+    {
         try
         {
-            // usbfs の fd を読むと、先頭にデバイスディスクリプタが返る
+            // usbfs の fd を読むと、先頭にデバイスディスクリプタが返る。dup した fd は位置を共有するので、位置を使わない pread で 0 から読む
             var head = stackalloc byte[18];
-            var got = Sys.ReadFd(fd, head, 18);
+            var got = Sys.PRead(fd, head, 18, 0);
             var (v, p) = UsbDescriptors.Ids(new ReadOnlySpan<byte>(head, (int)Math.Max(got, 0)));
-            if (v != vendor || p != product) throw new IOException($"{path} は別の機材になっています ({v:x4}:{p:x4})。挿し直されました");
+            if (v != vendor || p != product) throw new IOException($"{where} は別の機材になっています ({v:x4}:{p:x4})。挿し直されました");
 
             var number = 0u;
             if (Sys.Ioctl(fd, UsbFs.ClaimInterface, (nint)(&number)) < 0)
@@ -141,8 +154,8 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     private IReadOnlyList<UsbPipe>? _pipes;
 
     /// <summary>
-    /// usbfs の fd の続きを読む。開いたときにデバイスディスクリプタ (18 バイト) を読んであるので、続きは構成ディスクリプタ。
-    /// 初めて呼ばれたときに 1 回だけ読む (ほかの機材の開き方は変えない)
+    /// usbfs の fd の、デバイスディスクリプタ (18 バイト) の続きを読む。続きは構成ディスクリプタ。
+    /// 初めて呼ばれたときに 1 回だけ読む (ほかの機材の開き方は変えない)。dup した fd は位置を共有するので、位置を使わない pread で読む
     /// </summary>
     public IReadOnlyList<UsbPipe> Pipes()
     {
@@ -150,7 +163,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
         {
             if (_pipes is not null) return _pipes;
             var blob = stackalloc byte[ConfigDescriptorsSize];
-            var got = Sys.ReadFd(Fd, blob, ConfigDescriptorsSize);
+            var got = Sys.PRead(Fd, blob, ConfigDescriptorsSize, 18);
             if (got < 0) throw Failure("構成ディスクリプタを読めません");
             return _pipes = UsbDescriptors.Pipes(new ReadOnlySpan<byte>(blob, (int)got), 0);
         }

@@ -21,7 +21,7 @@ public class TunerPoolTests
         private int _busy;
         private volatile bool _closed;
 
-        /// <summary>選局すると同期せずに投げる (電波が届いていないチューナー)</summary>
+        /// <summary>選局すると同期せずに例外を送出する (電波が届いていないチューナー)</summary>
         public bool Deaf { get; init; }
 
         public FakeTuner(string path, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null)
@@ -390,7 +390,7 @@ public class TunerPoolTests
 
     /*
      * 同期しなかったら別のチューナーで選局し直す (Open の SyncTries・Pick の tried)。
-     * 偽のチューナーの Deaf は、選局すると「同期しませんでした」で投げる
+     * 偽のチューナーの Deaf は、選局すると「同期しませんでした」の例外を送出する
      */
     private static Rig Deaf(IReadOnlyList<TunerSpec> specs, params string[] deaf) =>
         new(specs, TimeSpan.Zero, TimeSpan.FromMilliseconds(1), deaf: deaf.ToHashSet());
