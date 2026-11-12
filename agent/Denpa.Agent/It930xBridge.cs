@@ -548,7 +548,7 @@ public sealed class It930xBridge
     /// 次の段の I2C の設定 (<c>IT9300_initialize</c> の後半。IT930x の仕様書 4.2)。I2C の速さ、端子の駆動の強さ、受信機ごとの I2C の相手。
     /// 終わりに <c>OVA_EEPROM_CFG_VALID</c> を読んで返す
     /// </summary>
-    /// <param name="receivers">受信機ごとの I2C のバスと復調器の T のアドレス (7 ビット)。ブリッジの欄は受信機の番号で並ぶ (IT930x の仕様書 4.2)</param>
+    /// <param name="receivers">受信機ごとの I2C のバスと、復調器の T のアドレス (7 ビット)。ブリッジの欄は受信機の番号で並ぶ (IT930x の仕様書 4.2)</param>
     public byte ConfigureReceivers(IReadOnlyList<It930xReceiver> receivers)
     {
         if (receivers.Any(receiver => receiver.Index < 0 || receiver.Index >= NextLevelAddress.Count))

@@ -491,6 +491,8 @@
     margin: 0;
     border-radius: 0;
     --pico-progress-color: var(--dp-ok);
+    /* 画面の外では描かない (バーの光が回り続けない)。大きさは上で決めてあるので contain-intrinsic-size は要らない */
+    content-visibility: auto;
   }
   .thumb {
     width: 5rem;

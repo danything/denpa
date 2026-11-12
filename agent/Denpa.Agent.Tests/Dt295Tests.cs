@@ -55,7 +55,7 @@ public class Dt295Tests
     [Arguments(0x04C5, 0x202F, "PIX-DTxxx (SPI モード)", false)]
     public async Task 公式_INF_の_ID_を見分けて_DT295_だけを使う(int vendor, int product, string name, bool supported)
     {
-        var model = Dt295.Find(vendor, product);
+        var model = Dt295.Family.FirstOrDefault(item => item.Vendor == vendor && item.Product == product);
         await Assert.That(model).IsNotNull();
         await Assert.That(model!.Name).IsEqualTo(name);
         await Assert.That(model.Supported).IsEqualTo(supported);

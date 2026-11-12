@@ -42,6 +42,7 @@ public class Dt295NativeTests
         for (var i = from; i < lines.Count && at < 0; i++) if (lines[i] == line) at = i;
         return at;
     }
+
     [Test]
     public async Task 地上波は_設定_選局_受信の確認_取り込み_受信_後始末の順で進み_TS_が連続して届く()
     {
@@ -57,13 +58,12 @@ public class Dt295NativeTests
         var firstS = Index(i2c, "11 W 0190");
         var closing = Index(i2c, "10 W 4700");
         var tuneHigh = Index(i2c, "10 W FEC01188");      // T25 = 545143 kHz → N = 34889 = 0x8849。上位 0x88 は初期化の 0x76 と違う
-        var tuneN = tuneHigh;
         await Assert.That(firstS).IsGreaterThan(20);
         await Assert.That(closing).IsGreaterThan(firstS);
         await Assert.That(tuneHigh).IsGreaterThan(closing);
         await Assert.That(i2c[tuneHigh - 1]).IsEqualTo("10 W FEC01049");
         // 受信中は 7.2.4 のとおり 0x96、0x80 (2 バイト) を読む
-        await Assert.That(i2c.Skip(tuneN).Any(line => line == "10 R 2")).IsTrue();
+        await Assert.That(i2c.Skip(tuneHigh).Any(line => line == "10 R 2")).IsTrue();
 
         // レジスタの順: チップの設定 (6 章) → USB のレジスタ (8.4) → I2C の準備 (6.4) → 取り込みの設定 (8.1.3) → 端点 (8.3.1) → 取り込み開始 → 停止 → hook を戻す
         var stores = fake.Stores;
@@ -219,12 +219,12 @@ public class Dt295NativeTests
         var fake = new Dt295Fake();
         var link = new Dt295NativeLink(fake);
         var i2c = new Dt295NativeI2c(link);
-        Assert.Throws<Dt295NativeException>(() => i2c.Write(0x20, 0x00));
+        Assert.Throws<Dt295NativeException>(() => i2c.Transfer(0x20, [0x00], 0));
         // 失敗のあとも続けて使える
-        i2c.Write(0x10, 0x01, 0x23);
+        i2c.Transfer(0x10, [0x01, 0x23], 0);
         await Assert.That(fake.Terrestrial.Regs[0x01]).IsEqualTo((byte)0x23);
-        i2c.Write(0x10, 0x01);
-        await Assert.That(i2c.Read(0x10, 1)[0]).IsEqualTo((byte)0x23);
+        i2c.Transfer(0x10, [0x01], 0);
+        await Assert.That(i2c.Transfer(0x10, [], 1)[0]).IsEqualTo((byte)0x23);
         await Assert.That(i2c.Transfers).IsEqualTo(4L);
     }
 
@@ -233,12 +233,12 @@ public class Dt295NativeTests
     {
         var fake = new Dt295Fake { I2cStuck = true };
         var i2c = new Dt295NativeI2c(new Dt295NativeLink(fake));
-        Assert.Throws<Dt295NativeException>(() => i2c.Write(0x10, 0x01, 0x23));
+        Assert.Throws<Dt295NativeException>(() => i2c.Transfer(0x10, [0x01, 0x23], 0));
         // 開始 (bit4) を立てたままにしない。最後に制御へ書くのは STOP (開始・再スタート・ACK・待つ側の印を落とした値)
         await Assert.That(fake.Stores.Last(s => s.Address == Dt295NativeI2c.Control).Value & 0x39).IsEqualTo(0u);
         // 失敗のあとも続けて使える
         fake.I2cStuck = false;
-        i2c.Write(0x10, 0x01, 0x23);
+        i2c.Transfer(0x10, [0x01, 0x23], 0);
         await Assert.That(fake.Terrestrial.Regs[0x01]).IsEqualTo((byte)0x23);
     }
 
@@ -310,7 +310,7 @@ public class Dt295NativeTests
     {
         var fake = Rig();
         fake.Put(0x1900020, 4, 0x02000200);
-        var (code, _, log) = Run(fake, "T25");
+        var (code, _, _) = Run(fake, "T25");
         await Assert.That(code).IsEqualTo(0);
         var starts = fake.Stores.Where(s => s.Address == 0x1902010).Select(s => s.Value).ToList();
         await Assert.That(starts).IsEquivalentTo(new[] { 0x02000000u, 0x04000000u });
@@ -322,7 +322,7 @@ public class Dt295NativeTests
     {
         var fake = Rig();
         fake.Put(0xF1001C, 4, 0x7FFD0000);
-        var (code, _, log) = Run(fake, "T25");
+        var (code, _, _) = Run(fake, "T25");
         await Assert.That(code).IsEqualTo(0);
         await Assert.That(fake.Stores.Where(s => s.Address == 0xF1001C).Select(s => s.Value))
             .IsEquivalentTo(new[] { 0x2F7D0000u, 0x2F7F0000u, 0x7FFD0000u });
@@ -445,7 +445,8 @@ public class Dt295NativeTests
         await Assert.That(i2c).Contains("11 W 030002");
         await Assert.That(i2c).Contains("11 W 073311");
         await Assert.That(i2c).Contains("11 W 10B000");
-        await Assert.That(i2c).Contains("11 W 1C59AA2019");    }
+        await Assert.That(i2c).Contains("11 W 1C59AA2019");
+    }
 
     [Test]
     public async Task S_側の初期化は_T_チューナーの_100_ms_の待ちの間に入る()
@@ -608,7 +609,7 @@ public class Dt295NativeTests
         // 地上波へ戻る: 先に S 側を待機させる表 (S 復調 1C=AA ほか。仕様書 7.2.2。推定) が入り、0B=01 も入る
         var back = Tune(terrestrial);
         await Assert.That(back).Contains("11 W 1CAA");
-        await Assert.That(back).Contains("11 W 1728".Replace("1728", "1701"));
+        await Assert.That(back).Contains("11 W 1701");
         await Assert.That(back).Contains("10 W FEC00B01");
 
         device.Release();

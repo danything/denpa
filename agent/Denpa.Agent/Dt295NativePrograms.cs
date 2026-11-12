@@ -47,7 +47,7 @@ public static class Dt295NativePrograms
     /// <summary>I2C の順次実行 (操作 2) が作業域に持つもの。+48 直前の読みの先頭バイト、+52 結果の置き場の先頭、+56 転送の種類、+60 いまの転送の読みの置き場</summary>
     private const int LastRead = 48, ResultStart = 52, Kind = 56, ReadStart = 60;
 
-    /// <summary>操作 2 の操作列と結果の置き場 (SDRAM。常駐イメージを入れていた 0x80380000 台。ホストからは 0x380000 台)。長い操作列だけここに置き、短いものは要求の中に入れる</summary>
+    /// <summary>操作 2 の操作列と結果の置き場 (SDRAM の 0x80380000 台。仕様書で常駐イメージが置かれる場所で、常駐イメージを入れないいまは空いている。ホストからは 0x380000 台)。長い操作列だけここに置き、短いものは要求の中に入れる</summary>
     public const uint BatchCpu = 0x80380000, BatchPhysical = 0x380000, BatchResultOffset = 0x2000, BatchLimit = 0x2000;
 
     /// <summary>操作 2 の要求の中に操作列と結果を置くとき: 結果は +16〜+31、操作列は +32〜+63</summary>

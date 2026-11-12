@@ -119,7 +119,7 @@ export function moveDay(day: number, key: string): number | null {
   return d.getTime();
 }
 
-/** 読み上げの名前 (「10 月 19 日 (今日)、予約 3 件」)。行が無ければ「なし」 */
+/** 読み上げの名前 (「10月19日 (今日)、予約 3 件」)。行が無ければ「なし」 */
 export function dayAriaLabel(
   day: number,
   mark: DayMark | undefined,

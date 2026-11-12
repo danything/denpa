@@ -1,7 +1,7 @@
 # チューナー
 
 使えるチューナーと、要るもの・B-CASカード・困ったときのことです。
-入れ方は [install.md](install.md) (Mac は [install-mac.md](install-mac.md)、Windows は [install-windows.md](install-windows.md))、
+入れ方は [install.md](install.md) (Mac は [install-mac.md](install-mac.md)、Windows は [install-windows.md](install-windows.md)、Android は [install-android.md](install-android.md))、
 エージェントの作りは [agent.md](agent.md)。
 
 「Amazon で見る」は Amazon のアソシエイトのリンク (広告) です。ここから買っても値段は変わらず、紹介料が denpa の開発を続ける費用になります。どこで買っても動作は同じです。
@@ -28,7 +28,9 @@
   (設定の「その他」→「ログ」の「Issue にする」から作れます。[tuner-pt3.md](tuner-pt3.md#動いたか教えてください))
 
 - **B-CASカード** と USB のカードリーダー (IT930x の機材・CECH-ZD1 J・PIX-DT295 は内蔵リーダーでもよい。asicen-userland の機材の内蔵リーダーは使えない。[下記](#カードリーダー))
-- **OS**: Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)。Talos Linux の 1 台に OS ごと入れるなら [install-talos.md](install-talos.md) (amd64・PT3。実機で確かめていない)
+- **OS**: Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)。Talos Linux の 1 台に OS ごと入れるなら [install-talos.md](install-talos.md) (amd64・PT3。実機で確かめていない)。
+  Android (10 以上、arm64) の端末は、チューナーエージェントとして使えます。挿せるのはエージェントが USB を直に持つ機材と USB のカードリーダーです
+  (ASICEN 系は使えない。実機で確かめていない。[install-android.md](install-android.md))
 - **Docker** (Linux。Compose 込み)。Mac と Windows は要らない (denpa 本体もエージェントも OS の上でそのまま動かす)。
   Kubernetes なら Helm
 - あれば Intel か AMD の GPU (`/dev/dri` を渡す) か NVIDIA の GPU (NVIDIA Container Toolkit で渡す。[install.md](install.md#用意するもの))。無ければソフトウェアでエンコードします

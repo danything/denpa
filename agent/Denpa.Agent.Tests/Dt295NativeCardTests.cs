@@ -4,7 +4,7 @@ namespace Denpa.Agent.Tests;
 
 /*
  * PIX-DT295 の内蔵カードリーダー (Dt295NativeCard) を、偽の機材 (Dt295Fake の UART のモデル) で確かめる。
- * 電源投入・切断の表と端子の扱いは仕様書 (dt295-resident/spec.md) §10。UART のモデルは偽物が作ったもので、実機の読み値ではない。
+ * 電源投入・切断の表と端子の扱いは仕様書 (dt295-resident/spec.md) の 10 章。UART のモデルは偽物が作ったもので、実機の読み値ではない。
  */
 public class Dt295NativeCardTests
 {
@@ -166,7 +166,7 @@ public class Dt295NativeCardTests
 
         await Assert.That(atr).IsEquivalentTo(BcasAtr);
         var uart = fake.Stores.Where(s => s.Address is >= 0xFEA000 and <= 0xFEA03F).Take(17).ToArray();
-        // 仕様書 §10 の投入の表: 段ごとのアドレス。0xFEA004 の値は極性 (0xF00223 = 0) から bit3、段 7 は | 2、段 16 は | 6
+        // 仕様書 10 章の投入の表: 段ごとのアドレス。0xFEA004 の値は極性 (0xF00223 = 0) から bit3、段 7 は | 2、段 16 は | 6
         await Assert.That(uart.Select(s => s.Address)).IsEquivalentTo(new uint[]
         {
             0xFEA01C, 0xFEA004, 0xFEA014, 0xFEA000, 0xFEA000, 0xFEA004, 0xFEA008, 0xFEA004, 0xFEA000, 0xFEA000,
@@ -263,7 +263,7 @@ public class Dt295NativeCardTests
         await Assert.That(fake.Stores.Count(s => s.Address is >= 0xFEA000 and <= 0xFEA03F)).IsEqualTo(writes);
         await Assert.That(card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00])).IsEquivalentTo(new byte[] { 0x90, 0x00 });
 
-        // 抜かれたら、次の Reset は電源から入れ直そうとして、カードが無い (挿入の印が無い) のを ATR が来ないことで判定する
+        // 抜かれたら送受信は CardAbsentException になり、挿し直したあとの Reset は電源から入れ直す
         fake.CardInserted = false;
         Assert.Throws<CardAbsentException>(() => card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00]));
         fake.CardInserted = true;

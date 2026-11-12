@@ -17,7 +17,7 @@ export const SERVICE_TYPE_LABEL: Record<string, string> = {
   SKY: "スカパー！プレミアム",
 };
 
-/** 種別の並びを画面の名前で (「地上波・BS・CS」)。知らない種別は符号のまま */
+/** 種別の並びを画面の名前で (「地上波・BS・CS」)。表に無い種別は符号のまま */
 export function typeNames(types: readonly string[]): string {
   return types.map((type) => SERVICE_TYPE_LABEL[type] ?? type).join("・");
 }
@@ -261,7 +261,7 @@ export function capacityLabel(
  * 進み具合。**小数第 1 位まで出す。**
  *
  * 整数だけだと、1 時間かかるエンコードでは同じ数字が 30 秒以上動かない。
- * 動いていないのか止まったのか画面から判らなかったので、1 桁足してある
+ * 動いていないのか止まったのか画面から分からなかったので、1 桁足してある
  */
 export function percent(value: number): string {
   const clamped = Math.min(Math.max(value, 0), 1);
@@ -272,7 +272,7 @@ export function percent(value: number): string {
  * 残り時間の見込み。**秒まで出す。**
  *
  * 分どまりだと終わりぎわの数分が「あと 1 分」で固まってしまい、
- * 見終わるまで待てばいいのか席を立っていいのか判らなかった。
+ * 見終わるまで待てばいいのか席を立っていいのか分からなかった。
  * 秒の桁は多少ふらつくが、動いていることそのものが情報になる
  */
 export function eta(ms: number | null): string {
@@ -382,7 +382,7 @@ export function badgeClass(state: string): string {
     case "conflict":
     case "failed":
       return "error";
-    // 予約済み・待ち・取消・削除は「見て欲しいこと」が無いので色を付けない
+    // 予約済み・待ち・取消・削除は「見てほしいこと」が無いので色を付けない
     default:
       return "";
   }

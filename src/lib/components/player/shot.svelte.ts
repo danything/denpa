@@ -31,7 +31,7 @@ export const SAVED_MS = 1500;
  * PC ではクリップボードにもコピーし (そのまま貼りたいとき用)、できたときは「保存しました (クリップボードにもコピー)」と出す。
  *
  * **送れなかったとき (オフラインで観ている・サーバが断った) だけ、端末に保存する** (指の端末は共有シート、
- * PC は PNG を落とす。`snapshot.saveOnDevice`)
+ * PC は PNG をダウンロードする。`snapshot.saveOnDevice`)
  */
 export function snapshotter(controls: PlayerControls) {
   let shot = $state<Notice | null>(null);
@@ -46,7 +46,7 @@ export function snapshotter(controls: PlayerControls) {
 
   /**
    * **PC ではクリップボードにもコピーする。** 置けるのは https か localhost で押した直後だけなので、
-   * 送る前に始める (中身は後から渡せる)。断られても黙る
+   * 送る前に始める (中身は後から渡せる)。断られても通知は出さない
    */
   function copy(canvas: HTMLCanvasElement): Promise<boolean> {
     if (window.matchMedia("(pointer: coarse)").matches || !canCopyImage())

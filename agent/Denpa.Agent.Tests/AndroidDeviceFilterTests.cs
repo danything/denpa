@@ -4,7 +4,7 @@ using System.Xml.Linq;
 namespace Denpa.Agent.Tests;
 
 /*
- * Android のアプリの device_filter.xml (android/app/src/main/res/xml/device_filter.xml)。挿したときにアプリを起こす機材と、
+ * Android のアプリの device_filter.xml (android/app/src/main/res/xml/device_filter.xml)。挿したときにアプリを起動する機材と、
  * アプリが許可を求めて fd をエージェントへ渡す機材を決める表で、手で書いている。
  * 見ること: エージェントが USB を直に持つ機材 (WinUsbTargets。--usb-ids と同じ) とちょうど同じ ID が並ぶ / CCID のクラス (11) がある
  */
@@ -36,7 +36,7 @@ public class AndroidDeviceFilterTests
     }
 
     [Test]
-    public async Task USB_の_CCID_のカードリーダーをクラスで拾う()
+    public async Task USB_の_CCID_のカードリーダーはクラスで選ぶ()
     {
         var classes = Load().Root!.Elements("usb-device")
             .Select(entry => (string?)entry.Attribute("class")).OfType<string>().Select(Number).ToList();

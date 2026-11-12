@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **カードには何も渡さない。** 読むのはスクランブルされていない PSI/SI (ARIB STD-B10) だけで、ECM と EMM は
-/// セクションの形 (table_id と長さ) を数えるだけにする。数えるものは次のとおり。
+/// セクションの形式 (table_id と長さ) を数えるだけにする。数えるものは次のとおり。
 /// </para>
 ///
 /// <list type="bullet">
@@ -50,7 +50,7 @@ public sealed class TsObservation
     private readonly SortedDictionary<int, SortedSet<(int System, int Pid)>> _ecms = [];
     /// <summary>CAT の CA 記述子 (CA_system_id と EMM の PID)</summary>
     private readonly SortedSet<(int System, int Pid)> _emms = [];
-    /// <summary>ECM・EMM の PID → そこに来たセクションの形</summary>
+    /// <summary>ECM・EMM の PID → そこに来たセクションの形式</summary>
     private readonly SortedDictionary<int, Shape> _shapes = [];
 
     private int? _transportStreamId, _networkId;
@@ -82,7 +82,7 @@ public sealed class TsObservation
     }
 
     /// <summary>
-    /// 分かったことを 1 行ずつ。**報告にそのまま貼れる形にする** (docs/tuner-it930x.md「スカパー！プレミアムでカード無しで分かること」)
+    /// 分かったことを 1 行ずつ。**報告にそのまま貼れる形式にする** (docs/tuner-it930x.md「スカパー！プレミアムでカード無しで分かること」)
     /// </summary>
     public IEnumerable<string> Describe()
     {
@@ -142,13 +142,13 @@ public sealed class TsObservation
         if (_shapes.TryGetValue(pid, out var shape))
         {
             /*
-             * ECM・EMM は形を数えるだけ。**CRC で捨てずに全部数える。** スカパー！プレミアムの ECM・EMM が
-             * 末尾に CRC を持つ形かは分かっていないので、section_syntax_indicator が 1 のものは CRC が合ったかを別に数える
+             * ECM・EMM は形式を数えるだけ。**CRC で捨てずに全部数える。** スカパー！プレミアムの ECM・EMM が
+             * 末尾に CRC を持つ形式かは分かっていないので、section_syntax_indicator が 1 のものは CRC が合ったかを別に数える
              */
             shape.Add(section, syntax ? Descrambler.Crc32(section) == 0 : null);
             return;
         }
-        // ここから先の PSI/SI はどれも CRC を持つ形式。CRC で確かめ、化けたセクションで嘘の CA_system_id を出さない
+        // ここから先の PSI/SI はどれも CRC を持つ形式。CRC で確かめ、壊れたセクションから誤った CA_system_id を出さない
         if (!syntax || section.Length < 12 || Descrambler.Crc32(section) != 0) return;
         var table = section[0];
         if (pid == PatPid && table == 0x00) OnPat(section);
@@ -209,7 +209,7 @@ public sealed class TsObservation
         Track(found);
     }
 
-    /// <summary>ECM・EMM の PID を、形を数える PID に足す</summary>
+    /// <summary>ECM・EMM の PID を、形式を数える PID に足す</summary>
     private void Track(IEnumerable<(int System, int Pid)> found)
     {
         foreach (var (_, pid) in found)
@@ -235,7 +235,7 @@ public sealed class TsObservation
     }
 
     /// <summary>
-    /// ECM・EMM の PID に来たセクションの形。table_id ごとの数と、長さの最小・最大、
+    /// ECM・EMM の PID に来たセクションの形式。table_id ごとの数と、長さの最小・最大、
     /// section_syntax_indicator が 1 のもののうち末尾の CRC が合った数と合わなかった数
     /// </summary>
     private sealed class Shape
@@ -245,7 +245,7 @@ public sealed class TsObservation
         private long _crcOk, _crcBad;
         public long Scrambled;
 
-        /// <param name="crc">CRC が合ったか。section_syntax_indicator が 0 (CRC を持たない形) なら null</param>
+        /// <param name="crc">CRC が合ったか。section_syntax_indicator が 0 (CRC を持たない形式) なら null</param>
         public void Add(byte[] section, bool? crc)
         {
             _tables[section[0]] = _tables.GetValueOrDefault(section[0]) + 1;

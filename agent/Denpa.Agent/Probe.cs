@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// デバイスを確保したままの選局は、値が 1 つ違っても「ioctl は通るが同期しない」という
-/// 出方をする。単体テストでは踏めないので、実機で当てるための入口を用意した
+/// 出方をする。単体テストでは再現できないので、実機で確かめるためのコマンドを用意した
 /// (チューナー自動検出のときと同じやり方)。受けた TS は、量・同期バイトの割合・連続性の飛び (ContinuityCount.cs)・
 /// スクランブルされたパケットの割合と、カード無しで分かること (CA_system_id・番組表が来ているか。TsObservation.cs) を出す。
 /// </para>
@@ -28,6 +28,7 @@ namespace Denpa.Agent;
 /// denpa-agent --card                                      # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
 /// denpa-agent --card zd1j:4-12.1                            # CECH-ZD1 J の内蔵の差し込み口だけ (ほかのリーダーに触らない)
 /// denpa-agent --card dt295:4-12.1                           # PIX-DT295 の差し込み口だけ (ほかのリーダーに触らない)
+/// denpa-agent --card it930x:4-12.1                          # IT930x の機材の内蔵カードリーダーだけ (ほかのリーダーに触らない)
 /// </code>
 ///
 /// <para>
@@ -183,7 +184,7 @@ public static class Probe
             return OneCard(Zd1j.Card(port), Zd1jBoard.CloseAll);
         }
         Console.WriteLine(Ccid.Describe() ?? PcscLink.Describe());
-        foreach (var found in It930x.Cards().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
+        foreach (var found in It930x.Cards()) Console.WriteLine($"内蔵 {found.Name}");
         Zd1j.DescribeCards(Zd1j.Cards(), Console.Out);
         Dt295.DescribeCards(Dt295.Cards(), Console.Out);
         try
@@ -506,7 +507,7 @@ public static class Probe
             // CXD2856ER の地上波は、プリセットを使ったか、ロックのビットが立った時刻、TMCC、モードとガードインターバルを出す (CXD2856 の仕様書 5.8)
             if (tuner is It930xTuner noted)
             {
-                foreach (var note in noted.Notes()) Console.WriteLine($"    {note}");
+                foreach (var note in noted.Notes()) output.WriteLine($"    {note}");
             }
         }
 
@@ -537,7 +538,7 @@ public static class Probe
         ShowBridge(tuner.Device, output);
     }
 
-    /// <summary>ブリッジの TS の経路の状態 (<see cref="It930xBridge.ReadTsStatus"/>) と、EP 0x84 の読みの数え (<see cref="It930xDevice.DescribeTsCounters"/>) を出す</summary>
+    /// <summary>ブリッジの TS の経路の状態 (<see cref="It930xBridge.ReadTsStatus"/>) と、EP 0x84 の読みを数えた値 (<see cref="It930xDevice.DescribeTsCounters"/>) を出す</summary>
     internal static void ShowBridge(It930xDevice? device, TextWriter output, string indent = "    ")
     {
         if (device is null) return;

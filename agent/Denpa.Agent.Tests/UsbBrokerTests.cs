@@ -7,7 +7,7 @@ using TUnit.Core.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * Android のアプリから USB を受け取る口 (UsbBroker.cs)。偽のアプリがソケットに繋ぎ、memfd に書いたディスクリプタの fd を
+ * Android のアプリから USB を受け取る仕組み (UsbBroker.cs)。偽のアプリがソケットに繋ぎ、memfd に書いたディスクリプタの fd を
  * SCM_RIGHTS で送る。memfd は usbfs ではないので、ポートの名前は名前から作る側 (CONNINFO_EX が使えないカーネルと同じ) になり、
  * インターフェースの確保 (USBDEVFS_CLAIMINTERFACE) は断られる。確かめるのは、その手前まで (受け取る・並べる・dup して先頭から読む)
  */
@@ -239,7 +239,7 @@ public sealed partial class UsbBrokerTests
             first.Send("""{"type":"synced"}""");
             await agent.Changed();
         }
-        // 切れただけでは捨てない (アプリが落ちても、受け取った fd は使える)
+        // 切れただけでは捨てない (アプリが終了しても、受け取った fd は使える)
         await Task.Delay(500);
         await Assert.That(agent.Host.Peek("001-004")).IsNotNull();
 

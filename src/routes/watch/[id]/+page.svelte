@@ -281,7 +281,7 @@
    */
   let rawCapable = $state(false);
   /**
-   * 4K の局の元の録画の詰め替え (放送の HEVC。`PlaybackInfo.broadcast`) を再生できるか。`isTypeSupported` に加えて
+   * 4K の局を録った元の TS を詰め替えたもの (放送の HEVC。`PlaybackInfo.broadcast`) を再生できるか。`isTypeSupported` に加えて
    * `decodingInfo` に放送の値を渡して決める (`#lib/hevc-4k.ts`。ライブの 4K の局と同じ)。4K の局の録画を開いたときに調べる
    */
   let broadcastHevc = false;
@@ -1257,7 +1257,7 @@
       if (moved) adaptQuietUntil = Date.now() + HOLD;
       return moved;
     }
-    // 音声だけとの行き来は作り直す (MSE は SourceBuffer の中のトラックの数を替えられない)
+    // 音声だけとの行き来は作り直す (MSE は SourceBuffer に入れたトラックの数を替えられない)
     if (next === "audio" || step === "audio" || remux === null) {
       // 同じ中身でも新しいオブジェクトにする (同じものを入れ直しても、プレイヤーを作り直す `$effect` が動かない)
       const fresh = { ...now };
@@ -1757,7 +1757,7 @@
   onMount(() => () => jikkyo.close());
 
   /**
-   * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
+   * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端に縦に並ぶボタンで出す (端末ごとに覚える)。
    * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない。時刻は録画の中の再生位置で出し、押すとそこへ飛ぶ
    */
   const jikkyoList = jikkyoListSwitch(
@@ -1766,7 +1766,7 @@
   );
   /**
    * 放送時刻 `at` が、観ているもの (エンコードしたもの・元の TS) のどこか (`airTime` の逆)。
-   * 録画の頭より前は「開始前」、切った CM の中は「CM」で、飛べない
+   * 録画の先頭より前は「開始前」、切った CM の中は「CM」で、飛べない
    */
   function placeAir(at: number): number | "before" | "cut" {
     if (info === null) return "before";
@@ -1972,7 +1972,7 @@
   onMount(() => {
     setSpeed(storedSpeed(), false);
     skipCm = skipCmAtStart(rec.cm_note, stored(SKIP_CM_KEY));
-    // チャプターが来るまで覆っておく (頭が CM のことが多い。`settle`)
+    // チャプターが来るまで覆っておく (始まりが CM のことが多い。`settle`)
     if (skipCm) shut();
     void loadChapters().then(() => {
       chaptersReady = true;
@@ -2397,8 +2397,8 @@
   }
 
   /**
-   * 観はじめの 1 回。チャプターが揃い、始める位置 (続きか頭か。`resume`) も決まってから、始まりが CM なら飛ぶ。
-   * 取得している間は黒く覆っておく (本編前の CM が一瞬流れていた)。位置を待たないと頭の CM を
+   * 観はじめの 1 回。チャプターが揃い、始める位置 (続きか先頭か。`resume`) も決まってから、始まりが CM なら飛ぶ。
+   * 取得している間は黒く覆っておく (本編前の CM が一瞬流れていた)。位置を待たないと始まりの CM を
    * 飛んでから続きへ移り、リロードのたびに「CM を飛ばしました」が出ていた。両方から呼び、遅いほうで決める
    */
   let chaptersReady = false;

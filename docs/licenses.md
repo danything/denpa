@@ -176,9 +176,9 @@ CI は zip を作る前に、DLL が上の表のもの (x264・dav1d・zimg・zl
 ソースは、自分で組むもの (FFmpeg・SVT-AV1・Opus) は Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball、MSYS2 のパッケージは
 [msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) のヘッダとライブラリも MSYS2 のパッケージです。
 
-### Android のアプリ (まだ配らない)
+### Android のアプリ
 
-CI が組む APK (`io.github.danything.denpa`。[.github/workflows/android.yml](../.github/workflows/android.yml)) です。リリースにはまだ載せません。
+リリースに添える APK (`denpa-<バージョン>-android-arm64.apk`。パッケージは `io.github.danything.denpa`。組むのは [.github/workflows/android.yml](../.github/workflows/android.yml)) です。
 アプリ (`android/`) は denpa と同じ AGPL-3.0-or-later です。常駐サービス・通知・USB・ソケット・子プロセスは Android の標準の API で書き、AndroidX も使いません。
 APK に入る依存は、Kotlin で書くと付いてくる下の 2 つだけです。単体テストだけで使う JUnit (EPL-1.0) と org.json (Public Domain。android.jar の org.json は中身が無いため) は APK に入りません。
 
@@ -187,14 +187,15 @@ APK に入る依存は、Kotlin で書くと付いてくる下の 2 つだけで
 | Kotlin の標準ライブラリ (`org.jetbrains.kotlin:kotlin-stdlib`)       | アプリの Kotlin のコード    | <https://github.com/JetBrains/kotlin>           | Apache-2.0 |
 | JetBrains の注釈 (`org.jetbrains:annotations`。標準ライブラリが引く) | 型の注釈 (動作には使わない) | <https://github.com/JetBrains/java-annotations> | Apache-2.0 |
 
-エージェントは `lib/<ABI>/libdenpa_agent.so` の名前で入れます。CI が `linux-bionic-arm64`・`linux-bionic-x64` の Native AOT で組みます。
+エージェントは `lib/<ABI>/libdenpa_agent.so` の名前で入れます。CI が `linux-bionic-arm64`・`linux-bionic-x64` の Native AOT で組み、リリースの APK には arm64 だけを入れます。
 中身は上の `denpa-agent` と同じ .NET のバイナリで、ファームウェア (IT930x と Siano) も同じく埋め込んであります。
 Android には OpenSSL が無いので、土台の libssl の代わりに OpenSSL を静的に入れます。asicen-userland はまだ入れません。
+Siano のファームウェアの許諾の文面 (`LICENCE.siano`) と OpenSSL の `LICENSE.txt` (`LICENSE.openssl` の名前で) は、APK の `assets/licenses/` に入れています。
 
 | 名前                                                     | 何に                                                              | 出どころ                                                                                 | ライセンス                                                                          |
 | -------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | ASP.NET Core (linux の実行時パックの IL を AOT で埋める) | エージェントのポートの HTTPS (Kestrel)                            | <https://github.com/dotnet/aspnetcore>                                                   | MIT                                                                                 |
-| OpenSSL (3.5 系。NDK で組み、静的リンク)                 | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`) | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、配るときはそれを添える |
+| OpenSSL (3.5 系。NDK で組み、静的リンク)                 | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`) | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、APK に入れて一緒に配る |
 
 ### `denpa-aio`
 

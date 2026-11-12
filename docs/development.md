@@ -90,7 +90,7 @@ PR を出して自分でマージします。急ぐときは Actions から手�
 **1 台ではこれ以上縮みません。** 中身の合計は約 3 分で大半は偽の放送を待つ時間、
 下限はいちばん長いファイル 1 本の時間です。
 
-CI では 6 つに割って別のランナーに出し、3 ワーカー×5 台と 1 ワーカーの 6 組 (下) で 16 ワーカーぶん並べます。
+CI では 10 組に割って別のランナーに出し、3 ワーカー×8 台と 1 ワーカー×2 台の 10 組 (下) で 26 ワーカーぶん並べます。
 組の中身は `tests/e2e/shards.json` で、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割っています。
 組ごとにテストの秒数の和がそろうように割り、長いファイルは組の先頭のほうに来るように組みます
 (組の中ではファイル名の順にワーカーへ配られるので、遅れて始まらずに済む)。組の時間の下限は、その組でいちばん長いファイル 1 本です。
@@ -98,14 +98,15 @@ CI では 6 つに割って別のランナーに出し、3 ワーカー×5 台�
 - 映像を長くデコードし続けるスペック (20-live・22-watch・互換モードのものなど。一覧は shards.json の注記) は 1 つの組に 3 本までにします。混むとどれも遅くなります
 - 名前が後ろの長いスペック (57-jikkyo など) は、前に並ぶスペックが少ない組に置きます。
   前のスペックがワーカーを埋めていると遅れて始まり、組がそのぶん長くなります
-- 6 組はライブの貯め方 (50-live-pacing・51-live-gaps) だけを、1 ワーカーで順に流します (test.yml)。同じ組でほかのワーカーが動くと
+- 9 組と 10 組は、ライブの貯め方 (50-live-pacing・51-live-gaps) を 1 本ずつ 1 ワーカーで流します (test.yml)。同じ組でほかのワーカーが動くと
   届く間隔が乱れ、貯める量がその間隔を覆う高さ (`pacing.ts` の `cover`) へ上がって、「下限のまま」を見るテストが落ちるためです
   (軽いスペックと組ませても 5 回に 2 回落ちた)。デコードが重なると、途中から入ったときにコマも落とします。
-  1 ワーカーなので、ほかのスペックを足すとそのぶん組が長くなります
+  1 ワーカーなので、ほかのスペックを足すとそのぶん組が長くなります。2 本を 1 つの組で順に流すと 2 分を超えるので、組を分けています
 - 1 本で長いスペックは、組の時間の下限を押し上げるので分けます (57-jikkyo-recorded・26-hwenc-hevc・20-live-player はそうして分けたもの)。
   20-live はテストが細かく多く、1 本で CI の 2.4 分かかっていたので、選局・一覧・データ放送 (20-live) と
   操作バーから先 (20-live-player) の 2 本に分けました。どちらも 1 分強です。
-  いまいちばん長いのは 57-jikkyo・03-recording・22-watch (CI でどれも 1.5 分ほど) です
+  いまいちばん長いのは 57-jikkyo (CI で 2 分ほど) で、20-live-player・22-watch (100 秒ほど)、03-recording (90 秒ほど) が続きます。
+  57-jikkyo の組は、この 1 本で 2 分を超えます
 - 組の時間は、組の秒数の和を 3 で割った値と、長いファイルが始まる時刻にその長さを足した値の、大きいほうで決まります。
   割り直すときは、ファイル名の順に空いたワーカーへ配って両方を見積もります
 - 実時間を待つテストは、確かめる性質が出る最短の尺で見ます。51-live-gaps は空きを 3 回 (縮めにかかる 20 秒より長い間隔で)、
@@ -124,27 +125,28 @@ CI では 6 つに割って別のランナーに出し、3 ワーカー×5 台�
 PR で飛ばしたものが main で赤くなったら、見て直します。
 
 main は ruleset の必須チェックで守ってあります。`check`・`agent`・`agent-asicen-mock`・`install-linux`・`talos`・
-`agent-windows`・`agent-windows-install`・`agent-macos`・`e2e (1)`〜`(6)`・`claude-review` と、CodeQL の
+`agent-windows`・`agent-windows-install`・`agent-macos`・`e2e (1)`〜`(10)`・`claude-review` と、CodeQL の
 `codeql / Analyze (actions・c-cpp・csharp・javascript-typescript)` です。確かめるには `gh api repos/danything/denpa/rules/branches/main`。
 
 ### 中身を回すジョブを決める
 
-**必須チェックのジョブは、飛ばすときも走らせて成功で終えます。** 中身の段を飛ばし、飛ばした理由をジョブの注記に出します。
+**関係ないジョブは、ジョブごと飛ばします。** ジョブの `if` で飛ばしたジョブは、必須チェックでも成功として数えられ、ランナーを使いません。
 
 - 決めるのは `.github/ci-changes.sh` です。PR の触ったファイルを GitHub の API から読み、下の組ごとに回すかを出します
 
   | 組      | ジョブ                                                                           | 回すとき                                                                                      |
   | ------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-  | e2e     | `e2e (1)`〜`(6)`                                                                 | エージェント・通知領域のアプリ・文書・入れ方・配備のほかを触ったとき                          |
+  | e2e     | `e2e (1)`〜`(10)`                                                                | エージェント・通知領域のアプリ・文書・入れ方・配備のほかを触ったとき                          |
   | windows | `agent-windows`・`agent-windows-install`                                         | `agent/`・`tray/Denpa.Tray*`・`install.ps1`・`scripts/build-wdi-simple.ps1`                   |
   | macos   | `agent-macos`・`tray-macos`                                                      | `agent/`・`tray/mac/`・`install.sh`                                                           |
   | android | `agent-android`                                                                  | `agent/` と、android.yml・Android で組む部品                                                  |
   | bundle  | `server-windows-bundle`・`server-windows`・`server-macos-bundle`・`server-macos` | 配布物の組み方・ffmpeg・入れ方・`tests/native-*`・依存と、OS ごとに扱いが違うサーバのファイル |
 
 - test.yml・ci-changes.sh・global.json を触ったときは全部回します。bundle を回すときは windows と macos も回します (配布物を確かめるジョブが、そちらで組んだエージェントを使う)
-- Windows と Mac のジョブは、飛ばすときは ubuntu のランナーで走らせます。混んだ Windows と Mac のランナーを待たずに済みます
-- 必須ではないジョブ (`tray-macos`・`agent-android`・`server-*`) はジョブごと飛ばします。回したか飛ばしたかは `changes` ジョブの Summary に出ます
-- e2e は `changes` を待たずに、それぞれのジョブの最初の段で決めます。E2E がいちばん長いので、始まりを遅らせないためです
+- 回したか飛ばしたかは `changes` ジョブの Summary に出ます。`changes` が落ちたときも、必須チェックのジョブは回します
+- e2e だけはジョブを走らせ、`changes` を待たずにそれぞれのジョブの最初の段で決めて、中身の段を飛ばします。E2E がいちばん長いので、始まりを遅らせないためです
+- CodeQL の C# の解析は、PR が `agent/`・`tray/`・C# のファイル・global.json を触っていなければ飛ばします (codeql.yml の `language-paths`。中身は 5ym/repo-config の共有の workflow)。
+  matrix の 1 つだけはジョブの `if` で飛ばせないので、ジョブは走らせて解析の段を飛ばします。main への push と週 1 回の実行では全部解析します
 - `check`・`agent`・`agent-asicen-mock`・`install-linux`・`talos` はいつも回します。どれも ubuntu のランナーで 2 分かかりません
 - ジョブが読むファイルを足したら、ci-changes.sh の一覧にも足します。足さないと、そのファイルだけを触った PR でジョブの中身が回りません
 
@@ -313,7 +315,7 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 ## Android のアプリ
 
 **Android で denpa を動かすアプリは `android/` の Gradle のプロジェクトです (パッケージは `io.github.danything.denpa`)。** 画面は持たず、常駐サービスがエージェントを子プロセスとして起動します。
-使い方は [install-android.md](install-android.md)、エージェントとの取り決めは [agent.md](agent.md#android-でアプリから-usb-を受け取る) にあります。リリースにはまだ載せません。
+使い方は [install-android.md](install-android.md)、エージェントとの取り決めは [agent.md](agent.md#android-でアプリから-usb-を受け取る) にあります。
 
 - Kotlin で、Android の標準の API (`android.*`) だけで書きます。AndroidX も使わず、APK に入る依存は Kotlin の標準ライブラリだけです。
   Gradle・AGP・Kotlin・compileSdk・JDK・依存は、その時点の最新の安定版にします。上げるのは Renovate です (JDK は `renovate.json` の注釈で追う)
@@ -342,5 +344,21 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 
 エミュレータの列は必須チェックではありません (起動や応答の時間がばらつき、コードと関係なく落ちることがあるため)。
 USB の機材はエミュレータに挿せないので、usbfs の fd (許可・`USBDEVFS_CONNINFO_EX`・確保) は CI では見ません。
+
+### リリースの APK と署名の鍵
+
+リリース (release.yml) は android.yml を `tag` 付きで呼び、arm64 のエージェントだけを入れた release の APK を組んで、`denpa-<バージョン>-android-arm64.apk` と `.sha256` を添えます (出所の証明も付ける)。
+
+- **リリースはいつも同じ鍵で署名します。** 鍵が違う APK は上書きで入れられないためです。denpa-tv とは別の鍵で、漏れたときに巻き込むアプリを 1 つにします
+- 鍵は PKCS12 (RSA 4096 ビット、有効期限 36500 日。denpa-tv と同じ作り) で、リポジトリの Actions の secrets に `DENPA_ANDROID_KEYSTORE_BASE64` (keystore を base64 にしたもの)・
+  `DENPA_ANDROID_KEYSTORE_PASSWORD`・`DENPA_ANDROID_KEY_ALIAS`・`DENPA_ANDROID_KEY_PASSWORD` として入れてあります。控えは管理者の手元にあります。
+  Gradle には、CI が keystore のパスを `DENPA_ANDROID_KEYSTORE` で、ほかを同じ名前の環境変数で渡します
+- android.yml は、署名した証明書の SHA-256 を、ワークフローに書いた値 (`CERT_SHA256`。install-android.md の「上げる」にも書いてある) と突き合わせます。
+  secrets が無いときと値が違うときは、リリースの APK を出さずに止まります
+- 鍵を渡さないとき (PR の CI・手元) は、release も debug の鍵で署名します。PR の CI は、R8 で縮めた release が組めることもここで確かめます
+- release は R8 で縮めます (`isMinifyEnabled`・`isShrinkResources`)。リフレクションで引くクラスが無く、マニフェストの部品は AGP の規則が残すので、規則は足していません。
+  エミュレータで確かめるのは debug の APK だけなので、リフレクションを使うコードを足したら規則も足します
+- エージェントに入っているもののライセンスの文書 (Siano のファームウェアの許諾と OpenSSL の LICENSE) を、APK の `assets/licenses/` に入れます
+  (`licenseAssets`。OpenSSL のものは CI が `android/agent-licenses/` に置く。`DENPA_AGENT_LICENSES` で替えられる)
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。

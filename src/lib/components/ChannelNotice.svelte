@@ -52,10 +52,10 @@
   /*
      * **枠で囲まない、画面の幅いっぱいの 1 行。** ヘッダーの下に貼る。見た目はページの中の通知 (`app.css` の `.notice.info`。
      * 淡い面と頭の ⓘ。地を案内の色で塗らない) を、角を落として 1 行の高さに詰めたもの。
-     * 狭い画面で文が長ければ折り返し、ボタンは右に残す
+     * 狭い画面で文が長ければ折り返し、ボタンは右に残す。左右の余白は本文と同じ (`+layout.svelte` の `--dp-gutter`)
      */
   .bar {
-    --bar-pad: 1rem;
+    --bar-pad: var(--dp-gutter);
     justify-content: space-between;
     padding: 0.375rem var(--bar-pad) 0.375rem
       calc(var(--bar-pad) + var(--dp-space-2) + 1.125em);
@@ -66,11 +66,6 @@
     top: 50%;
     translate: 0 -50%;
     left: var(--bar-pad);
-  }
-  @media (min-width: 768px) {
-    .bar {
-      --bar-pad: 1.5rem;
-    }
   }
   .bar .button {
     flex-shrink: 0;

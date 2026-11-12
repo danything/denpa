@@ -49,7 +49,7 @@ internal sealed class FakeIt930x : IUsbDevice
     public const uint CardResetOutput = 0xD8E3;
     public const uint CardDetectInput = 0xD8C6;
 
-    /// <summary>GPIOH14 のリセットを解いたときに偽のカードが返す ATR。null ならカードは応答しない</summary>
+    /// <summary>GPIOH14 のリセットを解除したときに偽のカードが返す ATR。null ならカードは応答しない</summary>
     public byte[]? CardAtr { get; set; }
 
     /// <summary>まとめて送られたブロックに、偽のカードが返すバイト (null なら何も返さない)</summary>
@@ -135,7 +135,7 @@ internal sealed class FakeIt930x : IUsbDevice
 
     private volatile Func<byte[]?>? _tsSource;
 
-    /// <summary>EP 0x84 の読みを出せない (OpenInStream が IOException を投げる)</summary>
+    /// <summary>EP 0x84 の読みを出せない (OpenInStream が IOException を送出する)</summary>
     public bool TsOpenFails { get; set; }
 
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
@@ -203,7 +203,7 @@ internal sealed class FakeIt930x : IUsbDevice
                 Note($"W {address:X4}={Convert.ToHexString(values)}");
                 var resetBefore = Registers.GetValueOrDefault(CardResetOutput);
                 for (var i = 0; i < values.Length; i++) Registers[address + (uint)i] = values[i];
-                // GPIOH14 を 0 から 1 に戻すとリセットが解け、カードがあれば ATR を返す (IT9300_bcasResetCard)
+                // GPIOH14 を 0 から 1 に戻すとリセットが解除され、カードがあれば ATR を返す (IT9300_bcasResetCard)
                 if (address == CardResetOutput && resetBefore == 0 && values[0] == 1 && CardAtr is { } atr && Registers.GetValueOrDefault(CardDetectInput) == 0)
                 {
                     UartRx.Clear();

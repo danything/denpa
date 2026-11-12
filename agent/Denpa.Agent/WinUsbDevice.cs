@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 並べるのは SetupAPI の <c>GUID_DEVINTERFACE_USB_DEVICE</c> (libwdi (wdi-simple・Zadig) で入れたものも同じ GUID で見える)。ポートの名前は Linux の sysfs と
-/// 同じ形 (<c>1-3.2</c>) にする (<c>SPDRP_LOCATION_PATHS</c> から。<see cref="UsbDevices.WindowsPort"/>)。**挿すポートを変えると別の名前になる。**
+/// 同じ形式 (<c>1-3.2</c>) にする (<c>SPDRP_LOCATION_PATHS</c> から。<see cref="UsbDevices.WindowsPort"/>)。**挿すポートを変えると別の名前になる。**
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -146,7 +146,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
     [LibraryImport("winusb.dll", SetLastError = true)]
     private static partial int WinUsb_GetOverlappedResult(nint handle, nint overlapped, uint* transferred, int wait);
 
-    private const string Busy = "ほかのソフトが使っているか、WinUSB になっていません (install.ps1 に -WinUsb を付けて流すと WinUSB に替えられます。Zadig でも替えられます。docs/install-windows.md)";
+    private const string Busy = "ほかのソフトが使っているか、WinUSB になっていません (install.ps1 に -WinUsb を付けて実行すると WinUSB に替えられます。Zadig でも替えられます。docs/install-windows.md)";
 
     private readonly Lock _gate = new();
     private readonly Dictionary<byte, uint> _timeouts = [];
@@ -364,7 +364,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         // 出しっぱなしの読みは待ち続ける (時間切れは Read の待ちで見る)。RAW_IO で WinUSB の詰め直しを省く
         Timeout(endpoint, 0);
         byte raw = 1;
-        if (WinUsb_SetPipePolicy(Handle, endpoint, RawIo, 1, &raw) == 0) throw Failure("TS の読みの形を決められません");
+        if (WinUsb_SetPipePolicy(Handle, endpoint, RawIo, 1, &raw) == 0) throw Failure("TS の読み出しに RAW_IO を設定できません");
         return new InStream(this, endpoint, transferSize, depth);
     }
 
@@ -406,7 +406,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                 for (var i = 0; i < depth; i++)
                 {
                     var overlapped = (NativeOverlapped*)NativeMemory.AllocZeroed((nuint)sizeof(NativeOverlapped));
-                    // 先に入れておく (イベントを作れずに投げても、片付けで解放されるように)
+                    // 先に入れておく (イベントを作れずに例外になっても、片付けで解放されるように)
                     _overlapped[i] = overlapped;
                     overlapped->EventHandle = CreateEventW(0, 1, 0, null);
                     if (overlapped->EventHandle == 0) throw owner.Failure("TS の読みの用意ができません");
@@ -452,9 +452,9 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     if (WinUsb_GetOverlappedResult(_owner.Handle, (nint)_overlapped[_head], &done, 0) == 0)
                     {
                         var error = Marshal.GetLastPInvokeError();
-                        // 端点の止まりなどは、その読みだけ捨てて出し直す。読みを出したスレッドが終わると Windows が取り消す
+                        // 端点のストールなどは、その読みだけ捨てて出し直す。読みを出したスレッドが終わると Windows が取り消す
                         // (ERROR_OPERATION_ABORTED) ので、それも同じに扱う。受信を止めるとき、読み出しのスレッドが先に終わり、
-                        // 別のスレッドが読み捨てるので必ず当たる。例外にすると停止の手順が途中で止まり、機材が受信中のまま残って
+                        // 別のスレッドが読み捨てるので、この取り消しは必ず起きる。例外にすると停止の手順が途中で止まり、機材が受信中のまま残って
                         // 次の受信の先頭に古いデータが混じる。出し直しは Read の呼びごとに深さの分までで、そのあとの待ちには時間切れがある
                         // (Dispose のあとは先頭の ThrowIf で抜ける) ので、出し直し続けることはない
                         if (error is not (ErrorGenFailure or ErrorOperationAborted)) throw Failure(_owner.Name, "TS の読みが失敗しました", error);
@@ -490,7 +490,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     _pending[_head] = false;
                     if (WinUsb_GetOverlappedResult(_owner.Handle, (nint)_overlapped[_head], &done, 0) == 0)
                     {
-                        // Read と同じく、端点の止まりと取り消しはその読みだけ捨てて出し直す。出し直しは 1 回の呼び出しで深さの分まで
+                        // Read と同じく、端点のストールと取り消しはその読みだけ捨てて出し直す。出し直しは 1 回の呼び出しで深さの分まで
                         var error = Marshal.GetLastPInvokeError();
                         if (error is not (ErrorGenFailure or ErrorOperationAborted) || round >= _overlapped.Length) throw Failure(_owner.Name, "TS の読みが失敗しました", error);
                         done = 0;

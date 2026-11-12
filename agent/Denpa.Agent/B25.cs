@@ -18,7 +18,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **復号できないものは落とさずに素通しする。** 録れないよりまし、で、復号できなかったことは
-/// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の出どころが失敗しても投げずに、
+/// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の出どころが失敗しても例外を送出せず、
 /// 鍵を捨てて素通しし (古い鍵で化けたものを「復号できた」として流さない)、少し置いて同じ ECM で問い合わせ直す。
 /// </para>
 ///

@@ -46,7 +46,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
 
-# **出したものには出所の証明 (attestation) を付けます** (actions/attest)。イメージ3つと、Windows・Mac の denpa 本体の zip・tar.gz と、
+# **出したものには出所の証明 (attestation) を付けます** (actions/attest)。イメージ3つと、Windows・Mac の denpa 本体の zip・tar.gz と、Android の APK と、
 # リリースに添えるエージェントの tar.gz / zip。.sha256 は同じリリースに置くので、壊れた
 # ファイルは見分けられても、すり替えまでは防げない — 証明はこのリポジトリのこの workflow が
 # 作ったことを Sigstore の署名で示すので、`gh attestation verify <ファイル> -R danything/denpa`
@@ -417,6 +417,45 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$TAG" dist/denpa-*-darwin-arm64.tar.gz dist/denpa-*-darwin-arm64.tar.gz.sha256 --clobber -R "${{ github.repository }}"
+
+  # **Android のアプリ (arm64) も添える** (`denpa-<バージョン>-android-arm64.apk`。docs/install-android.md)。組み方と署名は android.yml。
+  # 署名の鍵は secrets にあり、ここから android.yml にだけ渡す。Windows・Mac と同じく、リリースを作ったときだけ組む
+  android:
+    if: github.event_name == 'release'
+    uses: ./.github/workflows/android.yml
+    with:
+      tag: ${{ github.event.release.tag_name }}
+    secrets:
+      DENPA_ANDROID_KEYSTORE_BASE64: ${{ secrets.DENPA_ANDROID_KEYSTORE_BASE64 }}
+      DENPA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.DENPA_ANDROID_KEYSTORE_PASSWORD }}
+      DENPA_ANDROID_KEY_ALIAS: ${{ secrets.DENPA_ANDROID_KEY_ALIAS }}
+      DENPA_ANDROID_KEY_PASSWORD: ${{ secrets.DENPA_ANDROID_KEY_PASSWORD }}
+
+  android-attach:
+    if: github.event_name == 'release'
+    needs: android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-android-arm64
+          path: dist
+
+      - name: Attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/denpa-*-android-arm64.apk
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/denpa-*-android-arm64.apk dist/denpa-*-android-arm64.apk.sha256 --clobber -R "${{ github.repository }}"
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart のバージョン (Chart.yaml の version) とアプリのバージョン (appVersion) をリリースの

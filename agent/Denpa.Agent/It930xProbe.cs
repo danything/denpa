@@ -22,7 +22,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// <c>--chips</c> を付けると、起動したあと受信機の電源を入れ、TC90522 の機種のチップを読んで見分ける (TC90522 の仕様書 12 の 2〜5)。
-/// 復調器のアドレスが応答するか、中継の先の R850 の種類と水晶の駆動の強さ、RT710 か RT720 かを出し、終わったら電源を切る。
+/// 復調器のアドレスが応答するか、中継の先にある R850 の種類と水晶の駆動の強さ、RT710 か RT720 かを出し、終わったら電源を切る。
 /// 選局はしない (<c>--tune it930x:…</c> で確かめる)
 /// </para>
 ///
@@ -51,8 +51,8 @@ public static class It930xProbe
     internal const uint ModeStrap = 0xD801;
     /// <summary><c>r_br_mp2if_strap_usb20_mode</c> (bit 0)</summary>
     internal const uint Usb20Strap = 0xDA20;
-    /// <summary><c>OVA_EEPROM_CFG_VALID</c>。0 なら EEPROM の設定を読めていない (<c>DRV_GetEEPROMConfig</c>)</summary>
-    internal const uint EepromValid = 0x4979;
+    /// <summary><c>OVA_EEPROM_CFG_VALID</c> (<see cref="It930xBridge.EepromValid"/>)。0 なら EEPROM の設定を読めていない (<c>DRV_GetEEPROMConfig</c>)</summary>
+    internal const uint EepromValid = It930xBridge.EepromValid;
     /// <summary><c>OVA_EEPROM_CFG</c>。EEPROM の設定の写し (256 バイト)</summary>
     internal const uint EepromCopy = 0x4994;
     internal const int EepromLength = 256;

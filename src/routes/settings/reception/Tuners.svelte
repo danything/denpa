@@ -379,7 +379,7 @@
                       <button
                         type="button"
                         class="ghost more-button"
-                        aria-label={`${tuner.name} の名前・デバイス・LNB`}
+                        aria-label={`${tuner.name} の名前・デバイス・LNB・削除`}
                         aria-expanded={opened === index}
                         aria-controls={detailId}
                         onclick={() =>

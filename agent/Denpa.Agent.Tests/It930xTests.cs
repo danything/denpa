@@ -276,7 +276,7 @@ public class It930xTests
     }
 
     [Test]
-    public async Task sysfs_から_MLT5_系だけを並べる()
+    public async Task sysfs_から扱う機種だけを並べる()
     {
         // sysfs は Linux だけ (インターフェースの名前の「:」は Windows のファイル名に使えない)
         if (OperatingSystem.IsWindows()) return;

@@ -471,7 +471,7 @@ public class It930xDeviceTests
         }
     }
 
-    /// <summary>LNB の給電 (GPIOH11 の値。IT930x の仕様書 7.2・8) の書き込みを、開いたときの設定のあとから拾う</summary>
+    /// <summary>LNB の給電 (GPIOH11 の値。IT930x の仕様書 7.2・8) の書き込みを、開いたときの設定のあとから取り出す</summary>
     private static List<string> LnbWrites(FakeIt930x usb)
     {
         lock (usb.Log)

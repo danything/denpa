@@ -36,8 +36,8 @@ public static class Keys
 /// **自分に挿さっているカード。** 起動したときに開いておき (<see cref="Warm"/>)、開けなければ要ったときに探す。
 ///
 /// <para>
-/// 開けなければ投げて、次に要ったときにまた探す。カードを後から挿しても、
-/// asicend が後から起動しても、エージェントを入れ直さずに読めるようになる。
+/// 開けなければ例外を送出し、次に要ったときにまた探す。カードを後から挿しても、
+/// エージェントを入れ直さずに読めるようになる。
 /// 開いたあとの繋ぎ直しは <see cref="BCas"/> がやる。
 /// </para>
 /// </summary>
@@ -83,8 +83,8 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
     /// 最初の選局でこれを待つと、起動し直した直後の 1 回目だけ送り出しが 0.25〜0.45 秒遅れていた。
     ///
     /// <para>
-    /// 開けなくても<b>断った記録は残さない。</b>起動の直後は asicend がまだ起動していないことがあり、
-    /// 記録を残すと最初の選局が <see cref="BCas.RetryAfter"/> のあいだ探しもせずに断られる。
+    /// 開けなくても**断った記録は残さない。** 記録を残すと、起動の直後に開けなかっただけで、
+    /// 最初の選局が <see cref="BCas.RetryAfter"/> のあいだ探しもせずに断られる。
     /// 開けなかったときは今までどおり、要ったときに探す
     /// </para>
     /// </summary>
@@ -180,7 +180,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
 
     /// <summary>
     /// 契約の更新 (EMM) を配る側に渡し、配る側のカードの返り値を返す (<c>POST /denpa/card/emm</c>)。
-    /// **配る側が古くて 404 なら、記録に 1 回だけ出し、それからは送らずに <see cref="NotSupportedException"/> を投げる。**
+    /// **配る側が古くて 404 なら、記録に 1 回だけ出し、それからは送らずに <see cref="NotSupportedException"/> を送出する。**
     /// 鍵と契約確認はそのまま使う
     /// </summary>
     public int Emm(ReadOnlySpan<byte> payload)
@@ -207,7 +207,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         return Send(new HttpRequestMessage(HttpMethod.Post, $"{Url}/denpa/card/{path}") { Content = content }, what);
     }
 
-    /// <summary>送って中身を受け取る。**受け取れなければ、何が起きたかの分かる文で投げる**。<paramref name="request"/> はここで閉じる</summary>
+    /// <summary>送って中身を受け取る。**受け取れなければ、何が起きたかの分かる文で例外を送出する**。<paramref name="request"/> はここで閉じる</summary>
     private byte[] Send(HttpRequestMessage request, string what)
     {
         using var sending = request;

@@ -1,6 +1,6 @@
 /*
  * 見た目は Blades の Pico (Pico CSS v2 を引き継いだもの。素の CSS で、Sass は要らない)。
- * Pico は素の HTML を整える作りなので、入力欄・ボタン・余白を詰め、足りない部品(タグ・小さいボタン・並べ方)を下に足す。
+ * Pico は素の HTML を整える作りなので、入力欄・ボタン・余白を詰め、足りない部品 (タグ・小さいボタン・並べ方) を下に足す。
  * 画面ごとの並べ方は各コンポーネントの <style> に書く。
  * 開いたり閉じたりするメニューは `Menu.svelte` (ブラウザの popover)。見た目はここ (`.menu`)。
  *
@@ -52,7 +52,7 @@
 :root {
   --pico-font-family-sans-serif:
     "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
-  /* 16px(Tailwind の頃と同じ)。番組表の 1 マスなど rem で組んだ寸法がそのまま保たれる */
+  /* 16px (Tailwind の頃と同じ)。番組表の 1 マスなど rem で組んだ寸法がそのまま保たれる */
   --pico-font-size: 16px;
   /*
      * **放送から来た字は Denpa Font で** (番組名・説明・番組表のマス・録画の名前・局名)。
@@ -412,7 +412,7 @@
   display: inline-flex;
   flex-shrink: 0;
   vertical-align: -0.125em;
-  margin-inline-start: 0.25rem;
+  margin-inline-start: var(--dp-space-1);
 }
 .alert-dot.ground {
   color: var(--dp-warn-text);
@@ -1306,6 +1306,7 @@ input[type="checkbox"]:not([role="switch"]) {
   top: calc(env(safe-area-inset-top, 0px) + var(--day-head-gap));
 }
 /*
+ * ---- 入っている切り替え ----
  * **並び (`role="group"`) の外で押されているボタン (`aria-pressed="true"`) はオンで、主の色の短い下線と字** (番組表の「サブ ch」・映像の上の字幕など)。
  * 並びの中で押されているボタンは選んでいるもの (字の幅いっぱいの下線・左の縦線。下の `.pick-line`・`.segmented`・`.side-item`) なので、
  * この線は引かない。どの部品も、置いた場所でどちらかの 1 本になる (1 つの部品に線は 1 本)。

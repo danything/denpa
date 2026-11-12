@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /*
- * ITE IT930x (USB ブリッジ) のコマンドのフレーム。PLEX の PX-MLT5U・PX-MLT5PE と e-Better の DTV02A-5TS-P が積んでいる。
+ * ITE IT930x (USB ブリッジ) のコマンドのフレーム。PLEX・e-Better・Digibest の機材 (It930x.Family) が積んでいる。
  *
  * ITE Tech. の IT930x の Linux ドライバ (SDK。api/brCmd.c・api/brCmd.h) を元に書いた。ITE Tech. から、そのコードを
  * チューナーエージェントの中で MPL-2.0 として使い、変え、公開してよいと確認を得ている (docs/licenses.md)。
@@ -36,7 +36,7 @@ public static class It930xFrame
     public const int ReplyOverhead = 5;
 
     // コマンドの番号 (brCmd.h)。USB の機材ではチップの番号を 12 ビット上に足す (BrCmd_buildCommand)。
-    // MLT 系はブリッジが 1 つなのでチップは 0 と推定し、足さない
+    // どの機種も USB デバイス 1 つにブリッジが 1 つなので、チップは 0 と推定し、足さない
     public const ushort RegisterRead = 0x0000;
     public const ushort RegisterWrite = 0x0001;
     public const ushort QueryInfo = 0x0022;

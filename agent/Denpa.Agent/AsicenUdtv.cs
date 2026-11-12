@@ -142,7 +142,7 @@ internal static class Udtv
 
     /// <summary>
     /// ヘッダを読んで確かめる。**magic・バージョン・flags と request_id の組み合わせ・長さの上限** (wire-subset.md)。
-    /// 合わなければ中身を読まずに投げる
+    /// 合わなければ中身を読まずに <see cref="UdtvShapeError"/> を送出する
     /// </summary>
     public static (ushort Opcode, ushort Flags, uint RequestId, int Length) ReadHeader(Socket socket, Span<byte> header)
     {
@@ -477,9 +477,6 @@ internal sealed class AsicenTuner : ITuneDevice
         _name = $"asicen-{id} #{receiver}";
     }
 
-    /// <summary>読み出し側がいないままバッファが一杯のとき、この時間が経ったら TS のストリームを閉じる</summary>
-    internal TimeSpan StallLimit { get; init; } = AsicenStream.DefaultStallLimit;
-
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
     public bool Tuned
@@ -633,7 +630,7 @@ internal sealed class AsicenTuner : ITuneDevice
         if (_streamId == 0) throw started.Broken();
 
         _stream = AsicenStream.Attach(
-            UdtvControl.Endpoint(_runtimeDir, _id, "stream.sock"), control.Epoch, _lease, _streamId, token, _name, StallLimit, FirstTsGrace);
+            UdtvControl.Endpoint(_runtimeDir, _id, "stream.sock"), control.Epoch, _lease, _streamId, token, _name, FirstTsGrace);
         Log.Write($"[{_name}] 受信機を取って選局しました");
     }
 
@@ -727,7 +724,7 @@ internal static class AsicenLnb
     private static readonly Dictionary<string, HashSet<object>> Holders = new(StringComparer.Ordinal);
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(4);
 
-    /// <summary>給電を要求する。最初の 1 つのときにオンにする。**オンにできなければ投げる** (給電できないまま選局しても同期しない)</summary>
+    /// <summary>給電を要求する。最初の 1 つのときにオンにする。**オンにできなければ例外を送出する** (給電できないまま選局しても同期しない)</summary>
     public static void Hold(string id, object holder, string runtimeDir)
     {
         lock (Gate)
@@ -749,7 +746,7 @@ internal static class AsicenLnb
         }
     }
 
-    /// <summary>要求を取り下げる。最後の 1 つのときにオフにする。失敗しても投げない (asicend が止まるときにオフになる)</summary>
+    /// <summary>要求を取り下げる。最後の 1 つのときにオフにする。失敗しても例外にしない (asicend が止まるときにオフになる)</summary>
     public static void Drop(string id, object holder, string runtimeDir)
     {
         lock (Gate)
@@ -784,15 +781,12 @@ internal static class AsicenLnb
 /// </summary>
 internal sealed class AsicenStream
 {
-    public static readonly TimeSpan DefaultStallLimit = TimeSpan.FromSeconds(5);
-
     /// <summary>TS がこれだけ来なければ終わる</summary>
     private static readonly TimeSpan SilenceLimit = TimeSpan.FromSeconds(5);
 
     private readonly Socket _socket;
     private readonly string _name;
     private readonly ulong _streamId;
-    private readonly TimeSpan _stallLimit;
     private readonly ManualResetEventSlim _first = new();
     private readonly ManualResetEventSlim _end = new();
     private readonly Pipe _pipe = TsBuffer.New();
@@ -811,12 +805,11 @@ internal sealed class AsicenStream
 
     public bool Ended => _ended;
 
-    private AsicenStream(Socket socket, string name, ulong streamId, TimeSpan stallLimit)
+    private AsicenStream(Socket socket, string name, ulong streamId)
     {
         _socket = socket;
         _name = name;
         _streamId = streamId;
-        _stallLimit = stallLimit;
         Output = new DeviceStream(_pipe.Reader, () => _reason);
     }
 
@@ -825,14 +818,14 @@ internal sealed class AsicenStream
     /// **観察した形式: 要求は epoch, u64 lease, u64 ストリームの番号, 16 バイトのトークン (request_id は 1)。応答は epoch, u64 ストリームの番号。**
     /// </summary>
     public static AsicenStream Attach(
-        string socketPath, byte[] epoch, ulong lease, ulong streamId, byte[] token, string name, TimeSpan stallLimit, TimeSpan firstTs)
+        string socketPath, byte[] epoch, ulong lease, ulong streamId, byte[] token, string name, TimeSpan firstTs)
     {
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified)
         {
             SendTimeout = 4000,
             ReceiveTimeout = 4000,
         };
-        var stream = new AsicenStream(socket, name, streamId, stallLimit);
+        var stream = new AsicenStream(socket, name, streamId);
         try
         {
             UdtvControl.ConnectWithin(socket, socketPath, TimeSpan.FromSeconds(4));
@@ -994,8 +987,9 @@ internal sealed class AsicenStream
         }
     }
 
-    private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped || _draining, _stallLimit,
-        () => End($"読み出し側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました"),
+    /// <summary>読み出し側がいないまま <see cref="Zd1jTuner.StallLimit"/> 経ったら、TS のストリームを閉じる (USB を直に持つ機材から受ける TS と同じ上限)</summary>
+    private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped || _draining, Zd1jTuner.StallLimit,
+        () => End($"読み出し側がいないまま {Zd1jTuner.StallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました"),
         () => End("TS を渡せません (読み出し側が閉じました)"));
 
     private void End(string reason)

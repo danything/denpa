@@ -43,7 +43,7 @@ public interface IIt930xFrontend
     /// <summary>衛星で最後に <see cref="Signal"/> を読んだときの強度 (dB。CXD2856ER だけ)。<c>--tune</c> だけが出す</summary>
     double? SatelliteLevelDb => null;
 
-    /// <summary>最後の J.83B の選局で受けた周波数 (Hz)。J.83B でなければ null</summary>
+    /// <summary>最後の J.83B か ISDB-C の選局で受けた周波数 (Hz)。どちらでもなければ null</summary>
     uint? CableFrequency => null;
 
     /// <summary>最後の J.83B の選局で読んだ変調。<c>--tune</c> だけが出す</summary>
@@ -82,7 +82,7 @@ internal interface IIt930xBoard
 }
 
 /// <summary>
-/// CXD2856ER + CXD2858ER の受信機 (CXD2856 の仕様書)。<see cref="Cxd2856Frontend"/> に、選局表の値からの振り分けと、J.83B の周波数の試し方を足す
+/// CXD2856ER + CXD2858ER の受信機 (CXD2856 の仕様書)。<see cref="Cxd2856Frontend"/> に、選局表の値からの振り分けと、J.83B と ISDB-C の周波数の試し方を足す
 /// </summary>
 internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching) : IIt930xFrontend
 {
@@ -139,7 +139,7 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
     }
 
     /// <summary>
-    /// J.83B を選局する (CXD2856 の仕様書 7.4)。ずらして送られることがあるチャンネル (CXD2856 の仕様書 7.1) は、選局表の周波数とずらした周波数の両方を試し、
+    /// J.83B か ISDB-C を選局する (CXD2856 の仕様書 7.4・8.4)。ずらして送られることがあるチャンネル (CXD2856 の仕様書 7.1・8.2) は、選局表の周波数とずらした周波数の両方を試し、
     /// 前にロックしたほうを先にする。どちらもロックしなければ false
     /// </summary>
     private bool TuneCable(ChannelTable.Tuning tuning, Func<uint, bool> tune)
@@ -284,9 +284,9 @@ internal sealed class CxdBoard : IIt930xBoard
 /// <para>
 /// **ロックの順。** 受信機は並べて選局されるので (常駐のスキャン)、ロックは次の順でだけ取り、逆には取らない。
 /// <c>Registry</c> → この機材の <c>_gate</c> (使っている側の数)。
-/// <see cref="It930xTuner"/> の <c>_gate</c> → 受信機ごとの <c>_receiverGates</c> (<see cref="Frontend"/>・<see cref="KeepMatching"/>) → <see cref="Cxd2856Frontend"/> の受信機の操作 →
+/// <see cref="It930xTuner"/> の <c>_gate</c> → 受信機ごとの <c>_receiverGates</c> (<see cref="Frontend"/>・<see cref="CxdBoard.KeepMatching"/>) → <see cref="Cxd2856Frontend"/> の受信機の操作 →
 /// 同じバスの受信機で 1 つのバスのロック (<c>_buses</c>) → <see cref="It930xBridge"/> のコマンドのロック。<see cref="FlushTs"/> は <c>_gate</c> を持ったままブリッジのコマンドを送る (<c>_gate</c> → ブリッジのコマンドのロック)。LNB の給電の <c>_lnbGate</c> → ブリッジのコマンドのロック。
-/// <see cref="KeepMatching"/> はほかの受信機の <c>_receiverGates</c> と受信機の操作を取るが、その受信機の <see cref="It930xTuner"/> の <c>_gate</c> は取らない
+/// <see cref="CxdBoard.KeepMatching"/> はほかの受信機の <c>_receiverGates</c> と受信機の操作を取るが、その受信機の <see cref="It930xTuner"/> の <c>_gate</c> は取らない
 /// (選局の途中なら、受信機の操作のロックで選局が終わるのを待つ)。I2C の並びが同じバスで交わらないことは It930xConcurrencyTests.cs で確かめる
 /// </para>
 /// </summary>
@@ -631,7 +631,7 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 受信機の基板の電源を入れる・切る (IT930x の仕様書 7.2・7.3)。
-    /// 入れる: 電源の GPIOH ← 0、80 ms (GPIOH3 の機種は 100 ms)、GPIOH2 ← 1 (リセットを解く)、20 ms。切る: GPIOH2 ← 0、電源の GPIOH ← 1
+    /// 入れる: 電源の GPIOH ← 0、80 ms (GPIOH3 の機種は 100 ms)、GPIOH2 ← 1 (リセットを解除する)、20 ms。切る: GPIOH2 ← 0、電源の GPIOH ← 1
     /// </summary>
     internal void Power(bool on)
     {
@@ -752,7 +752,7 @@ public sealed class It930xDevice
     /// <summary>
     /// 機種が使う入力を全部開ける (<see cref="It930xBridge.EnableTsInputs"/>)。最初の受信機を開いたときの 1 回で、閉じるまで開けたままにし、受信機ごとには開け閉めしない
     /// (SDK も受信を始める・止めるときは EP 0x84 の読みだけを出し入れする)。
-    /// 機材を開いただけ (Q3 のもう片方の側の電源のため、カードのため) では開けない。PX-Q3PE4 で、電源を入れただけで初期化していない TC90522 の入力が溢れ、
+    /// 機材を開いただけ (Q3 でもう片方の側に電源を入れるため、カードのため) では開けない。PX-Q3PE4 で、電源を入れただけで初期化していない TC90522 の入力が溢れ、
     /// そのブリッジは電源を抜くまで TS を出さなくなった (2026-11-11。受信機を開いた側は、初期化のあとに入力を開けても溢れなかった)
     /// </summary>
     private void OpenInputs()
@@ -781,7 +781,7 @@ public sealed class It930xDevice
         lock (_gate)
         {
             if (_closed) return;
-            // 閉じるのに失敗したら、そのまま投げる。閉じきったか分からない入力を開け直さず、元の失敗を隠さない
+            // 閉じるのに失敗したら、その例外をそのまま送出する。閉じきったか分からない入力を開け直さず、元の失敗を隠さない
             Bridge.DisableTsInputs();
             if (_inputsOpen) Bridge.EnableTsInputs();
         }
@@ -816,7 +816,7 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 取っていたもう片方の側を返す。そちらも誰も使っていなければ、待たずに閉じる (電源が切れる)。
-    /// この側は閉じる前に <see cref="IdleGrace"/> を待ち終えていて、もう片方の側はこの側の電源のために取っていただけなので、もう一度は待たない
+    /// この側は閉じる前に <see cref="IdleGrace"/> を待ち終えていて、もう片方の側は電源を連動させるために取っていただけなので、もう一度は待たない
     /// </summary>
     private void Unlink()
     {
@@ -887,7 +887,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 受信機 <paramref name="receiver"/> が LNB の給電を要求する・要求を取り下げる (IT930x の仕様書 8、IT930x の仕様書 8)。給電は機材 (Q3 は側) の受信機で 1 つ (ブリッジの GPIOH11。1 で入る) なので、
+    /// 受信機 <paramref name="receiver"/> が LNB の給電を要求する・要求を取り下げる (IT930x の仕様書 8)。給電は機材 (Q3 は側) の受信機で 1 つ (ブリッジの GPIOH11。1 で入る) なので、
     /// 給電を要求している受信機の数が 0 から 1 になるときに入れ、1 から 0 になるときに切る。書き込みに失敗したら、要求している受信機の数は書く前に戻す
     /// </summary>
     public void Lnb(int receiver, bool on)
@@ -912,7 +912,7 @@ public sealed class It930xDevice
                 throw;
             }
             Log.Write($"[{Label}] LNB の給電を{(after > 0 ? "入れました" : "切りました")}");
-            // PX-Q3PE4 で衛星の選局のときだけブリッジの出力が止まったので、給電の切り替えがきっかけかを記録で絞る (2026-11-11)
+            // PX-Q3PE4 で衛星を選局したときだけブリッジの出力が止まったので、給電の切り替えがきっかけかを記録で絞る (2026-11-11)
             WatchOverflow($"LNB の給電を{(after > 0 ? "入れた" : "切った")}あと");
         }
     }
@@ -1126,7 +1126,7 @@ public sealed class It930xDevice
 /// </summary>
 public sealed class It930xTuner : ITuneDevice
 {
-    /// <summary>LNB の給電の設定で受け付ける値。給電は 15 V だけ (IT930x の仕様書 8、IT930x の仕様書 8。0 か 15 V のほかは断る)</summary>
+    /// <summary>LNB の給電の設定で受け付ける値。給電は 15 V だけ (IT930x の仕様書 8。0 か 15 V のほかは断る)</summary>
     public const string Lnb15v = "15v";
 
     private readonly string _name;
@@ -1315,7 +1315,7 @@ public sealed class It930xTuner : ITuneDevice
 
     public void Tune(ChannelTable.Tuning tuning)
     {
-        // 給電は 15 V だけ (IT930x の仕様書 8、IT930x の仕様書 8)。11 V は機材を開く前に断る
+        // 給電は 15 V だけ (IT930x の仕様書 8)。11 V は機材を開く前に断る
         if (tuning.Satellite && _lnb is not null && _lnb != Lnb15v)
         {
             throw new IOException($"{_name} の LNB の給電は 15V だけです (設定は {_lnb})");
@@ -1395,7 +1395,7 @@ public sealed class It930xTuner : ITuneDevice
         }
     }
 
-    /// <summary>最後の J.83B の選局で受けた周波数 (Hz。<c>--tune</c> が出す)。J.83B でなければ null</summary>
+    /// <summary>最後の J.83B か ISDB-C の選局で受けた周波数 (Hz。<c>--tune</c> が出す)。どちらでもなければ null</summary>
     public uint? CableFrequency => _frontend?.CableFrequency;
 
     /// <summary>最後の J.83B の選局で読んだ変調 (<c>256QAM</c> など。<see cref="Signal"/> を読んだあと)。<c>--tune</c> だけが出す</summary>
@@ -1416,7 +1416,7 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>最後の選局が ISDB-C で、復調器がロックしたか (<c>--tune</c> が出す)</summary>
     public bool IsdbcLocked { get; private set; }
 
-    /// <summary>最後の ISDB-C の選局の TSMF の判定 (<c>--tune</c> が出す)。選局に失敗したあとも残す。ISDB-C でないか、ロックしなかったなら null</summary>
+    /// <summary>最後に ISDB-C を選局したときの TSMF の判定 (<c>--tune</c> が出す)。選局に失敗したあとも残す。ISDB-C でないか、ロックしなかったなら null</summary>
     public TsmfSelector? Tsmf { get; private set; }
 
     /// <summary>最後の ISDB-C の選局で、分割 TLV を組み立てる処理 (<c>--tune</c> が数を出す)。選んだ TS が MPEG-2 TS なら何も数えない。ISDB-C でなければ null</summary>

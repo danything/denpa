@@ -32,6 +32,9 @@ jobs:
     with:
       languages: '["actions", "c-cpp", "csharp", "javascript-typescript"]'
       # エージェントは agent/ の下。テストのプロジェクトをビルドすれば本体もビルドされる (Native AOT の publish は要らない)。
-      # .NET は共有の側で 10.x の最新を入れる (global.json に sdk.version が無いので)。ここにバージョンを書くと、
+      # .NET は共有の側で 11.x の最新を入れる (global.json に sdk.version が無いので)。ここにバージョンを書くと、
       # Renovate が拾わずに test.yml とずれていく
       csharp-build: dotnet build agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
+      # PR が C# を触っていなければ、C# の解析を飛ばす (ジョブは走らせて成功で終える。必須チェックなので)。
+      # main への push と週 1 回の実行では全部解析する。C# は agent/ と tray/ にしか無い
+      language-paths: '{"csharp": ["agent/*", "tray/*", "*.cs", "*.csproj", "global.json", ".github/workflows/codeql.yml"]}'

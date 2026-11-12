@@ -4,10 +4,9 @@
 # **絞るのは PR だけ。** main への push と手で回したとき (workflow_dispatch) は全部回す (PR の番号が無いとき)。
 # PR で飛ばしたものが壊れていれば、main で気づいて直す。
 #
-# 必須チェックのジョブ (e2e (n)・agent-windows・agent-windows-install・agent-macos) は飛ばすときも走らせ、
-# 中身の段を飛ばして成功で終え、飛ばした理由をジョブの注記に出す (test.yml)。Windows と Mac のジョブは、
-# 飛ばすときは ubuntu のランナーで走らせる (Mac と Windows のランナーを待たない)。
-# 必須ではないジョブ (tray-macos・agent-android・server-*) は、ジョブごと飛ばす。
+# e2e (n) は飛ばすときも走らせ、中身の段を飛ばして成功で終え、飛ばした理由をジョブの注記に出す (test.yml)。
+# ほかのジョブ (agent-windows・agent-windows-install・agent-macos・tray-macos・agent-android・server-*) は、
+# ジョブごと飛ばす。必須チェックのジョブも、if で飛ばしたものは成功として数えられる。
 #
 # 使い方 (GH_TOKEN と GITHUB_REPOSITORY が要る):
 #
@@ -19,10 +18,10 @@
 #
 # | 名前    | 中身を回すジョブ                                                          | true にするファイル                                      |
 # | ------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
-# | e2e     | e2e (1)〜(6)                                                              | 下の「E2E と関係ないもの」以外の全部                     |
+# | e2e     | e2e (1)〜(10)                                                             | 下の「E2E と関係ないもの」以外の全部                     |
 # | windows | agent-windows・agent-windows-install                                      | エージェント・Windows の通知領域のアプリ・install.ps1    |
 # | macos   | agent-macos・tray-macos                                                   | エージェント・Mac のメニューバーのアプリ・install.sh     |
-# | android | agent-android                                                             | エージェントと、Android で組んで確かめる部品             |
+# | android | agent-android                                                             | エージェント・Android のアプリ・組んで確かめる部品       |
 # | bundle  | server-windows-bundle・server-windows・server-macos-bundle・server-macos | 配布物の組み方・ffmpeg・入れ方・native-smoke が使うもの |
 #
 # bundle が true なら windows と macos も true にする (配布物を確かめるジョブが、そちらで組んだエージェントを使う)。
@@ -53,7 +52,7 @@ while IFS= read -r f; do
   # E2E と関係ないもの。E2E はランナーで組んだアプリと偽のエージェント (tests/fake) で流すので、
   # 本物のエージェント・通知領域のアプリ・入れ方・文書・配備には触らない
   case "$f" in
-    docs/* | site/* | *.md | agent/* | tray/* | install.sh | install.ps1 | talos/* | charts/* | deploy/* | \
+    docs/* | site/* | *.md | agent/* | android/* | tray/* | install.sh | install.ps1 | talos/* | charts/* | deploy/* | \
       scripts/build-wdi-simple.ps1 | tests/install-* | tests/native-* | compose.prod.yml | renovate.json | LICENSE | \
       .github/ISSUE_TEMPLATE/* | .github/FUNDING.yml) ;;
     .github/workflows/*.yml | .github/*.sh | .github/*.c | .github/*.Dockerfile | .github/*.ts) ;;
@@ -64,7 +63,8 @@ while IFS= read -r f; do
     agent/*) windows=true macos=true android=true ;;
     tray/Denpa.Tray/* | tray/Denpa.Tray.Tests/* | install.ps1 | scripts/build-wdi-simple.ps1) windows=true ;;
     tray/mac/* | install.sh) macos=true ;;
-    .github/workflows/android.yml | .github/openssl-android.sh | .github/android-agent-smoke.sh | .github/fake-usb-broker.c) android=true ;;
+    android/* | .github/workflows/android.yml | .github/openssl-android.sh | .github/android-agent-smoke.sh | .github/android-app-smoke.sh | \
+      .github/fake-usb-broker.c) android=true ;;
   esac
 
   # 配布物 (windows-server.yml・macos-server.yml) と、それを確かめる server-windows・server-macos が使うもの。
