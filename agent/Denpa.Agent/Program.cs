@@ -713,6 +713,18 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
     await Respond.Write(http, result, result["ok"]!.GetValue<bool>() ? 200 : 500);
 });
 
+/*
+ * 元の TS の置き場が denpa と同じに見えているか (RawProbe.cs)。denpa が置き場の .denpa/ の下に書いた乱数のファイルの
+ * SHA-256 を返す。エージェントが何台もあるとき、denpa が後から復号させる先を選ぶのに使う
+ */
+app.MapPost("/denpa/raw/probe", async (HttpContext http) =>
+{
+    var body = await Respond.Read(http);
+    var path = body?["path"] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+    var (status, result) = await Task.Run(() => RawProbe.Hash(recorded, path));
+    await Respond.Write(http, result, status);
+});
+
 // --- 診断 -----------------------------------------------------------------
 // 直近のログ。設定の「その他」の「ログ」が読む (Json.cs の Log)
 app.MapGet("/denpa/logs", (HttpContext http) => Respond.Write(http, Log.Recent.ToJson()));

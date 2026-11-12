@@ -36,6 +36,7 @@
         <Compile Include="../Denpa.Agent/AsicenUdtv.cs" />
         <Compile Include="../Denpa.Agent/ChildTs.cs" />
         <Compile Include="../Denpa.Agent/Card.cs" />
+        <Compile Include="../Denpa.Agent/RawProbe.cs" />
         <Compile Include="../Denpa.Agent/Shell.cs" />
         <Compile Include="../Denpa.Agent/UsbSysfs.cs" />
         <Compile Include="../Denpa.Agent/CardShare.cs" />

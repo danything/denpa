@@ -28,6 +28,7 @@ import {
   epgReadableService,
   type Transport,
 } from "../types";
+import { keyRanks } from "./agent-cards";
 import { NO_CHANNEL } from "./agent-channels";
 import { fetchAgent } from "./agent-client";
 import { orderGroups, type Place } from "./agent-order";
@@ -554,6 +555,8 @@ export async function openChannelStream(
   service: number | null = null,
   /** 答え (レスポンスヘッダ) を待つ上限 (ms)。`openChannel` の `answerWithin` */
   answerWithin: number | null = null,
+  /** 復号して使う局 (`services.id`)。`openChannel` の `keyed` */
+  keyed: number | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
   return (
     await openChannel(
@@ -566,6 +569,7 @@ export async function openChannelStream(
       pin,
       service,
       answerWithin,
+      keyed,
     )
   ).stream;
 }
@@ -588,6 +592,10 @@ const TSMF_STREAMS = "X-Denpa-Tsmf-Streams";
  * **どのエージェントに送るかはここで決める** (`route`)。`places` は局を受けられる所 (エージェントとそのチャンネル。
  * `agent-channels.servicePlaces`)。エージェントの中のどのチューナーかは、今までどおりエージェントが決める。
  * 送った所は `place` で返す
+ *
+ * `keyed` は、復号して使う局 (`services.id`)。録画とライブが渡す。渡すと、局を受けられるエージェントのうち、
+ * その局を復号できる見込みのいちばん高いカードのエージェントに絞って振り分ける (`agent-cards.keyRanks`)。
+ * 鍵の要らない番組表・ロゴ・スキャンは渡さない (カードの無いエージェントでも受けられる)
  */
 export async function openChannel(
   type: string,
@@ -599,6 +607,7 @@ export async function openChannel(
   pin: string | null = null,
   service: number | null = null,
   answerWithin: number | null = null,
+  keyed: number | null = null,
 ): Promise<{
   stream: ReadableStream<Uint8Array>;
   tsmfStreams: number;
@@ -607,7 +616,7 @@ export async function openChannel(
 }> {
   if (places.length === 0) throw new Error(NO_CHANNEL);
   // 送る所を決めると同時に手元の数えに足す (`claim`)。決めてから足すまでの間に、ほかの選局が同じ空きを数えない
-  const sent = await claim({ type, places, priority, after, pin }, use);
+  const sent = await claim({ type, places, priority, after, pin, keyed }, use);
   const place: Place = { agent: sent.agent, channel: sent.channel };
   const agent = listAgents().find((a) => a.id === place.agent);
   if (agent === undefined) {
@@ -713,14 +722,20 @@ const ROUTE_ASK_WAIT = 3_000;
 
 /**
  * 送る所を決めて、手元の数え (`pending`) に足す。**局を受けられるエージェントが 1 台だけなら一覧を訊かずにそこへ送る**
- * (エージェントが 1 台のときの動きは変わらない)。2 台以上なら全部のエージェントに一覧を訊き、手元の数えを足して `route` で選ぶ。
+ * (エージェントが 1 台のときの動きは変わらない)。2 台以上なら全部のエージェントに一覧を訊き (復号して使う局ならカードも。`agent-cards.keyRanks`)、手元の数えを足して `route` で選ぶ。
  * 選ぶのと足すのは、間に await を挟まずに続けてやる (同時に振り分ける選局が、同じ空きを 2 本に数えない)
  */
 async function claim(request: RouteRequest, use: string): Promise<Pending> {
   const agents = new Set(request.places.map((place) => place.agent));
   let place = request.places[0]!;
   if (agents.size > 1) {
-    const asked = await askAll(ROUTE_ASK_WAIT);
+    // 一覧とカードは同時に訊く (待つのは長いほうの 1 回)
+    const [asked, keys] = await Promise.all([
+      askAll(ROUTE_ASK_WAIT),
+      request.keyed === null
+        ? Promise.resolve(null)
+        : keyRanks(request.keyed, [...agents], ROUTE_ASK_WAIT),
+    ]);
     place = route(
       withPending(
         asked.map((a) => ({
@@ -731,6 +746,7 @@ async function claim(request: RouteRequest, use: string): Promise<Pending> {
         [...pending],
       ),
       request,
+      keys,
     );
   }
   const sent: Pending = {
@@ -766,6 +782,8 @@ export interface RouteRequest {
   priority: number;
   after: readonly string[];
   pin: string | null;
+  /** 復号して使う局 (`services.id`)。鍵の要らない選局は null (`openChannel` の `keyed`) */
+  keyed: number | null;
 }
 
 /** そのチューナーを使ってよいか。空いている (余韻だけ) か、引き継ぐ利用者と自分より優先度の低い利用者しかいない (約束の 2・4) */
@@ -781,25 +799,32 @@ function usable(
   );
 }
 
+/** カードが分からないエージェントの順 (`agent-cards.cardRanks` の、使えるカードが無いものと同じ) */
+const NO_KEY = 3;
+
 /**
  * **送る所を選ぶ** (docs/architecture.md「エージェントを何台もつなぐ」)。エージェントの約束 (docs/agent.md「選ぶ順の約束」) を、
  * 全部のエージェントをまとめた選ぶ順 (`agent-order.orderGroups`。予約の割り振りと同じ関数) に読み替える。
  *
- * 1. 局を受けられて、一覧を返したエージェントに絞る
- * 2. 名指し (`pin`) なら、そのチューナーのあるエージェント
- * 3. 同じチャンネルを、自分と同じか優先度の高い利用者が読んでいるエージェントがあれば、そこで共有する (約束の 3)
- * 4. 選ぶ順に組を見て、その種別を受けられ、使ってよいチューナー (`usable`) のある最初のエージェント (約束の 2)
- * 5. どこにも無ければ、局を受けられる最初のエージェントに送る (エージェントが 409 で断り、呼んだ側が空き待ちで掛け直す)
+ * 1. 局を受けられて、一覧を返したエージェントに絞る。名指し (`pin`) なら、そのチューナーのあるエージェントに送る (無ければ絞った所の先頭)。
+ *    復号して使う局 (`keys` を渡したとき) なら、さらにその局を復号できる見込みのいちばん高いカードのエージェントに絞る
+ *    (`agent-cards.cardRanks`。契約を確かめたカード、確かめていないカード、未契約のカード、カード無しの順)
+ * 2. 同じチャンネルを、自分と同じか優先度の高い利用者が読んでいるエージェントがあれば、そこで共有する (約束の 3)
+ * 3. 選ぶ順に組を見て、その種別を受けられ、使ってよいチューナー (`usable`) のある最初のエージェント (約束の 2)
+ * 4. どこにも無ければ、1 で絞った所の先頭 (`places` の順) に送る (エージェントが 409 で断り、呼んだ側が空き待ちで掛け直す)
  *
- * どれも返さなければ `places` の先頭 (エージェントに繋がらない失敗をそのまま返す)
+ * 一覧を返したエージェントが 1 台も無ければ `places` の先頭 (エージェントに繋がらない失敗をそのまま返す)
+ *
+ * @param keys エージェントごとの、局を復号できる見込みの順 (`agent-cards.keyRanks`)。鍵の要らない選局は null
  */
 export function route(
   lists: readonly RoutedList[],
   request: RouteRequest,
+  keys: ReadonlyMap<number, number> | null = null,
 ): Place {
   const { type, priority, after, pin } = request;
   const listOf = new Map(lists.map((list) => [list.agent, list]));
-  const up = request.places.filter(
+  let up = request.places.filter(
     (place) => listOf.get(place.agent)?.up === true,
   );
   if (up.length === 0) return request.places[0]!;
@@ -809,6 +834,11 @@ export function route(
         listOf.get(place.agent)!.tuners.some((t) => t.pin === pin),
       ) ?? up[0]!
     );
+  }
+  if (keys !== null) {
+    const rank = (place: Place) => keys.get(place.agent) ?? NO_KEY;
+    const best = Math.min(...up.map(rank));
+    up = up.filter((place) => rank(place) === best);
   }
   const shared = up.find((place) =>
     listOf
@@ -991,6 +1021,8 @@ export function openWhenFree(
   service: number | null = null,
   /** 1 回のリクエストで答えを待つ上限 (ms)。`openChannel` の `answerWithin` */
   answerWithin: number | null = null,
+  /** 復号して使う局 (`services.id`)。`openChannel` の `keyed` */
+  keyed: number | null = null,
 ): Promise<{ stream: ReadableStream<Uint8Array>; place: Place }> {
   return retryWhileBusy(async () => {
     const opened = await openChannel(
@@ -1003,6 +1035,7 @@ export function openWhenFree(
       pin,
       service,
       answerWithin,
+      keyed,
     );
     return {
       stream: await expectTransport(opened, expected),

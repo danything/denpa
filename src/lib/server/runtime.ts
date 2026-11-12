@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 
 import { SOCKET_PATH } from "#lib/live.js";
 
+import { forgetAgentCard } from "./agent-cards";
 import { listen } from "./agent-events";
 import {
   type Agent,
@@ -26,6 +27,7 @@ import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
 import { restoreWidths } from "./restore-width";
 import { fillSatellites } from "./satellite-lineup";
 import { recheckContracts, tick } from "./scheduler";
+import { forgetRawProbe } from "./scramble";
 import { prune as pruneSessions } from "./session";
 import { beginDraining } from "./shutdown";
 import { redeem } from "./tickets";
@@ -342,6 +344,7 @@ function listenToAgent(agent: Agent): () => void {
           console.log(
             "[contracts] カードが契約の更新を受け入れました。10 秒後に契約を確かめ直します",
           );
+          forgetAgentCard(agent.id);
           recheckAfterCard();
           break;
         default:
@@ -352,6 +355,9 @@ function listenToAgent(agent: Agent): () => void {
     // 次の録画が失敗するまで気付けなかったのを埋める (agent-events.ts が切り替えを判定)
     (up) => {
       if (up) {
+        // 落ちている間にカードや置き場が変わったかもしれない。振り分けと後からの復号の前に訊き直す
+        forgetAgentCard(agent.id);
+        forgetRawProbe(agent.id);
         console.log(`[agent] ${agent.name} に繋がりました`);
         notify({
           event: "agent.up",

@@ -560,6 +560,11 @@ async function pump(
                 use,
                 undefined,
                 leaving,
+                null,
+                null,
+                null,
+                // 有料の局は、契約のあるカードで復号するエージェントに振り分ける (`agent-cards.keyRanks`)
+                service.id,
               )
                 // 選局の答えの形式が控えと違えば録らない。TS の読み方で TLV を読んでも、その逆でも、1 バイトも書けない
                 .then((opened) => expectTransport(opened, service.transport))
