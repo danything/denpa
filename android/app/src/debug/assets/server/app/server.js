@@ -50,11 +50,14 @@ async function smoke() {
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
+  // 終わらないときは 15 分で止める (adb forward の向こうで curl が先に諦めても、bun の子プロセスを残さない)
+  const timer = setTimeout(() => child.kill("SIGKILL"), 15 * 60 * 1000);
   const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
   ]);
+  clearTimeout(timer);
   return { ok: exitCode === 0, exitCode, stdout, stderr };
 }
 

@@ -331,11 +331,11 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
   bun は配布物のまま入れます (`keepDebugSymbols`)。jniLibs は APK の中では圧縮されるので、増えるのは arm64 で約 53 MB です。端末には展開した 113 MB が置かれます
 - 常駐サービスは、APK の assets に `server/` があれば、それを `files/denpa/server/` に書き出して `bun server/…/app/server.js` を部品として起動します (`Server.kt`)。
   置き場 (`DENPA_HOME`)・`HOME`・`TMPDIR` はエージェントと同じで、待ち受けるのは `PORT` (3000) です。出力は logcat の `denpa-server` に出ます。
+  いまのリリースの APK には `server/` が無く、bun は起動しません。debug の APK にだけ、確かめ用の小さなサーバ (`src/debug/assets/server/app/server.js`) が入ります
 - ffmpeg は `android/ffmpeg/` に置くと APK に入ります (`DENPA_FFMPEG` で別の置き場も渡せます)。`.github/ffmpeg-android.sh` が NDK で組み、
   `jniLibs/<ABI>/libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリ、ライセンスの文書とソースの入手先を並べます ([encode.md](encode.md#android-でエンコードする))。
   CI は組み上がりを actions/cache に置き、Dockerfile の `ffmpeg` 段・組むスクリプト・NDK が変わるまで使い回します (依存は別のキャッシュ。Mac と同じ作り)。
   常駐サービスは、APK に入っていれば `FFMPEG`・`FFPROBE` にそのパスを入れてサーバに渡します。APK の中で増えるのは arm64 で約 7 MB、端末には展開した 14 MB が置かれます
-  いまのリリースの APK には `server/` が無く、bun は起動しません。debug の APK にだけ、確かめ用の小さなサーバ (`src/debug/assets/server/app/server.js`) が入ります
 - 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と asicen-userland の機材
   (`AsicenUserland.UsbIds`) と食い違わないことを、エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
 - debug の APK にだけ、エミュレータで確かめるための受け口 (`src/debug/` の `DebugReceiver`) が入ります。USB の機材の代わりにファイルの fd を送ること、

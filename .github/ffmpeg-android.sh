@@ -79,7 +79,9 @@ tc="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
 export PATH="$tc/bin:$PATH"
 cc="$tc/bin/$triple$api-clang"
 cxx="$tc/bin/$triple$api-clang++"
-# 16 KB のページの端末でも読めるように、LOAD を 16 KB 境界にそろえる
+# 16 KB のページの端末でも読めるように、LOAD を 16 KB 境界にそろえる。
+# 静的に繋いだ依存 (x264・dav1d・SVT-AV1・Opus・zimg・libc++) のシンボルは libav* の外に出ない
+# (FFmpeg が libav* ごとの version script で、外に出すのを av*・sw* の名前に絞っている。llvm-nm -D で確かめた)
 page=-Wl,-z,max-page-size=16384
 cmake_android=(
   -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake"
@@ -251,7 +253,7 @@ make -j"$jobs"
 make install
 mkdir -p "$licenses/ffmpeg" && cp "$src/COPYING.GPLv3" "$src/LICENSE.md" "$licenses/ffmpeg/"
 
-# 実行ファイルは lib<名前>.so に、共有ライブラリは SONAME (Android の configure は版の番号を付けない) のまま入れる
+# 実行ファイルは lib<名前>.so に、共有ライブラリは SONAME (Android の configure はバージョン番号を付けない) のまま入れる
 install -m 755 "$prefix/bin/ffmpeg" "$lib/libffmpeg.so"
 install -m 755 "$prefix/bin/ffprobe" "$lib/libffprobe.so"
 for so in "$prefix"/lib/lib*.so; do install -m 755 "$so" "$lib/"; done
@@ -271,6 +273,9 @@ for f in "$lib"/*.so; do
     [ "$((align))" -ge 16384 ] || { echo "$name の LOAD が 16 KB 境界にそろっていません ($align)" >&2; exit 1; }
   done
 done
+# libav* が外に出すのは av*・sw* の名前だけ (静的に繋いだ依存のシンボルが出ていない)
+leaked=$(llvm-nm -D --defined-only "$lib"/libav*.so "$lib"/libsw*.so | awk 'NF == 3 && $2 ~ /^[TDBRVW]$/ { print $3 }' | grep -vE '^(av|sw)' || true)
+if [ -n "$leaked" ]; then echo "libav* が依存のシンボルを外に出しています:" >&2; echo "$leaked" | head >&2; exit 1; fi
 for exe in libffmpeg.so libffprobe.so; do
   llvm-readelf -l "$lib/$exe" | grep -F '[Requesting program interpreter: /system/bin/linker64]'
   llvm-readelf -d "$lib/$exe" | grep -E '\(RUNPATH\).*\[\$ORIGIN\]'

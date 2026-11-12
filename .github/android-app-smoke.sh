@@ -94,6 +94,15 @@ notified() { adb shell dumpsys notification --noredact | tr -d '\r' | grep -A60 
 
 broadcast() { adb shell am broadcast -n "$pkg/.DebugReceiver" -a "$pkg.debug.$1" "${@:2}" > /dev/null; }
 
+# logcat を空にする。API 29 では、直前に記録が多く出ると「failed to clear the 'main' log」で断られることがあるので、少し待ってやり直す
+clear_log() {
+  for _ in 1 2 3 4 5; do
+    adb logcat -c 2> /dev/null && return 0
+    sleep 2
+  done
+  adb logcat -c
+}
+
 adb shell getprop ro.build.version.release | tee "$logs/android-version.txt"
 adb shell uname -r | tee "$logs/kernel.txt"
 # 起きた直後はパッケージの管理が答えず、adb install が戻らないことがある (API 29)。答えるのを待ち、上限を付けて入れ直す
@@ -106,7 +115,7 @@ for try in 1 2 3; do
 done
 # 省電力の対象から外すよう求める画面を出さない (最初の起動で出る。CI では押せない)
 adb shell dumpsys deviceidle whitelist "+$pkg" > /dev/null
-adb logcat -c
+clear_log
 
 # --- アイコンで起動する
 echo "=== アイコンで起動する"
@@ -233,7 +242,7 @@ fi
 
 # --- エージェントが異常終了したら、アプリが起動し直して繋ぎ直す
 echo "=== エージェントに SIGKILL を送る"
-adb logcat -c
+clear_log
 broadcast KILL_AGENT
 wait_log "起動し直します"
 wait_log "起動しました (PID"
@@ -244,7 +253,7 @@ wait_log "アプリから USB の機材を 0 台受け取りました"
 
 # --- 通知の「終了」。SIGTERM が届き、エージェントも bun も常駐サービスも残らない
 echo "=== 通知の「終了」"
-adb logcat -c
+clear_log
 broadcast PRESS_STOP
 wait_log "通知の「終了」で、エージェント・サーバに SIGTERM を送りました"
 wait_until no_agent
