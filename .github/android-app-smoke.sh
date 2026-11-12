@@ -53,9 +53,10 @@ agent_pid() {
   adb shell ps -A -o PID,NAME | tr -d '\r' | awk '$2 == "libdenpa_agent.so" { print $1 }'
 }
 
-# 常駐サービスが connectedDevice (0x10) で動いているか
+# 常駐サービスが動いているか。種類 (types) は API 30 から出るので、出ていれば connectedDevice (0x10) か見る
 service_running() {
-  adb shell dumpsys activity services "$pkg" | tr -d '\r' | grep -q 'isForeground=true .*types=0x00000010'
+  line=$(adb shell dumpsys activity services "$pkg" | tr -d '\r' | grep 'isForeground=true') || return 1
+  case "$line" in *types=*) [[ "$line" == *types=0x00000010* ]] ;; *) true ;; esac
 }
 
 wait_until() {
@@ -91,7 +92,8 @@ adb logcat -c
 
 # --- アイコンで起動する
 echo "=== アイコンで起動する"
-timeout 60 adb shell am start -W -n "$pkg/.StartActivity" > /dev/null
+# -W は付けない (画面の無いアクティビティはすぐ閉じるので、API 29 では起動し終えた知らせが来ず戻らない)
+timeout 60 adb shell am start -n "$pkg/.StartActivity" > /dev/null
 wait_until service_running
 wait_until has_agent
 pid=$(agent_pid)
@@ -161,7 +163,7 @@ wait_log "エージェントが終了したため、常駐サービスを止め�
 
 # --- アイコンで始め直し、端末を起動し直すと BOOT_COMPLETED で始まる
 echo "=== 端末を起動し直す"
-timeout 60 adb shell am start -W -n "$pkg/.StartActivity" > /dev/null
+timeout 60 adb shell am start -n "$pkg/.StartActivity" > /dev/null
 wait_until service_running
 wait_until has_agent
 adb reboot

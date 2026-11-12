@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /*
- * 端末の要らない部分の単体テスト。USB_BROKER に送る行、組む URL、通知に出すエージェントの様子
+ * 端末の要らない部分の単体テスト。USB_BROKER に送る行、denpa と組む URL、通知に出すエージェントの様子
  */
 class BrokerLinesTest {
     private fun text(bytes: ByteArray) = bytes.toString(Charsets.UTF_8)

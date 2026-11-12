@@ -274,7 +274,7 @@ class DenpaService : Service() {
         val url = try {
             pairUrl()
         } catch (error: Exception) {
-            Log.w(TAG, "組む URL を取得できませんでした", error)
+            Log.w(TAG, "denpa と組む URL を取得できませんでした", error)
             null
         }
         val address = PairUrl.lanAddress(getSystemService(ConnectivityManager::class.java))

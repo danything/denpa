@@ -14,7 +14,7 @@
     <string name="action_stop">終了</string>
     <string name="action_stop_now">すぐ終了</string>
     <string name="action_copy_url">URL をコピー</string>
-    <string name="url_copied">組む URL をコピーしました</string>
-    <string name="url_no_address">Wi-Fi のアドレスが無いため、組む URL を作れません</string>
-    <string name="url_failed">組む URL を取得できませんでした</string>
+    <string name="url_copied">denpa と組む URL をコピーしました</string>
+    <string name="url_no_address">Wi-Fi のアドレスが無いため、denpa と組む URL を作れません</string>
+    <string name="url_failed">denpa と組む URL を取得できませんでした</string>
 </resources>
