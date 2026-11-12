@@ -470,6 +470,28 @@ denpa が渡すオプション (`profile`・`prio_speed`・`realtime`) を持つ
 **実機で確かめていないこと**: 実機の Mac で試しのエンコードが通るか、上の値で見た目が今の H.264 とそろうか・どれだけ小さくなるか、
 ライブの遅れ。
 
+## Android でエンコードする
+
+**Android のアプリ ([install-android.md](install-android.md)) の ffmpeg は、ソフトウェアのエンコーダ (SVT-AV1・x264・Opus) を Linux と同じに入れ、MediaCodec のエンコーダも組み込んであります。**
+denpa 本体はまだアプリに入っておらず、MediaCodec は denpa の GPU の探し方 (`hwenc.ts`) にまだつないでいません。
+いまは探すと GPU の方式が 0 になり、ソフトウェアでエンコードします。
+
+- 組むのは CI で、NDK (API 29) で Dockerfile の `ffmpeg` 段と同じバージョンと部品を組みます (`.github/ffmpeg-android.sh`)。
+  MediaCodec のエンコーダ `h264_mediacodec`・`hevc_mediacodec`・`av1_mediacodec` と、デコーダ (H.264・H.265・AV1・MPEG-2) はここで足します
+- **libav* は共有ライブラリにし、ffmpeg と ffprobe が共有します** (Linux のイメージと同じ)。Mac・Windows のように libav* を静的に繋いで ffprobe を読む部品だけで別に組むと、
+  arm64 で 19.8 MB (圧縮して 9.4 MB) になり、共有ライブラリの 14.0 MB (圧縮して 6.7 MB) より大きいためです (2026-11-12 に両方を組んで測った)。
+  実行ファイルは RUNPATH の `$ORIGIN` で、同じ置き場 (アプリの nativeLibraryDir) の libav* を読みます
+- MediaCodec は JVM の無いプロセス (bun から起動した ffmpeg) からも使えます。FFmpeg は JVM が無ければ NDK の AMediaCodec を使い (`-ndk_codec`)、binder のスレッドも自分で立てます。
+  x86_64 のエミュレータ (API 36) で、アプリの子プロセスの bun から起動した ffmpeg が、3 つとも 1 秒の素材をエンコードできました (エミュレータのエンコーダはソフトウェアの `c2.android.*`)
+
+**GPU の探し方につなぐときの見通し (未実装)。** Mac の `probeMac` と同じく、方式を `mediacodec` の 1 行にし、H.264・H.265・AV1 を 1 コマずつ試します。
+ただし FFmpeg の MediaCodec のエンコーダは MIME の種類で選ぶので、ハードウェアのエンコーダが無い端末ではソフトウェアの `c2.android.*` を開き、試しのエンコードが通ってしまいます。
+NDK でエンコーダの一覧を引けるのは API 36 からなので、アプリ (Kotlin) が `MediaCodecList` の `isHardwareAccelerated` (API 29 から) でハードウェアのエンコーダの名前を集めて環境変数で渡し、
+denpa が `-codec_name` でその名前を指定する形を考えています。画質の指定 (ビットレートの表・`-bitrate_mode`) と、SoC の熱で速さが落ちるかは実機で測ってから決めます。
+
+**CI** (android.yml の `emulator`) は、エミュレータ (API 29・35) の中で `tests/native-smoke.ts` を bun で流し、MediaCodec の H.264 のエンコードが通ることも確かめます。
+arm64 の実機では、ffmpeg を起動できるか・速さ・MediaCodec のハードウェアのエンコーダのどれも確かめていません。
+
 ## H.265 は GPU でだけ
 
 **H.265 は、GPU で H.265 をエンコードできる機材でだけ選べます** (VA-API `hevc_vaapi`

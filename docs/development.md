@@ -92,21 +92,21 @@ PR を出して自分でマージします。急ぐときは Actions から手�
 
 CI では 10 組に割って別のランナーに出し、3 ワーカー×8 台と 1 ワーカー×2 台の 10 組 (下) で 26 ワーカーぶん並べます。
 組の中身は `tests/e2e/shards.json` で、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割っています。
-組ごとにテストの秒数の和がそろうように割り、長いファイルは組の先頭のほうに来るように組みます
-(組の中ではファイル名の順にワーカーへ配られるので、遅れて始まらずに済む)。組の時間の下限は、その組でいちばん長いファイル 1 本です。
+1 組から 8 組は、テストの秒数の和がどれも 320 秒ほど (1 ワーカー 110 秒ほど) になるように割ります。
+8 組の秒数の和を 24 ワーカーで割った値が、組の時間の下限です。ジョブの時間は、これにチェックアウト・ビルド・ワーカーの立ち上がりの約 20 秒を足したものです。
 
-- 映像を長くデコードし続けるスペック (20-live・22-watch・互換モードのものなど。一覧は shards.json の注記) は 1 つの組に 3 本までにします。混むとどれも遅くなります
-- 名前が後ろの長いスペック (57-jikkyo など) は、前に並ぶスペックが少ない組に置きます。
-  前のスペックがワーカーを埋めていると遅れて始まり、組がそのぶん長くなります
+- **1 本のスペックは 50 秒以下にします。** 組の中ではファイル名の順に空いたワーカーへ配られるので、組の時間の下限は
+  いちばん長いファイル 1 本です。1 本で 60 秒を超えたら、確かめる中身はそのままで、describe やテストの切れ目で
+  ファイルを分けます。いまは 03-recording・15-scramble・20-live・22-watch・23-watch-data・26-hwenc・28-live-raw・
+  39-watch-stream・40-watch-compat・57-jikkyo・57-jikkyo-recorded をそうして分けてあり、いちばん長いのは 50 秒ほどです
+- 分けた先のファイルは、ほかのファイルの後でも前でも、単独でも通るようにします。同じファイルの前のテストが録った録画を
+  使い回していたもの (22-watch・23-watch-data) は、ファイルごとに 1 本録ります (`tests/e2e/watch.ts` の `sharedRecording`)。
+  分けたファイルどうしで使う道具は、`tests/e2e/` の小さなモジュール (`jikkyo.ts`・`live.ts`・`watch.ts` など) に置きます
+- 映像を長くデコードし続けるスペック (20-live・22-watch・互換モードのものなどと、そこから分けたもの。一覧は shards.json の注記) は 1 つの組に 3 本までにします。混むとどれも遅くなります
 - 9 組と 10 組は、ライブの貯め方 (50-live-pacing・51-live-gaps) を 1 本ずつ 1 ワーカーで流します (test.yml)。同じ組でほかのワーカーが動くと
   届く間隔が乱れ、貯める量がその間隔を覆う高さ (`pacing.ts` の `cover`) へ上がって、「下限のまま」を見るテストが落ちるためです
   (軽いスペックと組ませても 5 回に 2 回落ちた)。デコードが重なると、途中から入ったときにコマも落とします。
-  1 ワーカーなので、ほかのスペックを足すとそのぶん組が長くなります。2 本を 1 つの組で順に流すと 2 分を超えるので、組を分けています
-- 1 本で長いスペックは、組の時間の下限を押し上げるので分けます (57-jikkyo-recorded・26-hwenc-hevc・20-live-player はそうして分けたもの)。
-  20-live はテストが細かく多く、1 本で CI の 2.4 分かかっていたので、選局・一覧・データ放送 (20-live) と
-  操作バーから先 (20-live-player) の 2 本に分けました。どちらも 1 分強です。
-  いまいちばん長いのは 57-jikkyo (CI で 2 分ほど) で、20-live-player・22-watch (100 秒ほど)、03-recording (90 秒ほど) が続きます。
-  57-jikkyo の組は、この 1 本で 2 分を超えます。57-jikkyo・22-watch・03-recording は 1 組に集めて 1 ワーカーに 1 本ずつ流し、ほかのスペックを足しません (足すと、どれかの後ろに並んで組が延びる)
+  1 ワーカーなので、ほかのスペックを足すとそのぶん組が長くなります。どちらも 1 本で 60 秒ほどですが、組の時間は 1 分半ほどなので分けていません
 - 組の時間は、組の秒数の和を 3 で割った値と、長いファイルが始まる時刻にその長さを足した値の、大きいほうで決まります。
   割り直すときは、ファイル名の順に空いたワーカーへ配って両方を見積もります
 - 実時間を待つテストは、確かめる性質が出る最短の尺で見ます。51-live-gaps は空きを 3 回 (縮めにかかる 20 秒より長い間隔で)、
@@ -283,6 +283,7 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 ffmpeg・SVT-AV1・emsdk・Denpa Font・asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
 Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
+アプリに入れる ffmpeg は Dockerfile の `ffmpeg` 段からバージョンと部品を読み、x264・dav1d・zimg のバージョンは `.github/ffmpeg-android.sh` に書いています (Mac の `ffmpeg-macos.sh` と同じ)。
 `bun-android.sh` のバージョンは Dockerfile の `oven/bun` と別に Renovate が上げ、ずれている間は Android の CI が警告を出します。
 
 **土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は
@@ -331,6 +332,10 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 - 常駐サービスは、APK の assets に `server/` があれば、それを `files/denpa/server/` に書き出して `bun server/…/app/server.js` を部品として起動します (`Server.kt`)。
   置き場 (`DENPA_HOME`)・`HOME`・`TMPDIR` はエージェントと同じで、待ち受けるのは `PORT` (3000) です。出力は logcat の `denpa-server` に出ます。
   いまのリリースの APK には `server/` が無く、bun は起動しません。debug の APK にだけ、確かめ用の小さなサーバ (`src/debug/assets/server/app/server.js`) が入ります
+- ffmpeg は `android/ffmpeg/` に置くと APK に入ります (`DENPA_FFMPEG` で別の置き場も渡せます)。`.github/ffmpeg-android.sh` が NDK で組み、
+  `jniLibs/<ABI>/libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリ、ライセンスの文書とソースの入手先を並べます ([encode.md](encode.md#android-でエンコードする))。
+  CI は組み上がりを actions/cache に置き、Dockerfile の `ffmpeg` 段・組むスクリプト・NDK が変わるまで使い回します (依存は別のキャッシュ。Mac と同じ作り)。
+  常駐サービスは、APK に入っていれば `FFMPEG`・`FFPROBE` にそのパスを入れてサーバに渡します。APK の中で増えるのは arm64 で約 7 MB、端末には展開した 14 MB が置かれます
 - 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と asicen-userland の機材
   (`AsicenUserland.UsbIds`) と食い違わないことを、エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
 - debug の APK にだけ、エミュレータで確かめるための受け口 (`src/debug/` の `DebugReceiver`) が入ります。USB の機材の代わりにファイルの fd を送ること、
@@ -344,6 +349,12 @@ bash .github/bun-android.sh android/bun arm64
 cd android && ./gradlew lintDebug testDebugUnitTest assembleDebug
 ```
 
+ffmpeg は NDK (バージョンは android.yml の `NDK_VERSION`) を置いたコンテナで、nasm・meson・ninja・autoconf・automake・libtool・cmake を入れてから組みます (数分かかる)。
+
+```sh
+ANDROID_NDK_ROOT=/opt/ndk RUNNER_TEMP=/tmp bash .github/ffmpeg-android.sh android/ffmpeg arm64
+```
+
 CI は android.yml で両方の ABI を入れた debug の APK を組み (成果物の `denpa-android-debug`)、Android 10 (API 29。minSdk) と Android 15 (API 35) の
 x86_64 のエミュレータに入れて確かめます (`.github/android-app-smoke.sh`)。
 
@@ -354,6 +365,8 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
 - bun がアプリの子プロセスで動き、確かめ用のサーバが 3000 番で答えること。サーバの `GET /check` で、JIT が動くこと、`localhost` を引けること、
   `/proc` から読めること、bun が自分を子プロセスで起動できること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
+- bun が `FFMPEG`・`FFPROBE` の ffmpeg・ffprobe を起動できること。`tests/native-smoke.ts` を bun build で 1 つにまとめてアプリの置き場に置き、
+  確かめ用のサーバの `POST /smoke` で流す (エンコード、4K の局の HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec の H.264 のエンコード、4 本目の出口)
 - エージェントが落ちたらアプリが起動し直すこと、通知の「終了」でエージェントも bun も常駐サービスも残らないこと、端末を起動し直すと常駐サービスが始まること
 
 エミュレータの列は必須チェックではありません (起動や応答の時間がばらつき、コードと関係なく落ちることがあるため)。

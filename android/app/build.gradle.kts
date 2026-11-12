@@ -43,6 +43,14 @@ val asicen = System.getenv("DENPA_ASICEN")?.takeIf { it.isNotEmpty() }
 val bun = System.getenv("DENPA_BUN")?.takeIf { it.isNotEmpty() }
     ?: rootProject.layout.projectDirectory.dir("bun").asFile.path
 
+/*
+ * ffmpeg・ffprobe (3 段目から。denpa 本体がエンコードと読み取りに使う) の置き場。CI が .github/ffmpeg-android.sh で NDK で組み、
+ * 実行ファイルを `jniLibs/<ABI>/libffmpeg.so`・`libffprobe.so` に、共有ライブラリの libav* を同じ置き場に、ライセンスの文書とソースの入手先を
+ * `assets/licenses/ffmpeg/` に並べる。既定は android/ffmpeg/ (リポジトリには入れない)。`DENPA_FFMPEG` で別の置き場を渡せる。無ければ入れずに組む
+ */
+val ffmpeg = System.getenv("DENPA_FFMPEG")?.takeIf { it.isNotEmpty() }
+    ?: rootProject.layout.projectDirectory.dir("ffmpeg").asFile.path
+
 /** ライセンスの文書を `licenses/` に並べた assets の置き場を作る */
 abstract class LicenseAssets : DefaultTask() {
     @get:InputFiles
@@ -140,9 +148,11 @@ androidComponents {
         variant.sources.jniLibs?.addStaticSourceDirectory(agentLibs)
         variant.sources.jniLibs?.addStaticSourceDirectory("$asicen/jniLibs")
         variant.sources.jniLibs?.addStaticSourceDirectory("$bun/jniLibs")
+        variant.sources.jniLibs?.addStaticSourceDirectory("$ffmpeg/jniLibs")
         variant.sources.assets?.addGeneratedSourceDirectory(licenseAssets, LicenseAssets::output)
         variant.sources.assets?.addStaticSourceDirectory("$asicen/assets")
         variant.sources.assets?.addStaticSourceDirectory("$bun/assets")
+        variant.sources.assets?.addStaticSourceDirectory("$ffmpeg/assets")
     }
 }
 
