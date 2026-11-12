@@ -911,7 +911,9 @@ export class EpgReader {
  *
  * **中身で比べる。** 書き換われば version が上がるはずだが、上げずに中身だけ替える
  * 送り手を当てにしないよう、番組の番号・時刻・尺・タイトルで比べる。p/f は 1 局ぶん数百バイトが
- * 数秒おきに来るだけなので、毎回読んでも軽い
+ * 数秒おきに来るだけなので、毎回読んでも軽い。
+ *
+ * 4K の放送 (MMT/TLV) の MH-EIT[p/f] は、読み方だけを替えた `mh-eit.ts` の `MmtPresentFollowing` で追う
  */
 export class PresentFollowing {
   private readonly sections = new SectionAssembler(PID_EIT);
@@ -921,7 +923,7 @@ export class PresentFollowing {
   private readonly marks: [string | null, string | null] = [null, null];
 
   /** @param serviceId 追う局 (放送が名乗っている service_id) */
-  constructor(private readonly serviceId: number) {}
+  constructor(protected readonly serviceId: number) {}
 
   /** いま流れている番組。まだ来ていない・放送が空けているなら null */
   get present(): EitEvent | null {
@@ -943,17 +945,24 @@ export class PresentFollowing {
       // 番組表 (schedule) と他局の p/f は読まずに捨てる。同じ PID に流れてくる
       if (raw[0] !== TABLE_PF_ACTUAL || raw.length < 18) continue;
       if (u16(raw, 3) !== this.serviceId) continue;
-      const section = parseEit(raw);
-      if (section === null || section.sectionNumber > 1) continue;
-      const slot = section.sectionNumber as 0 | 1;
-      const event = section.events[0] ?? null;
-      const mark = event === null ? "" : markOf(event);
-      if (this.marks[slot] === mark) continue;
-      this.marks[slot] = mark;
-      this.held[slot] = event;
-      changed = true;
+      if (this.hold(parseEit(raw))) changed = true;
     }
     return changed;
+  }
+
+  /**
+   * 読んだ p/f[actual] のセクションを 1 本覚える。**いまか次のどちらかが変わったら true**。
+   * 渡すのは追う局のものだけ (table_id と service_id は呼ぶ側が確かめる)
+   */
+  protected hold(section: EitSection | null): boolean {
+    if (section === null || section.sectionNumber > 1) return false;
+    const slot = section.sectionNumber as 0 | 1;
+    const event = section.events[0] ?? null;
+    const mark = event === null ? "" : markOf(event);
+    if (this.marks[slot] === mark) return false;
+    this.marks[slot] = mark;
+    this.held[slot] = event;
+    return true;
   }
 }
 

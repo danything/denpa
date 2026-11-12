@@ -1039,7 +1039,7 @@ function tlvTables(services: FakeService[]): Uint8Array {
 }
 
 /**
- * MH-EIT の予定 (基本 0x8C) と p/f (0x8B)。**スクランブルしない** (実機の BS4K も、カード無しで読めた)。
+ * MH-EIT の予定 (基本 0x8C)。**スクランブルしない** (実機の BS4K も、カード無しで読めた)。
  * 予定はセクションに 10 番組ずつ。segment_last_section_number は last_section_number と同じ値になる (`synth-mmt.mhEitSection`) が、
  * 全部のセクションを流すので揃う
  */
@@ -1066,19 +1066,55 @@ function tlvEpg(services: FakeService[], knobs: Knobs): Uint8Array {
           events: chunk,
         }),
       );
-    const at = Date.now();
-    const now = events.findIndex(
-      (event) => event.startAt <= at && at < event.startAt + event.duration,
+  }
+  return concatBytes(m2Packets(sections));
+}
+
+/**
+ * MH-EIT[p/f] (0x8B)。いま流れている番組 (section 0) と次の番組 (section 1)。延長の決め方は TS の `nowOnAir` と同じで、
+ * 延びたら次の番組をそのぶん繰り下げて短くする
+ */
+function tlvOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
+  if (knobs.noPresentFollowing) return new Uint8Array(0);
+  const sections: Uint8Array[] = [];
+  for (const service of services) {
+    const events = programsWith(service, knobs);
+    const current = present(events);
+    if (current === undefined) continue;
+    const section = (
+      sectionNumber: number,
+      event: SynthEvent,
+      status: number,
+    ) =>
+      mhEitSection({
+        serviceId: service.serviceId,
+        tlvStreamId: tsidOf(service),
+        originalNetworkId: service.networkId,
+        tableId: 0x8b,
+        sectionNumber,
+        lastSectionNumber: 1,
+        runningStatus: status,
+        events: [mhEvent(event)],
+      });
+    sections.push(
+      section(
+        0,
+        { ...current, duration: current.duration + knobs.extendedMs },
+        4,
+      ),
     );
-    if (now >= 0)
+    const next = events[events.indexOf(current) + 1];
+    if (next !== undefined && next.duration > knobs.extendedMs)
       sections.push(
-        mhEitSection({
-          ...base,
-          tableId: 0x8b,
-          lastSectionNumber: 0,
-          runningStatus: 4,
-          events: [events[now]!],
-        }),
+        section(
+          1,
+          {
+            ...next,
+            startAt: next.startAt + knobs.extendedMs,
+            duration: next.duration - knobs.extendedMs,
+          },
+          1,
+        ),
       );
   }
   return concatBytes(m2Packets(sections));
@@ -1097,11 +1133,16 @@ export function broadcastTlv(
 ): () => void {
   send(tlvTables(services));
   send(tlvEpg(services, knobs()));
+  send(tlvOnAir(services, knobs()));
   let ticks = 0;
   const timer = setInterval(() => {
     ticks++;
-    // 表は繰り返し流れてくる。番組表は数秒おきに流し直す (途中から読んでも揃うように)
+    /*
+     * 表は繰り返し流れてくる。番組表は数秒おきに流し直す (途中から読んでも揃うように)。
+     * p/f は 1 秒ごと (本物も 2 秒に 1 回以上来る。`pf-event.PF_WAIT`)
+     */
     send(tlvTables(services));
+    send(tlvOnAir(services, knobs()));
     if (ticks % 30 === 0) send(tlvEpg(services, knobs()));
   }, TICK * 10);
   const startMs = Date.now();

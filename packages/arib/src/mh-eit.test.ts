@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { concatBytes } from "./bytes.js";
-import { MmtEpgReader, parseMhEit } from "./mh-eit.js";
+import { MmtEpgReader, MmtPresentFollowing, parseMhEit } from "./mh-eit.js";
 import {
   compressedIp,
   m2SectionMessage,
@@ -168,5 +168,56 @@ describe("MmtEpgReader", () => {
     for (let at = 0; at < data.length; at += 13)
       reader.feed(data.subarray(at, at + 13));
     expect(reader.all().map((e) => e.eventId)).toEqual([1, 2]);
+  });
+});
+
+describe("MmtPresentFollowing", () => {
+  const pf = (overrides: Partial<SynthMhEit> = {}) =>
+    section({ tableId: 0x8b, runningStatus: 4, ...overrides });
+  const next = event({
+    eventId: 2,
+    name: "次の番組",
+    startAt: START + 60 * 60_000,
+  });
+
+  test("いまと次をセクションの番号で分けて読む", () => {
+    const reader = new MmtPresentFollowing(SERVICE);
+    expect(
+      reader.feed(
+        tlv(
+          pf(),
+          pf({ sectionNumber: 1, lastSectionNumber: 1, events: [next] }),
+        ),
+      ),
+    ).toBe(true);
+    expect(reader.present?.name).toBe("🈑報道１９３０");
+    expect(reader.following?.name).toBe("次の番組");
+  });
+
+  test("同じものが繰り返し来ても変わったとは言わず、延びたら言う", () => {
+    const reader = new MmtPresentFollowing(SERVICE);
+    reader.feed(tlv(pf()));
+    expect(reader.feed(tlv(pf()))).toBe(false);
+    expect(
+      reader.feed(tlv(pf({ events: [event({ duration: 70 * 60_000 })] }))),
+    ).toBe(true);
+    expect(reader.present?.duration).toBe(70 * 60_000);
+  });
+
+  test("ほかの局の p/f と予定 (0x8C) は読まない", () => {
+    const reader = new MmtPresentFollowing(SERVICE);
+    expect(reader.feed(tlv(pf({ serviceId: SERVICE + 1 })))).toBe(false);
+    expect(reader.feed(tlv(section()))).toBe(false);
+    expect(reader.present).toBeNull();
+  });
+
+  test("チャンクの切れ目がどこに来ても読む", () => {
+    const data = tlv(pf());
+    const reader = new MmtPresentFollowing(SERVICE);
+    let changed = false;
+    for (let at = 0; at < data.length; at += 13)
+      if (reader.feed(data.subarray(at, at + 13))) changed = true;
+    expect(changed).toBe(true);
+    expect(reader.present?.eventId).toBe(1);
   });
 });

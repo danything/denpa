@@ -12,6 +12,7 @@ import {
   encodeRuns,
   expect,
   goto,
+  later,
   setRecording,
   syncEpg,
   test,
@@ -480,6 +481,44 @@ test.describe("ケーブル", () => {
         )
         .toBeGreaterThan(0.5);
     } finally {
+      rmSync(stack.liveFmp4File, { force: true });
+    }
+  });
+
+  /*
+   * TS の局と同じく、観ている 4K の局の MH-EIT[p/f] を読んで番組表に写し、画面に読み直させる (`live.followTlv`)。
+   * 予定の時刻だけで追うと、延長・繰り下げで出ている番組が放送とずれる
+   */
+  test("4K の局のライブでも、放送が延びたら終わりの時刻も延びる。戻れば戻る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(180_000);
+    await syncEpg(request);
+    // ケーブルの偽番組は 30 分枠。替わり目の直前なら、替わってから始める
+    const slot = 30 * 60_000;
+    const left = slot - (Date.now() % slot);
+    if (left < 60_000) await page.waitForTimeout(left + 3_000);
+    writeFileSync(stack.liveFmp4File, "");
+    try {
+      await goto(page, `/live?service=${CATV_4K_FREE.id}`);
+      const range = page.getByTestId("live-range");
+      await expect(range).toBeVisible();
+      const before = ((await range.textContent()) ?? "").trim();
+      const [start, end] = before.split("〜").map((part) => part.trim());
+
+      // 放送が 10 分押した。サーバが MH-EIT[p/f] を読んで番組表を直し、画面に読み直させる
+      await request.post(
+        `${stack.agentUrl}/__control/extend?ms=${10 * 60_000}`,
+      );
+      await expect(range).toHaveText(`${start} 〜 ${later(end ?? "", 10)}`);
+
+      // 戻せば元の時刻に戻る
+      await request.post(`${stack.agentUrl}/__control/extend?ms=0`);
+      await expect(range).toHaveText(before);
+    } finally {
+      await request.post(`${stack.agentUrl}/__control/extend?ms=0`);
       rmSync(stack.liveFmp4File, { force: true });
     }
   });
