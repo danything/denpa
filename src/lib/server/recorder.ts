@@ -875,7 +875,7 @@ export function failStrayRecordings(
   return stray.length;
 }
 
-/** 録画が通す、1 局に絞る道具 (`ServiceFilter`・`MmtServiceFilter`) の共通の形 */
+/** 録画が通す、1 局に絞るフィルタ (`ServiceFilter`・`MmtServiceFilter`) の共通の形 */
 interface RecordFilter {
   /** 塊を受けて、その局のぶんだけを返す */
   filter(chunk: Uint8Array): Uint8Array;
@@ -886,7 +886,7 @@ interface RecordFilter {
 }
 
 /**
- * **伝送の形式ごとに、1 局に絞る道具を選ぶ。** TS は `ServiceFilter`、4K の局 (TLV) は `MmtServiceFilter`。
+ * **伝送の形式ごとに、1 局に絞るフィルタを選ぶ。** TS は `ServiceFilter`、4K の局 (TLV) は `MmtServiceFilter`。
  * 4K の局のコピー禁止は番組表 (MH-EIT のコンテンツコピー制御記述子) で予約の時点に止める (`format.COPY_NEVER_REASON`)。
  * 録っている最中に MPT からは読まない (MPT のコピー制御の読み方を確かめていない)
  */

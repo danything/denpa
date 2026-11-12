@@ -63,11 +63,6 @@ export class MmtLive {
     return this.reader.scrambled;
   }
 
-  /** 時刻 0 に当たる放送の時刻 (90 kHz)。init を出すまでは null */
-  get origin(): number | null {
-    return this.muxer?.origin ?? null;
-  }
-
   feed(chunk: Uint8Array): MmtOut {
     const tlv = this.filter.filter(chunk);
     const out: MmtOut = {

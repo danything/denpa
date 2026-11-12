@@ -3,6 +3,7 @@ import { error } from "@sveltejs/kit";
 import { askedTrack } from "#lib/arib.js";
 import { parseId } from "#lib/id.js";
 import { chaseStream, chaseTransport } from "#lib/server/live.js";
+import { TLV_TYPE } from "#lib/server/tuner.js";
 import { askedFormat } from "#lib/server/viewing.js";
 import {
   BUSY,
@@ -50,7 +51,7 @@ export function GET({ params, url }) {
         codec !== "raw"
           ? "video/mp4"
           : chaseTransport(id) === "tlv"
-            ? "application/x-arib-tlv"
+            ? TLV_TYPE
             : "video/mp2t",
       "Cache-Control": "no-store",
       [CODEC_HEADER]: codec,

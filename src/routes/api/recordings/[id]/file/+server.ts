@@ -5,6 +5,7 @@ import { encodedFile } from "#lib/server/library.js";
 import { fileAudioBody } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { serveFile } from "#lib/server/serve.js";
+import { TLV_TYPE } from "#lib/server/tuner.js";
 import {
   type FileSource,
   parseFileSource,
@@ -79,7 +80,7 @@ function respond(
       ? "video/x-matroska"
       : // 4K の局の元の録画 (`.mmts`) は 1 局に絞った TLV (ライブの 4K の局の `codec=raw` と同じ)
         recordedTransport(path) === "tlv"
-        ? "application/x-arib-tlv"
+        ? TLV_TYPE
         : "video/mp2t",
     request,
   );

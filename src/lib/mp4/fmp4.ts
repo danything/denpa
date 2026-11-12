@@ -29,7 +29,7 @@ export interface AudioTrack {
   audioSpecificConfig: Uint8Array;
 }
 
-export type Mp4Track = VideoTrack | AudioTrack;
+type Mp4Track = VideoTrack | AudioTrack;
 
 /** 1 コマ (1 フレーム)。時間は 90 kHz */
 export interface Mp4Sample {
@@ -250,7 +250,7 @@ export function initSegment(tracks: readonly Mp4Track[]): Uint8Array {
   return concatBytes([ftyp, box("moov", mvhd, ...tracks.map(trak), mvex)]);
 }
 
-/** sample_flags。頭出しできるコマは「ほかに頼らない」、それ以外は「ほかに頼る・sync でない」 */
+/** sample_flags。頭出しできるコマは「ほかのコマを参照しない」、それ以外は「ほかのコマを参照する・sync でない」 */
 const KEY_FLAGS = 0x02000000;
 const DEPENDENT_FLAGS = 0x01010000;
 
