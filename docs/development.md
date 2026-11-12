@@ -313,7 +313,7 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 ## Android のアプリ
 
 **Android で denpa を動かすアプリは `android/` の Gradle のプロジェクトです (パッケージは `io.github.danything.denpa`)。** 画面は持たず、常駐サービスがエージェントを子プロセスとして起動します。
-使い方は [install-android.md](install-android.md)、エージェントとの取り決めは [agent.md](agent.md#android-でアプリから-usb-を受け取る) にあります。リリースにはまだ載せません。
+使い方は [install-android.md](install-android.md)、エージェントとの取り決めは [agent.md](agent.md#android-でアプリから-usb-を受け取る) にあります。
 
 - Kotlin で、Android の標準の API (`android.*`) だけで書きます。AndroidX も使わず、APK に入る依存は Kotlin の標準ライブラリだけです。
   Gradle・AGP・Kotlin・compileSdk・JDK・依存は、その時点の最新の安定版にします。上げるのは Renovate です (JDK は `renovate.json` の注釈で追う)
@@ -342,5 +342,21 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 
 エミュレータの列は必須チェックではありません (起動や応答の時間がばらつき、コードと関係なく落ちることがあるため)。
 USB の機材はエミュレータに挿せないので、usbfs の fd (許可・`USBDEVFS_CONNINFO_EX`・確保) は CI では見ません。
+
+### リリースの APK と署名の鍵
+
+リリース (release.yml) は android.yml を `tag` 付きで呼び、arm64 のエージェントだけを入れた release の APK を組んで、`denpa-<バージョン>-android-arm64.apk` と `.sha256` を添えます (出所の証明も付ける)。
+
+- **リリースはいつも同じ鍵で署名します。** 鍵が違う APK は上書きで入れられないためです。denpa-tv とは別の鍵で、漏れたときに巻き込むアプリを 1 つにします
+- 鍵は PKCS12 (RSA 4096 ビット、有効期限 36500 日。denpa-tv と同じ作り) で、リポジトリの Actions の secrets に `DENPA_ANDROID_KEYSTORE_BASE64` (keystore を base64 にしたもの)・
+  `DENPA_ANDROID_KEYSTORE_PASSWORD`・`DENPA_ANDROID_KEY_ALIAS`・`DENPA_ANDROID_KEY_PASSWORD` として入れてあります。控えは管理者の手元にあります。
+  Gradle には、CI が keystore のパスを `DENPA_ANDROID_KEYSTORE` で、ほかを同じ名前の環境変数で渡します
+- android.yml は、署名した証明書の SHA-256 を、ワークフローに書いた値 (`CERT_SHA256`。install-android.md の「上げる」にも書いてある) と突き合わせます。
+  secrets が無いときと値が違うときは、リリースの APK を出さずに止まります
+- 鍵を渡さないとき (PR の CI・手元) は、release も debug の鍵で署名します。PR の CI は、R8 で縮めた release が組めることもここで確かめます
+- release は R8 で縮めます (`isMinifyEnabled`・`isShrinkResources`)。リフレクションで引くクラスが無く、マニフェストの部品は AGP の規則が残すので、規則は足していません。
+  エミュレータで確かめるのは debug の APK だけなので、リフレクションを使うコードを足したら規則も足します
+- エージェントに入っているもののライセンスの文書 (Siano のファームウェアの許諾と OpenSSL の LICENSE) を、APK の `assets/licenses/` に入れます
+  (`licenseAssets`。OpenSSL のものは CI が `android/agent-licenses/` に置く。`DENPA_AGENT_LICENSES` で替えられる)
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。

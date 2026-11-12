@@ -335,7 +335,7 @@ jobs:
           [ "$(grep -c 'kind: ReplicationDestination' ds.yaml)" = 1 ]
           grep -q 'name: denpa-data-dst' ds.yaml
 
-  # Android で denpa を動かすアプリとエージェント (android.yml が組み、x86_64 の APK をエミュレータで入れて起動する。まだ配らない)。
+  # Android で denpa を動かすアプリとエージェント (android.yml が組み、x86_64 の APK をエミュレータで入れて起動する。リリースの APK は release.yml が組む)。
   # **必須チェックにはしない** (エミュレータは起動や応答の時間がばらつき、コードと関係なく落ちることがある。docs/development.md「Android のアプリ」)
   agent-android:
     needs: changes

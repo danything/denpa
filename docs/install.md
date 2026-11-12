@@ -1,7 +1,7 @@
 # 立てる
 
-README の手順の細かいところ。用意するもの、入れ方 (1 行・Compose・1 コンテナ・Helm・Talos Linux)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
-Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
+README の手順の細かいところ。用意するもの、入れ方 (1 行・Compose・1 コンテナ・Helm・Talos Linux・Android)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
+Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md) に、Android の端末をチューナーエージェントにするなら [install-android.md](install-android.md) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
 
 ## 用意するもの
 
@@ -132,6 +132,12 @@ PT3 を挿した機械を Talos Linux の 1 台のクラスタにして、OS の
 curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.sh | sh -s -- --node <IP>
 ```
 
+### Android の端末をチューナーエージェントに
+
+チューナーを挿した Android の端末 (Android 10 以上、arm64) を、別の機械で動かす denpa のチューナーエージェントにできます
+(実機では確かめていない)。リリースの `denpa-<バージョン>-android-arm64.apk` を入れ、通知の「URL をコピー」で取った URL を denpa の `TUNER_AGENT_URL` に書きます。
+手順は [install-android.md](install-android.md)。
+
 ### イメージのタグ
 
 `latest` はリリースのたびに新しくなります。バージョンを固定するなら `2.7.0` のように書きます
@@ -139,8 +145,8 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.
 
 ### 配布物を確かめる
 
-リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェントと denpa 本体
-(リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`・`denpa-…-darwin-arm64.tar.gz`・`denpa-…-windows-x64.zip`) には、
+リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェントと denpa 本体と、Android のアプリ
+(リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`・`denpa-…-darwin-arm64.tar.gz`・`denpa-…-windows-x64.zip`・`denpa-…-android-arm64.apk`) には、
 **出所の証明 (attestation)** を付けています (2.13.0 から)。このリポジトリのリリースの
 workflow が作ったものかを、[GitHub CLI](https://cli.github.com/) で確かめられます。
 

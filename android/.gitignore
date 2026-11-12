@@ -5,3 +5,5 @@
 local.properties
 # エージェントの実行ファイル (CI が置く。手元で組むときの置き方は docs/development.md「Android のアプリ」)
 agent-libs/
+# エージェントに入っているもののライセンスの文書 (CI が置く。app/build.gradle.kts の DENPA_AGENT_LICENSES)
+agent-licenses/

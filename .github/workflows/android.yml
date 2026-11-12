@@ -1,20 +1,40 @@
-name: Android
+name: Android      - name: Publish (Native AOT, ${{ matrix.rid }})
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
 
-# **Android で denpa を動かすアプリ** (android/。debug の APK) と、中に入れるエージェント (`linux-bionic-arm64`・`linux-bionic-x64` の Native AOT) を組み、
-# エミュレータで入れて起動して確かめる。CI (test.yml) が呼ぶ。まだ配らない (リリースに載せるのは署名の鍵を入れてから)。
-# 組み方は docs/development.md「Android 向けのエージェント」「Android のアプリ」。
+# **Android で denpa を動かすアプリ** (android/) と、中に入れるエージェント (`linux-bionic-arm64`・`linux-bionic-x64` の Native AOT) を組む。
+# CI (test.yml) は debug の APK をエミュレータで入れて起動して確かめ、リリース (release.yml) はリリースの鍵で署名した arm64 の APK
+# (`denpa-<バージョン>-android-arm64.apk`) を組む。組み方は docs/development.md「Android 向けのエージェント」「Android のアプリ」。
 #
 # 1. OpenSSL を NDK で静的ライブラリに組む (.github/openssl-android.sh)。**組んだものは actions/cache に置き、バージョン・組み方・NDK が
 #    変わるまで使い回す**
 # 2. エージェントを NDK の clang で組む。ASP.NET Core は linux の実行時パックの IL を使わせる (csproj の説明)
-# 3. アプリを Gradle で組む。2 の両方の ABI を `libdenpa_agent.so` の名前で APK に入れる。lint と単体テストもここで流す
+# 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。CI は両方の ABI を入れ、lint と単体テストも流し、
+#    R8 で縮める release も debug の鍵で組む。リリースは arm64 だけを入れ、リリースの鍵で署名する
 # 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・「終了」・
-#    端末の起動を確かめる (.github/android-app-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)
+#    端末の起動を確かめる (.github/android-app-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)。
+#    リリースでは流さない (同じコミットを main で確かめてある)
 #
-# 組むのは呼んだ workflow のコミット。コミットを入力で受けて取り出すことはしない (windows-server.yml と同じく、キャッシュを汚させない)
+# 組むのは呼んだ workflow のコミット (リリースならタグ)。コミットを入力で受けて取り出すことはしない (windows-server.yml と同じく、キャッシュを汚させない)
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      tag:
+        description: "リリースのタグ (v1.2.3 の形)。CI は dev (debug の APK と、debug の鍵で署名した release を組むだけ)"
+        type: string
+        default: dev
+    # リリースの署名の鍵 (docs/development.md「Android のアプリ」)。release.yml だけが渡す
+    secrets:
+      DENPA_ANDROID_KEYSTORE_BASE64:
+        required: false
+      DENPA_ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      DENPA_ANDROID_KEY_ALIAS:
+        required: false
+      DENPA_ANDROID_KEY_PASSWORD:
+        required: false
 
 permissions:
   contents: read
@@ -77,11 +97,16 @@ jobs:
 
       # NDK の clang を PATH の先頭に置く (csproj が `<triple>24-clang` を呼ぶ。暗号の部品もこれで組まれる)
       - name: Publish (Native AOT, ${{ matrix.rid }})
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           export PATH="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           export OPENSSL_ROOT_DIR="$PWD/openssl-out"
-          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r "${{ matrix.rid }}" -o out
+          # バージョンは実行ファイルに入れる (`GET /denpa/about`。リリースはタグ、CI は csproj の既定の dev)
+          version=()
+          if [ "$TAG" != dev ]; then version=("-p:InformationalVersion=$TAG"); fi
+          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r "${{ matrix.rid }}" "${version[@]}" -o out
           readelf=llvm-readelf
           # 動的リンカは Android のもの、繋ぐのは Android にある libc・libm・libdl だけ。LOAD は 16 KB 以上に揃える
           $readelf -l out/denpa-agent | grep -F '[Requesting program interpreter: /system/bin/linker64]'
@@ -90,15 +115,19 @@ jobs:
           test "$needed" = "libc.so libdl.so libm.so "
           for align in $($readelf -lW out/denpa-agent | awk '$1 == "LOAD" { print $NF }'); do test "$((align))" -ge 16384; done
           ls -l out/denpa-agent
+          # OpenSSL のライセンスの文書を一緒に渡し、APK に入れる (android/app/build.gradle.kts の DENPA_AGENT_LICENSES)
+          cp openssl-out/LICENSE.txt out/LICENSE.openssl
 
       - name: Upload agent
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: denpa-agent-android-${{ matrix.abi }}
-          path: out/denpa-agent
+          path: |
+            out/denpa-agent
+            out/LICENSE.openssl
           retention-days: 3
 
-  # アプリ (android/)。debug の鍵で署名する (リリースの鍵は secrets に入れてから)
+  # アプリ (android/)。CI は debug の鍵で署名する。リリースはリリースの鍵で署名し、arm64 の APK だけを渡す (release.yml が添える)
   app:
     needs: agent
     runs-on: ubuntu-latest
@@ -125,30 +154,91 @@ jobs:
           path: agent-out/arm64
 
       - name: Download agent (x86_64)
+        if: inputs.tag == 'dev'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: denpa-agent-android-x86_64
           path: agent-out/x86_64
 
-      # エージェントは jniLibs の `<ABI>/libdenpa_agent.so` に置く (android/app/build.gradle.kts の DENPA_AGENT_LIBS)
-      - name: Build APK (lint, unit tests, debug)
+      # エージェントは jniLibs の `<ABI>/libdenpa_agent.so` に、OpenSSL のライセンスの文書は agent-licenses/ に置く
+      # (android/app/build.gradle.kts の DENPA_AGENT_LIBS・DENPA_AGENT_LICENSES)
+      - name: Build APK (lint, unit tests, debug, release)
+        if: inputs.tag == 'dev'
         working-directory: android
         run: |
           set -euo pipefail
-          mkdir -p agent-libs/arm64-v8a agent-libs/x86_64
+          mkdir -p agent-libs/arm64-v8a agent-libs/x86_64 agent-licenses
           cp ../agent-out/arm64/denpa-agent agent-libs/arm64-v8a/libdenpa_agent.so
           cp ../agent-out/x86_64/denpa-agent agent-libs/x86_64/libdenpa_agent.so
-          ./gradlew lintDebug testDebugUnitTest assembleDebug --console=plain
-          # 両方の ABI のエージェントが入っていること
-          unzip -l app/build/outputs/apk/debug/app-debug.apk > apk.txt
-          grep -E ' lib/arm64-v8a/libdenpa_agent\.so$' apk.txt
-          grep -E ' lib/x86_64/libdenpa_agent\.so$' apk.txt
+          cp ../agent-out/arm64/LICENSE.openssl agent-licenses/
+          # release は R8 で縮めたものが組めるかを見る (鍵を渡さないので debug の鍵で署名される)
+          ./gradlew lintDebug testDebugUnitTest assembleDebug assembleRelease --console=plain
+          # 両方の ABI のエージェントと、ライセンスの文書が入っていること
+          for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
+            unzip -l "$apk" > apk.txt
+            grep -E ' lib/arm64-v8a/libdenpa_agent\.so$' apk.txt
+            grep -E ' lib/x86_64/libdenpa_agent\.so$' apk.txt
+            grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
+            grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt
+          done
+          ls -l app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK
+        if: inputs.tag == 'dev'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: denpa-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
+      # リリースの APK。**鍵が無ければ止める** (debug の鍵の APK をリリースに載せると、あとでリリースの鍵の APK に上書きできない)。
+      # 署名した証明書の SHA-256 を、下に書いた鍵のものと突き合わせる (secrets の鍵が入れ替わっていたら止める)
+      - name: Build APK (release, arm64)
+        if: inputs.tag != 'dev'
+        working-directory: android
+        env:
+          TAG: ${{ inputs.tag }}
+          KEYSTORE_BASE64: ${{ secrets.DENPA_ANDROID_KEYSTORE_BASE64 }}
+          DENPA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.DENPA_ANDROID_KEYSTORE_PASSWORD }}
+          DENPA_ANDROID_KEY_ALIAS: ${{ secrets.DENPA_ANDROID_KEY_ALIAS }}
+          DENPA_ANDROID_KEY_PASSWORD: ${{ secrets.DENPA_ANDROID_KEY_PASSWORD }}
+          # リリースの鍵の証明書の SHA-256 (docs/install-android.md にも書いてある)
+          CERT_SHA256: 9cfa63965769c4c24f84a9516cb57bb463e94febaf4f3fd34cbd4758321a8277
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$DENPA_ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$DENPA_ANDROID_KEY_ALIAS" ] || [ -z "$DENPA_ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::リリースの署名の鍵 (DENPA_ANDROID_KEYSTORE_*・DENPA_ANDROID_KEY_*) が secrets にありません"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          export DENPA_ANDROID_KEYSTORE="$RUNNER_TEMP/release.p12"
+          export DENPA_VERSION="$TAG"
+          mkdir -p agent-libs/arm64-v8a agent-licenses
+          cp ../agent-out/arm64/denpa-agent agent-libs/arm64-v8a/libdenpa_agent.so
+          cp ../agent-out/arm64/LICENSE.openssl agent-licenses/
+          ./gradlew assembleRelease --console=plain
+          rm -f "$RUNNER_TEMP/release.p12"
+          apk=app/build/outputs/apk/release/app-release.apk
+          # 入っているネイティブのライブラリは arm64 のエージェントだけ。ライセンスの文書も入っていること
+          unzip -l "$apk" > apk.txt
+          test "$(grep -oE ' lib/[^ ]+$' apk.txt)" = " lib/arm64-v8a/libdenpa_agent.so"
+          grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
+          grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
+          "$apksigner" verify --print-certs "$apk" | tee certs.txt
+          test "$(sed -nE 's/^Signer #1 certificate SHA-256 digest: //p' certs.txt)" = "$CERT_SHA256"
+          mkdir -p ../dist
+          asset="denpa-${TAG#v}-android-arm64.apk"
+          cp "$apk" "../dist/$asset"
+          (cd ../dist && sha256sum "$asset" > "$asset.sha256")
+          ls -l ../dist
+
+      - name: Upload release APK
+        if: inputs.tag != 'dev'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-android-arm64
+          path: dist/
           retention-days: 7
 
       - if: failure()
@@ -162,6 +252,7 @@ jobs:
   emulator:
     name: emulator (API ${{ matrix.api-level }})
     needs: app
+    if: inputs.tag == 'dev'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
