@@ -29,7 +29,7 @@ function slipOf(currentTime: number, mediaTime: number): number {
 }
 
 /**
- * 飛び直しの係 (ライブと観る画面で 1 つずつ)。映した 1 枚ごとに `check` を呼ぶ (測るだけなら `measure`、測った遅れで
+ * 飛び直しの処理 (ライブと観る画面で 1 つずつ)。映した 1 枚ごとに `check` を呼ぶ (測るだけなら `measure`、測った遅れで
  * 飛ぶなら `fix`)。遅れが測れなくても飛び直すときは `jump`。どれも飛び直したら true。止めている間・飛んでいる最中は
  * 飛ばない。連発はさせない (`UNSLIP_EVERY`)
  *

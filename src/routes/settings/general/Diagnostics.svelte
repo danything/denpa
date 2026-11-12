@@ -457,8 +457,8 @@
     color: var(--dp-warn-text);
   }
   /*
-   * 新しいバージョンのリンク。事実なのでバッジにせず字のまま、外へ出る印を添える (ヘッダーの「… が公開されています」と同じ)。
-   * 指で押すので高さは 40px を取る
+   * 新しいバージョンのリンク。事実なのでバッジにせず控えた字のまま、外へ出る印を添える
+   * (ヘッダーの「… が公開されています」と同じ。指を乗せたら本文の色)。指で押すので高さは 40px を取る
    */
   .update {
     display: inline-flex;
@@ -466,11 +466,11 @@
     align-items: center;
     gap: 0.375rem;
     min-height: 2.5rem;
-    color: inherit;
+    color: var(--dp-muted);
     text-decoration: none;
   }
   .update:hover {
-    color: var(--pico-h1-color);
+    color: var(--dp-fg);
   }
   .filters {
     display: flex;

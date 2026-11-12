@@ -179,14 +179,14 @@
   onMount(() => () => jikkyo.close());
 
   /**
-   * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
+   * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端に縦に並ぶボタンで出す (端末ごとに覚える)。
    * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない (`jikkyoListSwitch`。3 画面で同じ)
    */
   const jikkyoList = jikkyoListSwitch(
     () => jikkyoActive && data.jikkyo !== null,
     () => fullscreen.active,
   );
-  /** いま観ている場面の放送時刻 (元の TS の頭の放送時刻 + 追っかけの再生位置) */
+  /** いま観ている場面の放送時刻 (元の TS の先頭にある放送時刻 + 追っかけの再生位置) */
   function airTime(): number | null {
     const target = data.jikkyo;
     return target === null ? null : target.head + player.chasePosition * 1000;
@@ -196,7 +196,7 @@
     const target = data.jikkyo;
     return target === null ? null : target.head + recorded * 1000;
   }
-  /** 放送時刻 `at` が追っかけのどこか (`airTime` の逆)。録画の頭より前は「開始前」で、飛べない */
+  /** 放送時刻 `at` が追っかけのどこか (`airTime` の逆)。録画の先頭より前は「開始前」で、飛べない */
   function placeAir(at: number): number | "before" | "cut" {
     const target = data.jikkyo;
     return target === null

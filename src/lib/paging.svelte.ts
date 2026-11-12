@@ -99,7 +99,7 @@ export function sentinel(node: HTMLElement, onSeen: () => void) {
   let frame = 0;
   /**
    * 外されたか。**外されたあとに積んであった `watch` が走ると、外れた要素を
-   * 見張る observer がもう 1 つできて、誰にも切られない**。最後の 1 回を足した
+   * 観測する observer がもう 1 つでき、どこからも切られない**。最後の 1 回を足した
    * 直後に一覧が出尽くして印ごと消えるとそうなる
    */
   let gone = false;

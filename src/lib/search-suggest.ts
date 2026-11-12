@@ -2,7 +2,7 @@ import { dateTime, stateLabel } from "./format";
 
 /**
  * **ヘッダーの欄の候補** (`SearchField`)。`/api/search` の答えを、節ごとの候補の並びにする。
- * 候補を選んだときの行き先 (`href`。denpa の根からの相対) もここで決める:
+ * 候補を選んだときの行き先 (`href`。denpa のルートからの相対パス) もここで決める:
  *
  * - 番組 … 結果の画面でその番組の詳細を開く (`search?q=…&program=<id>`。番組表には番組を名指しで開く URL が無い)
  * - 録画 … 観る画面 (録っている最中は追っかけ再生)。観られないものは結果の画面
@@ -54,7 +54,7 @@ export interface SuggestResponse {
 }
 
 interface Suggestion {
-  /** 画面の中で 1 つだけの鍵。候補の id (`aria-activedescendant`) にも使う */
+  /** 画面の中で 1 つだけのキー。候補の id (`aria-activedescendant`) にも使う */
   key: string;
   label: string;
   /** 名前の下の小さな字 (局・時刻・状態) */

@@ -66,7 +66,7 @@
       : `${size(rec.ts_size)} (${extra.join("、")})`;
   }
 
-  /** 消し終えたら、端末に落としてあったコピーも片付ける (行の削除と「⋯」の削除で同じ) */
+  /** 消し終えたら、端末に保存したコピーも片付ける (行の削除と「⋯」の削除で同じ) */
   function afterDelete(rec: Rec): SubmitFunction {
     return () => async (options) => {
       await options.update();

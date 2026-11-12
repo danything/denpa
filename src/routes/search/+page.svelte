@@ -237,7 +237,7 @@
   let preview = $state<Preview | null>(null);
   /** スマホの形で書く欄を下から出しているか */
   let sheetOpen = $state(false);
-  /** 「録るか」を聞く番組。結果の一覧に出しうる行 (「もっと見る」で広げるぶんまで) */
+  /** 「録るか」を問い合わせる番組。結果の一覧に出しうる行 (「もっと見る」で広げるぶんまで) */
   const programIds = $derived(data.programs.rows.map((row) => row.id));
   /** 一覧の行のうち、いまの条件で録るもの */
   const recordingCount = $derived(
@@ -770,7 +770,7 @@
   </section>
 {/snippet}
 
-<!-- 行の 2 段目の先頭 (局のロゴと名前) と、状態のバッジ -->
+<!-- 行の 2 段目の先頭 (局のロゴと名前。ロゴの大きさと間はホームの行の `RowMeta` と同じ) と、状態のバッジ -->
 {#snippet service(row: {
   service_id: number;
   has_logo: boolean | null;
@@ -779,9 +779,8 @@
   <ServiceLogo
     id={row.service_id}
     has={row.has_logo}
-    style="height: 0.875rem; vertical-align: -0.125rem"
-  />
-  <span class="broadcast">{row.service_name}</span>・
+    style="height: 1rem; margin-right: 0.375rem; vertical-align: -0.1875rem"
+  /><span class="broadcast">{row.service_name}</span>・
 {/snippet}
 {#snippet stateTag(state: string, testid?: string)}
   <span class="tag {badgeClass(state)}" data-testid={testid}

@@ -32,7 +32,7 @@
  *
  * **新しい順で表示** (`LineOptions.reversed`。issue #1930) は、この並びを上下に返す。上から予約 (遠い順)、
  * 「いま」の線、録画中 (新しく始まった順)、録れたもの (新しい順)。逆にするのは並べる所 (`sections`・`timelineLines`) だけで、
- * 包み (`blocks`) と画面の部品は向きを知らない。見出しは逆のときもその日の頭 (いちばん新しい行の上) に立つ
+ * 包み (`blocks`) と画面の部品は向きを扱わない。見出しは逆のときもその日の頭 (いちばん新しい行の上) に立つ
  * (今日と「録画」の見出しの位置は `timelineLines`)。まとめて表示では番組どうしも新しい順にし
  * (予約は次の回が遠い番組が上)、番組の中の回は放送順のまま (開いた番組を上から読めば話が進む)。
  *
@@ -57,7 +57,7 @@ export interface TimelineItem extends Groupable {
 }
 
 /**
- * 行の性質。絞り込みの判定と件数に使う。**決めるのは画面** (観られるか・失敗かは画面の関数が知っている)
+ * 行の性質。絞り込みの判定と件数に使う。**決めるのは画面** (観られるか・失敗かは画面の関数で判定する)
  */
 export interface Traits {
   /** 観終えていない録画 (未視聴の点か、続きのバーが出ているもの) */
@@ -448,7 +448,7 @@ export function pageStart<T extends TimelineItem>(
 }
 
 /**
- * 線より下の側 (逆の並びの録れたもの) を頭 (線の側) から `count` 行だけ描くとき、何行目の手前まで描くか。
+ * 線より下の側 (ふだんは予約、逆の並びは録れたもの) を頭 (線の側) から `count` 行だけ描くとき、何行目の手前まで描くか。
  * 開いた番組の途中に落ちたら、その番組の終わりまで描く。見出しが末尾に残るなら、その下の行も 1 つ描く
  * (見出しだけを描かないように)
  */
@@ -558,7 +558,7 @@ export function mergeRecorded<
     const rec =
       byReservation.get(res.id) ??
       (res.program_id === null ? undefined : byProgram.get(res.program_id));
-    // 録画が一覧に無くても (消した・300 件の外)、録画の行がある予約は出さない。消した録画の予約が化けて戻らないように
+    // 録画が一覧に無くても (消した・300 件の外)、録画の行がある予約は出さない。消した録画の予約が、予約の行として出直さないように
     if (rec === undefined) return res.recorded !== true;
     if (res.name !== rec.name && res.name.includes(rec.name))
       names.set(rec.id, res.name);

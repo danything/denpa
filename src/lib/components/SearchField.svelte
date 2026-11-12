@@ -18,7 +18,7 @@
    * 同じものを置く (`+layout.svelte`)。`/` と Ctrl/⌘+K で入る (`data-search-field`。見えている欄を
    * `+layout.svelte` が探す)。
    *
-   * **打つそばから応える。** 結果の画面の外 (`live` でない) では、少し待ってから `/api/search` に聞き、
+   * **打つそばから候補か結果を出す。** 結果の画面の外 (`live` でない) では、少し待ってから `/api/search` に問い合わせ、
    * 欄の下に節ごとの候補を出す (combobox と listbox の形。↑/↓ で選び、Enter で開く。何も選んでいなければ
    * Enter で結果の画面。Esc で閉じる)。結果の画面 (`live`) では候補を出さず、打つそばから結果の画面そのものを
    * 出し直す (履歴は積まずに置き換える)。どちらも、言葉が変わったら送りかけの問い合わせを止める
@@ -35,7 +35,7 @@
     live?: boolean;
   } = $props();
 
-  /** 打ってから聞くまでの間。打つ手を止めるたびに聞くと、1 字ごとにサーバに聞くことになる */
+  /** 打ってから問い合わせるまでの間。待たずに問い合わせると、1 字ごとにサーバへ問い合わせることになる */
   const DELAY = 180;
 
   let typed = $state(untrack(() => value));
@@ -78,7 +78,7 @@
     active = -1;
   }
 
-  /** 候補を聞く。言葉が変わったら前の問い合わせは止める */
+  /** 候補を問い合わせる。言葉が変わったら前の問い合わせは止める */
   async function suggest(q: string): Promise<void> {
     controller?.abort();
     const mine = new AbortController();
