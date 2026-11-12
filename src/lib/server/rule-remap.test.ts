@@ -33,7 +33,8 @@ function station(
       name,
       type,
       service_type: 1,
-      channel,
+      // 最後に取り込みで見かけたときの TS (チャンネルの名前の後ろの番号)
+      transport_stream_id: Number(channel.split(":")[1]),
       updated_at: updatedAt,
       listed: updatedAt >= NOW,
     })

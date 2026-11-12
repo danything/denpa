@@ -68,6 +68,7 @@ const {
   SERVICE_TYPE_ORDER,
   serviceCounts,
   settle,
+  readChannels,
   syncServicesOnly,
   typeRank,
   unlistType,
@@ -75,11 +76,10 @@ const {
   widenServices,
 } = await import("./epg");
 const { subscribe } = await import("./events");
-const { getChannels } = await import("./tuner");
 
 describe("syncServicesOnly", () => {
   test("番組表を待たずに局だけ取り込む", async () => {
-    expect(syncServicesOnly(await getChannels())).toBe(1);
+    expect(syncServicesOnly(await readChannels())).toBe(1);
 
     const rows = orm()
       .select({ id: services.id, name: services.name, type: services.type })
@@ -97,7 +97,7 @@ describe("syncServicesOnly", () => {
   });
 
   test("何度呼んでも増えない", async () => {
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     expect(orm().select({ n: count() }).from(services).get()).toEqual({ n: 1 });
   });
 });
@@ -122,7 +122,7 @@ describe("局名の幅", () => {
       .where(eq(services.id, 3239123608))
       .run();
     offered = [channel(23608, "TOKYO MX")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     expect(name()).toBe("TOKYO MX");
     const at = Date.now();
     const recording = (id: number, service_name: string) => ({
@@ -162,11 +162,11 @@ describe("局名の幅", () => {
   });
 
   test("毎分の取り込みは幅だけ違う名前で戻さない。名前そのものが変われば入れ替える", async () => {
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     expect(name()).toBe("ＴＯＫＹＯ　ＭＸ");
 
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ２")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     expect(name()).toBe("ＴＯＫＹＯ　ＭＸ２");
   });
 
@@ -242,14 +242,14 @@ describe("消えた局の片付け", () => {
   }
 
   test("番組表は消し、まだ始めていない予約は取り消す。局の行は残す", async () => {
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     seed(3239123608);
 
     // 局が丸ごと入れ替わった (スキャンのやり直し)
     offered = [channel(23609, "別の局")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     unseenFor(3239123608, config.serviceForgetAfter + 1);
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
 
     expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 0 });
     expect(
@@ -270,7 +270,7 @@ describe("消えた局の片付け", () => {
 
   test("1 局も返ってこなかった回では何もしない", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     seed(3239123608);
 
     /*
@@ -278,7 +278,7 @@ describe("消えた局の片付け", () => {
      * 読むと、次の取り込みまで番組表が丸ごと消える
      */
     offered = [];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
 
     expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 1 });
     expect(
@@ -300,12 +300,12 @@ describe("消えた局の片付け", () => {
    */
   test("1 回見かけなかっただけでは片付けない", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ"), channel(23609, "別の局")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     seed(3239123608);
 
     // 一覧が欠けた回
     offered = [channel(23609, "別の局")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
 
     expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 1 });
     expect(
@@ -321,13 +321,13 @@ describe("消えた局の片付け", () => {
 
   test("見かけなかった局は、すぐに一覧から外す (片付けるのは待つ)", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ"), channel(23609, "別の局")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     offered = [channel(23609, "別の局")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     expect(listedIds()).toEqual([3239123609]);
     // 1 局も返ってこなかった回は、一覧をそのままにする
     offered = [];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     expect(listedIds()).toEqual([3239123609]);
   });
 
@@ -337,12 +337,12 @@ describe("消えた局の片付け", () => {
    */
   test("種別を消すと、最後の 1 種別でもその場で一覧から外し、番組表と予約を片付ける", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     seed(3239123608);
 
     expect(unlistType("GR")).toBe(1);
     offered = [];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
 
     expect(listedIds()).toEqual([]);
     expect(orm().select({ n: count() }).from(programs).get()).toEqual({ n: 0 });
@@ -351,7 +351,7 @@ describe("消えた局の片付け", () => {
       orm().select({ n: count() }).from(services).get()!.n,
     ).toBeGreaterThan(0);
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     expect(listedIds()).toEqual([3239123608]);
   });
 });
@@ -391,7 +391,7 @@ describe("savePrograms", () => {
    */
   test("コピー禁止の印を持つ。言っていない回 (null) では前のまま", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
     const copyNever = () =>
       orm().select({ copy_never: programs.copy_never }).from(programs).get()
@@ -410,7 +410,7 @@ describe("savePrograms", () => {
   /* シリーズ (docs/data.md「シリーズ」)。詳細の表は記述子を載せないので、項目ごと無い回では前のまま */
   test("シリーズを持つ。言っていない回では前のまま、載せずに来たら外す", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
     const series = () =>
       orm()
@@ -464,7 +464,7 @@ describe("savePrograms", () => {
 
   test("タイトルの無い回で、入っているタイトルを消さない", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
 
     savePrograms([event()], { type: "GR" });
@@ -501,7 +501,7 @@ describe("savePrograms", () => {
   // 文を使い回すようにしたとき (drizzle の placeholder)、null が文字の "null" になりかけた
   test("空の JSON 列は NULL のまま、中身があれば JSON の文字で入る", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
 
     savePrograms(
@@ -557,7 +557,7 @@ describe("savePrograms", () => {
    */
   test("番組表が動いたら、まだ始めていない予約だけ追従する", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
     orm().delete(reservations).run();
 
@@ -633,7 +633,7 @@ describe("savePrograms", () => {
 
   test("タイトルだけ読めた回で、入っている番組内容を消さない", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
 
     savePrograms(
@@ -658,7 +658,7 @@ describe("savePrograms", () => {
 
   test("タイトルの書き換えはこれまでどおり通る", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
 
     savePrograms([event()], { type: "GR" });
@@ -671,7 +671,7 @@ describe("savePrograms", () => {
 
   test("延長で重なった番組は消える (あとから来たほうが勝つ)", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
 
     const base = Date.now();
@@ -724,7 +724,7 @@ describe("savePrograms", () => {
 
   test("隣り合っているだけ (境界が同じ) の番組は消えない", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
     orm().delete(programs).run();
 
     const base = Date.now();
@@ -790,7 +790,7 @@ describe("savePrograms", () => {
 
     async function fresh(): Promise<number> {
       offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
-      syncServicesOnly(await getChannels());
+      syncServicesOnly(await readChannels());
       orm().delete(programs).run();
       return Date.now();
     }
@@ -909,7 +909,10 @@ describe("番組表に出す局", () => {
     name,
     service_id: 1024 + id,
     network_id: 0x7fe0,
-    channel,
+    transport_stream_id: [...channel].reduce(
+      (h, c) => (h * 31 + c.charCodeAt(0)) % 65_521,
+      0,
+    ),
     type,
   });
   const program = (serviceId: number, name: string, start = 0, end = 1) => ({
@@ -978,7 +981,10 @@ describe("番組表に出す局", () => {
       name: `BS${sid}`,
       service_id: sid,
       network_id: 4,
-      channel,
+      transport_stream_id: [...channel].reduce(
+        (h, c) => (h * 31 + c.charCodeAt(0)) % 65_521,
+        0,
+      ),
       type: "BS",
     });
     const services = [
@@ -1033,7 +1039,7 @@ describe("SERVICE_ORDER", () => {
     id: number,
     serviceId: number,
     type: "GR" | "BS" | "CS" | "CATV" | "SKY",
-    channel: string,
+    _channel: string,
     key: number | null,
     name: string,
     /** 取り込みが決める値 (`syncServices`)。ここでは SKY だけを復号できないものにする */
@@ -1050,7 +1056,6 @@ describe("SERVICE_ORDER", () => {
         name,
         type,
         service_type: 1,
-        channel,
         remote_control_key: key,
         decodable,
         epg_readable: epgReadable,
@@ -1077,12 +1082,6 @@ describe("SERVICE_ORDER", () => {
     expect(ordered(SERVICE_ORDER)).toEqual([
       "BS朝日1",
       "BS-TBS",
-      "WOWOWプライム",
-    ]);
-    // 物理チャンネル順だと、テレビと食い違う
-    expect(ordered("channel, service_id")).toEqual([
-      "BS-TBS",
-      "BS朝日1",
       "WOWOWプライム",
     ]);
   });
@@ -1238,7 +1237,7 @@ describe("ケーブルの局", () => {
         services: [{ serviceId: 600, serviceType: 1, name: "プレミアム" }],
       },
     ] as unknown as typeof offered;
-    syncServicesOnly(await getChannels());
+    syncServicesOnly(await readChannels());
 
     const rows = orm()
       .select({

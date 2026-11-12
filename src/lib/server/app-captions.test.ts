@@ -91,6 +91,7 @@ config.ffmpeg = FAKE;
 
 const { eq } = await import("drizzle-orm");
 const { orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { recordings, services } = await import("./schema");
 const { CAPTION_PER_RECORDING, liveCaptions, liveStream, recordingCaptions } =
   await import("./live");
@@ -112,10 +113,10 @@ orm()
     network_id: 4,
     name: "テスト局",
     type: "GR",
-    channel: "T27",
     updated_at: 0,
   })
   .run();
+placeServices([{ id: SERVICE, channel: "T27" }]);
 const now = Date.now();
 orm()
   .insert(recordings)

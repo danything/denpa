@@ -48,6 +48,7 @@ config.agentUrl = fakeAgentUrl(agent.port!);
 trustFakeAgent();
 
 const { orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { programs, recordings, reservations, services } =
   await import("./schema");
 const { broadcastDayStart, guideOf, HOUR, programRange, programsOf } =
@@ -75,7 +76,6 @@ orm()
       network_id: 32_736,
       name: "NHK総合1",
       type: "GR",
-      channel: "27",
       remote_control_key: 1,
       has_logo: true,
       updated_at: 0,
@@ -86,7 +86,6 @@ orm()
       network_id: 32_736,
       name: "NHK総合2",
       type: "GR",
-      channel: "27",
       remote_control_key: 1,
       updated_at: 0,
     },
@@ -96,12 +95,17 @@ orm()
       network_id: 32_736,
       name: "NHK Eテレ1",
       type: "GR",
-      channel: "26",
       remote_control_key: 2,
       updated_at: 0,
     },
   ])
   .run();
+// NHK総合1・2 は同じチャンネル (同じ TS)
+placeServices([
+  { id: MAIN, channel: "27" },
+  { id: SUB, channel: "27" },
+  { id: OTHER, channel: "26" },
+]);
 
 function program(
   id: number,
@@ -370,7 +374,6 @@ describe("観られない局", () => {
         network_id: 0x000b,
         name: "ＢＳでんぱ　４Ｋ",
         type: "CATV",
-        channel: "QC26",
         decodable: false,
         epg_readable: true,
         transport: "tlv",
@@ -383,7 +386,6 @@ describe("観られない局", () => {
         network_id: 0xfff0,
         name: "ケーブル有料",
         type: "CATV",
-        channel: "QC40",
         decodable: false,
         epg_readable: false,
         updated_at: 0,

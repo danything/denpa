@@ -3,13 +3,18 @@ import { mkdirSync } from "node:fs";
 import { SOCKET_PATH } from "#lib/live.js";
 
 import { listen } from "./agent-events";
-import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
+import {
+  type Agent,
+  listAgents,
+  syncEnvAgentsOnBoot,
+  tuningAgents,
+} from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
 import { pruneCodes } from "./device-auth";
 import { checkDisk } from "./disk";
 import { pump, requeueOrphanedJobs } from "./encoder";
-import { sync, syncServicesOnly } from "./epg";
+import { readChannels, sync, syncServicesOnly } from "./epg";
 import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
 import { pruneHistory, reconcile } from "./files";
@@ -25,7 +30,6 @@ import { prune as pruneSessions } from "./session";
 import { beginDraining } from "./shutdown";
 import { redeem } from "./tickets";
 import { pruneTransfer, swapAtBoot } from "./transfer";
-import { getChannels } from "./tuner";
 import { checkForUpdate } from "./update";
 import { notify } from "./webhook";
 import { serve } from "./ws";
@@ -254,8 +258,12 @@ export function start(): void {
  * 次の周期 (`CHANNEL_SYNC_INTERVAL`、既定 1 分) で入る。放送の一覧を読むのは数十秒かかるので待たない
  */
 async function syncChannels(): Promise<void> {
-  const channels = await getChannels();
-  syncServicesOnly(channels);
+  const read = await readChannels();
+  syncServicesOnly(read);
+  // 放送の一覧から入れるかは、選局に使うエージェント (`tuningAgents` の先頭) の控えで決める。読めなかった回は見送る
+  const tuning = tuningAgents()[0]!.id;
+  const channels = read.find((r) => r.agent === tuning)?.channels;
+  if (channels === undefined) return;
   void fillSatellites(channels).catch((error: unknown) => {
     console.warn(`[channels] 衛星の局を入れられませんでした: ${error}`);
   });
@@ -317,12 +325,12 @@ function listenToAgent(agent: Agent): () => void {
           break;
         case "channels":
           /*
-           * スキャンで局が入れ替わった。取り込み直して番組表も取得し直す。
+           * スキャンで局が入れ替わった。このエージェントの控えだけ取り込み直して (ほかのエージェントは前の写しのまま)、番組表も取得し直す。
            * 局の取り込み (`sync`) が先。取得は全チャンネルで数分かかるので、局の一覧と予約はそれを待たずに変える
            * (取得も始めに局を取り込むので、`POST /api/sync` は逆の順で同じ結果になる)
            */
           void guard("epg", async () => {
-            await sync();
+            await sync(agent);
             await collectOnce();
           });
           break;

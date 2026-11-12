@@ -244,7 +244,8 @@ function busyRecordings(): number {
  * 一貫した写しを取る (録画やエンコードの書き込みは止めない。bun:sqlite は backup API を出していない)。
  * 写しからログインの控え (`sessions`)・ペアリングの途中 (`device_codes`)・ニコニコとの連携 (`niconico_link`。
  * トークンを開く鍵は DB の隣のファイルで写しに入らないうえ、移した先では連携し直す)・
- * つないだエージェント (`agents`。組んだ相手は `tls/denpa.key` に結び付いていて、移した先では組み直す) を消し、`secure_delete` と
+ * つないだエージェント (`agents`。組んだ相手は `tls/denpa.key` に結び付いていて、移した先では組み直す) と、エージェントごとのチャンネルの写し (`agent_channels`)・
+ * 受信の記録 (`channel_reception`。移した先ではエージェントの行の ID が変わる) を消し、`secure_delete` と
  * `VACUUM` で消した行の中身もファイルに残さない。
  *
  * **別のプロセスで回す。** 数百 MB の DB だと数秒かかり、その間この (1 本しかない) スレッドが止まると
@@ -265,6 +266,8 @@ copy.exec("DELETE FROM sessions");
 copy.exec("DELETE FROM device_codes");
 copy.exec("DELETE FROM niconico_link");
 copy.exec("DELETE FROM agents");
+copy.exec("DELETE FROM agent_channels");
+copy.exec("DELETE FROM channel_reception");
 copy.exec("VACUUM");
 copy.close();
 `;

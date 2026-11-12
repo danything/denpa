@@ -1,5 +1,5 @@
 import { fail } from "@sveltejs/kit";
-import { and, gt, lte, sql } from "drizzle-orm";
+import { and, getTableColumns, gt, lte, sql } from "drizzle-orm";
 
 import { channelNotice } from "#lib/channel-notice.js";
 import { channelNumber } from "#lib/format.js";
@@ -7,6 +7,7 @@ import { parseId } from "#lib/id.js";
 import { jikkyoChannel } from "#lib/jikkyo/channels.js";
 import { type BroadcastCodec, broadcastCodec } from "#lib/live-choice.js";
 import { LAST_COOKIE } from "#lib/live.js";
+import { serviceChannel } from "#lib/server/agent-channels.js";
 import { orm } from "#lib/server/db.js";
 import {
   airing,
@@ -23,7 +24,6 @@ import { programs, services as stations } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 import { issue } from "#lib/server/tickets.js";
 import { liveStart, readKept, viewingOptions } from "#lib/server/viewing.js";
-import type { Service } from "#lib/types.js";
 
 import type { Actions } from "./$types";
 
@@ -78,14 +78,20 @@ export function load(event) {
   const { url, cookies } = event;
   const at = Date.now();
   // テレビと同じ並び (SERVICE_TYPE_ORDER / SERVICE_ORDER)
-  const services: Service[] = orm()
-    .select()
+  const services = orm()
+    .select({ ...getTableColumns(stations), channel: serviceChannel() })
     .from(stations)
     .where(currentServices())
     .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
     .all()
-    // 復号できない局は出さない。選んでもスクランブルされたままで映らない (`services.decodable`)
-    .filter((service) => service.decodable);
+    /*
+     * 復号できない局は出さない。選んでもスクランブルされたままで映らない (`services.decodable`)。
+     * チャンネルの分からない局 (エージェントの控えの写しがまだ無い) も選局できないので出さない
+     */
+    .filter(
+      (service): service is typeof service & { channel: string } =>
+        service.decodable && service.channel !== null,
+    );
 
   /*
    * いま流れているものだけ引く。番組表を丸ごと持ってくると、局の数 × 8 日ぶんに

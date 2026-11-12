@@ -31,6 +31,8 @@ import { type AccessControl, TlvServiceReader } from "@danything/arib/mmt-si";
 import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
 import { type ChannelType, isSatellite, type Transport } from "../types";
+import { storeAgentChannels } from "./agent-channels";
+import { listAgents, tuningAgents } from "./agents";
 import { CaObserver, describe, hex, type Observed } from "./ca-observe";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank, unlistType } from "./epg";
@@ -542,7 +544,7 @@ class Scanner {
       });
       return;
     }
-    const current = await getChannels().catch(() => []);
+    const current = await getChannels(tuningAgents()[0]).catch(() => []);
     const known = knownNames(current);
     const lineup = await readLineup(
       type,
@@ -898,7 +900,8 @@ async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
     const replaced = targets
       .map(([type]) => type)
       .filter((type) => !isSatellite(type) || scanner.lineups.has(type));
-    await putChannels(found, replaced);
+    // 預ける先は選局に使ったエージェント (`openChannel` と同じ先頭の 1 台)
+    await putChannels(found, replaced, tuningAgents()[0]);
     // 設定から消していた衛星の種別も、スキャンで入れ直したら放送の一覧から入れる側に戻す
     markRemoved(replaced.filter(isSatellite), false);
     // 回した種別のぶんだけ、分かったことを入れ替える (チャンネルと同じく、回していない種別は残す)
@@ -1014,7 +1017,7 @@ export function stop(): { stopped: boolean; message: string } {
 }
 
 /**
- * 1 つの種別のチャンネルと局を消す。設定の「チャンネル」の「削除を確定」から。
+ * 1 つの種別のチャンネルと局を、全部のエージェントから消す。設定の「チャンネル」の「削除を確定」から。
  *
  * **局がある種別なら、チューナーの有無によらず消せる** (種別ごとの例外は作らない)。スキャンは 1 件も見つからない結果を書かない
  * (アンテナを抜いたまま回して全部消えるのを防ぐ) ので、チューナーが挿さったまま回線だけが無くなったとき (引っ越しでケーブルが無くなったなど) は、
@@ -1027,7 +1030,15 @@ export async function removeType(
 ): Promise<{ removed: boolean; message: string }> {
   if (current.state === "running")
     return { removed: false, message: "スキャンの実行中は削除できません" };
-  await deleteChannels(type);
+  /*
+   * 全部のエージェントの控えから消す。返ってきた残りをその場で写しに入れる (最後の種別を消すと空の一覧になり、
+   * 取り込みは空の一覧を「返さなかった」と読んで前の写しを残すため)
+   */
+  for (const agent of listAgents())
+    storeAgentChannels({
+      agent: agent.id,
+      channels: await deleteChannels(type, agent),
+    });
   if (isSatellite(type)) markRemoved([type], true);
   unlistType(type);
   for (const key of [...observations.keys()])

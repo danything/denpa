@@ -18,6 +18,7 @@ const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-rules-")), "denpa.db");
 
 const { now, orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { applyRules, keepsReservation, previewSkips } = await import("./rules");
 const {
   programs,
@@ -78,10 +79,10 @@ function sub(
       name,
       type,
       service_type: 1,
-      channel,
       updated_at: now(),
     })
     .run();
+  placeServices([{ id, channel }]);
 }
 
 /** 局を指定して番組を 1 つ置く (置き直し)。既定は 3 時間後から (猶予の外) */

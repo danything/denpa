@@ -59,7 +59,6 @@ test("MP4 に詰め替えてからエンコードし、字幕を隣に置いて�
       name: "4K テスト",
       type: "CATV",
       service_type: 1,
-      channel: "QC28",
       transport: "tlv",
       updated_at: now,
     })

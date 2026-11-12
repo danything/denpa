@@ -116,7 +116,6 @@ function seed(): void {
       network_id: NETWORK,
       name: "でんぱテレビ",
       type: "GR",
-      channel: "T20",
       updated_at: 0,
     })
     .run();

@@ -158,7 +158,6 @@ test("4K の局の元の録画 (.mmts) は、MP4 に詰め替えてから読み�
       name: "4K テスト",
       type: "CATV",
       service_type: 1,
-      channel: "QC28",
       transport: "tlv",
       updated_at: now,
     })

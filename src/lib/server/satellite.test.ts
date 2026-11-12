@@ -500,21 +500,21 @@ describe("一覧から落ちたネットワークを作り直す", () => {
       remoteControlKeyId: null,
       services: [],
     }) satisfies AgentChannel;
-  // エージェントの一覧はネットワーク 6 だけ。局の表にはネットワーク 7 が前の名前で残っている
+  // エージェントの一覧はネットワーク 6 だけ。局の表にはネットワーク 7 が、上げてから見かけていない (TS が null の) まま残っている
   const channels = [cs("CS02:24608", 6), cs("CS08:24704", 6)];
   const stored = [
-    { type: "CS", network_id: 6, channel: "CS02:24608" },
-    { type: "CS", network_id: 7, channel: "CS04" },
-    { type: "CS", network_id: 7, channel: "CS06" },
-    { type: "BS", network_id: 4, channel: "BS15_0" },
+    { type: "CS", network_id: 6, transport_stream_id: 24608 },
+    { type: "CS", network_id: 7, transport_stream_id: null },
+    { type: "CS", network_id: 7, transport_stream_id: null },
+    { type: "BS", network_id: 4, transport_stream_id: null },
   ];
 
-  test("局の表に前の名前で残っていて一覧に無いネットワークを、読みに行くネットワークにする", () => {
+  test("局の表に見かけていないまま残っていて一覧に無いネットワークを、読みに行くネットワークにする", () => {
     expect(leftoverNetworks(channels, "CS", stored)).toEqual([7]);
     expect(needsLineup(channels, "CS", stored)).toBe(true);
   });
 
-  test("一覧にあるネットワークの前の名前と、ほかの種別の行は見ない", () => {
+  test("一覧にあるネットワークの行と、ほかの種別の行は見ない", () => {
     expect(
       needsLineup(
         [...channels, cs("CS04:28736", 7)],
@@ -524,7 +524,7 @@ describe("一覧から落ちたネットワークを作り直す", () => {
     ).toBe(false);
     expect(
       leftoverNetworks([{ ...cs("BS15:16625", 4), type: "BS" }], "BS", [
-        { type: "CS", network_id: 7, channel: "CS04" },
+        { type: "CS", network_id: 7, transport_stream_id: null },
       ]),
     ).toEqual([]);
   });

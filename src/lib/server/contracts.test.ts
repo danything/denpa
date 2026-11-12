@@ -23,6 +23,7 @@ config.dataDir = testDir;
 config.dbPath = join(testDir, "denpa.db");
 
 const { orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { cardContracts, programs, services } = await import("./schema");
 const {
   checkContracts,
@@ -220,7 +221,6 @@ describe("checkContracts", () => {
         network_id: 4,
         name: "有料シネマ",
         type: "BS",
-        channel: "BS01",
         updated_at: Date.now(),
       })
       .run();
@@ -281,7 +281,6 @@ describe("checkContracts", () => {
         network_id: 4,
         name: "まもなく期限切れ局",
         type: "BS",
-        channel: "BS03",
         updated_at: Date.now(),
       })
       .run();
@@ -344,7 +343,6 @@ describe("契約の更新 (EMM) のあとの確かめ直し", () => {
         network_id: 4,
         name: "更新した局",
         type: "BS",
-        channel: "BS13",
         updated_at: Date.now(),
       })
       .run();
@@ -409,10 +407,10 @@ describe("testDecode", () => {
         network_id: 4,
         name: "テスト局",
         type: "BS",
-        channel: "BS05",
         updated_at: Date.now(),
       })
       .run();
+    placeServices([{ id: 103, channel: "BS05" }]);
     airing(103);
 
     try {
@@ -442,10 +440,10 @@ describe("testDecode", () => {
         network_id: 4,
         name: "期限切れの局",
         type: "BS",
-        channel: "BS13",
         updated_at: Date.now(),
       })
       .run();
+    placeServices([{ id: 107, channel: "BS13" }]);
     airing(107);
     orm()
       .insert(cardContracts)
@@ -495,10 +493,10 @@ describe("testDecode", () => {
         network_id: 4,
         name: "暗号局",
         type: "BS",
-        channel: "BS07",
         updated_at: Date.now(),
       })
       .run();
+    placeServices([{ id: 104, channel: "BS07" }]);
     airing(104);
 
     try {
@@ -555,10 +553,10 @@ describe("testDecode", () => {
         network_id: 4,
         name: "微小パケット局",
         type: "BS",
-        channel: "BS09",
         updated_at: Date.now(),
       })
       .run();
+    placeServices([{ id: 105, channel: "BS09" }]);
     airing(105);
 
     try {
@@ -592,10 +590,10 @@ describe("testDecode", () => {
         network_id: 4,
         name: "映像の無い局",
         type: "BS",
-        channel: "BS11",
         updated_at: Date.now(),
       })
       .run();
+    placeServices([{ id: 108, channel: "BS11" }]);
     airing(108);
     try {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
@@ -616,10 +614,10 @@ describe("testDecode", () => {
         network_id: 4,
         name: "無料の時間帯の局",
         type: "BS",
-        channel: "BS11",
         updated_at: Date.now(),
       })
       .run();
+    placeServices([{ id: 106, channel: "BS11" }]);
     airing(106, true);
     const server = serveFakeAgent(async (req) =>
       new URL(req.url).pathname === "/denpa/card"
@@ -676,7 +674,6 @@ describe("ダイアログに出す契約の状態", () => {
           network_id: 7,
           name: `CS${id}`,
           type: "CS",
-          channel: `CS${id * 2}`,
           updated_at: Date.now(),
         })
         .run();
@@ -720,7 +717,7 @@ describe("確かめていない局の復号をまとめて確かめる (testDeco
       }
       return new Response("Not Found", { status: 404 });
     });
-    const service = (id: number, arib: number, channel: string) =>
+    const service = (id: number, arib: number, channel: string) => {
       orm()
         .insert(services)
         .values({
@@ -729,10 +726,11 @@ describe("確かめていない局の復号をまとめて確かめる (testDeco
           network_id: 4,
           name: `局${id}`,
           type: "BS",
-          channel,
           updated_at: Date.now(),
         })
         .run();
+      placeServices([{ id, channel }]);
+    };
     service(1, 103, "BS05");
     service(2, 9999, "BS05");
     service(3, 104, "BS07");
@@ -830,10 +828,10 @@ describe("まとめて確かめるときの失敗と重なり", () => {
           network_id: 4,
           name: `局${id}`,
           type: "BS",
-          channel: "BS05",
           updated_at: Date.now(),
         })
         .run();
+      placeServices([{ id, channel: "BS05" }]);
       airing(id);
     }
     try {
@@ -896,7 +894,6 @@ describe("checkContracts エッジケース・異常系", () => {
         network_id: 4,
         name: "過去失効局",
         type: "BS",
-        channel: "BS11",
         updated_at: Date.now(),
       })
       .run();
@@ -949,7 +946,6 @@ describe("checkContracts エッジケース・異常系", () => {
         network_id: 4,
         name: "エラー局",
         type: "BS",
-        channel: "BS13",
         updated_at: Date.now(),
       })
       .run();
@@ -1031,7 +1027,6 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
           network_id: 7,
           name: `CS${id}`,
           type: "CS",
-          channel: `CS${id * 2}`,
           updated_at: Date.now(),
         })
         .run();
@@ -1083,7 +1078,6 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
           network_id: 7,
           name: `CS${id}`,
           type: "CS",
-          channel: `CS${id * 2}`,
           updated_at: Date.now(),
         })
         .run();
@@ -1122,7 +1116,6 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
         network_id: 7,
         name: "CS1",
         type: "CS",
-        channel: "CS2",
         updated_at: Date.now(),
       })
       .run();

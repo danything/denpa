@@ -107,7 +107,6 @@ function recording(startAt: number): Recording {
       network_id: 4,
       name: "テスト局",
       type: "GR",
-      channel: "T27",
       updated_at: 0,
     })
     .run();

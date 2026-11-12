@@ -191,7 +191,6 @@ describe("録画を順に見る (restoreWidths)", () => {
         name: "TOKYO MX1",
         type: "GR",
         service_type: 1,
-        channel: "T16",
         has_logo: false,
         updated_at: at,
       })

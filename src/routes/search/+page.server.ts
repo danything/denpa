@@ -2,6 +2,7 @@ import { fail, redirect } from "@sveltejs/kit";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { parseId } from "#lib/id.js";
+import { serviceChannel } from "#lib/server/agent-channels.js";
 import { countClips, findClips } from "#lib/server/clips.js";
 import { reserveWarning } from "#lib/server/contracts.js";
 import { now, orm } from "#lib/server/db.js";
@@ -162,7 +163,7 @@ export function load({ url }) {
     })
     .from(serviceTable)
     .where(currentServices())
-    .orderBy(serviceTable.type, serviceTable.channel)
+    .orderBy(serviceTable.type, serviceChannel())
     .all();
 
   const options = { limit: LIMIT, count: true };

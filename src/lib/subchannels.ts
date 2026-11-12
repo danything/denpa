@@ -26,8 +26,8 @@ function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
 export interface Station {
   id: number;
   service_id: number;
-  /** 物理チャンネル (`T27`、`BS01:16400`)。選局に使う名前で、1 つの TS を指す */
-  channel: string;
+  /** 局の入っている TS の transport_stream_id。取り込みで見かけていない局は null (束ねない) */
+  transport_stream_id: number | null;
   type: string;
   /** original_network_id。CATV の局が元はどの放送かを見る (`types.origin`) */
   network_id: number;
@@ -45,31 +45,32 @@ export interface Airing {
 /**
  * 局ごとの本チャンネル。局の id → 本チャンネルの id (本チャンネルは自分を指す)。
  *
- * **地上波と BS は、同じ TS (`channel`) に入っている局を束ねる。** 同じ番組を流すこと
+ * **地上波と BS は、同じ TS (`transport_stream_id`) に入っている局を束ねる。** 同じ番組を流すこと
  * (同じ映像を複数のサービスで流す「イベント共有」) は同じ TS の中でしかできない決まり
  * (ARIB TR-B14 第四編 17.2「TS 内」、TR-B15 第一部 第四編 17.2「同じ事業者かつ同じ TS 内」)。
  * 本チャンネルはサービス ID のいちばん若い局 (NHK総合1 1024 / 総合2 1025、
  * テレ東 1072〜1074、BS朝日 151〜153)。
  *
  * - **地上波**は 1 放送局が 1 つの TS (TR-B14 第四編 5.3: transport_stream_id は
- *   network_id と同じ値)。チャンネルで束ねても、ネットワーク ID で束ねていた頃と同じ
- * - **BS** はネットワーク ID が全局で同じ (4) なので、チャンネル (= TS) で見る。
- *   BS朝日1・2・3 は 3 つとも `BS01:16400`。WOWOW のプライム・ライブ・シネマ (191〜193) は
- *   同じ会社でも TS が別々 (`BS03:16432` / `BS05:17488` / `BS05:17489`) で、それぞれが本チャンネル。
+ *   network_id と同じ値)。TS で束ねても、ネットワーク ID で束ねていた頃と同じ
+ * - **BS** はネットワーク ID が全局で同じ (4) なので、TS で見る。
+ *   BS朝日1・2・3 は 3 つとも TS 16400 (`BS01:16400`)。WOWOW のプライム・ライブ・シネマ (191〜193) は
+ *   同じ会社でも TS が別々 (16432 / 17488 / 17489) で、それぞれが本チャンネル。
  *   サービス ID の番号の範囲や事業者 (broadcaster_id) で束ねると、ここを取り違える
  * - **CATV は、地上波か BS を再送信している TS だけ束ねる** (`types.origin`)。中身は元の放送の TS のままなので、
  *   地上波・BS と同じ決まりになる。CS の再送信と CATV の自主放送は束ねない
  * - **CS と SKY は束ねない。** 1 つの TS に別々の会社の局が入っていて、同じ TS でも
  *   同じ番組を流す仲間とは限らない
  *
- * チャンネルの名前は TS ごとに 1 つ (衛星は名前に TSID が入っている。`satellite.ts`)
+ * 束ねるのはチャンネルの名前ではなく TS で見る (同じ TS を、中継局やエージェントによって別のチャンネルで受けることがある)
  */
 export function mainOf(services: Station[]): Map<number, number> {
   const tsOf = (service: Station) => {
     const kind =
       service.type === "CATV" ? origin(service.network_id) : service.type;
-    return kind === "GR" || kind === "BS"
-      ? `${service.type}:${service.channel}`
+    return (kind === "GR" || kind === "BS") &&
+      service.transport_stream_id !== null
+      ? `${service.type}:${service.network_id}:${service.transport_stream_id}`
       : null;
   };
   const first = new Map<string, Station>();

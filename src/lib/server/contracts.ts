@@ -10,6 +10,7 @@ import { PACKET } from "@danything/arib/psi";
 import { ServiceFilter } from "@danything/arib/service-filter";
 import { and, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
+import { NO_CHANNEL, serviceChannel } from "./agent-channels";
 import { fetchAgent } from "./agent-client";
 import { type Agent, primaryAgent } from "./agents";
 import { config } from "./config";
@@ -57,7 +58,8 @@ export interface ContractRow {
   cardId: string;
   serviceId: number;
   serviceName: string;
-  channel: string;
+  /** 局を選局するチャンネル (`agent-channels.serviceChannel`)。エージェントの控えに無ければ null */
+  channel: string | null;
   type: string;
   state: ContractState;
   status: ContractStatus;
@@ -306,7 +308,7 @@ export function getContractRows(
       cardId: cardContracts.card_id,
       serviceId: cardContracts.service_id,
       serviceName: services.name,
-      channel: services.channel,
+      channel: serviceChannel(),
       type: services.type,
       arib: services.service_id,
       state: cardContracts.state,
@@ -329,7 +331,7 @@ export function getContractRows(
     .selectDistinct({
       serviceId: services.id,
       serviceName: services.name,
-      channel: services.channel,
+      channel: serviceChannel(),
       type: services.type,
       arib: services.service_id,
     })
@@ -371,7 +373,7 @@ const DECODE_TARGET = {
   id: services.id,
   arib: services.service_id,
   type: services.type,
-  channel: services.channel,
+  channel: serviceChannel(),
 };
 
 /** 復号を確かめる局 (`DECODE_TARGET` で読んだ行) */
@@ -379,7 +381,7 @@ interface DecodeTarget {
   id: number;
   arib: number;
   type: string;
-  channel: string;
+  channel: string | null;
 }
 
 /** 局ごとにパケットを数える長さ。これだけ数えたら、15 秒を待たずに判定する */
@@ -389,9 +391,9 @@ const DECODE_PACKETS = 2000;
  * **同じ物理チャンネルの局を 1 つの組にまとめる** (`testDecodeUnverified`)。1 つの組は 1 回の選局で確かめる。
  * 組と組の中の並びは、渡した順
  */
-export function groupByChannel<T extends { type: string; channel: string }>(
-  targets: T[],
-): T[][] {
+export function groupByChannel<
+  T extends { type: string; channel: string | null },
+>(targets: T[]): T[][] {
   const groups = new Map<string, T[]>();
   for (const target of targets) {
     const key = `${target.type} ${target.channel}`;
@@ -518,6 +520,12 @@ async function decodeOnChannel(
   const results = new Map<number, DecodeResult>();
   const first = targets[0];
   if (first === undefined) return results;
+  const channel = first.channel;
+  if (channel === null) {
+    for (const target of targets)
+      results.set(target.id, { ok: false, decodeOk: false, error: NO_CHANNEL });
+    return results;
+  }
 
   /*
    * **局ごとに、その局のパケットだけを数える** (`ServiceFilter`)。物理チャンネルには同じ中継器のほかの局も入っていて、
@@ -535,7 +543,7 @@ async function decodeOnChannel(
     // スキャンと同じ優先度でストリームを開く (WantsKeys が有効な live プレフィックス)
     const stream = await openChannelStream(
       first.type,
-      first.channel,
+      channel,
       abortController.signal,
       "live test-decode",
       config.priority.scan,

@@ -16,6 +16,7 @@ const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-dedupe-")), "denpa.db");
 
 const { now, orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { duplicateAtStart } = await import("./rules");
 const {
   programs,
@@ -65,10 +66,10 @@ function service(
       name,
       type,
       service_type: 1,
-      channel,
       updated_at: now(),
     })
     .run();
+  placeServices([{ id, channel }]);
 }
 
 function rule(id: number, keyword: string, dedupe: boolean): void {

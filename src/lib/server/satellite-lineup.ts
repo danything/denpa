@@ -16,6 +16,7 @@
  * `RETRY_AFTER` たってから試し直す (局の一覧は 1 分ごとに読むので、そのたびに選局しない)
  */
 import type { ChannelType } from "../types";
+import { tuningAgents } from "./agents";
 import { orm } from "./db";
 import { readFromAir } from "./lineup-follow";
 import {
@@ -82,11 +83,12 @@ let running: Promise<ChannelType[]> | null = null;
 interface StoredService {
   type: string;
   network_id: number;
-  channel: string;
+  /** 上げてから一度も取り込みで見かけていない局は null (`services.transport_stream_id`) */
+  transport_stream_id: number | null;
 }
 
 /**
- * 局の表に前のバージョンの名前で残っていて、エージェントの一覧には無いネットワーク。
+ * 局の表に、上げてから一度も取り込みで見かけていない局として残っていて (`transport_stream_id` が null)、エージェントの一覧には無いネットワーク。
  * 一覧から落ちたネットワークで、作り直すときに読みに行く
  */
 export function leftoverNetworks(
@@ -105,7 +107,7 @@ export function leftoverNetworks(
         .filter(
           (row) =>
             row.type === type &&
-            !isLineupName(row.channel) &&
+            row.transport_stream_id === null &&
             !present.has(row.network_id),
         )
         .map((row) => row.network_id),
@@ -114,8 +116,8 @@ export function leftoverNetworks(
 }
 
 /**
- * その種別を作り直すべきか。局が無いか、前のバージョンの名前が残っている
- * (エージェントの一覧か、一覧に無いネットワークの局の表に)
+ * その種別を作り直すべきか。局が無いか、エージェントの一覧に前のバージョンの名前が残っているか、
+ * 一覧に無いネットワークの局が、上げてから見かけていないまま局の表に残っている
  */
 export function needsLineup(
   channels: readonly AgentChannel[],
@@ -166,7 +168,7 @@ function storedServices(): StoredService[] {
     .select({
       type: services.type,
       network_id: services.network_id,
-      channel: services.channel,
+      transport_stream_id: services.transport_stream_id,
     })
     .from(services)
     .all();
@@ -201,7 +203,8 @@ async function fill(
     if (scanState().state === "running") break;
     // 読んでいる間に設定から消された種別は書かない
     if (removedSatellites().includes(type)) continue;
-    await putChannels(lineup.channels, [type]);
+    // 預ける先は選局に使ったエージェント (`openChannel` と同じ先頭の 1 台)
+    await putChannels(lineup.channels, [type], tuningAgents()[0]);
     for (const network of goneNetworks(
       leftoverNetworks(channels, type, stored),
       lineup,

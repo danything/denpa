@@ -18,6 +18,7 @@ import { duplicateReason } from "../format";
 import { hasTime, inTime, jstOf } from "../rule-time";
 import { parseSearchFields, type SearchField } from "../search";
 import type { Program, Rule } from "../types";
+import { shareKey } from "./agent-channels";
 import { config } from "./config";
 import { paidAllowed } from "./contracts";
 import { now, orm } from "./db";
@@ -414,7 +415,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
 export function canceledBroadcasts(at: number): Declined {
   const rows = orm()
     .select({
-      channel: services.channel,
+      channel: shareKey(),
       name: reservations.name,
       start_at: reservations.start_at,
     })
@@ -899,7 +900,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     .select({
       ...getTableColumns(programTable),
       service_type: services.type,
-      channel: services.channel,
+      channel: shareKey(),
       decodable: services.decodable,
     })
     .from(programTable)

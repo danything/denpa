@@ -344,10 +344,13 @@ describe("選局できたら受信できたと残す", () => {
             ),
       async () => {
         const at = Date.now() - 4 * HOUR;
-        recordReceived("GR", "T16", at);
-        recordFailed("GR", "T26", at + HOUR);
-        recordReceived("GR", "T16", at + 2 * HOUR);
-        recordFailed("GR", "T26", at + 3 * HOUR);
+        // 記録は選局を送るエージェントのもの
+        const { primaryAgent } = await import("./agents");
+        const agent = primaryAgent().id;
+        recordReceived(agent, "GR", "T16", at);
+        recordFailed(agent, "GR", "T26", at + HOUR);
+        recordReceived(agent, "GR", "T16", at + 2 * HOUR);
+        recordFailed(agent, "GR", "T26", at + 3 * HOUR);
         expect(failingGround()).toEqual(["T26"]);
 
         // 選局できなかった回は何も残さない (失敗を数えるのは番組表の取得だけ)

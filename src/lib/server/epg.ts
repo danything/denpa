@@ -10,6 +10,7 @@ import {
   lt,
   lte,
   ne,
+  not,
   notInArray,
   or,
   sql,
@@ -22,6 +23,13 @@ import {
   type ChannelType,
   undecodableReason,
 } from "../types";
+import {
+  type AgentChannels,
+  retainedServices,
+  storeAgentChannels,
+  unreceivableService,
+} from "./agent-channels";
+import { type Agent, listAgents, NO_AGENT } from "./agents";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
@@ -36,13 +44,7 @@ import {
   reservations,
   services,
 } from "./schema";
-import {
-  type AgentChannel,
-  getChannels,
-  programKey,
-  serviceAbilities,
-  serviceKey,
-} from "./tuner";
+import { getChannels, programKey, serviceAbilities, serviceKey } from "./tuner";
 
 /**
  * 「いまエージェントの一覧にある局」だけに絞る条件。
@@ -213,7 +215,7 @@ export function watchableServices(at: number): number[] {
         name: services.name,
         service_id: services.service_id,
         network_id: services.network_id,
-        channel: services.channel,
+        transport_stream_id: services.transport_stream_id,
         type: services.type,
       })
       .from(services)
@@ -233,7 +235,18 @@ export function watchableServices(at: number): number[] {
   ).map((service) => service.id);
 }
 
-export function syncServices(channels: AgentChannel[]): number {
+/** 中身が違うと警告を出した局。同じ警告を取り込みのたびに出さない */
+const warnedShapes = new Set<number>();
+
+/**
+ * 局の一覧を、エージェントが返した控えから取り込む (`read` はエージェントの並びの順)。
+ *
+ * - **控えはエージェントごとに `agent_channels` へ写す** (`agent-channels.ts`)。局 (`services`) は局の ID で 1 行
+ * - **一覧を返さなかったエージェント (`read` に無い・空を返した) の写しは前のまま残し、その TS の局も見かけたことにする。**
+ *   1 台が落ちている間に、その台にしか無い局を片付けないため。空の一覧は不調でも返る
+ * - 同じ局を複数のエージェントが返し、中身 (局名・リモコン番号・形式) が違えば、並びの先のエージェントのものを使い、警告を出す
+ */
+export function syncServices(read: readonly AgentChannels[]): number {
   const at = now();
   let count = 0;
   const dropped: number[] = [];
@@ -241,14 +254,20 @@ export function syncServices(channels: AgentChannel[]): number {
    * この回で見かけた局。**時刻では数えない** (2 回の取り込みが同じミリ秒に入ることがある)
    */
   const seen = new Set<number>();
+  /** この回で局の行を書いたエージェント (局 → エージェント)。先に書いたエージェントのものを残す */
+  const writtenBy = new Map<number, { agent: number; shape: string }>();
+  const answered = read.filter((r) => r.channels.length > 0);
   let canceled = 0;
   /*
-   * **受信できないチャンネルの局は見かけなかったことにする** (`reception.ts`)。番組表とライブに出なくなり、
-   * しばらくすると番組と予約も片付く (`forgetMissing`)。受信できれば次の取り込みで戻る
+   * **受信できないチャンネルの局は見かけなかったことにする** (`reception.ts`。エージェントごと)。ほかのエージェントで受信できれば見かけたことになる。
+   * どこでも受信できなければ番組表とライブに出なくなり、しばらくすると番組と予約も片付く (`forgetMissing`)。受信できれば次の取り込みで戻る
    */
-  pruneReception(channels);
-  const blocked = unreceivableChannels();
+  for (const r of answered) pruneReception(r.agent, r.channels);
+  const blocked = new Map(
+    answered.map((r) => [r.agent, unreceivableChannels(r.agent)]),
+  );
   orm().transaction((tx) => {
+    for (const r of answered) storeAgentChannels(r);
     const known = new Map(
       tx
         .select({ id: services.id, name: services.name })
@@ -256,60 +275,78 @@ export function syncServices(channels: AgentChannel[]): number {
         .all()
         .map((row) => [row.id, row.name]),
     );
-    for (const channel of channels) {
-      if (blocked.has(`${channel.type}:${channel.channel}`)) continue;
-      for (const service of channel.services) {
-        const id = serviceKey(
-          channel.networkId,
-          service.serviceId,
-          channel.type,
-        );
-        // 映像の入っていないサービスは録っても仕方がない
-        if (service.serviceType !== DIGITAL_TV) {
-          dropped.push(id);
+    for (const { agent, channels } of answered) {
+      for (const channel of channels) {
+        if (blocked.get(agent)?.has(`${channel.type}:${channel.channel}`))
           continue;
-        }
-        seen.add(id);
-        const abilities = serviceAbilities(channel, service);
-        tx.insert(services)
-          .values({
-            id,
-            service_id: service.serviceId,
-            network_id: channel.networkId,
-            name: widthKept(known.get(id), service.name),
-            type: channel.type,
-            service_type: service.serviceType,
-            channel: channel.channel,
-            remote_control_key: channel.remoteControlKeyId,
-            decodable: abilities.decodable,
-            epg_readable: abilities.epgReadable,
-            transport: channel.transport ?? "ts",
-            listed: true,
-            // ロゴは放送波から取得したときに立てる (logo.ts)
-            has_logo: false,
-            updated_at: at,
-          })
-          .onConflictDoUpdate({
-            target: services.id,
-            set: {
-              service_id: sql`excluded.service_id`,
-              network_id: sql`excluded.network_id`,
-              name: sql`excluded.name`,
-              type: sql`excluded.type`,
-              service_type: sql`excluded.service_type`,
-              channel: sql`excluded.channel`,
-              remote_control_key: sql`excluded.remote_control_key`,
-              decodable: sql`excluded.decodable`,
-              epg_readable: sql`excluded.epg_readable`,
-              transport: sql`excluded.transport`,
+        for (const service of channel.services) {
+          const id = serviceKey(
+            channel.networkId,
+            service.serviceId,
+            channel.type,
+          );
+          // 映像の入っていないサービスは録っても仕方がない
+          if (service.serviceType !== DIGITAL_TV) {
+            dropped.push(id);
+            continue;
+          }
+          seen.add(id);
+          const abilities = serviceAbilities(channel, service);
+          const shape = `${service.name}|${channel.remoteControlKeyId}|${channel.transport ?? "ts"}`;
+          const first = writtenBy.get(id);
+          if (first !== undefined && first.agent !== agent) {
+            if (first.shape !== shape && !warnedShapes.has(id)) {
+              warnedShapes.add(id);
+              console.warn(
+                `[epg] 局 ${id} の中身 (局名・リモコン番号・形式) がエージェントによって違います。並びの先のエージェントのものを使います`,
+              );
+            }
+            continue;
+          }
+          writtenBy.set(id, { agent, shape });
+          tx.insert(services)
+            .values({
+              id,
+              service_id: service.serviceId,
+              network_id: channel.networkId,
+              name: widthKept(known.get(id), service.name),
+              type: channel.type,
+              service_type: service.serviceType,
+              transport_stream_id: channel.transportStreamId,
+              remote_control_key: channel.remoteControlKeyId,
+              decodable: abilities.decodable,
+              epg_readable: abilities.epgReadable,
+              transport: channel.transport ?? "ts",
               listed: true,
-              updated_at: sql`excluded.updated_at`,
-            },
-          })
-          .run();
-        count++;
+              // ロゴは放送波から取得したときに立てる (logo.ts)
+              has_logo: false,
+              updated_at: at,
+            })
+            .onConflictDoUpdate({
+              target: services.id,
+              set: {
+                service_id: sql`excluded.service_id`,
+                network_id: sql`excluded.network_id`,
+                name: sql`excluded.name`,
+                type: sql`excluded.type`,
+                service_type: sql`excluded.service_type`,
+                transport_stream_id: sql`excluded.transport_stream_id`,
+                remote_control_key: sql`excluded.remote_control_key`,
+                decodable: sql`excluded.decodable`,
+                epg_readable: sql`excluded.epg_readable`,
+                transport: sql`excluded.transport`,
+                listed: true,
+                updated_at: sql`excluded.updated_at`,
+              },
+            })
+            .run();
+          count++;
+        }
       }
     }
+    // 一覧を返さなかったエージェントの局は、前の写しのとおりに見かけたことにする (その台で受信できないと決めたチャンネルは除く)
+    for (const id of retainedServices(answered.map((r) => r.agent)))
+      seen.add(id);
     /*
      * 以前の取り込みで入ってしまったデータ放送やワンセグを片付ける。
      * 残っていると番組表に並び続け、ルールが引っかけて録画が失敗する。
@@ -498,9 +535,9 @@ function forgetMissing(at: number, seen: Set<number>): number {
  * 局によっては数分かかる。局だけ先に出しておかないと、スキャンの直後に
  * 番組表が空のまま何も出ない時間が続く。
  */
-export function syncServicesOnly(channels: AgentChannel[]): number {
+export function syncServicesOnly(read: readonly AgentChannels[]): number {
   const before = listedServices();
-  const synced = syncServices(channels);
+  const synced = syncServices(read);
   /*
    * 数が変わったときだけ知らせる。毎回知らせると、番組表を開いている端末が
    * 何も変わっていないのに 1 分おきに読み直すことになる
@@ -516,7 +553,7 @@ export function syncServicesOnly(channels: AgentChannel[]): number {
  * 内部 ID (例: 3239123608) とは別物。そのまま入れると番組表の JOIN が 1 件も当たらず、
  * 番組が丸ごと出なくなる。networkId と合わせて引き直す。
  *
- * **受信できないチャンネルの局は入れない** (`reception.ts`)。衛星はほかの中継器からもその局の番組表が届くので、
+ * **全部のエージェントで受信できないチャンネルの局は入れない** (`reception.ts`)。衛星はほかの中継器からもその局の番組表が届くので、
  * 入れるとルールが録れない予約を立てる。**番組表を読めない局も入れない** (`services.epg_readable`。番組表に出さない)。
  * 読めるが復号できない局の番組は入れる (番組表に「観られません」で出す)。ルールはその番組に当てない (`rules.applyRules`)。
  *
@@ -524,19 +561,16 @@ export function syncServicesOnly(channels: AgentChannel[]): number {
  * original_network_id と service_id が入っている。分けないと、CATV で読んだ番組表がアンテナの局に入る
  */
 function serviceIdIndex(): Map<string, number> {
-  const blocked = unreceivableChannels();
   const rows = orm()
     .select({
       id: services.id,
       network_id: services.network_id,
       service_id: services.service_id,
       type: services.type,
-      channel: services.channel,
     })
     .from(services)
-    .where(eq(services.epg_readable, true))
-    .all()
-    .filter((s) => !blocked.has(`${s.type}:${s.channel}`));
+    .where(and(eq(services.epg_readable, true), not(unreceivableService())))
+    .all();
   return new Map(
     rows.map((s) => [indexKey(s.type, s.network_id, s.service_id), s.id]),
   );
@@ -900,9 +934,41 @@ export function settle(): SettleResult {
  * 番組そのものを集めるのは `epg-collect.ts` で、こちらは**溜まっているものを
  * 使って予約を組み直すだけ**。
  */
-export async function sync(): Promise<SettleResult & { services: number }> {
-  const services = syncServices(await getChannels());
+export async function sync(
+  /** 渡せば、このエージェントの控えだけを読み直す (ほかのエージェントは前の写しのまま。`channels` の通知) */
+  only?: Agent,
+): Promise<SettleResult & { services: number }> {
+  const services = syncServices(await readChannels(only));
   const result = { services, ...settle() };
   await resolveConflicts();
   return result;
+}
+
+/**
+ * エージェントの控えを読む (並びの順)。`only` を渡せばその 1 台だけ。
+ * **読めなかったエージェントは飛ばす** (`syncServices` が前の写しのまま残す)。1 台も読めなければ、最初の理由で reject する
+ */
+export async function readChannels(only?: Agent): Promise<AgentChannels[]> {
+  const targets = only === undefined ? listAgents() : [only];
+  if (targets.length === 0) throw new Error(NO_AGENT);
+  const results = await Promise.allSettled(
+    targets.map((agent) => getChannels(agent)),
+  );
+  const read: AgentChannels[] = [];
+  let failure: unknown = null;
+  results.forEach((result, i) => {
+    const agent = targets[i]!;
+    if (result.status === "fulfilled") {
+      read.push({ agent: agent.id, channels: result.value });
+      return;
+    }
+    failure ??= result.reason;
+    if (targets.length > 1) {
+      console.warn(
+        `[epg] ${agent.name} のチャンネルを読めませんでした (前の写しのまま使います): ${result.reason}`,
+      );
+    }
+  });
+  if (read.length === 0) throw failure;
+  return read;
 }
