@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Android のアプリ (debug の APK) をエミュレータに入れて起動し、常駐サービスとエージェントを確かめる (.github/workflows/android.yml)。
+# Android のアプリ (debug の APK) をエミュレータに入れて起動し、常駐サービスとエージェントと denpa 本体を確かめる (.github/workflows/android.yml)。
 #
 #   bash .github/android-app-smoke.sh <APK> <記録の置き場> <native-smoke.js>
 #
@@ -16,11 +16,15 @@
 # - denpa と同じ手順で組み (POST /denpa/pair)、/denpa/about (os が android)・/denpa/tuners (0 台)・/denpa/card が答える
 # - アプリの LocalSocket から、ファイルの fd を付けた attached を送ると、エージェントが fd ごと受け取る (setFileDescriptorsForSend と 1 回の write)
 # - エージェントが APK の asicend (libasicend.so) を起動でき (--version)、ファームウェア待ちの ID の fd を asicend --fd に継がせる
-# - bun (libbun.so) がアプリの子プロセスとして untrusted_app で動き、debug の APK に入れた確かめ用のサーバ (android/app/src/debug/assets/server/) が
-#   3000 番で答える。GET /check で、JIT・名前を引けるか・/proc から読むもの・子プロセスの起動・bun:sqlite を bun の中から試す
+# - denpa 本体 (bun。libbun.so) がアプリの子プロセスとして untrusted_app で動き、APK の assets/server.zip を書き出して 3000 番で答える
+#   (/api/health・画面・字・デコーダ)。エージェントは全部のインターフェースで待ち受け (別の機械の denpa も組める)、denpa は 127.0.0.1 からアプリが作った合言葉で組んで、設定の「受信」の
+#   「チューナー」の一覧 (0 台) を読める
+# - アプリの子プロセスの bun で .github/android-bun-check.js を流し (debug の受け口の RUN_BUN)、JIT・名前を引けるか・/proc から読むもの・
+#   子プロセスの起動・TZ・bun:sqlite を bun の中から試す
 # - bun が、常駐サービスの渡す FFMPEG・FFPROBE (APK の libffmpeg.so・libffprobe.so) を子プロセスで起動できる。
 #   tests/native-smoke.ts (エンコード、HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec のエンコーダ、4 本目の出口) を
-#   アプリの置き場に置き、確かめ用のサーバの POST /smoke で、アプリの子プロセスの bun からさらに子プロセスで流す
+#   同じく RUN_BUN で流す
+# - 同じ APK を入れ直す (更新) と、常駐サービスが始まり直し、書き出した置き場が入れ替わって古いものは消え、DB は残る
 # - エージェントが異常終了すると、アプリが起動し直し、繋ぎ直して synced を送り直す
 # - 通知の「終了」で SIGTERM が届き、エージェントも bun も常駐サービスも残らない
 # - アイコンで始めたあとに端末を起動し直すと、BOOT_COMPLETED で常駐サービスが始まる
@@ -188,18 +192,74 @@ if grep -qE '\{ (execute|execute_no_trans) \}' "$logs/asicen-avc.txt"; then
   exit 1
 fi
 
-# --- bun。常駐サービスが APK の assets のサーバを書き出し、bun をアプリの子プロセス (untrusted_app) で起動する。
-# GET /check は bun の中から JIT などを試した結果を返す (android/app/src/debug/assets/server/app/server.js)
-echo "=== bun"
+# --- denpa 本体。常駐サービスが APK の assets/server.zip を書き出し、bun をアプリの子プロセス (untrusted_app) で起動する。
+# denpa はエージェントと 127.0.0.1 で、アプリが作った合言葉で組む。adb forward は端末のループバックに繋ぐので、denpa.env の既定の TRUSTED_NETWORKS で通る
+echo "=== denpa 本体"
 wait_until has_bun
-wait_log "が 3000 番で待ち受けています"
+wait_log "APK の denpa を"
+grep -F "APK の denpa を" "$host/logcat.txt" | tee "$logs/extract.txt"
 adb shell ps -A -o LABEL,USER,PID,PPID,NAME | tr -d '\r' | grep -F libbun.so | tee "$logs/bun-process.txt"
 grep -qE "^u:r:untrusted_app:[^ ]+ +[^ ]+ +$(bun_pid) +$app +libbun.so$" "$logs/bun-process.txt"
 adb forward tcp:3000 tcp:3000
-curl -fsS --max-time 60 http://127.0.0.1:3000/check | tee "$logs/bun-check.json"; echo
+health() { curl -fsS --max-time 5 -o "$host/health.json" http://127.0.0.1:3000/api/health; }
+wait_until health
+cp "$host/health.json" "$logs/health.json"
+jq -e '.ok and .version == "dev"' "$logs/health.json"
+# 画面・字・デコーダ (Mac の server-macos と同じもの)
+for path in / /api/font/denpa-font.css /api/font/denpa-font.woff2 /api/live/mpeg2/decoder.wasm /settings/reception; do
+  curl -fsS --max-time 30 -o "$host/page" -w "$path -> %{http_code} %{size_download} bytes\n" "http://127.0.0.1:3000$path" | tee -a "$logs/pages.txt"
+done
+# エージェントは全部のインターフェースで待ち受ける (別の機械の denpa も組めるように。組んだ denpa しか通さない)
+adb shell cat /proc/net/tcp /proc/net/tcp6 | tr -d '\r' | awk '$4 == "0A" { print $2 }' | tee "$logs/listen.txt"
+grep -qxE "0+:$(printf '%04X' "$port")" "$logs/listen.txt"
+# denpa がエージェントと組み (エージェントの tls/clients に、上で組んだ確かめの証明書と denpa の証明書の 2 つ)、設定の「受信」の「チューナー」の一覧を読めた (error が null)
+wait_log "エージェント ("
+for _ in $(seq 30); do
+  test "$(adb shell run-as "$pkg" cat files/denpa/config/tls/clients | tr -d '\r' | grep -c .)" = 2 && break
+  sleep 1
+done
+test "$(adb shell run-as "$pkg" cat files/denpa/config/tls/clients | tr -d '\r' | grep -c .)" = 2
+curl -fsS --max-time 30 "http://127.0.0.1:3000/settings/reception/__data.json" > "$logs/reception.json"
+# 「チューナー」の節は {list, error} の形で流れてくる (devalue。値は番号で引く)
+jq -se '[.[] | select(.type == "chunk") | .data as $d | select(($d[0] | type) == "object" and ($d[0] | has("list")) and ($d[0] | has("error")))
+  | {list: $d[$d[0].list], error: $d[$d[0].error]}] | length == 1 and .[0].error == null and .[0].list == []' "$logs/reception.json"
+# bun の SELinux の拒否は記録に残す。`/` の一覧を読むことが断られる。実行そのものや、実行できるメモリを断られたら止める
+adb logcat -d | tr -d '\r' | grep -E 'avc: +denied' | grep -F 'libbun' | tee "$logs/bun-avc.txt" || true
+if grep -qE '\{ (execute|execute_no_trans|execmem) \}' "$logs/bun-avc.txt"; then
+  echo "SELinux が bun の実行を断りました" >&2
+  exit 1
+fi
+
+# アプリの置き場の smoke/ にスクリプトを置き、debug の受け口 (RUN_BUN) でアプリの子プロセスの bun から流す。終わるまで待ち (秒)、終了コードを出す
+run_bun() {
+  name=$(basename "$1")
+  adb push "$1" "/data/local/tmp/$name" > /dev/null
+  adb shell "cat /data/local/tmp/$name | run-as $pkg sh -c 'mkdir -p files/denpa/smoke && cat > files/denpa/smoke/$name'"
+  adb shell rm "/data/local/tmp/$name"
+  broadcast RUN_BUN --es script "$name"
+  for _ in $(seq "$2"); do
+    code=$(adb shell run-as "$pkg" cat "files/denpa/smoke/$name.exit" 2> /dev/null | tr -d '\r\n') || true
+    if [[ "$code" =~ ^[0-9]+$ ]]; then
+      adb shell run-as "$pkg" cat "files/denpa/smoke/$name.stdout" | tr -d '\r' > "$logs/$name.stdout"
+      adb shell run-as "$pkg" cat "files/denpa/smoke/$name.stderr" | tr -d '\r' > "$logs/$name.stderr"
+      echo "$code"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "bun で流した $name が終わりません" >&2
+  return 1
+}
+
+# --- bun。.github/android-bun-check.js が、JIT などを bun の中から試して JSON で出す
+echo "=== bun"
+code=$(run_bun "$(dirname "$0")/android-bun-check.js" 120)
+cp "$logs/android-bun-check.js.stdout" "$logs/bun-check.json"
+cat "$logs/bun-check.json"; echo
+test "$code" = 0
 version=$(jq -r .version "$logs/bun-check.json")
 wait_log "bun $version"
-# JIT (DFG で組まれた回数が 1 回以上)、localhost を引ける、/proc から読める、bun が自分を子プロセスで起動できる、bun:sqlite で書ける。
+# JIT (DFG で組まれた回数が 1 回以上)、localhost を引ける、/proc から読める、bun が自分を子プロセスで起動できる、TZ=Asia/Tokyo を解ける、bun:sqlite で書ける。
 # 外の名前 (github.com) と HTTPS は、ランナーのネットワークに左右されるので、結果を残すだけにする
 jq -e --arg v "$version" '
   .platform == "android" and .arch == "x64"
@@ -207,27 +267,21 @@ jq -e --arg v "$version" '
   and .dns.localhost.ok
   and .proc.stat.ok and .proc.openFiles.ok and .proc.cpus.ok and .proc.totalmem.ok and .proc.rss.ok
   and .spawn.ok and .spawn.value.exitCode == 0 and .spawn.value.stdout == $v
+  and .tz.ok and .tz.value.offset == -540
   and .sqlite.value >= 1' "$logs/bun-check.json"
-jq -c '{dns: .dns.external, fetch, interfaces: .proc.interfaces, root: .proc.root}' "$logs/bun-check.json"
-# bun の SELinux の拒否は記録に残す。API 36 では `/` の一覧を読むことが断られる。実行そのものや、実行できるメモリを断られたら止める
-adb logcat -d | tr -d '\r' | grep -E 'avc: +denied' | grep -F 'libbun' | tee "$logs/bun-avc.txt" || true
-if grep -qE '\{ (execute|execute_no_trans|execmem) \}' "$logs/bun-avc.txt"; then
-  echo "SELinux が bun の実行を断りました" >&2
-  exit 1
-fi
+jq -c '{dns: .dns.external, fetch, interfaces: .proc.interfaces, root: .proc.root, tz}' "$logs/bun-check.json"
 
 # --- ffmpeg・ffprobe。常駐サービスが FFMPEG・FFPROBE で APK の libffmpeg.so・libffprobe.so を渡し、bun が子プロセスで起動する。
-# tests/native-smoke.ts をアプリの置き場 (DENPA_HOME/smoke/) に置き、POST /smoke で流す (エンコードがあるので数分かかる)
+# tests/native-smoke.ts を流す (エンコードがあるので数分かかる)
 echo "=== ffmpeg"
 jq -e '.ffmpeg.ok and (.ffmpeg.value.line | startswith("ffmpeg version"))
   and .ffprobe.ok and (.ffprobe.value.line | startswith("ffprobe version"))' "$logs/bun-check.json"
-adb push "$smoke" /data/local/tmp/native-smoke.js > /dev/null
-adb shell "cat /data/local/tmp/native-smoke.js | run-as $pkg sh -c 'mkdir -p files/denpa/smoke && cat > files/denpa/smoke/native-smoke.js'"
-adb shell rm /data/local/tmp/native-smoke.js
-curl -fsS --max-time 1200 -X POST http://127.0.0.1:3000/smoke > "$logs/ffmpeg-smoke.json"
-jq -r .stdout "$logs/ffmpeg-smoke.json" | tee "$logs/ffmpeg-smoke.txt"
-jq -r .stderr "$logs/ffmpeg-smoke.json" | tee "$logs/ffmpeg-smoke-stderr.txt" >&2
-jq -e .ok "$logs/ffmpeg-smoke.json" > /dev/null
+code=$(run_bun "$smoke" 1200)
+cp "$logs/$(basename "$smoke").stdout" "$logs/ffmpeg-smoke.txt"
+cp "$logs/$(basename "$smoke").stderr" "$logs/ffmpeg-smoke-stderr.txt"
+cat "$logs/ffmpeg-smoke.txt"
+cat "$logs/ffmpeg-smoke-stderr.txt" >&2
+test "$code" = 0
 # 終了コードだけでなく、最後まで流れたかも見る (ffprobe は 10 種類のファイル)
 test "$(grep -cE '^ffprobe .+: ok$' "$logs/ffmpeg-smoke.txt")" = 10
 for line in "ffmpeg: ok" "h264_mediacodec: ok" "no GPU: software encoding: ok" "side output closes when ffmpeg fails: ok"; do
@@ -239,6 +293,23 @@ if grep -qE '\{ (execute|execute_no_trans) \}' "$logs/ffmpeg-avc.txt"; then
   echo "SELinux が ffmpeg の実行を断りました" >&2
   exit 1
 fi
+
+# --- 更新 (同じ APK を入れ直す)。Android がアプリを止めて入れ替え、MY_PACKAGE_REPLACED で常駐サービスが始まる。
+# 書き出した置き場は新しい名前 (更新した時刻が入る) になって古いものは消え、DB (DENPA_HOME/data) は残る
+echo "=== 更新"
+before=$(adb shell run-as "$pkg" ls files/denpa/server | tr -d '\r')
+clear_log
+timeout 120 adb install -r -g "$apk" > /dev/null
+wait_until service_running
+wait_until has_agent
+wait_until has_bun
+wait_until health
+after=$(adb shell run-as "$pkg" ls files/denpa/server | tr -d '\r')
+echo "書き出した置き場: $before → $after" | tee "$logs/update.txt"
+test "$(printf '%s\n' "$after" | grep -c .)" = 1
+test "$after" != "$before"
+adb shell run-as "$pkg" ls files/denpa/data/denpa.db
+pid=$(agent_pid)
 
 # --- エージェントが異常終了したら、アプリが起動し直して繋ぎ直す
 echo "=== エージェントに SIGKILL を送る"
@@ -255,7 +326,7 @@ wait_log "アプリから USB の機材を 0 台受け取りました"
 echo "=== 通知の「終了」"
 clear_log
 broadcast PRESS_STOP
-wait_log "通知の「終了」で、エージェント・サーバに SIGTERM を送りました"
+wait_log "通知の「終了」で、エージェント・denpa 本体に SIGTERM を送りました"
 wait_until no_agent
 wait_until no_bun
 wait_until service_gone
@@ -280,4 +351,4 @@ broadcast PRESS_STOP
 wait_until no_agent
 wait_until no_bun
 wait_until service_gone
-echo "常駐サービスが始まり、エージェントと bun がアプリの子プロセスで答え、bun から ffmpeg・ffprobe を流せ、USB_BROKER で fd を受け取り、「終了」と端末の起動で止まり・始まりました"
+echo "常駐サービスが始まり、エージェントと denpa 本体がアプリの子プロセスで答えて組み、bun から ffmpeg・ffprobe を流せ、USB_BROKER で fd を受け取り、更新・「終了」・端末の起動で止まり・始まりました"

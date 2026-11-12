@@ -285,11 +285,16 @@ export function sharedNetworks(
 
 /**
  * 前段と同じネットワークを信頼していそうなら (`sharedNetworks`)、起動ログに出す。
- * **Mac と Windows では見ない。** OS の上でそのまま動くので自分のインターフェースは LAN そのもので、
- * インストーラの既定の `TRUSTED_NETWORKS` と必ず重なる (前段を同じネットワークに置く構成ではない)
+ * **Mac・Windows・Android では見ない。** OS の上でそのまま動くので自分のインターフェースは LAN そのもので、
+ * インストーラ (Android はアプリの denpa.env) の既定の `TRUSTED_NETWORKS` と必ず重なる (前段を同じネットワークに置く構成ではない)
  */
 export function warnIfProxyHidden(): void {
-  if (process.platform === "win32" || process.platform === "darwin") return;
+  if (
+    process.platform === "win32" ||
+    process.platform === "darwin" ||
+    process.platform === "android"
+  )
+    return;
   const shared = sharedNetworks(
     config.trustedNetworks,
     config.trustedProxies,

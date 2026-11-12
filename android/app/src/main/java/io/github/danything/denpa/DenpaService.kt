@@ -11,6 +11,7 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -22,18 +23,22 @@ import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import java.io.File
-import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /**
  * 常駐サービス (種類は connectedDevice)。部品 ([Part]) を子プロセスとして起動し、通知を出し続ける。部品はエージェントと、
- * APK にサーバが入っていれば bun で動かすサーバ ([Server]。2 段目のリリースの APK には入っていない)。
+ * APK に denpa 本体が入っていれば bun で動かす denpa ([Server])。
  *
- * - **動いている間は partial wake lock を持ち続ける。** 別の機械の denpa がいつ選局を求めるか分からず、画面を消すと CPU が止まって録画が欠けるため
+ * - **エージェントは全部のインターフェースで待ち受ける。** 同じ端末の denpa は `https://127.0.0.1:25252#pair=<合言葉>` で、
+ *   別の機械の denpa は通知の「組む URL をコピー」の URL で、同じ合言葉で組む (組んだ denpa しか通さないのは今と同じ)。
+ *   合言葉はアプリが `config/tls/pair-token` に作り、エージェントはそこから読む (Mac の install.sh と同じ)
+ * - **動いている間は partial wake lock を持ち続ける。** いつ録画が始まるか分からず、画面を消すと CPU が止まって録画が欠けるため
  * - **部品が自分で終わったら、待ってから起動し直す。** 通知の「終了」のあとは起動し直さない
  * - **「終了」は部品のそれぞれに SIGTERM を 1 回送り、すべて終わったら常駐サービスを止める。** 録画中ならエージェントは録画が終わるまで待ち、そのあいだ通知は「録画が終わったら終了します」にして、
  *   ボタンを「すぐ終了」(2 回目の SIGTERM) に替える
- * - 通知の本文 (チューナーの台数・録画中か) は、エージェントの `GET /denpa/tuners` を 10 秒ごとに読んで決める ([AgentClient])
+ * - 通知の本文 (チューナーの台数・録画中か) は、エージェントの `GET /denpa/tuners` を 10 秒ごとに読んで決める ([AgentClient])。
+ *   denpa が起動の途中か起動し直しているあいだは、本文をそちらにする。denpa が `GET /api/health` に答えたら、通知に LAN の URL を出し、
+ *   通知を押すとこの端末のブラウザで denpa を開く。「URL をコピー」はその URL を、「組む URL をコピー」はエージェントと組む URL をクリップボードに渡す
  * - 状態はどれも [worker] のスレッドで触る
  */
 class DenpaService : Service() {
@@ -49,15 +54,22 @@ class DenpaService : Service() {
 
     private lateinit var agent: Slot
 
-    /** 動かす部品。エージェントと、APK にサーバが入っていればそれも ([Server]) */
+    /** denpa 本体の部品。APK に入っていなければ null */
+    private var server: Slot? = null
+
+    /** 動かす部品。エージェントと、APK に denpa 本体が入っていればそれも ([Server]) */
     private lateinit var slots: List<Slot>
 
     /** 動いているエージェントの PID (動いていなければ 0)。debug の受け口が使う */
     internal val agentPid: Int get() = agent.part?.pid ?: 0
 
     private var status: AgentStatus? = null
+
+    /** denpa が `GET /api/health` に答えたか (最後に読んだとき) */
+    private var serverUp = false
     private var stopping = false
-    private var shown: String? = null
+    /** 出している通知の本文と URL */
+    private var shown: Pair<String, String?>? = null
 
     /** [Part.start] に渡すもの。起動するたびに作る */
     private class Launch(val arguments: List<String>, val environment: Map<String, String>, val directory: File? = null)
@@ -110,6 +122,7 @@ class DenpaService : Service() {
         private fun onExit(code: Int) {
             part = null
             if (this === agent) status = null
+            if (this === server) serverUp = false
             if (stopping) {
                 Log.i(TAG, "${label}が終了しました (終了コード $code)")
                 if (slots.all { it.part == null }) finish()
@@ -149,12 +162,13 @@ class DenpaService : Service() {
         acquireWakeLock()
         broker = UsbBroker(this, File(dataDir, "u"), DeviceFilter.load(this)).also { it.start() }
         agent = Slot("エージェント", AGENT_TAG, agentFile) { Launch(emptyList(), agentEnvironment()) }
-        slots = listOfNotNull(agent, serverSlot())
+        server = serverSlot()
+        slots = listOfNotNull(agent, server)
         for (slot in slots) worker.post { slot.start() }
         worker.post(poll)
     }
 
-    // 動いている間はずっと持つ (止めるのは onDestroy)。時間で切ると、別の機械の denpa からの選局を受けられなくなる
+    // 動いている間はずっと持つ (止めるのは onDestroy)。時間で切ると、そのあとの録画が欠ける
     @SuppressLint("WakelockTimeout")
     private fun acquireWakeLock() = wakeLock.acquire()
 
@@ -171,7 +185,8 @@ class DenpaService : Service() {
         when (intent?.action) {
             ACTION_STOP -> worker.post { requestStop() }
             ACTION_STOP_NOW -> worker.post { stopNow() }
-            ACTION_COPY_URL -> worker.post { copyPairUrl() }
+            ACTION_COPY_URL -> worker.post { copyUrl() }
+            ACTION_COPY_PAIR_URL -> worker.post { copyPairUrl() }
             else -> worker.post {
                 // アイコンか挿入で起こされた。終了の途中なら取りやめ、まだ動いている部品は終わったら起動し直す。もう終わった部品はすぐ起動する
                 if (stopping) {
@@ -205,9 +220,17 @@ class DenpaService : Service() {
         "HOME" to filesDir.path,
     )
 
+    /** bun で動かすものに渡す環境変数のうち、denpa 本体の置き場に依らないもの。debug の受け口が確かめ用のスクリプトに渡す */
+    internal fun bunEnvironment(): Map<String, String> = baseEnvironment() + Server.tools(this)
+
+    /**
+     * エージェントの環境変数。合言葉はアプリが先に作っておく (エージェントは `config/tls/pair-token` から読む。
+     * 同じものを同じ端末の denpa に `TUNER_AGENT_URL` の `#pair=` で渡し、別の機械の denpa には組む URL で渡す)
+     */
     private fun agentEnvironment(): Map<String, String> {
         val config = File(home, "config").apply { mkdirs() }
         val media = File(home, "media").apply { mkdirs() }
+        Server.pairToken(home)
         return baseEnvironment() + mapOf(
             "TUNERS_FILE" to File(config, "tuners.json").path,
             "CHANNELS_FILE" to File(config, "channels.json").path,
@@ -221,19 +244,23 @@ class DenpaService : Service() {
     private val asicenFirmware by lazy { Asicen.firmware(this) }
 
     /**
-     * bun で動かすサーバの部品 ([Server])。APK の assets にサーバが入っていなければ null (2 段目のリリースの APK)。
+     * denpa 本体の部品 ([Server])。APK の assets に入っていなければ null (手元で denpa 本体を置かずに組んだ APK)。
      * 起動するたびに assets を書き出し (APK が同じなら書き直さない)、`bun --version` を記録に出す
      */
     private fun serverSlot(): Slot? {
         if (!Server.bundled(this)) return null
-        return Slot("サーバ", Server.TAG, Server.bun(this)) {
-            val entry = Server.extract(this, home)
+        return Slot("denpa 本体", Server.TAG, Server.bun(this)) {
+            val dir = Server.extract(this, home)
             // 記録に出すだけなので、worker を待たせない (答えない bun でも「終了」や様子の読み取りが止まらない)
             thread(name = "denpa-server-version", isDaemon = true) {
                 val version = runCatching { Server.version(Server.bun(this)) }.getOrNull()
                 Log.i(Server.TAG, "bun ${version ?: "(--version に答えません)"}")
             }
-            Launch(listOf(entry.path), baseEnvironment() + Server.tools(this) + ("PORT" to Server.PORT.toString()), entry.parentFile)
+            val environment = Server.environment(
+                this, home, dir, Server.pairToken(home), AGENT_PORT, baseEnvironment(), Server.userEnvironment(this),
+            )
+            val entry = Server.entry(dir)
+            Launch(listOf(entry.path), environment, entry.parentFile)
         }
     }
 
@@ -276,34 +303,44 @@ class DenpaService : Service() {
                     null
                 }
             }
+            serverUp = server?.part != null && Server.healthy()
             refresh()
             worker.postDelayed(this, POLL_INTERVAL)
         }
     }
 
-    /** 通知の本文が変わったときだけ出し直す */
+    /** 通知の本文か URL が変わったときだけ出し直す */
     private fun refresh() {
-        val next = text()
-        if (next == shown) return
+        if (text() to url() == shown) return
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
     }
 
     private fun text(): String {
         val current = status
+        val denpa = server
         return when {
             !agentFile.canExecute() -> getString(R.string.state_missing_agent)
             stopping && current?.recording == true -> getString(R.string.state_stopping_after_recording)
             stopping -> getString(R.string.state_stopping)
             agent.restarting -> getString(R.string.state_restarting)
+            denpa?.restarting == true -> getString(R.string.state_server_restarting)
             current == null -> getString(R.string.state_starting)
+            denpa != null && !serverUp -> getString(R.string.state_server_starting)
             current.recording -> getString(R.string.state_recording)
             else -> getString(R.string.state_tuners, current.tuners)
         }
     }
 
+    /** 通知に出す denpa の URL (`http://<LAN のアドレス>:3000`)。denpa が答えていないか、LAN につながっていなければ null */
+    private fun url(): String? {
+        if (!serverUp || stopping) return null
+        return Lan.address(getSystemService(ConnectivityManager::class.java))?.let { "http://$it:${Server.PORT}" }
+    }
+
     private fun notification(): Notification {
         val body = text()
-        shown = body
+        val url = url()
+        shown = body to url
         val builder = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.app_name))
@@ -313,11 +350,18 @@ class DenpaService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
+        if (url != null) builder.setSubText(url)
+        if (server != null) {
+            // 押すと、この端末のブラウザで denpa を開く (この端末からはループバックで来るので、denpa.env の既定でログインなしで開ける)
+            val open = Intent(Intent.ACTION_VIEW, Uri.parse("http://127.0.0.1:${Server.PORT}/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            builder.setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE))
+        }
         if (stopping) {
             builder.addAction(action(ACTION_STOP_NOW, R.string.action_stop_now))
         } else {
             builder.addAction(action(ACTION_STOP, R.string.action_stop))
-            builder.addAction(action(ACTION_COPY_URL, R.string.action_copy_url))
+            if (url != null) builder.addAction(action(ACTION_COPY_URL, R.string.action_copy_url))
+            builder.addAction(action(ACTION_COPY_PAIR_URL, R.string.action_copy_pair_url))
         }
         return builder.build()
     }
@@ -330,51 +374,38 @@ class DenpaService : Service() {
     }
 
     /**
-     * 通知の「URL をコピー」。`--pair` で URL を読み、機械の名前を LAN のアドレスに替えてクリップボードに渡す。
+     * 通知の「URL をコピー」。通知に出している denpa の URL (LAN のアドレス) をクリップボードに渡す。
+     * ボタンを出したあとに LAN から外れていたら、そう出す
+     */
+    private fun copyUrl() = copy(url(), R.string.url_copied, sensitive = false)
+
+    /**
+     * 通知の「組む URL をコピー」。別の機械の denpa の `TUNER_AGENT_URL` に書く `https://<LAN のアドレス>:25252#pair=<合言葉>` をクリップボードに渡す。
      * 合言葉が入るので通知の本文には出さず、クリップボードには機密の印を付ける
      */
     private fun copyPairUrl() {
         val url = try {
-            pairUrl()
+            Lan.address(getSystemService(ConnectivityManager::class.java))?.let { Lan.pairUrl(it, AGENT_PORT, Server.pairToken(home)) }
         } catch (error: Exception) {
-            Log.w(TAG, "denpa と組む URL を取得できませんでした", error)
+            Log.w(TAG, "エージェントと組む URL を作れませんでした", error)
             null
         }
-        val address = PairUrl.lanAddress(getSystemService(ConnectivityManager::class.java))
-        val result = when {
-            url == null -> R.string.url_failed
-            address == null -> R.string.url_no_address
-            else -> PairUrl.withHost(url, address)?.let { copy(it); R.string.url_copied } ?: R.string.url_failed
+        copy(url, R.string.pair_url_copied, sensitive = true)
+    }
+
+    /** [url] をクリップボードに渡す。null (LAN につながっていない) ならそう出す */
+    private fun copy(url: String?, copied: Int, sensitive: Boolean) {
+        if (url != null) {
+            val clip = ClipData.newPlainText(getString(R.string.app_name), url)
+            // ClipDescription.EXTRA_IS_SENSITIVE (API 33)。古い Android は読まずに捨てる
+            if (sensitive) clip.description.extras = PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+            Handler(Looper.getMainLooper()).post { getSystemService(ClipboardManager::class.java).setPrimaryClip(clip) }
         }
         // Android 13 からはシステムがコピーしたことを出すので、重ねない
-        if (result != R.string.url_copied || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (url == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            val result = if (url == null) R.string.url_no_address else copied
             Handler(Looper.getMainLooper()).post { Toast.makeText(this, result, Toast.LENGTH_LONG).show() }
         }
-    }
-
-    private fun pairUrl(): String? {
-        val process = ProcessBuilder(agentFile.path, "--pair")
-            .apply { environment().putAll(agentEnvironment()) }
-            .start()
-        process.outputStream.close()
-        // 標準エラー (鍵を作ったなどの記録) は logcat に流す。終わるか destroy で切れたら、このスレッドも終わる
-        thread(name = "denpa-agent-pair", isDaemon = true) {
-            runCatching { process.errorStream.bufferedReader().forEachLine { Log.i(AGENT_TAG, it) } }
-        }
-        // 出力は URL の 1 行だけでパイプに収まるので、終わるのを先に待ってから読む (止まったまま worker を塞がない)
-        if (!process.waitFor(10, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            return null
-        }
-        if (process.exitValue() != 0) return null
-        return process.inputStream.bufferedReader().readLine()
-    }
-
-    private fun copy(url: String) {
-        val clip = ClipData.newPlainText(getString(R.string.app_name), url)
-        // ClipDescription.EXTRA_IS_SENSITIVE (API 33)。古い Android は読まずに捨てる
-        clip.description.extras = PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
-        Handler(Looper.getMainLooper()).post { getSystemService(ClipboardManager::class.java).setPrimaryClip(clip) }
     }
 
     internal companion object {
@@ -384,6 +415,7 @@ class DenpaService : Service() {
         const val ACTION_STOP = "io.github.danything.denpa.STOP"
         const val ACTION_STOP_NOW = "io.github.danything.denpa.STOP_NOW"
         const val ACTION_COPY_URL = "io.github.danything.denpa.COPY_URL"
+        const val ACTION_COPY_PAIR_URL = "io.github.danything.denpa.COPY_PAIR_URL"
 
         /** APK の jniLibs に入れるエージェントの名前 (中身は実行ファイル。nativeLibraryDir に展開される) */
         const val AGENT_LIBRARY = "libdenpa_agent.so"

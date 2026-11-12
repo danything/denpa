@@ -41,7 +41,7 @@ class StartActivity : Activity() {
 
     /*
      * Doze の間もネットワークと partial wake lock を使えるよう、省電力の対象から外すよう求める (docs/install-android.md)。
-     * 別の機械の denpa がいつ選局を求めるか分からないため。Play では配らないので、この求め方を使う
+     * いつ録画が始まるか分からず、LAN の端末からいつ開かれるかも分からないため。Play では配らないので、この求め方を使う
      */
     @SuppressLint("BatteryLife")
     private fun askBatteryOptimization() {

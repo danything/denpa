@@ -109,7 +109,7 @@
       "addLabels": ["needs-review"]
     },
     {
-      "description": "bun の Android 版 (.github/bun-android.sh。Android のアプリに入れる) は、スクリプトにアーカイブと LICENSE.md の SHA-256 も固定してあり、バージョンだけ上げると組めない。SHA-256 を人が入れ替えるので、自動ではマージせず、別の PR に分ける。Dockerfile の oven/bun (docker) はこれまでどおり共有の設定で上がり、ずれている間は Android の CI が警告を出す",
+      "description": "bun の Android 版 (.github/bun-android.sh。Android のアプリに入れる) は、スクリプトにアーカイブと LICENSE.md の SHA-256 も固定してあり、バージョンだけ上げると組めない。SHA-256 を人が入れ替えるので、自動ではマージせず、別の PR に分ける。Dockerfile の oven/bun (docker) はこれまでどおり共有の設定で上がるが、ずれている間は Android の CI が落ちる (APK の denpa 本体もコンテナと同じ bun で動かすため)。両方の PR をそろえてからマージする",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["oven-sh/bun"],
       "groupName": "bun-android",

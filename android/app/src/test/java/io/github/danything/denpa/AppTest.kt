@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /*
- * 端末の要らない部分の単体テスト。USB_BROKER に送る行、denpa と組む URL、通知に出すエージェントの様子
+ * 端末の要らない部分の単体テスト。USB_BROKER に送る行、denpa 本体に渡す環境変数、通知に出すエージェントの様子
  */
 class BrokerLinesTest {
     private fun text(bytes: ByteArray) = bytes.toString(Charsets.UTF_8)
@@ -60,25 +60,33 @@ class BrokerLinesTest {
     }
 }
 
-class PairUrlTest {
+class LanTest {
     @Test
-    fun 機械の名前を_LAN_のアドレスに替える() {
-        assertEquals(
-            "https://192.168.1.20:25252#pair=abc-_DEF",
-            PairUrl.withHost("https://localhost:25252#pair=abc-_DEF\n", "192.168.1.20"),
-        )
+    fun 組む_URL_は_LAN_のアドレスと合言葉で作る() {
+        assertEquals("https://192.168.1.20:25252#pair=abc-_DEF", Lan.pairUrl("192.168.1.20", 25252, "abc-_DEF"))
     }
 
     @Test
     fun IPv6_は角括弧で囲む() {
-        assertEquals("https://[fd00::1]:25252#pair=x", PairUrl.withHost("https://localhost:25252#pair=x", "fd00::1"))
-        assertEquals("https://10.0.0.2:25252#pair=x", PairUrl.withHost("https://[::1]:25252#pair=x", "10.0.0.2"))
+        assertEquals("https://[fd00::1]:25252#pair=x", Lan.pairUrl("fd00::1", 25252, "x"))
+    }
+}
+
+class ServerTest {
+    @Test
+    fun denpa_env_は_KEY_値の行だけを読む() {
+        val text = "# コメント\r\nTZ=Asia/Tokyo\r\n\nTRUSTED_NETWORKS=127.0.0.0/8,::1/128\nOIDC_GROUP=a=b c\n=値だけ\n名前だけ\n"
+        assertEquals(
+            mapOf("TZ" to "Asia/Tokyo", "TRUSTED_NETWORKS" to "127.0.0.0/8,::1/128", "OIDC_GROUP" to "a=b c"),
+            Server.parseEnvironment(text),
+        )
     }
 
     @Test
-    fun 形が違えば_null() {
-        assertNull(PairUrl.withHost("http://localhost:25252#pair=x", "10.0.0.2"))
-        assertNull(PairUrl.withHost("", "10.0.0.2"))
+    fun リリースのバージョンだけを_v_付きで渡す() {
+        assertEquals("v2.43.0", Server.denpaVersion("2.43.0"))
+        assertEquals("dev", Server.denpaVersion("0.0.0-dev"))
+        assertEquals("dev", Server.denpaVersion(null))
     }
 }
 

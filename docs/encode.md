@@ -473,8 +473,9 @@ denpa が渡すオプション (`profile`・`prio_speed`・`realtime`) を持つ
 ## Android でエンコードする
 
 **Android のアプリ ([install-android.md](install-android.md)) の ffmpeg は、ソフトウェアのエンコーダ (SVT-AV1・x264・Opus) を Linux と同じに入れ、MediaCodec のエンコーダも組み込んであります。**
-denpa 本体はまだアプリに入っておらず、MediaCodec は denpa の GPU の探し方 (`hwenc.ts`) にまだつないでいません。
-いまは探すと GPU の方式が 0 になり、ソフトウェアでエンコードします。
+アプリの denpa 本体は、MediaCodec を GPU の探し方 (`hwenc.ts`) にまだつないでいません。探すと GPU の方式が 0 になり、ソフトウェアでエンコードします。
+つなぐのは、ハードウェアのエンコーダの見分け方と画質の指定を実機で決めてからにします (下の「見通し」)。
+エンコードの本数 (`ENCODE_CONCURRENCY`) も、端末の速さと熱を実機で測ってから既定を決めます。いまは Linux と同じ既定 (2) です。
 
 - 組むのは CI で、NDK (API 29) で Dockerfile の `ffmpeg` 段と同じバージョンと部品を組みます (`.github/ffmpeg-android.sh`)。
   MediaCodec のエンコーダ `h264_mediacodec`・`hevc_mediacodec`・`av1_mediacodec` と、デコーダ (H.264・H.265・AV1・MPEG-2) はここで足します

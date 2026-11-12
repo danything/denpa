@@ -103,7 +103,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1 コンテナ・Helm・前段の後ろに置く)
 - [docs/install-mac.md](docs/install-mac.md) — Mac に入れる
 - [docs/install-windows.md](docs/install-windows.md) — Windows に入れる
-- [docs/install-android.md](docs/install-android.md) — Android の端末にチューナーを挿してエージェントにする (実機で確かめていない)
+- [docs/install-android.md](docs/install-android.md) — Android の端末にチューナーを挿し、1 台で denpa を動かすか、家の denpa のエージェントにする (実機で確かめていない)
 - [docs/install-talos.md](docs/install-talos.md) — Talos Linux の 1 台に、OS の設定から 1 行で入れる (PT3。実機で確かめていない)
 - [docs/screens.md](docs/screens.md) — 画面 (実機のスクリーンショット)
 - [docs/faq.md](docs/faq.md) — よくある質問
