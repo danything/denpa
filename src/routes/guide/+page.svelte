@@ -103,7 +103,7 @@
    * (同じ種別の別の日なら局の並びはほぼ同じなので、そのまま残す)
    */
   const toGuide = guideNavigation();
-  // ほかの画面から移る途中の姿も、同じタブを並べる (CATV のタブは局があるときだけ。`GuidePending`)
+  // ほかの画面から移る途中の姿も、同じタブを並べる (ケーブルとスカパー！プレミアムのタブは局があるときだけ。`GuidePending`)
   $effect(() => rememberGuideTabs(data.types));
   /** 押した先の種別。今と同じ日・同じ種別 (読み直し・同じリンク) なら null */
   const switching = $derived.by(() => {

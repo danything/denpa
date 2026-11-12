@@ -33,7 +33,7 @@ export const measure = {
    * 読み込み時とページ移動のたびに読み直す。
    *
    * `?measure` は**覚えない**。1 回だけ見たいときの手で、付けた URL を
-   * 誰かに渡したときに相手の端末に居座らせない
+   * 誰かに渡したときに相手の端末に残さない
    */
   start(url: ReadonlyURL): void {
     on = url.searchParams.has("measure") || read(KEY) === "1";

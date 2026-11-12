@@ -46,6 +46,7 @@
   import { Feed } from "#lib/feed.js";
   import { dateTime, fullDate, size, time } from "#lib/format.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { sentinel } from "#lib/paging.svelte.js";
   import { dayName, dayStart } from "#lib/timeline.js";
 
@@ -117,9 +118,10 @@
     }
     return out;
   });
-  const now = Date.now();
+  /** 開いたまま日付をまたいでも、「今日」「昨日」の見出しを進める */
+  const clock = minuteClock();
   function dayLabel(day: number): string {
-    return dayName(day, now) ?? fullDate(day);
+    return dayName(day, clock.now) ?? fullDate(day);
   }
 
   /** 条件を替える。URL を書き換えて load を回し直す (戻るボタンの履歴は積まない) */
@@ -433,7 +435,6 @@
   let filterOpen = $state(false);
 </script>
 
-<svelte:head><title>切り抜き - denpa</title></svelte:head>
 <svelte:window onclick={deleting.stand} onkeydown={onkey} />
 
 {#snippet kinds(done?: () => void)}
@@ -555,7 +556,7 @@
         <h2 class="day-head" data-testid="clip-day">
           <span class="day-head-chip">
             <span class="day-head-name">{dayLabel(group.day)}</span>
-            {#if dayName(group.day, now) !== null}<span
+            {#if dayName(group.day, clock.now) !== null}<span
                 class="day-head-date num">{fullDate(group.day)}</span
               >{/if}
           </span>
@@ -653,7 +654,7 @@
     >
       <HomeCalendar
         {marks}
-        today={dayStart(now)}
+        today={dayStart(clock.now)}
         pinned={picked}
         onpick={pickDay}
         describe={describeDay}

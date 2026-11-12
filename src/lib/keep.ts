@@ -29,7 +29,7 @@ export function forget(key: string): void {
   }
 }
 
-/** 頭が `prefix` のものを全部 (鍵は頭を外したもの)。読めなければ空 */
+/** キーが `prefix` で始まるものを全部 (キーは `prefix` を外したもの)。読めなければ空 */
 export function readAll(prefix: string): Record<string, string> {
   const out: Record<string, string> = {};
   try {

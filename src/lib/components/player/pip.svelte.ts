@@ -224,7 +224,7 @@ export function pictureInPicture(options: Options): Pip {
 
   /**
    * **canvas に移った・`<video>` に戻ったら小窓を閉じる。** 出しているほうにはもう映像が
-   * 流れてこない (canvas では `<video>` は空、戻れば canvas は畳まれる)。黙って残すと、
+   * 流れてこない (canvas では `<video>` は空、戻れば canvas は畳まれる)。閉じずに残すと、
    * 止まった映像の小窓が残り続ける
    */
   $effect(() => {

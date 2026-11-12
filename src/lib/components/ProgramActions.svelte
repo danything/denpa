@@ -7,7 +7,7 @@
 
   /**
    * **番組の詳細の下に並べるボタン** (番組表・検索・ホームの予約。`ProgramDetail` の `actions` に入れる)。
-   * どちらも同じ番組の詳細なので、何を出すか・どれを主にするかをここ 1 か所で決める。
+   * どれも同じ番組の詳細なので、何を出すか・どれを主にするかをここ 1 か所で決める。
    *
    * - **並びは控えから主へ。** ルールを作る → 予約取消 → 視聴 → 再生 → 予約。主 (クラスの無いボタン) は
    *   いちばん右 (狭い画面では下の段の右端)。閉じるは左下 (`ProgramDetail`)
@@ -35,7 +35,7 @@
       reservation_state: string | null;
       copy_never: boolean;
     };
-    /** 予約取消 (`?/cancel`) に一緒に送る隠し欄。番組表は番組の ID、検索は予約の ID */
+    /** 予約取消 (`?/cancel`) に一緒に送る隠し欄。番組表は番組の ID、検索とホームは予約の ID */
     cancel: Record<string, number>;
     /** 録れていてそのまま観られる録画 (`playableRecordingId`)。無ければ null */
     recordingId?: number | null;

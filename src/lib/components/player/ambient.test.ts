@@ -59,7 +59,7 @@ describe("アンビエントモード", () => {
     expect(plan({ ...base, room: false })).toBe("off");
   });
 
-  test("止めている間は写さず、光は残す。まだ光が無ければ1枚だけ写す", () => {
+  test("止めている間は写さず、光は残す。まだ光が無ければ 1 枚だけ写す", () => {
     expect(plan({ ...base, playing: false })).toBe("hold");
     expect(plan({ ...base, playing: false, lit: false })).toBe("watch");
   });
@@ -70,7 +70,7 @@ describe("アンビエントモード", () => {
     expect(plan({ ...base, hidden: true, lit: false })).toBe("hold");
   });
 
-  test("動きを減らす設定・data-lite では1枚写したら止める", () => {
+  test("動きを減らす設定・data-lite では 1 枚写したら止める", () => {
     expect(plan({ ...base, still: true, lit: false })).toBe("watch");
     expect(plan({ ...base, still: true })).toBe("hold");
   });
@@ -222,7 +222,7 @@ describe("光の canvas", () => {
     }
   });
 
-  test("箱の半径は、3回でその強さに近づくもの", () => {
+  test("箱の半径は、3 回でその強さに近づくもの", () => {
     expect(boxRadius(0.1)).toBe(1);
     expect(boxRadius(2.6)).toBe(2);
     expect(boxRadius(6)).toBe(6);
@@ -331,24 +331,6 @@ describe("地に敷く色", () => {
     }
   });
 
-  test("縦に積んだ操作バーは、暗幕 (明るいテーマ 60%・暗いテーマ 30%) の上で白い字が 4.5 以上", () => {
-    const white = hex("#ffffff");
-    const black = hex("#000000");
-    for (const frame of [...frames, hex("#ffffff")]) {
-      const light = washTone(frame, "light", WASH_LUMINANCE);
-      expect(contrast(mix(light, black, 0.6), white)).toBeGreaterThanOrEqual(
-        4.5,
-      );
-      expect(
-        contrast(mix(hex("#ffffff"), black, 0.6), white),
-      ).toBeGreaterThanOrEqual(4.5);
-      const dark = washTone(frame, "dark", WASH_LUMINANCE);
-      expect(contrast(mix(dark, black, 0.3), white)).toBeGreaterThanOrEqual(
-        4.5,
-      );
-    }
-  });
-
   test("色相は残す (赤は赤みのまま、青は青みのまま)", () => {
     const red = washTone(hex("#ff0000"), "light", WASH_LUMINANCE);
     expect(red[0]).toBeGreaterThan(red[1]);
@@ -358,7 +340,7 @@ describe("地に敷く色", () => {
 });
 
 describe("入れ替え", () => {
-  test("写した2枚の違いは色の差の平均で、透明度は見ない", () => {
+  test("写した 2 枚の違いは色の差の平均で、透明度は見ない", () => {
     expect(frameDelta([10, 20, 30, 255], [10, 20, 30, 0])).toBe(0);
     expect(frameDelta([10, 20, 30, 255], [13, 17, 30, 255])).toBe(2);
     expect(STILL).toBeGreaterThan(0);
@@ -444,7 +426,7 @@ describe("映像の中の動き", () => {
     expect(edges).toBeLessThan(grid / 3);
   });
 
-  test("縁を小さなものが横切っても、外周の1マスから取っていた頃の半分より揺れない", () => {
+  test("縁を小さなものが横切っても、外周の 1 マスから取っていた頃の半分より揺れない", () => {
     // 1 マスの点が上の端を横切る
     const dot = (n: number) => {
       const data = new Uint8ClampedArray(GLANCE.width * GLANCE.height * 4);

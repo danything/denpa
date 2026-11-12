@@ -10,7 +10,7 @@
    * 失敗したときはここに理由を出す
    */
   /** 戻る先 (設定の「連携」の「実況」) */
-  const back = `${resolve("/settings/integrations")}#jikkyo`;
+  const back = `${resolve("settings/integrations")}#jikkyo`;
   let message = $state("連携しています…");
   let failed = $state(false);
 
@@ -44,7 +44,7 @@
       );
     try {
       const res = await fetch(
-        resolve("/settings/integrations/niconico/finish"),
+        resolve("settings/integrations/niconico/finish"),
         {
           method: "POST",
           headers: { "content-type": "application/json" },

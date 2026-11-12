@@ -4,7 +4,7 @@
   import { CHANNEL_TYPES, type ChannelType, GUIDE_TYPES } from "#lib/types.js";
 
   /**
-   * 最後に開いた番組表の種別のタブ (`guide/+page.server.ts` の `types`。CATV は局があるときだけ)。
+   * 最後に開いた番組表の種別のタブ (`guide/+page.server.ts` の `types`。CATV と SKY は局があるときだけ)。
    * 移る途中の姿もこのタブを並べ、着いたときにタブの数が変わらないようにする。
    * まだ番組表を開いていなければ、いつも並ぶ地上波・BS・CS
    */

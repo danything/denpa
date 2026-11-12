@@ -51,7 +51,7 @@ export function shotName(title: string, at: Date, extension = "png"): string {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, NAME_MOST)
-      // 末尾の点と空白は Windows が黙って落とす
+      // 末尾の点と空白は Windows が保存するときに削る
       .replace(/[. ]+$/, "") || "denpa";
   const day = `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}`;
   const time = `${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`;
@@ -476,7 +476,7 @@ export function clipParams(
  * **端末に保存する** (サーバに置けなかったとき)。PNG にして `keepOnDevice` に渡す。
  * 共有シートを閉じられたら何も残らないので、そう言う。
  *
- * 返り値は通知 (トースト)。サーバに置けなかったことは必ず言う (黙ると、一覧に無い理由が分からない)
+ * 返り値は通知 (トースト)。サーバに置けなかったことは必ず言う (言わないと、一覧に無い理由が分からない)
  */
 export async function saveOnDevice(
   canvas: HTMLCanvasElement,

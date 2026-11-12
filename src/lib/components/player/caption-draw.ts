@@ -273,7 +273,7 @@ export function inkSpan(page: CaptionPage): [number, number] {
 }
 
 /**
- * 1 枚の canvas に字幕を出し続ける係。**出すものが変わったら `show` を呼ぶだけ。**
+ * 1 枚の canvas に字幕を出し続ける処理。**出すものが変わったら `show` を呼ぶだけ。**
  *
  * - canvas の大きさを画面の画素に合わせ直す (全画面の出入りで描き直す)
  * - 字がまだ届いていなければ、届いてから描き直す

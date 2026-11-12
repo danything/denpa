@@ -17,7 +17,7 @@
   let { data }: { data: PageData } = $props();
   const save = new SaveState();
   /** 連携を始めるリンク (サーバが hub へ送る。`niconico/link`) */
-  const linkHref = resolve("/settings/integrations/niconico/link");
+  const linkHref = resolve("settings/integrations/niconico/link");
 
   /** 連携を始められなかったとき (リンクの移動なので、理由は URL に載って戻ってくる) */
   const linkError = $derived(page.url.searchParams.get("niconico_error"));
