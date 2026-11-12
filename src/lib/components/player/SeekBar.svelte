@@ -307,7 +307,7 @@
     margin: -0.375rem 0 0 -0.375rem;
     border-radius: 50%;
     background: var(--seek-played);
-    box-shadow: 0 0 2px rgb(0 0 0 / 0.5);
+    box-shadow: 0 0 2px color-mix(in srgb, var(--dp-video) 50%, transparent);
     opacity: 0;
     transform: scale(0.5);
     transition:

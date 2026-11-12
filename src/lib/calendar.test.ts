@@ -44,7 +44,7 @@ describe("月の升目", () => {
     }
   });
 
-  test("うるう年の2月", () => {
+  test("うるう年の 2 月", () => {
     const feb = monthGrid(2028 * 12 + 1)
       .flat()
       .filter((cell) => cell !== null);
@@ -150,7 +150,7 @@ describe("月の行き来", () => {
     expect(stepMonth(months, oct + 1, -1)).toBe(oct);
   });
 
-  test("矢印の鍵で日を動かす", () => {
+  test("矢印キーで日を動かす", () => {
     expect(moveDay(today, "ArrowRight")).toBe(day(10, 20));
     expect(moveDay(today, "ArrowUp")).toBe(day(10, 12));
     expect(moveDay(day(10, 31), "ArrowDown")).toBe(day(11, 7));

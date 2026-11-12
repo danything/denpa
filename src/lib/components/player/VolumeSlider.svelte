@@ -242,7 +242,7 @@
   .name,
   .value {
     position: relative;
-    filter: drop-shadow(0 0 2px rgb(0 0 0 / 0.5));
+    filter: var(--dp-on-video-ink);
   }
   .icon {
     display: flex;

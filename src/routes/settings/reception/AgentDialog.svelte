@@ -91,8 +91,12 @@
       return;
     }
     scanning = true;
-    await Promise.resolve();
-    if (video === null) return;
+    // 映像の枠は `scanning` で描くので、描き終えてから流し込む。枠が無ければカメラも止める
+    await tick();
+    if (video === null) {
+      stopScan();
+      return;
+    }
     video.srcObject = stream;
     await video.play().catch(() => {});
     const Detector = (
@@ -180,7 +184,10 @@
         async ({ result, update }) => {
           if (result.type === "failure") {
             message = String(
-              result.data?.["message"] ?? "登録できませんでした",
+              result.data?.["message"] ??
+                (target?.kind === "move"
+                  ? "URL を変えられませんでした"
+                  : "登録できませんでした"),
             );
             return;
           }
@@ -281,14 +288,6 @@
 </dialog>
 
 <style>
-  .intro {
-    margin: var(--dp-space-1) 0 var(--dp-space-4);
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-space-1);
-  }
   .scan {
     display: flex;
     flex-direction: column;

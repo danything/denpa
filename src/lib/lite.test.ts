@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { isSoftwareRenderer } from "./lite";
 
-describe("ソフトウェアの描き手の見分け", () => {
-  test("ソフトウェアの描き手の名前なら、ソフトウェアとみなす", () => {
+describe("ソフトウェアのレンダラを見分ける", () => {
+  test("ソフトウェアのレンダラの名前なら、ソフトウェアとみなす", () => {
     for (const name of [
       "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
       "Google SwiftShader",

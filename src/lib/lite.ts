@@ -6,12 +6,12 @@
  * `app.css` の最後で、動きを減らす設定と同じ止まった姿にする。アンビエントの光とテーブルトップの反射も 1 枚写して止め
  * (`glow-loop.svelte.ts`)、明暗の切り替えは移さずにすぐ替える (`theme.svelte.ts`)。
  *
- * 見分けは開いたときに 1 回だけ。小さな WebGL の箱を作って描き手の名前を読み、すぐ捨てる。
+ * 見分けは開いたときに 1 回だけ。小さな WebGL の箱を作ってレンダラの名前を読み、すぐ捨てる。
  * 名前を読めるのは Chrome・Edge だけで、Firefox は丸めた名前、Safari は「Apple GPU」しか出さない。
  * 見分けられないときは付けない (回り続ける側に倒す)
  */
 
-/** ソフトウェアの描き手の名前。新しい名前が分かったら足す */
+/** ソフトウェアのレンダラの名前。新しい名前が分かったら足す */
 const SOFTWARE = [
   "swiftshader",
   "llvmpipe",
@@ -19,14 +19,14 @@ const SOFTWARE = [
   "microsoft basic render driver",
 ];
 
-/** WebGL の描き手の名前がソフトウェアのものか。null は WebGL を作れなかった (ソフトウェアとみなす) */
+/** WebGL のレンダラの名前がソフトウェアのものか。null は WebGL を作れなかった (ソフトウェアとみなす) */
 export function isSoftwareRenderer(name: string | null): boolean {
   if (name === null) return true;
   const lower = name.toLowerCase();
   return SOFTWARE.some((soft) => lower.includes(soft));
 }
 
-/** 描き手の名前を読む。WebGL を作れなければ null */
+/** レンダラの名前を読む。WebGL を作れなければ null */
 function rendererName(): string | null {
   const gl = document.createElement("canvas").getContext("webgl");
   if (gl === null) return null;

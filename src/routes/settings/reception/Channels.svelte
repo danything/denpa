@@ -834,7 +834,6 @@
 {/snippet}
 
 <style>
-  /* 種別を選ぶ欄とボタンを 1 組に (スキャンと局の削除)。高さは隣の小さなボタンにそろえる */
   /* チップは字の幅のまま (操作の 1 行に並べても伸ばさない) */
   .scan-agents {
     flex: none;
@@ -850,6 +849,7 @@
     padding: 0;
     list-style: none;
   }
+  /* 種別を選ぶ欄とボタンを 1 組に (スキャンと局の削除)。高さは隣の小さなボタンにそろえる */
   .scan-control {
     display: inline-flex;
     align-items: center;

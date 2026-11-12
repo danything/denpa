@@ -136,13 +136,13 @@
                 </div>
               {/if}
               {#if state?.versionDiffers}
-                <div class="small" data-testid="agent-version">
-                  denpa とバージョンが違います ({state.version})
+                <div class="small text-warn" data-testid="agent-version">
+                  ⚠ denpa とバージョンが違います ({state.version})。同じバージョンに揃えてください
                 </div>
               {/if}
               {#if state?.rawVisible === false}
-                <div class="small" data-testid="agent-raw">
-                  元の TS の置き場が見えません (録画のあとで復号できません)
+                <div class="small text-warn" data-testid="agent-raw">
+                  ⚠ 元の TS の置き場が見えません (録画のあとで復号できません)
                 </div>
               {/if}
               {#if deleting.armed === agent.id && (state?.recordings.length ?? 0) > 0}
@@ -274,10 +274,6 @@
     min-height: var(--dp-item-h);
     padding: var(--dp-space-2) var(--dp-space-3);
   }
-  .grow {
-    flex: 1;
-    min-width: 0;
-  }
   .name {
     overflow-wrap: anywhere;
   }
@@ -302,11 +298,6 @@
   }
   .rename button {
     margin: 0;
-  }
-  /* 押せない一言。メニューの項目と同じ余白 */
-  .menu-note {
-    margin: 0;
-    padding: var(--dp-space-2) var(--dp-space-3);
   }
   .actions {
     margin-top: var(--dp-space-3);

@@ -189,7 +189,7 @@ export type TimelineLine<T extends TimelineItem> =
     }
   | { kind: "row"; key: string; item: T; nested: boolean };
 
-/** その時刻の日の 0 時 (端末の時刻帯) */
+/** その時刻の日の 0 時 (端末のタイムゾーン) */
 export function dayStart(at: number): number {
   const d = new Date(at);
   d.setHours(0, 0, 0, 0);
@@ -198,7 +198,7 @@ export function dayStart(at: number): number {
 
 /**
  * 日付の呼び名。今日・明日・昨日だけ言葉にし、ほかは null (画面が日付を書く)。
- * 日の差は 0 時どうしで数える (夏時間の無い時刻帯でも、時刻の差で割ると端で外れる)
+ * 日の差は 0 時どうしで数える (夏時間の無いタイムゾーンでも、時刻の差で割ると端で外れる)
  */
 export function dayName(
   at: number,

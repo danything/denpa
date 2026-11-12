@@ -5,9 +5,9 @@ import { expect, goto, test } from "./helpers";
 /**
  * **ソフトウェアで描いている端末では、動き続けるものを止める** (docs/design.md の「動き」。`#lib/lite.ts`)。
  *
- * 開いたときに WebGL の描き手の名前を読み、ソフトウェアなら `<html data-lite>` を付ける。
+ * 開いたときに WebGL のレンダラの名前を読み、ソフトウェアなら `<html data-lite>` を付ける。
  * 付いている間は、録画中の点・骨組みの光などを動きを減らす設定と同じ止まった姿にする (`app.css` の最後)。
- * 描き手の名前は端末で変わるので、WebGL の箱を差し替えて名前を決める。動きを見るので、動きを許して流す
+ * レンダラの名前は端末で変わるので、WebGL の箱を差し替えて名前を決める。動きを見るので、動きを許して流す
  */
 test.use({ reducedMotion: "no-preference" });
 
@@ -63,7 +63,7 @@ function lite(page: Page) {
   return page.evaluate(() => document.documentElement.dataset["lite"] ?? null);
 }
 
-test("ソフトウェアの描き手なら data-lite を付け、録画中の点と骨組みの光を止める", async ({
+test("ソフトウェアのレンダラなら data-lite を付け、録画中の点と骨組みの光を止める", async ({
   page,
 }) => {
   await fakeRenderer(
@@ -75,7 +75,7 @@ test("ソフトウェアの描き手なら data-lite を付け、録画中の点
   expect(await animations(page)).toEqual({ dot: "none", skeleton: "none" });
 });
 
-test("GPU の描き手なら data-lite を付けず、回し続ける", async ({ page }) => {
+test("GPU のレンダラなら data-lite を付けず、回し続ける", async ({ page }) => {
   await fakeRenderer(
     page,
     "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0, D3D11)",

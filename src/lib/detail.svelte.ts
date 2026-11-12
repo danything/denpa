@@ -117,10 +117,13 @@ export function programDetail() {
       current = filled(seed);
       if (programId === null) return;
 
-      const res = await fetch(resolve(`api/programs/${programId}`));
-      if (!res.ok || token !== opened) return;
-      const body = (await res.json()) as ProgramDetail;
-      if (token === opened) current = body;
+      // 届かなかったとき (回線が切れた・応答が読めない) も行の分のまま。呼ぶ側は待たないので、投げると拾う所が無い
+      const body = await fetch(resolve(`api/programs/${programId}`))
+        .then(async (res) =>
+          res.ok ? ((await res.json()) as ProgramDetail) : null,
+        )
+        .catch(() => null);
+      if (body !== null && token === opened) current = body;
     },
   };
 }

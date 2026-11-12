@@ -7,6 +7,8 @@
   import { resolve } from "$app/paths";
 </script>
 
+<svelte:head><title>ログアウトしました - denpa</title></svelte:head>
+
 <div class="solo glow">
   <h1>ログアウトしました</h1>
   <p>

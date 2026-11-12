@@ -24,6 +24,7 @@
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, { warningNotice } from "#lib/components/Toasts.svelte";
   import {
+    beforeJapanese,
     channelNumber,
     date,
     playableRecordingId,
@@ -125,11 +126,9 @@
   );
 
   const services = $derived(data.services);
-  /** 文に入れる種別。英字 (BS・CS) のあとには半角の空白を入れる (docs/writing.md) */
+  /** 文に入れる種別。英字 (BS・CS) のあとには半角の空白を入れる (docs/writing.md。`beforeJapanese`) */
   const typeWord = $derived(
-    /^[A-Z]/.test(SERVICE_TYPE_LABEL[data.type] ?? "")
-      ? `${SERVICE_TYPE_LABEL[data.type]} `
-      : SERVICE_TYPE_LABEL[data.type],
+    beforeJapanese(SERVICE_TYPE_LABEL[data.type] ?? data.type),
   );
   const programs = $derived<GridProgram[]>(sheet?.programs ?? []);
 
@@ -447,7 +446,7 @@
     let frames = 0;
     const settle = () => {
       place();
-      // 画像 (局ロゴ) やバッジが入って高さが変わることがあるので数回追う
+      // 画像 (局ロゴ) が後から入って高さが変わることがあるので数回追う
       if (++frames < 5) requestAnimationFrame(settle);
     };
     requestAnimationFrame(settle);

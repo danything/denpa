@@ -574,9 +574,6 @@
   padding: var(--dp-space-2) var(--dp-space-3);
   font-size: var(--dp-text-base);
 }
-.board .t-row .row-actions .row-menu .menu-danger {
-  color: var(--dp-rec-text);
-}
 
 .board .t-more {
   position: relative;

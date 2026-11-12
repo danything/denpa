@@ -84,6 +84,7 @@
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
   import { separateLiveAudio } from "#lib/native-audio-choice.js";
+  import { recordNotice } from "#lib/record-notice.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR, stepSpeed } from "#lib/ts/pacing.js";
   import { GUIDE_TYPES } from "#lib/types.js";
@@ -437,18 +438,13 @@
 
   /** いまの 1 コマを字幕・コメントごと切り抜いてサーバに保存する (3 画面共通。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
+
   const notices = $derived<Notice[]>([
     ...shooter.notices,
     ...pip.notices,
-    // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか断られたかを言う
+    // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか、予約はしたが録らないか、断られたかを言う
     ...(form?.recorded
-      ? [
-          {
-            key: `record-${form.recorded}`,
-            kind: "info" as const,
-            text: `「${form.recorded}」の録画を始めます`,
-          },
-        ]
+      ? [recordNotice(form.recorded, form.state, form.reason)]
       : []),
     ...errorNotice(form, "record-error"),
   ]);
@@ -1202,8 +1198,12 @@
     font-weight: var(--dp-weight-bold);
     font-size: var(--dp-text-xs);
   }
-  .back-live:hover:not(:disabled) {
+  .back-live:is(:hover, :focus-visible):not(:disabled) {
     background: var(--dp-on-video-hover);
+  }
+  /* 映像の上の焦点の線はテーマで変えない (`app.css` の `--dp-video-focus`。操作バーのボタンと同じ) */
+  :is(.relearn, .back-live):focus-visible {
+    outline-color: var(--dp-video-focus);
   }
   /* 押すものなので操作バーのボタンと同じ段 (実況のコメントより上。`ControlBar`) */
   .unmute {

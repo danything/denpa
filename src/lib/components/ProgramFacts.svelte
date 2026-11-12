@@ -98,7 +98,7 @@
 <p class="meta small muted num">
   <span class="broadcast">{program.service_name}</span>・{dateTime(
     program.start_at,
-  )} 〜 {time(program.end_at)}
+  )}〜{time(program.end_at)}
   ({duration(program.start_at, program.end_at)})
   {#if status}
     <span class="meta-status">{@render status()}</span>

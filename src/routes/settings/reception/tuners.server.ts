@@ -70,8 +70,8 @@ function describe(use: string): string {
 
 /** 録画のほかの用途の印と、画面の言葉。括弧の中に印のチャンネルを添える (`logo`・`live` の印は `種別/チャンネル` なので、チャンネルだけ) */
 const USE_WORDS: [RegExp, string][] = [
-  [/^logo \S+\/(\S+)$/, "局ロゴ収集"],
-  [/^epg (\S+)$/, "番組表"],
+  [/^logo \S+\/(\S+)$/, "局ロゴの取得"],
+  [/^epg (\S+)$/, "番組表の取得"],
   [/^scan (\S+)$/, "チャンネルスキャン"],
   [/^scan quality (\S+)$/, "受信品質の測定"],
   [/^live \S+\/(\S+)$/, "ライブ視聴"],
@@ -306,7 +306,7 @@ export const actions = {
 
   /**
    * 使わないカードリーダーを入れ替える。行ごとに `reader.<番号>` にリーダーの名前、`reader-use.<番号>` にスイッチ
-   * (外れていれば送られてこない)。使う最後の 1 台をオフにする聞き返しは画面でする (`Tuners.svelte`)
+   * (外れていれば送られてこない)。使う最後の 1 台をオフにする聞き返しは画面でする (`AgentTuners.svelte`)
    */
   cards: async ({ request }) => {
     const form = await request.formData();
@@ -349,7 +349,7 @@ export const actions = {
     if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
     const serviceId = parseId(form.get("serviceId"));
     if (serviceId === null || serviceId < 1) {
-      return fail(400, { message: "serviceId が不正です" });
+      return fail(400, { message: "局 ID が不正です" });
     }
     try {
       const result = await testDecodeStream(serviceId, agent.id);

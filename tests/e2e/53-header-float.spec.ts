@@ -145,7 +145,7 @@ test("Tab で「本文へ移動」が出て、Enter で本文へ焦点が移る"
 test("明暗を選び直したときだけ画面全体が移り、開いたときは移らない", async ({
   page,
 }) => {
-  // E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`)。WebGL の描き手の名前を差し替えて、GPU で描ける端末として見る
+  // E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`)。WebGL のレンダラの名前を差し替えて、GPU で描ける端末として見る
   await page.addInitScript(() => {
     const read = WebGLRenderingContext.prototype.getParameter;
     WebGLRenderingContext.prototype.getParameter = function (name: number) {

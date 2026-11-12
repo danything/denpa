@@ -8,7 +8,7 @@ import {
   parseFetchId,
 } from "./offline-db";
 
-describe("Background Fetch の登録ID", () => {
+describe("Background Fetch の登録 ID", () => {
   test("作って読み戻せる (試みの印つき)", () => {
     expect(parseFetchId(fetchId(42, "encoded", "a1b2"))).toEqual({
       id: 42,
@@ -31,7 +31,7 @@ describe("Background Fetch の登録ID", () => {
     });
   });
 
-  test("よそのIDは読まない", () => {
+  test("よその ID は読まない", () => {
     expect(parseFetchId("rec-abc-encoded")).toBeNull();
     expect(parseFetchId("other-1-encoded")).toBeNull();
     expect(parseFetchId("rec-1-ts")).toBeNull();

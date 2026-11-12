@@ -21,7 +21,7 @@ import {
 } from "./timeline";
 
 const H = 3_600_000;
-/** 2026-10-18 12:00 (端末の時刻帯) */
+/** 2026-10-18 12:00 (端末のタイムゾーン) */
 const NOW = new Date(2026, 9, 18, 12, 0).getTime();
 
 function item(key: string, zone: Zone, at: number, group = key): TimelineItem {
@@ -91,8 +91,8 @@ const today = dayStart(NOW);
 const yesterday = dayStart(NOW - 26 * H);
 const tomorrow = dayStart(NOW + 24 * H);
 
-describe("今日の見出しは「いま」の行をまたいで1つ", () => {
-  test("今日の録画・録画中と「いま」の行・今日の予約が1つの見出しの下に並び、ほかの日は上と下", () => {
+describe("今日の見出しは「いま」の行をまたいで 1 つ", () => {
+  test("今日の録画・録画中と「いま」の行・今日の予約が 1 つの見出しの下に並び、ほかの日は上と下", () => {
     const lines = byDayLines([
       item("rec-old", "past", NOW - 26 * H),
       item("rec-1", "past", NOW - 3 * H),
@@ -149,7 +149,7 @@ describe("今日の見出しは「いま」の行をまたいで1つ", () => {
     ]);
   });
 
-  test("予約だけ・未視聴だけに絞っても、今日の見出しは1つ", () => {
+  test("予約だけ・未視聴だけに絞っても、今日の見出しは 1 つ", () => {
     const reservations = byDayLines([
       item("res-1", "future", NOW + H),
       item("res-2", "future", NOW + 2 * H),
@@ -164,7 +164,7 @@ describe("今日の見出しは「いま」の行をまたいで1つ", () => {
     expect(keys(all(unfinished))).toEqual([`day-${today}`, "rec-1", "now"]);
   });
 
-  test("見出しは1日に1つ (鍵が重ならない)", () => {
+  test("見出しは 1 日に 1 つ (キーが重ならない)", () => {
     const lines = all(
       byDayLines([
         item("rec-1", "past", NOW - 3 * H),
@@ -193,7 +193,7 @@ describe("今日の見出しは「いま」の行をまたいで1つ", () => {
     ]);
   });
 
-  test("日付が先の録れたもの (時計のずれ) は「いま」の行の上に見出しを立て、鍵は予約の側と重ならない", () => {
+  test("日付が先の録れたもの (時計のずれ) は「いま」の行の上に見出しを立て、キーは予約の側と重ならない", () => {
     const lines = byDayLines([
       item("rec-1", "past", NOW - 3 * H),
       item("rec-ahead", "past", NOW + 24 * H),
@@ -588,7 +588,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     ]);
   });
 
-  test("日付の見出しは新しい日から並び、今日の見出しは今日の予約・「いま」の行・録画中・今日の録画をまたいで1つ", () => {
+  test("日付の見出しは新しい日から並び、今日の見出しは今日の予約・「いま」の行・録画中・今日の録画をまたいで 1 つ", () => {
     const lines = reversedLines([
       item("rec-old", "past", NOW - 26 * H),
       item("rec-1", "past", NOW - 3 * H),
@@ -628,7 +628,7 @@ describe("新しい順で表示 (上下を返す)", () => {
     expect(keys(top(lines))).toEqual([`day-${today}`, "now"]);
   });
 
-  test("日付が先の録れたもの (時計のずれ) があっても、見出しの鍵は重ならない", () => {
+  test("日付が先の録れたもの (時計のずれ) があっても、見出しのキーは重ならない", () => {
     const lines = top(
       reversedLines([
         item("rec-1", "past", NOW - 3 * H),

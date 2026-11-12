@@ -114,7 +114,7 @@
     --pico-border-color: transparent;
     --pico-color: var(--dp-on-video);
     --pico-box-shadow: none;
-    filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.6));
+    filter: var(--dp-on-video-ink);
   }
   :global(.ov-btn:is(:hover, :focus-visible)) {
     --pico-background-color: var(--dp-on-video-hover);

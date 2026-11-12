@@ -631,7 +631,8 @@ const collecting = new Set<string>();
  * - `busy` … 開けなかった。空いているチューナーが無い
  * - `stopped` … こちらから止めた (「いますぐ」の押し直しなど)
  */
-type Outcome = "done" | "miss" | "ranOut" | "yielded" | "busy" | "stopped";
+export type Outcome =
+  "done" | "miss" | "ranOut" | "yielded" | "busy" | "stopped";
 
 /**
  * 衛星のカルーセルをいつ見たか・いつ待って来なかったか (`logo-period.ts` の `CarouselWatch`)。

@@ -19,10 +19,10 @@
  *
  * **限られた画面にしか出ない部品は、それを描くコンポーネントが <script> で読む**
  * (`import "@anyblades/blades/components/modal";`)。その画面の CSS にだけ入る。
- * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`・`ContractDialog`
+ * - content/table … `HomeCalendar`・設定の `Channels`・`AgentTuners`・`ContractDialog`
  * - forms/input-range … `player/SeekBar`
  * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Channels`
- * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`・`ContractDialog`
+ * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`・`AgentDialog`・`ContractDialog`
  * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`・端末に保存した録画 (`offline`)
  *
  * 部品を足すとき: 当てる要素がどの画面にも出るならここに (並びを守って)、そうでなければ描くコンポーネントの
@@ -99,8 +99,8 @@
   --dp-space-5: 1.5rem;
   --dp-space-6: 2rem;
   /*
-     * **重なりの段 (`z-index`)。** ページの段と、映像の舞台の中の段に分けて、数字はここにだけ書く。
-     * 1 つの部品の中だけで前後を決めるもの (面の上の線・裏に敷く 1 枚の 1・2・-1、番組表の箱の中の段) は部品に書く
+     * **重なりの段 (`z-index`)。** ページの段と、映像の舞台に置く段に分けて、数字はここにだけ書く。
+     * 1 つの部品の中だけで前後を決めるもの (面の上の線・裏に敷く 1 枚の 1・2・-1、番組表の箱に置く段) は部品に書く
      */
   --dp-z-heading: 3; /* 貼り付く日付の見出し */
   --dp-z-pagebar: 5; /* ページの中で上に貼り付く操作の 1 行 (切り抜きの選択)。見出しより上 */
@@ -206,6 +206,8 @@
   --dp-video-menu: color-mix(in srgb, var(--dp-video-panel) 75%, transparent);
   /* 映像の上のメニュー・音量・実況に書く欄の影。近い影と遠い影の 2 段 */
   --dp-video-shadow: 0 2px 6px rgb(0 0 0 / 0.35), 0 18px 40px rgb(0 0 0 / 0.45);
+  /* 映像の上のアイコンと字に付ける小さな影 (`filter`)。明るい映像の上でも縁が読めるように。どの部品も同じ値 */
+  --dp-on-video-ink: drop-shadow(0 1px 2px rgb(0 0 0 / 0.6));
   /*
      * つまみ (再生位置のバー・音量) の入れたぶん。**ほかの所と同じ主の色 (azure-550 `#0172ad`) を 80% に透かす**
      * (色はそろえ、太いカプセルで広く塗っても映像が透けて重くならないように)。
@@ -758,14 +760,8 @@ progress[value]::-webkit-progress-value {
   white-space: pre-wrap;
 }
 
-/* ---- 面 ---- */
-/* まとまりの箱。地の上に置き、枠も地も付けず余白だけで囲む */
-.panel {
-  padding: var(--dp-space-4);
-}
-
 /*
- * 1 つのことだけを言う画面 (断られた・無かった・ログアウトした・テレビのペアリング)。
+ * 1 つのことだけを言う画面 (断られた・無かった・ログアウトした・テレビのペアリング・まだ観られない録画)。
  * **枠で囲まず、見出し・文・ボタンを左に揃えて置く。** 真ん中の小さなカードに入れていた頃は、
  * 文が数文字ずつで折り返して読みにくかった。読みやすい幅 (32rem) で止め、画面の上のほうに置く
  */
@@ -775,7 +771,7 @@ progress[value]::-webkit-progress-value {
   align-items: flex-start;
   gap: var(--dp-space-3);
   max-width: 32rem;
-  margin: clamp(2rem, 16vh, 9rem) auto 2rem;
+  margin: clamp(var(--dp-space-6), 16vh, 9rem) auto var(--dp-space-6);
 }
 .solo h1 {
   line-height: 1.35;
@@ -1064,6 +1060,9 @@ progress[value]::-webkit-progress-value {
 .text-error {
   color: var(--dp-rec-text);
 }
+.text-warn {
+  color: var(--dp-warn-text);
+}
 /* 欄の上の小さい見出し。<label class="field"><span>見出し</span><input></label> */
 .field {
   display: flex;
@@ -1199,9 +1198,15 @@ input[type="checkbox"][role="switch"] {
     button:not([class]),
     :is(button, a.button):is(.small, .xs, .danger, .save),
     a.button
-  ):where(:not(.secondary, .outline, .ghost, [aria-pressed="true"])):not(
-    div
-  ):where(:active) {
+  ):where(
+    :not(
+      .secondary,
+      .outline,
+      .ghost,
+      [aria-pressed="true"],
+      [aria-current]:not([aria-current="false"])
+    )
+  ):not(div):where(:active) {
   scale: 0.97;
   /* 押したらすぐ縮み、離すとばねで戻る (戻りは下の `:where(button, a.button)` の transition) */
   transition: scale var(--dp-duration) var(--dp-ease);
@@ -1990,6 +1995,18 @@ button.text-button:hover {
   cursor: not-allowed;
   opacity: 0.5;
 }
+/* 戻せない操作の確定 (「削除を確定」)。指している間も赤い字 */
+.menu-item.menu-danger {
+  color: var(--dp-rec-text);
+}
+/*
+ * 押せない一言 (押せない項目のわけ・外せない理由)。項目と同じ余白で並べる。
+ * メニューの幅より長いので折り返す (1 行に詰めると、メニューの中に横のスクロールバーが出る)
+ */
+.menu-note {
+  margin: 0;
+  padding: var(--dp-space-2) var(--dp-space-3);
+}
 /*
  * **選んでいる項目** (いまの画面・選んでいる日・番組表のジャンル)。ほかの選んでいるものと同じく塗らずに左の縦線と主の色の太字
  * (プルダウンの一覧・映像の上のメニューと同じ)。詳細度は上の指している項目と同じにして、字の色を決めている項目 (番組表の土日) はそちらを残す
@@ -2213,8 +2230,12 @@ dialog {
 .modal-box:focus {
   outline: none;
 }
+/* 見出しのすぐ下の説明 (`IssueDialog`・`AgentDialog`・`ContractDialog`)。見出しに寄せ、下の中身とは離す */
+.modal-box .intro {
+  margin: var(--dp-space-1) 0 var(--dp-space-4);
+}
 /*
- * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`・`ContractDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)
+ * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`・`AgentDialog`・`ContractDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)
  */
 .modal-backdrop {
   position: fixed;
@@ -2537,7 +2558,7 @@ dialog[open] > article {
 }
 
 /*
- * **一覧と右の列** (`.with-side` と、右の列に付ける `.side-column`)。録画の一覧 (ホーム) と切り抜きで同じ。
+ * **一覧と右の列** (`.with-side` と、右の列に付ける `.side-column`)。録画の一覧 (ホーム)・切り抜き・ルールで同じ。
  * スマホの形は一覧だけ (右の列は出さない)、広い形は一覧と 20rem の右の列 (1600px からは 22rem)
  */
 .with-side {

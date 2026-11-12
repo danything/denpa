@@ -1105,11 +1105,4 @@
     width: 16rem;
     max-width: calc(100vw - 2rem);
   }
-  /*
-     * 押せない項目のすぐ下に出す理由 (CM 検出をやり直せないわけ)。項目と同じ字下げで、次の項目とは余白で分ける。
-     * 理由はメニューの幅 (16rem) より長いので折り返す (1 行に詰めると、メニューの中に横のスクロールバーが出る)
-     */
-  .menu-note {
-    padding: var(--dp-space-1) var(--dp-space-3) var(--dp-space-2);
-  }
 </style>

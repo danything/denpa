@@ -71,10 +71,10 @@
       : [...LNB_CHOICES, { value: lnb, label: lnb }];
   }
   /**
-   * チューナーの表の骨組みの行の高さ (rem)。本物の行 (名前とデバイスの 2 行で 2.9rem) から行の間 (0.4rem) を
+   * チューナーの表の骨組みの行の高さ (rem)。本物の行 (名前とデバイスの 2 行で 2.9rem) から行の間 (`--dp-space-2`。0.5rem) を
    * 引いたもの。台数は届くまで分からないので、よくある 4 台ぶん
    */
-  const TUNER_SKELETON = [2.5, 2.5, 2.5, 2.5];
+  const TUNER_SKELETON = [2.4, 2.4, 2.4, 2.4];
 
   /** 読み直しの間も前の中身を出したままにする (`held`) */
   const shownTuners = held(() => agent.tuners);

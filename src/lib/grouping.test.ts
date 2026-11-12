@@ -23,7 +23,7 @@ const rows = [
 ];
 
 describe("番組ごとにまとめる", () => {
-  test("番組どうしはいちばん新しい回が新しい順、1本だけの番組はまとめずに混ぜる", () => {
+  test("番組どうしはいちばん新しい回が新しい順、1 本だけの番組はまとめずに混ぜる", () => {
     const entries = groupBySeries(rows);
     expect(
       entries.map((e) => (e.kind === "group" ? e.group.key : e.item.key)),

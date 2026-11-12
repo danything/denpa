@@ -36,7 +36,7 @@ describe("行の状態の段", () => {
     expect(problems.map((l) => l.kind)).toEqual(["failed", "saved"]);
   });
 
-  test("2段に収まらなければ、2段目に残りのラベルをつなぐ。色はいちばん重いもの、中身は落とす", () => {
+  test("2 段に収まらなければ、2 段目に残りのラベルをつなぐ。色はいちばん重いもの、中身は落とす", () => {
     const lines = statusLines(
       [line("encode", "busy", { testid: "recording-state" })],
       [
