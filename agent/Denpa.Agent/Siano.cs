@@ -15,7 +15,7 @@ namespace Denpa.Agent;
  *
  * **カーネルが使っている機材には触らない。** PX-S1UD は mainline の smsusb + smsdvb で Linux DVB になり、そちらで使える (DvbTuner)。
  * 自動検出ではどのドライバにも繋がっていない機材だけを並べる (blacklist の手順は docs/tuner-px-s1ud.md)。
- * 設定の device は siano:<USB のポート> (siano:1-2.3。S1UD にはシリアルが無い)。以前は同じ形式の設定で siano-userland (siano-ts) を起動していた。
+ * 設定の device は siano:<USB のポート> (siano:1-2.3。S1UD にはシリアルが無い)。
  * 挿さっていれば Detect が見つけて組み立てるので、普通は書かなくてよい。
  */
 

@@ -186,7 +186,7 @@ public sealed class TunerPool(
             }
             /*
              * 別の機材になったかもしれないので、デバイスは取り直す。**選局していなくても、開いたままのデバイスは手放す。**
-             * PIX-DT295 のように最初の選局で開いたまま持つ機材は、無効にしても USB を握ったままで、ほかのソフトから使えなかった
+             * PIX-DT295 のように最初の選局で開いたまま持つ機材は、無効にしても USB を開いたままで、ほかのソフトから使えなかった
              */
             closing = Retire(index => !Kept(index));
         }
@@ -548,7 +548,7 @@ public sealed class TunerPool(
     /// <item><c>asicen:&lt;USB ポート&gt;:&lt;受信機&gt;</c> … asicen-userland の機材 (Asicen.cs。試験的)</item>
     /// <item><c>zd1j:&lt;USB のポート&gt;</c> … Sony CECH-ZD1 J (Zd1j.cs)。エージェントが USB を直に持つ (Linux・Windows・macOS)</item>
     /// <item><c>dt295:&lt;USB のポート&gt;</c> … PIXELA PIX-DT295 (Dt295NativeTuner.cs)。エージェントが USB を直に持ち、機材のレジスタを直に書いて動かす</item>
-    /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など。It930xDevice.cs)。エージェントが USB を直に持つ。受けられる種別は受信機ごとに決まっている (地上波・衛星・J.83B (SKY)。LNB の給電は 15V だけ)</item>
+    /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など。It930xDevice.cs)。エージェントが USB を直に持つ。受けられる種別は受信機ごとに決まっている (地上波・衛星・ISDB-C (CATV)・J.83B (SKY)。LNB の給電は 15V だけ)</item>
     /// </list>
     ///
     /// <para>それ以外は例外を送出する</para>
@@ -1454,12 +1454,12 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
     /// </summary>
     public void Start(string command, Action onExit)
     {
-        var child = Process.Start(new ProcessStartInfo("setsid", ["sh", "-c", $"{command} \"$1\" \"$2\"", "sh", Type, Channel])
+        var child = Shell.Start(new ProcessStartInfo("setsid", ["sh", "-c", $"{command} \"$1\" \"$2\"", "sh", Type, Channel])
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-        })!;
+        });
         _child = child;
 
         _ = Task.Run(async () =>

@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 /// <param name="Version">起動したファームウェアのバージョン (QUERYINFO の 4 バイト、上位から)</param>
 public sealed record It930xBoot(uint Before, bool Rebooted, uint Version)
 {
-    /// <summary>バージョンを <c>1.4.0.0</c> の形に</summary>
+    /// <summary>バージョンを <c>1.4.0.0</c> の形式に</summary>
     public static string Format(uint version) => $"{version >> 24}.{(version >> 16) & 0xFF}.{(version >> 8) & 0xFF}.{version & 0xFF}";
 }
 
@@ -147,9 +147,6 @@ public sealed class It930xBridge
     /// 16 のときも、PX-MLT5PE の実機で 5 つの受信機がそれぞれ約 30 Mbps を流して足りた (2026-11-10)
     /// </summary>
     public const int TsDepth = 64;
-
-    /// <summary>SDK が EP 0x84 に出したままにする転送要求の数 (<c>BR_URB_COUNT</c>)。<see cref="TsDepth"/> はこれより少なくしない</summary>
-    public const int SdkTsDepth = 8;
 
     /// <summary>入力を全部閉じてから EP 0x84 をリセットするまでの待ち (ms。SDK の <c>DRV_ResetRxPort</c> の <c>mdelay(10)</c>)</summary>
     public const int InputsOffSettleMs = 10;

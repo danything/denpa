@@ -1,7 +1,7 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * IT930x のブリッジ (It930xFrame.cs・It930xBridge.cs・It930xFirmware.cs)、機種の表 (It930x.cs)、実機で試す入口 (It930xProbe.cs)。
+ * IT930x のブリッジ (It930xFrame.cs・It930xBridge.cs・It930xFirmware.cs)、機種の表 (It930x.cs)、実機で試すコマンド (It930xProbe.cs)。
  * 偽の USB (It930xFakes.cs) の上で、コマンドの形と順番を ITE の SDK と照らす。期待値に添えた関数名は SDK のもの。
  */
 public class It930xTests

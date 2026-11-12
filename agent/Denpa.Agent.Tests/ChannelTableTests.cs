@@ -72,7 +72,7 @@ public class ChannelTableTests
     [Test]
     public async Task TSID_の無い衛星の名前は中継器の先頭の_TS()
     {
-        // NIT を読む入口。どの TS にもネットワーク全体の NIT が流れているので、選り分けなくてよい
+        // denpa が NIT を読むときに選局する。どの TS にもネットワーク全体の NIT が流れているので、選り分けなくてよい
         var entry = ChannelTable.Parse("BS15")!;
         await Assert.That(entry.Frequency).IsEqualTo(ChannelTable.Parse("BS15:16625")!.Frequency);
         await Assert.That(entry.StreamId).IsEqualTo(ChannelTable.NoStreamId);

@@ -6,7 +6,7 @@ import java.net.Inet4Address
 
 /**
  * 端末の LAN のアドレスと、通知から渡す URL (docs/install-android.md)。
- * denpa の URL は `http://<アドレス>:3000`、別の機械の denpa がエージェントと組む URL は `https://<アドレス>:25252#pair=<合言葉>`
+ * denpa の URL は `http://<アドレス>:3000`、別の機械の denpa がエージェントと組む登録用の URL は `https://<アドレス>:25252#pair=<合言葉>`
  * (エージェントの `--pair` は機械の名前を使うが、Android では `localhost` になるので、アプリが LAN のアドレスで作る)
  */
 internal object Lan {
@@ -25,9 +25,6 @@ internal object Lan {
             ?.hostAddress
     }
 
-    /** 別の機械の denpa の `TUNER_AGENT_URL` に書く URL。IPv6 のアドレスは角括弧で囲む */
-    fun pairUrl(address: String, port: Int, token: String): String {
-        val host = if (address.contains(':')) "[$address]" else address
-        return "https://$host:$port#pair=$token"
-    }
+    /** 登録用の URL (別の機械の denpa の「エージェントを追加」に貼る)。アドレスは [address] が返す IPv4 */
+    fun pairUrl(address: String, port: Int, token: String) = "https://$address:$port#pair=$token"
 }

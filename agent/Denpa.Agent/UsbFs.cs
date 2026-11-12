@@ -166,7 +166,7 @@ public interface ICcidPipe : IBulkPipe
 
 /// <summary>
 /// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直に扱うための共通の部品。<see cref="UsbFsPipe"/> (カードリーダー) と
-/// <see cref="UsbFsDevice"/> (チューナー) が使う。**libusb を使わない。**
+/// <see cref="UsbFsDevice"/> (チューナー) が使う。
 ///
 /// <para>
 /// ioctl の番号と構造体のレイアウトはカーネルの uapi (<c>linux/usbdevice_fs.h</c>) のもの。x64 と arm64 で同じ (どちらも LP64 で、
@@ -300,7 +300,7 @@ public sealed unsafe class UsbFsPipe : ICcidPipe
             {
                 var errno = Marshal.GetLastPInvokeError();
                 throw new IOException(errno == UsbFs.Ebusy
-                    ? "別のプロセスがカードリーダーを使用中です (動いているエージェント自身か、ホストの pcscd など)"
+                    ? "カードリーダーはほかのソフトが使っています (動いているエージェント自身か、ホストの pcscd など)"
                     : $"カードリーダーのインターフェースを確保できません ({Marshal.GetPInvokeErrorMessage(errno)})");
             }
             return new UsbFsPipe(path, fd, info);

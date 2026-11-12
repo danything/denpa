@@ -142,8 +142,7 @@ public class It930xTsTests
         await Assert.That(It930xBridge.TsTransferSize % 188).IsEqualTo(0);
         await Assert.That(It930xBridge.TsTransferSize % 4).IsEqualTo(0);
         // BR_URB_COUNT (8) より少なくしない
-        await Assert.That(It930xBridge.SdkTsDepth).IsEqualTo(8);
-        await Assert.That(It930xBridge.TsDepth).IsGreaterThanOrEqualTo(It930xBridge.SdkTsDepth);
+        await Assert.That(It930xBridge.TsDepth).IsGreaterThanOrEqualTo(8);
     }
 
     // ---------------------------------------------------------------------

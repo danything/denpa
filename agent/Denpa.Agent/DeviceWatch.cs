@@ -14,6 +14,7 @@ internal sealed class DeviceWatch : IDisposable
     private readonly IDisposable _watch;
     /// <summary>Rescan を重ねないための印</summary>
     private readonly Lock _gate = new();
+    private volatile bool _disposed;
 
     public DeviceWatch(IUsbHost host, Action changed)
     {
@@ -22,10 +23,22 @@ internal sealed class DeviceWatch : IDisposable
         _watch = host.Watch(Soon);
     }
 
-    private void Soon() => _settle.Change(Settle, Timeout.InfiniteTimeSpan);
+    private void Soon()
+    {
+        if (_disposed) return;
+        try
+        {
+            _settle.Change(Settle, Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException)
+        {
+            // 止めたのと入れ違いに届いた抜き差しは捨てる (止めたタイマーの Change は例外を送出し、タイマーや監視のスレッドの外へ出るとプロセスが終了する)
+        }
+    }
 
     private void Fire()
     {
+        if (_disposed) return;
         // 探すのは数百 ms かかる。前の回が終わっていなければ重ねず、少し待って探し直す (その間の抜き差しを取りこぼさない)
         if (!_gate.TryEnter())
         {
@@ -48,6 +61,7 @@ internal sealed class DeviceWatch : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         _watch.Dispose();
         _settle.Dispose();
     }

@@ -5,7 +5,7 @@ namespace Denpa.Agent.Tests;
 
 /*
  * LAN に知らせる mDNS (Mdns.cs)。Linux の自前の応答が組むパケットを、DNS の決まりどおりに読み戻して確かめる。
- * denpa の側の読み取り (src/lib/server/agent-mdns.ts) も同じ形を読む
+ * denpa の側の読み取り (src/lib/server/agent-mdns.ts) も同じ形式を読む
  */
 public class MdnsTests
 {

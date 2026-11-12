@@ -70,7 +70,7 @@ internal readonly record struct CxdIsdbcSignal(
     byte Search, byte Ts, byte? Modulation, int CnRaw, byte[]? Per, byte[]? Locked, byte BerLength, byte[]? Ber, byte[]? Uncorrected, int IfAgc);
 
 /// <summary>
-/// ISDB-C でほかに読める値 (仕様書 9.5)。出どころは PLEX の公開ドライバーに入っている Sony の手順だけ (仕様書 13)。PX-MLT5PE の実機で読めたが、値が正しいかはほかの受信機と比べていない。<c>--tune</c> の出力にだけ出す。値が無ければ null
+/// ISDB-C でほかに読める値 (仕様書 9.5)。出どころは PLEX の公開ドライバに入っている Sony の手順だけ (仕様書 13)。PX-MLT5PE の実機で読めたが、値が正しいかはほかの受信機と比べていない。<c>--tune</c> の出力にだけ出す。値が無ければ null
 /// </summary>
 /// <param name="Inverted">復調器がスペクトルの反転を見つけたか</param>
 /// <param name="CarrierOffsetKhz">搬送波のずれ (kHz)</param>
@@ -180,7 +180,7 @@ internal sealed class Cxd2856(CxdLink link)
         CxdRow.W(T, 0x00, 0x00),
     ];
 
-    /// <summary>TS の形の設定 (初期化のとき 1 回。仕様書 3.2)。シリアル・D0・立ち上がりでラッチ</summary>
+    /// <summary>TS の形式の設定 (初期化のとき 1 回。仕様書 3.2)。シリアル・D0・立ち上がりでラッチ</summary>
     internal static readonly CxdRow[] TsFormRows =
     [
         CxdRow.W(T, 0x00, 0x00),
@@ -563,7 +563,7 @@ internal sealed class Cxd2856(CxdLink link)
         return id;
     }
 
-    /// <summary>TS の形の設定 (仕様書 3.2)</summary>
+    /// <summary>TS の形式の設定 (仕様書 3.2)</summary>
     public void TsForm() => link.Run(TsFormRows);
 
     /// <summary>TS クロックの設定 (仕様書 3.3)。手順 2 の読み出しは仕様書のとおり読むだけで使わない</summary>
@@ -831,7 +831,7 @@ internal sealed class Cxd2856(CxdLink link)
 
     /// <summary>
     /// J.83B の状態と、変調・C/N・PER の元の値を読む (仕様書 9.4)。値を固めて (T の <c>01</c> ← <c>01</c>) から読み、読み終えたら (途中で失敗しても) 戻す (仕様書 2.3)。
-    /// 自動の探索がロックしていなければ (<c>88</c> の bit0 が 0) 値を読まない (仕様書 9.4 が PLEX の公開ドライバーの手順として書く形)。
+    /// 自動の探索がロックしていなければ (<c>88</c> の bit0 が 0) 値を読まない (仕様書 9.4 が PLEX の公開ドライバの手順として書く形)。
     /// PER も複数のレジスタにまたがる誤り率なので、同じ固めた間に読む (仕様書に無い。9.4 は PER を固めるかを書いていないので、2.3 の一般の決まりから決めた)
     /// </summary>
     public CxdJ83bSignal ReadJ83bSignal()
@@ -1062,6 +1062,7 @@ internal sealed class Cxd2856(CxdLink link)
         return -gain / 100.0;
     }
 }
+
 /// <summary>
 /// 受信機 1 つぶんの復調器 (CXD2856ER) とチューナー (CXD2858ER)。初期化・地上波と衛星と J.83B と ISDB-C の選局とロックの待ち・方式の切り替え・信号品質・スリープ。
 ///
@@ -1197,7 +1198,7 @@ public sealed class Cxd2856Frontend
     }
 
     /// <summary>
-    /// 初期化 (電源を入れたあと 1 回。仕様書 2.2)。復調器の初期化 → チューナーの初期化 (中継の中で) → TS の形の設定。
+    /// 初期化 (電源を入れたあと 1 回。仕様書 2.2)。復調器の初期化 → チューナーの初期化 (中継の中で) → TS の形式の設定。
     /// 識別が合わない・チューナーの CPU の状態が 0 でないときは <see cref="IOException"/> (その受信機だけを使えなくする。仕様書 2.2)
     /// </summary>
     public void Init()

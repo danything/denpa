@@ -275,10 +275,10 @@ internal sealed class CxdBoard : IIt930xBoard
 ///
 /// <para>
 /// **Q3 は、2 つの USB デバイスをそれぞれ別の機材として持つ** (<c>it930x:&lt;側 1 のポート&gt;:0〜3</c> と <c>it930x:&lt;側 2 のポート&gt;:0〜3</c>)。
-/// IT930x の仕様書 2.1 の受信機の番号 0〜7 は、側 1 の 0〜3 と側 2 の 0〜3 に当たる。設定の形とポートの見つけ方がほかの機種と同じになり、片側だけが見えていても使える。
+/// IT930x の仕様書 2.1 の受信機の番号 0〜7 は、側 1 の 0〜3 と側 2 の 0〜3 に当たる。設定の形式とポートの見つけ方がほかの機種と同じになり、片側だけが見えていても使える。
 /// 電源の連動 (IT930x の仕様書 7.4) は、受信機を開いている間、もう片方の側の機材も取っておくことで行う (機材を開いている間は電源が入る)。
 /// 連動で電源だけが入った側は、チップを初期化していない。その側の受信機を最初に開くときに初期化する。
-/// もう片方の側が見つからない・開けないときは、記録に出して見つかった側だけを使う (TC90522 の仕様書 13.3 の「片側だけ見えている Q3」)。
+/// もう片方の側が見つからない・開けないときは、記録に出して見つかった側だけを使う (IT930x の仕様書 11.3 の「片側だけ見えている Q3」)。
 /// </para>
 ///
 /// <para>
@@ -825,8 +825,8 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 取っていたもう片方の側を返す。そちらも誰も使っていなければ、待たずに閉じる (電源が切れる)。
-    /// この側は閉じる前に <see cref="IdleGrace"/> を待ち終えていて、もう片方の側は電源を連動させるために取っていただけなので、もう一度は待たない
+    /// 取っていたもう片方の側を返す (この側の受信機が全部閉じたときと、この側を閉じるとき)。そちらも誰も使っていなければ、待たずに閉じる (電源が切れる)。
+    /// もう片方の側は電源を連動させるために取っていただけなので、<see cref="IdleGrace"/> を待たない
     /// </summary>
     private void Unlink()
     {
@@ -1355,9 +1355,11 @@ public sealed class It930xTuner : ITuneDevice
                     Check(tuning, _model);
                 }
                 // 全体の溢れが立ったままの機材は、ロックしても TS が届かない。30 秒待たせずに断り、ほかのチューナーへ回させる (TunerPool)。
-                // 機材は返す (カードも受信機も使っていなければ、待ってから閉じる。次に取るときに開き直して溢れを読み直す)
+                // 前の選局で開いた受信機は閉じてから (LNB の給電の要求も取り下げて)、機材を返す。カードもほかの受信機も使っていなければ、待ってから閉じる。
+                // 次に取るときに開き直して溢れを読み直す
                 if (_device.Jammed is { } jammed)
                 {
+                    if (_frontend is not null) Rest(_device);
                     Drop();
                     _closeIdle?.Invoke();
                     throw new TunerUnusableException(
@@ -1499,6 +1501,20 @@ public sealed class It930xTuner : ITuneDevice
         }
     }
 
+    /// <summary>受信機を閉じ、LNB の給電の要求を取り下げる (<see cref="It930xDevice.Rest(int)"/>)。失敗は機材に記録して続ける (このあと機材を返すため)</summary>
+    private void Rest(It930xDevice device)
+    {
+        try
+        {
+            device.Rest(_receiver);
+        }
+        catch (IOException error)
+        {
+            device.Fail(error);
+            Log.Write($"[{_name}] スリープにできませんでした ({error.Message})");
+        }
+    }
+
     /// <summary>機材を返す (使えなくなったとき・捨てるとき)</summary>
     private void Drop()
     {
@@ -1515,18 +1531,7 @@ public sealed class It930xTuner : ITuneDevice
         lock (_gate)
         {
             StopOutput();
-            if (_device is { Faulted: false } device)
-            {
-                try
-                {
-                    device.Rest(_receiver);
-                }
-                catch (IOException error)
-                {
-                    device.Fail(error);
-                    Log.Write($"[{_name}] スリープにできませんでした ({error.Message})");
-                }
-            }
+            if (_device is { Faulted: false } device) Rest(device);
             Drop();
         }
         _closeIdle?.Invoke();

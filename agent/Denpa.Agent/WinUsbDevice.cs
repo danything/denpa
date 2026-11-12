@@ -5,7 +5,7 @@ using System.Text;
 namespace Denpa.Agent;
 
 /// <summary>
-/// Windows の WinUSB (<c>winusb.dll</c>) の <see cref="IUsbDevice"/>。機材にドライバが無いので、利用者が WinUSB に替える (install.ps1 の -WinUsb か Zadig)
+/// Windows の WinUSB (<c>winusb.dll</c>) の <see cref="IUsbDevice"/>。機材のドライバは、利用者が WinUSB に替える (install.ps1 の -WinUsb か Zadig)
 /// (docs/install-windows.md)。Microsoft の公開の資料 (SetupAPI・WinUSB の関数) どおりに P/Invoke だけで呼ぶ。
 ///
 /// <para>
@@ -182,7 +182,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
     }
 
     /// <summary>
-    /// 挿さっている USB 機材のパスを並べたもの。**抜き差しが起きたかを見比べるためだけ** (DeviceWatch.cs)。
+    /// 挿さっている USB 機材のパスを並べたもの。**抜き差しが起きたかを見比べるためだけ** (<see cref="WinUsbHost.Watch"/>)。
     /// 機材は開かない
     /// </summary>
     public static string Fingerprint() =>
@@ -455,7 +455,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                         // 端点のストールなどは、その転送要求だけ捨てて出し直す。転送要求を出したスレッドが終わると Windows が取り消す
                         // (ERROR_OPERATION_ABORTED) ので、それも同じに扱う。受信を止めるとき、読み出しのスレッドが先に終わり、
                         // 別のスレッドが読み捨てるので、この取り消しは必ず起きる。例外にすると停止の手順が途中で止まり、機材が受信中のまま残って
-                        // 次の受信の先頭に古いデータが混じる。出し直しは Read の呼びごとに深さの分までで、そのあとの待ちには時間切れがある
+                        // 次の受信の先頭に古いデータが混じる。出し直しは Read を 1 回呼ぶごとに深さの分までで、そのあとの待ちには時間切れがある
                         // (Dispose のあとは先頭の ThrowIf で抜ける) ので、出し直し続けることはない
                         if (error is not (ErrorGenFailure or ErrorOperationAborted)) throw Failure(_owner.Name, "TS の読み出しが失敗しました", error);
                         done = 0;

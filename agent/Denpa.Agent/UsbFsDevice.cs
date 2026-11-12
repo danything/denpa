@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace Denpa.Agent;
 
 /// <summary>
-/// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直に扱う <see cref="IUsbDevice"/>。**libusb を使わない。**
+/// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直に扱う <see cref="IUsbDevice"/>。
 ///
 /// <para>
 /// ioctl の番号の組み立て方、errno、開くときの文言は <see cref="UsbFs"/> と共通にしている。
@@ -225,7 +225,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
 
     private IOException Failure(string what) => Failure(Name, what, Marshal.GetLastPInvokeError());
 
-    internal static IOException Failure(string name, string what, int errno) => errno switch
+    private static IOException Failure(string name, string what, int errno) => errno switch
     {
         UsbFs.Enodev or UsbFs.Eshutdown => new UsbGoneException($"{name} が抜かれました"),
         UsbFs.Etimedout => new IOException($"{name}: {what} (時間切れ)"),

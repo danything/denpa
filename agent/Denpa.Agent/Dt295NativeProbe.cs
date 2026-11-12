@@ -277,7 +277,7 @@ public static class Dt295NativeProbe
         var problem = (string?)null;
         long firstTsMs = -1;
         var streaming = TimeSpan.Zero;
-        // 平均の Mbps は、最初に読めた時刻から最後に読めた時刻までで割る (最初の読み出しのぶんは除く)。窓の秒数や止めるまでの読み出しには左右されない
+        // 平均の Mbps は、最初に読めた時刻から最後に読めた時刻までで割る (最初の読み出しのぶんは除く)。決めた秒数や止めるまでの読み出しには左右されない
         var firstRead = TimeSpan.MinValue;
         var lastRead = TimeSpan.Zero;
         long firstChunk = 0;

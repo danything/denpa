@@ -7,7 +7,7 @@ namespace Denpa.Agent;
  * 設定の device は dt295:<USB のポート>。ホストが機材のレジスタを直に書いて動かす。ファームウェアは入れず、要求ごとに動く小さなプログラム (Dt295NativePrograms.cs) だけを機材に置く。
  * 機材の中では復号せず、スクランブルのままの TS を受けて、エージェントの B25 で復号する。差し込み口のカードも、ほかのチューナーの復号に使う。
  * ここは機材の識別と探す・開くだけ。機材の設定は Dt295NativeDevice.cs・Dt295NativeBoard.cs、チューナーは Dt295NativeTuner.cs、カードは Dt295NativeCard.cs。
- * 同じ公式ドライバーの機材 (PIX-DT295 W・DT420・DT410 など。<see cref="Dt295.Family"/>) は見つけるが、未確認なので開かずに断る。
+ * 同じ公式ドライバの機材 (PIX-DT295 W・DT420・DT410 など。<see cref="Dt295.Family"/>) は見つけるが、未確認なので開かずに断る。
  *
  * Dt295Native*.cs は、仕様書 (denpa-spec の dt295-resident/spec.md。mAgicVISION のファームウェアを入れた機材の動作を書いたもの) と
  * 実機の観測から書いた。mAgicVISION のコードは移していない。コメントの節の番号は仕様書のもの。
@@ -16,7 +16,7 @@ namespace Denpa.Agent;
  */
 
 /// <summary>
-/// 公式ドライバー <c>pxmb86m0x_usb</c> が受け持つ機材 1 つ (その INF に並ぶ USB の ID)。
+/// 公式ドライバ <c>pxmb86m0x_usb</c> が受け持つ機材 1 つ (その INF に並ぶ USB の ID)。
 /// <paramref name="Unconfirmed"/> が null でないものは見つけても使わず、その理由で断る
 /// </summary>
 public sealed record Dt295Model(int Vendor, int Product, string Name, string? Unconfirmed)
@@ -28,7 +28,7 @@ public sealed record Dt295Model(int Vendor, int Product, string Name, string? Un
         $"{Name} ({Vendor:x4}:{Product:x4}、{port}) は未確認なので使いません ({Unconfirmed})。動かせるのはいまは PIX-DT295 だけです";
 }
 
-/// <summary>PIX-DT295 (と同じドライバーの機材) の識別と、挿さっているものを探す・開く</summary>
+/// <summary>PIX-DT295 (と同じドライバの機材) の識別と、挿さっているものを探す・開く</summary>
 public static class Dt295
 {
     public const int Vendor = 0x06B8;
@@ -96,7 +96,7 @@ public static class Dt295
     }
 
     /// <summary>
-    /// 同じドライバーの機材 (<see cref="Family"/>) が挿さっているポートと、その機材。未確認のものも含む。**開かない。**
+    /// 同じドライバの機材 (<see cref="Family"/>) が挿さっているポートと、その機材。未確認のものも含む。**開かない。**
     /// カーネルのドライバが使っているものは並べない
     /// </summary>
     public static List<(string Port, Dt295Model Model)> Found(Action<string>? warn = null) => Found(UsbHost.Current, warn);
@@ -107,7 +107,7 @@ public static class Dt295
 
     private static UsbId Id(Dt295Model model) => new(model.Vendor, model.Product);
 
-    /// <summary>そのポートの機材。同じドライバーの機材でなければ null。**開かない**</summary>
+    /// <summary>そのポートの機材。同じドライバの機材でなければ null。**開かない**</summary>
     public static Dt295Model? Identify(string port) => Identify(UsbHost.Current, port);
 
     /// <summary>渡した <see cref="IUsbHost"/> から (渡せるのはテストのため)</summary>

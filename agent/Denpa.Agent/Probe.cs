@@ -412,15 +412,17 @@ public static class Probe
                 ShowPowerProbe(tuner, output, ref powerProbeShown);
                 // TC90522 の機種は、失敗したあとも、チューナーに書いた値と PLL の状態、ロックの判定で読む復調器のレジスタを出す (どこで止まったかを切り分けるため)。
                 // CXD2856ER の地上波は、プリセットを使ったかとロックのビットが立った時刻を出す
+                var elapsedShown = false;
                 if (tuner is It930xTuner diagnosed && diagnosed.Diagnose() is { Count: > 0 } lines)
                 {
                     output.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+                    elapsedShown = true;
                     foreach (var line in lines) output.WriteLine($"    {line}");
                 }
                 // ISDB-C は、どこで失敗したか (ロック・TSMF の判定) と、ロックしていれば変調と C/N も出す
                 if (tuning.IsdbC && tuner is It930xTuner failed)
                 {
-                    output.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+                    if (!elapsedShown) output.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
                     if (failed.CableFrequency is { } tried) output.WriteLine($"    ロックした周波数 {tried} Hz");
                     foreach (var line in TsmfLines(failed.IsdbcLocked, failed.Tsmf)) output.WriteLine($"    {line}");
                     if (failed.IsdbcFailedSignal is { } last)

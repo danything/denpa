@@ -217,7 +217,7 @@ public static class AsicenUserland
             // ファームウェア待ちの機材は Boot が扱い、理由もそちらが残す
             if (usb is not null && Loaders.Contains(usb)) continue;
             warn($"ASICEN の機材 {Text(device, "model") ?? usb} (USB {Text(device, "port")}) を使えません: {Text(device, "status")}"
-                + (Text(device, "status") == "open_failed" ? " (/dev/bus/usb を開く権限が無いか、別のプロセスが使っています)" : ""));
+                + (Text(device, "status") == "open_failed" ? " (/dev/bus/usb を開く権限が無いか、ほかのソフトが使っています)" : ""));
         }
         return found;
     }
@@ -483,7 +483,7 @@ public static class AsicenUserland
                 return;
             }
             var output = $"{stdout.GetAwaiter().GetResult()}{stderr.GetAwaiter().GetResult()}".Trim();
-            Log.Write($"[asicen {id}] ファームウェアの流し込みで asicend が終了しました (exit {process.ExitCode}: {output})。"
+            Log.Write($"[asicend {id}] ファームウェアの流し込みで asicend が終了しました (exit {process.ExitCode}: {output})。"
                 + "流し込めていれば、機材がつながり直してアプリから届きます");
         }
         catch (IOException error)
@@ -651,7 +651,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
     private static string Hint(int code) => code switch
     {
         2 => "。引数かランタイムルートが合いません",
-        3 => "。筐体が見つからないか開けません (抜けたか、別のプロセスが使っている?)",
+        3 => "。筐体が見つからないか開けません (抜けたか、ほかのソフトが使っている?)",
         4 => "。同じ筐体の asicend がほかに動いています",
         7 => "。USB の読み書きに失敗しました (抜けた?)",
         10 => "。ファームウェアを受け付けません",

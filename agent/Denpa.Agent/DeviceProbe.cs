@@ -7,8 +7,8 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 台数はデバイスの数を数えれば分かるが、**種別 (地上波か衛星か) はどこにも
-/// 書かれていない。** sysfs には出ておらず (実機で確認: `dev` `device` `power`
-/// `subsystem` `uevent` しか無く、4 つとも同じ PCI デバイスの下にぶら下がる)。
+/// 書かれていない。** sysfs には出ていない (実機で確認: `dev` `device` `power`
+/// `subsystem` `uevent` しか無く、4 つとも同じ PCI デバイスの下にぶら下がる) ので、
 /// ioctl で問い合わせるしかない。
 /// </para>
 ///
@@ -77,7 +77,7 @@ public static class DeviceProbe
         : null;
 
     /// <summary>
-    /// 名前からの当てずっぽう。**ioctl が方式を返さなかったときだけ。**
+    /// 名前から種別を推定する。**ioctl が方式を返さなかったときだけ。**
     ///
     /// <para>
     /// 実機の名前は "Toshiba TC90522 ISDB-S module"。方式が名前に入っている

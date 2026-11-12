@@ -87,9 +87,6 @@ public sealed class Descrambler(
     /// </summary>
     public const int HoldLimit = 8 * 1024 * 1024;
 
-    /// <summary>B-CAS の CA_system_id。カードから読み取れるまではこれで CA 記述子を選ぶ</summary>
-    private const int BcasSystemId = 0x0005;
-
     /// <summary>
     /// 鍵を受け取れなかった ECM を同じ中身のまま問い合わせ直すまでのパケット数 (地上波の 2 秒ほど)。**時計ではなく
     /// 読んだ量で数える。** ファイルは実時間より速く読むので、時計で待つと数分ぶんがスクランブルされたまま残る
@@ -222,7 +219,8 @@ public sealed class Descrambler(
     private int _emmPid = -1;
 
     private CardInit? _init;
-    private int _caSystemId = BcasSystemId;
+    // カードから読み取れるまでは B-CAS の CA_system_id で CA 記述子を選ぶ
+    private int _caSystemId = TsObservation.BcasSystemId;
     private string? _logged;
     private long _decoded, _undecodable;
 
@@ -1202,7 +1200,7 @@ public sealed class Descrambler(
 
     /// <summary>
     /// CAT。CA 記述子 (0x09) のうち、このカードの方式の CA_PID が EMM の PID (libaribb25 の <c>proc_cat</c>)。
-    /// CA 記述子の形は PMT の ECM と同じ
+    /// CA 記述子の形式は PMT の ECM と同じ
     /// </summary>
     private void OnCat(ReadOnlySpan<byte> section)
     {

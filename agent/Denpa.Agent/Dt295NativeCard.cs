@@ -31,7 +31,7 @@ public sealed class Dt295NativeCard : ICardLink
     private bool _powered;
     private byte[]? _atr;
 
-    /// <summary>電源の入れ方から T=1 までの流れ (<see cref="Reset"/>)、送受信 (<see cref="Transmit"/>)、電源を切る (<see cref="Dispose"/>) を 1 つずつ通す (準備を別のスレッドで進めるため)</summary>
+    /// <summary>電源投入から T=1 の取り決めまで (<see cref="Reset"/>)、送受信 (<see cref="Transmit"/>)、電源を切る (<see cref="Dispose"/>) を 1 つずつ通す (準備を別のスレッドで進めるため)</summary>
     private readonly Lock _session = new();
 
     public string Name { get; }

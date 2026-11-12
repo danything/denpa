@@ -231,5 +231,5 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/io.github.danything.denpa
 開けないときは、エージェントのログ (`/Library/Logs/denpa/denpa-agent.log`。設定の「その他」→「ログ」でも見られる) に
 `[Sony CECH-ZD1 J <ポート>] 開けません (…ところで): …` の行が、どこで止まったか (USB を開く・ブリッジを起動する・コア 1 との
 bulk の経路を用意する) 付きで出ます。開けたときは `開きました` の行と、初めて開いたときに端点の一覧
-(`usb <ポート>: EP 0x81 bulk …`) が出ます。これらの行と `--card` の出力を、設定の「その他」→「ログ」の「Issue にする」で
+(`[usb <ポート>] EP 0x81 bulk …`) が出ます。これらの行と `--card` の出力を、設定の「その他」→「ログ」の「Issue にする」で
 送ってもらえると調べられます。

@@ -6,6 +6,7 @@ namespace Denpa.Agent;
 /// エージェントが USB を直に持つ機材の USB ID と名前 (<c>denpa-agent --usb-ids</c>)。Windows ではドライバが WinUSB でないと開けないので、
 /// install.ps1 の <c>-WinUsb</c> がこれを読み、挿さっている機材のドライバを WinUSB に替える (docs/install-windows.md)。
 /// ID は各機材の表 (<see cref="Zd1j"/>・<see cref="Dt295.Family"/>・<see cref="It930x.Family"/>・<see cref="Siano.Models"/>) から作り、ここにも install.ps1 にも書かない。
+/// Android のアプリの device_filter.xml は、これと asicen-userland の ID を手で並べる (AndroidDeviceFilterTests で突き合わせる)
 /// </summary>
 public static class WinUsbTargets
 {
