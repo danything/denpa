@@ -48,7 +48,6 @@ beforeEach(() => {
       name: "ＴＯＫＹＯ　ＭＸ１",
       type: "GR",
       service_type: 1,
-      channel: "T16",
       updated_at: now(),
     })
     .run();

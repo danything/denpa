@@ -128,7 +128,6 @@ beforeEach(() => {
       network_id: 32391,
       name: "TOKYO MX1",
       type: "GR",
-      channel: "T16",
       updated_at: 0,
     })
     .run();

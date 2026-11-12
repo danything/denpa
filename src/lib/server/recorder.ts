@@ -17,6 +17,7 @@ import {
   type Reservation,
   type Transport,
 } from "../types";
+import { channelOfService, NO_CHANNEL } from "./agent-channels";
 import { fileSize } from "./chase";
 import { config } from "./config";
 import { now, orm } from "./db";
@@ -549,7 +550,7 @@ async function pump(
               openChannel(
                 service.type,
                 // 掛け直すたびに引き直す。放送の一覧が変わってチャンネルを書き換えたら、新しいほうへ行く
-                channelOf(service.id) ?? service.channel,
+                channelOf(service.id),
                 signal,
                 use,
                 undefined,
@@ -933,13 +934,12 @@ function recordFilter(transport: Transport, serviceId: number): RecordFilter {
   };
 }
 
-/** 局のいまのチャンネルの名前 (`services.channel`)。局が無ければ null */
-function channelOf(serviceId: number): string | null {
-  return (
-    orm()
-      .select({ channel: services.channel })
-      .from(services)
-      .where(eq(services.id, serviceId))
-      .get()?.channel ?? null
-  );
+/**
+ * 局のいまのチャンネルの名前 (`agent-channels.serviceChannel`)。**分からなければ送出する** (呼ぶ側の掛け直しに任せる)。
+ * 上げた直後は、最初の局の取り込みが終わるまでエージェントの控えの写しが無い
+ */
+function channelOf(serviceId: number): string {
+  const channel = channelOfService(serviceId);
+  if (channel === null) throw new Error(NO_CHANNEL);
+  return channel;
 }

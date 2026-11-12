@@ -12,6 +12,7 @@ import {
 
 import { COPY_NEVER_REASON } from "../format";
 import type { Reservation } from "../types";
+import { shareKey } from "./agent-channels";
 import { config } from "./config";
 import { assign, type Busy, type Capacity, capacityOf } from "./conflict";
 import { checkContracts } from "./contracts";
@@ -100,7 +101,7 @@ export async function resolveConflicts(): Promise<{
     .select({
       ...getTableColumns(reservations),
       type: services.type,
-      channel: services.channel,
+      channel: shareKey(),
       copy_never: sql<boolean>`COALESCE(${programs.copy_never}, 0) = 1`.mapWith(
         Boolean,
       ),

@@ -4,11 +4,12 @@
  * - `TUNER_AGENT_URL` はカンマで区切って何台でも書ける。書いたものは起動のたびに行と突き合わせ、
  *   URL (`#` の前) が同じ行があればそれを使い、無ければ行を足す。**環境変数から消したものは行も消す**
  * - 組むときの合言葉 (`#pair=`) は DB に持たない。環境変数から読む
- * - 通知の購読・ログ・バージョンは全部の行 (`listAgents`) に、選局とチューナーの一覧は `tuningAgents` に、
- *   チャンネル・カード・復号は並びの先頭の 1 台 (`primaryAgent`) に送る
+ * - 通知の購読・ログ・バージョンと、チャンネルの控えを読むのは全部の行 (`listAgents`)。選局とチューナーの一覧と、
+ *   スキャンの結果を預けるのは `tuningAgents`。カード・復号は並びの先頭の 1 台 (`primaryAgent`) に送る
  */
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
+import { forgetMissingAgents } from "./agent-channels";
 import { config } from "./config";
 import { orm } from "./db";
 import { agents } from "./schema";
@@ -137,6 +138,8 @@ export function syncEnvAgents(): void {
           ),
         )
         .run();
+      // 外部キーは効かせていないので、そのエージェントのチャンネルの写しと受信の記録もここで消す
+      forgetMissingAgents();
     }
     targets.forEach((target, position) => {
       const row = env.find((r) => r.origin === target.origin);
@@ -225,7 +228,7 @@ export const NO_AGENT =
   "エージェントがありません。TUNER_AGENT_URL に https://ホスト:25252#pair=<合言葉> を書きます (docs/agent.md)";
 
 /**
- * 並びの先頭のエージェント。チャンネル・カード・復号はここに送る。
+ * 並びの先頭のエージェント。カード・復号はここに送る。
  * 1 台も無ければ、TUNER_AGENT_URL の書き方を入れたエラーを送出する
  */
 export function primaryAgent(): Agent {

@@ -186,7 +186,6 @@ function uhdRecording() {
       name: "4K テスト",
       type: "CATV",
       service_type: 1,
-      channel: "QC28",
       transport: "tlv",
       updated_at: now,
     })

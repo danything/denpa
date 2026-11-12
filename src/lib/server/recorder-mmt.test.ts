@@ -48,6 +48,7 @@ config.encodedDir = join(dir, "encoded");
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const { now, orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { startRecording, stopRecording } = await import("./recorder");
 const { recordings, reservations, services } = await import("./schema");
 const { probeMmts } = await import("./mmts");
@@ -77,11 +78,11 @@ describe("4K の局の録画", () => {
         name: "4K テスト",
         type: "CATV",
         service_type: 1,
-        channel: "QC28",
         transport: "tlv",
         updated_at: now(),
       })
       .run();
+    placeServices([{ id: SERVICE, channel: "QC28" }]);
     const start = now();
     const reservation = orm()
       .insert(reservations)

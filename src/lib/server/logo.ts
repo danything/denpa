@@ -20,6 +20,7 @@ import {
 import { type CarouselCounts, CarouselProgress } from "../ts/logo-dsmcc";
 import { withPalette } from "../ts/logo-palette";
 import type { ChannelType } from "../types";
+import { serviceChannel } from "./agent-channels";
 import { config } from "./config";
 import { orm } from "./db";
 import { currentServices } from "./epg";
@@ -510,23 +511,30 @@ function tunableServices(): {
   channel: string;
   network_id: number;
 }[] {
-  return orm()
-    .select({
-      id: services.id,
-      type: services.type,
-      channel: services.channel,
-      network_id: services.network_id,
-    })
-    .from(services)
-    .where(
-      and(
-        currentServices(),
-        eq(services.decodable, true),
-        ne(services.type, "CATV"),
-      ),
-    )
-    .orderBy(services.type, services.channel)
-    .all();
+  return (
+    orm()
+      .select({
+        id: services.id,
+        type: services.type,
+        channel: serviceChannel(),
+        network_id: services.network_id,
+      })
+      .from(services)
+      .where(
+        and(
+          currentServices(),
+          eq(services.decodable, true),
+          ne(services.type, "CATV"),
+        ),
+      )
+      .orderBy(services.type, serviceChannel())
+      .all()
+      // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は選局できない
+      .filter(
+        (service): service is typeof service & { channel: string } =>
+          service.channel !== null,
+      )
+  );
 }
 
 /**

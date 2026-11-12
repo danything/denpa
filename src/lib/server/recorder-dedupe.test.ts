@@ -53,6 +53,7 @@ config.dbPath = join(dir, "denpa.db");
 config.rawDir = dir;
 
 const { now, orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { startRecording, stopRecording } = await import("./recorder");
 const { reservationStates } = await import("./reservations");
 const { programs, recordings, reservations, rules, services } =
@@ -120,10 +121,10 @@ beforeEach(() => {
         name,
         type,
         service_type: 1,
-        channel,
         updated_at: now(),
       })
       .run();
+    placeServices([{ id, channel }]);
   }
   orm()
     .insert(rules)

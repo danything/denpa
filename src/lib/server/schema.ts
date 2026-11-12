@@ -233,8 +233,12 @@ export const services = sqliteTable("services", {
    * 192 = データ/ワンセグ、164 = エンジニアリング。録るのは 1 だけ
    */
   service_type: integer("service_type").notNull().default(DIGITAL_TV),
-  /** 物理チャンネル。同一チャンネルの同時録画はチューナーを共有できる */
-  channel: text("channel").notNull(),
+  /**
+   * 局の入っている TS の transport_stream_id (TLV なら tlv_stream_id)。取り込みのたびに入れ直す (`epg.syncServices`)。
+   * **局からチャンネルを引く鍵。** 種別・`network_id` と組で `agent_channels` を引く (`agent-channels.serviceChannel`)。
+   * 上げてから一度も取り込みで見かけていない局は null
+   */
+  transport_stream_id: integer("transport_stream_id"),
   remote_control_key: integer("remote_control_key"),
   has_logo: flag("has_logo")
     .notNull()
@@ -287,8 +291,10 @@ export const services = sqliteTable("services", {
 export const channelReception = sqliteTable(
   "channel_reception",
   {
+    /** 選局したエージェント (`agents.id`)。アンテナとチューナーはエージェントごとなので、エージェントごとに数える */
+    agent_id: integer("agent_id").notNull(),
     type: text("type").$type<ChannelType>().notNull(),
-    /** チャンネルの名前 (`T27`・`BS15:16625`)。`services.channel` と同じもの */
+    /** チャンネルの名前 (`T27`・`BS15:16625`)。`agent_channels.channel` と同じもの */
     channel: text("channel").notNull(),
     /** 最後に受信できた時刻。一度も確かめていなければ null */
     ok_at: integer("ok_at"),
@@ -303,7 +309,38 @@ export const channelReception = sqliteTable(
       .notNull()
       .default(sql`0`),
   },
-  (t) => [primaryKey({ columns: [t.type, t.channel] })],
+  (t) => [primaryKey({ columns: [t.agent_id, t.type, t.channel] })],
+);
+
+/**
+ * **どの TS を、どのエージェントのどのチャンネルで受けられるか** (`agent-channels.ts`)。
+ *
+ * 控え (`channels.json`) はエージェントが持ち、ここはその写し。取り込み (`epg.syncServices`) のたびに、
+ * 一覧を返したエージェントのぶんだけ入れ直す。返さなかった (落ちている) エージェントの行は前のまま残し、
+ * その台にしか無い局を片付けない。
+ *
+ * 局 (`services`) は局の ID で 1 行のまま。同じ TS を複数のエージェントが受けられれば、ここに台数ぶんの行がある。
+ * 中継局の違いで、同じ TS を別の物理チャンネルで受けることもある。
+ * エージェントの行を消したら、ここの行もコードで消す (`agents.syncEnvAgents`。外部キーは効かせていない)
+ */
+export const agentChannels = sqliteTable(
+  "agent_channels",
+  {
+    /** `agents.id` */
+    agent_id: integer("agent_id").notNull(),
+    type: text("type").$type<ChannelType>().notNull(),
+    /** そのエージェントでの物理チャンネルの名前 (`T27`・`BS15:16625`)。選局にそのまま渡す */
+    channel: text("channel").notNull(),
+    network_id: integer("network_id").notNull(),
+    /** transport_stream_id (TLV なら tlv_stream_id) */
+    transport_stream_id: integer("transport_stream_id").notNull(),
+    /** 伝送の形式 (`types.Transport`)。控えに無ければ `ts` */
+    transport: text("transport").$type<Transport>().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.agent_id, t.type, t.channel] }),
+    index("agent_channels_ts").on(t.type, t.network_id, t.transport_stream_id),
+  ],
 );
 
 /**

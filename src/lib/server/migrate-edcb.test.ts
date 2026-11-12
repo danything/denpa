@@ -146,7 +146,6 @@ beforeEach(() => {
         network_id: GR.networkId,
         name: "でんぱ総合",
         type: "GR",
-        channel: "T27",
         updated_at: now(),
       },
       {
@@ -155,7 +154,6 @@ beforeEach(() => {
         network_id: BS.networkId,
         name: "BSでんぱ",
         type: "BS",
-        channel: "BS01_0",
         updated_at: now(),
       },
     ])
@@ -650,7 +648,6 @@ describe("EpgTimerSrv から通しで", () => {
         network_id: MX.networkId,
         name: "ＴＯＫＹＯ　ＭＸ１",
         type: "GR",
-        channel: "16",
         updated_at: now(),
       })
       .run();

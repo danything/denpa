@@ -171,6 +171,7 @@ config.agentUrl = fakeAgentUrl(agent.port!);
 trustFakeAgent();
 
 const { orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { services } = await import("./schema");
 const { serviceKey } = await import("./tuner");
 const { readLogo, sweepNow, sweepState } = await import("./logo");
@@ -184,11 +185,16 @@ orm()
       network_id: s.network,
       name: `局${s.sid}`,
       type: s.type,
-      channel: s.channel,
       updated_at: 1,
     })),
   )
   .run();
+placeServices(
+  STATIONS.map((s) => ({
+    id: serviceKey(s.network, s.sid, s.type),
+    channel: s.channel,
+  })),
+);
 
 const logos = () =>
   STATIONS.filter(

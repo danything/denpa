@@ -130,6 +130,7 @@ writeFileSync(
 );
 
 const { orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { services } = await import("./schema");
 const { serviceKey } = await import("./tuner");
 const { readLogo, stats, sweep, sweepNow, sweepState } = await import("./logo");
@@ -148,11 +149,16 @@ orm()
       network_id: s.network,
       name: `局${s.sid}`,
       type: s.type,
-      channel: s.channel,
       updated_at: 1,
     })),
   )
   .run();
+placeServices(
+  STATIONS.map((s) => ({
+    id: serviceKey(s.network, s.sid, s.type),
+    channel: s.channel,
+  })),
+);
 
 describe("外れの控えが間違っていても当たり直せる", () => {
   test("どの中継も外れと控えられていると、定期の取得は何も開かない", async () => {

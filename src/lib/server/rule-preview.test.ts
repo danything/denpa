@@ -19,6 +19,7 @@ const realAgent = config.agentUrl;
 config.agentUrl = "https://127.0.0.1:9";
 
 const { now, orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { clockOf, jstOf } = await import("../rule-time");
 const { previewFor } = await import("./rule-preview");
 const {
@@ -68,7 +69,6 @@ beforeEach(() => {
         name: "TOKYO MX1",
         type: "GR",
         service_type: 1,
-        channel: "T16",
         updated_at: now(),
       },
       {
@@ -78,11 +78,14 @@ beforeEach(() => {
         name: "BS11",
         type: "BS",
         service_type: 1,
-        channel: "BS09_0",
         updated_at: now(),
       },
     ])
     .run();
+  placeServices([
+    { id: MX, channel: "T16" },
+    { id: BS11, channel: "BS09_0" },
+  ]);
 });
 
 function program(
@@ -448,10 +451,10 @@ describe("枝番の局で同じ放送", () => {
         name: "TOKYO MX1",
         type: "GR",
         service_type: 1,
-        channel: "T16",
         updated_at: now(),
       })
       .run();
+    placeServices([{ id: MX_SUB, channel: "T16" }]);
     // 枝番のほうを先に入れる (並び順に左右されない)
     program(2, "テスト魔法 #1", 5 * HOUR, MX_SUB);
     program(1, "テスト魔法 #1", 5 * HOUR);
@@ -480,10 +483,10 @@ describe("枝番の局で同じ放送", () => {
         name: "TOKYO MX1",
         type: "GR",
         service_type: 1,
-        channel: "T16",
         updated_at: now(),
       })
       .run();
+    placeServices([{ id: MX_SUB, channel: "T16" }]);
     program(1, "テスト魔法 #1", 5 * HOUR);
     program(2, "テスト魔法 #1", 5 * HOUR, MX_SUB);
     orm()
@@ -530,7 +533,6 @@ describe("復号できない局", () => {
         name: "ＢＳでんぱ　４Ｋ",
         type: "CATV",
         service_type: 1,
-        channel: "QC26",
         decodable: false,
         epg_readable: true,
         transport: "tlv",

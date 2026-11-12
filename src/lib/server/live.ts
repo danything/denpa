@@ -68,6 +68,7 @@ import { MkvSplitter } from "#lib/ts/mkv.js";
 import { BUSY } from "#lib/ts/playback.js";
 import { type Transport, undecodableReason } from "#lib/types.js";
 
+import { serviceChannel } from "./agent-channels";
 import {
   captionFeed,
   type CaptionOut,
@@ -3179,7 +3180,7 @@ export function liveStream(
 /**
  * HTTP のライブ (`liveStream`・`liveCaptions`) が観るもの。字幕は 1 本目で、チューナーは名指ししない。
  * 放送そのままでは段を下げない。4K の局の `hevc` (放送の HEVC の詰め替え) も段を下げない (下げるコーデックは呼ぶ側が決めて渡す)。
- * 局が無ければ null
+ * 局が無いか、局のチャンネルが分からなければ null
  */
 function httpWant(
   serviceId: number,
@@ -3188,7 +3189,8 @@ function httpWant(
   rung: Rung,
 ): Want | null {
   const row = serviceOf(serviceId);
-  if (row === undefined) return null;
+  // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は選局できない
+  if (row === undefined || row.channel === null) return null;
   const raw = form === "raw";
   const whole = row.transport === "tlv" && form === "hevc";
   return {
@@ -4387,7 +4389,7 @@ function serviceOf(serviceId: number) {
   return orm()
     .select({
       type: services.type,
-      channel: services.channel,
+      channel: serviceChannel(),
       service_id: services.service_id,
       network_id: services.network_id,
       decodable: services.decodable,

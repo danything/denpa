@@ -1,6 +1,11 @@
 import { type Actions, fail } from "@sveltejs/kit";
-import { count, eq, inArray, or, sql } from "drizzle-orm";
+import { count, eq, or, sql } from "drizzle-orm";
 
+import {
+  serviceAgent,
+  serviceChannel,
+  unreceivableService,
+} from "#lib/server/agent-channels.js";
 import {
   caName,
   caSystemIds,
@@ -11,11 +16,7 @@ import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
 import { currentServices, typeRank } from "#lib/server/epg.js";
 import { lineupNotice, seenLineupChanges } from "#lib/server/lineup-follow.js";
-import {
-  type Reception,
-  receptionOf,
-  unreceivableChannels,
-} from "#lib/server/reception.js";
+import { type Reception, receptionOf } from "#lib/server/reception.js";
 import {
   observedOf,
   removeType,
@@ -77,47 +78,34 @@ interface Coverage {
  * **受信できないチャンネルの局は出す** (番組表やライブからは外れている。外れた理由をここで言う)
  */
 function coverage(): Coverage[] {
-  const unreceivable = unreceivableChannels();
-  const blocked = [...unreceivable].map((key) =>
-    key.slice(key.indexOf(":") + 1),
-  );
   const rows = orm()
     .select({
       id: services.id,
       name: services.name,
       type: services.type,
-      channel: services.channel,
+      channel: serviceChannel(),
+      agent: serviceAgent(),
       network_id: services.network_id,
       decodable: services.decodable,
       transport: services.transport,
       programs: count(programs.id),
       until: sql`COALESCE(MAX(${programs.end_at}), 0)`.mapWith(Number),
-      current: sql`CASE WHEN ${currentServices()} THEN 1 ELSE 0 END`.mapWith(
-        Number,
-      ),
     })
     .from(services)
     .leftJoin(programs, eq(programs.service_id, services.id))
-    // 取り残しの局は出さない
-    .where(
-      blocked.length === 0
-        ? currentServices()
-        : or(currentServices(), inArray(services.channel, blocked)),
-    )
+    // 取り残しの局は出さない。全部のエージェントで受信できないと決めた局は、一覧から外れていても出す
+    .where(or(currentServices(), unreceivableService()))
     .groupBy(services.id)
     .orderBy(services.service_id)
-    .all()
-    // 名前だけで絞ったぶんを、種別と名前の組で絞り直す (いまの局はそのまま)
-    .filter(
-      (row) =>
-        !blocked.includes(row.channel) ||
-        unreceivable.has(`${row.type}:${row.channel}`) ||
-        row.current === 1,
-    );
+    .all();
 
   const channels = new Map<string, Coverage>();
+  /** チャンネル (`種別:名前`) を選局するエージェント。受信の様子はそのエージェントのものを出す */
+  const agents = new Map<string, number>();
   for (const row of rows) {
-    const { id, name, type, channel, programs, until, decodable } = row;
+    const { id, name, type, channel, agent, programs, until, decodable } = row;
+    // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は出さない
+    if (channel === null || agent === null) continue;
     const key = `${type}:${channel}`;
     const from = type === "CATV" ? origin(row.network_id) : null;
     const entry = channels.get(key) ?? {
@@ -131,9 +119,15 @@ function coverage(): Coverage[] {
     };
     entry.services.push({ id, name, programs, until, decodable });
     channels.set(key, entry);
+    agents.set(key, agent);
   }
   const list = [...channels.values()];
-  const reception = receptionOf(list);
+  const reception = receptionOf(
+    list.map((entry) => ({
+      ...entry,
+      agent: agents.get(`${entry.type}:${entry.channel}`)!,
+    })),
+  );
   for (const entry of list)
     entry.reception = reception.get(`${entry.type}:${entry.channel}`) ?? "ok";
   return list.sort(

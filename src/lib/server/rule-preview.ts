@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm";
 
 import type { Program, Rule } from "../types";
+import { shareKey } from "./agent-channels";
 import { config } from "./config";
 import { contentions, type Occupant, settled } from "./conflict";
 import { paidAllowed } from "./contracts";
@@ -219,7 +220,7 @@ async function countPreview(
       service_name: serviceTable.name,
       has_logo: serviceTable.has_logo,
       type: serviceTable.type,
-      channel: serviceTable.channel,
+      channel: shareKey(),
     })
     .from(reservations)
     .innerJoin(serviceTable, eq(serviceTable.id, reservations.service_id))
@@ -268,7 +269,7 @@ async function countPreview(
     service_type: serviceTable.type,
     service_name: serviceTable.name,
     service_has_logo: serviceTable.has_logo,
-    service_channel: serviceTable.channel,
+    service_channel: shareKey(),
     service_decodable: serviceTable.decodable,
   };
   const all = orm()

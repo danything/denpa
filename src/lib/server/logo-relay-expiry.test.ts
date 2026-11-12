@@ -65,6 +65,7 @@ writeFileSync(
 );
 
 const { orm } = await import("./db");
+const { placeServices } = await import("./fake-channels");
 const { services } = await import("./schema");
 const { serviceKey } = await import("./tuner");
 const { sweep } = await import("./logo");
@@ -77,10 +78,10 @@ orm()
     network_id: 4,
     name: "局101",
     type: "BS",
-    channel: "BS01_0",
     updated_at: 1,
   })
   .run();
+placeServices([{ id: serviceKey(4, 101, "BS"), channel: "BS01_0" }]);
 
 test("古い外れの控えは開き直し、また外れなら時刻を書き直して次は開かない", async () => {
   await sweep();

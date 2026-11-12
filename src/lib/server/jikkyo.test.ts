@@ -174,7 +174,6 @@ describe("recordingJikkyo", () => {
         network_id: 32739,
         name: "ＴＢＳ１",
         type: "GR",
-        channel: "T22",
         updated_at: 0,
       },
       {
@@ -183,7 +182,6 @@ describe("recordingJikkyo", () => {
         network_id: 4,
         name: "放送大学テレビ",
         type: "BS",
-        channel: "BS11_2",
         updated_at: 0,
       },
     ])

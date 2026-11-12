@@ -12,6 +12,13 @@ import {
 
 const HOUR = 60 * 60 * 1000;
 
+/** チャンネルの名前を TS の番号にする。同じ名前なら同じ TS */
+function tsOf(channel: string): number {
+  let hash = 0;
+  for (const char of channel) hash = (hash * 31 + char.charCodeAt(0)) % 65_521;
+  return hash;
+}
+
 function station(
   id: number,
   serviceId: number,
@@ -19,7 +26,13 @@ function station(
   type = "GR",
   networkId = 0x7fe0,
 ): Station {
-  return { id, service_id: serviceId, channel, type, network_id: networkId };
+  return {
+    id,
+    service_id: serviceId,
+    transport_stream_id: tsOf(channel),
+    type,
+    network_id: networkId,
+  };
 }
 
 // テレ東 (1072〜1074) と NHK総合 (1024・1025)。並びは SERVICE_ORDER のとおり

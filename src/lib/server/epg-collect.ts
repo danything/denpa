@@ -18,6 +18,7 @@ import { ServiceReader } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
 import { isSatellite } from "../types";
+import { type Agent, tuningAgents } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
 import {
@@ -64,9 +65,9 @@ const collected = new Map<string, number>();
  * 書いたときだけ進む (`epg.savePrograms`。録画とスキャンが読んだぶんも入る)。番組の行の `updated_at` で
  * 数えると、ライブが p/f を写しただけで「集めたばかり」になり、2 時間は行き直さなかった。
  *
- * **数えるキーは局**で、`services.channel` は見ない。あの列に入るのは
- * 「最後に取り込んだときの枠の名前」1 つだけなので、**同じ TS を指す枠が
- * 2 つあると片方が必ず「一度も集めていない」ことになる**。実機の BS が
+ * **数えるキーは局**で、チャンネルの名前では数えない。局に物理チャンネルを 1 つだけ持っていた頃
+ * (`services.channel`) は、そこに「最後に取り込んだときの枠の名前」しか入らず、**同じ TS を指す枠が
+ * 2 つあると片方が必ず「一度も集めていない」ことになっていた**。実機の BS が
  * まさにそれで、9 枠が永久に「まっさら」に見えて周回のたびに開かれていた。
  *
  * 局で引けば、どの枠から開いても同じ時刻が出る。
@@ -263,6 +264,8 @@ export type Outcome = "read" | "busy" | "cut" | "untuned";
  * `last` が false の回は、選局できなくても受信できなかったと数えない。この周回で読み直すため (`drain`)
  */
 async function collectChannel(
+  /** 選局を送るエージェント (`agents.id`)。受信の記録をこのエージェントのものにする */
+  agent: number,
   channel: AgentChannel,
   /** 全局読みのとき、来るはずの局 (service_id)。普段 (自分の中継だけ) は null */
   whole: number[] | null,
@@ -425,7 +428,7 @@ async function collectChannel(
   const failed = receptionFailed({ received, refused, opened, timedOut, last });
   if (failed) {
     collected.set(key(channel), Date.now());
-    if (recordFailed(channel.type, channel.channel)) {
+    if (recordFailed(agent, channel.type, channel.channel)) {
       console.warn(
         `[epg] ${label} を受信できないチャンネルにしました (続けて選局できませんでした)`,
       );
@@ -817,10 +820,18 @@ export async function drain<J extends { channel: { type: string } }>(
 }
 
 async function run(): Promise<number> {
-  const all = await getChannels().catch(() => [] as AgentChannel[]);
+  // 選局を送るエージェント (`openChannel` と同じ先頭の 1 台) の控えを回る
+  let target: Agent;
+  try {
+    target = tuningAgents()[0]!;
+  } catch {
+    return 0;
+  }
+  const agent = target.id;
+  const all = await getChannels(target).catch(() => [] as AgentChannel[]);
   if (all.length === 0) return 0;
   // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
-  syncServices(all);
+  syncServices([{ agent, channels: all }]);
   forgetGround(all);
   // 番組表を読める局が 1 つも無いチャンネル (EIT がスクランブルされた SKY など) は番組表を取得しない (`epgReadableChannel`。番組表に出さないので要らない)
   const channels = all.filter(epgReadableChannel);
@@ -865,7 +876,7 @@ async function run(): Promise<number> {
   const first = firstSweeps(channels, reach, lastOf).filter(
     (channel) => at - lastOf(channel) >= config.epgChannelRetry,
   );
-  const checked = checkedAt();
+  const checked = checkedAt(agent);
   const checkedOf = (channel: AgentChannel) => checked.get(key(channel)) ?? 0;
   const sweeps = [...first, ...networkSweeps(targets, channels, checkedOf)];
   // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
@@ -933,7 +944,12 @@ async function run(): Promise<number> {
       last: Last,
     ): Promise<Outcome> => {
       update({ pending: state.pending - 1 });
-      const result = await collectChannel(job.channel, job.whole, last.tune);
+      const result = await collectChannel(
+        agent,
+        job.channel,
+        job.whole,
+        last.tune,
+      );
       /*
        * 列へ戻る回 (空きが無かった・途中で切れた・選局をやり直す) は、読み終えたあとの処理をしない。
        * 取り込んだ番組も数えない (読み直した回に同じ番組をもう一度数える)

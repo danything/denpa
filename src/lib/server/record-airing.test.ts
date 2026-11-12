@@ -70,7 +70,6 @@ orm()
       network_id: 32_736,
       name: "NHK総合",
       type: "GR",
-      channel: "27",
       updated_at: 0,
     },
     {
@@ -79,7 +78,6 @@ orm()
       network_id: 32_736,
       name: "NHK Eテレ",
       type: "GR",
-      channel: "26",
       updated_at: 0,
     },
   ])

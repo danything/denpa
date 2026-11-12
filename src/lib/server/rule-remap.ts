@@ -11,9 +11,9 @@
 import { eq } from "drizzle-orm";
 
 import { toHalfWidth } from "../fold";
+import { unreceivableService } from "./agent-channels";
 import { orm } from "./db";
 import { currentServices } from "./epg";
-import { unreceivableChannels } from "./reception";
 import { reapply } from "./rule-actions";
 import { DIGITAL_TV, rules as ruleTable, services } from "./schema";
 
@@ -38,7 +38,8 @@ export function orphanedRules(): Orphan[] {
       id: services.id,
       name: services.name,
       type: services.type,
-      channel: services.channel,
+      network_id: services.network_id,
+      transport_stream_id: services.transport_stream_id,
       service_type: services.service_type,
     })
     .from(services)
@@ -60,7 +61,14 @@ export function orphanedRules(): Orphan[] {
    * 受信できないチャンネルの局 (`reception.ts`) はサービス ID が変わったのではないので出さない。
    * 止めているルールも出さない (付け替えても録らない)
    */
-  const blocked = unreceivableChannels();
+  const blocked = new Set(
+    orm()
+      .select({ id: services.id })
+      .from(services)
+      .where(unreceivableService())
+      .all()
+      .map((row) => row.id),
+  );
   const orphans: Orphan[] = [];
   for (const rule of orm()
     .select()
@@ -73,10 +81,12 @@ export function orphanedRules(): Orphan[] {
       const gone = byId.get(id);
       // 局の行が無い (映像の無い局として消した) ものは、名前も候補も出せない
       if (gone === undefined) continue;
-      if (blocked.has(`${gone.type}:${gone.channel}`)) continue;
+      if (blocked.has(gone.id)) continue;
       const name = toHalfWidth(gone.name);
       const rank = (service: (typeof live)[number]) =>
-        service.channel === gone.channel
+        gone.transport_stream_id !== null &&
+        service.network_id === gone.network_id &&
+        service.transport_stream_id === gone.transport_stream_id
           ? 0
           : toHalfWidth(service.name) === name
             ? 1

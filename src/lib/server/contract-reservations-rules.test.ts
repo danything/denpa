@@ -71,7 +71,6 @@ function paidAiring(serviceId: number): void {
       network_id: 4,
       name: `CS${serviceId}`,
       type: "CS",
-      channel: `CS${serviceId}`,
       updated_at: 0,
     })
     .run();
