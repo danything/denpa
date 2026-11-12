@@ -2,7 +2,9 @@
 # ---------------------------------------------------------------------------
 # Android のアプリ (debug の APK) をエミュレータに入れて起動し、常駐サービスとエージェントを確かめる (.github/workflows/android.yml)。
 #
-#   bash .github/android-app-smoke.sh <APK> <記録の置き場>
+#   bash .github/android-app-smoke.sh <APK> <記録の置き場> <native-smoke.js>
+#
+# 3 つ目は tests/native-smoke.ts を bun build で 1 つにまとめたもの (android.yml が作る)
 #
 # エミュレータが起きてから android-emulator-runner が流す。エージェントはアプリの子プロセス (SELinux の untrusted_app) で動く。
 # エミュレータには USB の機材を挿せず、通知のボタンも押せないので、その 2 つは debug の APK にだけ入る受け口 (DebugReceiver) で代える
@@ -16,6 +18,9 @@
 # - エージェントが APK の asicend (libasicend.so) を起動でき (--version)、ファームウェア待ちの ID の fd を asicend --fd に継がせる
 # - bun (libbun.so) がアプリの子プロセスとして untrusted_app で動き、debug の APK に入れた確かめ用のサーバ (android/app/src/debug/assets/server/) が
 #   3000 番で答える。GET /check で、JIT・名前を引けるか・/proc から読むもの・子プロセスの起動・bun:sqlite を bun の中から試す
+# - bun が、常駐サービスの渡す FFMPEG・FFPROBE (APK の libffmpeg.so・libffprobe.so) を子プロセスで起動できる。
+#   tests/native-smoke.ts (エンコード、HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec のエンコーダ、4 本目の出口) を
+#   アプリの置き場に置き、確かめ用のサーバの POST /smoke で、アプリの子プロセスの bun からさらに子プロセスで流す
 # - エージェントが異常終了すると、アプリが起動し直し、繋ぎ直して synced を送り直す
 # - 通知の「終了」で SIGTERM が届き、エージェントも bun も常駐サービスも残らない
 # - アイコンで始めたあとに端末を起動し直すと、BOOT_COMPLETED で常駐サービスが始まる
@@ -24,6 +29,7 @@ set -euo pipefail
 
 apk=$1
 logs=$2
+smoke=$3
 mkdir -p "$logs"
 logs=$(cd "$logs" && pwd)
 pkg=io.github.danything.denpa
@@ -201,6 +207,30 @@ if grep -qE '\{ (execute|execute_no_trans|execmem) \}' "$logs/bun-avc.txt"; then
   exit 1
 fi
 
+# --- ffmpeg・ffprobe。常駐サービスが FFMPEG・FFPROBE で APK の libffmpeg.so・libffprobe.so を渡し、bun が子プロセスで起動する。
+# tests/native-smoke.ts をアプリの置き場 (DENPA_HOME/smoke/) に置き、POST /smoke で流す (エンコードがあるので数分かかる)
+echo "=== ffmpeg"
+jq -e '.ffmpeg.ok and (.ffmpeg.value.line | startswith("ffmpeg version"))
+  and .ffprobe.ok and (.ffprobe.value.line | startswith("ffprobe version"))' "$logs/bun-check.json"
+adb push "$smoke" /data/local/tmp/native-smoke.js > /dev/null
+adb shell "cat /data/local/tmp/native-smoke.js | run-as $pkg sh -c 'mkdir -p files/denpa/smoke && cat > files/denpa/smoke/native-smoke.js'"
+adb shell rm /data/local/tmp/native-smoke.js
+curl -fsS --max-time 1200 -X POST http://127.0.0.1:3000/smoke > "$logs/ffmpeg-smoke.json"
+jq -r .stdout "$logs/ffmpeg-smoke.json" | tee "$logs/ffmpeg-smoke.txt"
+jq -r .stderr "$logs/ffmpeg-smoke.json" | tee "$logs/ffmpeg-smoke-stderr.txt" >&2
+jq -e .ok "$logs/ffmpeg-smoke.json" > /dev/null
+# 終了コードだけでなく、最後まで流れたかも見る (ffprobe は 10 種類のファイル)
+test "$(grep -cE '^ffprobe .+: ok$' "$logs/ffmpeg-smoke.txt")" = 10
+for line in "ffmpeg: ok" "h264_mediacodec: ok" "no GPU: software encoding: ok" "side output closes when ffmpeg fails: ok"; do
+  grep -qxF "$line" "$logs/ffmpeg-smoke.txt" || { echo "native-smoke の出力に「$line」がありません" >&2; exit 1; }
+done
+# ffmpeg・ffprobe の SELinux の拒否は記録に残す。実行そのものを断られたら止める
+adb logcat -d | tr -d '\r' | grep -E 'avc: +denied' | grep -E 'libff(mpeg|probe)' | tee "$logs/ffmpeg-avc.txt" || true
+if grep -qE '\{ (execute|execute_no_trans) \}' "$logs/ffmpeg-avc.txt"; then
+  echo "SELinux が ffmpeg の実行を断りました" >&2
+  exit 1
+fi
+
 # --- エージェントが異常終了したら、アプリが起動し直して繋ぎ直す
 echo "=== エージェントに SIGKILL を送る"
 adb logcat -c
@@ -241,4 +271,4 @@ broadcast PRESS_STOP
 wait_until no_agent
 wait_until no_bun
 wait_until service_gone
-echo "常駐サービスが始まり、エージェントと bun がアプリの子プロセスで答え、USB_BROKER で fd を受け取り、「終了」と端末の起動で止まり・始まりました"
+echo "常駐サービスが始まり、エージェントと bun がアプリの子プロセスで答え、bun から ffmpeg・ffprobe を流せ、USB_BROKER で fd を受け取り、「終了」と端末の起動で止まり・始まりました"

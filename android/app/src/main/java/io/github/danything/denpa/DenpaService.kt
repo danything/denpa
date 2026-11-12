@@ -233,7 +233,7 @@ class DenpaService : Service() {
                 val version = runCatching { Server.version(Server.bun(this)) }.getOrNull()
                 Log.i(Server.TAG, "bun ${version ?: "(--version に答えません)"}")
             }
-            Launch(listOf(entry.path), baseEnvironment() + ("PORT" to Server.PORT.toString()), entry.parentFile)
+            Launch(listOf(entry.path), baseEnvironment() + Server.tools(this) + ("PORT" to Server.PORT.toString()), entry.parentFile)
         }
     }
 

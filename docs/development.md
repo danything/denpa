@@ -283,6 +283,7 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 ffmpeg・SVT-AV1・emsdk・Denpa Font・asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
 Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
+アプリに入れる ffmpeg は Dockerfile の `ffmpeg` 段からバージョンと部品を読み、x264・dav1d・zimg のバージョンは `.github/ffmpeg-android.sh` に書いています (Mac の `ffmpeg-macos.sh` と同じ)。
 `bun-android.sh` のバージョンは Dockerfile の `oven/bun` と別に Renovate が上げ、ずれている間は Android の CI が警告を出します。
 
 **土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は
@@ -330,6 +331,10 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
   bun は配布物のまま入れます (`keepDebugSymbols`)。jniLibs は APK の中では圧縮されるので、増えるのは arm64 で約 53 MB です。端末には展開した 113 MB が置かれます
 - 常駐サービスは、APK の assets に `server/` があれば、それを `files/denpa/server/` に書き出して `bun server/…/app/server.js` を部品として起動します (`Server.kt`)。
   置き場 (`DENPA_HOME`)・`HOME`・`TMPDIR` はエージェントと同じで、待ち受けるのは `PORT` (3000) です。出力は logcat の `denpa-server` に出ます。
+- ffmpeg は `android/ffmpeg/` に置くと APK に入ります (`DENPA_FFMPEG` で別の置き場も渡せます)。`.github/ffmpeg-android.sh` が NDK で組み、
+  `jniLibs/<ABI>/libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリ、ライセンスの文書とソースの入手先を並べます ([encode.md](encode.md#android-でエンコードする))。
+  CI は組み上がりを actions/cache に置き、Dockerfile の `ffmpeg` 段・組むスクリプト・NDK が変わるまで使い回します (依存は別のキャッシュ。Mac と同じ作り)。
+  常駐サービスは、APK に入っていれば `FFMPEG`・`FFPROBE` にそのパスを入れてサーバに渡します。APK の中で増えるのは arm64 で約 7 MB、端末には展開した 14 MB が置かれます
   いまのリリースの APK には `server/` が無く、bun は起動しません。debug の APK にだけ、確かめ用の小さなサーバ (`src/debug/assets/server/app/server.js`) が入ります
 - 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と asicen-userland の機材
   (`AsicenUserland.UsbIds`) と食い違わないことを、エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
@@ -344,6 +349,12 @@ bash .github/bun-android.sh android/bun arm64
 cd android && ./gradlew lintDebug testDebugUnitTest assembleDebug
 ```
 
+ffmpeg は NDK (バージョンは android.yml の `NDK_VERSION`) を置いたコンテナで、nasm・meson・ninja・autoconf・automake・libtool・cmake を入れてから組みます (数分かかる)。
+
+```sh
+ANDROID_NDK_ROOT=/opt/ndk RUNNER_TEMP=/tmp bash .github/ffmpeg-android.sh android/ffmpeg arm64
+```
+
 CI は android.yml で両方の ABI を入れた debug の APK を組み (成果物の `denpa-android-debug`)、Android 10 (API 29。minSdk) と Android 15 (API 35) の
 x86_64 のエミュレータに入れて確かめます (`.github/android-app-smoke.sh`)。
 
@@ -354,6 +365,8 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
 - bun がアプリの子プロセスで動き、確かめ用のサーバが 3000 番で答えること。サーバの `GET /check` で、JIT が動くこと、`localhost` を引けること、
   `/proc` から読めること、bun が自分を子プロセスで起動できること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
+- bun が `FFMPEG`・`FFPROBE` の ffmpeg・ffprobe を起動できること。`tests/native-smoke.ts` を bun build で 1 つにまとめてアプリの置き場に置き、
+  確かめ用のサーバの `POST /smoke` で流す (エンコード、4K の局の HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec の H.264 のエンコード、4 本目の出口)
 - エージェントが落ちたらアプリが起動し直すこと、通知の「終了」でエージェントも bun も常駐サービスも残らないこと、端末を起動し直すと常駐サービスが始まること
 
 エミュレータの列は必須チェックではありません (起動や応答の時間がばらつき、コードと関係なく落ちることがあるため)。
