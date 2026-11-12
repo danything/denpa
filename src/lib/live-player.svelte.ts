@@ -75,7 +75,7 @@ import {
   type LiveChoice,
   type LiveFormat,
 } from "#lib/live-choice.js";
-import { pinnedTuner } from "#lib/live-tuner.svelte.js";
+import { liveTuner, pinnedTuner } from "#lib/live-tuner.svelte.js";
 import {
   type CaptionTrack,
   CHANNEL,
@@ -2541,7 +2541,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         if (notice.type === "error") {
           // リクエストし直しても入れなかった。取り上げた録画か、「ライブに戻る」を試していたなら追っかけへ
           const to = returning ? (yielded?.recording ?? null) : fallback;
-          if (to !== null && tuned !== null) giveWay(to, returning);
+          if (notice.unpin === true && tuned !== null) {
+            // 名指しのチューナーがもう無い。名指しをやめて、エージェントに選ばせてリクエストし直す (docs/watch.md)
+            liveTuner.set(null);
+            note(notice.message);
+            requestAgain();
+          } else if (to !== null && tuned !== null) giveWay(to, returning);
           else if (
             !raw &&
             served !== 0 &&

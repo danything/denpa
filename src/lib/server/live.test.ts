@@ -31,6 +31,7 @@ import {
   openingLine,
   parseCommand,
   parsePlayable,
+  pinnedNotTuned,
   rawEnding,
   rungCodec,
   rungPlan,
@@ -497,6 +498,26 @@ describe("使えなかった理由", () => {
   });
 });
 
+/** **名指しの選局を断られたら、エージェントの理由と自動に戻す場所を出す** (docs/agent.md「デバッグ用の名指し」) */
+describe("名指しの選局を断られたときの文面 (pinnedNotTuned)", () => {
+  test("理由を出し、自動に戻す場所を添える", () => {
+    expect(
+      pinnedNotTuned(
+        "it930x:3-1:0",
+        "PLEX PX-MLT8PE 3-1 #0: 30 秒待っても TS が届きませんでした",
+        false,
+      ),
+    ).toBe(
+      "ライブのチューナーに選んだ it930x:3-1:0 で選局できませんでした。PLEX PX-MLT8PE 3-1 #0: 30 秒待っても TS が届きませんでした。設定の「その他」で「自動」に戻せます",
+    );
+  });
+
+  test("チューナーがもう無ければ、自動に戻したと言う", () => {
+    expect(pinnedNotTuned("/dev/px4video0", "選局できませんでした", true)).toBe(
+      "ライブのチューナーに選んだ /dev/px4video0 が見つからないため、自動に戻しました",
+    );
+  });
+});
 describe("ffmpeg が局の映像・音声を指定できずに降りた (missingMedia)", () => {
   test("映像か音声の指定で降りた行なら、どちらかを返す", () => {
     expect(

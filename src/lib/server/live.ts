@@ -117,7 +117,13 @@ import { LastingScramble, mediaPids } from "./scramble";
 import { settings } from "./settings";
 import { chunks, endInput, lines, sideOutput } from "./stream";
 import { holdTranscode, transcodeRoom } from "./transcode";
-import { getTuners, openWhenFree, type StreamUse } from "./tuner";
+import {
+  getTuners,
+  openWhenFree,
+  type StreamUse,
+  TuneError,
+  TunerBusyError,
+} from "./tuner";
 import { HLG_TO_SDR, UHD_HEIGHT } from "./uhd";
 import type { Connection } from "./ws";
 
@@ -866,6 +872,30 @@ export function whyNotTuned(why: string, until: number | null): string {
   });
   return `いまは放送休止です (${clock} まで)`;
 }
+
+/**
+ * **名指し (デバッグ用。docs/agent.md「デバッグ用の名指し」) の選局を断られたときの文面。** ほかのチューナーに替えないので、
+ * エージェントの理由と、自動に戻す場所を出す。名指しのチューナーが一覧にもう無ければ、画面が自動に戻す (`unpin`)
+ *
+ * @param reason エージェントが返した理由。読めなければ `whyNotTuned` の文面
+ * @param gone 名指しのチューナーがエージェントの一覧に無い
+ */
+export function pinnedNotTuned(
+  pin: string,
+  reason: string,
+  gone: boolean,
+): string {
+  return gone
+    ? `ライブのチューナーに選んだ ${pin} が見つからないため、自動に戻しました`
+    : `ライブのチューナーに選んだ ${pin} で選局できませんでした。${reason}。設定の「その他」で「自動」に戻せます`;
+}
+
+/**
+ * **ライブの選局で、エージェントの答えを待つ上限 (ms)。** エージェントは TS が 30 秒届かなければ自分で選局を畳んで理由を返す
+ * (`TunerPool.FirstTsWait`)。同期しなかったときに別のチューナーで選局し直すぶん (同期の待ちは機材によって 5〜15 秒) を足しても収まる長さ。
+ * エージェントが答えを返さないまま止まっても、画面を「読み込み中」のままにしない
+ */
+export const LIVE_ANSWER_WAIT = 60_000;
 
 interface Viewer {
   /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者は映像か字幕だけを流すエンドポイント (`sessionStream`・`liveCaptions`) */
@@ -1906,13 +1936,8 @@ class Session {
         wanted = null;
       }
     } catch (error) {
-      this.died(
-        label,
-        String(error),
-        this.source === undefined
-          ? whyNotTuned(String(error), resting(this.serviceId))
-          : "録画を読めませんでした",
-      );
+      if (this.source === undefined) await this.notTuned(label, error);
+      else this.died(label, String(error), "録画を読めませんでした");
     } finally {
       // スクランブルの理由を伝え終えてから畳む (`endScrambled`)
       await this.ending;
@@ -1925,10 +1950,48 @@ class Session {
    * `HOLD_MOST` (6 秒) 貼られて黒くなるだけで、失敗に見えなかった (tvk T15 で
    * `-map 0:p:…` を解決できずに ffmpeg が降りていた)。こちらから畳んだとき (`stop`) は言わない
    */
-  private died(label: string, why: string, message: string): void {
+  private died(
+    label: string,
+    why: string,
+    message: string,
+    unpin = false,
+  ): void {
     if (this.stopped || this.ending !== null) return;
     console.warn(`[live] ${label}: ${why}`);
-    this.tell({ type: "error", message });
+    this.tell(
+      unpin
+        ? { type: "error", message, unpin: true }
+        : { type: "error", message },
+    );
+  }
+
+  /**
+   * 選局できなかったことを伝える (`died`)。**名指し (`pin`) の選局でエージェントが断ったなら、その理由を出す**
+   * (docs/watch.md「使えないときは、ほかのチューナーに替えずに理由を出します」)。
+   * 名指しのチューナーがエージェントの一覧にもう無ければ、画面に自動へ戻させる (`unpin`)。
+   * 一覧を取得できなければ、無くなったとはみなさない
+   */
+  private async notTuned(label: string, error: unknown): Promise<void> {
+    const why = String(error);
+    const plain = whyNotTuned(why, resting(this.serviceId));
+    const pin = this.pin;
+    if (
+      pin === null ||
+      !(error instanceof TuneError || error instanceof TunerBusyError)
+    ) {
+      this.died(label, why, plain);
+      return;
+    }
+    const gone = await getTuners().then(
+      (tuners) => !tuners.some((tuner) => tuner.pin === pin),
+      () => false,
+    );
+    this.died(
+      label,
+      why,
+      pinnedNotTuned(pin, error.reason ?? plain, gone),
+      gone,
+    );
   }
 
   /**
@@ -1986,6 +2049,7 @@ class Session {
       () => this.stopped,
       this.pin,
       this.program > 0 ? this.program : null,
+      LIVE_ANSWER_WAIT,
     );
     this.locating = this.locate();
     this.settle();
@@ -2777,13 +2841,8 @@ class Session {
           return;
       }
     } catch (error) {
-      this.died(
-        label,
-        String(error),
-        chase
-          ? "録画を読めませんでした"
-          : whyNotTuned(String(error), resting(this.serviceId)),
-      );
+      if (chase) this.died(label, String(error), "録画を読めませんでした");
+      else await this.notTuned(label, error);
     } finally {
       captioner?.stop();
       // スクランブルの理由を伝え終えてから畳む (`endScrambled`)
@@ -2816,13 +2875,8 @@ class Session {
         return true;
       });
     } catch (error) {
-      this.died(
-        label,
-        String(error),
-        chase
-          ? "録画を読めませんでした"
-          : whyNotTuned(String(error), resting(this.serviceId)),
-      );
+      if (chase) this.died(label, String(error), "録画を読めませんでした");
+      else await this.notTuned(label, error);
     } finally {
       this.stop();
     }

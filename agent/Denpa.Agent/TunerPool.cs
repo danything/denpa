@@ -42,6 +42,17 @@ public sealed class TunerPool(
     /// <summary>誰も読まなくなってから選局を畳むまでの間</summary>
     public static readonly TimeSpan Linger = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// **選局を受けてから最初の TS が届くまでの上限。** 超えたら、その選局を失敗として畳んで利用者に理由を返し、
+    /// そのチューナーはそのチャンネルで後回しにする (<see cref="Starve"/>)。前の読み出しを待つ 2 秒、デバイスを開く時間、
+    /// 同期の待ち (機材によって 5〜15 秒) を含めた長さで、ふつうは 1 秒前後で届く。
+    /// 入れる前は、本番で PX-MLT8PE の受信機に入ったライブの選局が答えを返さないまま止まり、画面が「読み込み中」のままだった
+    /// </summary>
+    public static readonly TimeSpan FirstTsWait = TimeSpan.FromSeconds(30);
+
+    /// <summary>最初の TS を待つ上限 (<see cref="FirstTsWait"/>)。変えるのはテストだけ</summary>
+    public TimeSpan FirstTsLimit { get; init; } = FirstTsWait;
+
     /// <summary>読む側が遅れてよい上限 (バイト)</summary>
     public const long MaxLag = 64L * 1024 * 1024;
 
@@ -306,6 +317,10 @@ public sealed class TunerPool(
             sink = Join(lease, priority, use, service);
         }
 
+        // 選局のどこで止まっても (前の読み出し・同期・TS の読み出し)、上限までに TS が届かなければ利用者に理由を返す
+        var name = spec.Name;
+        _ = Task.Delay(FirstTsLimit).ContinueWith(_ => Starve(lease, name), TaskScheduler.Default);
+
         /*
          * **選局は取り合いのロックを放してからやる** (同期待ちの 5〜15 秒、ほかの要求を止めない。
          * docs/agent.md「選局は取り合いのロックの外でやる」)。ここから先で触るのは、上で押さえた自分のチューナーだけ。
@@ -359,6 +374,8 @@ public sealed class TunerPool(
                     lease.StartNative(held.Device, () => OnExit(lease));
                     // 閉じる側 (Held.Close) は、この読み出しが止まるのを待ってから閉じる
                     held.Reader = lease;
+                    // 選局している間に TS を待つ上限を過ぎて畳んだ。合っている印を残すと、次の選局が選局し直さずに読み始める
+                    if (lease.Starved) held.Channel = null;
                 }
             }
             else
@@ -416,6 +433,34 @@ public sealed class TunerPool(
             lock (_gate) _unsynced.Remove((index, type, channel));
         }
         return sink;
+    }
+
+    /// <summary>
+    /// **最初の TS が <see cref="FirstTsLimit"/> までに届かなかった選局を畳む。** 利用者には理由を返し、
+    /// そのチューナーはそのチャンネルで後回しにし (<see cref="UnsyncedFor"/>)、次の選局では選局し直す。
+    /// 取り上げられた選局、もう TS が届いた選局、失敗で畳んだ選局には何もしない
+    /// </summary>
+    private void Starve(Lease lease, string name)
+    {
+        var reason = $"{name}: {FirstTsLimit.TotalSeconds:0} 秒待っても TS が届きませんでした";
+        lock (_gate)
+        {
+            if (!_leases.TryGetValue(lease.Tuner, out var current) || current != lease || !lease.Starve(reason)) return;
+            Forget(lease);
+            _unsynced[(lease.Tuner, lease.Type, lease.Channel)] = Environment.TickCount64;
+            lock (lease.Sinks)
+            {
+                foreach (var sink in lease.Sinks) sink.Fail(reason);
+                lease.Sinks.Clear();
+            }
+        }
+        lease.Stop();
+        lock (_deviceGate)
+        {
+            if (_held.TryGetValue(lease.Tuner, out var held)) held.Channel = null;
+        }
+        Log.Write($"[{name}] {lease.Channel}: {reason}。この選局を畳みます");
+        onChange();
     }
 
     /// <summary>試したチューナーのどれでも同期しなかったときの理由。名前を「・」で並べ、文言は 1 台のときと同じ (denpa は文言で放送休止を見分ける)</summary>
@@ -1065,6 +1110,20 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     private long _firstReadMs = -1;
 
+    private volatile bool _starved;
+
+    /// <summary>最初の TS が上限までに届かずに畳んだ (<see cref="TunerPool.FirstTsLimit"/>)</summary>
+    public bool Starved => _starved;
+
+    /// <summary>まだ TS が 1 度も届いていなければ、届かなかった印と理由を残して true。畳むのは呼んだ側</summary>
+    public bool Starve(string reason)
+    {
+        if (Volatile.Read(ref _firstReadMs) >= 0 || _stopped || _drained) return false;
+        _starved = true;
+        Error = reason;
+        return true;
+    }
+
     /// <summary>
     /// **前の報告からあとに、利用者としていたもの。** 溢れの報告は 1 分に 1 回なので、報告した瞬間の
     /// <see cref="Sinks"/> だけだと溢れた本人が抜けたあとで「利用者なし」になる (実機の 24 時間で 42%)。
@@ -1201,7 +1260,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                     ? tuner.Output.Read(buffer, 0, buffer.Length)
                     : ring.Read(buffer, 0, buffer.Length, () => _stopped || _drained);
                 if (read <= 0) break;
-                if (_firstReadMs < 0) _firstReadMs = Clock.ElapsedMilliseconds;
+                if (_firstReadMs < 0) Volatile.Write(ref _firstReadMs, Clock.ElapsedMilliseconds);
 
                 if (Interlocked.Add(ref _queued, read) > QueueLimit)
                 {
@@ -1364,6 +1423,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                 {
                     var read = await stream.ReadAsync(buffer);
                     if (read <= 0) break;
+                    if (_firstReadMs < 0) Volatile.Write(ref _firstReadMs, Clock.ElapsedMilliseconds);
                     Broadcast(buffer[..read]);
                 }
             }

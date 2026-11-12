@@ -386,14 +386,42 @@ export function recordingHolds(
  * 総当たりのスキャンでここを区別できないと、録画中で塞がっていただけの
  * チャンネルを「受信できない」と判断して設定から落としてしまう。
  */
-export class TunerBusyError extends Error {}
+export class TunerBusyError extends Error {
+  /** エージェントが返した理由 (本文の `error`)。読めなければ null */
+  constructor(
+    message: string,
+    readonly reason: string | null = null,
+  ) {
+    super(message);
+  }
+}
 
 /**
  * **エージェントが「選局できない」と返した** (同期しない・デバイスが無いなど)。空き待ち (`TunerBusyError`) と、
  * エージェントに繋がらないのは別。受信できるかの記録 (`epg-collect.ts` → `reception.ts`) は、開けなかった回のうちこれだけを失敗に数える
  * (ほかに数えるのは、開けたのに上限まで待っても何も来なかった回)
  */
-export class TuneError extends Error {}
+export class TuneError extends Error {
+  /** エージェントが返した理由 (本文の `error`)。読めなければ null */
+  constructor(
+    message: string,
+    readonly reason: string | null = null,
+  ) {
+    super(message);
+  }
+}
+
+/** エージェントの失敗の本文 (`{ "error": "…" }`) から理由を読む。形が違えば null */
+function agentReason(detail: string): string | null {
+  try {
+    const body = JSON.parse(detail) as { error?: unknown } | null;
+    return typeof body?.error === "string" && body.error !== ""
+      ? body.error
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 物理チャンネルを丸ごと開く。**使い方はこれ 1 つ。**
@@ -418,9 +446,21 @@ export async function openChannelStream(
    * ほかの局を待たずに流し始める (docs/agent.md「B25 の復号もカードリーダーも自前」)。TS をまるごと使う録画は渡さない
    */
   service: number | null = null,
+  /** 答え (レスポンスヘッダ) を待つ上限 (ms)。`openChannel` の `answerWithin` */
+  answerWithin: number | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
   return (
-    await openChannel(type, channel, signal, use, priority, after, pin, service)
+    await openChannel(
+      type,
+      channel,
+      signal,
+      use,
+      priority,
+      after,
+      pin,
+      service,
+      answerWithin,
+    )
   ).stream;
 }
 
@@ -434,6 +474,10 @@ const TSMF_STREAMS = "X-Denpa-Tsmf-Streams";
  * エージェントが `X-Denpa-Tsmf-Streams` で返す。返さなければ (TSMF でない・古いエージェント) 1
  *
  * `transport` は流れてくるバイト列の形式 (`streamTransport`)。TSMF から選んだ TS が分割 TLV なら `tlv`
+ *
+ * `answerWithin` (ms) を渡すと、その間にエージェントが答え (レスポンスヘッダ) を返さなければリクエストを打ち切り、
+ * `TuneError` を送出する。エージェントは最初の TS を送るときにヘッダを返すので、答えが来ないのは TS が届いていないとき。
+ * 答えが来たあとのストリームには効かない
  */
 export async function openChannel(
   type: string,
@@ -444,6 +488,7 @@ export async function openChannel(
   after: readonly StreamUse[] = [],
   pin: string | null = null,
   service: number | null = null,
+  answerWithin: number | null = null,
 ): Promise<{
   stream: ReadableStream<Uint8Array>;
   tsmfStreams: number;
@@ -458,14 +503,35 @@ export async function openChannel(
   for (const leaving of after) query.append("after", leaving);
   if (pin !== null) query.set("tuner", pin);
   if (service !== null) query.set("service", String(service));
-  const res = await agentFetch(`/denpa/stream?${query}`, {
-    signal,
-  });
+  const answer = new AbortController();
+  const timer =
+    answerWithin === null
+      ? undefined
+      : setTimeout(() => answer.abort(), answerWithin);
+  let res: Response;
+  try {
+    res = await agentFetch(`/denpa/stream?${query}`, {
+      signal:
+        timer === undefined ? signal : AbortSignal.any([signal, answer.signal]),
+    });
+  } catch (error) {
+    if (answer.signal.aborted && !signal.aborted) {
+      const reason = `エージェントから選局の答えが ${Math.round((answerWithin ?? 0) / 1000)} 秒返りませんでした`;
+      throw new TuneError(`選局できません (${reason})`, reason);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok || res.body === null) {
     const detail = await res.text().catch(() => "");
+    const reason = agentReason(detail);
     if (res.status === 409)
-      throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
-    throw new TuneError(`選局できません (${res.status}) ${detail}`);
+      throw new TunerBusyError(
+        `チューナーに空きがありません ${detail}`,
+        reason,
+      );
+    throw new TuneError(`選局できません (${res.status}) ${detail}`, reason);
   }
   recordTuned(type, channel);
   return {
@@ -571,10 +637,22 @@ export function openWhenFree(
   pin: string | null = null,
   /** 観る局 (放送の service_id)。`openChannelStream` の `service` */
   service: number | null = null,
+  /** 1 回のリクエストで答えを待つ上限 (ms)。`openChannel` の `answerWithin` */
+  answerWithin: number | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
   return retryWhileBusy(
     () =>
-      openChannelStream(type, channel, signal, use, priority, [], pin, service),
+      openChannelStream(
+        type,
+        channel,
+        signal,
+        use,
+        priority,
+        [],
+        pin,
+        service,
+        answerWithin,
+      ),
     giveUp,
   );
 }
