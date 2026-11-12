@@ -12,6 +12,7 @@ import {
 
 import { COPY_NEVER_REASON } from "../format";
 import type { Reservation } from "../types";
+import { type CardNarrow, cardNarrower } from "./agent-cards";
 import { shareKey } from "./agent-channels";
 import { config } from "./config";
 import { assign, type Busy, type Capacity, capacityOf } from "./conflict";
@@ -43,6 +44,9 @@ import {
   tunerSnapshot,
 } from "./tuner";
 
+/** 割り振りでカードを訊くときに答えを待つ上限 (ms。振り分けの `ROUTE_ASK_WAIT` と同じ) */
+const CARD_ASK_WAIT = 3_000;
+
 interface Candidate extends Reservation {
   type: string;
   channel: string;
@@ -63,11 +67,18 @@ interface Candidate extends Reservation {
 export async function tunerState(): Promise<{
   capacity: Capacity;
   busy: Busy[];
+  narrow: CardNarrow;
 }> {
+  const keep: CardNarrow = (_service, places) => places;
   const tuners = await tunerSnapshot();
-  if (tuners === null) return { capacity: [], busy: [] };
+  if (tuners === null) return { capacity: [], busy: [], narrow: keep };
   const capacity = capacityOf(tuners);
-  if (capacity.length === 0) return { capacity, busy: [] };
+  if (capacity.length === 0) return { capacity, busy: [], narrow: keep };
+  // 録画の選局はカードの契約で絞って振り分ける (`tuner.route` の手順 1)。割り振りも同じ順で受けられる所を絞る
+  const narrow = await cardNarrower(
+    [...new Set(tuners.map((t) => t.agent))],
+    CARD_ASK_WAIT,
+  );
   const ids = tuners.flatMap((t) =>
     t.users.flatMap((u) => recordingOf(u.use) ?? []),
   );
@@ -85,14 +96,18 @@ export async function tunerState(): Promise<{
           .all()
           .map((rec) => [rec.id, recordingUntil(rec)] as const),
   );
-  return { capacity, busy: recordingHolds(tuners, (id) => until.get(id)) };
+  return {
+    capacity,
+    busy: recordingHolds(tuners, (id) => until.get(id)),
+    narrow,
+  };
 }
 
 export async function resolveConflicts(): Promise<{
   accepted: number;
   rejected: number;
 }> {
-  const { capacity, busy } = await tunerState();
+  const { capacity, busy, narrow } = await tunerState();
   const all: Candidate[] = orm()
     .select({
       ...getTableColumns(reservations),
@@ -120,7 +135,10 @@ export async function resolveConflicts(): Promise<{
    * 番組表が書き換わって禁止でなくなったものは、ここで割り振りに戻る
    */
   const skipped = all.filter((c) => c.copy_never);
-  const candidates = all.filter((c) => !c.copy_never);
+  // 受けられる所はカードの契約で絞る (振り分けと同じ順。`agent-cards.cardNarrower`)
+  const candidates = all
+    .filter((c) => !c.copy_never)
+    .map((c) => ({ ...c, channel: narrow(c.service_id, c.channel) }));
 
   // 前後のマージンぶんチューナーを使う時間は延びる。予約表と実行時のズレを無くすため
   // 同じ物差しで数える

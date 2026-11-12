@@ -4,12 +4,7 @@ import { SOCKET_PATH } from "#lib/live.js";
 
 import { forgetAgentCard } from "./agent-cards";
 import { listen } from "./agent-events";
-import {
-  type Agent,
-  listAgents,
-  primaryAgent,
-  syncEnvAgentsOnBoot,
-} from "./agents";
+import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
 import { pruneCodes } from "./device-auth";
@@ -262,13 +257,17 @@ export function start(): void {
 async function syncChannels(): Promise<void> {
   const read = await readChannels();
   syncServicesOnly(read);
-  // 放送の一覧から入れるかは、並びの先頭のエージェント (放送の一覧を読んで預ける先) の控えで決める。読めなかった回は見送る
-  const tuning = primaryAgent().id;
-  const channels = read.find((r) => r.agent === tuning)?.channels;
-  if (channels === undefined) return;
-  void fillSatellites(channels).catch((error: unknown) => {
-    console.warn(`[channels] 衛星の局を入れられませんでした: ${error}`);
-  });
+  // 放送の一覧から入れるかは、エージェントごとにその控えで決める (預ける先もそのエージェント)。読めなかったエージェントは見送る
+  const all = listAgents();
+  for (const entry of read) {
+    const agent = all.find((a) => a.id === entry.agent);
+    if (agent === undefined) continue;
+    void fillSatellites(agent, entry.channels).catch((error: unknown) => {
+      console.warn(
+        `[channels] ${agent.name} の衛星の局を入れられませんでした: ${error}`,
+      );
+    });
+  }
 }
 
 /** 呼ばれてから `ms` 置いて `run` を 1 回呼ぶ。待っている間に呼ばれた分はまとめる */

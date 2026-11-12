@@ -1,0 +1,1 @@
+ALTER TABLE `recordings` ADD `agent_id` integer;

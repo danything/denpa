@@ -64,9 +64,9 @@ const NO_CARD = "B-CAS カードが認識されていません";
 const NO_CARD_PLACE =
   "このカードで復号するエージェントの控えに、この局のチャンネルがありません";
 
-/** 並びの先頭のエージェントが使っているカードの番号 (設定のダイアログに出すカード)。カードが読めなければ null */
-async function usableCardId(): Promise<string | null> {
-  const card = await cardStatus();
+/** エージェント (渡さなければ並びの先頭) が使っているカードの番号。カードが読めなければ null */
+async function usableCardId(agent?: Agent): Promise<string | null> {
+  const card = await cardStatus(agent);
   return (card.ok && getActiveCardId(card)) || null;
 }
 
@@ -674,11 +674,17 @@ function saveDecode(
  * **有料の番組を復号できて録れた。** その局を、復号テストで確かめたときと同じく契約中にする (`encoder.ts`。`noteStillScrambled` の反対)。
  * 番組表に契約の情報 (0xCB) が無い局は、手で予約した録画でも契約中になり、録り続けている間は 31 日 (`DECODE_VALID_MS`) を過ぎても録られなくならない。
  *
- * 書くのは、いま使っているカードの行。カードが読めないときは書かない (どのカードで観られたか分からない)。
+ * 書くのは、録ったエージェント (`recordings.agent_id`) がいま使っているカードの行。録ったエージェントが分からない (上げる前の録画)・
+ * もう無いときは並びの先頭のエージェントのカード。カードが読めないときは書かない (どのカードで観られたか分からない)。
  * カードが答えた行 (`code` がある) の状態は変えない (`saveDecode`)
  */
-export async function noteDecoded(serviceId: number): Promise<void> {
-  const cardId = await usableCardId();
+export async function noteDecoded(
+  serviceId: number,
+  agentId: number | null = null,
+): Promise<void> {
+  const agent =
+    agentId === null ? undefined : listAgents().find((a) => a.id === agentId);
+  const cardId = await usableCardId(agent);
   if (cardId !== null) saveDecode(cardId, serviceId, true);
 }
 

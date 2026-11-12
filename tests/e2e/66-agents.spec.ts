@@ -4,7 +4,7 @@ import {
   type SecondAgent,
   type Spare,
 } from "../stack";
-import { expect, goto, test } from "./helpers";
+import { expect, goto, recordOne, test } from "./helpers";
 
 /**
  * **設定の「受信」の「エージェント」** (docs/agent.md「エージェントを足す」、agent-admin.ts)。
@@ -110,5 +110,144 @@ test.describe("エージェントの登録", () => {
     await page.getByTestId("agent-delete-confirm").click();
     await expect(page.getByTestId("agent-row")).toHaveCount(1);
     await expect(page.getByTestId("agent-tuners-name")).toHaveCount(1);
+  });
+});
+
+/** 偽エージェントが受けた選局の印 (`/__control/opens` の `use`) */
+async function opened(agentUrl: string): Promise<string[]> {
+  const body = (await (await fetch(`${agentUrl}/__control/opens`)).json()) as {
+    opens: { use: string }[];
+  };
+  return body.opens.map((open) => open.use);
+}
+
+/**
+ * **2 台のエージェントで、スキャン・番組表・録画・ライブを通す** (docs/agent.md「エージェントが何台もあるとき」)。
+ * どちらも同じ偽の放送を受ける。スキャンはエージェントごとに回り、ほかは局を受けられるどちらかに振り分けられる。
+ * 常駐処理を回す別の denpa (`bootSpare` の `autostart`) を、`TUNER_AGENT_URL` に 2 台書いて立てる
+ */
+test.describe("2 台のエージェント", () => {
+  test.describe.configure({ mode: "serial" });
+  let spare: Spare;
+  let living: SecondAgent;
+  let study: SecondAgent;
+
+  test.beforeAll(async ({ stack }, info) => {
+    const rawDir = `${stack.root}/spare/raw`;
+    living = await bootSecondAgent(info.workerIndex, rawDir, "居間", 2);
+    study = await bootSecondAgent(info.workerIndex, rawDir, "書斎", 4);
+    spare = await bootSpare(
+      info.workerIndex,
+      stack.root,
+      `${living.pairUrl},${study.pairUrl}`,
+      true,
+    );
+  });
+  test.afterAll(async () => {
+    await spare?.shutdown();
+    await study?.shutdown();
+    await living?.shutdown();
+  });
+
+  test("スキャンはエージェントごとに回し、進み具合もエージェントごとに出す", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ baseURL: spare.appUrl });
+    const page = await context.newPage();
+    try {
+      // 環境変数で決めたエージェントの名前はホスト名 (どちらも 127.0.0.1)。見分けられるよう画面で名前を付ける
+      await goto(page, "/settings/reception#agents");
+      for (const [at, name] of [
+        [0, "居間"],
+        [1, "書斎"],
+      ] as const) {
+        const row = page.getByTestId("agent-row").nth(at);
+        await row.getByTestId("agent-more").click();
+        await page
+          .getByTestId("agent-rename")
+          .filter({ visible: true })
+          .click();
+        await row.getByTestId("agent-name-input").fill(name);
+        await row.getByTestId("agent-name-save").click();
+        await expect(row.getByTestId("agent-name")).toHaveText(name);
+      }
+
+      await goto(page, "/settings/reception#channels");
+      const card = page.getByTestId("channel-section");
+      await expect(card.getByTestId("scan-agents").first()).toContainText(
+        "居間",
+      );
+      await card.getByLabel("スキャンする種別").first().selectOption("GR");
+      await card.getByTestId("scan-start").first().click();
+      await expect(card.getByTestId("scan-state")).toHaveText("完了", {
+        timeout: 90_000,
+      });
+      const progress = card.getByTestId("scan-agent-progress");
+      await expect(progress).toContainText("居間 50 / 50 チャンネル");
+      await expect(progress).toContainText("書斎 50 / 50 チャンネル");
+      // どちらのエージェントも自分のチューナーで総当たりした
+      for (const agent of [living, study])
+        expect(
+          (await opened(agent.agentUrl)).some((use) => use.startsWith("scan ")),
+        ).toBe(true);
+      // チャンネルの表には、受けられるエージェントの名前が並ぶ
+      await expect(card.getByTestId("channel-agents").first()).toHaveText(
+        "居間・書斎",
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("番組表と録画とライブは、どちらか 1 台に振り分ける", async ({
+    browser,
+    playwright,
+  }) => {
+    const context = await browser.newContext({ baseURL: spare.appUrl });
+    const page = await context.newPage();
+    const request = await playwright.request.newContext({
+      baseURL: spare.appUrl,
+      extraHTTPHeaders: { Origin: spare.appUrl },
+    });
+    try {
+      // 番組表 (`/api/sync`) と、すぐ始まる BS の番組を 1 本録る
+      const { id } = await recordOne(page, request);
+      const all = [
+        ...(await opened(living.agentUrl)),
+        ...(await opened(study.agentUrl)),
+      ];
+      expect(all.some((use) => use.startsWith("epg "))).toBe(true);
+      // 録画は 1 台にだけ送る
+      const holders = [];
+      for (const agent of [living, study])
+        if ((await opened(agent.agentUrl)).includes(`rec ${id}`))
+          holders.push(agent);
+      expect(holders).toHaveLength(1);
+
+      // ライブ: 局のライブのエンドポイントを開き、最初のバイトが届けばどちらかのエージェントが選局している
+      const services = (await (await request.get("/api/services")).json()) as {
+        id: number;
+        type: string;
+        live: string;
+      }[];
+      const target = services.find((service) => service.type === "GR")!;
+      const aborter = new AbortController();
+      // 変換せずに流す形 (偽の ffmpeg は fMP4 を作らない。30-api と同じ)
+      const res = await fetch(`${spare.appUrl}/${target.live}?codec=raw`, {
+        signal: aborter.signal,
+      });
+      expect(res.ok).toBe(true);
+      const reader = res.body!.getReader();
+      expect((await reader.read()).done).toBe(false);
+      aborter.abort();
+      const lives = [
+        ...(await opened(living.agentUrl)),
+        ...(await opened(study.agentUrl)),
+      ].filter((use) => use.startsWith("live "));
+      expect(lives.length).toBeGreaterThan(0);
+    } finally {
+      await request.dispose();
+      await context.close();
+    }
   });
 });

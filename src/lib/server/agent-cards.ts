@@ -193,3 +193,75 @@ export async function keyRanks(
   ]);
   return cardRanks(cards.values(), (card) => contracts.get(card) ?? null);
 }
+
+/** 局を受けられる所 (`agent-order.placesKey`) を、カードの順で絞る関数。局の ID と受けられる所の文字列を受け、絞った文字列を返す */
+export type CardNarrow = (service: number, places: string) => string;
+
+/**
+ * **予約の割り振り (`conflict.ts`) とルールの下見が、振り分け (`tuner.route` の手順 1) と同じ順で受けられる所を絞るための関数。**
+ * 割り振りは同期で数えるので、先にカードを読んでおき (控えが新しければ訊かない。`routeCards`)、あとは控えだけで決める。
+ * 受けられるエージェントが 1 台の局は絞らない (振り分けも訊かずに送る)。エージェントが 1 台なら何もしない
+ */
+export async function cardNarrower(
+  agents: readonly number[],
+  wait: number,
+): Promise<CardNarrow> {
+  if (agents.length <= 1) return (_service, places) => places;
+  const cards = await routeCards(agents, wait);
+  const memo = new Map<string, string>();
+  return (service, places) => {
+    const key = `${service}\n${places}`;
+    let narrowed = memo.get(key);
+    if (narrowed === undefined) {
+      const contracts = contractsOf(service, [
+        ...new Set(
+          [...cards.values()].flatMap((c) => (c.card === null ? [] : [c.card])),
+        ),
+      ]);
+      narrowed = narrowPlaces(
+        places,
+        cards,
+        (card) => contracts.get(card) ?? null,
+      );
+      memo.set(key, narrowed);
+    }
+    return narrowed;
+  };
+}
+
+/**
+ * `cardNarrower` の中身。受けられる所のうち、その局を復号できる見込みのいちばん高いエージェントのものだけを残す。
+ * `statusOf` はカードの番号から、その局の契約の状態 (`cardRanks` と同じ)
+ */
+export function narrowPlaces(
+  places: string,
+  cards: ReadonlyMap<number, AgentCard>,
+  statusOf: (card: string) => ReturnType<typeof contractStatus> | null,
+): string {
+  const lines = places.split("\n");
+  const agentOf = (line: string): number | null => {
+    const tab = line.indexOf("\t");
+    return tab < 0 ? null : Number(line.slice(0, tab));
+  };
+  const ids = new Set(
+    lines.flatMap((line) => {
+      const agent = agentOf(line);
+      return agent === null ? [] : [agent];
+    }),
+  );
+  if (ids.size <= 1) return places;
+  const mine = [...ids].flatMap((id) => {
+    const card = cards.get(id);
+    return card === undefined ? [] : [card];
+  });
+  const ranks = cardRanks(mine, statusOf);
+  // 訊けなかったエージェントは、使えるカードが無いものとして数える (振り分けと同じ)
+  const rank = (id: number) => ranks.get(id) ?? 3;
+  const best = Math.min(...[...ids].map(rank));
+  return lines
+    .filter((line) => {
+      const agent = agentOf(line);
+      return agent === null || rank(agent) === best;
+    })
+    .join("\n");
+}

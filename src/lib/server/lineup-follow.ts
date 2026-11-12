@@ -17,7 +17,7 @@
 import { NitReader, SdtReader } from "@danything/arib/psi";
 import { and, desc, gte, isNull, lt } from "drizzle-orm";
 
-import { primaryAgent } from "./agents";
+import { type Agent, listAgents } from "./agents";
 import { config } from "./config";
 import { now, orm } from "./db";
 import { emit } from "./events";
@@ -160,23 +160,38 @@ async function compare(
   const key = `${type}:${network.networkId}`;
   if (checked.get(key) === network.version) return false;
 
-  // 読んだ表は並びの先頭のエージェント (`readFromAir` で開いた先) のチャンネルのもの。控えもそこのものを書き換える
-  const agent = primaryAgent();
-  const all = await getChannels(agent);
-  const mine = all.filter((channel) => channel.type === type);
-  const next = lineupFrom(
-    type,
-    [network],
-    sdt.tables(),
-    knownNames(all),
-  ).channels;
-  // 読めた TS が 1 つも無い表は使わない (読み違えで全部消さない)
-  if (next.length === 0) return false;
-  const current = mine.filter(
-    (channel) => channel.networkId === network.networkId,
-  );
-  const diff = lineupDiff(current, next);
-  if (!diff.changed) {
+  /*
+   * **控えはエージェントごとに読み、変わっていたエージェントの控えだけ書き換える。** 放送の一覧はどのエージェントで読んでも同じなので、
+   * 読んだ表を全部のエージェントの控えと比べる。その種別のチャンネルを控えに持たないエージェント (衛星を受けないもの) には足さない
+   */
+  const plans: { agent: Agent; keep: AgentChannel[]; diff: LineupDiff }[] = [];
+  let next: AgentChannel[] | null = null;
+  for (const agent of listAgents()) {
+    const all = await getChannels(agent).catch(() => null);
+    if (all === null) continue;
+    const mine = all.filter((channel) => channel.type === type);
+    if (mine.length === 0) continue;
+    next ??= lineupFrom(
+      type,
+      [network],
+      sdt.tables(),
+      knownNames(all),
+    ).channels;
+    // 読めた TS が 1 つも無い表は使わない (読み違えで全部消さない)
+    if (next.length === 0) return false;
+    const current = mine.filter(
+      (channel) => channel.networkId === network.networkId,
+    );
+    const diff = lineupDiff(current, next);
+    if (diff.changed)
+      plans.push({
+        agent,
+        keep: mine.filter((channel) => channel.networkId !== network.networkId),
+        diff,
+      });
+  }
+  if (next === null) return false;
+  if (plans.length === 0) {
     checked.set(key, network.version);
     sighted.delete(key);
     return false;
@@ -191,17 +206,12 @@ async function compare(
   }
   if (at - first.at < CONFIRM_AFTER) return false;
 
-  await putChannels(
-    [
-      ...mine.filter((channel) => channel.networkId !== network.networkId),
-      ...next,
-    ],
-    [type],
-    agent,
-  );
+  for (const plan of plans)
+    await putChannels([...plan.keep, ...next], [type], plan.agent);
   checked.set(key, network.version);
   sighted.delete(key);
-  record(type, changeText(type, diff));
+  // 知らせる文は最初に書き換えたエージェントの差分から (放送の一覧は同じなので、どのエージェントもふつうは同じ差分)
+  record(type, changeText(type, plans[0]!.diff));
   return true;
 }
 
@@ -245,6 +255,8 @@ const READ_TIMEOUT = 30_000;
 export async function readFromAir(
   type: SatelliteType,
   options: Omit<Parameters<typeof readLineup>[2], "timeout">,
+  /** このエージェントで読む。渡さなければ、全部のエージェントから振り分ける (放送の一覧はどのエージェントで読んでも同じ) */
+  agent?: Agent,
 ): Promise<{ lineup: Lineup; busy: boolean }> {
   let busy = false;
   const lineup = await readLineup(
@@ -252,8 +264,10 @@ export async function readFromAir(
     (channel) =>
       openChannelStream(
         type,
-        // 放送の一覧は、控えを書き換える並びの先頭のエージェントで読む (スキャンと同じ)
-        [{ agent: primaryAgent().id, channel }],
+        (agent === undefined ? listAgents() : [agent]).map((a) => ({
+          agent: a.id,
+          channel,
+        })),
         AbortSignal.timeout(READ_TIMEOUT * 4),
         `scan ${channel}`,
         config.priority.scan,

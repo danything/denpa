@@ -1,6 +1,7 @@
 import { type Actions, fail } from "@sveltejs/kit";
-import { count, eq, or, sql } from "drizzle-orm";
+import { asc, count, eq, or, sql } from "drizzle-orm";
 
+import { parseId } from "#lib/id.js";
 import {
   serviceAgent,
   serviceChannel,
@@ -26,7 +27,12 @@ import {
   start,
   stop,
 } from "#lib/server/scan.js";
-import { programs, services } from "#lib/server/schema.js";
+import {
+  agentChannels,
+  agents,
+  programs,
+  services,
+} from "#lib/server/schema.js";
 import { measureSignal } from "#lib/server/signal-quality.js";
 import {
   ALL_CHANNEL_TYPES,
@@ -42,6 +48,8 @@ interface Coverage {
   channel: string;
   /** このチャンネルを控えに持つエージェント (`agent-channels.serviceAgent`)。受信の様子と測定はこのエージェントのもの */
   agent: number;
+  /** このチャンネルの TS を受けられるエージェントの名前 (並びの順)。画面は 2 台以上のときだけ出す */
+  agents: string[];
   /** 受信できるか。受信できないチャンネルも、印を付けて出す (`reception.ts`) */
   reception: Reception;
   /**
@@ -66,6 +74,30 @@ interface Coverage {
   observed: { caSystemIds: string[]; epg: string; logo: string } | null;
 }
 
+/** TS (`種別:network_id:transport_stream_id`) ごとの、受けられるエージェントの名前 (並びの順) */
+function receiversByTs(): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const row of orm()
+    .selectDistinct({
+      type: agentChannels.type,
+      network: agentChannels.network_id,
+      ts: agentChannels.transport_stream_id,
+      name: agents.name,
+      position: agents.position,
+      id: agents.id,
+    })
+    .from(agentChannels)
+    .innerJoin(agents, eq(agents.id, agentChannels.agent_id))
+    .orderBy(asc(agents.position), asc(agents.id))
+    .all()) {
+    const key = `${row.type}:${row.network}:${row.ts}`;
+    const names = out.get(key) ?? [];
+    if (!names.includes(row.name)) names.push(row.name);
+    out.set(key, names);
+  }
+  return out;
+}
+
 /**
  * 取れているチャンネルと、局ごとの番組表の集まり具合。**denpa 自身の DB から。**
  *
@@ -88,6 +120,7 @@ function coverage(): Coverage[] {
       channel: serviceChannel(),
       agent: serviceAgent(),
       network_id: services.network_id,
+      transport_stream_id: services.transport_stream_id,
       decodable: services.decodable,
       transport: services.transport,
       programs: count(programs.id),
@@ -101,6 +134,7 @@ function coverage(): Coverage[] {
     .orderBy(services.service_id)
     .all();
 
+  const receivers = receiversByTs();
   const channels = new Map<string, Coverage>();
   for (const row of rows) {
     const { id, name, type, channel, agent, programs, until, decodable } = row;
@@ -112,6 +146,9 @@ function coverage(): Coverage[] {
       type,
       channel,
       agent,
+      agents:
+        receivers.get(`${type}:${row.network_id}:${row.transport_stream_id}`) ??
+        [],
       reception: "ok" as Reception,
       origin: from === "CATV" ? null : from,
       transport: row.transport,
@@ -183,7 +220,10 @@ export const actions = {
     if (types.length === 0)
       return fail(400, { message: "スキャンする種別を選んでください" });
 
-    const result = start({ types });
+    const agents = chosenAgents(form);
+    if (agents !== undefined && agents.length === 0)
+      return fail(400, { message: "スキャンするエージェントを選んでください" });
+    const result = start({ types, agents });
     if (!result.started) return fail(409, { message: result.message });
     return { success: true, scan: result.message };
   },
@@ -202,11 +242,15 @@ export const actions = {
    * 画面は押し間違いを防ぐ 2 回目 (「削除を確定」) で送ってくる
    */
   removeType: async ({ request }) => {
-    const type = String((await request.formData()).get("type") ?? "");
+    const form = await request.formData();
+    const type = String(form.get("type") ?? "");
+    const agents = chosenAgents(form);
+    if (agents !== undefined && agents.length === 0)
+      return fail(400, { message: "局を削除するエージェントを選んでください" });
     if (!ALL_CHANNEL_TYPES.includes(type as ChannelType))
       return fail(400, { message: "削除する種別の指定が不正です" });
     try {
-      const result = await removeType(type as ChannelType);
+      const result = await removeType(type as ChannelType, agents);
       if (!result.removed) return fail(409, { message: result.message });
       return { success: true, scan: result.message };
     } catch (error) {
@@ -250,3 +294,17 @@ export const actions = {
     }
   },
 } satisfies Actions;
+
+/**
+ * スキャンと局の削除で選んだエージェント (`agents`。行の ID をカンマで並べたもの。チップは 2 台以上のときだけ出す)。
+ * 送られてこなければ全部 (undefined)。チップを出していて何も選んでいなければ空
+ */
+function chosenAgents(form: FormData): number[] | undefined {
+  const raw = form.get("agents");
+  if (raw === null) return undefined;
+  return String(raw)
+    .split(",")
+    .filter((value) => value !== "")
+    .map((value) => parseId(value))
+    .filter((id): id is number => id !== null);
+}

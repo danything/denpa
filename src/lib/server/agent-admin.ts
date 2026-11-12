@@ -21,6 +21,7 @@ import {
   refusedAsUnpaired,
 } from "./agent-client";
 import { agentDownSince } from "./agent-events";
+import { aboutName, NAME_MAX } from "./agent-name";
 import { type Agent, listAgents, parseAgentUrl } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
@@ -100,27 +101,6 @@ async function pairWith(origin: string, token: string): Promise<PeerCert> {
     throw new AgentAdminError(error.message);
   }
 }
-
-/** エージェントの `/denpa/about` の `name`。返さない (古いエージェント・繋がらない) なら null */
-async function aboutName(agent: Agent): Promise<string | null> {
-  try {
-    const res = await fetchAgent(agent, "/denpa/about", {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-    const body = (await res.json().catch(() => null)) as {
-      name?: unknown;
-    } | null;
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
-    return name === "" ? null : name.slice(0, NAME_MAX);
-  } catch {
-    return null;
-  }
-}
-
-/** 名前の長さの上限 (字) */
-export const NAME_MAX = 40;
 
 /** 入れ替わったエージェントの控えを捨て、購読を繋ぎ直し、局を取り込み直す (待たない) */
 function refresh(agent: Agent): void {

@@ -43,7 +43,12 @@ mock.module("./tuner", () => ({
         clearInterval(timer);
       },
     });
-    return { stream, tsmfStreams: 1, transport: "ts" as const };
+    return {
+      stream,
+      tsmfStreams: 1,
+      transport: "ts" as const,
+      place: { agent: 1, channel: "T16" },
+    };
   },
 }));
 

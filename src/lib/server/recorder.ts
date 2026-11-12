@@ -538,6 +538,8 @@ async function pump(
        */
       // 引き継ぎは最初に使うときだけ。取り直すころには、止めた録画はもう離れている
       let handoff = after;
+      /** いま録っているエージェント (`recordings.agent_id`) */
+      let agentId: number | null = null;
       while (!controller.signal.aborted) {
         /** 切れた理由。EOF なら null のまま */
         let broke: unknown = null;
@@ -567,7 +569,18 @@ async function pump(
                 service.id,
               )
                 // 選局の答えの形式が控えと違えば録らない。TS の読み方で TLV を読んでも、その逆でも、1 バイトも書けない
-                .then((opened) => expectTransport(opened, service.transport))
+                .then((opened) => {
+                  // どのエージェントで録ったかを残す (有料の番組を復号できたとき、そのエージェントのカードを契約中にする。`contracts.noteDecoded`)
+                  if (opened.place.agent !== agentId) {
+                    agentId = opened.place.agent;
+                    orm()
+                      .update(recordings)
+                      .set({ agent_id: agentId })
+                      .where(eq(recordings.id, recording.id))
+                      .run();
+                  }
+                  return expectTransport(opened, service.transport);
+                })
                 .catch((error: unknown) => {
                   /*
                    * **衛星で選局できなかったら、放送の一覧を読み直す** (`lineup-follow.refreshLineup`)。
