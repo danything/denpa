@@ -52,8 +52,8 @@ spec:
         # **入れ替えの合図。** CI が「そのイメージの中身を最後に変えたコミット」を書く。
         # 手で触らない
         imageMarks:
-          denpa: sha-f4ced24039d1
-          agent: sha-4ddc8e08e3ec
+          denpa: sha-3f05fc5f7f37
+          agent: sha-b2c907639f0c
 
         denpa:
           # LAN から来たときだけ何も聞かずに通す (docs/auth.md)
