@@ -100,6 +100,7 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 `oci://ghcr.io/danything/charts/denpa-agent` を使い、本体の設定の「受信」の「エージェントを追加」で登録するか、`TUNER_AGENT_URL` でそこを指します
 ([agent.md](agent.md#エージェントは別イメージ別プロセス))。`TUNER_AGENT_URL` には `#pair=<合言葉>` を付けます。組んだあとも `#pair=` は消しません ([上げるときの注意](config.md#エージェントを-db-に持つようにした-前のバージョンから上げるとき))。
 合言葉は chart が Secret `tuner-agent-pair` に作り、読み方は `helm install` のあとに出ます。
+Pod のネットワークには LAN のマルチキャストが届かない (推定) ので、「エージェントを追加」の候補には出ません ([agent.md](agent.md#lan-で見つける))。
 本体の chart はエージェントと組む合言葉を自分で作って両方に渡すので、何も書かなくて構いません
 (ArgoCD などの GitOps で入れるときは、合言葉を SOPS などで別の Secret に持ち、その名前を `agent.pairSecret` に書きます。
 ArgoCD はクラスタを見ずに描くので chart に作らせると値が変わり続け、Secret を同期しない設定ならそもそも作られません。

@@ -10,7 +10,9 @@ import {
   moveAgent,
   removeAgent,
   renameAgent,
+  unregistered,
 } from "#lib/server/agent-admin.js";
+import { discoverAgents } from "#lib/server/agent-mdns.js";
 import type { Agent } from "#lib/server/agents.js";
 import { tokenRefusal } from "#lib/server/auth.js";
 import { orm } from "#lib/server/db.js";
@@ -35,7 +37,11 @@ function recordingName(id: number): string | null {
  */
 export function load(locals: { token?: number }, all: Agent[], lists: Lists) {
   if (tokenRefusal(locals) !== null)
-    return { agents: [], agentStates: Promise.resolve([]) };
+    return {
+      agents: [],
+      agentStates: Promise.resolve([]),
+      foundAgents: Promise.resolve([]),
+    };
   return {
     agents: agentEntries(),
     agentStates: Promise.all(
@@ -48,6 +54,15 @@ export function load(locals: { token?: number }, all: Agent[], lists: Lists) {
           recordingName,
         ),
       ),
+    ),
+    // LAN で見つかった、まだ登録していないエージェント (「エージェントを追加」の候補。agent-mdns.ts)
+    foundAgents: discoverAgents().then((found) =>
+      unregistered(found).map(({ id, name, host, port }) => ({
+        id,
+        name,
+        host,
+        port,
+      })),
     ),
   };
 }

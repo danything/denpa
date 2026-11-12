@@ -55,6 +55,7 @@ root が書いた録画も Finder から消したり動かしたりできます�
   install.sh が最後に出す登録用の URL (`https://<Mac の名前>.local:25252#pair=<合言葉>`) とその下の QR を、denpa の設定の「受信」の「エージェントを追加」に貼るか読ませます。`TUNER_AGENT_URL` に書いても登録できます
   ([別の所に置く](agent.md#エージェントは別イメージ別プロセス)のと同じ構成)。このときエージェントは全部のインターフェースで待ち受けます。
   エージェントが応答するのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
+  エージェントは LAN に知らせる (mDNS) ので、同じ LAN の denpa なら「エージェントを追加」の入力欄の下に Mac の名前が出ます (選んだあとも合言葉は要る。[agent.md](agent.md#lan-で見つける))
 - 手元でビルドした tar.gz を入れるとき (開発と CI) は、`DENPA_AGENT_TARBALL`・`DENPA_SERVER_TARBALL` に絶対パスを書き、`sudo -E` で環境変数を渡します
 
 LaunchDaemon の環境変数は、コンテナ既定の置き場を Mac の置き場に向け直すものです。エージェントは

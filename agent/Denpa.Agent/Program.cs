@@ -808,6 +808,12 @@ app.Lifetime.ApplicationStopped.Register(() =>
     UserlandDaemon.StopAll();
 });
 
+/*
+ * **LAN の denpa に知らせる** (mDNS。Mdns.cs)。denpa は「エージェントを追加」の候補に出し、登録したエージェントのアドレスが変わったら付け替える。
+ * 知らせるのは名前・ポート・証明書の指紋の先頭だけで、合言葉は入れない。止まり始めたら取り下げる
+ */
+var advertised = Mdns.Start(port, tls.Fingerprint, host);
+app.Lifetime.ApplicationStopping.Register(() => advertised?.Dispose());
 Log.Write($"listening on https://{(host is null ? $"*:{port}" : new IPEndPoint(host, port).ToString())} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
 Log.Write($"証明書 {tls.Fingerprint[..16]}… / 組んだ denpa {tls.Clients.Count} 台 ({tls.Dir})");
 /*

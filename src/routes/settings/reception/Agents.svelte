@@ -32,6 +32,8 @@
   const states = held(() => data.agentStates);
   const stateOf = (id: number): AgentState | undefined =>
     states.value?.find((state) => state.id === id);
+  /** LAN で見つかった、まだ登録していないエージェント (「エージェントを追加」の候補) */
+  const found = held(() => data.foundAgents);
 
   /**
    * 2 段目に「・」でつなぐもの。ホスト・チューナーの台数・バージョン・環境変数で決めたもの・繋がらない時刻。
@@ -257,7 +259,11 @@
   </section>
 </div>
 
-<AgentDialog target={dialog} onclose={() => (dialog = null)} />
+<AgentDialog
+  target={dialog}
+  found={found.value ?? []}
+  onclose={() => (dialog = null)}
+/>
 
 <style>
   /* 1 件が 2 行あるので件の面 (`app.css` の `.item`) に乗せる (テレビのアプリの一覧と同じ) */

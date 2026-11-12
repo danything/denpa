@@ -31,6 +31,7 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 (手で `denpa-agent --pair` を流しても同じ URL が出る)、denpa には `TUNER_AGENT_URL` (`https://127.0.0.1:25252#pair=<合言葉>`) で渡します。
 上げ直しても変えません。
 `-AgentOnly` では、別の機械の denpa に登録する登録用の URL (`https://<この PC の名前>:25252#pair=<合言葉>`) とその QR を最後に出します。denpa の設定の「受信」の「エージェントを追加」に貼るか読ませます。`TUNER_AGENT_URL` に書いても登録できます ([agent.md](agent.md#エージェントを足す))。
+エージェントは LAN に知らせる (mDNS) ので、同じ LAN の denpa なら「エージェントを追加」の入力欄の下にこの PC の名前が出ます (選んだあとも合言葉は要る。[agent.md](agent.md#lan-で見つける))。
 
 - 録画中に上げ直す・外すと、install.ps1 が録画の終わりを待ってから止めます (録画中かは `denpa-agent --status` で確かめる。
   エージェントの API は組んだ denpa にしか応答しないので、エージェント自身の証明書で呼ぶもの)。エンコードの途中なら、次に起きたときにやり直します
