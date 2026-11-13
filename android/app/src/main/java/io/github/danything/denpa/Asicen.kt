@@ -16,7 +16,6 @@ import java.io.IOException
  * CI で入れずに組んだ APK (手元で asicen-userland を置かずに組んだもの) では、エージェントは ASICEN の機材を挙げない
  */
 internal object Asicen {
-    private const val TAG = "denpa"
     private const val FIRMWARE_ASSET = "asicen/asicen-loader.bin"
 
     /** エージェントに渡す環境変数 (agent/Denpa.Agent/Asicen.cs の ASICEN_USERLAND_DIR・ASICEN_FIRMWARE・ASICEN_RUNTIME_DIR) */
@@ -46,7 +45,7 @@ internal object Asicen {
             }
             file
         } catch (error: IOException) {
-            Log.w(TAG, "ASICEN のファームウェアを書き出せません", error)
+            Log.w(DenpaService.TAG, "ASICEN のファームウェアを書き出せません", error)
             null
         }
     }

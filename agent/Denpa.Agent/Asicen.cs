@@ -116,7 +116,7 @@ public static class AsicenUserland
     /// 受信機 1 つを方式の名前から組み立てる。<c>ISDB-T</c>・<c>ISDB-S</c> をコンマか <c>/</c> で並べたもの。
     /// 対応していない方式が混じっていれば理由を残して null
     /// </summary>
-    internal static UserlandReceiver? Receiver(int number, IEnumerable<string> systems, string model, Action<string> warn)
+    internal static UserlandReceiver? Receiver(int number, IEnumerable<string> systems, Action<string> warn)
     {
         var names = systems.SelectMany(system => system.Split(',', '/')).Select(name => name.Trim()).Where(name => name.Length > 0).ToList();
         if (names.Count == 0 || names.Any(name => name is not ("ISDB-T" or "ISDB-S")))
@@ -124,8 +124,7 @@ public static class AsicenUserland
             warn($"受信機 {number} の方式 {string.Join(",", names)} には対応していません (asicen-userland が新しい?)。この受信機は使いません");
             return null;
         }
-        var satellite = names.Contains("ISDB-S");
-        return new UserlandReceiver(number, names.Contains("ISDB-T"), satellite, satellite && PowersLnb(model));
+        return new UserlandReceiver(number, names.Contains("ISDB-T"), names.Contains("ISDB-S"));
     }
 
     /// <summary>筐体 1 台。<see cref="Ports"/> は USB 機能のポート (asicend の <c>--device usb:</c> に渡す)</summary>
@@ -206,8 +205,8 @@ public static class AsicenUserland
                     Systems: (receiver["systems"] as JsonArray ?? []).Select(system => system is JsonValue value && value.TryGetValue<string>(out var text) ? text : "").ToList()))
                 .ToList();
             var receivers = listed.Count > 0
-                ? listed.Select(receiver => receiver.Number is { } number ? Receiver(number, receiver.Systems, model.Name, warn) : null)
-                : model.Systems.Select((systems, index) => Receiver(index, [systems], model.Name, warn));
+                ? listed.Select(receiver => receiver.Number is { } number ? Receiver(number, receiver.Systems, warn) : null)
+                : model.Systems.Select((systems, index) => Receiver(index, [systems], warn));
             found.Add(new Enclosure(id, model.Name, ports, [.. receivers.OfType<UserlandReceiver>().OrderBy(receiver => receiver.Index)]));
         }
 
@@ -248,7 +247,7 @@ public static class AsicenUserland
             }
             var fields = UserlandReceiver.Fields(line);
             if (!fields.TryGetValue("receiver", out var index) || !fields.TryGetValue("system", out var system)) continue;
-            if (int.TryParse(index, out var number) && model is not null && Receiver(number, [system], model, warn) is { } receiver) receivers.Add(receiver);
+            if (int.TryParse(index, out var number) && model is not null && Receiver(number, [system], warn) is { } receiver) receivers.Add(receiver);
         }
         if (model is null || Models.All(known => known.Name != model))
         {
@@ -371,7 +370,7 @@ public static class AsicenUserland
     }
 
     private static List<UserlandReceiver> Receivers(Model model, Action<string> warn) =>
-        [.. model.Systems.Select((systems, index) => Receiver(index, [systems], model.Name, warn)).OfType<UserlandReceiver>()];
+        [.. model.Systems.Select((systems, index) => Receiver(index, [systems], warn)).OfType<UserlandReceiver>()];
 
     /// <summary>
     /// asicend のソケットのパスが <c>sun_path</c> に収まるか。**収まらなければ起動しない** (asicend が断る前に、理由を記録に出す)。

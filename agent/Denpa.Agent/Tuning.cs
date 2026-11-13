@@ -181,7 +181,7 @@ internal static class TsBuffer
     internal const int Depth = 8 * 1024 * 1024;
 
     /// <summary>
-    /// 待ちの続きは Inline で呼ぶ (スレッドプールに回さない。書く側は専用のスレッドで、読む側も 200ms ごとに自分で確かめる)
+    /// 待ちの続きは Inline で呼ぶ (スレッドプールに回さない。書く側は専用のスレッドで、読む側も 200 ms ごとに自分で確かめる)
     /// </summary>
     public static Pipe New() => new(new PipeOptions(
         pauseWriterThreshold: Depth,
@@ -192,7 +192,7 @@ internal static class TsBuffer
         useSynchronizationContext: false));
 
     /// <summary>
-    /// 書いたぶんを渡す。続けて書けるなら true。<paramref name="stopped"/> になったら (50ms ごとに見る)、
+    /// 書いたぶんを渡す。続けて書けるなら true。<paramref name="stopped"/> になったら (50 ms ごとに見る)、
     /// またはバッファが空かないまま <paramref name="limit"/> 経ったら渡すのをやめて false (後者は読む側がいないとみて <paramref name="stalled"/> を呼ぶ)。
     /// 読み出し側が閉じていたら <paramref name="closed"/> を呼んで false
     /// </summary>
@@ -268,7 +268,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         : this(new SafeFileHandle(), ended) => _piped = new Piped(reader);
 
     /// <summary>
-    /// **<see cref="PipeReader"/> から読む。待つのは 200ms ずつ** (fd の poll と同じく、時々印を確かめる)。
+    /// **<see cref="PipeReader"/> から読む。待つのは 200 ms ずつ** (fd の poll と同じく、時々印を確かめる)。
     ///
     /// <para>
     /// 読みかけの間に読む側が抜けても、待っている読み出し (<c>ReadAsync</c>) は捨てずに次の読む側が引き継ぐ。
@@ -284,7 +284,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         /// <summary>
         /// 待っている読み。**Task にしない。** 待つたびに Task と待ち合わせの入れ物を作ると、
         /// 8 本ぶん流したときに秒あたり数千回の確保になる。読み出しが済むと PipeReader が <see cref="_ready"/> を立てるので、
-        /// それを 200ms ずつ待つ (どちらも使い回す)
+        /// それを 200 ms ずつ待つ (どちらも使い回す)
         /// </summary>
         private ValueTask<ReadResult> _pending;
         private bool _waiting;
@@ -511,8 +511,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
-    /// 畳む。Pipe に詰めた TS を待っている読む側の待ちは**すぐ終わらせる** (200ms ごとの確認を待たない。
-    /// 混んだ CI では 500ms を超えていた)。印を立ててから待ちを終わらせる (待ちが終わった側がその印を確かめて戻る)
+    /// 畳む。Pipe に詰めた TS を待っている読む側の待ちは**すぐ終わらせる** (200 ms ごとの確認を待たない。
+    /// 混んだ CI では 500 ms を超えていた)。印を立ててから待ちを終わらせる (待ちが終わった側がその印を確かめて戻る)
     /// </summary>
     public void Stop()
     {
@@ -529,7 +529,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>
     /// <see cref="Stop"/> のあと、**読みかけの読む側が戻るまで待つ** (長くても <paramref name="most"/>)。
     /// 止めたあとに始まった Read は fd に触らずに戻るので、見るのは中にいる数だけでよい。
-    /// 読む側が先に抜けていれば待たない (局替えのたびに固定で待っていた 300ms がこれで消える)
+    /// 読む側が先に抜けていれば待たない (局替えのたびに固定で待っていた 300 ms がこれで消える)
     /// </summary>
     public void WaitReaders(TimeSpan most)
     {
@@ -723,7 +723,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     /// <summary>
     /// **dvr のリングバッファの大きさ。** 全 PID を <c>DMX_OUT_TS_TAP</c> で流すので、溜まるのは demux のフィルタではなく dvr。
-    /// 既定 (≒1.8MB) は地上波で 0.9 秒ぶんしかなく、8MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても畳まない」)
+    /// 既定 (≒1.8 MB) は地上波で 0.9 秒ぶんしかなく、8 MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても畳まない」)
     /// </summary>
     private const int DvrBuffer = 8 * 1024 * 1024;
 
@@ -1072,7 +1072,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         var deadline = DateTime.UtcNow + LockTimeout;
         while (DateTime.UtcNow < deadline)
         {
-            // 細かく見る。同期は 200ms ほどで来るので、100ms 刻みだと
+            // 細かく見る。同期は 200 ms ほどで来るので、100 ms 刻みだと
             // その半分が待つだけの時間になる (カーネルは選局のたびに
             // status を 0 に戻すので、前のチャンネルの同期を読み取ることはない)
             Thread.Sleep(10);

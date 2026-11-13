@@ -299,7 +299,10 @@ internal sealed class Cxd2856(CxdLink link)
         CxdRow.W(T, 0xBE, 0x02),
     ];
 
-    /// <summary>ISDB-T のままの選局し直しの最初 (仕様書 5.4 の手順 1。このあと <see cref="BandRows"/>)</summary>
+    /// <summary>
+    /// 同じ方式のままの選局し直しの最初 (TS を止める 2 行。仕様書 5.4 の手順 1・6.3 の手順 2・7.4・8.4)。
+    /// ISDB-T はこのあと <see cref="BandRows"/>、J.83B は <see cref="BandJ83bRows"/> を書き、ISDB-S と ISDB-C はこの 2 行だけ
+    /// </summary>
     internal static readonly CxdRow[] RetuneRows =
     [
         CxdRow.W(T, 0x00, 0x00),

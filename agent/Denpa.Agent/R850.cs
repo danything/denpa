@@ -299,7 +299,7 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
         Set(s, 0x0A, 4, 4, 1);
         Set(s, 0x19, 6, 6, 1);
         Set(s, 0x15, 4, 4, 1);
-        // あわせて行うこと
+        // あわせて書く値
         Set(s, 0x13, 4, 4, 1);
         Set(s, 0x10, 6, 5, 0);
         Set(s, 0x12, 2, 2, 0);

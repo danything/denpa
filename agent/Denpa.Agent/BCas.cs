@@ -233,12 +233,9 @@ public sealed class BCas : IKeySource, IDisposable
         var apdu = new byte[verificationData.Length + 8];
         apdu[0] = 0x90;
         apdu[1] = 0x3C;
-        apdu[2] = 0x00;
-        apdu[3] = 0x00;
         apdu[4] = (byte)(verificationData.Length + 2);
         BinaryPrimitives.WriteUInt16BigEndian(apdu.AsSpan(5), dateMjd);
         verificationData.CopyTo(apdu.AsSpan(7));
-        apdu[^1] = 0x00;
 
         lock (_gate) return Run(link => Code(Transmit(link, apdu, ConfirmLength, "契約確認")));
     }

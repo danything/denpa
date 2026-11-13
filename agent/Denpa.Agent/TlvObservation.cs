@@ -46,7 +46,7 @@ public sealed class TlvObservation
     private readonly SortedDictionary<int, (long Count, int Length, byte[] First)> _ecms = [];
     private readonly SortedDictionary<int, (string Name, bool Actual, int FreeCa)> _services = [];
     private long _packets, _skipped, _ntp, _broken, _mpt, _plt, _emm;
-    private long _eit, _eitBad, _sdtActual, _sdtOther, _sdtBad, _nit, _nitBad, _amt;
+    private long _eit, _eitBad, _sdtActual, _sdtOther, _sdtBad, _nit, _nitBad;
     private int? _package, _networkId;
     private string? _networkName;
     private (int Service, string Name)? _eitSample;
@@ -453,7 +453,7 @@ public sealed class TlvObservation
         }
     }
 
-    /// <summary>伝送制御信号 (TLV-SI)。セクションが並ぶ。TLV-NIT (0x40・0x41) と AMT (0xFE) を数える</summary>
+    /// <summary>伝送制御信号 (TLV-SI)。セクションが並ぶ。TLV-NIT (0x40・0x41) を読み、ほか (AMT の 0xFE など) は table_id ごとに数える</summary>
     private void Signalling(ReadOnlySpan<byte> body)
     {
         var at = 0;
@@ -463,11 +463,6 @@ public sealed class TlvObservation
             var table = body.Slice(at, Math.Min(length, body.Length - at));
             at += length;
             var id = table[0];
-            if (id == 0xFE)
-            {
-                _amt++;
-                continue;
-            }
             if (id is not (0x40 or 0x41))
             {
                 _otherTables[id] = _otherTables.GetValueOrDefault(id) + 1;

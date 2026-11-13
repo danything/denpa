@@ -59,7 +59,7 @@ internal sealed class DvbCable
         }
         catch (Exception error) when (error is IOException or ObjectDisposedException)
         {
-            Log.Write($"[{name}] dvr から TS を読めなくなりました ({error.Message})");
+            Log.Write($"[{name}] {Ended} ({error.Message})");
             _output.Complete($"{Ended} ({error.Message})");
         }
     }

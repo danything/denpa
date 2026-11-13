@@ -153,9 +153,7 @@ public static class ChannelTable
             var colon = body.IndexOf(':');
             if (colon >= 0)
             {
-                var text = body[(colon + 1)..];
-                if (text.Length is 0 or > 2 || !text.All(char.IsAsciiDigit)
-                    || !int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out index) || index > TsmfSelector.MaxIndex) return null;
+                if (!Number(body[(colon + 1)..], out index, digits: 2) || index > TsmfSelector.MaxIndex) return null;
                 body = body[..colon];
             }
             if (!Number(body, out var channel)) return null;
@@ -217,28 +215,24 @@ public static class ChannelTable
         var slash = body.IndexOf('/');
         if (slash >= 0)
         {
-            var text = body[(slash + 1)..];
-            if (text.Length is 0 or > 5 || !text.All(char.IsAsciiDigit)
-                || !int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number is < 1 or > 65535) return false;
+            if (!Number(body[(slash + 1)..], out var number, digits: 5) || number is < 1 or > 65535) return false;
             service = number;
             body = body[..slash];
         }
         var colon = body.IndexOf(':');
         if (colon < 0) return Number(body, out channel);
         if (!Number(body[..colon], out channel)) return false;
-        var id = body[(colon + 1)..];
-        if (id.Length is 0 or > 5 || !id.All(char.IsAsciiDigit)
-            || !int.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
-            || value is < 1 or > 65535) return false;
+        if (!Number(body[(colon + 1)..], out var value, digits: 5) || value is < 1 or > 65535) return false;
         tsid = (uint)value;
         return true;
     }
 
-    private static bool Number(string text, out int value)
+    /// <summary><paramref name="digits"/> 桁までの数字だけの文字列を読む</summary>
+    private static bool Number(string text, out int value, int digits = 3)
     {
         // 0 詰めは許す (`BS01` と `BS1` は同じもの)。それ以外は受け取らない
         value = 0;
-        return text.Length is > 0 and <= 3
+        return text.Length > 0 && text.Length <= digits
             && text.All(char.IsAsciiDigit)
             && int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value);
     }

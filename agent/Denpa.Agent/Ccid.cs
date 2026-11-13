@@ -466,12 +466,12 @@ public static class Ccid
     /// </summary>
     public static string? Describe()
     {
-        var text = new StringBuilder();
         if (Find() is not { } found) return null;
         if (found.Count == 0)
         {
             return $"CCID のカードリーダーが見つかりません ({(UsbHost.Brokered ? "アプリから受け取った機材" : UsbSysfs.Devices)} に bInterfaceClass 0b のインターフェースがありません)";
         }
+        var text = new StringBuilder();
         foreach (var candidate in found) text.AppendLine(candidate.Name);
 
         try

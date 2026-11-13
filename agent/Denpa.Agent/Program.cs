@@ -138,8 +138,7 @@ if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText
  */
 // 末尾の `/` は落とす (置き場の中かを `<置き場>/` で始まるかで見るので、`/media/raw/` だとどれも外になる)
 var recorded = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
-    (Environment.GetEnvironmentVariable("RAW_DIR") is { Length: > 0 } rawDir ? rawDir : null)
-    ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") is { Length: > 0 } mediaDir ? mediaDir : "/media", "raw")));
+    Config.Given("RAW_DIR") ?? Path.Combine(Config.Given("MEDIA_DIR") ?? "/media", "raw")));
 
 // 自分の鍵と証明書、合言葉、組んだ denpa (tuners.json の隣の tls/。AgentTls.cs)
 var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
@@ -189,8 +188,7 @@ var sharing = cardLan.Port is { } sharePort ? new CardShareServer(cardLan, share
  */
 var cardUrl = Environment.GetEnvironmentVariable("CARD_URL");
 Keys.Configure(cardUrl, cardLan.Hops);
-var tune = new TuneOptions(
-    Environment.GetEnvironmentVariable("FAKE_TUNE") is { Length: > 0 } fake ? fake : null);
+var tune = new TuneOptions(Config.Given("FAKE_TUNE"));
 
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 

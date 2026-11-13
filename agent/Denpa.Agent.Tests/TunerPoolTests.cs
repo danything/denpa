@@ -410,7 +410,7 @@ public class TunerPoolTests
     /// 本番で、名指しのライブが PX-MLT8PE の受信機に入ったまま答えを返さず、同じ名指しのリクエストし直しもその選局を共有して止まり続けた
     /// </summary>
     [Test]
-    public async Task 最初のTSが上限までに届かなければ畳んで理由を返し_次は選局し直す(CancellationToken cancel)
+    public async Task 最初の_TS_が上限までに届かなければ畳んで理由を返し_次は選局し直す(CancellationToken cancel)
     {
         await Task.Yield();
         // 1 回の読み出しが上限より長く掛かる (TS が届かない受信機)
@@ -434,7 +434,7 @@ public class TunerPoolTests
 
     /// <summary>**TS が届いた選局は、上限を過ぎても畳まない**</summary>
     [Test]
-    public async Task TSが届いた選局は上限を過ぎても畳まない(CancellationToken cancel)
+    public async Task TS_が届いた選局は上限を過ぎても畳まない(CancellationToken cancel)
     {
         await Task.Yield();
         var rig = new Rig([Spec("A", "fake:a")], TimeSpan.Zero, TimeSpan.FromMilliseconds(10), firstTs: TimeSpan.FromMilliseconds(300));

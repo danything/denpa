@@ -165,9 +165,8 @@ public class AsicenTests
         {
             "asicen:1-2:0 BS/CS", "asicen:1-2:1 GR", "asicen:1-2:2 BS/CS", "asicen:1-2:3 GR", "asicen:3-1.4:0 GR/BS/CS",
         });
-        // 給電できるのは PX-W3U2・PX-W3U3・PX-W3U3 V2 の衛星の受信機だけ
-        await Assert.That(enclosures[0].Receivers.Select(receiver => receiver.Lnb15v).ToArray()).IsEquivalentTo(new bool?[] { true, false, true, false });
-        await Assert.That(enclosures[1].Receivers[0].Lnb15v).IsFalse();
+        // 給電できるのは PX-W3U2・PX-W3U3・PX-W3U3 V2 だけ
+        await Assert.That(enclosures.Select(enclosure => AsicenUserland.PowersLnb(enclosure.Model)).ToArray()).IsEquivalentTo(new[] { true, false });
     }
 
     [Test]
@@ -349,7 +348,6 @@ public class AsicenTests
         await Assert.That(found.Select(enclosure => $"{enclosure.Id} {enclosure.Model} {string.Join(",", enclosure.Ports)}").ToArray())
             .IsEquivalentTo(new[] { "1-2 PX-W3U3 1-2.1,1-2.2", "1-3 PX-S3U2 1-3" });
         await Assert.That(string.Join(" ", found[0].Receivers.Select(receiver => string.Join("/", receiver.Types)))).IsEqualTo("BS/CS GR BS/CS GR");
-        await Assert.That(found[0].Receivers[0].Lnb15v).IsTrue();
         await Assert.That(found[1].Receivers.Select(receiver => receiver.Index).ToArray()).IsEquivalentTo(new[] { 0, 1 });
         await Assert.That(warnings.Count).IsEqualTo(2);
         await Assert.That(warnings.Any(warning => warning.Contains("PX-W3U3 V2 (USB 2-1.1)"))).IsTrue();
@@ -473,7 +471,7 @@ public class AsicenTests
         await Assert.That(busy.Code).IsEqualTo(UdtvError.Busy);
         await Assert.That(busy.Operation).IsEqualTo("acquire");
         await Assert.That(busy.Label).IsEqualTo("BUSY");
-        await Assert.That(busy.Message).Contains("他が使っています");
+        await Assert.That(busy.Message).Contains("受信機をほかのソフトが使っています");
 
         var unsupported = Udtv.Failed(AsicenRecorded.Unsupported);
         await Assert.That(unsupported.Code).IsEqualTo(UdtvError.Unsupported);

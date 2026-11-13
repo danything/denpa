@@ -504,9 +504,9 @@ ioctl は通り、同期しないだけなので気付きにくい。
   PIX-DT295 は制御転送を 1 つのスレッドずつ通す (`_gate`) ので、TS の送り出しの要求と応答の組の間には入らない
 - 読めなかったら `signal` を null にし、その選局では 1 回だけ記録に残す。選局は止めない
 
-形式は `{ "locked": true, "cn": 25.3, "unit": "dB", "atTune": false, "strengthDbm": -35.3 }`。`unit` が `raw` なら `cn` は機材のレジスタの値か、DVB のドライバが返した相対値 (0〜65535) のままで、dB ではありません。
-`strengthDbm` は電波の強度 (dBm) で、dBm で返す機材 (DVB のドライバが `FE_SCALE_DECIBEL` で返すもの・CECH-ZD1 J・IT930x の機材の地上波と J.83B) だけ入り、ほかは null (IT930x の機材の衛星の強度は dBm と言えないので入れない)。古いエージェントは `strengthDbm` を返さないので、サーバは無いものも null と同じに読む (古いサーバは読まずに捨てる)。
-`atTune` は選局したときに測った値 (asicend)。測れない機材と空いているチューナーは `signal: null` です。どの機材で何が出るかは [tuners.md](tuners.md#信号レベル)。
+形式は `{ "locked": true, "cn": 25.3, "unit": "dB", "atTune": false, "strengthDbm": -35.3 }`。`unit` が `raw` なら `cn` は DVB のドライバが返した相対値 (0〜65535) のままで、dB ではありません。
+`strengthDbm` は電波の強度 (dBm) で、dBm で返す機材 (DVB のドライバが `FE_SCALE_DECIBEL` で返すもの・CECH-ZD1 J・IT930x の機材の地上波と J.83B・Siano の機材) だけ入り、ほかは null (IT930x の機材の衛星の強度は dBm と言えないので入れない)。古いエージェントは `strengthDbm` を返さないので、サーバは無いものも null と同じに読む (古いサーバは読まずに捨てる)。
+`atTune` は選局したときに確かめた値で、受信中は読み直しません (asicend。同期したかだけで、`cn` は null)。測れない機材と空いているチューナーは `signal: null` です。どの機材で何が出るかは [tuners.md](tuners.md#信号レベル)。
 
 ### DVB の機材で ISDB-C を受ける (実機で確かめていない)
 

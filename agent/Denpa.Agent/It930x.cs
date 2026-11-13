@@ -370,8 +370,7 @@ public static class It930x
     private static readonly ConcurrentDictionary<string, It930xModel> Known = new(StringComparer.Ordinal);
 
     /// <summary><c>--card it930x:4-12.1</c> (内蔵のカードリーダー。受信機の番号は付けない) からポートを取る。形式が違えば null</summary>
-    public static string? CardPort(string? device) =>
-        Is(device) && device![Scheme.Length..] is var port && UsbSysfs.IsPort(port) ? port : null;
+    public static string? CardPort(string? device) => UsbSysfs.PortOf(device, Scheme);
 
     /// <summary>内蔵のカードリーダー。挿さっている機材のぶん。**開くまでは何も開かない**</summary>
     public static IReadOnlyList<CardLinkCandidate> Cards() => Cards(Found(), Serial);

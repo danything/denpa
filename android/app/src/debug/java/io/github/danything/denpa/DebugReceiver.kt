@@ -86,7 +86,7 @@ class DebugReceiver : BroadcastReceiver() {
     }
 
     private companion object {
-        const val TAG = "denpa"
+        const val TAG = DenpaService.TAG
         const val ATTACH_FILE = "io.github.danything.denpa.debug.ATTACH_FILE"
         const val PRESS_STOP = "io.github.danything.denpa.debug.PRESS_STOP"
         const val KILL_AGENT = "io.github.danything.denpa.debug.KILL_AGENT"

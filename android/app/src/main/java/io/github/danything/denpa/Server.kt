@@ -31,10 +31,10 @@ import java.util.zip.ZipInputStream
  */
 internal object Server {
     const val TAG = "denpa-server"
-    const val BUN_LIBRARY = "libbun.so"
-    const val FFMPEG_LIBRARY = "libffmpeg.so"
-    const val FFPROBE_LIBRARY = "libffprobe.so"
     const val PORT = 3000
+    private const val BUN_LIBRARY = "libbun.so"
+    private const val FFMPEG_LIBRARY = "libffmpeg.so"
+    private const val FFPROBE_LIBRARY = "libffprobe.so"
     private const val ARCHIVE = "server.zip"
     private const val ENTRY = "app/server.js"
     private const val ENV_FILE = "denpa.env"

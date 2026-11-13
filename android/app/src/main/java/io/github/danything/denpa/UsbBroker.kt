@@ -235,7 +235,7 @@ internal class UsbBroker(private val context: Context, private val socketFile: F
         runCatching { socket.close() }
     }
 
-    @Suppress("DEPRECATION") // 型を渡す版は API 33 から
+    @Suppress("DEPRECATION") // 型を渡す getParcelableExtra は API 33 から
     private fun deviceOf(intent: Intent): UsbDevice? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
@@ -246,6 +246,6 @@ internal class UsbBroker(private val context: Context, private val socketFile: F
     private fun id(device: UsbDevice) = "%04x:%04x".format(device.vendorId, device.productId)
 
     private companion object {
-        const val TAG = "denpa"
+        const val TAG = DenpaService.TAG
     }
 }
