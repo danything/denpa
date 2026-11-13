@@ -17,6 +17,7 @@ import {
   encodeArgs,
   EncodeLag,
   encodeSpeed,
+  hevcTsCodec,
   keepLight,
   key,
   type Light,
@@ -1383,6 +1384,25 @@ describe("4K の局のライブ", () => {
       codec === "hevc" || codec === "h264" ? hw : null;
     expect(liveRungCodec(["hevc", "h264"], "hevc", rk)).toBe("h264");
     expect(liveRungCodec(["hevc", "h264"], "mpeg2", rk)).toBe("hevc");
+  });
+
+  test("TS で送る 4K の局と PMT で分かったら、ライブの段を下げた H.265 だけを選び直す (hevcTsCodec)", () => {
+    const hw: LiveHw = { way: { device: "d", kind: "vaapi" }, full: false };
+    const gpu = () => hw;
+    // 段を下げた H.265 は H.265 を外して、言った形式から選ぶ (AV1 が先)
+    expect(hevcTsCodec("hevc", 1, true, ["hevc", "av1", "h264"], gpu)).toBe(
+      "av1",
+    );
+    expect(hevcTsCodec("hevc", 2, true, ["hevc", "h264", "raw"], gpu)).toBe(
+      "h264",
+    );
+    // 言っていなければ H.264
+    expect(hevcTsCodec("hevc", 1, true, null, gpu)).toBe("h264");
+    // 段 0 の H.265 は放送の HEVC を写すのでそのまま。ほかの形式もそのまま
+    expect(hevcTsCodec("hevc", 0, true, ["av1"], gpu)).toBe("hevc");
+    expect(hevcTsCodec("av1", 1, true, ["av1"], gpu)).toBe("av1");
+    // 追っかけは選局の答えを出さないので替えない
+    expect(hevcTsCodec("hevc", 1, false, ["av1"], gpu)).toBe("hevc");
   });
 
   test("詰め替えた fMP4 の codecs は Main 10・Level 5.1 の hvc1", () => {
