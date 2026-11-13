@@ -971,9 +971,8 @@
         />
       {:else}
         <!-- 局はあるが、いま流している番組が無い (番組表を集めている途中など) -->
-        <p class="muted">
-          {typeWord}の番組表はまだありません。集まるまでお待ちください
-        </p>
+        <p class="bold">{typeWord}の番組表はまだありません</p>
+        <p class="small muted">集まるまでお待ちください</p>
       {/if}
     </div>
   {:else if sheet !== null && sheet.failed !== null && switching === null}

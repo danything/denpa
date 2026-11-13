@@ -703,12 +703,7 @@ thead th {
 }
 
 /* ---- 並べる ---- */
-/* 縦に積む / 横に並べて折り返す */
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dp-space-3);
-}
+/* 横に並べて折り返す */
 .cluster {
   display: flex;
   flex-wrap: wrap;
@@ -1347,7 +1342,7 @@ input[type="checkbox"][role="switch"] {
   background-size: 1rem var(--dp-mark);
 }
 /*
- * **メニューを開くボタンは、中の設定が既定から変わっているときに同じ短い下線を引く** (`data-on`。ホームの「⋯」・切り抜きの「絞り込み」)。
+ * **メニューを開くボタンは、中の設定が既定から変わっているときに同じ短い下線を引く** (`data-on`。ホームの「⋯」・切り抜きの「絞り込み」・番組表の「ジャンル」)。
  * 開いているかは `aria-expanded` で言うので `aria-pressed` は使わず、字の色も変えない。
  * 主の色の点は「まだ見ていないもの」の印なので使わない (1 つの見た目に 1 つの意味)
  */
@@ -1829,7 +1824,7 @@ button[aria-busy="true"]::after {
 }
 
 /*
- * 文の続きとして読める、地も枠も無い小さなボタン (エンコーダの「確かめ直す」)。
+ * 文の続きとして読める、地も枠も無い小さなボタン (エンコーダの「再確認」)。
  * 押せることは下線で示す。上の `aria-busy` より後に置き、送信中も字は控えた色のまま。
  *
  * **ボタンのトークンをここで字のものに戻す。** ボタンの規則 (上の「ボタン」) は地と字を `--pico-background-color`・
@@ -2768,14 +2763,17 @@ dialog[open] > article {
 .side-item.static:hover {
   background: transparent;
 }
-/* 行の右の控えた値 (件数・値) */
-.side-item .side-sub {
+/* 行の右の控えた値 (件数・値)。同じ絞り込みをメニューに並べたとき (切り抜き) も同じ */
+:is(.side-item, .menu-item) .side-sub {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   gap: var(--dp-space-1);
   color: var(--dp-muted);
   font-size: var(--dp-text-xs);
+}
+.menu-item .side-sub {
+  margin-inline-start: auto;
 }
 /* いちばん下に置くもの (状態・主のボタン)。線では分けず、余白で下に押す */
 .side-foot {

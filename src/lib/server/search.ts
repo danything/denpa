@@ -17,6 +17,7 @@ import type { ReservationState, Rule } from "../types";
 import { now, orm } from "./db";
 import { ANY_PAID, compile, haystack, matchesCompiled } from "./rules";
 import {
+  activeEncodeJobId,
   HELD_STATES,
   latestReservationRecordingId,
   programs,
@@ -291,6 +292,8 @@ export function searchRecordings(q: string, options: SearchOptions) {
             library_path: recordings.library_path,
             watched_at: recordings.watched_at,
             has_logo: services.has_logo,
+            // エンコード中か。動いている間は削除を出さない (ホームの行と同じ。裏の ffmpeg が元の TS を読んでいる)
+            job_id: activeEncodeJobId(recordings.id),
           })
           .from(recordings)
           .leftJoin(services, eq(services.id, recordings.service_id))

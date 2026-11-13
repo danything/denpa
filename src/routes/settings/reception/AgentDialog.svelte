@@ -90,6 +90,11 @@
         "カメラを使えません。スマートフォンのカメラで QR を読み、出た URL を貼ってください";
       return;
     }
+    // カメラの許可を待つ間に窓を閉じていたら、届いたカメラをすぐ止める (閉じたときの `stopScan` はもう済んでいる)
+    if (dialog?.open !== true) {
+      stopScan();
+      return;
+    }
     scanning = true;
     // 映像の枠は `scanning` で描くので、描き終えてから流し込む。枠が無ければカメラも止める
     await tick();
@@ -249,7 +254,7 @@
               data-testid="agent-qr-video"
             ></video>
             <button type="button" class="small ghost" onclick={stopScan}
-              >読むのをやめる</button
+              >中断</button
             >
           {:else}
             <button

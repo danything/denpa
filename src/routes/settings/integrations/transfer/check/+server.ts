@@ -6,7 +6,7 @@ import { failure, migrating, refuse } from "../guard.server";
 
 /**
  * **確かめる。** 送ったファイルを開いて migrate を当て、録画のファイルが置き場にあるかを数える。
- * 「もう一度確かめる」も同じ (開くのは初めの 1 回だけ)
+ * 「再確認」も同じ (開くのは初めの 1 回だけ)
  */
 export async function POST(event) {
   const refused = refuse(event) ?? migrating();

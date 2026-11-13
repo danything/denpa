@@ -444,35 +444,41 @@
   const MANY = 0;
 
   let filterOpen = $state(false);
+
+  /**
+   * 絞り込みの 1 項目。サイドバーでは行 (`side-item`。選んでいるかは `aria-pressed`)、
+   * 「絞り込み」のメニューではほかのメニューと同じ項目 (`menu-item`。↑↓ で動き、押すと閉じる)
+   */
+  function filterItem(menu: boolean, selected: boolean) {
+    return menu
+      ? {
+          class: "menu-item",
+          role: "menuitemradio",
+          "aria-checked": selected,
+        }
+      : { class: "side-item", "aria-pressed": selected };
+  }
 </script>
 
 <svelte:window onclick={deleting.stand} onkeydown={onkey} />
 
-{#snippet kinds(done?: () => void)}
+{#snippet kinds(menu = false)}
   {#each KINDS as kind (kind.label)}
     <button
       type="button"
-      class="side-item"
-      aria-pressed={data.query.kind === kind.id}
-      onclick={() => {
-        apply({ kind: kind.id });
-        done?.();
-      }}
+      {...filterItem(menu, data.query.kind === kind.id)}
+      onclick={() => apply({ kind: kind.id })}
       data-testid="clip-kind"
       data-kind={kind.id ?? "all"}>{kind.label}</button
     >
   {/each}
 {/snippet}
 
-{#snippet services(done?: () => void)}
+{#snippet services(menu = false)}
   <button
     type="button"
-    class="side-item"
-    aria-pressed={data.query.service === undefined}
-    onclick={() => {
-      apply({ service: undefined });
-      done?.();
-    }}
+    {...filterItem(menu, data.query.service === undefined)}
+    onclick={() => apply({ service: undefined })}
     data-testid="clip-service"
   >
     <span>すべての局</span>
@@ -481,12 +487,8 @@
   {#each data.facets.services as service (service.id)}
     <button
       type="button"
-      class="side-item"
-      aria-pressed={data.query.service === service.id}
-      onclick={() => {
-        apply({ service: service.id });
-        done?.();
-      }}
+      {...filterItem(menu, data.query.service === service.id)}
+      onclick={() => apply({ service: service.id })}
       data-testid="clip-service"
       data-service={service.id}
     >
@@ -721,26 +723,23 @@
           </button>
         {/snippet}
         <div class="c-menu-head small muted">種類</div>
-        <div class="side-list" role="group" aria-label="ライブか録画か">
-          {@render kinds(() => (filterOpen = false))}
+        <div class="c-menu-group" role="group" aria-label="ライブか録画か">
+          {@render kinds(true)}
         </div>
         {#if data.facets.services.length > 0}
           <div class="c-menu-head small muted">局</div>
-          <div class="side-list" role="group" aria-label="局">
-            {@render services(() => (filterOpen = false))}
+          <div class="c-menu-group" role="group" aria-label="局">
+            {@render services(true)}
           </div>
         {/if}
         {#if data.query.day !== undefined}
-          <div class="side-list">
-            <button
-              type="button"
-              class="side-item"
-              onclick={() => {
-                apply({ day: undefined });
-                filterOpen = false;
-              }}>{fullDate(dayOf(data.query.day))} の絞り込みを外す</button
-            >
-          </div>
+          <button
+            type="button"
+            class="menu-item"
+            role="menuitem"
+            onclick={() => apply({ day: undefined })}
+            >{fullDate(dayOf(data.query.day))} の絞り込みを外す</button
+          >
         {/if}
         <div class="c-menu-head small muted num">
           {data.facets.count} 枚・{size(data.facets.bytes)}
@@ -1142,6 +1141,12 @@
   }
   .c-menu-head {
     padding: var(--dp-space-2) var(--dp-space-3) var(--dp-space-1);
+  }
+  /* 種類・局の束。項目の間はメニューと同じ (`app.css` の `.menu`) */
+  .c-menu-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
   }
   :global(.c-filter-menu) {
     width: 16rem;

@@ -520,7 +520,7 @@
           {data.collect.boosted
             ? "最優先で集めています"
             : "番組表を集めています"}
-          ({data.collect.active.join(", ") || "準備中"})・残り {data.collect
+          ({data.collect.active.join("、") || "準備中"})・残り {data.collect
             .pending} チャンネル
         </div>
         <progress

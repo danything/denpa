@@ -54,7 +54,7 @@
   const viewingSave = new SaveState();
 
   /**
-   * 「確かめ直す」は今の値を見せている画面のまま送る。enhance の既定 (成功後に `form.reset()`) だと、
+   * 「再確認」は今の値を見せている画面のまま送る。enhance の既定 (成功後に `form.reset()`) だと、
    * 何も変えずに押しただけで欄が初期値に戻って見える
    */
   const keepValues: SubmitFunction = () => async (options) => {
@@ -216,7 +216,7 @@
                   type="submit"
                   form="probe-hw"
                   class="text-button"
-                  data-testid="hw-probe">確かめ直す</button
+                  data-testid="hw-probe">再確認</button
                 >
                 {#snippet more()}
                   <p>
@@ -328,7 +328,7 @@
           />
         </div>
       </form>
-      <!-- 「確かめ直す」が送るフォーム。ボタンは映像コーデックの下にあり、`form="probe-hw"` で指す -->
+      <!-- 「再確認」が送るフォーム。ボタンは映像コーデックの下にあり、`form="probe-hw"` で指す -->
       <form
         id="probe-hw"
         method="POST"

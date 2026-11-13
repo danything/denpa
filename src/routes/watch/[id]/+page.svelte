@@ -592,7 +592,7 @@
     if (Math.abs(now - at) >= 0.05) at = now;
     // 自動再生で断られて音を出せていない。消音にしておき、押して出してもらう (ライブと同じ)
     if (!muted && canvas.blocked && !canvas.paused) muted = true;
-    // 飛んだ先に着いた (流れ出した)。CM の跨ぎを待つのをやめる
+    // 飛んだ先に着いた (流れ出した)。CM を跨ぐのを待つのをやめる
     if (waiting && canvas.flowing && now >= hopTo) {
       if (++settled >= SETTLED) open();
     }
@@ -1792,7 +1792,7 @@
     if (info === null) return null;
     return data.head + toTsTime(mediaTime(), ruler(info)) * 1000;
   }
-  /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
+  /** 字幕を貼り直す処理を回している映像。二重に回さないための目印 (`follow`) */
   let following: HTMLVideoElement | null = null;
   /** 映像だけ遅れたら飛び直す (`unslip.ts`)。段を替えてデコーダが作り直されると、Android の Chrome で映像だけ取り残される */
   const unslip = unslipper();
@@ -2009,7 +2009,7 @@
     return () => {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("pagehide", onLeave);
-      // 貼り直しの追いかけを畳む。外さないと画面を離れたあとも回り続ける
+      // 字幕を貼り直す処理を止める。外さないと画面を離れたあとも回り続ける
       following = null;
       clearInterval(ticker);
       remember(true);

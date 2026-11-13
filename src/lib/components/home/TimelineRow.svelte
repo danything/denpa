@@ -134,7 +134,7 @@
   }
 
   /**
-   * 録画の行の段。動いているもの (エンコード・待ち・録画中・端末に保存中) が先、
+   * 録画の行の段。動いているもの (エンコード・待ち・端末に保存中) が先、
    * 問題 (失敗・欠けた・録画が途中で切れた・ロゴで CM を判定できなかった・端末に保存できなかった) が後
    */
   function recLines(rec: Rec): RowStatus[] {
@@ -154,10 +154,6 @@
         testid: "recording-state",
         detailTestid: encoding ? "encode-progress" : undefined,
       });
-    } else if (rec.state === "recording") {
-      activities.push(
-        recordingLine(shown.label, rec.end_at, "recording-state"),
-      );
     } else if (!shown.quiet) {
       problems.push({
         kind: rec.state,
@@ -183,7 +179,7 @@
         kind: "save-failed",
         tone: "error",
         label: "端末に保存できませんでした",
-        detail: "詳細からやり直せます",
+        detail: "詳細から再試行できます",
       });
     }
     problems.push(...clipLine(rec, true));
@@ -360,7 +356,7 @@
 {/snippet}
 
 <!--
-    録画の行。押すと再生 (録っている最中は追っかけ)。中身を読みたいときは行の「詳細」から。
+    録画の行。押すと再生。中身を読みたいときは行の「詳細」から。
     置き場と尺と切った CM の位置は属性にだけ持たせる (確かめる手段は残しておきたい)
 -->
 {#snippet recRow(item: Item & { kind: "rec" }, nested: boolean)}
