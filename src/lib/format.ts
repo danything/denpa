@@ -230,10 +230,9 @@ export function byteScale(total: number): {
 }
 
 /**
- * 録画の見出しに添える空きと残り時間 (`disk.capacity`)。「空き 1.2 TB」と「約 900 時間」。
- * 分けて返すのは、列が狭いと時間のほうだけ落とすため。目安が無ければ `hours` は null。
+ * 録画の「状態」の「空き」に出す空きと残り時間 (`disk.capacity`)。「1.2 TB」と「約 900 時間」。目安が無ければ `hours` は null。
  *
- * **細かく出さない。** 見出しの脇に小さく置くので短く、また値が少し動くたびに
+ * **細かく出さない。** 小さく置くので短く、また値が少し動くたびに
  * 画面の HTML が変わると ETag が合わなくなるので、サーバでこの粗さに丸めてから渡す。
  * 時間は桁に合わせて丸める (目安なので 937 と出すほどの精度は無い)
  */
@@ -248,11 +247,11 @@ export function capacityLabel(
       : free >= 1024 ** 3
         ? `${Math.floor(free / 1024 ** 3)} GB`
         : "1 GB 未満";
-  if (hours === null) return { free: `空き ${space}`, hours: null };
-  if (hours < 1) return { free: `空き ${space}`, hours: "1 時間未満" };
+  if (hours === null) return { free: space, hours: null };
+  if (hours < 1) return { free: space, hours: "1 時間未満" };
   const step = hours >= 1000 ? 100 : hours >= 100 ? 10 : 1;
   return {
-    free: `空き ${space}`,
+    free: space,
     hours: `約 ${Math.floor(hours / step) * step} 時間`,
   };
 }

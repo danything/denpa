@@ -7,7 +7,7 @@ import { expect, goto, makeRule, syncEpg, test } from "./helpers";
  * 見えている地の色を計算値から採り、コントラストが 4.5:1 以上あるかを、乗せる前と後の両方で確かめる。
  * 地は祖先の背景を下から重ねて求める (行の地・ガラスの面のような半透明も混ぜる)。
  *
- * 字で見せるボタンは「確かめ直す」「詳しく」(`.text-button`)・説明の ⓘ (`Lead`)。
+ * 字で見せるボタンは「再確認」「詳しく」(`.text-button`)・説明の ⓘ (`Lead`)。
  * ボタンの規則は `--pico-color` を主のボタンの字 (= 地の色) にするので、乗せたときにそれを指すと字が消えていた。
  * ボタンの形のもの (`a.button`・ふつうのボタン) は `45-buttons` が見る
  */
@@ -133,14 +133,14 @@ for (const theme of ["dark", "light"] as const) {
         ).toBe(theme);
         total += await hoverAll(page, page.locator("main"), url);
       }
-      // エンコードの GPU の行の「確かめ直す」は名指しでも見る (乗せると字が地の色になって消えていた)
+      // エンコードの GPU の行の「再確認」は名指しでも見る (乗せると字が地の色になって消えていた)
       await goto(page, "/settings/recording");
       await expect(page.getByTestId("hw-probe")).toBeVisible();
       expect(
         await hoverAll(
           page,
           page.getByTestId("hw-probe").locator(".."),
-          "確かめ直す",
+          "再確認",
         ),
       ).toBeGreaterThan(0);
       // 番組表の詳細 (浮かぶ箱)

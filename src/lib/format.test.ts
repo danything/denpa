@@ -212,26 +212,26 @@ describe("空きと残り時間", () => {
   const GB = 1024 ** 3;
   test("1 TB からは TB で、時間は桁で丸める", () => {
     expect(capacityLabel(1.25 * 1024 * GB, 937.4)).toEqual({
-      free: "空き 1.3 TB",
+      free: "1.3 TB",
       hours: "約 930 時間",
     });
     expect(capacityLabel(512.7 * GB, 64.9)).toEqual({
-      free: "空き 512 GB",
+      free: "512 GB",
       hours: "約 64 時間",
     });
     expect(capacityLabel(4 * 1024 * GB, 2345)).toEqual({
-      free: "空き 4.0 TB",
+      free: "4.0 TB",
       hours: "約 2300 時間",
     });
   });
 
   test("目安が無ければ空きだけ、残りわずかはそう言う", () => {
     expect(capacityLabel(300 * GB, null)).toEqual({
-      free: "空き 300 GB",
+      free: "300 GB",
       hours: null,
     });
     expect(capacityLabel(0.5 * GB, 0.2)).toEqual({
-      free: "空き 1 GB 未満",
+      free: "1 GB 未満",
       hours: "1 時間未満",
     });
   });

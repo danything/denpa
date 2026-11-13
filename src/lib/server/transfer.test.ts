@@ -299,7 +299,7 @@ describe("取り込む", () => {
     expect(result.blocked).toBe(true);
     expect(() => transfer.apply(false)).toThrow("置き場に無い録画があります");
 
-    // 写したら「もう一度確かめる」で通る (送り直さない)
+    // 写したら「再確認」で通る (送り直さない)
     mkdirSync(join(fresh.encoded, "シリーズ"), { recursive: true });
     writeFileSync(join(fresh.encoded, "シリーズ", "第1話.mkv"), "video");
     const again = await transfer.check();

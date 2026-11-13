@@ -277,14 +277,14 @@
   }
 
   /** 一覧の各行。開いたときに、いま映している局まで送る (局が 100 を超えると画面の外のほうが普通) */
-  const rows: Record<number, HTMLElement | undefined> = $state({});
+  const rows: Record<number, HTMLElement | null | undefined> = $state({});
   /** 一覧そのもの。送るのはこの中だけ (下の説明) */
   let list = $state<HTMLElement | null>(null);
   /** 一度送った一覧は、あとは触らない。見ている途中で勝手に動くと邪魔になる (詳細を閉じるなどで作り直した一覧は先頭からなので、また送る) */
   let scrolledList: HTMLElement | null = null;
   $effect(() => {
     const row = current === undefined ? undefined : rows[current.id];
-    if (list === scrolledList || row === undefined || list === null) return;
+    if (list === scrolledList || row == null || list === null) return;
     scrolledList = list;
     /*
      * `scrollIntoView` は使わない。動かせるものは何でも動かすので、縦に積む幅では窓ごと動いて、
@@ -757,9 +757,7 @@
                   >{/if}{#if player.dropped > 0}・<span
                     >コマ落ち {player.dropped}</span
                   >{/if}{#if player.slipMost > 0}・<span
-                    >映像の遅れ 最大 {Math.round(
-                      player.slipMost * 1000,
-                    )}ms</span
+                    >映像の遅れ 最大 {Math.round(player.slipMost * 1000)} ms</span
                   >{/if}{#if player.slips > 0}・<span
                     >映像の遅れを補正 {player.slips} 回</span
                   >{/if}{#if player.rateChanges > 0}・<span
@@ -769,7 +767,7 @@
                       : `速さ ${player.rate} 倍・`}速さを変えた回数 {player.rateChanges}
                     回</span
                   >{/if}{#if player.canvas && player.decodeMs > 0}・<span
-                    >デコード {player.decodeMs.toFixed(1)}ms{player.thinned
+                    >デコード {player.decodeMs.toFixed(1)} ms{player.thinned
                       ? " (コマを間引いています)"
                       : ""}</span
                   >{/if}
@@ -955,6 +953,18 @@
         {/if}
       </JikkyoList>
     {/snippet}
+    <!--
+      列の先頭。データ放送を開いている間はリモコン (入れ替えない。押しながら局も変えたい。常に受信していても、開くまでは出さない)、
+      その下に実況のコメントの一覧 (出している間)
+    -->
+    {#snippet asideTop()}
+      {#if dataPress !== null}
+        <Remote press={dataPress} />
+      {/if}
+      {#if jikkyoList.shown}
+        {@render commentList()}
+      {/if}
+    {/snippet}
     {#if detail.current}
       <!--
             番組の中身は、この列を入れ替えて出す (モーダルにしない。映像に被さると観ながら読めない)
@@ -969,29 +979,14 @@
       >
         {#snippet top()}
           <!-- 番組の中身を開いていても、リモコンとコメントの一覧は列の先頭に残す (局の一覧のときと同じ) -->
-          {#if dataPress !== null}
-            <Remote press={dataPress} />
-          {/if}
-          {#if jikkyoList.shown}
-            {@render commentList()}
-          {/if}
+          {@render asideTop()}
         {/snippet}
         <ProgramFacts program={detail.current} />
       </FactsAside>
     {:else}
       <!-- 幅と高さ・サイドバーの形は FactsAside と同じ (PlayerLayout が持つ。一覧は中身が違うので列だけ揃える) -->
       <aside class="live-side">
-        <!--
-                データ放送を開いている間だけ、リモコンを一覧の上に出す (入れ替えない。押しながら局も変えたい)。
-                常に受信していても、開くまでは出さない
-            -->
-        {#if dataPress !== null}
-          <Remote press={dataPress} />
-        {/if}
-        <!-- 実況のコメントの一覧も、出している間は一覧の上 (リモコンの下) -->
-        {#if jikkyoList.shown}
-          {@render commentList()}
-        {/if}
+        {@render asideTop()}
 
         <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
         <div role="group" class="type-tabs segmented">

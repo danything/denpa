@@ -236,17 +236,14 @@
    */
   function watchLink(rec: Rec): string | null {
     if (rec.deleted_at !== null || rec.state === "failed") return null;
-    if (rec.library_path !== null) return resolve(`watch/${rec.id}`);
     /*
      * **エンコードが終わる前でも観られる。** 録り終えて CM 検出やエンコードを待っている間 (失敗したときも) は
-     * 観る画面がサーバに元の TS をその場で変換させて流す (`server/playback.ts`)。録っている最中だけ
-     * 追っかけ再生の画面 (`/chase`。伸びている TS を追い読みする)
+     * 観る画面がサーバに元の TS をその場で変換させて流す (`server/playback.ts`)。録っている最中の録画は
+     * 予約の行に出る (追っかけはそちらから)
      */
-    if (rec.ts_path !== null)
-      return resolve(
-        rec.finished_at !== null ? `watch/${rec.id}` : `chase/${rec.id}`,
-      );
-    return null;
+    return (rec.library_path ?? rec.ts_path) === null
+      ? null
+      : resolve(`watch/${rec.id}`);
   }
 
   /**
@@ -972,7 +969,7 @@
             class="secondary outline"
             onclick={() => saveToDevice(rec)}
           >
-            {held?.state === "failed" ? "保存をやり直す" : "端末に保存"}
+            {held?.state === "failed" ? "保存を再試行" : "端末に保存"}
           </button>
         {/if}
         {#if held !== undefined}
@@ -1073,13 +1070,13 @@
               tabindex="-1"
               data-testid="cm-redo-button"
             >
-              CM 検出をやり直す
+              CM の再検出
             </div>
             <div class="menu-note muted small">{redo.reason}</div>
           {:else}
             {@render menuSubmit(
               "?/redetectCm",
-              "CM 検出をやり直す",
+              "CM の再検出",
               "cm-redo-button",
               { id: rec.id },
               detail.close,

@@ -116,7 +116,7 @@
     }
   }
 
-  /** 確かめる (送り終えたあとと「もう一度確かめる」) */
+  /** 確かめる (送り終えたあとと「再確認」) */
   async function recheck(): Promise<void> {
     error = null;
     forcing.fire();
@@ -281,7 +281,7 @@
       <!-- 再エンコードは置いてあるファイルを消してから書き直す。その間に写すと、移した先で「置き場に無い」になる -->
       <div class="notice warning" data-testid="transfer-working">
         録画中か、エンコード・CM
-        検出・スクランブル復号を待っている・している録画が {status.working} 件あります。この録画のファイルは書き出したあとも作り直されることがあるので、終わってから書き出し、録画のフォルダを写してください
+        検出・スクランブル復号を待っているか処理している録画が {status.working} 件あります。この録画のファイルは書き出したあとも作り直されることがあるので、終わってから書き出し、録画のフォルダを写してください
       </div>
     {/if}
     <!-- ダウンロードとして返すので、素のフォームで送る (`use:enhance` を付けない) -->
@@ -293,7 +293,7 @@
           disabled={busy || status.upload !== null}
           data-testid="transfer-export"
         >
-          書き出す
+          書き出し
         </button>
       </div>
       <span class="hint">
@@ -395,7 +395,7 @@
               type="button"
               class="small outline"
               onclick={recheck}
-              data-testid="transfer-recheck">もう一度確かめる</button
+              data-testid="transfer-recheck">再確認</button
             >
           </div>
         {/if}
@@ -458,7 +458,7 @@
 
           {#if result.blocked}
             <div class="notice warning" data-testid="transfer-blocked">
-              置き場に無い録画があります。録画のフォルダを写してから「もう一度確かめる」を押してください。このまま取り込むと、無いものは起動のすぐあとに削除済みになります
+              置き場に無い録画があります。録画のフォルダを写してから「再確認」を押してください。このまま取り込むと、無いものは起動のすぐあとに削除済みになります
             </div>
             {#if result.files.list.length > 0}
               <details class="log">
@@ -482,7 +482,7 @@
                 class="small"
                 disabled={busy}
                 onclick={recheck}
-                data-testid="transfer-recheck">もう一度確かめる</button
+                data-testid="transfer-recheck">再確認</button
               >
               {#if forcing.armed === 0}
                 <button
@@ -514,7 +514,7 @@
                 onclick={() => apply(false)}
                 data-testid="transfer-apply"
               >
-                {phase === "applying" ? "取り込んでいます…" : "取り込む"}
+                {phase === "applying" ? "取り込んでいます…" : "取り込み"}
               </button>
               <span class="hint">
                 この denpa の今の DB

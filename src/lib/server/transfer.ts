@@ -112,7 +112,7 @@ export interface CheckResult {
   manifest: Manifest | null;
   counts: Counts;
   files: FileCheck;
-  /** 無いものがあるか。あれば「取り込む」は 2 回押しにする */
+  /** 無いものがあるか。あれば「取り込み」は 2 回押しにする */
   blocked: boolean;
 }
 
@@ -840,7 +840,7 @@ function inspect(): CheckResult {
 
 /**
  * 確かめる。送り終えていれば、初めの 1 回だけ開いて migrate を当て (`prepare`)、
- * 毎回、置き場と突き合わせる (録画のフォルダを写したあとの「もう一度確かめる」は送り直さずに済む)。
+ * 毎回、置き場と突き合わせる (録画のフォルダを写したあとの「再確認」は送り直さずに済む)。
  * **使えないファイルなら、送ったものを消す**
  */
 export async function check(): Promise<CheckResult> {

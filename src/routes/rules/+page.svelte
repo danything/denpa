@@ -340,11 +340,11 @@
     <dl class="side-list stats" data-testid="rule-summary">
       <div class="side-item static">
         <dt>これから 7 日の予約</dt>
-        <dd class="num">{data.summary.weekReservations} 件</dd>
+        <dd class="side-sub num">{data.summary.weekReservations} 件</dd>
       </div>
       <div class="side-item static">
         <dt>この 7 日で録れた</dt>
-        <dd class="num">{data.summary.lastWeekRecordings} 本</dd>
+        <dd class="side-sub num">{data.summary.lastWeekRecordings} 本</dd>
       </div>
     </dl>
     <div class="side-foot">
@@ -435,9 +435,6 @@
   .stats dd {
     margin: 0;
     font-weight: var(--dp-weight);
-  }
-  .stats dd {
-    color: var(--dp-muted);
   }
   /*
      * 「ルールを作る」はサイドバーの下端。低い画面でサイドバーの中身があふれても、下に貼り付けて見えたままにする

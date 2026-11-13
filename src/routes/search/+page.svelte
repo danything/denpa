@@ -495,7 +495,7 @@
                     >
                   </span>
                 </svelte:element>
-                {#if rec.state !== "recording"}
+                {#if rec.state !== "recording" && rec.job_id === null}
                   <div class="row-actions">
                     <ArmedDelete
                       {deleting}
@@ -599,7 +599,7 @@
                 <div class="row-actions">
                   {#if res.recording_id !== null}
                     <a
-                      class="button small ghost"
+                      class="button small"
                       href={resolve(`chase/${res.recording_id}`)}>追っかけ</a
                     >
                   {:else if rowCancelable(res.state, res.end_at)}

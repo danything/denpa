@@ -53,9 +53,7 @@
           ? "recordings-capacity"
           : "recordings-capacity-menu"}
       >
-        {capacity.free.replace(/^空き\s*/, "")}{capacity.hours === null
-          ? ""
-          : `・${capacity.hours}`}
+        {capacity.free}{capacity.hours === null ? "" : `・${capacity.hours}`}
       </dd>
     </div>
   {/if}

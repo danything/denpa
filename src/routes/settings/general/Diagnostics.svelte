@@ -30,7 +30,7 @@
   let { data }: { data: PageData } = $props();
 
   /**
-   * スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、ログの押すもの (読み直す・Issue にする) を絞り込みと同じ 1 行に入れる。
+   * スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、ログの押すもの (「再読み込み」「Issue にする」) を絞り込みと同じ 1 行に入れる。
    * その 1 行は下のタブの上に浮く (`settings/+layout.svelte` の `.section-bar`)
    */
   const phone = new MediaQuery(PHONE_FORM);
@@ -460,7 +460,7 @@
       {#if rows.length === 0}
         <p class="small muted" data-testid="logs-empty">
           {query.trim() !== "" || problemsOnly
-            ? "当てはまる行はありません"
+            ? "当てはまるものはありません"
             : "ログはまだありません"}
         </p>
       {:else}

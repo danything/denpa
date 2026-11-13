@@ -13,7 +13,7 @@
     open,
     agent,
     cardId,
-    initialContracts = [],
+    initialContracts,
     onclose,
   }: {
     open: boolean;
@@ -127,9 +127,7 @@
           element.showModal();
           box?.focus();
         }
-      } else {
-        if (element.open) element.close();
-      }
+      } else if (element.open) element.close();
     });
   });
 </script>
@@ -268,7 +266,7 @@
           data-testid="btn-check-contracts"
         >
           <RefreshCw aria-hidden="true" />
-          {busy === "check" ? "確認しています…" : "契約を確認し直す"}
+          {busy === "check" ? "確認しています…" : "契約を再確認"}
         </button>
       </div>
     </footer>
