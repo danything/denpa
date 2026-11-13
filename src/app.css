@@ -2575,7 +2575,8 @@ dialog[open] > article {
 }
 :where(html:not([data-phone])) .with-side > .side-column {
   display: flex;
-  padding-top: var(--dp-space-1);
+  /* 上は空けない (`.side-panel` の上の余白も消す)。ヘッダーとの間は `--dp-header-space` が持っていて、ここでも空けると一覧の見出しより下がる */
+  padding-top: 0;
 }
 @media (min-width: 1600px) {
   :where(html:not([data-phone])) .with-side {
