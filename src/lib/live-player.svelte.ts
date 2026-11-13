@@ -2019,6 +2019,18 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   let broadcastHevc: boolean | undefined;
 
+  /**
+   * TS に HEVC を入れて送る 4K の局と、答え (`tuned` の `broadcast`) で分かったときに確かめる (`begin` と同じ `#lib/hevc-4k.ts`)。
+   * 再生できなければ H.265 をやめて次の形式に移る (`giveUpCodec`)
+   */
+  function checkBroadcastHevc(): void {
+    const probe = browserHevcProbe(pickMediaSource()?.Source);
+    void broadcastHevcPlayable(probe).then((playable) => {
+      broadcastHevc = playable;
+      if (!playable && codec === "hevc" && !hevcGaveUp) giveUpCodec("hevc");
+    });
+  }
+
   /** H.265 を使えるか。4K の局は放送の HEVC の詰め替えを再生できるか、TS の局はサーバが GPU でエンコードできて受け取れるか */
   function hevcCan(): boolean {
     if (compat || hevcGaveUp) return false;
@@ -2678,6 +2690,24 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           audios = notice.audios;
           audio = notice.audio;
           awaiting = false;
+          /*
+           * **サーバが PMT を読んで、TS に HEVC を入れて送る 4K の局と分かった** (`broadcast`)。放送のままをリクエストしていても
+           * 答えは HEVC の詰め替えで、下の `start` で MSE に移る。この局を開いている間は「放送のまま」を HEVC として扱い、
+           * 次からの指示にも付ける (`Tuned.broadcast`。サーバは選局の前から HEVC の詰め替えとして受ける)
+           */
+          if (
+            notice.broadcast === "hevc" &&
+            chase === null &&
+            tuned !== null &&
+            tuned.broadcast !== "hevc"
+          ) {
+            tuned = { ...tuned, broadcast: "hevc" };
+            if (!notice.raw) {
+              rawChosen = false;
+              if (notice.codec !== "audio") codec = notice.codec;
+            }
+            if (broadcastHevc === undefined) checkBroadcastHevc();
+          }
           const step = servedStep(notice);
           // 追っかけで音声だけを選んでいたときは、実際には段 3 をリクエストしている (`wantedCommand`)
           const requested =

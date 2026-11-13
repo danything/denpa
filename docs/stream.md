@@ -820,7 +820,7 @@ AV1・H.265 の VBR がどのドライバでも通るか、段を下げた変換
 - 渡す codecs は `hvc1.2.4.L153.B0` (Main 10・Level 5.1) と AAC です (`#lib/live.ts` の `BROADCAST_HEVC`)。入れ物の中の名前は `hvc1` で (Safari は `hev1` を受け取らない)、VPS・SPS・PPS は `hvcC` にだけ置きます。
   放送はコマの中にも送ってくるので、`hvcC` に入れたものと同じならサンプルから外します。違うものが来たら (番組が替わって符号化の設定が変わった、など) init から作り直します (`mp4/mmt.ts` の `parametersChanged`)。録画 (`.mmts`) は 1 本の fMP4 にするので作り直さず、違うものはサンプルに残します
 - 局の行の伝送の形式 (`services.transport`) から決めます。画面は局の一覧の `broadcast` で知り (`live/+page.server.ts`)、サーバは選局の指示の
-  `raw` を 4K の局では `hevc` に読み替えます (`live.liveForm`)
+  `raw` を 4K の局では `hevc` に読み替えます (`live.liveForm`)。TS で送る 4K の局は局の行では分からず、PMT を読んでから決めます ([下](#ts-で送る-4k-の局))
 
 **回線が足りないときは、今の段の仕組みのまま AV1 か H.264 に移ります** ([回線に合わせて画質を下げる](#回線に合わせて画質を下げる))。
 
@@ -869,6 +869,40 @@ AV1・H.265 の VBR がどのドライバでも通るか、段を下げた変換
 確かめたのは合成の素材 (ffmpeg で作った HEVC Main10 と AAC を `@danything/arib/synth-mmt-av` で MMT/TLV に包んだもの) だけです。
 偽エージェントはスクランブルしていない 4K の局 (QC28) でこれを流します。
 
+### TS で送る 4K の局
+
+**ケーブルの 4K の局には、HEVC を TS に入れて送る局があります。サーバは選局して PMT を読み、映像が HEVC (stream_type 0x24) なら 4K の局と同じに扱います。**
+報告のあった局 (J:COM の QC14 など) は HEVC Main 10・3840x2160・59.94 コマ・BT.2020/HLG と、AAC の LATM (stream_type 0x11) でした (issue #2729)。
+
+- 局の一覧では MPEG-2 の局と見分けられません。局の行にも覚えず、セッションを開くたびに PMT を読みます (`captions.ts` の `peekPmt`・`pmtVideo`)
+- 放送のまま (`raw`) をリクエストされたら、元の TS ではなく HEVC の詰め替えを送ります (`live.servedFormat`)。画面の MPEG-2 のデコーダ (WASM) は HEVC をデコードできないためです。
+  詰め替えは ffmpeg で、映像は写し (`-c:v copy -tag:v hvc1`)、音声だけ AAC にエンコードします (MSE は LATM を受け取らない)。GPU も、その場で変換する本数の枠も使いません
+- `hevc` をリクエストされたときも同じく写します (`live.copiesVideo`)。H.265 にエンコードはしません
+- `h264`・`av1` は 4K の局と同じく、インタレ解除をせずに 1080p (段を下げれば段の高さ) に縮め、HLG を SDR の 8 ビットに直してエンコードします (`live.uhdVideoArgs`)。
+  デコードは CPU で、GPU でエンコードするときも直したものを上げて渡します。MPEG-2 の局と同じ経路 (`deinterlace_vaapi`・GPU のデコード) を通していた頃は、
+  VA-API が `Error reinitializing filters` で止まり、ソフトウェアに降りていました
+- 写すときは `-probesize` を 5MB にし、mp4 の `delay_moov` を付けます。mp4 のマルチプレクサは映像の大きさと VPS・SPS・PPS を知ってから書き始めるので、
+  MPEG-2 の局の 100KB では足りないと見ています (推定)
+- 字幕は MPEG-2 の局と同じく、同じ ffmpeg から受けます
+
+**画面には、セッションが PMT を読んだあとの選局の答え (`tuned`) で知らせます。** 答えに `broadcast: "hevc"` を付け、放送のままをリクエストされていれば
+`codec: "hevc"`・`raw: false` で答え直します (`Session.switchFormat`)。まだ何も送っていないので、画面は MPEG-2 のデコーダを畳んで MSE で受け直します。
+
+- 画面はその局を開いている間、`Tuned.broadcast` を `hevc` にします。メニューの「MPEG-2」の行は「H.265」になり、自動の順も 4K の局のものになります。
+  次からの指示にも `broadcast` を付け、サーバは選局の前から放送のままを HEVC の詰め替えとして受けます (`attend`)。局を替えると局の一覧の値に戻ります
+- HEVC を再生できるかは、答えを受けてから 4K の局と同じ決め方で調べます (`#lib/hevc-4k.ts`)。再生できなければ H.265 をやめて次の形式に移ります
+- 放送のままを送る前に PMT を読むのは、ケーブル (`CATV`) の局だけです (`Session.readsVideo`)。TS で送る 4K の局はケーブルにしか無く、
+  ほかの局の HTTP の応答ヘッダを PMT まで待たせないためです
+- HTTP のライブの `codec=raw` は、`?playable=` を付けたときだけ替えます。付けないものは今までどおり元の TS で、替えるものとは別のセッションにします
+  (`Session.keepsTs`。目印の `key` も分ける)。画面の外のものにとって `raw` は元の TS だからです
+- HTTP のライブは、PMT を読んでから応答ヘッダを返します (`live.liveServed`)。放送のままでも `X-Denpa-Codec: hevc` と `video/mp4` です。
+  `?playable=` に `hevc` が無ければ `h264` (無ければ `av1`) をエンコードし、どれも無ければ「再生できる形式がありません」で畳みます
+  ([api.md](api.md#ライブ-get-apiservicesidlive))。待つ間に切られたら、ストリームを閉じて抜けます
+- 同じ局の放送のままを、HEVC を再生できる端末とできない端末が同時に観ると、先に開いた端末の答えで共有します。できない端末は、MSE が受け取れずに次の形式に移ります
+
+確かめたのは引数とリクエストの扱いのテストだけです。実際の放送の TS で、写した HEVC を画面と ffmpeg で再生できるかは確かめていません。
+VPS・SPS・PPS はコマの中にも残ったまま送るので、`hvc1` として受け取らない端末があるかもしれません (推定)。
+
 ## 字幕
 
 **映像と同じ ffmpeg から、字幕をデコードせずに写して受け取る。出口を 2 つ持つ** (`src/lib/server/captions.ts`)。
@@ -902,7 +936,7 @@ ffmpeg は入口で時刻を 0 に寄せ直すが、**寄せ幅はプロセス�
 > [!NOTE]
 > **字幕を持たない放送はある** (ショッピングやサブチャンネル)。そこに `0:p:X:s:0` を
 > 指定すると ffmpeg は入口を探り終えてから終了し、映像も出ない (`-map …?` でも、字幕の出口が空になって終了する)。
-> だから **ffmpeg を起こす前に PMT を読み**、字幕の ES が無ければ字幕の出口を指定しない (`server/captions.ts` の `peekCaptions`。追っかけも同じ)。
+> だから **ffmpeg を起こす前に PMT を読み**、字幕の ES が無ければ字幕の出口を指定しない (`server/captions.ts` の `peekPmt`。追っかけも同じ)。
 > PMT を 3 秒で読めなかったときは指定し、終了したら字幕なしで起こし直して、その局を 15 分覚えておく (`server/live.ts` の `captionless`)。
 > 起こし直すと映像が 1.5 秒ほど遅れる。放送のままの経路は映像が ffmpeg を通らないので、字幕の ffmpeg が終了しても映像は遅れない。
 

@@ -13,6 +13,7 @@ import {
   audioArgs,
   blameLiveHw,
   CHASE_STREAM_HOLD,
+  copiesVideo,
   encodeArgs,
   EncodeLag,
   encodeSpeed,
@@ -36,6 +37,7 @@ import {
   rungCodec,
   rungPlan,
   rungSlot,
+  servedFormat,
   sessionStream,
   softwareEncodes,
   takeLight,
@@ -1353,22 +1355,22 @@ describe("4K の局のライブ", () => {
 
   test("放送のままは HEVC の詰め替え。GPU が無くても出せる。TS の局の H.265 は GPU が無ければ H.264", () => {
     const noGpu = () => false;
-    expect(liveForm("tlv", "h264", true, noGpu)).toEqual({
+    expect(liveForm("hevc", "h264", true, noGpu)).toEqual({
       codec: "hevc",
       raw: false,
       downgraded: false,
     });
-    expect(liveForm("tlv", "hevc", false, noGpu)).toEqual({
+    expect(liveForm("hevc", "hevc", false, noGpu)).toEqual({
       codec: "hevc",
       raw: false,
       downgraded: false,
     });
-    expect(liveForm("ts", "hevc", false, noGpu)).toEqual({
+    expect(liveForm("mpeg2", "hevc", false, noGpu)).toEqual({
       codec: "h264",
       raw: false,
       downgraded: true,
     });
-    expect(liveForm("ts", "h264", true, noGpu)).toEqual({
+    expect(liveForm("mpeg2", "h264", true, noGpu)).toEqual({
       codec: "h264",
       raw: true,
       downgraded: false,
@@ -1379,8 +1381,8 @@ describe("4K の局のライブ", () => {
     const hw: LiveHw = { way: { device: "d", kind: "rkmpp" }, full: false };
     const rk = (codec: string) =>
       codec === "hevc" || codec === "h264" ? hw : null;
-    expect(liveRungCodec(["hevc", "h264"], "tlv", rk)).toBe("h264");
-    expect(liveRungCodec(["hevc", "h264"], "ts", rk)).toBe("hevc");
+    expect(liveRungCodec(["hevc", "h264"], "hevc", rk)).toBe("h264");
+    expect(liveRungCodec(["hevc", "h264"], "mpeg2", rk)).toBe("hevc");
   });
 
   test("詰め替えた fMP4 の codecs は Main 10・Level 5.1 の hvc1", () => {
@@ -1388,5 +1390,125 @@ describe("4K の局のライブ", () => {
     expect(BROADCAST_HEVC).toContain("hvc1.2.4.L153");
     // TS の局の H.265 (GPU でエンコードしたもの) は今までどおり
     expect(codecsFor("hevc")).toContain("hvc1.1.6.L123");
+  });
+});
+
+/**
+ * **TS で送る 4K の局のライブ** (`encodeArgs` の `video` が `hevc`・`servedFormat`。issue #2729)。ケーブルの 4K の局には、
+ * HEVC (stream_type 0x24) と AAC の LATM を TS に入れて送る局がある
+ */
+describe("TS で送る 4K の局のライブ", () => {
+  const vaapi: LiveHw = {
+    way: { device: "/dev/dri/renderD128", kind: "vaapi" },
+    full: true,
+  };
+  const ts = (codec: "hevc" | "h264" | "av1", hw: LiveHw | null = null) =>
+    encodeArgs(1024, stereo, codec, 0, hw, 0, false, "pipe:3", "ts", "hevc");
+  const filter = (args: string[]) => args[args.indexOf("-vf") + 1] ?? "";
+
+  test("H.265 は映像をエンコードせずに写し、音声だけ AAC にエンコードする", () => {
+    const args = ts("hevc").join(" ");
+    expect(args).toContain("-map 0:p:1024:v:0 -c:v copy -tag:v hvc1");
+    expect(args).not.toContain("-vf");
+    expect(args).not.toContain("-fpsmax");
+    expect(args).toContain("-c:a aac");
+    expect(args).toContain("-probesize 5000000");
+    expect(args).toContain("+delay_moov");
+    // 字幕は MPEG-2 の局と同じく、同じ ffmpeg から受ける
+    expect(args).toContain("pipe:3");
+  });
+
+  test("写すときは GPU を使わない", () => {
+    const args = ts("hevc", vaapi).join(" ");
+    expect(args).not.toContain("vaapi");
+    expect(args).toContain("-c:v copy");
+  });
+
+  test("H.264・AV1 は 4K の局と同じく、インタレ解除をせずに縮めて SDR の 8 ビットにする", () => {
+    expect(filter(ts("h264"))).toBe(["scale=-2:1080", ...HLG_TO_SDR].join(","));
+    expect(ts("h264").join(" ")).toContain("-map 0:p:1024:v:0");
+    expect(ts("av1").join(" ")).toContain("libsvtav1");
+  });
+
+  test("VA-API でも GPU でデコードせず、deinterlace_vaapi を挟まない", () => {
+    const args = ts("h264", vaapi);
+    expect(filter(args)).toBe(
+      ["scale=-2:1080", ...HLG_TO_SDR, "format=nv12", "hwupload"].join(","),
+    );
+    expect(args).not.toContain("-hwaccel");
+    expect(args.join(" ")).not.toContain("deinterlace_vaapi");
+    expect(args.join(" ")).toContain("-c:v h264_vaapi");
+  });
+
+  test("MPEG-2 の局は今までどおり", () => {
+    const mpeg2 = encodeArgs(
+      1024,
+      stereo,
+      "h264",
+      0,
+      null,
+      0,
+      false,
+      "pipe:3",
+      "ts",
+      "mpeg2",
+    );
+    expect(mpeg2).toEqual(plain());
+    expect(plain().join(" ")).toContain("-probesize 100000");
+    expect(plain().join(" ")).not.toContain("delay_moov");
+  });
+
+  test("ffmpeg で写すのは、TS の HEVC を hevc でリクエストしたときだけ", () => {
+    expect(copiesVideo("ts", "hevc", "hevc")).toBe(true);
+    expect(copiesVideo("ts", "mpeg2", "hevc")).toBe(false);
+    expect(copiesVideo("ts", "hevc", "h264")).toBe(false);
+    // 4K の局 (TLV) は ffmpeg を通さずに詰め替える
+    expect(copiesVideo("tlv", "hevc", "hevc")).toBe(false);
+  });
+
+  test("放送のままは HEVC の詰め替え。HEVC を再生できないと言った端末にはエンコードする", () => {
+    const raw = { codec: "h264", raw: true } as const;
+    const copy = { codec: "hevc", raw: false } as const;
+    expect(servedFormat(raw, "hevc", null)).toEqual(copy);
+    expect(servedFormat(raw, "hevc", ["raw", "hevc", "h264"])).toEqual(copy);
+    expect(servedFormat(raw, "hevc", ["raw", "h264", "av1"])).toEqual({
+      codec: "h264",
+      raw: false,
+    });
+    expect(servedFormat(raw, "hevc", ["raw", "av1"])).toEqual({
+      codec: "av1",
+      raw: false,
+    });
+    // 再生できる形式が無い (呼ぶ側が「再生できる形式がありません」で畳む)
+    expect(servedFormat(raw, "hevc", ["raw"])).toBeNull();
+    // MPEG-2 の局・読めなかったとき・放送のままでないものは、リクエストされたまま
+    expect(servedFormat(raw, "mpeg2", null)).toEqual(raw);
+    expect(servedFormat(raw, null, null)).toEqual(raw);
+    const h264 = { codec: "h264", raw: false } as const;
+    expect(servedFormat(h264, "hevc", null)).toEqual(h264);
+  });
+
+  test("元の TS のまま送る HTTP の raw (?playable= が無い) は、HEVC の詰め替えに替えうるものと共有しない", () => {
+    const at = (keepsTs: boolean) =>
+      key("CATV", "QC14", 1, stereo, "raw", 0, null, 0, keepsTs);
+    expect(at(true)).not.toBe(at(false));
+    // 分けないものは今までの目印のまま
+    expect(at(false)).toBe(key("CATV", "QC14", 1, stereo, "raw", 0));
+  });
+
+  test("画面が前の答えで知った放送のコーデックを、選局の指示から読む", () => {
+    const tune = {
+      type: "tune",
+      channelType: "CATV",
+      channel: "QC14",
+      serviceId: 1,
+    };
+    expect(parseCommand({ ...tune, broadcast: "hevc" })).toMatchObject({
+      broadcast: "hevc",
+    });
+    expect(parseCommand(tune)).toMatchObject({ broadcast: "mpeg2" });
+    expect(parseCommand({ ...tune, broadcast: "av1" })).toMatchObject({
+      broadcast: "mpeg2",
+    });
   });
 });

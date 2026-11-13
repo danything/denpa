@@ -159,6 +159,12 @@ export type Notice =
       audio: string;
       /** 選べる音声。1 つしか無ければ画面は切り替えを出さない */
       audios: AudioTrack[];
+      /**
+       * サーバが PMT を読んで、TS に HEVC を入れて送る 4K の局と分かったときだけ `hevc`。画面はその局を開いている間、
+       * 「放送のまま」を HEVC の詰め替えとして扱う (`Tuned.broadcast`)。放送のままをリクエストしても、答えは `hevc` になる
+       * (`server/live.ts` の `servedFormat`)
+       */
+      broadcast?: BroadcastCodec;
     }
   | {
       /** 選べる字幕。ffmpeg が入口で読んだストリーム一覧から分かるので、1 枚も届いていなくても来る (`captions.ts` の `TrackList`) */
@@ -449,7 +455,9 @@ export interface Tuned {
   raw?: boolean;
   /**
    * 放送のコーデック (`#lib/live-choice.ts` の `BroadcastCodec`)。省くと MPEG-2。4K の局は `hevc` で、画面は「放送のまま」を
-   * HEVC の詰め替えとしてリクエストする (`pickFormat`)。サーバは読まない (局の行の `transport` で決める)
+   * HEVC の詰め替えとしてリクエストする (`pickFormat`)。TS に HEVC を入れて送る 4K の局は、局の一覧では分からず、サーバの答え
+   * (`tuned` の `broadcast`) で `hevc` にする。開いている間だけで、局を替えると一覧の値に戻る。サーバは `hevc` のときだけ読み
+   * (`server/live.ts` の `attend`)、4K の局 (TLV) は局の行の `transport` で決める
    */
   broadcast?: BroadcastCodec;
 }

@@ -2,6 +2,7 @@ import { error } from "@sveltejs/kit";
 
 import { askedTrack } from "#lib/arib.js";
 import { parseId } from "#lib/id.js";
+import { broadcastCodec } from "#lib/live-choice.js";
 import { chaseStream, chaseTransport } from "#lib/server/live.js";
 import { TLV_TYPE } from "#lib/server/tuner.js";
 import { askedFormat } from "#lib/server/viewing.js";
@@ -26,13 +27,13 @@ import {
  * 埋まっていれば 503。
  *
  * 4K の局の録画 (`.mmts`) は、`hevc` が放送の HEVC の詰め替え (枠を使わない)、`raw` が 1 局に絞った TLV (`application/x-arib-tlv`)。
- * `auto` と段の選び方も 4K の局のもの (`viewing.askedFormat` の `transport`)
+ * `auto` と段の選び方も 4K の局のもの (`viewing.askedFormat` の `broadcast`)
  */
 export function GET({ params, url }) {
   const id = parseId(params.id);
   if (id === null) error(400, "録画 ID が不正です");
   const transport = chaseTransport(id);
-  const asked = askedFormat(url, "chase", {}, transport);
+  const asked = askedFormat(url, "chase", {}, broadcastCodec(transport));
   if (asked === null) error(406, NO_FORMAT);
   const { codec, rung } = asked;
   const from = Number(url.searchParams.get("from") ?? 0);

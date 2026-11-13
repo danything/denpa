@@ -311,7 +311,7 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
   });
 });
 
-/** **4K の局** (`transport` が `tlv`)。放送のままは HEVC の詰め替えで、GPU は要らない。`raw` (MPEG-2 の TS) は自動の候補にしない */
+/** **4K の局** (`broadcast` が `hevc`。TLV と、TS で送る局)。放送のままは HEVC の詰め替えで、GPU は要らない。`raw` (MPEG-2 の TS) は自動の候補にしない */
 describe("4K の局の形式", () => {
   const at = (query: string) => new URL(`http://192.168.1.20/x?${query}`);
   const outside = (query: string) =>
@@ -323,7 +323,7 @@ describe("4K の局の形式", () => {
       scene: "live" as const,
       rung: 0 as const,
       hevc: false,
-      transport: "tlv" as const,
+      broadcast: "hevc" as const,
     };
     const all = ["raw", "av1", "hevc", "h264"] as const;
     expect(autoFormat({ ...base, formats: all, indoor: true })).toBe("hevc");
@@ -338,7 +338,7 @@ describe("4K の局の形式", () => {
 
   test("HTTP の codec。hevc は GPU が無くても詰め替え、段を下げるなら H.265 を外して選ぶ", () => {
     const tlv = (url: URL) =>
-      askedFormat(url, "live", { hevc: false, pick: noGpu }, "tlv");
+      askedFormat(url, "live", { hevc: false, pick: noGpu }, "hevc");
     expect(tlv(at("codec=hevc"))).toEqual({ codec: "hevc", rung: 0 });
     expect(tlv(at("codec=raw"))).toEqual({ codec: "raw", rung: 0 });
     expect(tlv(at("codec=auto&playable=hevc,h264"))).toEqual({
