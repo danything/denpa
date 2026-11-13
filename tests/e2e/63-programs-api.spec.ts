@@ -40,8 +40,15 @@ test.describe("外から使う番組表", () => {
     expect(guide.services[0]).toHaveProperty("remoteControlKey");
     expect(guide.services[0]).toHaveProperty("logo");
 
-    // 先の番組を 1 つ予約して、状態が付いたものもマスと比べる
-    const upcoming = guide.services
+    // 先の番組を 1 つ予約して、状態が付いたものもマスと比べる。放送日の終わり (4:00) まで 2 時間を切っていると、
+    // 今日の放送日に先の番組が残っていないことがあるので、次の放送日で比べる
+    const day =
+      guide.to - Date.now() < 2 * HOUR
+        ? ((await (
+            await request.get(`/api/programs?type=GR&from=${guide.to}`)
+          ).json()) as ApiGuide)
+        : guide;
+    const upcoming = day.services
       .flatMap((service) => service.programs)
       .find(
         (p) =>
@@ -64,10 +71,10 @@ test.describe("外から使う番組表", () => {
     expect(body.reason === null || typeof body.reason === "string").toBe(true);
 
     const again = (await (
-      await request.get(`/api/programs?type=GR&from=${guide.from}`)
+      await request.get(`/api/programs?type=GR&from=${day.from}`)
     ).json()) as ApiGuide;
     const sheet = (await (
-      await request.get(`/api/guide?type=GR&start=${guide.from}`)
+      await request.get(`/api/guide?type=GR&start=${day.from}`)
     ).json()) as {
       programs: {
         id: number;
@@ -92,10 +99,10 @@ test.describe("外から使う番組表", () => {
     // 24 時間を超えたぶんは切って、切った範囲を返す
     const wide = (await (
       await request.get(
-        `/api/programs?type=GR&from=${guide.from}&to=${guide.from + 48 * HOUR}`,
+        `/api/programs?type=GR&from=${day.from}&to=${day.from + 48 * HOUR}`,
       )
     ).json()) as ApiGuide;
-    expect(wide.to).toBe(guide.from + 24 * HOUR);
+    expect(wide.to).toBe(day.from + 24 * HOUR);
     for (const p of wide.services.flatMap((service) => service.programs)) {
       expect(p.startAt).toBeLessThan(wide.to);
       expect(p.endAt).toBeGreaterThan(wide.from);

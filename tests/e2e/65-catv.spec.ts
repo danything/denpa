@@ -296,7 +296,8 @@ test.describe("ケーブル", () => {
     request,
   }) => {
     await syncEpg(request);
-    await goto(page, "/guide?type=CATV");
+    // 30 分先を含む放送日を開く。4:00 の直前は、今日の放送日にこれから始まる番組が残っていないことがある
+    await goto(page, `/guide?type=CATV&start=${Date.now() + 30 * 60_000}`);
     const cells = page
       .getByTestId("guide-grid")
       .locator(`[data-testid=grid-program][data-service-id="${CATV_4K.id}"]`);
