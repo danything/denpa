@@ -45,7 +45,7 @@ internal object Asicen {
             }
             file
         } catch (error: IOException) {
-            Log.w(DenpaService.TAG,"ASICEN のファームウェアを書き出せません", error)
+            Log.w(DenpaService.TAG, "ASICEN のファームウェアを書き出せません", error)
             null
         }
     }
