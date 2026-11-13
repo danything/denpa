@@ -485,7 +485,7 @@ function broadcastFilters(smooth: boolean): string[] {
  *
  * **GPU でだけエンコードする** (ソフトウェアのエンコーダを組んでいない。`#lib/hw.ts` の `SOFTWARE_CODECS`)。
  * GPU が無いのにリクエストされたら投げる。選局の指示を受けるところで H.264 に替えてあるので (`attend`)、ふつうは来ない。
- * 入れ物の中の名前は `hvc1` にする。ffmpeg の既定の `hev1` は Safari が受け取らない (`#lib/live.ts` の `codecsFor`)。
+ * コンテナ内のタグは `hvc1` にする。ffmpeg の既定の `hev1` は Safari が受け取らない (`#lib/live.ts` の `codecsFor`)。
  * 音声は H.264 と同じ AAC (`audioArgs`)
  *
  * ## 録画をその場で変換するときも同じエンコード方法
