@@ -319,7 +319,8 @@ internal sealed class Dt295NativeStream
 
 /// <summary>
 /// PIX-DT295 のチューナー (地上波・BS・CS。復調は地上波と衛星の 2 つだが、TS を出すのは 1 つずつ)。
-/// 機材は復号しないので、TS はスクランブルのまま出す (B25 はエージェントが復号する)。機材は選局している間だけ取る
+/// 機材は復号しないので、TS はスクランブルのまま出す (B25 はエージェントが復号する)。機材は最初の選局で取り、捨てる (<see cref="Dispose"/>) まで持つ。
+/// 読む側が詰まって止めたときと、機材が使えなくなった (USB が抜けたなど) ときは返す
 /// </summary>
 public sealed class Dt295NativeTuner : ITuneDevice
 {
@@ -376,7 +377,8 @@ public sealed class Dt295NativeTuner : ITuneDevice
         var streamId = tuning.StreamId;
         lock (_gate)
         {
-            Stop(release: false);
+            // 前の受信の途中で使えなくなった (USB が抜けた) 機材は返して、開き直す
+            Stop(release: _device is { Faulted: true });
             try
             {
                 _device ??= _acquire();

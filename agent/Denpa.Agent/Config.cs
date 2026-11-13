@@ -114,7 +114,7 @@ public sealed class Config(string tunersFile, string channelsFile)
         Given("CHANNELS_FILE") ?? Path.Combine(DefaultDir(), "channels.json"));
 
     /// <summary>環境変数。空は書いていないのと同じ (空のパスは開けず、起動ごと落ちる)</summary>
-    private static string? Given(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
+    internal static string? Given(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
 
     /// <summary>
     /// 変数が無いときの置き場。Linux はコンテナの <c>/config</c>。Mac と Windows はインストーラと同じ

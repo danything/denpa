@@ -262,7 +262,7 @@ internal sealed class SianoDevice : IDisposable
     private void Send(byte[] message) => _usb.BulkWrite(OutEndpoint, message, _timings.SendMs);
 
     /// <summary>
-    /// <paramref name="done"/> が true を返すまで、長くても <paramref name="timeoutMs"/> 待つ (<see cref="_sync"/> を取った中で呼ばれる)。
+    /// <paramref name="done"/> が true を返すまで、長くても <paramref name="timeoutMs"/> 待つ (<paramref name="done"/> は <see cref="_sync"/> を取った中で呼ぶ)。
     /// 読み出しが失敗していれば <see cref="IOException"/>、閉じていれば <see cref="ObjectDisposedException"/> を送出する
     /// </summary>
     private bool Wait(Func<bool> done, int timeoutMs)

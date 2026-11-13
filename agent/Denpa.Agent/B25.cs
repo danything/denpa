@@ -1110,7 +1110,7 @@ public sealed class Descrambler(
         if (!_programs.TryGetValue(number, out var expected) || expected != pid) return;
         // PMT が届いた時刻は、取っておいた ECM を問い合わせる (Rebuild) 前に測る。後で測るとカードの往復が入る
         var arrived = _clock.ElapsedMilliseconds;
-        // 覚えた PMT のあとに来た、その局の最初の本物の PMT。同じなら確かめ終わりで、作り直さない
+        // 覚えた PMT のあとで、その局について最初に来た本物の PMT。同じなら確かめ終わりで、作り直さない
         var recalled = !_recalling && _recalledPmts.Remove(number);
         if (recalled) _realPmtMs = arrived;
         if (_pmts.TryGetValue(number, out var last) && section.SequenceEqual(last))

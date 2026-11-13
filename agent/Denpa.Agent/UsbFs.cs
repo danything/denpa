@@ -337,8 +337,8 @@ public sealed unsafe class UsbFsPipe : ICcidPipe
     /// <summary>
     /// **USB のポートをリセットする** (<c>USBDEVFS_RESET</c>)。リーダーが途中のやり取りを
     /// 残したまま止まったとき (前のエージェントがやり取りの最中に止められた、など)、
-    /// USB からは繋がって見えるのに何を送っても応答しなくなる。人が unbind / bind していたのを
-    /// ここでやる。リセットで確保が外れるので取り直す
+    /// USB からは繋がって見えるのに何を送っても応答しなくなる。人が unbind / bind していた代わりに、
+    /// ここでリセットする。リセットで確保が外れるので取り直す
     /// </summary>
     public void ResetPort()
     {

@@ -95,7 +95,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
 
     /// <summary>
     /// チップのクロック・端子の設定。仕様書 6 章の手順 1〜12 を順に。各書き込みは読み戻して確かめる。
-    /// どれかが合わなければ、保存した値を逆の順に戻して <see cref="Dt295NativeException"/>
+    /// どれかが合わなければ、保存した値を逆の順に戻して <see cref="Dt295NativeException"/>。
     /// 値を読む順も仕様書のとおり。0x1600000 のブロックは 0xF10118・0xF1011C を書く (手順 2・3) まで止まっていて 0 しか読めないので、
     /// 手順 4 の前に読まない。0xF001F0・0xF10004・0xF10018・0xF10014 は手順 7 で読む
     /// </summary>
@@ -285,9 +285,9 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// 仕様書 8.4 のうち 2・6・7 の bulk IN の端点の設定だけを書く (書かないものは本体のコメント)。保護レジスタ 0xFD814C に対象の組の番号 (1・2・8) を書いてから対象を書き、終わったら 0xF に戻す。
-    /// 元の値を読んで保存してから書き、変えようとしたビットが読み戻しで 1 つも変わっていなければ、保存した値を戻して失敗する。
-    /// 補助 CPU の割り込み・端点の設定は書かない (本体のコメント)
+    /// 仕様書 8.4 のうち 2・6・7 の bulk IN の端点の設定だけを書く (補助 CPU の割り込み・端点など、書かないものは本体のコメント)。
+    /// 保護レジスタ 0xFD814C に対象の組の番号 (1・2・8) を書いてから対象を書き、終わったら 0xF に戻す。
+    /// 元の値を読んで保存してから書き、変えようとしたビットが読み戻しで 1 つも変わっていなければ、書いたときと同じ組の番号の下で保存した値を戻して失敗する
     /// </summary>
     public void SetUpUsb()
     {
@@ -305,16 +305,14 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
             }
             log?.Invoke($"0x{address:X}: 0x{value:X} を書いて 0x{back:X} が読めた (書く前 0x{before:X}。違うビットは変えようとしなかったか、変わらなかった)");
         }
-        var saved = new List<(uint Address, uint Value)>();
-        uint Original(uint address)
-        {
-            var value = link.Read32(address);
-            if (saved.All(item => item.Address != address)) saved.Add((address, value));
-            return value;
-        }
+        // アドレスごとの元の値と、書いた組の番号とアドレスの並び (戻すときも同じ組の番号の下で書く。0xF の下では書けない)
+        var saved = new Dictionary<uint, uint>();
+        var written = new List<(uint Group, uint Address)>();
         void Put(uint group, uint address, uint value)
         {
-            var before = Original(address);
+            var before = link.Read32(address);
+            saved.TryAdd(address, before);
+            if (!written.Contains((group, address))) written.Add((group, address));
             Guarded(group, address, value);
             Verify(address, before, value);
         }
@@ -338,8 +336,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
         }
         catch (Dt295NativeException)
         {
-            link.Write32(Dt295NativePrograms.Protect, 0xF);
-            foreach (var (address, value) in saved.AsEnumerable().Reverse()) link.Write32(address, value);
+            foreach (var (group, address) in written.AsEnumerable().Reverse()) Guarded(group, address, saved[address]);
             throw;
         }
     }

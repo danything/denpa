@@ -18,7 +18,8 @@ internal enum Cxd2858Side
 
 /// <summary>
 /// CXD2858ER の書き込みの並び。**読み書きは、復調器の中継を開けている間だけ呼ぶ** (仕様書 4.1)。開け閉めとバスのロックは <see cref="Cxd2856Frontend"/> が持つ。
-/// チューナーの状態 (止まっている・地上波側で動作中・衛星側で動作中) はこちらで覚える (仕様書 4.1)
+/// チューナーの状態 (止まっている・地上波側で動作中・衛星側で動作中) はこちらで覚える (仕様書 4.1)。
+/// 周波数の上限 (<see cref="MaxTerrestrialKhz"/>・<see cref="MaxSatelliteKhz"/>) は、呼ぶ側の <see cref="Cxd2856Frontend"/> が何も書く前に確かめる
 /// </summary>
 internal sealed class Cxd2858(CxdLink link)
 {
@@ -100,7 +101,7 @@ internal sealed class Cxd2858(CxdLink link)
     /// 50 ms たったら <see cref="FinishTerrestrial"/> で手順 9〜10 を書く (仕様書 5.4)。
     /// 衛星側で動作中なら、先に衛星側を止める (手順 0。仕様書 10.2)。地上波側のままなら止めずに書く
     /// </summary>
-    public void TuneTerrestrial(uint khz) => TuneTerrestrialSide("地上波の周波数", khz, TerrestrialRows);
+    public void TuneTerrestrial(uint khz) => TuneTerrestrialSide(khz, TerrestrialRows);
 
     /// <summary>地上波の手順 9〜10 (<c>88</c> ← <c>00</c>、<c>87</c> ← <c>C0</c>。仕様書 4.3)。手順 8 から 50 ms たってから、中継を開けている間に呼ぶ</summary>
     public void FinishTerrestrial() => link.Run(TerrestrialTailRows);
@@ -109,18 +110,17 @@ internal sealed class Cxd2858(CxdLink link)
     /// J.83B の周波数を設定する (仕様書 4.5)。<paramref name="khz"/> は中心周波数の kHz (仕様書 7.1)。並びは地上波 (仕様書 4.3) と同じで、手順 4・6・8 の値だけが違う。
     /// 手順 8 のあと 50 ms 待つ。J.83B も地上波側を使うので、地上波側のままなら止めずに書き、衛星側で動作中なら先に衛星側を止める (仕様書 10.2)
     /// </summary>
-    public void TuneCable(uint khz) => TuneTerrestrialSide("J.83B の周波数", khz, CableRows);
+    public void TuneCable(uint khz) => TuneTerrestrialSide(khz, CableRows);
 
     /// <summary>
     /// ISDB-C の周波数を設定する (仕様書 4.6)。<paramref name="khz"/> は中心周波数の kHz (仕様書 8.2。周波数の補正はしない)。並びと値は J.83B (仕様書 4.5) と同じで、
     /// 手順 8 の 2 バイトだけが違う。手順 8 のあと 50 ms 待つ。地上波側を使うので、地上波側のまま (ISDB-T・J.83B から) なら止めずに書き、
     /// 衛星側で動作中なら先に衛星側を止める (仕様書 10.2)
     /// </summary>
-    public void TuneIsdbc(uint khz) => TuneTerrestrialSide("ISDB-C の周波数", khz, IsdbcRows);
+    public void TuneIsdbc(uint khz) => TuneTerrestrialSide(khz, IsdbcRows);
 
-    private void TuneTerrestrialSide(string what, uint khz, Func<uint, CxdRow[]> rows)
+    private void TuneTerrestrialSide(uint khz, Func<uint, CxdRow[]> rows)
     {
-        if (khz > MaxTerrestrialKhz) throw new IOException($"{what}は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
         if (Side == Cxd2858Side.Satellite) StopSatellite();
         // 書き始めたら動作中とみなす (途中で失敗しても、使い終えたときに止める書き込みを送れるように。仕様書に無い)
         Side = Cxd2858Side.Terrestrial;
@@ -134,7 +134,6 @@ internal sealed class Cxd2858(CxdLink link)
     /// </summary>
     public void TuneSatellite(uint khz)
     {
-        if (khz > MaxSatelliteKhz) throw new IOException($"衛星の周波数は {MaxSatelliteKhz} kHz までです ({khz} kHz)");
         if (Side == Cxd2858Side.Terrestrial) StopTerrestrial();
         // 書き始めたら動作中とみなす (地上波と同じ。仕様書に無い)
         Side = Cxd2858Side.Satellite;

@@ -140,10 +140,9 @@ public sealed class InheritedFds : IDisposable
 /// <para>
 /// 受信機ごとに地上波か衛星かが決まっていて、1 つの受信機で両方を受けられる機種もある。
 /// その違いはここに入ってくるだけで、こちらは機種を見ない。
-/// <c>Lnb15v</c> は LNB に 15V を出せるか。**分からなければ null** で、そのときは要求どおり指定する。
 /// </para>
 /// </summary>
-public sealed record UserlandReceiver(int Index, bool Terrestrial, bool Satellite, bool? Lnb15v = null)
+public sealed record UserlandReceiver(int Index, bool Terrestrial, bool Satellite)
 {
     public string[] Types => [.. Terrestrial ? ["GR"] : Array.Empty<string>(), .. Satellite ? ["BS", "CS"] : Array.Empty<string>()];
 

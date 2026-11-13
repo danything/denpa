@@ -204,14 +204,20 @@ public static class Probe
         {
             Zd1jBoard.CloseAll();
             Dt295NativeDevice.CloseAll();
+            It930xDevice.CloseAll();
         }
     }
 
-    /// <summary>そのポートの IT930x の機材の内蔵カードリーダー。機材が見当たらなければ標準エラー出力に出して null</summary>
+    /// <summary>そのポートの IT930x の機材の内蔵カードリーダー。機材が見当たらないか、カードリーダーの無い機種 (PX-MLT8PE の 3 受信機の側) なら標準エラー出力に出して null</summary>
     private static CardLinkCandidate? It930xCardAt(string port)
     {
-        if (It930x.Identify(port) is { } model) return It930x.Card(port, model);
-        Console.Error.WriteLine($"USB のポート {port} に {It930x.Model} が見当たりません");
+        if (It930x.Identify(port) is not { } model)
+        {
+            Console.Error.WriteLine($"USB のポート {port} に {It930x.Model} が見当たりません");
+            return null;
+        }
+        if (model.Card) return It930x.Card(port, model);
+        Console.Error.WriteLine($"{model.Name} {port} には内蔵カードリーダーがありません");
         return null;
     }
 

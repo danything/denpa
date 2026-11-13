@@ -27,9 +27,9 @@ public class ProbeTests
         clock.Stop();
 
         await Assert.That(decodedMs).IsNull();
-        // 読み出し側は 200ms ごとに合図を確かめる
+        // 読み出し側は 200 ms ごとに合図を確かめる
         await Assert.That(clock.ElapsedMilliseconds >= 1000 && clock.ElapsedMilliseconds < 2000).IsTrue()
-            .Because($"{clock.ElapsedMilliseconds}ms かかった");
+            .Because($"{clock.ElapsedMilliseconds} ms かかった");
     }
 
     /*

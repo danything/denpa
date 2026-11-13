@@ -200,7 +200,7 @@ internal static class Udtv
     public static string Reason(uint code, string label) => code switch
     {
         UdtvError.InvalidArgument => "要求の内容が合っていません (INVALID_ARGUMENT)",
-        UdtvError.Busy => "他が使っています (BUSY)",
+        UdtvError.Busy => "受信機をほかのソフトが使っています (BUSY)",
         UdtvError.Unsupported => "この筐体では使えません (UNSUPPORTED)",
         _ => label.Length > 0 ? $"エラー {code} ({label})" : $"エラー {code}",
     };

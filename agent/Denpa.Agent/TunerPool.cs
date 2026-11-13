@@ -38,7 +38,6 @@ public sealed record TuneOptions(string? FakeTune = null);
 public sealed class TunerPool(
     IReadOnlyList<TunerSpec> specs, Action onChange, TuneOptions tune, Func<TunerSpec, ITuneDevice>? openDevice = null)
 {
-
     /// <summary>誰も読まなくなってから選局を畳むまでの間</summary>
     public static readonly TimeSpan Linger = TimeSpan.FromSeconds(5);
 
@@ -285,10 +284,7 @@ public sealed class TunerPool(
             {
                 foreach (var open in _leases.Values)
                 {
-                    if (open.Type != type || open.Channel != channel) continue;
-                    bool strong;
-                    lock (open.Sinks) strong = open.Sinks.Any(sink => !after.Contains(sink.Use) && sink.Priority >= priority);
-                    if (strong) return Join(open, priority, use, service);
+                    if (open.Type == type && open.Channel == channel && StrongestOf(open, after) >= priority) return Join(open, priority, use, service);
                 }
             }
 
@@ -440,15 +436,11 @@ public sealed class TunerPool(
                 // 選び直した先も使えないなら選局し直さない (使えないチューナーしか残っていない)
                 if (retry && Pick(type, channel, priority, after, from) is { } candidate && !Unusable(candidate)) next = Tuners[candidate].Name;
                 else retry = false;
-                lock (lease.Sinks)
-                {
-                    /*
-                     * 選局している間に共有に入った利用者にも失敗を伝える (失敗を伝えずに外すと読み出しが終わらない)。
-                     * 選局し直すときも、共有に入った利用者はこの選局に結び付いているので失敗で返す (呼んだ側が読み直せば、選局し直した先を共有する)
-                     */
-                    foreach (var joined in lease.Sinks) joined.Fail(reason);
-                    lease.Sinks.Clear();
-                }
+                /*
+                 * 選局している間に共有に入った利用者にも失敗を伝える (失敗を伝えずに外すと読み出しが終わらない)。
+                 * 選局し直すときも、共有に入った利用者はこの選局に結び付いているので失敗で返す (呼んだ側が読み直せば、選局し直した先を共有する)
+                 */
+                lease.Dismiss(reason);
             }
             sink.Fail(reason);
             onChange();
@@ -487,11 +479,7 @@ public sealed class TunerPool(
             if (!_leases.TryGetValue(lease.Tuner, out var current) || current != lease || !lease.Starve(reason)) return;
             Forget(lease);
             _unsynced[(lease.Tuner, lease.Type, lease.Channel)] = Environment.TickCount64;
-            lock (lease.Sinks)
-            {
-                foreach (var sink in lease.Sinks) sink.Fail(reason);
-                lease.Sinks.Clear();
-            }
+            lease.Dismiss(reason);
         }
         lease.Stop();
         lock (_deviceGate)
@@ -621,12 +609,7 @@ public sealed class TunerPool(
         {
             if (!Forget(lease)) return;
             // 選局が落ちた。利用者には失敗として伝える (失敗を伝えずに終わると空ファイルになる)
-            var reason = lease.Error is null ? "" : $" ({lease.Error})";
-            lock (lease.Sinks)
-            {
-                foreach (var sink in lease.Sinks) sink.Fail($"選局が終了しました{reason}");
-                lease.Sinks.Clear();
-            }
+            lease.Dismiss($"選局が終了しました{(lease.Error is null ? "" : $" ({lease.Error})")}");
         }
         onChange();
     }
@@ -688,15 +671,7 @@ public sealed class TunerPool(
     {
         lease.CancelLinger();
         Forget(lease);
-        lock (lease.Sinks)
-        {
-            foreach (var sink in lease.Sinks)
-            {
-                if (reason is null) sink.End();
-                else sink.Fail(reason);
-            }
-            lease.Sinks.Clear();
-        }
+        lease.Dismiss(reason);
         // 読むのをやめる印だけ立てる。止まりきるのを待つのはロックの外 (上の説明)
         lease.Stop();
     }
@@ -761,16 +736,7 @@ public sealed class TunerPool(
     private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after, IReadOnlyList<(int Index, string Name)> tried)
     {
         var ranks = Ranks(Tuners);
-        // 残る利用者の優先度。引き継ぐ相手 (`after`) はもう離れたものとして数えない。誰もいなければ null
-        int? Strongest(int index)
-        {
-            if (!_leases.TryGetValue(index, out var lease)) return null;
-            lock (lease.Sinks)
-            {
-                var staying = lease.Sinks.Where(sink => !after.Contains(sink.Use)).ToList();
-                return staying.Count == 0 ? null : staying.Max(sink => sink.Priority);
-            }
-        }
+        int? Strongest(int index) => _leases.TryGetValue(index, out var lease) ? StrongestOf(lease, after) : null;
         bool Idle(int index) => _leases.ContainsKey(index) && Strongest(index) is null;
         bool Usable(int index) => Strongest(index) is not { } strongest || strongest < priority;
 
@@ -852,14 +818,15 @@ public sealed class TunerPool(
         {
             // 同じチャンネルを読んでいる選局には入れる (優先度にかかわらず共有する。Open が Join する)
             if (lease.Type == type && lease.Channel == channel) return index;
-            lock (lease.Sinks)
-            {
-                var staying = lease.Sinks.Where(sink => !after.Contains(sink.Use)).ToList();
-                if (staying.Count > 0 && staying.Max(sink => sink.Priority) >= priority)
-                    throw new TunerBusyException($"{spec.Name} ({pin}) は同じか優先度の高い利用者が使っています");
-            }
+            if (StrongestOf(lease, after) >= priority) throw new TunerBusyException($"{spec.Name} ({pin}) は同じか優先度の高い利用者が使っています");
         }
         return index;
+    }
+
+    /// <summary>残る利用者のうち、いちばん高い優先度。引き継ぐ相手 (<c>after</c>) はもう離れたものとして数えない。誰もいなければ null</summary>
+    private static int? StrongestOf(Lease lease, IReadOnlySet<string> after)
+    {
+        lock (lease.Sinks) return lease.Sinks.Where(sink => !after.Contains(sink.Use)).Max(sink => (int?)sink.Priority);
     }
 
     /// <summary>チューナー画面に出るもの (<see cref="JsonNode"/> で組むわけは <see cref="Json"/>)</summary>
@@ -1066,11 +1033,11 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     /// </summary>
     public StreamFormat Format => Owner?.Format ?? StreamFormat.Ts;
 
-    /// <summary><c>/denpa/stream</c> の Content-Type (<see cref="Format"/> から決める)。最初の塊を書く前に入れる</summary>
-    public string ContentType => ContentTypeOf(Format);
-
-    /// <summary>形式ごとの Content-Type。TLV は登録された媒体の種類が無いので <c>x-</c> を付ける (中身は ARIB の TLV のバイト列)</summary>
-    public static string ContentTypeOf(StreamFormat format) => format == StreamFormat.Tlv ? "application/x-arib-tlv" : "video/MP2T";
+    /// <summary>
+    /// <c>/denpa/stream</c> の Content-Type (<see cref="Format"/> から決める)。最初の塊を書く前に入れる。
+    /// TLV は登録された媒体の種類が無いので <c>x-</c> を付ける (中身は ARIB の TLV のバイト列)
+    /// </summary>
+    public string ContentType => Format == StreamFormat.Tlv ? "application/x-arib-tlv" : "video/MP2T";
 
     public void Push(byte[] chunk)
     {
@@ -1129,6 +1096,20 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
     public string Type { get; } = type;
     public string Channel { get; } = channel;
     public List<Sink> Sinks { get; } = [];
+
+    /// <summary>利用者を全部外す。<paramref name="reason"/> があれば失敗として伝え、無ければ正常に終わらせる</summary>
+    public void Dismiss(string? reason)
+    {
+        lock (Sinks)
+        {
+            foreach (var sink in Sinks)
+            {
+                if (reason is null) sink.End();
+                else sink.Fail(reason);
+            }
+            Sinks.Clear();
+        }
+    }
 
     /// <summary>
     /// **選局の内訳を測る時計** (取った時点から)。最初に送り出したときに 1 行残す。

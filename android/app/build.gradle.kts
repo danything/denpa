@@ -31,7 +31,7 @@ val sianoLicence = rootProject.layout.projectDirectory.file("../agent/Denpa.Agen
 val denpaLicense = rootProject.layout.projectDirectory.file("../LICENSE")
 
 /*
- * asicen-userland (ASICEN 系。試験的) の置き場。CI が .github/asicen-android.sh で、上流の Android 版を `jniLibs/<ABI>/libasicend.so`・
+ * asicen-userland (ASICEN 系。試験的) の置き場。CI が .github/asicen-android.sh で、上流の Android 向けのビルドを `jniLibs/<ABI>/libasicend.so`・
  * `libasicenctl.so` に、ファームウェアを `assets/asicen/` に、ライセンスの文書とソースの入手先を `assets/licenses/asicen-userland/` に並べる。
  * 既定は android/asicen-userland/ (リポジトリには入れない)。`DENPA_ASICEN` で別の置き場を渡せる。無ければ入れずに組む (ASICEN の機材は使えない)
  */
@@ -39,7 +39,7 @@ val asicen = System.getenv("DENPA_ASICEN")?.takeIf { it.isNotEmpty() }
     ?: rootProject.layout.projectDirectory.dir("asicen-userland").asFile.path
 
 /*
- * bun (denpa 本体を動かす) の置き場。CI が .github/bun-android.sh で、公式の Android 版を `jniLibs/<ABI>/libbun.so` に、
+ * bun (denpa 本体を動かす) の置き場。CI が .github/bun-android.sh で、公式の Android 向けのビルドを `jniLibs/<ABI>/libbun.so` に、
  * ライセンスの文書を `assets/licenses/bun/` に並べる。既定は android/bun/ (リポジトリには入れない)。`DENPA_BUN` で別の置き場を渡せる。
  * 無ければ入れずに組む (denpa 本体は起動しない)
  */
@@ -92,14 +92,14 @@ val releaseKeystore = System.getenv("DENPA_ANDROID_KEYSTORE")?.takeIf { it.isNot
 
 android {
     namespace = "io.github.danything.denpa"
-    // いまの最新の安定版 (Android 17 の 37.2)。targetSdk は小数を持てないので 37
+    // いまの最新の安定バージョン (Android 17 の 37.2)。targetSdk は小数を持てないので 37
     compileSdk {
         version = release(37) { minorApiLevel = 2 }
     }
 
     defaultConfig {
         applicationId = "io.github.danything.denpa"
-        // foregroundServiceType が入った API 29 (Android 10)。bun の Android 版 (3 段目) も API 28 を求める
+        // foregroundServiceType が入った API 29 (Android 10)。bun の Android 向けのビルド (3 段目) も API 28 を求める
         minSdk = 29
         targetSdk = 37
         versionName = denpaVersion

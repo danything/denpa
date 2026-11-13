@@ -7,9 +7,9 @@ local.properties
 agent-libs/
 # エージェントに入っているもののライセンスの文書 (CI が置く。app/build.gradle.kts の DENPA_AGENT_LICENSES)
 agent-licenses/
-# asicen-userland の上流の Android 版 (CI が .github/asicen-android.sh で置く。app/build.gradle.kts の DENPA_ASICEN)
+# asicen-userland の上流の Android 向けのビルド (CI が .github/asicen-android.sh で置く。app/build.gradle.kts の DENPA_ASICEN)
 asicen-userland/
-# bun の公式の Android 版 (CI が .github/bun-android.sh で置く。app/build.gradle.kts の DENPA_BUN)
+# bun の公式の Android 向けのビルド (CI が .github/bun-android.sh で置く。app/build.gradle.kts の DENPA_BUN)
 bun/
 # ffmpeg・ffprobe と libav* (CI が .github/ffmpeg-android.sh で組んで置く。app/build.gradle.kts の DENPA_FFMPEG)
 ffmpeg/
