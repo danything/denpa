@@ -893,6 +893,8 @@ AV1・H.265 の VBR がどのドライバでも通るか、段を下げた変換
 - HEVC を再生できるかは、答えを受けてから 4K の局と同じ決め方で調べます (`#lib/hevc-4k.ts`)。再生できなければ H.265 をやめて次の形式に移ります
 - 放送のままを送る前に PMT を読むのは、ケーブル (`CATV`) の局だけです (`Session.readsVideo`)。TS で送る 4K の局はケーブルにしか無く、
   ほかの局の HTTP の応答ヘッダを PMT まで待たせないためです
+- HTTP のライブの `codec=raw` は、`?playable=` を付けたときだけ替えます。付けないものは今までどおり元の TS で、替えるものとは別のセッションにします
+  (`Session.keepsTs`。目印の `key` も分ける)。画面の外のものにとって `raw` は元の TS だからです
 - HTTP のライブは、PMT を読んでから応答ヘッダを返します (`live.liveServed`)。放送のままでも `X-Denpa-Codec: hevc` と `video/mp4` です。
   `?playable=` に `hevc` が無ければ `h264` (無ければ `av1`) をエンコードし、どれも無ければ「再生できる形式がありません」で畳みます
   ([api.md](api.md#ライブ-get-apiservicesidlive))。待つ間に切られたら、ストリームを閉じて抜けます

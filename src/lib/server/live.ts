@@ -1511,6 +1511,11 @@ class Session {
      * 詰め替え (`runMmt`)、ほかのコーデックは詰め替えた fMP4 を ffmpeg でエンコードする (`run`)、`raw` は 1 局に絞った TLV (`runRaw`)
      */
     readonly transport: Transport = "ts",
+    /**
+     * **放送のままを元の TS のまま送るか** (HTTP の `codec=raw` で `?playable=` が無いもの。`httpWant`)。TS で送る 4K の局でも
+     * HEVC の詰め替えに替えない (`readsVideo`)。替えるセッションと共有しないように、目印も分ける (`key`)
+     */
+    readonly keepsTs = false,
   ) {
     this.list = new TrackList(program);
     this.id = key(
@@ -1522,6 +1527,7 @@ class Session {
       track,
       pin,
       rung,
+      keepsTs,
     );
     this.asked = { codec, raw };
     // エンコードが遅れて作り直した前のセッションから、軽くしたものを受け継ぐ (`lighten`)
@@ -1774,12 +1780,13 @@ class Session {
   }
 
   /**
-   * 放送のままを送る前に PMT で映像のコーデックを見るか (`runRaw`)。ケーブル (`CATV`) の TS の局のライブだけ。
+   * 放送のままを送る前に PMT で映像のコーデックを見るか (`runRaw`)。ケーブル (`CATV`) の TS の局のライブで、元の TS のまま送るもの (`keepsTs`) でないときだけ。
    * TS に HEVC を入れて送る 4K の局はケーブルにしか無く、ほかの局は HTTP の応答ヘッダを PMT まで待たせない (`liveServed`)
    */
   private readsVideo(): boolean {
     return (
       this.raw &&
+      !this.keepsTs &&
       this.channelType === "CATV" &&
       this.transport === "ts" &&
       this.source === undefined &&
@@ -3276,8 +3283,10 @@ export const key = (
   // **チューナーを名指ししているものは別のセッションにする**。名指しでない人と混ぜると、指定のチューナーで選局されない
   pin: string | null = null,
   rung: Rung = 0,
+  // **元の TS のまま送るもの (`Session.keepsTs`) は、HEVC の詰め替えに替えるものと分ける**
+  keepsTs = false,
 ) =>
-  `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}${rung === 0 ? "" : `~${rung}`}`;
+  `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}${rung === 0 ? "" : `~${rung}`}${keepsTs ? "!ts" : ""}`;
 const sessions = new Map<string, Session>();
 
 /**
@@ -3306,6 +3315,8 @@ interface Want {
    * エンコードするかを決める (`servedFormat`)。言っていなければ省く (画面の WebSocket は、受け取れなければ自分で次の形式に移る)
    */
   playable?: readonly LiveFormat[];
+  /** 放送のままを元の TS のまま送るか (`Session.keepsTs`。HTTP の `codec=raw` で `?playable=` が無いもの) */
+  keepsTs?: boolean;
 }
 
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
@@ -3324,6 +3335,7 @@ function begin(want: Want): Session {
     want.pin,
     want.rung,
     want.now.transport,
+    want.keepsTs === true,
   );
   session.audios = want.now.audios;
   session.playable = want.playable ?? null;
@@ -3344,6 +3356,7 @@ function sharedSession(want: Want): Session | undefined {
       want.track,
       want.pin,
       want.rung,
+      want.keepsTs === true,
     ),
   );
 }
@@ -3405,7 +3418,7 @@ export function liveStream(
   rung: Rung = 0,
   playable: readonly LiveFormat[] | null = null,
 ): ReadableStream<Uint8Array> | null | "busy" {
-  const want = httpWant(serviceId, codec, audio, rung);
+  const want = httpWant(serviceId, codec, audio, rung, playable !== null);
   if (want === null) return null;
   if (playable !== null) want.playable = playable;
   const release = rungSlot(
@@ -3449,6 +3462,8 @@ function httpWant(
   form: StreamCodec | "raw",
   audio: string | undefined,
   rung: Rung,
+  /** 端末が再生できる形式を言ったか (`?playable=`)。言わない `raw` は元の TS のまま送る (`Session.keepsTs`) */
+  stated = true,
 ): Want | null {
   const row = serviceOf(serviceId);
   // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は選局できない
@@ -3465,6 +3480,8 @@ function httpWant(
     raw,
     pin: null,
     rung: raw || whole ? 0 : rung,
+    // TS で送る 4K の局があるのはケーブルだけ。ほかの局は分けずに共有する
+    keepsTs: raw && !stated && row.type === "CATV" && row.transport === "ts",
   };
 }
 
@@ -3551,8 +3568,15 @@ export function liveCaptions(
   rung: Rung = 0,
 ): ReadableStream<Uint8Array> | null {
   // 映像 (`liveStream`) と同じ決め方で目印を作る。放送そのままの目印は音声で分けない (`key`)
-  const want = httpWant(serviceId, form, audio, rung);
-  const session = want === null ? undefined : sharedSession(want);
+  /*
+   * ケーブルの局の `raw` は、元の TS のまま送るもの (`?playable=` の無い映像) を先に探し、無ければ HEVC の詰め替えに替えうるもの
+   * (`?playable=` の付いた映像) を探す (`Session.keepsTs`)。ほかの局はどちらも同じ目印になる
+   */
+  const want = httpWant(serviceId, form, audio, rung, false);
+  const session =
+    want === null
+      ? undefined
+      : (sharedSession(want) ?? sharedSession({ ...want, keepsTs: false }));
   if (session === undefined || !session.alive) return null;
   return captionFeed((out) => {
     const viewer: Viewer = {

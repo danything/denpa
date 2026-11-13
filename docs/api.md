@@ -130,12 +130,13 @@
 4K の局の字幕 (`GET /api/services/<id>/captions`) にも、映像と同じ `codec` (詰め替えなら `hevc`) を渡します。
 
 **TS で送る 4K の局** (ケーブルの 4K の局のうち、HEVC を TS に入れて送る局) は、局の一覧では MPEG-2 の局と見分けられません。
-サーバは選局して PMT を読み、映像が HEVC なら `raw` を MPEG-2 の TS ではなく、放送の HEVC を写して音声だけ AAC にした fragmented MP4 で返します
-(`X-Denpa-Codec: hevc`、`video/mp4`)。`raw` でも中身は `X-Denpa-Codec` で見分けます。`?playable=` に `hevc` が無ければ、4K の局と同じく縮めて SDR にした
-`h264` (無ければ `av1`) を返し、どれも無ければストリームを閉じます (「再生できる形式がありません」)。
-ケーブル (`CATV`) の TS の局の `raw` の応答ヘッダは、選局して PMT を読んでから返します。ほかの種別は今までどおり待ちません。`hevc` は GPU が無くても写すだけで、`h264`・`av1` は 4K の局と同じく
-縮めて SDR に直します。字幕 (`GET /api/services/<id>/captions`) には、映像をリクエストしたときと同じ `codec=raw` を渡します
-(同じストリームを共有する)。時刻は放送の PTS ではなく、応答の fragmented MP4 の時刻です。
+`?playable=` の無い `raw` は、どの局でも今までどおり元の TS (`video/mp2t`、`X-Denpa-Codec: raw`) を返します。映像が HEVC でも替えません。
+`?playable=` を付けた `raw` (`codec=auto` で `raw` が選ばれたときも) は、サーバが選局して PMT を読み、映像が HEVC なら放送の HEVC を写して音声だけ AAC にした
+fragmented MP4 で返します (`X-Denpa-Codec: hevc`、`video/mp4`)。中身は `X-Denpa-Codec` で見分けます。`?playable=` に `hevc` が無ければ、4K の局と同じく
+縮めて SDR にした `h264` (無ければ `av1`) を返し、どれも無ければストリームを閉じます (「再生できる形式がありません」)。
+ケーブル (`CATV`) の TS の局で `?playable=` を付けた `raw` は、選局して PMT を読んでから応答ヘッダを返します。ほかは今までどおり待ちません。
+`hevc` は GPU が無くても写すだけで、`h264`・`av1` は 4K の局と同じく縮めて SDR に直します。字幕 (`GET /api/services/<id>/captions`) には、
+映像をリクエストしたときと同じ `codec=raw` を渡します (同じストリームを共有する)。HEVC に替えたときの時刻は、放送の PTS ではなく応答の fragmented MP4 の時刻です。
 
 `?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。音声だけを聴くとき向け。
 映像をエンコードしないので軽い。録画の `audio` と同じ書き方です。`codec` と一緒に渡すと、`audio=only` を優先します。

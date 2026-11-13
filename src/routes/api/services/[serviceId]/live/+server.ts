@@ -75,6 +75,8 @@ export async function GET({ params, url, request }) {
   if (stream === "busy") error(503, BUSY);
   // 実際に流す形式。TS で送る 4K の局の放送のままは、PMT を読んでから替わる (`live.liveServed`)
   const aborted = new Promise<null>((resolve) => {
+    // 待ち始める前に切られていたら、イベントは来ない
+    if (request.signal.aborted) resolve(null);
     request.signal.addEventListener("abort", () => resolve(null), {
       once: true,
     });

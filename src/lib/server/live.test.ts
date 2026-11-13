@@ -1488,6 +1488,14 @@ describe("TS で送る 4K の局のライブ", () => {
     expect(servedFormat(h264, "hevc", null)).toEqual(h264);
   });
 
+  test("元の TS のまま送る HTTP の raw (?playable= が無い) は、HEVC の詰め替えに替えうるものと共有しない", () => {
+    const at = (keepsTs: boolean) =>
+      key("CATV", "QC14", 1, stereo, "raw", 0, null, 0, keepsTs);
+    expect(at(true)).not.toBe(at(false));
+    // 分けないものは今までの目印のまま
+    expect(at(false)).toBe(key("CATV", "QC14", 1, stereo, "raw", 0));
+  });
+
   test("画面が前の答えで知った放送のコーデックを、選局の指示から読む", () => {
     const tune = {
       type: "tune",
