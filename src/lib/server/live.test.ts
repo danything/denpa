@@ -1443,22 +1443,19 @@ describe("TS で送る 4K の局のライブ", () => {
   });
 
   test("MPEG-2 の局は今までどおり", () => {
-    expect(
-      encodeArgs(1024, stereo, "h264", 0, null, 0, false, "pipe:3", "ts"),
-    ).toEqual(
-      encodeArgs(
-        1024,
-        stereo,
-        "h264",
-        0,
-        null,
-        0,
-        false,
-        "pipe:3",
-        "ts",
-        "mpeg2",
-      ),
+    const mpeg2 = encodeArgs(
+      1024,
+      stereo,
+      "h264",
+      0,
+      null,
+      0,
+      false,
+      "pipe:3",
+      "ts",
+      "mpeg2",
     );
+    expect(mpeg2).toEqual(plain());
     expect(plain().join(" ")).toContain("-probesize 100000");
     expect(plain().join(" ")).not.toContain("delay_moov");
   });
