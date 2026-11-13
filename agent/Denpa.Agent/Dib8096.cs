@@ -1380,8 +1380,10 @@ public sealed class Dib8096
             {
                 if (_tunerBand == Band.Cband && ((_ltDefault >> 10) & 7) != 0)
                 {
+                    // 10〜12 ビットの欄だけを半分にする。ほかのビット (13・14) は残す。
+                    // C バンド (170MHz 以下) だけの処理で、日本の地上波 (UHF) では通らない。実機では確かめていない
                     var half = ((_ltDefault >> 10) & 7) / 2;
-                    _ltDefault &= half << 10;
+                    _ltDefault = (_ltDefault & ~(7 << 10)) | (half << 10);
                 }
             }
             else

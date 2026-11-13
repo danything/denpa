@@ -441,6 +441,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
             ObjectDisposedException.ThrowIf(_closed, this);
             var deadline = Environment.TickCount64 + timeoutMs;
             var copied = 0;
+            var dropped = 0;
             while (copied < buffer.Length)
             {
                 if (_length < 0)
@@ -456,8 +457,8 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                         // (ERROR_OPERATION_ABORTED) ので、それも同じに扱う。受信を止めるとき、読み出しのスレッドが先に終わり、
                         // 別のスレッドが読み捨てるので、この取り消しは必ず起きる。例外にすると停止の手順が途中で止まり、機材が受信中のまま残って
                         // 次の受信の先頭に古いデータが混じる。出し直しは Read を 1 回呼ぶごとに深さの分までで、そのあとの待ちには時間切れがある
-                        // (Dispose のあとは先頭の ThrowIf で抜ける) ので、出し直し続けることはない
-                        if (error is not (ErrorGenFailure or ErrorOperationAborted)) throw Failure(_owner.Name, "TS の読み出しが失敗しました", error);
+                        // (Dispose のあとは先頭の ThrowIf で抜ける)。深さを超えて捨て続けるなら、端点が戻らないので例外にする (ReadTransfer と同じ)
+                        if (error is not (ErrorGenFailure or ErrorOperationAborted) || ++dropped > _overlapped.Length) throw Failure(_owner.Name, "TS の読み出しが失敗しました", error);
                         done = 0;
                     }
                     _length = (int)done;
