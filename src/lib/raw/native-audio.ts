@@ -87,12 +87,21 @@ export class NativeAudio {
    * 予約し続けると、80 ms 鳴っては組み直すのを繰り返して「ブツブツ」と途切れる
    */
   private frozen = false;
+  /** AudioContext を自分で作ったか。渡されたもの (`shared`) は畳んでも閉じない */
+  private readonly owned: boolean;
+  /**
+   * @param shared 使い回す AudioContext。**作り直しても音を止めないため。** iOS の Safari は、押したとき以外に作った
+   *   AudioContext を止めたまま始めるので、画質を切り替えて作り直すたびに自動再生を断られたことになり、消音になっていた (#2728)。
+   *   渡せば、畳むときは自分のつないだ音だけを外し、AudioContext は閉じない (閉じるのは渡した側)
+   */
   constructor(
     private readonly video: HTMLVideoElement,
     private readonly failed: (reason: string) => void,
     decoder: string,
+    shared?: AudioContext,
   ) {
-    this.context = audioContext("interactive");
+    this.context = shared ?? audioContext("interactive");
+    this.owned = shared === undefined;
     this.seam = new Seam(this.context.sampleRate);
     let outlet: Outlet | null = null;
     try {
@@ -115,7 +124,7 @@ export class NativeAudio {
       );
     } catch (error) {
       outlet?.destroy();
-      void this.context.close().catch(() => undefined);
+      if (this.owned) void this.context.close().catch(() => undefined);
       throw error;
     }
     this.worker.onmessage = (event: MessageEvent<AudioOutput>) =>
@@ -361,8 +370,10 @@ export class NativeAudio {
     this.listening.abort();
     this.worker.terminate();
     this.outlet.destroy();
+    this.muteGain.disconnect();
+    this.fade.disconnect();
     this.context.onstatechange = null;
-    void this.context.close().catch(() => undefined);
+    if (this.owned) void this.context.close().catch(() => undefined);
     playbackSession(false);
     this.frames = [];
     this.cursor = 0;
