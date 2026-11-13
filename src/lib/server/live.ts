@@ -796,6 +796,26 @@ export function liveRungCodec(
 }
 
 /**
+ * **TS で送る 4K の局と PMT で分かったあとのコーデック** (`Session.runEncode`)。ライブの段を下げた H.265 だけを、4K の局として
+ * 段を下げるコーデックに選び直す (`liveRungCodec`)。4K の局の H.265 は放送の HEVC を写すもので、段を下げられない。
+ * `playable` が null (端末が言っていない) なら H.264。追っかけ (`live` が false) とほかの形式はそのまま
+ */
+export function hevcTsCodec(
+  codec: StreamCodec,
+  rung: Rung,
+  live: boolean,
+  playable: readonly LiveFormat[] | null,
+  pick?: Parameters<typeof rungCodec>[2],
+): StreamCodec {
+  if (!live || codec !== "hevc" || rung === 0) return codec;
+  return liveRungCodec(
+    (playable ?? []).filter((format): format is LiveCodec => format !== "raw"),
+    "hevc",
+    pick,
+  );
+}
+
+/**
  * 端末が再生できるコーデック (`tune`・`chase` の `playable`、HTTP の `?playable=`)。配列でも `,` 区切りでもよい。
  * 知らない値は捨てる。**省かれたら、リクエストされたコーデックと H.264** (H.264 はどの端末でも再生できる)
  */
@@ -1967,17 +1987,15 @@ class Session {
              * 選んでいる (画面が HEVC と知らない初回と、HTTP の `?codec=hevc&rung=`)。追っかけは選局の答えを出さないので替えない。
              * 端末が再生できる形式を言っていなければ (画面の WebSocket・`?playable=` の無い HTTP)、どの端末でも再生できる H.264
              */
-            const lowered =
-              this.source === undefined &&
-              this.codec === "hevc" &&
-              this.rung !== 0;
+            const was = this.codec;
+            this.codec = hevcTsCodec(
+              this.codec,
+              this.rung,
+              this.source === undefined,
+              this.playable,
+            );
+            const lowered = this.codec !== was;
             if (lowered) {
-              this.codec = liveRungCodec(
-                (this.playable ?? []).filter(
-                  (format): format is LiveCodec => format !== "raw",
-                ),
-                "hevc",
-              );
               console.log(
                 `[live] ${this.id}: TS に HEVC が入っているので、段 ${this.rung} を ${this.codec} でエンコードします`,
               );
