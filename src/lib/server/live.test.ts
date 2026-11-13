@@ -1425,9 +1425,7 @@ describe("TS で送る 4K の局のライブ", () => {
   });
 
   test("H.264・AV1 は 4K の局と同じく、インタレ解除をせずに縮めて SDR の 8 ビットにする", () => {
-    expect(filter(ts("h264"))).toBe(
-      ["scale=-2:1080", ...HLG_TO_SDR].join(","),
-    );
+    expect(filter(ts("h264"))).toBe(["scale=-2:1080", ...HLG_TO_SDR].join(","));
     expect(ts("h264").join(" ")).toContain("-map 0:p:1024:v:0");
     expect(ts("av1").join(" ")).toContain("libsvtav1");
   });
@@ -1470,7 +1468,7 @@ describe("TS で送る 4K の局のライブ", () => {
 
   test("放送のままは HEVC の詰め替え。HEVC を再生できないと言った端末にはエンコードする", () => {
     const raw = { codec: "h264", raw: true } as const;
-    const copy = { codec: "hevc", raw: false };
+    const copy = { codec: "hevc", raw: false } as const;
     expect(servedFormat(raw, "hevc", null)).toEqual(copy);
     expect(servedFormat(raw, "hevc", ["raw", "hevc", "h264"])).toEqual(copy);
     expect(servedFormat(raw, "hevc", ["raw", "h264", "av1"])).toEqual({
