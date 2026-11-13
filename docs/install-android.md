@@ -97,7 +97,7 @@ adb push denpa.env /sdcard/Android/data/io.github.danything.denpa/files/denpa.en
 ```
 
 - **直したら、通知の「終了」で止めてから、ホーム画面の「denpa」で始め直します。** アプリは denpa を起動するたびに読み直します
-- 置き場 (`DENPA_DB`・`MEDIA_DIR`)・ffmpeg・字とデコーダの置き場・エージェントの宛先 (`TUNER_AGENT_URL`)・`PORT`・`DENPA_VERSION` はアプリが決め、`denpa.env` に書いても効きません
+- 置き場 (`DENPA_DB`・`MEDIA_DIR`・`RAW_DIR`・`ENCODED_DIR`)・ffmpeg・字とデコーダの置き場・エージェントの宛先 (`TUNER_AGENT_URL`)・`PORT`・`DENPA_VERSION` はアプリが決め、`denpa.env` に書いても効きません
 - `TRUSTED_NETWORKS` の雛形は `127.0.0.0/8,::1/128,192.168.0.0/16,10.0.0.0/8` です。`127.0.0.0/8` と `::1/128` はこの端末のブラウザです
 - **Android 10 では `denpa.env` を読まず、雛形と同じ中身で動かします。** Android 10 は、ストレージの権限を持つほかのアプリもこの置き場に書けるので、
   `TRUSTED_NETWORKS` を書き換えられると誰でも denpa を開けてしまうためです。変数を足すなら Android 11 以上の端末で使います

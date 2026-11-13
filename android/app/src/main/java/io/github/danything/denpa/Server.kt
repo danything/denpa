@@ -103,6 +103,9 @@ internal object Server {
         "DENPA_VERSION" to denpaVersion(packageInfo(context).versionName),
         "DENPA_DB" to File(home, "data/denpa.db").path,
         "MEDIA_DIR" to File(home, "media").path,
+        // エージェントには MEDIA_DIR だけを渡す。元の TS とエンコード済みの置き場も MEDIA_DIR の下に固定し、本体とエージェントで食い違わないようにする
+        "RAW_DIR" to File(home, "media/raw").path,
+        "ENCODED_DIR" to File(home, "media/encoded").path,
         "MPEG2_DIR" to File(dir, "mpeg2").path,
         "FONT_DIR" to File(dir, "font").path,
         "TUNER_AGENT_URL" to "https://127.0.0.1:$agentPort#pair=$token",

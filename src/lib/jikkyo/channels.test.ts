@@ -69,6 +69,14 @@ describe("jikkyoChannel", () => {
     expect(catv(101, 0x0031)).toBeNull();
   });
 
+  test("ケーブルで受けた 4K の局は、BS の局と番号が同じでも当てない", () => {
+    // NHK BS4K・BS日テレ 4K (network_id 0x000B)。NX-Jikkyo に 4K のチャンネルは無い
+    for (const service_id of [101, 141])
+      expect(
+        jikkyoChannel({ type: "CATV", service_id, network_id: 0x000b }),
+      ).toBeNull();
+  });
+
   test("地上波の表は NX-Jikkyo の地上波のチャンネル (jk1〜14、jk3 は無い) だけを指す", () => {
     for (const jk of TERRESTRIAL.values()) {
       expect(jk >= 1 && jk <= 14 && jk !== 3, String(jk)).toBe(true);

@@ -55,6 +55,7 @@ import {
   type Notice,
 } from "#lib/live.js";
 import {
+  busyNote,
   ENCODE_SLOW,
   parseRung,
   type Rung,
@@ -1075,11 +1076,6 @@ const GPU_BUSY =
 const HEVC_GAVE_UP = "H.265 を GPU でエンコードできませんでした";
 /** 段を下げた AV1 を GPU でエンコードできずに降りたときの文面 (`Session.run`) */
 const AV1_GAVE_UP = "AV1 を GPU でエンコードできませんでした";
-/**
- * 段を下げようとしたが、その場で変換する本数の枠 (`transcode.ts`) が埋まっていて下げられなかったときの断り書き (`attend`)。
- * 段は下げずに今のまま観られる
- */
-const RUNG_BUSY = "サーバが混んでいるため、画質を下げられませんでした";
 /** H.265 をリクエストされたが出せないので H.264 にしたときの断り書き (`attend`) */
 const HEVC_TO_H264 =
   "H.265 を GPU でエンコードできないため、H.264 に切り替えました";
@@ -4044,7 +4040,7 @@ export function attend(connection: Connection): void {
       connection.send(
         CHANNEL.control,
         0n,
-        json({ type: "notice", message: RUNG_BUSY } satisfies Notice),
+        json({ type: "notice", message: busyNote(true) } satisfies Notice),
       );
 
     /*
