@@ -820,7 +820,7 @@ export function pinKey(tuner: Pick<AgentTuner, "agent" | "pin">): string {
 }
 
 /** 名指しを、エージェントの ID と pin に分ける。前に ID が付いていなければ、どのエージェントでもよい */
-export function splitPin(named: string): { agent: number | null; pin: string } {
+function splitPin(named: string): { agent: number | null; pin: string } {
   const found = /^(\d+):(.+)$/s.exec(named);
   return found === null
     ? { agent: null, pin: named }
@@ -921,7 +921,7 @@ export function route(
  * 無ければ受けられて使ってよいチューナーのうち `rank` のいちばん小さいもの (エージェントの選び方と同じ。約束の 2・3)。
  * 一覧はそのまま残し、写しを返す
  */
-export function withPending(
+function withPending(
   lists: readonly RoutedList[],
   sent: readonly Omit<Pending, "answeredAt">[],
 ): RoutedList[] {

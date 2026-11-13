@@ -281,7 +281,7 @@ type StreamCodec = LiveCodec | "audio";
  * @param audio どの音声を、どちら側で出すか
  * @param caption 何本目の字幕を出すか。**null なら字幕の出力を付けない**。
  *   字幕を持たない放送で字幕を求めると ffmpeg は組み立ての時点で降りるので、
- *   そうと分かったらこちらで再エンコードする (`Session.run`)
+ *   そうと分かったらこちらで再エンコードする (`Session.runEncode`)
  * @param hw GPU でエンコードするならその経路 (`hwenc.liveHw`)。null ならソフトウェア (`videoArgs`)
  * @param rung 回線に合わせて下げた段 (`#lib/rungs.ts`)。0 なら下げない
  * @param half エンコードが遅れたので 30 コマにするか (`videoArgs` の `half`。`Session` の `lighten`)
@@ -479,7 +479,7 @@ function broadcastFilters(smooth: boolean): string[] {
  * 設定でそのコーデックのエンコーダに GPU を選んであれば、**録画と同じ GPU でエンコードする**
  * (`hwenc.liveHw`。低遅延の引数とインタレ解除まで GPU に寄せる話は `hwenc.liveHwArgs`)。
  * 非力な機材 (Celeron J4125) では x264 ultrafast で 2 本目から追いつかなくなるため (issue #417)。
- * GPU が映像を 1 つも出さずに降りたら、ソフトウェアで再エンコードする (`Session.run`)
+ * GPU が映像を 1 つも出さずに降りたら、ソフトウェアで再エンコードする (`Session.runEncode`)
  *
  * ## H.265
  *
@@ -849,7 +849,7 @@ export function rungPlan(o: {
 /**
  * **このコーデックをソフトウェアでエンコードしてよいか。** H.264 はいつも、AV1 は段 0 だけ (SVT-AV1 は段を下げても重い)、
  * H.265 はいつも駄目 (ソフトウェアのエンコーダを組んでいない)。駄目なものは GPU が降りてもソフトウェアに降りず、
- * そこで止めて降りた方式を覚える (`Session.run`・`server/playback.ts` の `withFallback`)
+ * そこで止めて降りた方式を覚える (`Session.runEncode`・`server/playback.ts` の `withFallback`)
  */
 export function softwareEncodes(codec: LiveCodec, rung: Rung): boolean {
   return codec === "h264" || (codec === "av1" && rung === 0);
@@ -983,7 +983,7 @@ interface Viewer {
  * 字幕を持っていないと分かった局。**同じ間違いを繰り返さないため。**
  *
  * 字幕を出させた ffmpeg は、その放送に字幕が無いと**組み立ての時点で降りる**。
- * 映像も出ない。1 回目は字幕なしで再エンコードして繋ぐが (`Session.run`)、覚えて
+ * 映像も出ない。1 回目は字幕なしで再エンコードして繋ぐが (`Session.runEncode`)、覚えて
  * おかないと選局のたびに 2 回起こすことになる。
  *
  * **番組が変われば付くことがある**ので、しばらくしたら忘れる
@@ -1126,7 +1126,7 @@ const GPU_BUSY =
  * (`live-player.svelte.ts`。文面は見ず、H.265 をリクエストしていて降りたことで決める)
  */
 const HEVC_GAVE_UP = "H.265 を GPU でエンコードできませんでした";
-/** 段を下げた AV1 を GPU でエンコードできずに降りたときの文面 (`Session.run`) */
+/** 段を下げた AV1 を GPU でエンコードできずに降りたときの文面 (`Session.runEncode`) */
 const AV1_GAVE_UP = "AV1 を GPU でエンコードできませんでした";
 /** H.265 をリクエストされたが出せないので H.264 にしたときの断り書き (`attend`) */
 const HEVC_TO_H264 =
@@ -1363,7 +1363,7 @@ class Session {
   private toldClockAt = 0;
   /**
    * いまの ffmpeg が映像の中身 (init の次の塊) を 1 つでも出したか。
-   * **GPU から降りてよいのは出す前だけ** (`run`)。出したあとで落ちたのは GPU のせいとは限らない
+   * **GPU から降りてよいのは出す前だけ** (`runEncode`)。出したあとで落ちたのは GPU のせいとは限らない
    */
   private produced = false;
   /**
@@ -1508,7 +1508,7 @@ class Session {
     readonly rung: Rung = 0,
     /**
      * 伝送の形式 (`services.transport`)。`tlv` は 4K の局で、TS を経由せずに読む (`live-mmt.ts`)。`hevc` は放送の HEVC の
-     * 詰め替え (`runMmt`)、ほかのコーデックは詰め替えた fMP4 を ffmpeg でエンコードする (`run`)、`raw` は 1 局に絞った TLV (`runRaw`)
+     * 詰め替え (`runMmt`)、ほかのコーデックは詰め替えた fMP4 を ffmpeg でエンコードする (`runEncode`)、`raw` は 1 局に絞った TLV (`runRaw`)
      */
     readonly transport: Transport = "ts",
     /**
@@ -1561,7 +1561,7 @@ class Session {
 
   /** 出した映像の長さ (`pace` の `speed`)。ffmpeg ごとに init から読み直す (`drain`) */
   private readonly length = new VideoLength();
-  /** 速さを測る点。ffmpeg ごとに作り直す (`run`。起こし直すまでの空きを遅れに数えない) */
+  /** 速さを測る点。ffmpeg ごとに作り直す (`runEncode`。起こし直すまでの空きを遅れに数えない) */
   private meter = new SpeedMeter();
   /** 出した映像の長さの合計 (秒) */
   private media = 0;
@@ -1581,7 +1581,7 @@ class Session {
 
   /**
    * いまの ffmpeg が映像をエンコードせずに写しているか (TS で送る 4K の局の `hevc`。`copiesVideo`)。
-   * 映像のコーデックは PMT を読んでから決まるので、ffmpeg を起こすたびに決め直す (`run`)
+   * 映像のコーデックは PMT を読んでから決まるので、ffmpeg を起こすたびに決め直す (`runEncode`)
    */
   private copied = false;
 
@@ -1794,12 +1794,13 @@ class Session {
     );
   }
 
-  /** 送る形式が決まったら呼ぶもの (`decided` を解く) */
+  /** 送る形式が決まったら呼ぶもの (`decided` を解決する) */
   private formatKnown: () => void = () => undefined;
 
   /**
-   * **送る形式が決まった。** TS の局のライブの放送のままは、PMT を読んでから決まる (`servedFormat`)。ほかは作ったときに
-   * 決まっている。HTTP のライブはこれを待ってから応答ヘッダ (`X-Denpa-Codec`・Content-Type) を返す (`liveStream`)。畳んだときも解く
+   * **送る形式が決まった。** ケーブルの TS の局のライブの放送のままは、PMT を読んでから決まる (`readsVideo`・`servedFormat`)。
+   * ほかは作ったときに決まっている。HTTP のライブはこれを待ってから応答ヘッダ (`X-Denpa-Codec`・Content-Type) を返す (`liveServed`)。
+   * 畳んだときも解決する
    */
   readonly decided: Promise<void> = new Promise((resolve) => {
     this.formatKnown = resolve;
@@ -2481,7 +2482,7 @@ class Session {
   private async pump(
     stream: AsyncGenerator<Uint8Array>,
     proc: ReturnType<typeof Bun.spawn>,
-    /** リーダーを自分で閉じるか。ライブは起こし直しても使い回すので閉じない (`run`) */
+    /** リーダーを自分で閉じるか。ライブは起こし直しても使い回すので閉じない (`runEncode`) */
     own: boolean,
   ): Promise<void> {
     const writer = proc.stdin as import("bun").FileSink;
@@ -2603,7 +2604,7 @@ class Session {
 
   /**
    * ffmpeg が出した fMP4 を割って配る。**割る道具は ffmpeg ごとに作り**、起こし直したとき
-   * (`run`)、前の ffmpeg の書きかけを次へ持ち越さない
+   * (`runEncode`)、前の ffmpeg の書きかけを次へ持ち越さない
    */
   private async drain(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
     const splitter = new Fmp4Splitter();
@@ -2917,11 +2918,11 @@ class Session {
         // 起こし直したあとの新しい対応は、次の塊で配る (`CLOCK_EVERY` を待たない)
         this.toldClockAt = 0;
       }
-      // 字幕が無い放送。**映像ごと落ちる**ので、字幕なしで再エンコードする (`run`)
+      // 字幕が無い放送。**映像ごと落ちる**ので、字幕なしで再エンコードする (`runEncode`)
       if (NO_SUBTITLE.test(line)) this.noSubtitle = true;
-      // 局の映像か音声が無い。字幕なしで起こし直しても同じところで降りる (`run`)
+      // 局の映像か音声が無い。字幕なしで起こし直しても同じところで降りる (`runEncode`)
       this.noMedia ??= missingMedia(line);
-      // NVENC の同時に開ける数を超えた。GPU から降りても方式は覚えない (`run`・`blameGpu`)
+      // NVENC の同時に開ける数を超えた。GPU から降りても方式は覚えない (`runEncode`・`blameGpu`)
       if (nvencBusy(line)) this.busy = true;
       if (worthLogging(line)) {
         console.warn(
@@ -3573,10 +3574,24 @@ export function liveCaptions(
    * (`?playable=` の付いた映像) を探す (`Session.keepsTs`)。ほかの局はどちらも同じ目印になる
    */
   const want = httpWant(serviceId, form, audio, rung, false);
+  /*
+   * `codec=auto` で放送のままが選ばれ、PMT を読んで HEVC の詰め替えかエンコードに替えたもの (`servedFormat`) は、
+   * 応答の `X-Denpa-Codec` (`hevc` など) で来る。目印はリクエストされた `raw` なので、`raw` の目印で探して送っている形式を比べる
+   */
+  const switched = (): Session | undefined => {
+    if (form === "raw") return undefined;
+    const asked = httpWant(serviceId, "raw", audio, 0);
+    const found = asked === null ? undefined : sharedSession(asked);
+    return found !== undefined && !found.raw && found.codec === form
+      ? found
+      : undefined;
+  };
   const session =
     want === null
       ? undefined
-      : (sharedSession(want) ?? sharedSession({ ...want, keepsTs: false }));
+      : (sharedSession(want) ??
+        sharedSession({ ...want, keepsTs: false }) ??
+        switched());
   if (session === undefined || !session.alive) return null;
   return captionFeed((out) => {
     const viewer: Viewer = {

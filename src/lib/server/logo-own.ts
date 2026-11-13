@@ -28,6 +28,7 @@ import {
 } from "../ts/logo-detect";
 import type { ScanLogo } from "./cm-scan";
 import { config } from "./config";
+import { recordingInput } from "./recording-io";
 import { run } from "./stream";
 
 /**
@@ -158,8 +159,7 @@ async function learn(
       // キーフレームしかデコードしない。散らして見るだけなので全部は要らない
       "-skip_frame",
       "nokey",
-      "-i",
-      input,
+      ...recordingInput(input),
       "-an",
       "-sn",
       "-dn",

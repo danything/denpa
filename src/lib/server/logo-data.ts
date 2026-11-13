@@ -240,7 +240,8 @@ export function share(serviceId: number, file: string, replace: boolean): void {
  * **向こうが同じ大きさのものを持っていれば、ふだんは写さない** (自分で育てたほうが確か)。
  * 覚え直した (`replace`。局がロゴを替えた) ときだけは上書きする。同じ映像なので向こうの型も
  * 古く、残すと向こうは古い型で当てて外すか、覚え直しに 1 本ぶん余計にかかる。
- * 書きかけを読まれないよう、隣に写してから差し替える (`logo-own.save` と同じ)
+ * 書きかけを読まれないよう、隣に写してから差し替える。隣の名前は写すたびに変える (`logo-own.save` と同じ。
+ * エンコードは何本か同時に走り、束ねた局へ同じファイルを写しに来ることがある)
  */
 export function copyModel(
   from: string,
@@ -250,7 +251,10 @@ export function copyModel(
 ): void {
   for (const dir of to) {
     if (!replace && existsSync(join(dir, file))) continue;
-    const temp = join(dir, `${file}.${process.pid}-share.tmp`);
+    const temp = join(
+      dir,
+      `${file}.${process.pid}-${Math.random().toString(36).slice(2)}.tmp`,
+    );
     try {
       mkdirSync(dir, { recursive: true });
       copyFileSync(join(from, file), temp);

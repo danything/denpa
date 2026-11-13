@@ -20,7 +20,6 @@ import {
   appFrame,
   CAPTION_FEED_BACKLOG,
   CAPTION_FEED_HOLD,
-  CaptionCount,
   captionFeed,
   type CaptionOut,
   captionOutput,
@@ -29,6 +28,7 @@ import {
   NO_SUBTITLE,
   pagesFromMkv,
   peekPmt,
+  PmtPeek,
   pmtVideo,
   rawCaptionArgs,
   textFrame,
@@ -231,7 +231,7 @@ describe("PMT で字幕の本数を見る", () => {
 
   test("TS を少しずつ渡して、その局の PMT を読めたら本数を返す", () => {
     const ts = head([[0x06, 0x130, captionDescriptors()]]);
-    const counter = new CaptionCount(SERVICE);
+    const counter = new PmtPeek(SERVICE);
     // パケットの切れ目と関係なく割って届く
     expect(counter.feed(ts.subarray(0, 100))).toBeNull();
     expect(counter.feed(ts.subarray(100, 300))).toBeNull();
@@ -239,7 +239,7 @@ describe("PMT で字幕の本数を見る", () => {
   });
 
   test("ほかの局の PMT では決めない", () => {
-    expect(new CaptionCount(SERVICE + 1).feed(head([]))).toBeNull();
+    expect(new PmtPeek(SERVICE + 1).feed(head([]))).toBeNull();
   });
 
   test("字幕が無い PMT なら 0、読んだ塊はそのまま出てくる", async () => {

@@ -274,6 +274,8 @@ describe("ライブの字幕 (liveCaptions)", () => {
     const media = liveStream(SERVICE, "raw") as ReadableStream<Uint8Array>;
     const first = liveCaptions(SERVICE);
     expect(first).not.toBeNull();
+    // 放送のままを替えていないセッションには、変換した形式の字幕では繋がない (時刻が違う)
+    expect(liveCaptions(SERVICE, 1, "hevc")).toBeNull();
     await first!.cancel();
     // 映像はまだ流れている (同じセッションをもう一度共有できる)
     const second = liveCaptions(SERVICE);

@@ -29,6 +29,7 @@ import { undecodableReason } from "#lib/types.js";
  * 出せなければ H.264)、`?codec=raw` でエンコードせずに 1 局に絞っただけの、変換しない TS (MPEG-2。テレビのアプリ向け)。
  * 4K の局 (`services.transport` が `tlv`) は、`?codec=hevc` が放送の HEVC と AAC をエンコードせずに詰め替えた fMP4 (GPU は要らない)、
  * `?codec=raw` が 1 局に絞った TLV (`application/x-arib-tlv`)。`?codec=auto` は `raw` を候補にしない (`viewing.autoFormat`)。
+ * TS で送る 4K の局の `?codec=raw` は、`?playable=` を付けたときだけ PMT を読んでから HEVC の詰め替えかエンコードに替える (`live.liveServed`)。
  * `?codec=auto` は端末が再生できる形式 (`?playable=`) からサーバが「自動」の順で選ぶ (`viewing.askedFormat`)。選べなければ 406。
  * どれも中身の形式を `X-Denpa-Codec` で返す。
  * `?audio=only` で音声だけ (AAC の fMP4。画面の無いスピーカーへの Cast 向け。録画の API と同じ書き方)。

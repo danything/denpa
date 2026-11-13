@@ -52,10 +52,13 @@ type Discovery = Infer<typeof DISCOVERY>;
  */
 let discovered: Discovery | null = null;
 
+/** 発行元へのリクエストを待つ上限 (ms)。届かない発行元を待ち続けると、`/login` と `/login/callback` が返らない */
+const IDP_TIMEOUT = 10_000;
+
 async function discover(): Promise<Discovery> {
   if (discovered !== null) return discovered;
   const url = `${config.oidcIssuer}/.well-known/openid-configuration`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(IDP_TIMEOUT) });
   if (!res.ok)
     throw new Error(`OIDC の設定を読めません (${res.status}) ${url}`);
   const doc = read(DISCOVERY, await res.json(), "OIDC の設定");
@@ -205,6 +208,7 @@ async function exchange(
   const doc = await discover();
   const res = await fetch(doc.token_endpoint, {
     method: "POST",
+    signal: AbortSignal.timeout(IDP_TIMEOUT),
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
@@ -239,7 +243,9 @@ async function publicKey(kid: string): Promise<CryptoKey> {
   if (cached !== undefined) return cached;
 
   const doc = await discover();
-  const res = await fetch(doc.jwks_uri);
+  const res = await fetch(doc.jwks_uri, {
+    signal: AbortSignal.timeout(IDP_TIMEOUT),
+  });
   if (!res.ok) throw new Error(`署名の鍵を取得できません (${res.status})`);
   const jwks = read(JWKS, await res.json(), "OIDC の署名の鍵");
   for (const { kid: name, kty, n, e } of jwks.keys) {

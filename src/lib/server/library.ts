@@ -39,7 +39,7 @@ export function seriesFolder(series: string, name: string): string {
  * 保存先での相対パスを組む。`シリーズ名/シリーズ名 - YYYY-MM-DD - HHMM 副題{ext}`。
  *
  * シリーズ名のフォルダにまとめるのは**ディスク上で見やすくするため**。
- * 隣にはサムネ (`-poster.jpg`) を録画ごとに置く (metadata.ts)。
+ * 隣にはサムネイル (`-poster.jpg`) を録画ごとに置く (metadata.ts)。
  *
  * 日時はプロセスの TZ (compose・Helm・インストーラが Asia/Tokyo を渡す) のローカル時刻。放送日で並ぶのが期待値なので UTC にはしない。
  */

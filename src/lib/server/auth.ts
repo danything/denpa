@@ -233,7 +233,7 @@ const MAX_REPORTED = 64;
  * `Host` はブラウザのスクリプトから変えられないが、`X-Forwarded-Host` のようなヘッダは
  * 同じオリジンからなら付けられるので、どちらか片方だけでは足りない。
  *
- * 信頼するネットワークの中から知らない名前で来たときに呼ぶ。ログに理由を 1 度だけ出す
+ * 信頼するネットワークの中から来たときに呼ぶ (hooks)。知らない名前なら、ログに理由を 1 度だけ出す
  */
 export function foreignHost(headers: Headers, address: string): string | null {
   const names = [headers.get("host")];

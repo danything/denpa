@@ -159,7 +159,7 @@ export function rawCaptionArgs(
  *
  * 字幕を持たない局はある (ショッピングやサブチャンネル)。そこに
  * `0:p:X:s:0` を要求すると、ffmpeg は**組み立ての時点で終了する**。つまり
- * **映像も出ない**。そうと分かったら字幕なしで起動し直す (`Session.run`)。
+ * **映像も出ない**。そうと分かったら字幕なしで起動し直す (`Session.runEncode`)。
  *
  * ffmpeg は `Stream map '' matches no streams.` と出力する。**この行は記録に残らない** (`worthLogging` の
  * 言葉を含まない)。残るのはそのあとの `Failed to set value '0:p:X:s:0' for option 'map': Invalid argument`
@@ -224,7 +224,7 @@ export function pmtVideo(section: Uint8Array): ServiceVideo | null {
 /**
  * TS を少しずつ渡して、その局の PMT から字幕の本数 (`captionStreams`) と映像のコーデック (`pmtVideo`) を読む
  */
-export class CaptionCount {
+export class PmtPeek {
   private readonly packets = new PacketStream();
   private readonly pmt: PmtTracker;
   /** 読んだ PMT にある映像のコーデック。まだ読んでいないか、映像が無ければ null */
@@ -283,7 +283,7 @@ export async function peekPmt(
   count: number | null;
   video: ServiceVideo | null;
 }> {
-  const counter = new CaptionCount(program);
+  const counter = new PmtPeek(program);
   const head: Uint8Array[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<"late">((resolve) => {
