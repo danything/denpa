@@ -131,8 +131,9 @@
 
 **TS で送る 4K の局** (ケーブルの 4K の局のうち、HEVC を TS に入れて送る局) は、局の一覧では MPEG-2 の局と見分けられません。
 サーバは選局して PMT を読み、映像が HEVC なら `raw` を MPEG-2 の TS ではなく、放送の HEVC を写して音声だけ AAC にした fragmented MP4 で返します
-(`X-Denpa-Codec: hevc`、`video/mp4`)。`?playable=` に `hevc` が無ければ、4K の局と同じく縮めて SDR にした `h264` (無ければ `av1`) を返します。
-TS の局の `raw` の応答ヘッダは、選局して PMT を読んでから返します。`hevc` は GPU が無くても写すだけで、`h264`・`av1` は 4K の局と同じく
+(`X-Denpa-Codec: hevc`、`video/mp4`)。`raw` でも中身は `X-Denpa-Codec` で見分けます。`?playable=` に `hevc` が無ければ、4K の局と同じく縮めて SDR にした
+`h264` (無ければ `av1`) を返し、どれも無ければストリームを閉じます (「再生できる形式がありません」)。
+ケーブル (`CATV`) の TS の局の `raw` の応答ヘッダは、選局して PMT を読んでから返します。ほかの種別は今までどおり待ちません。`hevc` は GPU が無くても写すだけで、`h264`・`av1` は 4K の局と同じく
 縮めて SDR に直します。字幕 (`GET /api/services/<id>/captions`) には、映像をリクエストしたときと同じ `codec=raw` を渡します
 (同じストリームを共有する)。時刻は放送の PTS ではなく、応答の fragmented MP4 の時刻です。
 

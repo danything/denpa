@@ -72,7 +72,7 @@ import { type Anchor, BroadcastClock, parseStart } from "#lib/ts/clock.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { KeyGate } from "#lib/ts/key-gate.js";
 import { MkvSplitter } from "#lib/ts/mkv.js";
-import { BUSY } from "#lib/ts/playback.js";
+import { BUSY, NO_FORMAT } from "#lib/ts/playback.js";
 import {
   type ServiceVideo,
   type Transport,
@@ -403,7 +403,7 @@ export function copiesVideo(
 
 /**
  * **TS に HEVC を入れて送る 4K の局の `hevc`。映像はエンコードせずに写す** (docs/stream.md「TS で送る 4K の局」)。
- * 入れ物の中の名前は `hvc1` (Safari は `hev1` を受け取らない)。音声は AAC の LATM で、MSE は受け取らないので
+ * コンテナ内のタグは `hvc1` (Safari は `hev1` を受け取らない)。音声は AAC の LATM で、MSE は受け取らないので
  * H.265 と同じ AAC にエンコードする (`audioArgs`)。GPU も、その場で変換する本数の枠も使わない
  */
 const HEVC_COPY: { input: string[]; filter: string; encoder: string[] } = {
@@ -1766,13 +1766,25 @@ class Session {
   /** エンコードし始める。**畳むまで戻らない** */
   async run(): Promise<void> {
     const label = `${this.channelType}:${this.channel}`;
-    // TS の局のライブの放送のままは、PMT を読んでから形式を決める (`runRaw`)
-    if (this.raw && this.transport === "ts" && this.source === undefined) {
-      if (this.program <= 0) this.formatKnown();
-    } else this.formatKnown();
+    // ケーブルの TS の局のライブの放送のままは、PMT を読んでから形式を決める (`runRaw`)
+    if (!this.readsVideo()) this.formatKnown();
     if (this.raw) return this.runRaw(label);
     if (this.passthrough) return this.runMmt(label);
     return this.runEncode(label);
+  }
+
+  /**
+   * 放送のままを送る前に PMT で映像のコーデックを見るか (`runRaw`)。ケーブル (`CATV`) の TS の局のライブだけ。
+   * TS に HEVC を入れて送る 4K の局はケーブルにしか無く、ほかの局は HTTP の応答ヘッダを PMT まで待たせない (`liveServed`)
+   */
+  private readsVideo(): boolean {
+    return (
+      this.raw &&
+      this.channelType === "CATV" &&
+      this.transport === "ts" &&
+      this.source === undefined &&
+      this.program > 0
+    );
   }
 
   /** 送る形式が決まったら呼ぶもの (`decided` を解く) */
@@ -3011,11 +3023,15 @@ class Session {
        * デコーダでは観られないので、HEVC の詰め替え (端末が HEVC を再生できなければエンコード) に替えて、エンコードの経路へ
        * 渡す (`servedFormat`・`switchFormat`)。絞る側 (`ServiceFilter`) も PMT を読むまで何も出さないので、待っても遅れない
        */
-      if (!chase && this.program > 0) {
+      if (this.readsVideo()) {
         const head = await peekPmt(input, this.program, PMT_WAIT);
         input = head.stream;
         if (this.stopped) return;
         const served = servedFormat(this.asked, head.video, this.playable);
+        if (served === null) {
+          this.died(label, "playable に HEVC・H.264・AV1 が無い", NO_FORMAT);
+          return;
+        }
         if (!served.raw) {
           this.switchFormat(served);
           return await this.runEncode(label, input);
@@ -3854,7 +3870,7 @@ function dropWarm(serviceId: number, by: Session): void {
  * **リクエストされた形式を、局の放送のコーデックに合わせて決め直す** (選局の `attend`・先回りの `warm`)。
  *
  * - 4K の局 (`broadcast` が `hevc`。TLV と、TS で送る局) の放送のまま (`raw`) は、放送の HEVC の詰め替え (`hevc`)。
- *   画面に送る放送のままはこれだけで、元の TS や 1 局に絞った TLV (`raw`) は HTTP の `codec=raw` だけが流す。
+ *   画面に送る放送のままはこれだけ。1 局に絞った TLV (`raw`) は HTTP の `codec=raw` だけが流す (TS で送る 4K の局の HTTP の `raw` も詰め替え。`servedFormat`)。
  *   4K の局の `hevc` は詰め替えなので GPU は要らない
  * - MPEG-2 の局の `hevc` は GPU でエンコードする。出せなければ H.264 にする (`liveHevc`。`downgraded`)
  */
@@ -4674,22 +4690,21 @@ function serviceOf(serviceId: number) {
  *
  * TS に HEVC を入れて送る 4K の局 (`video` が `hevc`) の放送のまま (`raw`) は、元の TS ではなく HEVC の詰め替え (`hevc`)。
  * 画面の MPEG-2 のデコーダ (WASM) は HEVC をデコードできない。端末が HEVC を再生できないと言っていれば
- * (`playable` に `hevc` が無い)、4K の局と同じく縮めて SDR にした H.264 (それも無ければ AV1)。`playable` が null なら言っていない。
+ * (`playable` に `hevc` が無い)、4K の局と同じく縮めて SDR にした H.264 (それも無ければ AV1)。どれも無ければ null
+ * (呼ぶ側が「再生できる形式がありません」で畳む)。`playable` が null なら言っていない。
  * それ以外 (MPEG-2 の局・放送のままでない) は、リクエストされたまま
  */
 export function servedFormat(
   asked: { codec: StreamCodec; raw: boolean },
   video: ServiceVideo | null,
   playable: readonly LiveFormat[] | null,
-): { codec: StreamCodec; raw: boolean } {
+): { codec: StreamCodec; raw: boolean } | null {
   if (video !== "hevc" || !asked.raw) return asked;
   if (playable === null || playable.includes("hevc"))
     return { codec: "hevc", raw: false };
-  return {
-    codec:
-      playable.includes("h264") || !playable.includes("av1") ? "h264" : "av1",
-    raw: false,
-  };
+  if (playable.includes("h264")) return { codec: "h264", raw: false };
+  if (playable.includes("av1")) return { codec: "av1", raw: false };
+  return null;
 }
 
 /**

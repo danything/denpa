@@ -39,7 +39,7 @@ import { undecodableReason } from "#lib/types.js";
  * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)。
  * 復号できない局 (`services.decodable`。スカパー！プレミアムと、B-CAS 以外の方式でスクランブルされたケーブルの局と、ACAS でスクランブルされたケーブルの 4K の局) は 409 で断る
  */
-export async function GET({ params, url }) {
+export async function GET({ params, url, request }) {
   const serviceId = parseId(params.serviceId);
   if (serviceId === null) error(400, "局 ID が不正です");
   // 復号できない局は選局せずに断る。流してもスクランブルされたままで映らない
@@ -75,6 +75,11 @@ export async function GET({ params, url }) {
   if (stream === "busy") error(503, BUSY);
   // 実際に流す形式。TS で送る 4K の局の放送のままは、PMT を読んでから替わる (`live.liveServed`)
   const served = await liveServed(stream);
+  // 待つ間に切られたら抜ける。応答を返していないので、ストリームの cancel は呼ばれない
+  if (request.signal.aborted) {
+    await stream.cancel();
+    return new Response(null, { status: 499 });
+  }
   const format = served === null ? codec : served.raw ? "raw" : served.codec;
   return new Response(stream, {
     headers: {

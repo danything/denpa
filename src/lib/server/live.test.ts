@@ -1479,6 +1479,8 @@ describe("TS で送る 4K の局のライブ", () => {
       codec: "av1",
       raw: false,
     });
+    // 再生できる形式が無い (呼ぶ側が「再生できる形式がありません」で畳む)
+    expect(servedFormat(raw, "hevc", ["raw"])).toBeNull();
     // MPEG-2 の局・読めなかったとき・放送のままでないものは、リクエストされたまま
     expect(servedFormat(raw, "mpeg2", null)).toEqual(raw);
     expect(servedFormat(raw, null, null)).toEqual(raw);
