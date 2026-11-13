@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 import { readIndoorHosts } from "../host";
 import {
@@ -181,8 +181,33 @@ function parseHwAllow(value: string | undefined): HwAllow {
   }
 }
 
+/** `settings()` が読むキー。1 回のクエリでまとめて読む */
+const SETTING_KEYS = [
+  "codec",
+  "hwAllow",
+  "liveHwAllow",
+  "keepOriginal",
+  "postalCode",
+  "prefecture",
+  "bmlNetwork",
+  "transcodeLimit",
+  "jikkyo",
+  "jikkyoNg",
+  "indoorHosts",
+  "recordLogo",
+] as const;
+
 export function settings(): Settings {
-  const flag = (key: string, fallback: boolean) => {
+  const rows = new Map(
+    orm()
+      .select({ key: settingsTable.key, value: settingsTable.value })
+      .from(settingsTable)
+      .where(inArray(settingsTable.key, [...SETTING_KEYS]))
+      .all()
+      .map((row) => [row.key, row.value]),
+  );
+  const stored = (key: (typeof SETTING_KEYS)[number]) => rows.get(key);
+  const flag = (key: (typeof SETTING_KEYS)[number], fallback: boolean) => {
     const value = stored(key);
     return value === undefined ? fallback : value === "true";
   };
