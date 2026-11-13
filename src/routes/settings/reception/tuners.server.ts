@@ -133,8 +133,11 @@ function remoteName(remote: string | undefined, all: Agent[]): string | null {
  * **アクセストークンにはエージェントごとの表を返さない** (カードを配る側の URL でエージェントのある場所が分かる。操作もできない。`agents.server.ts` と同じ)
  */
 export function load(locals: { token?: number }, all: Agent[], lists: Lists) {
+  const refused = tokenRefusal(locals);
   return {
-    tunerAgents: (tokenRefusal(locals) === null ? all : []).map((agent) => {
+    // 表を返さないときの理由 (「エージェントがありません」と出さない)
+    tunerRefusal: refused,
+    tunerAgents: (refused === null ? all : []).map((agent) => {
       const answer = lists.get(agent.id) ?? tunerList(agent);
       const card = cardStatus(agent).then((status) => ({
         ...status,
