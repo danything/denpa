@@ -76,9 +76,10 @@ test.describe("テレビのペアリング", () => {
       (await request.get("/api/recordings", { headers: auth })).status(),
     ).toBe(200);
 
-    // 番組表を見て、予約して、取り消す (テレビのアプリの番組表。docs/api.md)
+    // 番組表を見て、予約して、取り消す (テレビのアプリの番組表。docs/api.md)。
+    // 今日の放送日 (4:00 まで) ではなく今から 24 時間を取る。4:00 の直前は、今日の放送日に先の番組が残っていないことがある
     await syncEpg(request);
-    const guide = await request.get("/api/programs?type=GR", {
+    const guide = await request.get(`/api/programs?type=GR&from=${Date.now()}`, {
       headers: auth,
     });
     expect(guide.status()).toBe(200);
