@@ -4,8 +4,8 @@ import { indoorHost, parseIndoorHosts, readIndoorHosts } from "./host";
 import { homeHost } from "./niconico";
 
 /**
- * **家の中かは開いた名前で決める** (`indoorHost`)。世帯の設定に載せた名前と、プライベートの IP・`localhost`・`.local`・
- * `.home.arpa`。連携の戻り先 (`homeHost`) と違って CGNAT (VPN) は入れない
+ * **家の中かは開いた名前で決める** (`indoorHost`)。世帯の設定に載せた名前と、プライベートの IP・`localhost`・
+ * 家の中だけの名前 (`LOCAL_SUFFIXES`)。連携の戻り先 (`homeHost`) と違って CGNAT (VPN) は入れない
  */
 describe("ライブの自動で家の中とみるホスト", () => {
   test("載せた名前は家の中。大文字・末尾の点・角括弧は気にしない", () => {
@@ -26,6 +26,10 @@ describe("ライブの自動で家の中とみるホスト", () => {
       "localhost",
       "denpa.local",
       "tv.home.arpa",
+      // ログインなしで開ける名前 (`server/auth.ts` の `knownHost`) と同じ後ろ (`LOCAL_SUFFIXES`)
+      "nas.lan",
+      "denpa.internal",
+      "denpa.localhost",
       "[::1]",
       "[fd12:3456::1]",
       "[::ffff:c0a8:114]",
@@ -43,6 +47,12 @@ describe("ライブの自動で家の中とみるホスト", () => {
       "[2001:db8::1]",
     ])
       expect(indoorHost(host, [])).toBe(false);
+  });
+
+  test("連携の戻り先は denpa-hub が受け付ける `.local`・`.home.arpa` だけ", () => {
+    expect(homeHost("denpa.local")).toBe(true);
+    expect(homeHost("nas.lan")).toBe(false);
+    expect(indoorHost("nas.lan", [])).toBe(true);
   });
 
   test("連携の戻り先は今までどおり CGNAT も家の中", () => {

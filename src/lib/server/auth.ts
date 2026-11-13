@@ -1,5 +1,6 @@
 import { type NetworkInterfaceInfo, networkInterfaces } from "node:os";
 
+import { localName } from "../host";
 import { inAny, networks, normalize, overlaps, unreadable } from "./address";
 import { config } from "./config";
 import { pwaNames } from "./manifest";
@@ -162,15 +163,6 @@ export function trusted(address: string): boolean {
   return inAny(address, networks(config.trustedNetworks));
 }
 
-/** 名前の後ろがこれなら、外の DNS では引けない (家の中だけの名前。`.localhost` はブラウザが自分に向ける) */
-const LOCAL_SUFFIXES = [
-  ".localhost",
-  ".local",
-  ".lan",
-  ".home.arpa",
-  ".internal",
-];
-
 /**
  * **信頼するネットワークから、ログインなしで開いてよい名前か。**
  *
@@ -181,7 +173,7 @@ const LOCAL_SUFFIXES = [
  * そこで、攻める側が自分の名前として用意できないものだけを通す。
  *
  * - IP の直書き (IPv4・IPv6)、`localhost`、ドットの無い名前
- * - 家の中だけの名前 (`LOCAL_SUFFIXES`)
+ * - 家の中だけの名前 (`#lib/host.ts` の `LOCAL_SUFFIXES`)
  * - 自分の名前として設定にあるもの (`ALLOWED_HOSTS`、`PWA_NAMES`)
  *
  * `host` は `Host` ヘッダの値 (ポート付きでよい)。読めない形なら通さない
@@ -192,7 +184,7 @@ export function knownHost(host: string): boolean {
   if (normalize(name) !== null) return true;
   if (!/^[a-z0-9_.-]+$/.test(name)) return false;
   if (name === "localhost" || !name.includes(".")) return true;
-  if (LOCAL_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
+  if (localName(name)) return true;
   return ownNames().some((entry) =>
     entry.startsWith(".")
       ? name === entry.slice(1) || name.endsWith(entry)
