@@ -2014,18 +2014,22 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 4K の局の放送の HEVC を再生できるか (`#lib/hevc-4k.ts`)。4K の局を初めて開くときに 1 回だけ調べる (`begin`)。
-   * 調べるまでは undefined
+   * 4K の局の放送の HEVC を再生できるか (`probeBroadcastHevc`)。4K の局を初めて開くとき (`begin`) か、TS で送る 4K の局と
+   * 答えで分かったとき (`checkBroadcastHevc`) に 1 回だけ調べる。調べるまでは undefined
    */
   let broadcastHevc: boolean | undefined;
 
+  /** 放送の HEVC を再生できるかを調べる (`#lib/hevc-4k.ts`) */
+  function probeBroadcastHevc(): Promise<boolean> {
+    return broadcastHevcPlayable(browserHevcProbe(pickMediaSource()?.Source));
+  }
+
   /**
-   * TS に HEVC を入れて送る 4K の局と、答え (`tuned` の `broadcast`) で分かったときに確かめる (`begin` と同じ `#lib/hevc-4k.ts`)。
+   * TS に HEVC を入れて送る 4K の局と、答え (`tuned` の `broadcast`) で分かったときに確かめる。
    * 再生できなければ H.265 をやめて次の形式に移る (`giveUpCodec`)
    */
   function checkBroadcastHevc(): void {
-    const probe = browserHevcProbe(pickMediaSource()?.Source);
-    void broadcastHevcPlayable(probe).then((playable) => {
+    void probeBroadcastHevc().then((playable) => {
       broadcastHevc = playable;
       if (!playable && codec === "hevc" && !hevcGaveUp) giveUpCodec("hevc");
     });
@@ -2405,9 +2409,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
     // 4K の局なら、放送の HEVC を再生できるかを先に確かめる (1 回だけ。`#lib/hevc-4k.ts`)
     if (broadcastKind() === "hevc" && broadcastHevc === undefined) {
-      broadcastHevc = await broadcastHevcPlayable(
-        browserHevcProbe(pickMediaSource()?.Source),
-      );
+      broadcastHevc = await probeBroadcastHevc();
     }
     await prepareCompat();
     if (superseded(mine) || !pickFormat()) return;
@@ -2701,10 +2703,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             tuned !== null &&
             tuned.broadcast !== "hevc"
           ) {
+            /*
+             * リクエストする形式も、4K の局で「放送のまま」を選んだときと同じ `hevc` にする (`pickFormat`)。`tuned.codec` が
+             * 前のまま (`h264` など) だと、字幕の選び直しのように選局し直さずに送る指示で、HEVC の詰め替えではなくエンコードになる
+             */
             tuned = { ...tuned, broadcast: "hevc" };
             if (!notice.raw) {
               rawChosen = false;
               if (notice.codec !== "audio") codec = notice.codec;
+              tuned = { ...tuned, codec, raw: false };
             }
             if (broadcastHevc === undefined) checkBroadcastHevc();
           }

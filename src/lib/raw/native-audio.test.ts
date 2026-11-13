@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 
 import { NativeAudio } from "./native-audio";
 import type { AudioInput, AudioOutput } from "./native-audio-protocol";
+import { audioContext } from "./seam";
 
 class Param {
   value = 1;
@@ -162,6 +163,7 @@ function setup(decoder = "/api/live/mpeg2") {
     video as unknown as HTMLVideoElement,
     (reason) => errors.push(reason),
     decoder,
+    audioContext("interactive"),
   );
   const worker = TestWorker.all[0]!,
     context = Context.all[0]!;
@@ -204,7 +206,7 @@ test("デコード待ちが上限を超えたら打ち切って片付ける", ()
   audio.feed(new Uint8Array(8 * 1024 * 1024), false);
   expect(errors).toHaveLength(1);
   expect(worker.terminated).toBe(true);
-  expect(context.state).toBe("closed");
+  expect(context.sources.every((node) => node.stopped)).toBe(true);
 });
 test("畳んだあとに来たコマは鳴らさない", () => {
   const { worker, context, audio } = setup();
@@ -275,27 +277,28 @@ test("自動再生を断られたら、ふだんの「音を出す」に渡す",
   expect(audio.blocked).toBe(false);
 });
 
-test("音の経路を組めなかったら、作りかけの AudioContext を閉じる", () => {
+test("音の経路を組めなかったら、worker を作らずに例外を投げ、渡した AudioContext は閉じない", () => {
   Context.failGraph = true;
+  const context = new Context();
   let threw = false;
   try {
     new NativeAudio(
       new Video() as unknown as HTMLVideoElement,
       () => {},
       "/api/live/mpeg2",
+      context as unknown as AudioContext,
     );
   } catch {
     threw = true;
   }
   expect(threw).toBe(true);
-  expect(Context.all[0]!.state).toBe("closed");
+  expect(context.state).toBe("running");
   expect(TestWorker.all).toHaveLength(0);
 });
 
 // #2728。iOS の Safari は、押したとき以外に作った AudioContext を止めたまま始める。画質を切り替えて作り直しても、動いている AudioContext を使い続ける
 test("渡した AudioContext は畳んでも閉じず、作り直した次の音でもそのまま使う", () => {
   const shared = new Context();
-  void shared.resume();
   const make = () =>
     new NativeAudio(
       new Video() as unknown as HTMLVideoElement,
