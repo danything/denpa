@@ -381,7 +381,8 @@
               </p>
               <p>
                 家の中かは、開いたアドレスの名前で決めます。192.168.x.x
-                のような家の中の IP アドレス・localhost・.local・.home.arpa
+                のような家の中の IP
+                アドレス・localhost・.local・.lan・.home.arpa・.internal
                 で開いたときは、書かなくても家の中です。VPN のアドレス
                 (100.64.0.0/10) は家の中に入れません。
               </p>

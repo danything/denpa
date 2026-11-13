@@ -1780,13 +1780,17 @@ class Session {
   }
 
   /**
-   * 放送のままを送る前に PMT で映像のコーデックを見るか (`runRaw`)。ケーブル (`CATV`) の TS の局のライブで、元の TS のまま送るもの (`keepsTs`) でないときだけ。
+   * 送る形式を PMT で映像のコーデックを見てから決めるか。ケーブル (`CATV`) の TS の局のライブで、次のどちらかのときだけ。
+   *
+   * - 放送のまま (`runRaw`)。元の TS のまま送るもの (`keepsTs`) は除く
+   * - 段を下げた H.265 (`runEncode`)。4K の局と分かったら、段を下げるコーデックを選び直す (`liveRungCodec`)
+   *
    * TS に HEVC を入れて送る 4K の局はケーブルにしか無く、ほかの局は HTTP の応答ヘッダを PMT まで待たせない (`liveServed`)
    */
   private readsVideo(): boolean {
     return (
-      this.raw &&
-      !this.keepsTs &&
+      ((this.raw && !this.keepsTs) ||
+        (!this.raw && this.codec === "hevc" && this.rung !== 0)) &&
       this.channelType === "CATV" &&
       this.transport === "ts" &&
       this.source === undefined &&
@@ -1898,16 +1902,17 @@ class Session {
        * H.265 と段を下げた AV1 はソフトウェアに降りられない (`softwareEncodes`)。画面は諦めて次の形式をリクエストし直す
        * (`live-player.svelte.ts`)。段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
        */
-      const gpuOnly =
+      // コーデックは PMT を読んだあとで替わることがある (下の 4K の局の段を下げた H.265) ので、そのつど見る
+      const gpuOnly = () =>
         this.codec !== "audio" && !softwareEncodes(this.codec, this.rung);
-      const gaveUp = this.codec === "hevc" ? HEVC_GAVE_UP : AV1_GAVE_UP;
+      const gaveUp = () => (this.codec === "hevc" ? HEVC_GAVE_UP : AV1_GAVE_UP);
       const noGpu = () =>
-        gpuOnly &&
+        gpuOnly() &&
         hw === null &&
         !copiesVideo(this.transport, video, this.codec);
       // PMT を読むなら、映像のコーデックが分かってから決める (下。TS で送る 4K の局の `hevc` は GPU を使わない)
       if (!peeks && noGpu()) {
-        this.died(label, `${this.codec} を GPU でエンコードできない`, gaveUp);
+        this.died(label, `${this.codec} を GPU でエンコードできない`, gaveUp());
         return;
       }
       /*
@@ -1956,6 +1961,27 @@ class Session {
             wanted = null;
           if (head.video === "hevc") {
             video = "hevc";
+            /*
+             * **ライブの段を下げた H.265 は、4K の局として段を下げるコーデックを選び直す** (`liveRungCodec`)。4K の局の H.265 は
+             * 放送の HEVC を写すもので段を下げられず、そのままだと 4K の HEVC を送ってしまう。選局の時点では MPEG-2 の局として
+             * 選んでいる (画面が HEVC と知らない初回と、HTTP の `?codec=hevc&rung=`)。追っかけは選局の答えを出さないので替えない。
+             * 端末が再生できる形式を言っていなければ (画面の WebSocket・`?playable=` の無い HTTP)、どの端末でも再生できる H.264
+             */
+            const lowered =
+              this.source === undefined &&
+              this.codec === "hevc" &&
+              this.rung !== 0;
+            if (lowered) {
+              this.codec = liveRungCodec(
+                (this.playable ?? []).filter(
+                  (format): format is LiveCodec => format !== "raw",
+                ),
+                "hevc",
+              );
+              console.log(
+                `[live] ${this.id}: TS に HEVC が入っているので、段 ${this.rung} を ${this.codec} でエンコードします`,
+              );
+            }
             // デコードを GPU に載せない経路で選び直す。映像を写すなら GPU は使わない
             hw = pickHw();
             /*
@@ -1964,8 +1990,10 @@ class Session {
              */
             const found = !this.hevcVideo;
             this.hevcVideo = true;
-            if (found && this.source === undefined) this.retell();
+            if ((found || lowered) && this.source === undefined) this.retell();
           }
+          // HTTP のライブは、段を下げた H.265 の形式が決まるまで応答ヘッダを待っている (`readsVideo`)
+          this.formatKnown();
           if (this.stopped || noGpu()) {
             /*
              * 追っかけは読み元を閉じる (`stream.chunks` が cancel する)。返ってきた `head.stream` はまだ読み始めて
@@ -1978,7 +2006,7 @@ class Session {
               this.died(
                 label,
                 `${this.codec} を GPU でエンコードできない`,
-                gaveUp,
+                gaveUp(),
               );
             return;
           }
@@ -2106,12 +2134,12 @@ class Session {
            * 覚えない) 降りる。画面は次の形式をリクエストし直し、覚えている間は H.265 の指示を H.264 にする (`liveHevc`)。
            * 段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
            */
-          if (gpuOnly) {
+          if (gpuOnly()) {
             blameLiveHw(this.codec, hw, this.busy);
             this.died(
               label,
               `GPU (${hw.way.device} の ${hw.way.kind}) で ${this.codec} (段 ${this.rung}) をエンコードできなかった`,
-              gaveUp,
+              gaveUp(),
             );
             return;
           }

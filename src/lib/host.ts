@@ -69,10 +69,30 @@ function normalHost(hostname: string): string {
 }
 
 /**
+ * **家の中だけの名前の後ろ。** 外の DNS では引けない (`.localhost` はブラウザが自分に向ける)。
+ * ログインなしで開ける名前 (`server/auth.ts` の `knownHost`) と、ライブの「自動」の家の中 (`indoorHost`) が同じものを使う。
+ * 連携の戻り先 (`privateHost`) は denpa-hub が受け付ける `.local`・`.home.arpa` だけで、これとは別
+ */
+export const LOCAL_SUFFIXES = [
+  ".localhost",
+  ".local",
+  ".lan",
+  ".home.arpa",
+  ".internal",
+] as const;
+
+/** 家の中だけの名前か (`LOCAL_SUFFIXES`)。`name` は小文字にそろえたもの */
+export function localName(name: string): boolean {
+  return LOCAL_SUFFIXES.some(
+    (suffix) => name.length > suffix.length && name.endsWith(suffix),
+  );
+}
+
+/**
  * **ライブの「自動」で家の中とみるホストか** (`#lib/live-choice.ts` の `autoCodec`)。
  *
  * 世帯の設定の「家の中の名前」(`indoorHosts`) に載っている名前なら家の中。載っていなくても、
- * プライベートの IP をそのまま打って開いた・`localhost`・`.local`・`.home.arpa` なら家の中。
+ * プライベートの IP をそのまま打って開いた・`localhost`・家の中だけの名前 (`LOCAL_SUFFIXES`) なら家の中。
  * **CGNAT (100.64.0.0/10) は入れない。** VPN 越し (外から) のことが多い
  */
 export function indoorHost(
@@ -80,7 +100,9 @@ export function indoorHost(
   indoorHosts: readonly string[],
 ): boolean {
   const host = normalHost(hostname);
-  return indoorHosts.includes(host) || privateHost(host, false);
+  return (
+    indoorHosts.includes(host) || localName(host) || privateHost(host, false)
+  );
 }
 
 /** 家の中の名前の数の上限 */
