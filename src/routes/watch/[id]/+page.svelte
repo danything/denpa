@@ -552,6 +552,8 @@
           : `${reason}。${codecLabel(fresh.codec)} に切り替えました`,
       );
       replay(fresh, position);
+      // 替える先が無い。断り書きが消えたあとも黒いままにせず、観られないことを幕に出す (開いたときの `picked === null` と同じ)
+      if (fresh === null) broken = true;
       return;
     }
     let next: CanvasCodec | null = null;
@@ -2648,11 +2650,11 @@
   function previewSeek(to: number): Promise<void> {
     const target = video;
     if (target === null || canvas !== null) return Promise.resolve();
-    return new Promise((resolve) => {
+    return new Promise((arrived) => {
       const done = () => {
         clearTimeout(timer);
         target.removeEventListener("seeked", done);
-        resolve();
+        arrived();
       };
       // 着かないまま (読めない・遅い) でも次へ進めるように
       const timer = setTimeout(done, 1000);

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { SERVICE_TYPE_LABEL } from "#lib/format.js";
 import { parseId } from "#lib/id.js";
 import { type Agent, listAgents } from "#lib/server/agents.js";
+import { tokenRefusal } from "#lib/server/auth.js";
 import { config } from "#lib/server/config.js";
 import {
   checkContracts as verifyContracts,
@@ -129,10 +130,14 @@ function remoteName(remote: string | undefined, all: Agent[]): string | null {
  * **チューナーとカードリーダーの表を、エージェントごとに** (見出しはエージェントの名前。1 台でも出す)。
  * 相手待ちのものは promise のまま返して後から流し込む (待つと画面が出ない)。
  * 繋がらなかった理由も一緒に返す。空の一覧だけ渡すと「チューナーが 1 台も無い」と区別が付かない
+ * **アクセストークンにはエージェントごとの表を返さない** (カードを配る側の URL でエージェントのある場所が分かる。操作もできない。`agents.server.ts` と同じ)
  */
-export function load(all: Agent[], lists: Lists) {
+export function load(locals: { token?: number }, all: Agent[], lists: Lists) {
+  const refused = tokenRefusal(locals);
   return {
-    tunerAgents: all.map((agent) => {
+    // 表を返さないときの理由 (「エージェントがありません」と出さない)
+    tunerRefusal: refused,
+    tunerAgents: (refused === null ? all : []).map((agent) => {
       const answer = lists.get(agent.id) ?? tunerList(agent);
       const card = cardStatus(agent).then((status) => ({
         ...status,
@@ -200,9 +205,15 @@ async function rowsOf(agent: Agent) {
   return contractRows(await cardStatus(agent));
 }
 
+/**
+ * **どれもアクセストークン (テレビのアプリ) では断る** (403。`tokenRefusal`)。テレビのアプリに渡した資格で、チューナーとカードリーダーの設定を差し替えさせない。
+ * 契約と復号の確認も、エージェントごとの表を返さない (`load`) ので一緒に断る
+ */
 export const actions = {
   /** 機材の定義を書き換える。渡すのはデバイスと種別だけ (選局はエージェントが組み立てる) */
-  tuners: async ({ request }) => {
+  tuners: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const form = await request.formData();
     const agent = agentFrom(form);
     if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
@@ -298,7 +309,9 @@ export const actions = {
   },
 
   /** 定義を消して自動検出に戻す。挿さっている機材をエージェントが自分で見つける */
-  tunersAuto: async ({ request }) => {
+  tunersAuto: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const agent = agentFrom(await request.formData());
     if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
     return save([], agent);
@@ -308,7 +321,9 @@ export const actions = {
    * 使わないカードリーダーを入れ替える。行ごとに `reader.<番号>` にリーダーの名前、`reader-use.<番号>` にスイッチ
    * (外れていれば送られてこない)。使う最後の 1 台をオフにする聞き返しは画面でする (`AgentTuners.svelte`)
    */
-  cards: async ({ request }) => {
+  cards: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const form = await request.formData();
     const agent = agentFrom(form);
     if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
@@ -329,7 +344,9 @@ export const actions = {
   },
 
   /** B-CAS カード内の CA 契約情報を確認し、各有料局の契約・有効期限を更新する */
-  checkContracts: async ({ request }) => {
+  checkContracts: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const agent = agentFrom(await request.formData());
     if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
     try {
@@ -343,7 +360,9 @@ export const actions = {
   },
 
   /** 対象の局のストリームを数秒開いて、復号できるかを試す */
-  testDecode: async ({ request }) => {
+  testDecode: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const form = await request.formData();
     const agent = agentFrom(form);
     if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
@@ -374,7 +393,9 @@ export const actions = {
   },
 
   /** 確かめていない有料の局を、物理チャンネルごとに 1 回の選局でまとめて確かめる */
-  testDecodeUnverified: async ({ request }) => {
+  testDecodeUnverified: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const agent = agentFrom(await request.formData());
     if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
     try {

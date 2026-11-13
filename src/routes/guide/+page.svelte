@@ -23,6 +23,7 @@
   import ProgramState from "#lib/components/ProgramState.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, { warningNotice } from "#lib/components/Toasts.svelte";
+  import { writeCookie } from "#lib/cookie.js";
   import {
     beforeJapanese,
     channelNumber,
@@ -160,8 +161,8 @@
     subchannels = on;
     // 列が増減するだけなので、少しずつ描き直さない (`drawAll`)
     drawAll();
-    // パスは接頭辞込み (録画一覧の「まとめて表示」と同じ)
-    document.cookie = `${SUBCHANNELS_COOKIE}=${on ? "1" : "0"}; path=${resolve("")}; max-age=31536000; samesite=lax`;
+    // パスは接頭辞込み (`cookie.writeCookie`。録画一覧の「まとめて表示」と同じ)
+    writeCookie(SUBCHANNELS_COOKIE, on ? "1" : "0", resolve(""));
   }
 
   /**

@@ -29,7 +29,9 @@
         <p>ルールの「優先度」は予約どうしを比べるもので、この順とは別です。</p>
       {/snippet}
     </Lead>
-    {#if data.tunerAgents.length === 0}
+    {#if data.tunerRefusal !== null}
+      <p class="small muted">{data.tunerRefusal}</p>
+    {:else if data.tunerAgents.length === 0}
       <p class="small muted">
         エージェントがありません。上の「エージェントを追加」から登録してください。
       </p>

@@ -45,6 +45,7 @@
   } from "#lib/components/home/placement.js";
   import TimelineBar from "#lib/components/home/TimelineBar.svelte";
   import TimelineEntry from "#lib/components/home/TimelineEntry.svelte";
+  import { writeCookie } from "#lib/cookie.js";
   import { type DetailSeed, programDetail } from "#lib/detail.svelte.js";
   import { applyEncodeProgress } from "#lib/encode-live.svelte.js";
   import {
@@ -450,9 +451,9 @@
     if (openedGroups.has(key)) openedGroups.delete(key);
     else openedGroups.add(key);
   }
-  /** 端末に覚える (サーバが読む)。パスは接頭辞込み (`live-player.svelte.ts` の `remember` と同じ) */
+  /** 端末に覚える (サーバが読む。`cookie.writeCookie`) */
   function remember(name: string, on: boolean): void {
-    document.cookie = `${name}=${on ? "1" : "0"}; path=${resolve("")}; max-age=31536000; samesite=lax`;
+    writeCookie(name, on ? "1" : "0", resolve(""));
   }
   function setGrouped(on: boolean): void {
     grouped = on;

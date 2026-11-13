@@ -99,7 +99,7 @@ describe("insertCue", () => {
   });
 });
 
-/** **待ち (TIME) のある字幕は、次が来なくても消える** (libaribcaption の描き手と同じ) */
+/** **待ち (TIME) のある字幕は、次が来なくても消える** (libaribcaption のレンダラと同じ) */
 describe("showing", () => {
   const page = (duration: number | null) => ({
     v: 1 as const,
