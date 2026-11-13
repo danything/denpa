@@ -877,7 +877,7 @@ AV1・H.265 の VBR がどのドライバでも通るか、段を下げた変換
 - 局の一覧では MPEG-2 の局と見分けられません。局の行にも覚えず、セッションを開くたびに PMT を読みます (`captions.ts` の `peekPmt`・`pmtVideo`)
 - 放送のまま (`raw`) をリクエストされたら、元の TS ではなく HEVC の詰め替えを送ります (`live.servedFormat`)。画面の MPEG-2 のデコーダ (WASM) は HEVC をデコードできないためです。
   詰め替えは ffmpeg で、映像は写し (`-c:v copy -tag:v hvc1`)、音声だけ AAC にエンコードします (MSE は LATM を受け取らない)。GPU も、その場で変換する本数の枠も使いません
-- `hevc` をリクエストされたときも同じく写します (`live.copiesVideo`)。H.265 にエンコードはしません
+- `hevc` をリクエストされたときも同じく写します (`live.copiesVideo`)。H.265 にエンコードはしません。HTTP の `?codec=hevc` は、GPU で H.265 を出せなければ選局の前に `h264` になります (`viewing.askedFormat`)
 - `h264`・`av1` は 4K の局と同じく、インタレ解除をせずに 1080p (段を下げれば段の高さ) に縮め、HLG を SDR の 8 ビットに直してエンコードします (`live.uhdVideoArgs`)。
   デコードは CPU で、GPU でエンコードするときも直したものを上げて渡します。MPEG-2 の局と同じ経路 (`deinterlace_vaapi`・GPU のデコード) を通していた頃は、
   VA-API が `Error reinitializing filters` で止まり、ソフトウェアに降りていました

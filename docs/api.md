@@ -5,7 +5,7 @@
 
 - **認証は画面と同じです** ([下記](#認証))。`TRUSTED_NETWORKS` に入っている相手はそのまま通ります
   (家の LAN の Home Assistant など。名前で呼ぶなら [ALLOWED_HOSTS](auth.md#ログインなしで開ける名前-allowed_hosts) に書く)。それ以外はログインか、アクセストークンが要ります
-- **書き込み (POST・PATCH・DELETE) には `Content-Type: application/json` を付けます** (本文が無い DELETE でも。画像を送る [`POST /api/clips`](#切り抜き-post-apiclips) は除く)。
+- **書き込み (POST・PATCH・DELETE) には `Content-Type: application/json` を付けます** (本文が無い DELETE でも。画像そのものを送る [`POST /api/clips`](#切り抜き-post-apiclips) は除く)。
   付けないと、SvelteKit の CSRF の守りが「よそのサイトからのフォーム送信」とみなして 403 を返します
   (アプリは Origin を付けないため)
 - 設定の画面からだけ使うもの (denpa を別の機械へ移す `/settings/integrations/transfer/…` など) はここに載せません。
@@ -135,8 +135,9 @@
 fragmented MP4 で返します (`X-Denpa-Codec: hevc`、`video/mp4`)。中身は `X-Denpa-Codec` で見分けます。`?playable=` に `hevc` が無ければ、4K の局と同じく
 縮めて SDR にした `h264` (無ければ `av1`) を返し、どれも無ければストリームを閉じます (「再生できる形式がありません」)。
 ケーブル (`CATV`) の TS の局で `?playable=` を付けた `raw` は、選局して PMT を読んでから応答ヘッダを返します。ほかは今までどおり待ちません。
-`hevc` は GPU が無くても写すだけで、`h264`・`av1` は 4K の局と同じく縮めて SDR に直します。字幕 (`GET /api/services/<id>/captions`) には、
-映像をリクエストしたときと同じ `codec=raw` を渡します (同じストリームを共有する)。HEVC に替えたときの時刻は、放送の PTS ではなく応答の fragmented MP4 の時刻です。
+替えた `hevc` は GPU が無くても写すだけで、`h264`・`av1` は 4K の局と同じく縮めて SDR に直します。`?codec=hevc` を直に渡したときは MPEG-2 の局と同じく、
+GPU で H.265 を出せなければ選局の前に `h264` になります。字幕 (`GET /api/services/<id>/captions`) には、映像に渡した `codec=raw` か、
+応答の `X-Denpa-Codec` を渡します (どちらも同じストリームを共有する)。HEVC に替えたときの時刻は、放送の PTS ではなく応答の fragmented MP4 の時刻です。
 
 `?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。音声だけを聴くとき向け。
 映像をエンコードしないので軽い。録画の `audio` と同じ書き方です。`codec` と一緒に渡すと、`audio=only` を優先します。
@@ -893,7 +894,8 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 観ている 1 コマを置きます。本文は次のどちらかです (画像の形式は `Content-Type` を見ずに中身で見分けます)。
 
 - **`multipart/form-data`** … `frame` (映像。PNG・JPEG・WebP) と、出していた重ね `captions` (字幕)・`comments` (実況のコメント)。
-  重ねは映像と同じ縦横の透明な PNG で、出していなかったものは省きます。送った重ねは、あとから出し入れできます (下の「重ねの出し入れ」)
+  重ねは映像と同じ縦横の透明な PNG で、出していなかったものは省きます。送った重ねは、あとから出し入れできます (下の「重ねの出し入れ」)。
+  SvelteKit の CSRF の守りが multipart をフォームの送信とみなすので、`Origin` を付けない相手 (アプリ・スクリプト) が送ると `403` です
 - **画像そのもの** (PNG・JPEG・WebP) … 重ねを分けずに 1 枚で。出し入れはできません
 
 どこで撮ったかは URL の問い合わせで渡し、番組名・局名・番組の始めからの位置はサーバが引きます。

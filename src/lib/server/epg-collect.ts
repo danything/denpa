@@ -730,7 +730,7 @@ export async function drain<J extends { channel: { type: string } }>(
   options: {
     backoff?: number;
     idleLimit?: number;
-    /** 待つ。`freed` はどれかの処理が 1 件を終えたら解ける */
+    /** 待つ。`freed` はどれかの処理が 1 件を終えたら解決する */
     wait?: (ms: number, freed: Promise<void>) => Promise<void>;
     /** 1 件を列へ戻したとき (進み具合の残りを足す) */
     requeued?: (job: J) => void;

@@ -381,9 +381,9 @@ interface EncodeOptions {
 const MIN_SKIP = 0.05;
 
 /**
- * 先頭から捨てる長さ。**エンコードするほうと字幕を作るほうで同じ値を使う。**
+ * 先頭から捨てる長さ。**エンコードするほうと CM 検出のやり直し (`detectCm`。`encode_skip` の無い古い録画) で同じ値を使う。**
  *
- * ここが食い違うと、捨てたぶんだけ字幕がずれる。片方だけ「短いから捨てない」と
+ * ここが食い違うと、捨てたぶんだけチャプターがずれる。片方だけ「短いから捨てない」と
  * 判断することがないよう、判断そのものをここ 1 か所に置く
  */
 export function headSkip(videoStart: number | undefined): number {
@@ -1394,12 +1394,11 @@ export function encodeAttempts(
 
 async function runJob(jobId: number): Promise<void> {
   const { signal, recording } = startJob(jobId);
-  const input = recording === undefined ? null : encodeSource(recording);
-
   if (recording === undefined) {
     markFailed(jobId, "録画が見つかりません");
     return;
   }
+  const input = encodeSource(recording);
   if (input === null) {
     fail(jobId, recording, "元の TS がありません");
     return;
@@ -2109,14 +2108,17 @@ async function runJob(jobId: number): Promise<void> {
     }),
   });
   /*
-   * **もう一方 (H.265・H.264) の隣にもポスターを複製しておく** (同じ画像。ffmpeg を
-   * もう一度は回さない)。主を消すと残ったほうが主に繰り上がるので、
-   * そのときも画面のサムネイルが途切れない
+   * **もう一方 (H.265・H.264) の隣にも、ポスターとデータ放送の変化ログを複製しておく** (同じもの。ffmpeg を
+   * もう一度は回さない)。主を消すと残ったほうが主に繰り上がるので (`files.reconcile`)、
+   * そのときも画面のサムネイルとデータ放送が途切れない
    */
-  const primaryPoster = sidecarPaths(output).thumbnail;
+  const from = sidecarPaths(output);
   for (const other of [hevc, alt]) {
-    if (other !== null && existsSync(primaryPoster))
-      copyFileSync(primaryPoster, sidecarPaths(other).thumbnail);
+    if (other === null) continue;
+    const to = sidecarPaths(other);
+    if (existsSync(from.thumbnail)) copyFileSync(from.thumbnail, to.thumbnail);
+    if (existsSync(from.dataBroadcast))
+      copyFileSync(from.dataBroadcast, to.dataBroadcast);
   }
 
   // 復号した TS は作業用。元の TS は残したままなので、やり直せる
@@ -2136,7 +2138,7 @@ async function runJob(jobId: number): Promise<void> {
   /*
    * **エンコードしている間に録画が消されていたら、置いたものを消して中止にする。** 削除 (`files.deleteRecordingFiles`。
    * 端末の削除の再送も来る) は走っているジョブを待たないので、ここで行に書き戻すと、消した行に置き場のパスが入り、
-   * どの片付け (`reconcile` は消していない行だけを見る) にも拾われないファイルが残る。ここから行を書くまで await を挟まない
+   * どの片付け (`reconcile` は消していない行だけを見る) も消さないファイルが残る。ここから行を書くまで await を挟まない
    */
   const current = orm()
     .select({ deleted: recordings.deleted_at })
@@ -2399,7 +2401,7 @@ async function detectCm(
     }
     for (const [i, file] of files.entries()) renameSync(outputs[i]!, file);
   } finally {
-    // 投げたときも書きかけ (`.post`) を残さない。片付け (`files.orphan`) も拾うが、拾うのは書いてから 1 時間経ったあと (`files.SETTLE`)
+    // 投げたときも書きかけ (`.post`) を残さない。片付け (`files.orphan`) も消すが、消すのは書いてから 1 時間経ったあと (`files.SETTLE`)
     discard();
     removeIfExists(chapters);
   }

@@ -4,7 +4,7 @@
  * 前段 (Home Assistant の Ingress・k8s の Ingress で `/denpa` を剥がすもの) は接頭辞を
  * 剥がしてから渡してくるので、こちらに見えるのは `/guide` でも、ブラウザは
  * `/api/hassio_ingress/<token>/guide` にいる。接頭辞を設定させない (Ingress の
- * 接頭辞はトークン入りで毎回変わる)。代わりに:
+ * 接頭辞はトークン入りで毎回変わる)。代わりに次のようにする。
  *
  * - 画面の中は `resolve` (`$app/paths`) で先頭に付ける。SvelteKit はこれをブラウザのいる
  *   URL から求めるので、接頭辞がそのまま入る (paths.relative。既定)
