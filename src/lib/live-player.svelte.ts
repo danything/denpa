@@ -51,6 +51,7 @@ import {
   slipHidden,
   unslipper,
 } from "#lib/components/player/unslip.js";
+import { writeCookie } from "#lib/cookie.js";
 import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
@@ -233,8 +234,8 @@ function remember(target: Tuned, choice: LiveChoice): void {
       choice,
     }),
   );
-  // パスは接頭辞込み。`/live` と決め打ちすると、前段の接頭辞の下では読む画面に届かない
-  document.cookie = `${LAST_COOKIE}=${value}; path=${resolve("live")}; max-age=31536000; samesite=lax`;
+  // パスは接頭辞込み (`cookie.writeCookie`)
+  writeCookie(LAST_COOKIE, value, resolve("live"));
 }
 
 /**

@@ -25,7 +25,7 @@ export async function load({ locals }) {
   );
   return {
     ...agents.load(locals, all, lists),
-    ...tuners.load(all, lists),
+    ...tuners.load(locals, all, lists),
     ...channels.load(),
     ...logos.load(),
     ...broadcast.load(),

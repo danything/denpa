@@ -143,6 +143,7 @@ export function sameOrigin(request: Request, url: URL): boolean {
  * - 世帯のニコニコのアカウントを差し替える
  * - ほかのテレビのアプリのアクセストークンを取り消す
  * - エージェントを登録・名前の変更・URL の変更・削除する (設定の「受信」)
+ * - チューナーの定義・カードリーダーを書き換える、カードの契約と復号を確かめる (設定の「受信」のチューナーの節)
  */
 export function tokenRefusal(locals: { token?: number }): string | null {
   return locals.token === undefined
