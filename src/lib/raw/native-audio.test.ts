@@ -292,6 +292,26 @@ test("音の経路を組めなかったら、作りかけの AudioContext を閉
   expect(TestWorker.all).toHaveLength(0);
 });
 
+// #2728。iOS の Safari は、押したとき以外に作った AudioContext を止めたまま始める。画質を切り替えて作り直しても、動いている AudioContext を使い続ける
+test("渡した AudioContext は畳んでも閉じず、作り直した次の音でもそのまま使う", () => {
+  const shared = new Context();
+  void shared.resume();
+  const make = () =>
+    new NativeAudio(
+      new Video() as unknown as HTMLVideoElement,
+      () => {},
+      "/api/live/mpeg2",
+      shared as unknown as AudioContext,
+    );
+  const first = make();
+  first.destroy();
+  expect(shared.state).toBe("running");
+  audio = make();
+  expect(audio.blocked).toBe(false);
+  // 新しい AudioContext は作らない
+  expect(Context.all).toHaveLength(1);
+});
+
 // #2474。波形が途中で 0 に飛ぶ・0 から飛ぶと「プツッ」と聞こえる
 test("映像が止まったら、鳴っている音を絞りきってから止める", () => {
   const { video, worker, context } = setup();

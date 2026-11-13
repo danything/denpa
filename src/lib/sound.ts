@@ -167,6 +167,9 @@ export class Outlet {
   destroy(): void {
     if (this.gone) return;
     this.gone = true;
+    // AudioContext を使い回す側 (`NativeAudio` の `shared`) のために、自分の経路を外しておく
+    this.input.disconnect();
+    this.tail.disconnect();
     if (this.out !== null) {
       this.out.audio.pause();
       this.out.audio.srcObject = null;
