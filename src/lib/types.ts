@@ -80,6 +80,13 @@ export const BCAS_SYSTEM_ID = 0x0005;
 export type Transport = "ts" | "tlv";
 
 /**
+ * TS の局の映像のコーデック。局の PMT にある映像の stream_type から決める (`server/captions.ts` の `pmtVideo`)。
+ * 覚えておかず、ライブと追っかけのセッションが開くたびに読む。
+ * ケーブルの 4K の局には、TS に HEVC を入れて送る局がある (docs/stream.md「TS で送る 4K の局」)
+ */
+export type ServiceVideo = "mpeg2" | "h264" | "hevc";
+
+/**
  * エージェントが復号できる CA_system_id。伝送の形式ごと。**どの方式に対応するかは、この表だけで決める。**
  * 4K の放送 (TLV) の CA_system_id は B-CAS と同じ `0x0005` でも、B-CAS のカードでは復号できない (ACAS が要る)。
  * ACAS に対応したら `tlv` に足す

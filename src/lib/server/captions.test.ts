@@ -28,7 +28,8 @@ import {
   CaptionText,
   NO_SUBTITLE,
   pagesFromMkv,
-  peekCaptions,
+  peekPmt,
+  pmtVideo,
   rawCaptionArgs,
   textFrame,
   TrackList,
@@ -193,7 +194,7 @@ async function readAll(
 }
 
 /**
- * **字幕があるかは ffmpeg を起動する前に PMT で分かる** (`peekCaptions`)。無い放送に字幕の出力を要求すると
+ * **字幕があるかは ffmpeg を起動する前に PMT で分かる** (`peekPmt`)。無い放送に字幕の出力を要求すると
  * ffmpeg は入力を探り終えてから終了し、起動し直すぶん映像が遅れる
  */
 describe("PMT で字幕の本数を見る", () => {
@@ -245,14 +246,14 @@ describe("PMT で字幕の本数を見る", () => {
     const video = packetize(VIDEO_PID, new Uint8Array(10));
     const ts = head([]);
     const parts = [video, ts.subarray(0, 200), ts.subarray(200), video];
-    const peeked = await peekCaptions(chunksOf(parts), SERVICE, 1_000);
+    const peeked = await peekPmt(chunksOf(parts), SERVICE, 1_000);
     expect(peeked.count).toBe(0);
     expect(await readAll(peeked.stream)).toEqual(parts);
   });
 
   test("字幕があれば本数", async () => {
     const parts = [head([[0x06, 0x130, captionDescriptors()]])];
-    const peeked = await peekCaptions(chunksOf(parts), SERVICE, 1_000);
+    const peeked = await peekPmt(chunksOf(parts), SERVICE, 1_000);
     expect(peeked.count).toBe(1);
     expect(await readAll(peeked.stream)).toEqual(parts);
   });
@@ -267,7 +268,7 @@ describe("PMT で字幕の本数を見る", () => {
       // 待ちきったあとに届く 1 つ目。返すストリームから出てこないといけない
       yield video;
     })();
-    const peeked = await peekCaptions(source, SERVICE, 50);
+    const peeked = await peekPmt(source, SERVICE, 50);
     expect(peeked.count).toBeNull();
     late();
     expect(await readAll(peeked.stream)).toEqual([video, video]);
@@ -275,7 +276,7 @@ describe("PMT で字幕の本数を見る", () => {
 
   test("先に尽きたら null", async () => {
     const parts = [packetize(VIDEO_PID, new Uint8Array(10))];
-    const peeked = await peekCaptions(chunksOf(parts), SERVICE, 1_000);
+    const peeked = await peekPmt(chunksOf(parts), SERVICE, 1_000);
     expect(peeked.count).toBeNull();
     expect(await readAll(peeked.stream)).toEqual(parts);
   });
@@ -285,15 +286,36 @@ describe("PMT で字幕の本数を見る", () => {
       yield packetize(VIDEO_PID, new Uint8Array(10));
       throw new Error("切れた");
     })();
-    const peeked = await peekCaptions(source, SERVICE, 1_000);
+    const peeked = await peekPmt(source, SERVICE, 1_000);
     expect(peeked.count).toBeNull();
     await expect(readAll(peeked.stream)).rejects.toThrow("切れた");
+  });
+
+  test("PMT の最初の映像から局の映像のコーデックを読む (TS で送る 4K の局は HEVC)", () => {
+    const pmt = (type: number) =>
+      programMap(SERVICE, VIDEO_PID, [
+        [0x0f, 0x112],
+        [type, VIDEO_PID],
+      ]);
+    expect(pmtVideo(pmt(0x02))).toBe("mpeg2");
+    expect(pmtVideo(pmt(0x1b))).toBe("h264");
+    expect(pmtVideo(pmt(0x24))).toBe("hevc");
+    // 映像の無い局 (音声だけ)
+    const audioOnly = programMap(SERVICE, VIDEO_PID, [[0x11, 0x112]]);
+    expect(pmtVideo(audioOnly)).toBeNull();
+  });
+
+  test("先に読むときに映像のコーデックも返す。PMT を読めなければ null", async () => {
+    const peeked = await peekPmt(chunksOf([head([])]), SERVICE, 1_000);
+    expect(peeked.video).toBe("mpeg2");
+    const none = [packetize(VIDEO_PID, new Uint8Array(10))];
+    expect((await peekPmt(chunksOf(none), SERVICE, 1_000)).video).toBeNull();
   });
 
   test("塊が届くたびに知らせる", async () => {
     let seen = 0;
     const parts = [packetize(VIDEO_PID, new Uint8Array(10)), head([])];
-    await peekCaptions(chunksOf(parts), SERVICE, 1_000, () => seen++);
+    await peekPmt(chunksOf(parts), SERVICE, 1_000, () => seen++);
     expect(seen).toBe(2);
   });
 });

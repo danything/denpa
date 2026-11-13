@@ -1185,7 +1185,7 @@ export async function streamResponse(
     rung === 0
       ? codec
       : plan.mmts !== null || source?.media.hlg === true
-        ? liveRungCodec(playable, "tlv")
+        ? liveRungCodec(playable, "hevc")
         : rungCodec(playable, source === undefined);
 
   const held = holdTranscode();

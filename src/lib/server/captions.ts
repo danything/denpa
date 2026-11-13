@@ -49,6 +49,7 @@ import {
 
 import { type CaptionTrack, CHANNEL, type Notice } from "#lib/live.js";
 import { type MkvFrame, MkvSplitter } from "#lib/ts/mkv.js";
+import type { ServiceVideo } from "#lib/types.js";
 
 /** 失敗を言っている行。**それ以外は入力の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
@@ -163,7 +164,7 @@ export function rawCaptionArgs(
  * ffmpeg は `Stream map '' matches no streams.` と出力する。**この行は記録に残らない** (`worthLogging` の
  * 言葉を含まない)。残るのはそのあとの `Failed to set value '0:p:X:s:0' for option 'map': Invalid argument`
  *
- * 起動する前に PMT を読んで、字幕が無ければ初めから要求しない (`peekCaptions`)。これは PMT を読めなかった
+ * 起動する前に PMT を読んで、字幕が無ければ初めから要求しない (`peekPmt`)。これは PMT を読めなかった
  * ときと、ffmpeg と見立てが食い違ったときの備え
  */
 export const NO_SUBTITLE = /matches no streams/;
@@ -201,23 +202,49 @@ export function captionStreams(section: Uint8Array): number {
   return count;
 }
 
-/** TS を少しずつ渡して、その局の PMT から字幕の本数を読む (`captionStreams`) */
+/**
+ * 映像の stream_type と、そのコーデック。ffmpeg と同じく、PMT に並んだ最初の映像を局の映像とみなす。
+ * ケーブルの 4K の局には、TS に HEVC (0x24) を入れて送る局がある (docs/stream.md「TS で送る 4K の局」)
+ */
+const VIDEO_STREAMS: ReadonlyMap<number, ServiceVideo> = new Map([
+  [0x02, "mpeg2"],
+  [0x1b, "h264"],
+  [0x24, "hevc"],
+]);
+
+/** **PMT から局の映像のコーデックを読む** (`VIDEO_STREAMS`)。映像が無ければ null */
+export function pmtVideo(section: Uint8Array): ServiceVideo | null {
+  for (const [type] of pmtStreams(section)) {
+    const video = VIDEO_STREAMS.get(type);
+    if (video !== undefined) return video;
+  }
+  return null;
+}
+
+/**
+ * TS を少しずつ渡して、その局の PMT から字幕の本数 (`captionStreams`) と映像のコーデック (`pmtVideo`) を読む
+ */
 export class CaptionCount {
   private readonly packets = new PacketStream();
   private readonly pmt: PmtTracker;
+  /** 読んだ PMT にある映像のコーデック。まだ読んでいないか、映像が無ければ null */
+  video: ServiceVideo | null = null;
 
   /** @param program 放送が名乗っている番号 */
   constructor(program: number) {
     this.pmt = new PmtTracker(program);
   }
 
-  /** 塊を 1 つ。**PMT を読めたら字幕の本数**、まだなら null */
+  /** 塊を 1 つ。**PMT を読めたら字幕の本数**、まだなら null。映像のコーデックは `video` に入れる */
   feed(chunk: Uint8Array): number | null {
     for (const packet of this.packets.feed(chunk)) {
       const pid = packetPid(packet);
       if (pid !== PID_PAT && pid !== this.pmt.pid) continue;
       for (const section of this.pmt.feed(packet, pid))
-        if (section[0] === TABLE_PMT) return captionStreams(section);
+        if (section[0] === TABLE_PMT) {
+          this.video = pmtVideo(section);
+          return captionStreams(section);
+        }
     }
     return null;
   }
@@ -232,24 +259,30 @@ export class CaptionCount {
 export const PMT_WAIT = 3_000;
 
 /**
- * **ffmpeg を起動する前に、字幕があるかを TS の先頭から読む。**
+ * **ffmpeg を起動する前に、字幕があるかと映像のコーデックを TS の先頭から読む。**
  *
  * 字幕を持たない放送に字幕の出力を要求すると ffmpeg は入力を探り終えてから終了し、起動し直すぶん
  * 映像が 1.5 秒ほど遅れる (`NO_SUBTITLE`)。PMT には ES が全部並んでいるので、起動する前に分かる。
  * ffmpeg の `-map …?` (無ければ飛ばす) では足りない。字幕の出力に何も無いと、それで終了する
  *
+ * 映像のコーデックは、TS に HEVC を入れて送る 4K の局を、MPEG-2 の局と分けてエンコードするのに使う (`live.encodeArgs` の `video`)。
+ *
  * **読んだ塊は捨てない。** 返すストリームの先頭から同じものが出てくる
  *
  * @param program 放送が名乗っている番号
- * @param wait これだけ待って PMT を読めなければ、字幕の本数は null (分からない)
+ * @param wait これだけ待って PMT を読めなければ、字幕の本数と映像のコーデックは null (分からない)
  * @param onChunk 塊が届くたびに呼ぶ (開くまでの内訳の「最初のバイト」)
  */
-export async function peekCaptions(
+export async function peekPmt(
   stream: AsyncGenerator<Uint8Array>,
   program: number,
   wait: number,
   onChunk?: () => void,
-): Promise<{ stream: AsyncGenerator<Uint8Array>; count: number | null }> {
+): Promise<{
+  stream: AsyncGenerator<Uint8Array>;
+  count: number | null;
+  video: ServiceVideo | null;
+}> {
   const counter = new CaptionCount(program);
   const head: Uint8Array[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -280,7 +313,11 @@ export async function peekCaptions(
   } finally {
     clearTimeout(timer);
   }
-  return { stream: replay(head, pending, stream), count };
+  return {
+    stream: replay(head, pending, stream),
+    count,
+    video: counter.video,
+  };
 }
 
 /** 読んでおいた塊、読みかけの 1 つ、残り、の順に出す */

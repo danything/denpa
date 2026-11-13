@@ -3,11 +3,16 @@ import { eq } from "drizzle-orm";
 
 import { askedTrack } from "#lib/arib.js";
 import { parseId } from "#lib/id.js";
+import { broadcastCodec } from "#lib/live-choice.js";
 import { orm } from "#lib/server/db.js";
-import { liveStream } from "#lib/server/live.js";
+import { liveServed, liveStream } from "#lib/server/live.js";
 import { services } from "#lib/server/schema.js";
 import { TLV_TYPE } from "#lib/server/tuner.js";
-import { askedFormat, liveAudioOnly } from "#lib/server/viewing.js";
+import {
+  askedFormat,
+  liveAudioOnly,
+  parseFormats,
+} from "#lib/server/viewing.js";
 import {
   BUSY,
   CODEC_HEADER,
@@ -34,7 +39,7 @@ import { undecodableReason } from "#lib/types.js";
  * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)。
  * 復号できない局 (`services.decodable`。スカパー！プレミアムと、B-CAS 以外の方式でスクランブルされたケーブルの局と、ACAS でスクランブルされたケーブルの 4K の局) は 409 で断る
  */
-export function GET({ params, url }) {
+export async function GET({ params, url }) {
   const serviceId = parseId(params.serviceId);
   if (serviceId === null) error(400, "局 ID が不正です");
   // 復号できない局は選局せずに断る。流してもスクランブルされたままで映らない
@@ -50,30 +55,40 @@ export function GET({ params, url }) {
   if (row !== undefined && !row.decodable)
     error(409, undecodableReason(row.type, row.transport));
   const transport = row?.transport ?? "ts";
-  const asked = liveAudioOnly(url) ?? askedFormat(url, "live", {}, transport);
+  const asked =
+    liveAudioOnly(url) ??
+    askedFormat(url, "live", {}, broadcastCodec(transport));
   if (asked === null) error(406, NO_FORMAT);
   const { codec, rung } = asked;
+  // 再生できると言った形式。TS で送る 4K の局の放送のままを、HEVC の詰め替えにするかエンコードするかに使う (`live.servedFormat`)
+  const playable = url.searchParams.has("playable")
+    ? parseFormats(url.searchParams.get("playable"))
+    : null;
   const stream = liveStream(
     serviceId,
     codec,
     askedTrack(url.searchParams.get("audio")),
     rung,
+    playable,
   );
   if (stream === null) error(404, "局がありません");
   if (stream === "busy") error(503, BUSY);
+  // 実際に流す形式。TS で送る 4K の局の放送のままは、PMT を読んでから替わる (`live.liveServed`)
+  const served = await liveServed(stream);
+  const format = served === null ? codec : served.raw ? "raw" : served.codec;
   return new Response(stream, {
     headers: {
       "Content-Type":
-        codec === "raw"
+        format === "raw"
           ? transport === "tlv"
             ? TLV_TYPE
             : "video/mp2t"
-          : codec === "audio"
+          : format === "audio"
             ? "audio/mp4"
             : "video/mp4",
       "Cache-Control": "no-store",
-      [CODEC_HEADER]: codec,
-      ...(codec === "raw" ? {} : { [RUNG_HEADER]: String(rung) }),
+      [CODEC_HEADER]: format,
+      ...(format === "raw" ? {} : { [RUNG_HEADER]: String(rung) }),
     },
   });
 }

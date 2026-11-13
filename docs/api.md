@@ -129,6 +129,13 @@
 `hevc` には段がありません。`?rung=1〜3` を付けると、`?playable=` から H.265 を外して選んだコーデックでエンコードします。
 4K の局の字幕 (`GET /api/services/<id>/captions`) にも、映像と同じ `codec` (詰め替えなら `hevc`) を渡します。
 
+**TS で送る 4K の局** (ケーブルの 4K の局のうち、HEVC を TS に入れて送る局) は、局の一覧では MPEG-2 の局と見分けられません。
+サーバは選局して PMT を読み、映像が HEVC なら `raw` を MPEG-2 の TS ではなく、放送の HEVC を写して音声だけ AAC にした fragmented MP4 で返します
+(`X-Denpa-Codec: hevc`、`video/mp4`)。`?playable=` に `hevc` が無ければ、4K の局と同じく縮めて SDR にした `h264` (無ければ `av1`) を返します。
+TS の局の `raw` の応答ヘッダは、選局して PMT を読んでから返します。`hevc` は GPU が無くても写すだけで、`h264`・`av1` は 4K の局と同じく
+縮めて SDR に直します。字幕 (`GET /api/services/<id>/captions`) には、映像をリクエストしたときと同じ `codec=raw` を渡します
+(同じストリームを共有する)。時刻は放送の PTS ではなく、応答の fragmented MP4 の時刻です。
+
 `?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。音声だけを聴くとき向け。
 映像をエンコードしないので軽い。録画の `audio` と同じ書き方です。`codec` と一緒に渡すと、`audio=only` を優先します。
 `?rung=1〜3` を付けると音声を 96k に下げます (その場で変換する本数の枠は使わない)。
