@@ -15,7 +15,7 @@ import {
   MAX_PENDING_BYTES,
   type PcmChunk,
 } from "./native-audio-protocol";
-import { audioContext, Seam, SNAP } from "./seam";
+import { Seam, SNAP } from "./seam";
 
 const TICK_MS = 20;
 /**
@@ -51,7 +51,6 @@ interface Frame extends PcmChunk {
   bytes: number;
 }
 export class NativeAudio {
-  private readonly context: AudioContext;
   private readonly worker: Worker;
   private readonly outlet: Outlet;
   private readonly muteGain: GainNode;
@@ -87,21 +86,17 @@ export class NativeAudio {
    * 予約し続けると、80 ms 鳴っては組み直すのを繰り返して「ブツブツ」と途切れる
    */
   private frozen = false;
-  /** AudioContext を自分で作ったか。渡されたもの (`shared`) は畳んでも閉じない */
-  private readonly owned: boolean;
   /**
-   * @param shared 使い回す AudioContext。**作り直しても音を止めないため。** iOS の Safari は、押したとき以外に作った
-   *   AudioContext を止めたまま始めるので、画質を切り替えて作り直すたびに自動再生を断られたことになり、消音になっていた (#2728)。
-   *   渡せば、畳むときは自分のつないだ音だけを外し、AudioContext は閉じない (閉じるのは渡した側)
+   * @param context 鳴らす AudioContext。**畳んでも閉じない** (閉じるのは渡した側)。iOS の Safari は、押したとき以外に作った
+   *   AudioContext を止めたまま始めるので、画質を切り替えるたびに新しく作ると自動再生を断られたことになり、消音になっていた (#2728)。
+   *   畳むときは自分のつないだ音だけを外す
    */
   constructor(
     private readonly video: HTMLVideoElement,
     private readonly failed: (reason: string) => void,
     decoder: string,
-    shared?: AudioContext,
+    private readonly context: AudioContext,
   ) {
-    this.context = shared ?? audioContext("interactive");
-    this.owned = shared === undefined;
     this.seam = new Seam(this.context.sampleRate);
     let outlet: Outlet | null = null;
     try {
@@ -124,7 +119,6 @@ export class NativeAudio {
       );
     } catch (error) {
       outlet?.destroy();
-      if (this.owned) void this.context.close().catch(() => undefined);
       throw error;
     }
     this.worker.onmessage = (event: MessageEvent<AudioOutput>) =>
@@ -373,7 +367,6 @@ export class NativeAudio {
     this.muteGain.disconnect();
     this.fade.disconnect();
     this.context.onstatechange = null;
-    if (this.owned) void this.context.close().catch(() => undefined);
     playbackSession(false);
     this.frames = [];
     this.cursor = 0;
