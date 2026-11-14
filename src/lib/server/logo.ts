@@ -240,17 +240,27 @@ function noCdtOn(ts: string): boolean {
 
 /**
  * 1 回開いた結果から、その TS で CDT を見たか (true)・来なかったと言えるか (false) を決める。どちらとも言えなければ null。
- * 来なかったと言えるのは、6 分 (`SWEEP_TIMEOUT`) 開けきって 1 セクションも来なかったときだけ。
- * 共有 (`RIDE_TIMEOUT`) や、取り上げられて途中で切れた回は短いので証拠にしない
+ * 来なかったと言えるのは、6 分 (`SWEEP_TIMEOUT`) の上限まで開けていて、実際に `NO_CDT_WINDOW` 以上読んで 1 セクションも来なかったときだけ。
+ * 上限のタイマーは選局を待つ間も進むので、開けないまま 6 分過ぎた回 (`openedMs` が 0) や、選局待ちが長くて少ししか読めなかった回は証拠にしない。
+ * 共有 (`RIDE_TIMEOUT`) や、取り上げられて途中で切れた回も短いので証拠にしない
  */
 export function cdtVerdict(
   cdtSections: number,
   ranOut: boolean,
   timeout: number,
+  openedMs: number,
 ): boolean | null {
   if (cdtSections > 0) return true;
-  return ranOut && timeout >= SWEEP_TIMEOUT ? false : null;
+  return ranOut && timeout >= SWEEP_TIMEOUT && openedMs >= NO_CDT_WINDOW
+    ? false
+    : null;
 }
+
+/**
+ * ケーブルの TS で「CDT が来ない」と控えるのに要る、実際に読んだ長さ。地上波の CDT は 3 分では実機でほとんど当たらず
+ * (`SWEEP_TIMEOUT`)、それより十分長い 5 分とする。6 分の上限から選局待ちの 1 分ぶんを残す
+ */
+const NO_CDT_WINDOW = 5 * 60_000;
 
 /** ケーブルの TS で CDT が来なかった (`seen` が false)・来た を書き留める */
 function markNoCdt(ts: string, seen: boolean): void {
@@ -949,7 +959,12 @@ async function collect(
    * その間は取得しない。共有でも 1 つ来れば控えを消す
    */
   if (!satellite && target.type === "CATV") {
-    const seen = cdtVerdict(feed?.cdtSections ?? 0, ranOut, timeout);
+    const seen = cdtVerdict(
+      feed?.cdtSections ?? 0,
+      ranOut,
+      timeout,
+      openedAt === null ? 0 : Date.now() - openedAt,
+    );
     if (seen !== null) markNoCdt(target.ts, seen);
   }
   return {

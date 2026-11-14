@@ -202,13 +202,18 @@ describe("ロゴの出どころ (logoSource)", () => {
 
 describe("CDT が来なかったと言えるか (cdtVerdict)", () => {
   test("1 つでも来れば来た", () => {
-    expect(cdtVerdict(1, false, 1)).toBe(true);
+    expect(cdtVerdict(1, false, 1, 1)).toBe(true);
   });
 
   test("6 分開けきって 0 なら来なかった。短い共有や途中で切れた回は決めない", () => {
-    expect(cdtVerdict(0, true, 6 * 60_000)).toBe(false);
-    expect(cdtVerdict(0, true, 3 * 60_000)).toBeNull();
-    expect(cdtVerdict(0, false, 6 * 60_000)).toBeNull();
+    expect(cdtVerdict(0, true, 6 * 60_000, 6 * 60_000)).toBe(false);
+    expect(cdtVerdict(0, true, 3 * 60_000, 3 * 60_000)).toBeNull();
+    expect(cdtVerdict(0, false, 6 * 60_000, 2 * 60_000)).toBeNull();
+  });
+
+  test("開けないまま・選局待ちが長くて少ししか読めないまま 6 分過ぎた回は決めない", () => {
+    expect(cdtVerdict(0, true, 6 * 60_000, 0)).toBeNull();
+    expect(cdtVerdict(0, true, 6 * 60_000, 2 * 60_000)).toBeNull();
   });
 });
 
