@@ -614,7 +614,7 @@ test.describe("ライブ視聴", () => {
   });
 
   /*
-   * **局を変えたら、データ放送も作り直す。**
+   * **局を変えたら、データ放送を閉じ、開き直すと作り直す。**
    *
    * エンジンは一度に一つの放送しか持たない (カルーセルも覚えるものも局ごと)。
    * 作り直さずにいると**前の局の文書が残り**、映像が前の局の小窓に寄せられたままになる
@@ -643,7 +643,12 @@ test.describe("ライブ視聴", () => {
 
     await channels.nth(1).click();
     await expect(page.getByTestId("live-title")).toBeVisible();
-    // 局が変われば、エンジンも別のものになっている
+    // 別の局へ移ったら閉じる (テレビと同じ。開いたままだと次の局の入口に d が届き、選局しただけでメニューが開く)
+    await expect(overlay).toHaveAttribute("data-open", "false");
+    await expect(overlay).toHaveAttribute("data-state", "off");
+    // 開き直すと、エンジンは次の局のもの
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-data-button").click();
     await expect(overlay).toHaveAttribute("data-state", "ready", {
       timeout: 15_000,
     });
