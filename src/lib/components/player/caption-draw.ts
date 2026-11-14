@@ -2,7 +2,7 @@
  * **字幕の文字の配置を canvas に描く** ([caption-text.ts](../../../../packages/arib/src/caption-text.ts))。ライブ・追っかけ・観る画面で同じもの。
  *
  * サーバが置き場所まで決めて送ってくるので、ここは言われたとおりに塗るだけ。描き方は
- * libaribcaption のレンダラ (region_renderer / text_renderer_freetype) に揃えてある:
+ * libaribcaption のレンダラ (region_renderer / text_renderer_freetype) に揃えてある。
  *
  * - 背景は区画 (`w`x`h`) ごとに塗る。空白も塗る
  * - 字は字の枠の左端をペンの位置にして、**縦は「永」の墨の上下を枠の真ん中に置く**

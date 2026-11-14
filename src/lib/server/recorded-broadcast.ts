@@ -21,7 +21,7 @@ import { openRecordingSync } from "./recording-io";
  * PMT を探して先頭から読む量 (バイト)。放送は PMT を 100ms ごとに流すので、ふつうは最初の数百 KB で見つかる。
  * 4K の HEVC は 1 局で約 33Mbit/s あり、4MB は 1 秒ぶんほど
  */
-export const PMT_SEARCH = 4 * 1024 * 1024;
+const PMT_SEARCH = 4 * 1024 * 1024;
 
 /** 1 回に読む量 (TS のパケット 1024 個) */
 const READ_CHUNK = 188 * 1024;
