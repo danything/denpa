@@ -105,6 +105,13 @@ const BUSY_RETRY = 10_000;
  */
 const CABLE_RETRY = [10_000, 30_000, 60_000] as const;
 
+/**
+ * ケーブル局の NIT をまだ読めていない間、局が揃ってからも NIT を待つ上限 (読み始めから)。
+ * NIT は 10 秒に 1 回は流れる (ARIB TR-B15) ので、選局が落ち着くまでの数秒を足した 15 秒。
+ * 来なければその TS には NIT が無いとして、全体の待ち (`TUNE_TIMEOUT`) までは延ばさない
+ */
+const NIT_WAIT = 15_000;
+
 /** 設定の表のキー。エージェントごとの、ケーブル局の NIT から作った一覧 (`cable.StoredCableLineup`) */
 const cableKey = (agent: number) => `cableLineup:${agent}`;
 
@@ -244,7 +251,7 @@ export async function readServices(
   cable = false,
   /**
    * 同じストリームで NIT も全部のセクションそろえて読む (ケーブル局の NIT。`cable.ts`)。`wait` なら、局が揃っても
-   * NIT[actual] がそろうまで読み続ける (全体の待ち `timeout` は延ばさない。NIT が来なくても局は返す)
+   * NIT[actual] がそろうまで、読み始めから `NIT_WAIT` までは読み続ける (NIT が来なくても局は返す)
    */
   nit?: { reader: NitReader; wait: boolean },
 ): Promise<ScanResult> {
@@ -267,7 +274,10 @@ export async function readServices(
       const complete = reader.feed(chunk);
       return (
         complete &&
-        (nit === undefined || !nit.wait || nit.reader.actual !== null) &&
+        (nit === undefined ||
+          !nit.wait ||
+          nit.reader.actual !== null ||
+          Date.now() - started >= NIT_WAIT) &&
         (observer === undefined ||
           observed(observer) ||
           Date.now() - started >= OBSERVE_WAIT)

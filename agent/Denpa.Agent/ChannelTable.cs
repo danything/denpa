@@ -233,7 +233,6 @@ public static class ChannelTable
         return true;
     }
 
-    /// <summary><paramref name="digits"/> 桁までの数字だけの文字列を読む</summary>
     /// <summary>
     /// <c>QF&lt;kHz&gt;</c> で選局できる周波数の範囲 (kHz)。VHF 1ch の下端 (90 MHz) から UHF 62ch の上端 (770 MHz) まで。
     /// ケーブルの選局表の並び (<c>QV1</c>〜<c>QU62</c>) が収まる範囲と同じ
@@ -241,6 +240,7 @@ public static class ChannelTable
     private const int DirectMinKhz = 90_000;
     private const int DirectMaxKhz = 770_000;
 
+    /// <summary><paramref name="digits"/> 桁までの数字だけの文字列を読む</summary>
     private static bool Number(string text, out int value, int digits = 3)
     {
         // 0 詰めは許す (`BS01` と `BS1` は同じもの)。それ以外は受け取らない
