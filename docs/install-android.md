@@ -104,8 +104,8 @@ adb push denpa.env /sdcard/Android/data/io.github.danything.denpa/files/denpa.en
   `TRUSTED_NETWORKS` を書き換えられると誰でも denpa を開けてしまうためです。変数を足すなら Android 11 以上の端末で使います
 - エンコードの本数 (`ENCODE_CONCURRENCY`) は、Linux と同じ既定 (2) のままです。端末の速さと熱に合う値は、実機で測ってから決めます ([encode.md](encode.md#android-でエンコードする))
 
-**エンコードは、端末のハードウェアのエンコーダ (MediaCodec) を使えれば使い、使えなければソフトウェアで** (SVT-AV1・x264)。
-アプリが起動のたびに端末のハードウェアのエンコーダ (H.264・H.265・AV1) の名前を集めて denpa に渡し、denpa が 1 コマずつ試して、通ったものを使います。
+**端末のハードウェアのエンコーダ (MediaCodec) を使えれば使い、使えなければソフトウェア (SVT-AV1・x264) でエンコードします。**
+アプリが起動のたびに端末のハードウェアのエンコーダ (H.264・H.265・AV1) の名前を集めて denpa に渡し、denpa がそれぞれ 1 コマエンコードして試し、通ったものを使います。
 何を使っているかは設定の「録画」の「エンコード」に出ます。実機では確かめていません ([encode.md](encode.md#android-でエンコードする))。
 
 ## 止まらないようにする
