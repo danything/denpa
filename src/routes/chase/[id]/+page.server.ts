@@ -3,8 +3,8 @@ import { eq } from "drizzle-orm";
 
 import { parseId } from "#lib/id.js";
 import { orm } from "#lib/server/db.js";
+import { aribServiceId } from "#lib/server/encoder.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
-import { aribServiceId } from "#lib/server/live.js";
 import { relative } from "#lib/server/paths.js";
 import { recordedBroadcast } from "#lib/server/recorded-broadcast.js";
 import { recordings } from "#lib/server/schema.js";

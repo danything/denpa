@@ -88,10 +88,10 @@ import type { Recording } from "#lib/types.js";
 import { programSpec } from "./captions";
 import { chapterList } from "./cm";
 import { config } from "./config";
+import { aribServiceId } from "./encoder";
 import { type LiveHw, nvencBusy } from "./hwenc";
 import { type EncodedColumns, encodedFile, encodedFiles } from "./library";
 import {
-  aribServiceId,
   audioArgs,
   blameLiveHw,
   liveRungCodec,

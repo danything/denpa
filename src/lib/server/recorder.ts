@@ -22,7 +22,7 @@ import type { Place } from "./agent-order";
 import { fileSize } from "./chase";
 import { config } from "./config";
 import { now, orm } from "./db";
-import { broadcastServiceId, encodeInput, enqueue } from "./encoder";
+import { aribServiceId, encodeInput, enqueue } from "./encoder";
 import { savePrograms } from "./epg";
 import { emit } from "./events";
 import { moveFile, removeIfExists } from "./fsx";
@@ -822,7 +822,7 @@ function finish(recordingId: number, size: number): void {
    * 4K の局の録画 (TLV) は ffmpeg が読めないので、サムネイルを作らない (エンコードすれば、詰め替えた MP4 から作る。`encoder.ts`)。
    * TS で送る 4K の局の録画は、縮めて SDR に直して取る (`encoder.encodeInput` の `uhd`)
    */
-  const kind = encodeInput(dest, broadcastServiceId(recording.service_id));
+  const kind = encodeInput(dest, aribServiceId(recording.service_id));
   if (!kind.tlv)
     void writeThumbnail(
       dest,

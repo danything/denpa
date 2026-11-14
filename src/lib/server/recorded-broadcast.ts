@@ -21,7 +21,7 @@ import { openRecordingSync } from "./recording-io";
  * PMT を探して先頭から読む量 (バイト)。放送は PMT を 100ms ごとに流すので、ふつうは最初の数百 KB で見つかる。
  * 4K の HEVC は 1 局で約 33Mbit/s あり、4MB は 1 秒ぶんほど
  */
-export const PMT_SEARCH = 4 * 1024 * 1024;
+const PMT_SEARCH = 4 * 1024 * 1024;
 
 /** 1 回に読む量 (TS のパケット 1024 個) */
 const READ_CHUNK = 188 * 1024;
@@ -54,7 +54,7 @@ function remember<T>(map: Map<string, T>, path: string, value: T): void {
 /**
  * **録画の放送のコーデック。** TS の録画は先頭の PMT を読んで決める (`headVideo`)。
  * PMT を読めなかった録画は `UNDECIDED_WAIT` の間は読み直さず、MPEG-2 の局の録画として扱う
- * @param program その局の放送の番号 (ARIB のサービス ID。`live.aribServiceId`)。0 なら PMT を探さない
+ * @param program その局の放送の番号 (ARIB のサービス ID。`encoder.aribServiceId`)。0 なら PMT を探さない
  */
 export function recordedBroadcast(
   path: string,
