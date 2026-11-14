@@ -304,7 +304,7 @@ public sealed class It930xDevice
     /// <summary>
     /// プロセスが終わるとき (SIGTERM で終わる <c>--tune</c> などの CLI も) と、捕まえていない例外でプロセスが落ちるときに機材を閉じる。
     /// 開けたままの入力に読む側がいなくなると、ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなるため (<see cref="It930xOverflow"/>)。
-    /// エージェントは止まるときに閉じ終えているので何もしない。SIGKILL (Pod の猶予切れ・OOM) で終わるときは、どちらも呼ばれない
+    /// エージェントは止まるときに閉じ終えている (<see cref="Shutdown()"/>) ので何もしない。SIGKILL (Pod の猶予切れ・OOM) で終わるときは、どちらも呼ばれない
     /// </summary>
     static It930xDevice()
     {
@@ -316,7 +316,7 @@ public sealed class It930xDevice
     private static int _closingBeforeExit;
 
     /// <summary>
-    /// 終わる前に全部閉じる (<see cref="CloseAll()"/>)。別のスレッドで閉じ、<see cref="ExitCloseLimit"/> で待つのをやめる。
+    /// 終わる前に全部閉じ、それからは開かない (<see cref="Shutdown()"/>)。別のスレッドで閉じ、<see cref="ExitCloseLimit"/> で待つのをやめる。
     /// 落ちたスレッドが機材の一覧やブリッジのコマンドのロックを持ったまま止まっていても、プロセスが終わらなくならないため
     /// </summary>
     private static void CloseBeforeExit()
@@ -328,7 +328,7 @@ public sealed class It930xDevice
             if (!Registry.TryEnter(ExitCloseLimit)) return;
             try
             {
-                CloseAll();
+                Shutdown();
             }
             catch (Exception error)
             {
@@ -412,6 +412,9 @@ public sealed class It930xDevice
     /// <summary>USB が抜けたなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
     public bool Faulted => _faulted;
 
+    /// <summary>閉じた (<see cref="Shutdown()"/> で、使っている側がいるまま閉じたときも)。閉じた機材の受信機には書かない</summary>
+    public bool Closed => Volatile.Read(ref _closed);
+
     private It930xDevice(string port, It930xModel model, IUsbDevice usb, It930xBridge bridge, Action<int> sleep, Func<long> nowMs, Func<It930xDevice?>? link)
     {
         Port = port;
@@ -454,6 +457,8 @@ public sealed class It930xDevice
         waiting?.Invoke();
         lock (Registry)
         {
+            // 止めるときに閉じたあとは開かない (Shutdown)。開くと、プロセスが終わるときに入力を開けたまま読み出しが止まる
+            if (_stopped?.Invoke(port) == true) throw new IOException($"エージェントを止めているので、{It930x.Model} ({port}) を開きません");
             if (Devices.TryGetValue(port, out var device))
             {
                 if (!device.Faulted)
@@ -589,9 +594,9 @@ public sealed class It930xDevice
 
     /// <summary>
     /// TS のバッファの溢れを読み、前に読んだときから変わっていれば記録に出す (選局したあと、流し始める・止めるとき、LNB の給電を切り替えたあと、閉じるとき)。
-    /// 読めなければ何もしない (抜けたかどうかは EP 0x84 の読み出しとほかの操作が決める)
+    /// 読んだ溢れを返す。読めなければ何もせずに null を返す (抜けたかどうかは EP 0x84 の読み出しとほかの操作が決める)
     /// </summary>
-    internal void WatchOverflow(string when)
+    internal It930xOverflow? WatchOverflow(string when)
     {
         It930xOverflow overflow;
         try
@@ -600,12 +605,12 @@ public sealed class It930xDevice
         }
         catch (IOException)
         {
-            return;
+            return null;
         }
         var before = _overflow;
         _overflow = overflow;
-        if (before is not null && before.System == overflow.System && before.Inputs.SequenceEqual(overflow.Inputs)) return;
-        if (!overflow.Any && before is not { Any: true }) return;
+        if (before is not null && before.System == overflow.System && before.Inputs.SequenceEqual(overflow.Inputs)) return overflow;
+        if (!overflow.Any && before is not { Any: true }) return overflow;
         // 全体の溢れが前から立っていたなら、EP 0x84 から TS が出ないので、入力にも溜まって溢れる。読み出しの遅れとは分ける (PX-MLT8PE。2026-11-12)
         var cause = before is { System: true }
             ? "全体の溢れが前から立っていて EP 0x84 から TS が出ないため、入力にも溜まったと推定します"
@@ -613,6 +618,7 @@ public sealed class It930xDevice
         Log.Write(overflow.Any
             ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}"
             : $"[{Label}] {when}に TS のバッファの溢れが下りていました");
+        return overflow;
     }
 
     /// <summary>溢れた入力の受信機 (「、受信機 2」)</summary>
@@ -677,10 +683,11 @@ public sealed class It930xDevice
                 _demux.Push(buffer.AsSpan(0, got));
             }
         }
-        catch (IOException error)
+        catch (Exception error)
         {
             // 閉じている途中の失敗 (入力を閉じて EP 0x84 をリセットした読み出し) は、閉じる側が片付ける
             if (_stopping || _closing) return;
+            // IOException でない失敗 (受信機ごとに分ける処理の不具合など) も同じく片付ける。スレッドごと落ちると、入力を開けたまま読む側がいなくなる
             // EP 0x84 の読み出しは全部の受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
             _faulted = true;
             Log.Write($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
@@ -696,16 +703,18 @@ public sealed class It930xDevice
         }
     }
 
-    /// <summary>入力を全部閉じて EP 0x84 をリセットする (<see cref="It930xBridge.DisableTsInputs"/>)。閉じられなければ記録に出す</summary>
-    private void CloseInputs()
+    /// <summary>入力を全部閉じて EP 0x84 をリセットする (<see cref="It930xBridge.DisableTsInputs"/>)。閉じられなければ記録に出して false</summary>
+    private bool CloseInputs()
     {
         try
         {
             Bridge.DisableTsInputs();
+            return true;
         }
         catch (IOException error)
         {
             Log.Write($"[{Label}] TS の入力を閉じられませんでした ({error.Message})");
+            return false;
         }
     }
 
@@ -793,7 +802,10 @@ public sealed class It930xDevice
             if (_closed) return;
             // 閉じるのに失敗したら、その例外をそのまま送出する。閉じきったか分からない入力を開け直さず、元の失敗を隠さない
             Bridge.DisableTsInputs();
-            if (_inputsOpen) Bridge.EnableTsInputs();
+            // 読み出しが失敗した機材では開け直さない (読む側がいない)。開け直す前後に失敗したら、読み出しのスレッドと前後しても最後に閉じる
+            if (!_inputsOpen || _faulted) return;
+            Bridge.EnableTsInputs();
+            if (_faulted) CloseInputs();
         }
     }
 
@@ -1049,7 +1061,7 @@ public sealed class It930xDevice
     /// </summary>
     internal int PowerOffWaitMs { get; set; } = PowerOffSettleMs;
 
-    /// <summary>全部閉じる (エージェントを止めるとき。<c>--tune</c> の終わり)。使っている側がいても閉じる</summary>
+    /// <summary>全部閉じる (<c>--tune</c> の終わりなど)。使っている側がいても閉じる。エージェントを止めるときは <see cref="Shutdown()"/></summary>
     public static void CloseAll() => CloseAll(_ => true);
 
     /// <summary>
@@ -1069,9 +1081,34 @@ public sealed class It930xDevice
         }
     }
 
+    /// <summary>止めたポートか (<see cref="Shutdown(Func{string, bool})"/>)。Registry の中で読み書きする</summary>
+    private static Func<string, bool>? _stopped;
+
+    /// <summary>
+    /// **エージェントを止めるときに、ほかの何よりも先に呼ぶ** (Program.cs の <c>ApplicationStopping</c>。<c>ApplicationStopped</c> とプロセスが終わるときにも呼ぶ)。
+    /// 機材を全部閉じ (入力を閉じる → EP 0x84 の読み出しを止める → 受信機をスリープにして電源を切る → USB を閉じる)、それからは開かない (<see cref="Acquire(string)"/> が断る)。
+    /// 選局を離す処理 (<see cref="TunerPool.CloseAll"/>) やほかの機材を閉じる処理のあとに置くと、そちらが終わらないまま SIGKILL で止められたときに、
+    /// 入力を開けたまま読み出しが止まり、ブリッジのバッファが溢れる。選局が流しているままでも閉じてよい (出口を終わらせる。選局はあとで離す)
+    /// </summary>
+    public static void Shutdown() => Shutdown(_ => true);
+
+    /// <summary><see cref="Shutdown()"/> の本体。テストは自分のポートだけを渡す</summary>
+    internal static void Shutdown(Func<string, bool> which)
+    {
+        lock (Registry)
+        {
+            var before = _stopped;
+            _stopped = before is null ? which : port => before(port) || which(port);
+            var open = Devices.Keys.Where(which).ToList();
+            if (open.Count > 0) Log.Write($"エージェントを止めるので、{It930x.Model} を閉じます (USB のポート {string.Join("、", open)})");
+            CloseAll(which);
+        }
+    }
+
     /// <summary>
     /// ブリッジの入力を全部閉じ、受信機を全部スリープにし、電源を切って (GPIOH2 ← 0、電源の GPIOH ← 1)、USB を閉じる。抜けていれば書かずに閉じる。
-    /// 電源が GPIOH3 の機種は、受信機を閉じたときに電源を切っている。閉じるのを待っていたら、その待ちはやめる。Registry の中で呼ぶ
+    /// 電源が GPIOH3 の機種は、受信機を閉じたときに電源を切っている。閉じるのを待っていたら、その待ちはやめる。Registry の中で呼ぶ。
+    /// **EP 0x84 の読み出しを止めるのは、入力を閉じたあと。** 入力を閉じられなかったときは、受信機をスリープにして電源を切ってから止める (入力に TS が入らないように)
     /// </summary>
     private void Close()
     {
@@ -1082,48 +1119,60 @@ public sealed class It930xDevice
             _closed = true;
         }
         _closing = true;
+        // 読み出しが失敗した機材は、読み出しのスレッドが入力を閉じている (抜けていれば書けない) ので、何も書かない
+        var write = !Faulted;
         // 入力を閉じて EP 0x84 をリセットしてから読み出しを止める (SDK の DRV_ResetRxPort)。読む側がいないまま、ブリッジに TS を溜めない
-        if (!Faulted)
+        var inputsClosed = write && CloseInputs();
+        if (inputsClosed)
         {
-            CloseInputs();
-            WatchOverflow("閉じるとき");
+            // 次に開いたときに溢れていたら、閉じる前から溢れていたのか、閉じたあとに溢れたのかを記録で分ける
+            var overflow = WatchOverflow("閉じるとき");
+            Log.Write($"[{Label}] TS の入力を閉じました ({overflow?.ToString() ?? "溢れは読めませんでした"})。EP 0x84 の読み出しを止めます");
+        }
+        else if (write)
+        {
+            Log.Write($"[{Label}] TS の入力を閉じられなかったので、受信機をスリープにして電源を切ってから EP 0x84 の読み出しを止めます");
+            Quiet();
         }
         _stopping = true;
         _reader?.Join(TimeSpan.FromSeconds(2));
         for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete();
-        if (!Faulted)
-        {
-            // 受信機 1 つのスリープに失敗しても、ほかの受信機と電源は切る (USB が抜けたときは、電源を切る書き込みも失敗して下で記録に出る)
-            foreach (var receiver in Model.Receivers)
-            {
-                try
-                {
-                    Rest(receiver.Index, linked: false);
-                }
-                catch (IOException error)
-                {
-                    Log.Write($"[{Label}] 受信機 {receiver.Index} をスリープにできませんでした ({error.Message})");
-                }
-            }
-            try
-            {
-                if (Model.PowerWhileOpen)
-                {
-                    Power(false);
-                    // 電源が落ちきる前に入れ直さないよう、USB を閉じる前に待つ (IT930x の仕様書 7.2・10、CXD2856 の仕様書 10.3)。閉じている間は Registry を持っているので、
-                    // 同じポートを開き直す Acquire (次に電源を入れる書き込み) もこの待ちのあとになる
-                    _sleep(PowerOffWaitMs);
-                }
-            }
-            catch (IOException error)
-            {
-                Log.Write($"[{Label}] 電源を切れませんでした ({error.Message})");
-            }
-        }
+        if (inputsClosed) Quiet();
         _usb.Dispose();
         Log.Write($"[{Label}] 閉じました");
         // 取っていたもう片方の側を返す (USB を閉じたあと。一覧のロックは持っている)
         Unlink();
+    }
+
+    /// <summary>受信機を全部スリープにし、電源を切る (<see cref="Close"/>)。受信機 1 つのスリープに失敗しても、ほかの受信機と電源は切る</summary>
+    private void Quiet()
+    {
+        // USB が抜けたときは、電源を切る書き込みも失敗して下で記録に出る
+        foreach (var receiver in Model.Receivers)
+        {
+            try
+            {
+                Rest(receiver.Index, linked: false);
+            }
+            catch (IOException error)
+            {
+                Log.Write($"[{Label}] 受信機 {receiver.Index} をスリープにできませんでした ({error.Message})");
+            }
+        }
+        try
+        {
+            if (Model.PowerWhileOpen)
+            {
+                Power(false);
+                // 電源が落ちきる前に入れ直さないよう、USB を閉じる前に待つ (IT930x の仕様書 7.2・10、CXD2856 の仕様書 10.3)。閉じている間は Registry を持っているので、
+                // 同じポートを開き直す Acquire (次に電源を入れる書き込み) もこの待ちのあとになる
+                _sleep(PowerOffWaitMs);
+            }
+        }
+        catch (IOException error)
+        {
+            Log.Write($"[{Label}] 電源を切れませんでした ({error.Message})");
+        }
     }
 }
 
@@ -1283,7 +1332,7 @@ public sealed class It930xTuner : ITuneDevice
         {
             try
             {
-                return _attempted && _device is { Faulted: false } ? _frontend?.Diagnose() ?? [] : [];
+                return _attempted && _device is { Faulted: false, Closed: false } ? _frontend?.Diagnose() ?? [] : [];
             }
             catch (IOException error)
             {
@@ -1344,8 +1393,8 @@ public sealed class It930xTuner : ITuneDevice
             Tsmf = null;
             Tlv = null;
             IsdbcFailedSignal = null;
-            // 抜けた・TS を読めなくなった機材は返して、開き直す
-            if (_device is { Faulted: true }) Drop();
+            // 抜けた・TS を読めなくなった・止めるときに閉じた機材は返して、開き直す (止めたあとは開かずに断る)
+            if (_device is { Faulted: true } or { Closed: true }) Drop();
             try
             {
                 _device ??= _acquire();
@@ -1492,7 +1541,7 @@ public sealed class It930xTuner : ITuneDevice
         try
         {
             _device?.Detach(_receiver);
-            if (_device is { Faulted: false }) _frontend?.Stream(false);
+            if (_device is { Faulted: false, Closed: false }) _frontend?.Stream(false);
         }
         catch (IOException error)
         {
@@ -1531,7 +1580,7 @@ public sealed class It930xTuner : ITuneDevice
         lock (_gate)
         {
             StopOutput();
-            if (_device is { Faulted: false } device) Rest(device);
+            if (_device is { Faulted: false, Closed: false } device) Rest(device);
             Drop();
         }
         _closeIdle?.Invoke();

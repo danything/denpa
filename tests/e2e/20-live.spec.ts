@@ -144,13 +144,13 @@ test.describe("ライブ視聴", () => {
   test("映像の上端と右の列の最初のもの (種別のタブ) の上端がそろう", async ({
     browser,
   }) => {
-    // MPEG-2 もデコードできる端末として開く (既定の枠は `stack.ts` の `liveWithoutMpeg2`)。エンコードしたものは AV1 で観る
+    // MPEG-2 もデコードできる端末として開く (既定の枠は `stack.ts` の `liveWithoutMpeg2`)。エンコードしたものは H.264 で観る (GPU が無いのでメニューに並ぶのは H.264)
     const context = await browser.newContext();
     const page = await context.newPage();
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
     await wakeControls(page, "live-frame");
-    await pickCodec(page, "live", "av1");
+    await pickCodec(page, "live", "h264");
     for (const size of [
       { width: 1366, height: 768 },
       { width: 1920, height: 1080 },

@@ -75,8 +75,10 @@ import {
   type BroadcastCodec,
   broadcastFormat,
   formatLabel,
+  keptChoice,
   type LiveChoice,
   type LiveFormat,
+  shownCodec,
 } from "#lib/live-choice.js";
 import { liveTuner, pinnedTuner } from "#lib/live-tuner.svelte.js";
 import {
@@ -309,6 +311,11 @@ interface LivePlayerOptions {
    */
   hevc?: boolean;
   /**
+   * その場でエンコードできるコーデック (AV1 → H.265 → H.264 の順。サーバが決める。`server/viewing.ts` の `liveCodecs`)。
+   * コーデックのメニューには、この先頭から端末で再生できるものを 1 つだけ並べる (`menuCodec`)。省くと H.264 だけ
+   */
+  liveCodecs?: readonly LiveCodec[];
+  /**
    * 最初に繋ぐときのチケット (`server/tickets.ts`)。ライブのページを組むときにサーバが配る。**1 回だけ使う** (`takePageTicket`)。
    * 追っかけは渡さない (`/api/live/ticket` で取る)
    */
@@ -360,7 +367,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let codec = $state<LiveCodec>("h264");
   /**
    * コーデックのメニューで選んだもの。**リクエストする形式の元**で、実際の形式は選ぶたびに決める (`pickFormat`)。
-   * 自動なら端末と開いた場所に合わせ (`autoCodec`)、選んだものは家の中でも外でもそのまま使う
+   * 自動なら端末と開いた場所に合わせ (`autoCodec`)、選んだものは家の中でも外でもそのまま使う。
+   * 覚えていたエンコードするものがメニューに並んでいなければ、自動として扱う (`inUse`。値は書き換えない)
    */
   let choice = $state<LiveChoice>(options.choice ?? "auto");
   /** AV1 を受け取れなかった (`start`)。**この画面を開いている間は**自動で AV1 を選ばない。選び直せば試し直す */
@@ -980,7 +988,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * **上げた段がいつまでも映り始めなければ戻す** (`PROBE_START`)。足りない段では最初のキーフレームが届かず、
      * `tuned` も溜まった前の段の映像の後ろに並ぶ。刻みは映っている間しか回らないので、ここで数える
      */
-    if (choice !== "auto") upAsk = null;
+    if (inUse() !== "auto") upAsk = null;
     if (upAsk !== null && starting) {
       if (now - upAsk.at >= PROBE_START) {
         const from = upAsk.from;
@@ -1007,7 +1015,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       now,
       route: "live",
       current: served,
-      manual: choice !== "auto",
+      manual: inUse() !== "auto",
       throughput: rate,
       ahead,
       waiting: stuckNow(now),
@@ -1972,7 +1980,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * コーデックのメニューで選ぶ (自動・AV1・MPEG-2)。音声と同じ扱い (`setAudio`) で、選んだものは
+   * コーデックのメニューで選ぶ (自動・エンコードするもの・MPEG-2)。音声と同じ扱い (`setAudio`) で、選んだものは
    * **この端末に覚える** (`LAST_COOKIE`。ライブだけ)。選び直したなら前の断り書きは用済みで、打ち切っていた形式も試し直す。
    * 決まる形式が今と同じならリクエストし直さない (自動で AV1 になっていて AV1 を選んだ、など)
    */
@@ -2008,7 +2016,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function needsRawCheck(): boolean {
     return (
       broadcastKind() === "mpeg2" &&
-      (choice === "raw" || (choice === "auto" && options.indoor === true))
+      (inUse() === "raw" || (inUse() === "auto" && options.indoor === true))
     );
   }
 
@@ -2052,6 +2060,25 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
+   * **コーデックのメニューに並べる、エンコードするもの (1 つだけ)。** サーバがその場でエンコードできる並び (`options.liveCodecs`) の
+   * 先頭から、この端末で再生できるもの (`#lib/live-choice.ts` の `shownCodec`)。再生できるかは MSE で受け取れるか (互換モードなら描けるか) で見て、
+   * 途中で打ち切ったか (`av1GaveUp` など) は見ない (見るとメニューが開いている間に入れ替わる)。
+   * H.265 は追っかけ・互換モード・4K の局 (放送のままが HEVC の詰め替え) では出さないので並びから外す
+   */
+  function menuCodec(): LiveCodec | null {
+    const noHevc = compat || chase !== null || broadcastKind() === "hevc";
+    const live = (options.liveCodecs ?? ["h264"]).filter(
+      (id) => !(noHevc && id === "hevc"),
+    );
+    return shownCodec(live, (id) => (compat ? canvasCan(id) : mseCan(id)));
+  }
+
+  /** いま使う選択。覚えていたエンコードするものは、メニューに並んでいるもの (`menuCodec`) と同じときだけ (`keptChoice`) */
+  function inUse(): LiveChoice {
+    return keptChoice(choice, menuCodec());
+  }
+
+  /**
    * **選んでいるものから、リクエストする形式を決める。** 自動なら `autoCodec`。選んだものは使えればそのまま、
    * 使えなければ外と同じ順 (AV1 → H.265 → H.264、互換モードは AV1 → H.264 → MPEG-2) で代わりを探す。何も使えなければ null。
    * 使えるかは、MPEG-2 はデコードできて打ち切っていないか、AV1・H.265・H.264 は受け取れて (互換モードなら描けて) 打ち切っていないか。
@@ -2074,9 +2101,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       compat,
       broadcast: kind,
     };
-    if (choice === "auto")
+    const chosen = inUse();
+    if (chosen === "auto")
       return autoCodec({ ...can, indoor: options.indoor === true });
-    const wanted = choice === "raw" ? broadcastFormat(kind) : choice;
+    const wanted = chosen === "raw" ? broadcastFormat(kind) : chosen;
     const ok = wanted === "raw" ? can.rawOk : can[wanted];
     return ok ? wanted : autoCodec({ ...can, indoor: false });
   }
@@ -2102,10 +2130,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       fail("再生できる形式がありません");
       return false;
     }
-    const wanted = choice === "raw" ? broadcastFormat(kind) : choice;
-    if (choice !== "auto" && next !== wanted && warning === "")
+    const chosen = inUse();
+    const wanted = chosen === "raw" ? broadcastFormat(kind) : chosen;
+    if (chosen !== "auto" && next !== wanted && warning === "")
       note(
-        `${formatLabel(choice, kind)} を再生できないため、${formatLabel(next)} に切り替えました`,
+        `${formatLabel(chosen, kind)} を再生できないため、${formatLabel(next)} に切り替えました`,
       );
     rawChosen = next === "raw";
     if (next !== "raw") codec = next;
@@ -3419,9 +3448,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get warning() {
       return warning;
     },
-    /** コーデックのメニューで選んでいるもの (自動・AV1・MPEG-2) */
+    /** コーデックのメニューで選んでいるもの (自動・エンコードするもの・MPEG-2)。並んでいないものを覚えていれば自動 (`inUse`) */
     get choice() {
-      return choice;
+      return inUse();
+    },
+    /** コーデックのメニューに並べる、エンコードするもの (`menuCodec`) */
+    get shown() {
+      return menuCodec();
     },
     setChoice,
     /** 前のフレームを貼っているか。**切り替えの間の黒を埋めている** */

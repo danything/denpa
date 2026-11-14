@@ -6,7 +6,10 @@ import {
   broadcastCodec,
   broadcastFormat,
   formatLabel,
+  hiddenCodecs,
+  keptChoice,
   readChoice,
+  shownCodec,
 } from "./live-choice";
 
 const all = { rawOk: true, av1: true, hevc: true, h264: true };
@@ -98,8 +101,8 @@ describe("自動の形式", () => {
 });
 
 describe("覚えていた選択の読み方", () => {
-  test("自動・AV1・MPEG-2 はそのまま", () => {
-    for (const choice of ["auto", "av1", "raw"] as const)
+  test("自動・AV1・H.265・H.264・MPEG-2 はそのまま", () => {
+    for (const choice of ["auto", "av1", "hevc", "h264", "raw"] as const)
       expect(readChoice(choice)).toBe(choice);
   });
 
@@ -109,9 +112,54 @@ describe("覚えていた選択の読み方", () => {
     expect(readChoice(3)).toBe("auto");
   });
 
-  test("メニューに並べない H.264 と H.265 を選んでいた端末も自動", () => {
-    expect(readChoice("h264")).toBe("auto");
-    expect(readChoice("hevc")).toBe("auto");
+  test("エンコードするものは、いまメニューに並んでいるものと同じときだけ使い、違えば自動", () => {
+    expect(keptChoice("hevc", "hevc")).toBe("hevc");
+    expect(keptChoice("h264", "hevc")).toBe("auto");
+    expect(keptChoice("av1", "h264")).toBe("auto");
+    expect(keptChoice("av1", null)).toBe("auto");
+    // 自動と MPEG-2 は並びに関わらずそのまま
+    expect(keptChoice("auto", "h264")).toBe("auto");
+    expect(keptChoice("raw", null)).toBe("raw");
+  });
+});
+
+/**
+ * **メニューに並べるエンコードするもの** (`shownCodec`)。サーバがその場でエンコードできる並びの先頭から、端末で再生できるもの 1 つ。
+ * テレビのアプリに外させるもの (`hiddenCodecs`) は、並びの先頭以外
+ */
+describe("メニューに並べるコーデック", () => {
+  const plays =
+    (...ok: string[]) =>
+    (codec: string) =>
+      ok.includes(codec);
+
+  test("GPU が無ければ H.264", () => {
+    expect(shownCodec(["h264"], plays("av1", "hevc", "h264"))).toBe("h264");
+  });
+
+  test("GPU で H.264 と H.265 をエンコードできれば、H.265 を再生できる端末は H.265、できない端末は H.264", () => {
+    expect(shownCodec(["hevc", "h264"], plays("av1", "hevc", "h264"))).toBe(
+      "hevc",
+    );
+    expect(shownCodec(["hevc", "h264"], plays("av1", "h264"))).toBe("h264");
+  });
+
+  test("GPU で AV1 をエンコードできれば、AV1 を再生できる端末は AV1", () => {
+    expect(
+      shownCodec(["av1", "hevc", "h264"], plays("av1", "hevc", "h264")),
+    ).toBe("av1");
+    expect(shownCodec(["av1", "h264"], plays("h264"))).toBe("h264");
+  });
+
+  test("どれも再生できなければ並びの先頭、並びが空なら null", () => {
+    expect(shownCodec(["hevc", "h264"], plays())).toBe("hevc");
+    expect(shownCodec([], plays("h264"))).toBeNull();
+  });
+
+  test("テレビのアプリには、並びの先頭以外を外させる", () => {
+    expect(hiddenCodecs(["h264"])).toEqual(["av1", "hevc"]);
+    expect(hiddenCodecs(["hevc", "h264"])).toEqual(["av1", "h264"]);
+    expect(hiddenCodecs(["av1", "hevc", "h264"])).toEqual(["hevc", "h264"]);
   });
 });
 

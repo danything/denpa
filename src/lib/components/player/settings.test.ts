@@ -88,6 +88,7 @@ describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
     const made = liveCodecs({
       icon,
       choice: "auto",
+      shown: "av1",
       format: "raw",
       unavailable: [],
       onselect: (next) => picked.push(next),
@@ -96,18 +97,35 @@ describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
     return { made, picked };
   }
 
-  test("自動・AV1・MPEG-2 と並べ、自動の値にいまの形式を添える", () => {
+  test("自動・エンコードするもの 1 つ・MPEG-2 と並べ、自動の値にいまの形式を添える", () => {
     const { made } = codecs();
     expect(made.options.map((o) => o.label)).toEqual(["自動", "AV1", "MPEG-2"]);
     expect(made.value).toBe("自動 (MPEG-2)");
     expect(made.options.find((o) => o.active)?.key).toBe("auto");
+    expect(codecs({ shown: "hevc" }).made.options.map((o) => o.label)).toEqual([
+      "自動",
+      "H.265",
+      "MPEG-2",
+    ]);
+    expect(codecs({ shown: "h264" }).made.options.map((o) => o.label)).toEqual([
+      "自動",
+      "H.264",
+      "MPEG-2",
+    ]);
   });
 
-  test("H.264 と H.265 は並べない。自動でそれになっていれば値には出す", () => {
+  test("並べていないものも、自動でそれになっていれば値には出す", () => {
     const { made } = codecs({ format: "h264" });
     expect(made.options.map((o) => o.key)).toEqual(["auto", "av1", "mpeg2"]);
     expect(made.value).toBe("自動 (H.264)");
     expect(codecs({ format: "hevc" }).made.value).toBe("自動 (H.265)");
+  });
+
+  test("並べるものが無ければ、自動と MPEG-2 だけ", () => {
+    expect(codecs({ shown: null }).made.options.map((o) => o.key)).toEqual([
+      "auto",
+      "mpeg2",
+    ]);
   });
 
   test("選んだものはその名前だけを値に出す", () => {

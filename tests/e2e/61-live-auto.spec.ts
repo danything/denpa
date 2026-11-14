@@ -31,7 +31,7 @@ test.describe("ライブの自動", () => {
     await syncEpg(request);
   });
 
-  test("家の中で開くと MPEG-2 で観る。メニューは自動・AV1・MPEG-2 の順 (H.264 と H.265 は並べない)", async ({
+  test("家の中で開くと MPEG-2 で観る。メニューは自動・エンコードするもの 1 つ・MPEG-2 の順 (GPU が無いので H.264)", async ({
     page,
   }) => {
     await openLive(page);
@@ -49,7 +49,7 @@ test.describe("ライブの自動", () => {
       await options.evaluateAll((items) =>
         items.map((item) => item.getAttribute("data-codec")),
       ),
-    ).toEqual(["auto", "av1", "mpeg2"]);
+    ).toEqual(["auto", "h264", "mpeg2"]);
     await expect(
       page.locator('[data-testid="live-codec-option"][data-codec="auto"]'),
     ).toHaveAttribute("aria-checked", "true");
@@ -116,9 +116,9 @@ test.describe("ライブの自動", () => {
     await openSettings(page, "live");
     await page.getByTestId("live-codec").click();
     await page
-      .locator('[data-testid="live-codec-option"][data-codec="av1"]')
+      .locator('[data-testid="live-codec-option"][data-codec="h264"]')
       .click();
-    await expect(page.getByTestId("live-codec")).toHaveText(/AV1/);
+    await expect(page.getByTestId("live-codec")).toHaveText(/H\.264/);
     await expect(page.getByTestId("live-raw")).toHaveCount(0, {
       timeout: 30_000,
     });
@@ -126,10 +126,30 @@ test.describe("ライブの自動", () => {
     await goto(page, "/live");
     await expect(page.getByTestId("live-title")).toBeVisible();
     await expect(page.getByTestId("live-codec")).not.toContainText("自動");
-    await expect(page.getByTestId("live-codec")).toContainText("AV1");
+    await expect(page.getByTestId("live-codec")).toContainText("H.264");
   });
 
-  test("前に H.264 を選んでいた端末も自動で開く", async ({ page, stack }) => {
+  test("前に AV1 を選んでいた端末は、AV1 をその場でエンコードできない (メニューに並ばない) ので自動で開く", async ({
+    page,
+    stack,
+  }) => {
+    await page.context().addCookies([
+      {
+        name: "denpa_live_last",
+        value: encodeURIComponent(JSON.stringify({ choice: "av1" })),
+        domain: new URL(stack.appUrl).hostname,
+        path: "/live",
+      },
+    ]);
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-codec")).toContainText("自動 (MPEG-2)");
+  });
+
+  test("前に H.264 を選んでいた端末は、H.264 がメニューに並んでいればそれで開く", async ({
+    page,
+    stack,
+  }) => {
     await page.context().addCookies([
       {
         name: "denpa_live_last",
@@ -140,7 +160,8 @@ test.describe("ライブの自動", () => {
     ]);
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
-    await expect(page.getByTestId("live-codec")).toContainText("自動 (MPEG-2)");
+    await expect(page.getByTestId("live-codec")).toHaveText(/H\.264/);
+    await expect(page.getByTestId("live-codec")).not.toContainText("自動");
   });
 
   test("家の中の名前は 1 行に 1 つ保存し、読めない名前は理由を出す", async ({
@@ -164,14 +185,15 @@ test.describe("ライブの自動", () => {
     await expect(page.getByTestId("saved-result")).toBeVisible();
   });
 
-  test("観るときの決まりを API で返す (127.0.0.1 は家の中。メニューから外すのはいつも H.264 と H.265)", async ({
+  test("観るときの決まりを API で返す (127.0.0.1 は家の中。GPU が無いのでその場でエンコードできるのは H.264 だけで、AV1 と H.265 を外させる)", async ({
     request,
   }) => {
     const res = await request.get("/api/playback/options");
     expect(res.headers()["cache-control"]).toBe("no-store");
     expect(await res.json()).toEqual({
       indoor: true,
-      hidden: ["h264", "hevc"],
+      liveCodecs: ["h264"],
+      hidden: ["av1", "hevc"],
       hevc: false,
     });
   });

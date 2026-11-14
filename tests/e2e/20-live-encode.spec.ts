@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
+import type { Page } from "@playwright/test";
+
 import { BS11, BS_NO_LOGO, MX, SERVICES } from "../fake/services";
 import {
   CAPTION_SCREENS,
@@ -17,6 +19,7 @@ import {
   test,
   wakeControls,
 } from "./helpers";
+import { plugGpu } from "./hwenc";
 import { sameBox } from "./live";
 
 /**
@@ -171,34 +174,46 @@ test.describe("ライブ視聴", () => {
    * ブラウザもある。
    *
    * **選び直したら再エンコードになる。** サーバはエンコード方式ごとに別の ffmpeg を回す
-   * ので、渡した引数がそのまま変わる
+   * ので、渡した引数がそのまま変わる。GPU が無いのでメニューに並ぶのは H.264 で、
+   * MPEG-2 をデコードできる端末として開き、自動の MPEG-2 (エンコードしない) から H.264 に替える
    */
-  test("エンコード方式を選び直すと、その形式で再エンコードする", async ({
-    page,
-    stack,
-  }) => {
-    rmSync(stack.liveArgsFile, { force: true });
-    await goto(page, "/live");
-    await page.getByTestId("live-channel").first().click();
-    await expect(page.getByTestId("live-title")).toBeVisible();
-    // MPEG-2 をデコードできない端末として開くので、自動で H.264 を観る (`liveWithoutMpeg2`。MPEG-2 から始まる自動は `61-live-auto`)
-    expect(await ffmpegArgs(stack.liveArgsFile, expect)).toContain("libx264");
+  test.describe("MPEG-2 をデコードできる端末", () => {
+    test.use({ liveMpeg2: true });
 
-    await wakeControls(page, "live-frame");
-    await pickCodec(page, "live", "av1");
+    test("エンコード方式を選び直すと、その形式で再エンコードする", async ({
+      page,
+      stack,
+    }) => {
+      rmSync(stack.liveArgsFile, { force: true });
+      await page.context().clearCookies();
+      await goto(page, "/live");
+      await page.getByTestId("live-channel").first().click();
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await expect(page.getByTestId("live-raw")).toBeVisible({
+        timeout: 30_000,
+      });
+      const encodes = () =>
+        existsSync(stack.liveArgsFile)
+          ? readFileSync(stack.liveArgsFile, "utf8")
+              .split("---\n")
+              .filter((run) => run.includes("libx264")).length
+          : 0;
+      const before = encodes();
 
-    await expect(async () => {
-      const runs = readFileSync(stack.liveArgsFile, "utf8")
-        .split("---\n")
-        .filter((run) => run.trim() !== "");
-      expect(
-        runs.some((run) => run.includes("libsvtav1")),
-        "AV1 で再エンコードしていない",
-      ).toBe(true);
-    }).toPass({ timeout: 15_000 });
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "h264");
 
-    // 押した形式が切り替えに出ている。押しても表示が変わらないと効いたか分からない
-    await expect(page.getByTestId("live-codec")).toContainText("AV1");
+      await expect
+        .poll(encodes, {
+          message: "H.264 で再エンコードしていない",
+          timeout: 15_000,
+        })
+        .toBeGreaterThan(before);
+
+      // 押した形式が切り替えに出ている。押しても表示が変わらないと効いたか分からない
+      await expect(page.getByTestId("live-codec")).toHaveText(/H\.264/);
+      await expect(page.getByTestId("live-codec")).not.toContainText("自動");
+    });
   });
 
   /*
@@ -213,17 +228,22 @@ test.describe("ライブ視聴", () => {
     await channels.first().click();
     await expect(page.getByTestId("live-title")).toBeVisible();
 
+    // GPU が無いので、メニューに並ぶエンコードするものは H.264。選べば自動ではなくなる
+    const codec = page.getByTestId("live-codec");
     await wakeControls(page, "live-frame");
-    await pickCodec(page, "live", "av1");
-    await expect(page.getByTestId("live-codec")).toContainText("AV1");
+    await pickCodec(page, "live", "h264");
+    await expect(codec).toHaveText(/H\.264/);
+    await expect(codec).not.toContainText("自動");
 
     await channels.nth(1).click();
     await expect(channels.nth(1)).toHaveAttribute("data-current", "true");
-    await expect(page.getByTestId("live-codec")).toContainText("AV1");
+    await expect(codec).toHaveText(/H\.264/);
+    await expect(codec).not.toContainText("自動");
 
     // 開き直しても覚えている
     await goto(page, "/live");
-    await expect(page.getByTestId("live-codec")).toContainText("AV1");
+    await expect(codec).toHaveText(/H\.264/);
+    await expect(codec).not.toContainText("自動");
   });
 
   /*
@@ -462,7 +482,19 @@ test.describe("ライブ視聴", () => {
    */
   test("2 本目の字幕を選んだまま、エンコード方式を選び直しても字幕は 2 本目", async ({
     page,
+    request,
+    stack,
   }) => {
+    // 自動 (H.264) から選び直す先が要るので、AV1 をエンコードできる GPU を挿す (メニューに AV1 が並ぶ)
+    const unplug = await plugGpu(stack.hwDir, request);
+    try {
+      await captionKeptAcrossCodec(page);
+    } finally {
+      await unplug();
+    }
+  });
+
+  async function captionKeptAcrossCodec(page: Page): Promise<void> {
     await captureSockets(page);
     // 送ったものを控える (繋ぎ直しても数えられるよう、作る前から)
     await page.addInitScript(() => {
@@ -524,7 +556,7 @@ test.describe("ライブ視聴", () => {
         return [last?.codec, last?.caption];
       })
       .toEqual(["av1", 1]);
-  });
+  }
 
   /*
    * **字幕は映像と同じ ffmpeg がエンコードする。** 出口を 2 つ持つ 1 本しか起きない。

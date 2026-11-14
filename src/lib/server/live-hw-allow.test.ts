@@ -30,7 +30,8 @@ afterAll(() => {
 });
 
 const { saveSettings, settings } = await import("./settings");
-const { blameLiveHw, liveHevc, pickLiveHw } = await import("./live");
+const { blameLiveHw, liveHevc, liveRealtime, pickLiveHw } =
+  await import("./live");
 const { gpuReady } = await import("./transcode");
 const { bootstrap, MIGRATIONS } = await import("./db");
 
@@ -124,6 +125,55 @@ test("GPU が H.265 をエンコードできずに降りたら、覚えている
   expect(liveHevc([D])).toBe(true);
   expect(blameLiveHw("hevc", hw, false)).toBe(true);
   expect(liveHevc([D])).toBe(false);
+});
+
+/**
+ * **ライブでその場でエンコードできるコーデック** (`liveRealtime`。コーデックのメニューに並べる候補)。AV1 → H.265 → H.264 の順で、
+ * GPU に載るもの (ライブの印・最近落ちたか) と、ソフトウェアの H.264。ソフトウェアの AV1 は間に合わないので数えない
+ */
+test("GPU が無ければ H.264 だけ。ソフトウェアの AV1 は数えない", () => {
+  saveSettings({ hwAllow: {}, liveHwAllow: {} });
+  expect(liveRealtime([])).toEqual(["h264"]);
+});
+
+test("VA-API で H.264 と H.265 をエンコードできる GPU (AV1 は無い) なら H.265 → H.264", () => {
+  const E: HwDevice = {
+    ...A,
+    path: "/dev/dri/renderD132",
+    vaapi: ["hevc", "h264"],
+  };
+  saveSettings({ hwAllow: {}, liveHwAllow: {} });
+  expect(liveRealtime([E])).toEqual(["hevc", "h264"]);
+  // ライブの印で H.265 を外せば H.264 だけ
+  saveSettings({ hwAllow: {}, liveHwAllow: { [E.path]: only(["h264"]) } });
+  expect(liveRealtime([E])).toEqual(["h264"]);
+  // 印を全部外しても、ソフトウェアの H.264 は残る
+  saveSettings({ hwAllow: {}, liveHwAllow: { [E.path]: only([]) } });
+  expect(liveRealtime([E])).toEqual(["h264"]);
+});
+
+test("AV1 もエンコードできる GPU なら AV1 → H.265 → H.264。H.265 が無ければ AV1 → H.264", () => {
+  const F: HwDevice = {
+    ...A,
+    path: "/dev/dri/renderD133",
+    vaapi: ["av1", "hevc", "h264"],
+  };
+  saveSettings({ hwAllow: {}, liveHwAllow: {} });
+  expect(liveRealtime([F])).toEqual(["av1", "hevc", "h264"]);
+  expect(liveRealtime([A])).toEqual(["av1", "h264"]);
+});
+
+test("GPU が H.265 をエンコードできずに降りたら、覚えている間は並べない", () => {
+  const G: HwDevice = {
+    ...A,
+    path: "/dev/dri/renderD134",
+    vaapi: ["hevc", "h264"],
+  };
+  saveSettings({ hwAllow: {}, liveHwAllow: {} });
+  const hw = pickLiveHw("hevc", true, [G]);
+  if (hw === null) throw new Error("GPU に載らない");
+  blameLiveHw("hevc", hw, false);
+  expect(liveRealtime([G])).toEqual(["h264"]);
 });
 
 /**
