@@ -22,6 +22,7 @@ const A: HwUsable = {
   qsv: [],
   amf: [],
   videotoolbox: [],
+  mediacodec: [],
 };
 /** AV1 をエンコードできない (Arc より前) */
 const B: HwUsable = {
@@ -32,6 +33,7 @@ const B: HwUsable = {
   qsv: [],
   amf: [],
   videotoolbox: [],
+  mediacodec: [],
 };
 /** Rockchip MPP (`/dev/mpp_service`)。H.264 だけ */
 const R: HwUsable = {
@@ -42,6 +44,7 @@ const R: HwUsable = {
   qsv: [],
   amf: [],
   videotoolbox: [],
+  mediacodec: [],
 };
 
 describe("エンコーダの選択", () => {
@@ -64,6 +67,7 @@ describe("エンコーダの選択", () => {
       qsv: ["av1", "hevc", "h264"],
       amf: ["av1", "hevc", "h264"],
       videotoolbox: ["av1", "hevc", "h264"],
+      mediacodec: ["av1", "hevc", "h264"],
     });
   });
 
@@ -84,6 +88,7 @@ describe("エンコーダの選択", () => {
       qsv: ["av1", "hevc", "h264"],
       amf: ["av1", "hevc", "h264"],
       videotoolbox: ["av1", "hevc", "h264"],
+      mediacodec: ["av1", "hevc", "h264"],
     });
   });
 
@@ -97,6 +102,7 @@ describe("エンコーダの選択", () => {
         qsv: [],
         amf: [],
         videotoolbox: [],
+        mediacodec: [],
       },
     };
     const C: HwUsable = {
@@ -119,6 +125,7 @@ describe("エンコーダの選択", () => {
       qsv: [],
       amf: [],
       videotoolbox: [],
+      mediacodec: [],
     });
   });
 
@@ -131,6 +138,7 @@ describe("エンコーダの選択", () => {
         qsv: [],
         amf: [],
         videotoolbox: [],
+        mediacodec: [],
       },
     };
     expect(hwChoice(allow, [A], "av1")).toBe(A.path);
@@ -146,6 +154,7 @@ describe("エンコーダの選択", () => {
         qsv: [],
         amf: [],
         videotoolbox: [],
+        mediacodec: [],
       },
     };
     expect(
@@ -157,6 +166,7 @@ describe("エンコーダの選択", () => {
       qsv: [],
       amf: [],
       videotoolbox: [],
+      mediacodec: [],
     });
   });
 });

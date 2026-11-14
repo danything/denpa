@@ -25,7 +25,8 @@ import java.util.zip.ZipInputStream
  *   assets のままでは bun が読めないので、起動の前に `DENPA_HOME/server/<versionCode>-<更新した時刻>/` へ書き出す ([extract])
  * - **assets に `server.zip` が無ければ起動しない。** 手元で denpa 本体を置かずに組んだ APK は、エージェントだけが動く
  * - 環境変数は Mac の `denpa.sh` (install.sh) と同じ並び ([environment])。ffmpeg・ffprobe は jniLibs の `libffmpeg.so`・`libffprobe.so` を
- *   `FFMPEG`・`FFPROBE` で渡す ([tools])。libav* の共有ライブラリは、実行ファイルの RUNPATH (`$ORIGIN`) で同じ置き場から読まれる
+ *   `FFMPEG`・`FFPROBE` で渡す ([tools])。libav* の共有ライブラリは、実行ファイルの RUNPATH (`$ORIGIN`) で同じ置き場から読まれる。
+ *   MediaCodec のハードウェアのエンコーダの名前は `MEDIACODEC_ENCODERS` で渡す ([Encoders])
  * - 人が足す環境変数は、外部ストレージのアプリの置き場の `denpa.env` に書く ([userEnvironment])。アプリが決めるものはそちらより勝つ
  * - 出力はエージェントと同じく logcat に流す (タグは [TAG])
  */
@@ -112,7 +113,7 @@ internal object Server {
         "PORT" to PORT.toString(),
         // 変換のキャッシュを書かない (Mac の denpa.sh・コンテナと同じ。展開した置き場は更新のたびに替わる)
         "BUN_RUNTIME_TRANSPILER_CACHE_PATH" to "0",
-    ) + tools(context)
+    ) + tools(context) + Encoders.environment()
 
     /** リリースの APK (versionName が `2.43.0` の形) は `v2.43.0`、手元と CI の APK は `dev` (更新の通知を出さない) */
     fun denpaVersion(versionName: String?): String =

@@ -22,7 +22,7 @@
 # - アプリの子プロセスの bun で .github/android-bun-check.js を流し (debug の受け口の RUN_BUN)、JIT・名前を引けるか・/proc から読むもの・
 #   子プロセスの起動・TZ・bun:sqlite を bun の中から試す
 # - bun が、常駐サービスの渡す FFMPEG・FFPROBE (APK の libffmpeg.so・libffprobe.so) を子プロセスで起動できる。
-#   tests/native-smoke.ts (エンコード、HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec のエンコーダ、4 本目の出口) を
+#   tests/native-smoke.ts (エンコード、HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec のエンコーダと名前での選び方、4 本目の出口) を
 #   同じく RUN_BUN で流す
 # - 同じ APK を入れ直す (更新) と、常駐サービスが始まり直し、書き出した置き場が入れ替わって古いものは消え、DB は残る
 # - エージェントが異常終了すると、アプリが起動し直し、繋ぎ直して synced を送り直す
@@ -295,7 +295,7 @@ cat "$logs/ffmpeg-smoke-stderr.txt" >&2
 test "$code" = 0
 # 終了コードだけでなく、最後まで流れたかも見る (ffprobe は 10 種類のファイル)
 test "$(grep -cE '^ffprobe .+: ok$' "$logs/ffmpeg-smoke.txt")" = 10
-for line in "ffmpeg: ok" "h264_mediacodec: ok" "no GPU: software encoding: ok" "side output closes when ffmpeg fails: ok"; do
+for line in "ffmpeg: ok" "h264_mediacodec: ok" "no GPU: software encoding: ok" "h264 on mediacodec (c2.android.avc.encoder): ok" "side output closes when ffmpeg fails: ok"; do
   grep -qxF "$line" "$logs/ffmpeg-smoke.txt" || { echo "native-smoke の出力に「$line」がありません" >&2; exit 1; }
 done
 # ffmpeg・ffprobe の SELinux の拒否は記録に残す。実行そのものを断られたら止める
