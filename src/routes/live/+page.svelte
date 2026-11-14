@@ -555,9 +555,9 @@
       <DataBroadcast
         on={player.showData}
         receive={player.receivingData}
-        channel={player.tuned === null
+        channel={player.dataChannel === null
           ? null
-          : `${player.tuned.channelType}/${player.tuned.channel}/${player.tuned.serviceId}`}
+          : `${player.dataChannel.channelType}/${player.dataChannel.channel}/${player.dataChannel.serviceId}`}
         media={mediaBox}
         listen={player.listenData}
         bind:press={dataPress}

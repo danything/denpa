@@ -40,9 +40,10 @@ import {
   storedCaptionsOn,
 } from "#lib/components/player/caption-pref.js";
 import {
-  closesData,
+  closingOnTune,
   DATA_RECEIVE_KEY,
   storedDataReceive,
+  tunedCloses,
   wantsData,
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
@@ -476,11 +477,19 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let holding = $state(false);
   /**
    * データ放送を出すか (テレビの d ボタン)。サーバは押されてからデコードする (`server/live.ts` の `wantData`)。
-   * 別の局へ移ったら閉じる (`closesData`)
+   * 別の局へ移ったら閉じる (`closesData`)。閉じるのはサーバが選局を受けたとき (`closing`)
    */
   let showData = $state(false);
-  /** 最後に選局した局 (`Tuned.serviceId`)。追っかけの間も覚えておき、同じ局へ戻ったら開いたまま */
-  let lastService: number | null = null;
+  /**
+   * サーバが選局の答え (`tuned`) で受けたと知らせた局。追っかけの間も覚えておき、同じ局へ戻ったら開いたまま。
+   * データ放送のエンジンはこの局のもの (`dataChannel`)。リクエストしただけの局 (`tuned`) とは、答えが届くまで違う
+   */
+  let onAir = $state<Tuned | null>(null);
+  /**
+   * 別の局への選局をリクエストして、答えを待っている局 (`Tuned.serviceId`。`closingOnTune`)。答えが届いたら
+   * データ放送を閉じる (`tunedCloses`)。サーバが断ったら (`fail`) 閉じずに忘れる。待っている間は受信をリクエストしない (`wantsData`)
+   */
+  let closing = $state<number | null>(null);
   /**
    * データ放送を自動で受信するか (データ放送のボタンの長押し)。**端末ごとに覚える** (`data-receive.ts`)。
    * いまの局の入口に自動起動の指定があれば (`autoStart`)、開いていなくてもサーバにリクエストし、入口の文書を裏で動かす
@@ -1921,6 +1930,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 段を上げたあとの待ち (`upAsk`) を残すと、エラーの画面のまま段を下げてリクエストし直す
     upAsk = null;
     thaw();
+    /*
+     * 選局が済まなかった (サーバが断った・繋がらなかった)。データ放送は閉じずに前の局のまま (`closing`)。
+     * 選局の指示より先にやめた受信のリクエストを戻す (サーバが前の局を流したままなら、前の局のものが届く)
+     */
+    if (closing !== null) {
+      closing = null;
+      syncData();
+    }
   }
 
   /**
@@ -2152,6 +2169,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function setData(on: boolean): void {
     if (showData === on) return;
     showData = on;
+    // 選局の答えを待っている間に押したら、次の局で開く・閉じる。答えが届いても閉じない
+    closing = null;
     syncData();
   }
 
@@ -2169,6 +2188,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       auto: receiveData,
       tuned: tuned !== null,
       autoStart,
+      switching: closing !== null,
     });
   }
 
@@ -2234,12 +2254,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   ): Promise<void> {
     chase = null;
     chaseTimeline = null;
-    // 別の局へ移ったらデータ放送を閉じる。サーバへは `begin` の `syncData` で送る
-    if (closesData(lastService, target.serviceId)) {
-      showData = false;
-      autoStart = false;
-    }
-    lastService = target.serviceId;
+    /*
+     * 別の局へ移るなら、サーバが選局を受けたら (`tuned`) データ放送を閉じる (`closingOnTune`)。それまでは前の局の
+     * データ放送を出したままで、受信のリクエストは `begin` の `syncData` で選局の指示より先にやめる。
+     * リクエストし直し (`requestAgain`・`reconnect`) もここを通り、答えの来ていない局を待ち直す
+     */
+    closing = closingOnTune(onAir?.serviceId ?? null, target.serviceId);
     tuned = target;
     audio = target.audio ?? "";
     /*
@@ -2265,6 +2285,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     broadcast?: BroadcastCodec,
   ): Promise<void> {
     tuned = null;
+    // 追っかけは局を選ばない。待っていた選局の答え (`closing`) はもう来ないので、データ放送は閉じない
+    closing = null;
     chase = {
       recordingId,
       base: Math.max(0, at),
@@ -2754,6 +2776,24 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           audios = notice.audios;
           audio = notice.audio;
           awaiting = false;
+          /*
+           * **サーバが選局を受けた。** 待っていた別の局なら、ここでデータ放送を閉じる (`tunedCloses`)。
+           * サーバは `tuned` を次の局のデータ放送より先に送るので、閉じる前に次の局の入口へ d は届かない。
+           * 自動起動の指定 (`autoStart`) も忘れる。次の局のものは `tuned` のあとに届く。追っかけの答えには `serviceId` が無い
+           */
+          if (
+            chase === null &&
+            tuned !== null &&
+            notice.serviceId === tuned.serviceId
+          ) {
+            if (tunedCloses(closing, notice.serviceId)) {
+              showData = false;
+              autoStart = false;
+            }
+            closing = null;
+            onAir = tuned;
+            syncData();
+          }
           /*
            * **サーバが PMT を読んで、TS に HEVC を入れて送る 4K の局と分かった** (`broadcast`)。放送のままをリクエストしていても
            * 答えは HEVC の詰め替えで、下の `start` で MSE に移る。この局を開いている間は「放送のまま」を HEVC として扱い、
@@ -3489,7 +3529,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         auto: receiveData,
         tuned: tuned !== null,
         autoStart,
+        switching: closing !== null,
       });
+    },
+    /**
+     * データ放送のエンジンが受け持つ局 (`DataBroadcast` の `channel`)。局を映していなければ null。
+     * サーバが選局を受けた局 (`onAir`) で、別の局への選局の答えを待っている間も、断られたあとも前の局のまま作り直さない。
+     * 初めての選局で答えがまだ無いときは、リクエストした局
+     */
+    get dataChannel() {
+      if (tuned === null) return null;
+      return onAir ?? tuned;
     },
     toggleReceiveData,
     listenData,

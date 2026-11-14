@@ -32,14 +32,18 @@ export function dataReceiveNote(on: boolean): string {
 /**
  * サーバに受信をリクエストするか。開いている (d) か、自動で受信していて、局を映していて、
  * その局の入口に自動起動の指定があるとき (`autoStart`。サーバが PMT を読んで知らせる `Notice` の `autoStart`)。
- * 追っかけ・録画に譲っている間は局のデータ放送が無いので、開いていなければリクエストしない
+ * 追っかけ・録画に譲っている間は局のデータ放送が無いので、開いていなければリクエストしない。
+ * 別の局への選局の答えを待っている間 (`switching`。`closingOnTune`) は、開いていてもリクエストしない。
+ * 答えが届けば閉じるので、次の局のセッションが覚えているぶん (実機で約 2MB) を受け取っても使わない
  */
 export function wantsData(now: {
   open: boolean;
   auto: boolean;
   tuned: boolean;
   autoStart: boolean;
+  switching: boolean;
 }): boolean {
+  if (now.switching) return false;
   return now.open || (now.auto && now.tuned && now.autoStart);
 }
 
@@ -52,4 +56,25 @@ export function wantsData(now: {
  */
 export function closesData(previous: number | null, next: number): boolean {
   return previous !== null && previous !== next;
+}
+
+/**
+ * 選局をリクエストしたとき、答えを待ってから閉じる局 (`closesData` が閉じると言う次の局)。閉じないなら null。
+ * **閉じるのはサーバが選局を受けたとき** (`tunedCloses`)。リクエストした時点で閉じていた頃は、サーバが選局を
+ * 断ると (復号できない局の `error`) 前の局を受信したまま、データ放送だけが閉じていた。
+ * `onAir` はサーバが選局の答え (`tuned`) で受けたと知らせた局 (`Tuned.serviceId`)。追っかけの間も前の局のまま覚えておく
+ */
+export function closingOnTune(
+  onAir: number | null,
+  next: number,
+): number | null {
+  return closesData(onAir, next) ? next : null;
+}
+
+/**
+ * 選局の答え (`tuned` の `serviceId`) が届いたとき、開いたデータ放送を閉じるか。待っていた局 (`closingOnTune`) の答えのときだけ閉じる。
+ * 続けて選び直したあとで前の指示の答えが遅れて届いても、待っている局のものでなければ閉じない
+ */
+export function tunedCloses(closing: number | null, served: number): boolean {
+  return closing !== null && closing === served;
 }
