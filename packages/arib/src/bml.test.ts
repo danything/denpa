@@ -92,6 +92,39 @@ describe("parseBxmlInfo", () => {
     expect(info.additionalAribCarouselInfo?.dataEventId).toBe(0x0f);
   });
 
+  test("TR-B14 表 2-3 のビットの並びで読む (バージョンを書いた地上波の入口)", () => {
+    // 0x33: transmission_format 00・entry_point_flag 1・auto_start_flag 1・document_resolution 0011
+    // 0x20: use_xml 0・default_version_flag 0・independent_flag 1・style_for_TV_flag 0・reserved
+    // 0003 0000: bml_major_version 3・bml_minor_version 0 (default_version_flag が 0 のときだけある)
+    // 0x18: data_event_id 1・event_section_flag 1。0x40: ondemand_retrieval_flag 0・file_storable_flag 1
+    const info = parseBxmlInfo(
+      Uint8Array.from([0x33, 0x20, 0x00, 0x03, 0x00, 0x00, 0x18, 0x40]),
+    );
+    expect(info.transmissionFormat).toBe(0);
+    expect(info.entryPointInfo).toEqual({
+      autoStartFlag: true,
+      documentResolution: 3,
+      useXML: false,
+      defaultVersionFlag: false,
+      independentFlag: true,
+      styleForTVFlag: false,
+      bmlMajorVersion: 3,
+      bmlMinorVersion: 0,
+    });
+    expect(info.additionalAribCarouselInfo).toEqual({
+      dataEventId: 1,
+      eventSectionFlag: true,
+      ondemandRetrievalFlag: false,
+      fileStorableFlag: true,
+      startPriority: 0,
+    });
+    // auto_start_flag だけを落とす (0x23)
+    expect(
+      parseBxmlInfo(Uint8Array.from([0x23, 0xe0, 0x18, 0x40])).entryPointInfo
+        ?.autoStartFlag,
+    ).toBe(false);
+  });
+
   test("入口でない ES は起動のしかたを持たない", () => {
     const descriptor = bxmlDescriptor({ entryPoint: false });
     const info = parseBxmlInfo(Uint8Array.from(descriptor.slice(4)));

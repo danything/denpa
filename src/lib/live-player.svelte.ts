@@ -40,6 +40,7 @@ import {
   storedCaptionsOn,
 } from "#lib/components/player/caption-pref.js";
 import {
+  closesData,
   DATA_RECEIVE_KEY,
   storedDataReceive,
   wantsData,
@@ -467,9 +468,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let holding = $state(false);
   /**
    * データ放送を出すか (テレビの d ボタン)。サーバは押されてからデコードする (`server/live.ts` の `wantData`)。
-   * 局を変えても押したままにする
+   * 別の局へ移ったら閉じる (`closesData`)
    */
   let showData = $state(false);
+  /** 最後に選局した局 (`Tuned.serviceId`)。追っかけの間も覚えておき、同じ局へ戻ったら開いたまま */
+  let lastService: number | null = null;
   /**
    * データ放送を常に受信するか (再生の設定の行)。**端末ごとに覚える** (`data-receive.ts`)。開いていなくても
    * サーバにリクエストし、入口の文書を裏で動かす (`DataBroadcast` の `receive`)
@@ -2189,6 +2192,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   ): Promise<void> {
     chase = null;
     chaseTimeline = null;
+    // 別の局へ移ったらデータ放送を閉じる。サーバへは `begin` の `syncData` で送る
+    if (closesData(lastService, target.serviceId)) showData = false;
+    lastService = target.serviceId;
     tuned = target;
     audio = target.audio ?? "";
     /*
