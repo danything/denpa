@@ -8,7 +8,7 @@ import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
 import { ServiceFilter } from "@danything/arib/service-filter";
 import { and, eq, sql } from "drizzle-orm";
 
-import { RECORDED_EXT, recordedTransport } from "#lib/source.js";
+import { RECORDED_EXT } from "#lib/source.js";
 import { TsHead } from "#lib/ts/ts-head.js";
 
 import {
@@ -22,7 +22,7 @@ import type { Place } from "./agent-order";
 import { fileSize } from "./chase";
 import { config } from "./config";
 import { now, orm } from "./db";
-import { enqueue } from "./encoder";
+import { broadcastServiceId, encodeInput, enqueue } from "./encoder";
 import { savePrograms } from "./epg";
 import { emit } from "./events";
 import { moveFile, removeIfExists } from "./fsx";
@@ -818,9 +818,18 @@ function finish(recordingId: number, size: number): void {
   // エンコードしない設定なら元の TS をそのまま保存先へ移す。拡張子 (伝送の形式) はそのまま (`.m2ts`・`.mmts`)
   const dest = libraryPath(recording, extname(recording.ts_path!));
   moveFile(recording.ts_path!, dest);
-  // 4K の録画 (TLV) は ffmpeg が読めないので、サムネイルを作らない (エンコードすれば、詰め替えた MP4 から作る。`encoder.ts`)
-  if (recordedTransport(dest) === "ts")
-    void writeThumbnail(dest, (recording.end_at - recording.start_at) / 1000);
+  /*
+   * 4K の局の録画 (TLV) は ffmpeg が読めないので、サムネイルを作らない (エンコードすれば、詰め替えた MP4 から作る。`encoder.ts`)。
+   * TS で送る 4K の局の録画は、縮めて SDR に直して取る (`encoder.encodeInput` の `uhd`)
+   */
+  const kind = encodeInput(dest, broadcastServiceId(recording.service_id));
+  if (!kind.tlv)
+    void writeThumbnail(
+      dest,
+      (recording.end_at - recording.start_at) / 1000,
+      undefined,
+      kind.uhd,
+    );
   // 保存先に置いた時点で「視聴可能」になる
   orm()
     .update(recordings)
