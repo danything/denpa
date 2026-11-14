@@ -51,7 +51,7 @@
 
   const listId = $derived(`${testid}-list`);
   let groups = $state<SuggestGroup[]>([]);
-  /** 候補を出しているときの言葉。結果の画面へのリンクと「見つかりません」に使う */
+  /** 候補を出しているときの言葉。結果の画面へのリンクと「一致するものはありません」に使う */
   let answered = $state("");
   let open = $state(false);
   let active = $state(-1);

@@ -22,7 +22,7 @@ function shrink(size: GrabSize): ImageBitmapOptions {
  *
  * 光を描くのは `AmbientGlow.svelte` (舞台 `PlayerStage` が枠の周りに置く。テーブルトップの間は代わりに
  * 反射の `FoldReflection.svelte`)。ここが持つのは
- * オン/オフと、いまのコマを小さく写す手立て:
+ * オン/オフと、いまのコマを小さく写す手立て。
  *
  * - `<video>` で観ているとき … コマ (`VideoFrame`) を worker に渡して縮めてもらう (`glance-worker.ts`)。
  *   `VideoFrame` の無いブラウザは画面の側で `createImageBitmap` で縮める

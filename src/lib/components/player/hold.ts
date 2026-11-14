@@ -1,5 +1,7 @@
 import type { Attachment } from "svelte/attachments";
 
+import { isShiftD } from "./keys";
+
 /**
  * **ボタンの長押しで、押したときとは別の操作をする** (`{@attach}`)。データ放送のボタン (d) で、自動で受信するかを切り替える
  * (`data-receive.ts`)。ライブの右端の列のボタンと、観る画面の ⚙ の「データ放送」の行で同じ。
@@ -74,7 +76,7 @@ export function hold(
       onHold();
     };
     const key = (event: KeyboardEvent) => {
-      if (event.key !== "D" || event.ctrlKey || event.altKey || event.metaKey)
+      if (!isShiftD(event) || event.ctrlKey || event.altKey || event.metaKey)
         return;
       event.preventDefault();
       event.stopPropagation();
