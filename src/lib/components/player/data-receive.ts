@@ -34,7 +34,7 @@ export function dataReceiveNote(on: boolean): string {
  * その局の入口に自動起動の指定があるとき (`autoStart`。サーバが PMT を読んで知らせる `Notice` の `autoStart`)。
  * 追っかけ・録画に譲っている間は局のデータ放送が無いので、開いていなければリクエストしない。
  * 別の局への選局の答えを待っている間 (`switching`。`closingOnTune`) は、開いていてもリクエストしない。
- * 答えが届けば閉じるので、次の局のセッションが覚えているぶん (実機で約 2MB) を受け取っても使わない
+ * 答えが届けば閉じるので、次の局のセッションが覚えているぶん (実機で約 2 MB) を受け取っても使わない
  */
 export function wantsData(now: {
   open: boolean;

@@ -72,8 +72,8 @@ describe("データ放送を自動で受信するか", () => {
     expect(tunedCloses(closingOnTune(null, 1), 1)).toBe(false);
   });
 
-  test("サーバが選局を断ったら (答えが来ない)、データ放送は前の局のまま", () => {
-    // 1 から 2 を選び、2 は断られた。画面は待つのをやめ (`fail`)、映しているのは 1 のまま
+  test("サーバが選局を断ったあとも、映している局は前の局のまま比べる (閉じないことは E2E の 20-live-tune)", () => {
+    // 1 から 2 を選び、2 は断られた。`fail` は `closing` を null に戻し、`onAir` は 1 のまま
     const onAir = 1;
     expect(closingOnTune(onAir, 2)).toBe(2);
     // 1 に選び直すと、閉じる局は無い

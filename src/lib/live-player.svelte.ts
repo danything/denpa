@@ -487,7 +487,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let onAir = $state<Tuned | null>(null);
   /**
    * 別の局への選局をリクエストして、答えを待っている局 (`Tuned.serviceId`。`closingOnTune`)。答えが届いたら
-   * データ放送を閉じる (`tunedCloses`)。サーバが断ったら (`fail`) 閉じずに忘れる。待っている間は受信をリクエストしない (`wantsData`)
+   * データ放送を閉じる (`tunedCloses`)。サーバが断ったら (`fail`) 閉じずに null に戻す。待っている間は受信をリクエストしない (`wantsData`)
    */
   let closing = $state<number | null>(null);
   /**
@@ -2779,7 +2779,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           /*
            * **サーバが選局を受けた。** 待っていた別の局なら、ここでデータ放送を閉じる (`tunedCloses`)。
            * サーバは `tuned` を次の局のデータ放送より先に送るので、閉じる前に次の局の入口へ d は届かない。
-           * 自動起動の指定 (`autoStart`) も忘れる。次の局のものは `tuned` のあとに届く。追っかけの答えには `serviceId` が無い
+           * 自動起動の指定 (`autoStart`) も false に戻す。次の局のものは `tuned` のあとに届く。追っかけの答えには `serviceId` が無い
            */
           if (
             chase === null &&
