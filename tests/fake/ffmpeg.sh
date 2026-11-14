@@ -255,9 +255,17 @@ fi
 
 # **エンコードしている間を残す** (始まりと終わりの時刻 (ミリ秒)・入力・出力をタブで区切る)。コーデックを同時にエンコードしているか
 # (2 本の間が重なるか)、中止で全部止まったか (終わりが無い) をテストから見るため。1 行ずつ 1 回で書く
+#
+# **時刻は bash の EPOCHREALTIME から作る。`date +%s%3N` は使わない。** Ubuntu 26.04 の date (uutils coreutils 0.10.0) は
+# `%3N` で秒の端数の先頭の 0 を落としてから 3 桁を出す (12.052 秒が 12.526 秒になる)。毎秒の最初の 0.1 秒は
+# 最大 0.9 秒ずれ、CI で 2 本のエンコードが重ならないように見えた (`src/lib/server/fake-ffmpeg.test.ts`)
+now_ms() {
+    local t="${EPOCHREALTIME//[!0-9]/}"
+    printf '%s' "${t:0:-3}"
+}
 spans="${FAKE_FFMPEG_ENCODE_SPANS_FILE:-}"
 if [ -n "$spans" ] && [ "$output" != "-" ]; then
-    printf 'start\t%s\t%s\t%s\n' "$(date +%s%3N)" "$input" "$output" >> "$spans"
+    printf 'start\t%s\t%s\t%s\n' "$(now_ms)" "$input" "$output" >> "$spans"
 fi
 
 # 進み具合の出口。エンコードするほうは fd 3 を開いて渡す (`-progress pipe:3`)。開いていなければ stdout
@@ -304,6 +312,6 @@ fi
 
 printf 'frame=1200\nfps=120\nbitrate=2000.0kbits/s\ntotal_size=4096\nout_time_us=10000000\nspeed=8.0x\ndrop_frames=0\nprogress=end\n' >&4
 if [ -n "$spans" ] && [ "$output" != "-" ]; then
-    printf 'end\t%s\t%s\t%s\n' "$(date +%s%3N)" "$input" "$output" >> "$spans"
+    printf 'end\t%s\t%s\t%s\n' "$(now_ms)" "$input" "$output" >> "$spans"
 fi
 exit 0
