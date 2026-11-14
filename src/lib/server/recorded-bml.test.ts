@@ -1,5 +1,13 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,8 +36,13 @@ const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-bml-db-")), "denpa.db");
 const { orm } = await import("./db");
 const { recordings, services } = await import("./schema");
-const { loadRecordedBml, recordedAutoStart, saveRecordedBml, withProgramInfo } =
-  await import("./recorded-bml");
+const {
+  AUTO_START_KEEP,
+  loadRecordedBml,
+  recordedAutoStart,
+  saveRecordedBml,
+  withProgramInfo,
+} = await import("./recorded-bml");
 
 /*
  * 録画のデータ放送。**TS から取り出してサイドカーに置き、再生時に読み直す。**
@@ -328,5 +341,81 @@ describe("recordedAutoStart", () => {
     const after = join(dir, "cut-then.bml.jsonl");
     writeFileSync(after, `${pmt.slice(0, pmt.length - 5)}\n${pmt}\n`);
     expect(await recordedAutoStart(after)).toBe(true);
+  });
+
+  /** 指定のある PMT の行と、指定を外した PMT の行 */
+  async function pmtLines(): Promise<{ on: string; off: string }> {
+    const ts = join(dir, "memo.ts");
+    const sidecar = join(dir, "memo.bml.jsonl");
+    writeFileSync(ts, recorded());
+    await saveRecordedBml(ts, sidecar, recording(T), 0);
+    const isPmt = (line: string) => line.includes('"type":"pmt"');
+    return {
+      on: readFileSync(sidecar, "utf8").split("\n").find(isPmt)!,
+      off: flagless(sidecar).split("\n").find(isPmt)!,
+    };
+  }
+
+  /** 中身を同じ大きさの空白に替え、更新時刻を `at` (秒) に戻す。読み直せば指定は無い */
+  function blank(path: string, at: number): void {
+    writeFileSync(path, " ".repeat(statSync(path).size));
+    utimesSync(path, at, at);
+  }
+
+  test("大きさと更新時刻が同じなら読み直さない", async () => {
+    const { on } = await pmtLines();
+    const sidecar = join(dir, "memo-hit.bml.jsonl");
+    writeFileSync(sidecar, `${on}\n`);
+    utimesSync(sidecar, 1_700_000_000, 1_700_000_000);
+    expect(await recordedAutoStart(sidecar)).toBe(true);
+    blank(sidecar, 1_700_000_000);
+    expect(await recordedAutoStart(sidecar)).toBe(true);
+    // 更新時刻が変われば読み直す
+    utimesSync(sidecar, 1_700_000_100, 1_700_000_100);
+    expect(await recordedAutoStart(sidecar)).toBe(false);
+  });
+
+  test("伸びたら読み直す (あとから指定のある PMT が足された)", async () => {
+    const { on, off } = await pmtLines();
+    const sidecar = join(dir, "memo-grow.bml.jsonl");
+    writeFileSync(sidecar, `${off}\n`);
+    utimesSync(sidecar, 1_700_000_000, 1_700_000_000);
+    expect(await recordedAutoStart(sidecar)).toBe(false);
+    appendFileSync(sidecar, `${on}\n`);
+    // 更新時刻は同じでも、大きさが違えば読み直す
+    utimesSync(sidecar, 1_700_000_000, 1_700_000_000);
+    expect(await recordedAutoStart(sidecar)).toBe(true);
+  });
+
+  test("消えたサイドカーは false で、覚えていた答えを使わない", async () => {
+    const { on } = await pmtLines();
+    const sidecar = join(dir, "memo-gone.bml.jsonl");
+    writeFileSync(sidecar, `${on}\n`);
+    expect(await recordedAutoStart(sidecar)).toBe(true);
+    rmSync(sidecar);
+    expect(await recordedAutoStart(sidecar)).toBe(false);
+  });
+
+  test(`覚えるのは ${AUTO_START_KEEP} 件まで。長く開いていないものから捨てて読み直す`, async () => {
+    const { on } = await pmtLines();
+    const many = mkdtempSync(join(dir, "memo-many-"));
+    const paths = Array.from({ length: AUTO_START_KEEP + 1 }, (_, i) =>
+      join(many, `${i}.bml.jsonl`),
+    );
+    for (const path of paths) {
+      writeFileSync(path, `${on}\n`);
+      utimesSync(path, 1_700_000_000, 1_700_000_000);
+    }
+    const [first, second, ...rest] = paths as [string, string, ...string[]];
+    expect(await recordedAutoStart(first)).toBe(true);
+    expect(await recordedAutoStart(second)).toBe(true);
+    // 最初のものを開き直すと新しい側へ移り、次に捨てられるのは 2 番目になる
+    expect(await recordedAutoStart(first)).toBe(true);
+    for (const path of rest) expect(await recordedAutoStart(path)).toBe(true);
+    blank(first, 1_700_000_000);
+    blank(second, 1_700_000_000);
+    // 最初のものはまだ覚えている。2 番目は捨てられていて読み直す
+    expect(await recordedAutoStart(first)).toBe(true);
+    expect(await recordedAutoStart(second)).toBe(false);
   });
 });

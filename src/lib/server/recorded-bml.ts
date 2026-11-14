@@ -18,6 +18,7 @@ import {
   createReadStream,
   existsSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { createInterface } from "node:readline";
@@ -177,6 +178,15 @@ export async function saveRecordedBml(
 /** 変化ログの 1 行が PMT か。中身は JSON にする前に文字で絞る (モジュールの行は base64 で大きく、引用符を含まない) */
 const PMT_LINE = '"type":"pmt"';
 
+/** 覚えておくサイドカーの数。超えたら長く開いていないものから捨てる (捨てたものは次に開くときに読み直す) */
+export const AUTO_START_KEEP = 512;
+
+/** 読んで決まった答え (サイドカーのパスごと)。読んだときの大きさと更新時刻を添える */
+const autoStartHeld = new Map<
+  string,
+  { size: number; mtime: number; on: boolean }
+>();
+
 /**
  * **録画の入口の部品に自動起動の指定があるか** (`ts/data-auto-start.ts` の `autoStarts`)。観る画面は、データ放送を
  * 自動で受信する端末でこれが true のときだけ、開く前から変化ログを取得する (`components/player/data-receive.ts`)。
@@ -185,10 +195,39 @@ const PMT_LINE = '"type":"pmt"';
  * 指定があれば true (再生位置で分けない)。行を先頭から読み、指定のある PMT が見つかったところでやめる。
  * PMT はふつう先頭近くにあるが、指定が無い録画はファイルを最後まで読む (読むのはサーバの中だけで、端末へは送らない)
  *
+ * 観る画面を開くたびに呼ぶので、答えはサイドカーのパスごとにメモリに覚える (`AUTO_START_KEEP` まで)。
+ * ファイルの大きさか更新時刻が読んだときと違えば読み直す (エンコードし直して書き替わった・まだ伸びている)
+ *
  * @returns サイドカーが無ければ false
  */
 export async function recordedAutoStart(sidecarPath: string): Promise<boolean> {
-  if (!existsSync(sidecarPath)) return false;
+  let size: number;
+  let mtime: number;
+  try {
+    ({ size, mtimeMs: mtime } = statSync(sidecarPath));
+  } catch {
+    // 無い (データ放送を持たない録画)。覚えない
+    autoStartHeld.delete(sidecarPath);
+    return false;
+  }
+  const held = autoStartHeld.get(sidecarPath);
+  // 読んでいる間に伸びても、覚えるのは読む前の大きさと時刻。次に開くときに違いが分かって読み直す
+  const on =
+    held !== undefined && held.size === size && held.mtime === mtime
+      ? held.on
+      : await readAutoStart(sidecarPath);
+  // 開いたものを新しい側 (後ろ) へ置き、上限を超えたら古いもの (先頭) から捨てる
+  autoStartHeld.delete(sidecarPath);
+  if (autoStartHeld.size >= AUTO_START_KEEP) {
+    const oldest = autoStartHeld.keys().next().value;
+    if (oldest !== undefined) autoStartHeld.delete(oldest);
+  }
+  autoStartHeld.set(sidecarPath, { size, mtime, on });
+  return on;
+}
+
+/** 変化ログを先頭から読み、どこかの PMT の入口の部品に自動起動の指定があるか (`recordedAutoStart`) */
+async function readAutoStart(sidecarPath: string): Promise<boolean> {
   const input = createReadStream(sidecarPath, { encoding: "utf8" });
   const lines = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY });
   try {
