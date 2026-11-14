@@ -1450,7 +1450,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /**
    * 始めてよいか。貯まっただけでは始めない。いまの位置のフレームを出せる (`HAVE_CURRENT_DATA`) まで待たないと、
    * 前の局の静止画のまま新しい局の音が鳴る。映像の無い放送で音まで止めないよう、待ちきりにはしない (`START_WAIT`)。
-   * 1 枚目が少し止まって見えるのは直さない ([stream.md](../../docs/stream.md#新しい局の1枚目が少し止まるのは直さない))
+   * 1 枚目が少し止まって見えるのは直さない ([stream.md](../../docs/stream.md#新しい局の-1-枚目が少し止まるのは直さない))
    */
   function canStart(video: HTMLVideoElement): boolean {
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return true;
@@ -3484,7 +3484,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * その局の入口に自動起動の指定があるとき
      */
     get receivingData() {
-      return receiveData && tuned !== null && autoStart;
+      return wantsData({
+        open: false,
+        auto: receiveData,
+        tuned: tuned !== null,
+        autoStart,
+      });
     },
     toggleReceiveData,
     listenData,
