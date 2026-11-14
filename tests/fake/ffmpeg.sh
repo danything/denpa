@@ -283,6 +283,19 @@ for i in $(seq 1 "$steps"); do
     sleep 0.2
 done
 
+# E2E から「同じ録画を N 本そろってエンコードするまで終えない」と指示するための目印 (ファイルの中身が N)。
+# コーデックを同時にエンコードしているかを、2 本の間が重なるかで確かめるのに要る。上のエンコードは 0.8 秒しかなく、
+# 混んだ CI では 2 本目の起動がそれより遅れて重ならないことがあった。**始まった本数で待つので、時刻の差に頼らない。**
+# 本当に 1 本ずつエンコードしていたら 2 本目は始まらないので、30 秒で諦めて終える (重ならず、テストが落ちる)
+if [ -s "${FAKE_FFMPEG_ENCODE_TOGETHER_FILE:-/nonexistent}" ] && [ -n "$spans" ] && [ "$output" != "-" ]; then
+    together="$(cat "$FAKE_FFMPEG_ENCODE_TOGETHER_FILE")"
+    for _ in $(seq 1 300); do
+        started=$(awk -F'\t' -v i="$input" '$1 == "start" && $3 == i { n++ } END { print n + 0 }' "$spans")
+        if [ "$started" -ge "$together" ]; then break; fi
+        sleep 0.1
+    done
+fi
+
 if [ "$output" != "-" ]; then
     mkdir -p "$(dirname "$output")"
     # 中身は問わないが、サイズ 0 だと「失敗」と見分けが付かないので少しだけ書く
