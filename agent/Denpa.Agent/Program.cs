@@ -4,6 +4,7 @@ using System.Security.Authentication;
 using System.Text;
 using System.Text.Json.Nodes;
 using Denpa.Agent;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
@@ -835,7 +836,19 @@ if (sharing is not null)
 }
 if (cardUrl is { Length: > 0 }) Log.Write($"鍵を {cardUrl} から受け取ります (TTL {cardLan.Hops})");
 Log.Write($"チューナー {pool.Tuners.Count} 台 / チャンネル {config.LoadChannels().Count} 件");
-await app.RunAsync();
+try
+{
+    await app.RunAsync();
+}
+catch (IOException error) when (error.InnerException is AddressInUseException)
+{
+    /*
+     * **待ち受けるポートが使われていたら、理由を出して 2 で終わる** (設定を読めないときと同じ)。例外のままだとプロセスが SIGABRT で落ち、
+     * 終了コードが残らない (Bun の exitCode は null。適合テストが落ちたことに気づかず、応答を 10 秒待っていた)
+     */
+    Log.Write($"待ち受けるポートはほかのソフトが使っています。AGENT_PORT・CARD_SHARE_PORT を変えるか、使っているソフトを止めてください ({error.Message})");
+    return 2;
+}
 return 0;
 
 /// <summary>HTTP に JSON を書く / 読む。中身の作りは <see cref="Json"/></summary>

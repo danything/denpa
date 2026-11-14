@@ -1437,16 +1437,24 @@ public sealed class It930xTuner : ITuneDevice
                 _frontend.Stream(true);
                 if (tsmf is not null) WaitTsmf(_frontend, tsmf);
             }
+            catch (ObjectDisposedException error) when (_device is { Closed: true } device)
+            {
+                // 選局の途中で、止めるために機材を閉じられた (Shutdown は選局が終わるのを待たない)。閉じた USB に書いた失敗は、止めたことが分かる文にして返す
+                throw new IOException($"止めるので、選局の途中で {device.Model.Name} ({device.Port}) を閉じました", error);
+            }
             catch (IOException error)
             {
                 if (_device is { } device)
                 {
-                    // 選局できなかった受信機は給電の要求を取り下げる (受けていない受信機のために LNB を入れたままにしない。IT930x の仕様書 8 は前の指定に戻すと書く)
+                    /*
+                     * 選局できなかった受信機は給電の要求を取り下げる (受けていない受信機のために LNB を入れたままにしない。IT930x の仕様書 8 は前の指定に戻すと書く)。
+                     * 止めるために閉じた機材には書かない (閉じたときに電源を切っている)。確かめたあとに閉じられて書けなくても、元の失敗を返す
+                     */
                     try
                     {
-                        device.Lnb(_receiver, false);
+                        if (!device.Closed) device.Lnb(_receiver, false);
                     }
-                    catch (IOException)
+                    catch (Exception cleanup) when (cleanup is IOException or ObjectDisposedException)
                     {
                         // 元の失敗を返す
                     }

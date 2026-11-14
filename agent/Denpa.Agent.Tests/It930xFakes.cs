@@ -167,6 +167,7 @@ internal sealed class FakeIt930x : IUsbDevice
 
     public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs)
     {
+        ObjectDisposedException.ThrowIf(Disposed && DisposedThrows, this);
         if (_gone) throw GoneAsProtocolError ? new IOException("fake-it930x: Protocol error") : new UsbGoneException("fake-it930x が抜かれました");
         if (endpoint != 0x02) throw new InvalidOperationException($"EP 0x{endpoint:X2} に送った");
         if (data.Length > 63) throw new InvalidOperationException($"フレームが 63 バイトを超えた ({data.Length})");
@@ -348,6 +349,7 @@ internal sealed class FakeIt930x : IUsbDevice
 
     public int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
+        ObjectDisposedException.ThrowIf(Disposed && DisposedThrows, this);
         if (_gone) throw GoneAsProtocolError ? new IOException("fake-it930x: Protocol error") : new UsbGoneException("fake-it930x が抜かれました");
         if (endpoint != 0x81) throw new InvalidOperationException($"EP 0x{endpoint:X2} から読んだ");
         if (_late.TryDequeue(out var late)) return Copy(late, buffer);
@@ -369,6 +371,12 @@ internal sealed class FakeIt930x : IUsbDevice
 
     /// <summary>機材が USB を閉じた (閉じる処理の最後。TS の読み出しを閉じた「TS 閉じる」は、電源を切るより前に残る)</summary>
     public volatile bool Disposed;
+
+    /// <summary>
+    /// 閉じたあとの読み書きを ObjectDisposedException にする (UsbFsDevice と同じ)。既定では閉じたあとも応答する
+    /// (同じ偽物を挿し直した機材として開き直すテストのため)
+    /// </summary>
+    public bool DisposedThrows { get; init; }
 
     public void Dispose() => Disposed = true;
 }
