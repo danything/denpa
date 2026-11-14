@@ -332,6 +332,60 @@ test.describe("ライブ視聴", () => {
   });
 
   /**
+   * **縦長の窓では映像を窓の上に留め、局の一覧だけを映像の裏へ巻く** (#2754)。一覧を探しながら映像を観られる。
+   * 横長の窓は映像が窓の半分を超えることがあるので留めず、今までどおり映像ごと巻く
+   */
+  test("縦長の窓では、一覧を巻いても映像は窓の上に残る", async ({ page }) => {
+    const scrolled = (by: number) =>
+      page.evaluate((by) => {
+        window.scrollTo(0, by);
+        const frame = document
+          .querySelector('[data-testid="live-frame"]')
+          ?.getBoundingClientRect();
+        const list = document
+          .querySelector('[data-testid="live-channels"]')
+          ?.getBoundingClientRect();
+        return {
+          scrollY: Math.round(window.scrollY),
+          top: Math.round(frame?.top ?? -1),
+          listTop: Math.round(list?.top ?? -1),
+        };
+      }, by);
+
+    // 一覧が窓の下へはみ出す低い縦長の窓 (E2E の局は少ないので、窓を低くしてはみ出させる)
+    await page.setViewportSize({ width: 380, height: 400 });
+    await goto(page, "/live");
+    await expect(page.getByTestId("live-channel").first()).toBeVisible();
+    const before = await scrolled(0);
+    const after = await scrolled(1000);
+    expect(after.scrollY).toBeGreaterThan(0);
+    expect(after.top).toBe(0);
+    // 一覧は巻いたぶんだけ上へ動く (映像の裏へ入る)
+    expect(after.listTop).toBe(before.listTop - after.scrollY);
+    // 映像は一覧より上に描く (一覧の行が映像に被らない)
+    const onTop = await page.evaluate(() => {
+      const frame = document
+        .querySelector('[data-testid="live-frame"]')
+        ?.getBoundingClientRect();
+      if (frame === undefined) return false;
+      const hit = document.elementFromPoint(
+        frame.left + frame.width / 2,
+        frame.top + frame.height / 2,
+      );
+      return Boolean(hit?.closest('[data-testid="live-frame"]'));
+    });
+    expect(onTop).toBe(true);
+
+    // 横長の窓は留めない (映像も一緒に上へ巻かれる)
+    await page.setViewportSize({ width: 900, height: 640 });
+    await goto(page, "/live");
+    await expect(page.getByTestId("live-channel").first()).toBeVisible();
+    const wide = await scrolled(1000);
+    expect(wide.scrollY).toBeGreaterThan(0);
+    expect(wide.top).toBeLessThan(0);
+  });
+
+  /**
    * **番組の中身は右の列を入れ替えて出す。モーダルにしない** — 映像の上に
    * 被さると観ながら読めない (観る画面と同じ考え方)。
    *

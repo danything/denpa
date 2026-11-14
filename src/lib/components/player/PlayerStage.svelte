@@ -552,6 +552,19 @@
     }
   }
   /*
+   * 縦長の窓で縦に積むときは、枠を窓の上 (上の安全域のすぐ下) に留め、下の右の列を枠の裏へ流す (#2754)。
+   * 留まる範囲を外枠にする指定と、横長の窓を外す理由は `PlayerLayout` (条件も同じ)。右の列 (位置を持つ。`AmbientGlow`) より
+   * 上に描くため、ページの中で貼り付くものの段 (`--dp-z-pagebar`) にする。広げた全画面 (下の `[data-pseudo]`) はこれより強く当たる。
+   * テーブルトップでは枠の置き場 (`.room`) が箱なので、貼り付いても動かない
+   */
+  @media (max-width: 999.98px) and (orientation: portrait) {
+    .stage {
+      position: sticky;
+      top: env(safe-area-inset-top, 0px);
+      z-index: var(--dp-z-pagebar);
+    }
+  }
+  /*
    * 横にしたスマホでは、枠を 16:9 にして真ん中に置く (画面の幅いっぱいだと左右の黒帯の上に操作バーの端が出て
    * 潜って見えた)。条件は `PlayerLayout` の `PHONE_LANDSCAPE` と同じ
    */
