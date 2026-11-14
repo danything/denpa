@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { beforeJapanese, typeNames } from "../format";
 import {
@@ -19,7 +19,7 @@ import {
 } from "../ts/logo";
 import { type CarouselCounts, CarouselProgress } from "../ts/logo-dsmcc";
 import { withPalette } from "../ts/logo-palette";
-import type { ChannelType } from "../types";
+import { type ChannelType, origin } from "../types";
 import { serviceChannel, servicePlaces, strictPlaces } from "./agent-channels";
 import { type Place, placesKey } from "./agent-order";
 import { config } from "./config";
@@ -95,6 +95,16 @@ const SWEEP_TUNERS = 2;
  */
 const RELAY_RETRY = 7 * 24 * 60 * 60_000;
 
+/**
+ * ケーブルの TS を 6 分 (`SWEEP_TIMEOUT`) 開いて CDT が 1 つも来なかったとき、次に確かめ直すまでの間隔。
+ *
+ * ケーブルの自主放送が CDT を流すかは分かっていない。再送信の地上波の TS が CDT を残しているかも、実機では確かめていない
+ * (docs/logo.md「ケーブルの局」)。来ない TS を控えないと、「ロゴをいますぐ集める」を押すたびに 6 分ずつ空振りする。
+ * 間隔は、持っているロゴを取り直す間隔 (`LOGO_MAX_AGE`) と、カルーセルの無い中継を確かめ直す間隔 (`RELAY_RETRY`) と同じ 1 週間。
+ * 流し始めた局のロゴは、局のマークが変わったときと同じくらいの遅れで入る
+ */
+const NO_CDT_RETRY = 7 * 24 * 60 * 60_000;
+
 function logoDir(): string {
   return join(config.dataDir, "logos");
 }
@@ -121,14 +131,24 @@ function writeWhole(path: string, data: string | Uint8Array): void {
   renameSync(working, path);
 }
 
+/**
+ * 中継の控えのキー。**チャンネルの名前ではなく TS** (`network_id:transport_stream_id`。`tsKey`)。
+ * アンテナの `BS15:16625` とケーブルでそれを再送信するチャンネルは同じ TS で、片方で当たれば
+ * もう片方も当たり。読みかけ (`carousels`) も TS で引き継ぐ
+ */
 interface RelayNotes {
-  /** ロゴを積んでいなかった中継と、そう分かった時刻 */
+  /** ロゴを積んでいなかった TS と、そう分かった時刻 */
   noCarousel: Record<string, number>;
   /**
-   * ロゴのカルーセルを積んでいた中継と、そう分かった時刻。チューナーが空いているときに
+   * ロゴのカルーセルを積んでいた TS と、そう分かった時刻。チューナーが空いているときに
    * 自分から開くのはここだけ (`awaitCarousel`)。外れを全部当たり直すことはしない
    */
   carriers: Record<string, number>;
+  /**
+   * ケーブルの TS で、6 分開いても CDT が 1 つも来なかったもの (TS → 時刻)。`NO_CDT_RETRY` の間は
+   * その TS の局を取得しない (`logoSource`)
+   */
+  noCdt: Record<string, number>;
   /** カルーセルを読み切っても来なかった局 (局 ID → そう分かった時刻) */
   absent: Record<string, number>;
   /**
@@ -160,11 +180,18 @@ function notes(): RelayNotes {
     relays = {
       noCarousel: parsed.noCarousel ?? {},
       carriers: parsed.carriers ?? {},
+      noCdt: parsed.noCdt ?? {},
       absent: parsed.absent ?? {},
       gaveUp: parsed.gaveUp ?? {},
     };
   } catch {
-    relays = { noCarousel: {}, carriers: {}, absent: {}, gaveUp: {} };
+    relays = {
+      noCarousel: {},
+      carriers: {},
+      noCdt: {},
+      absent: {},
+      gaveUp: {},
+    };
   }
   return relays;
 }
@@ -180,30 +207,73 @@ function save(next: RelayNotes): void {
   }
 }
 
-/** その中継は今回は飛ばしてよいか。確かめてから RELAY_RETRY の間だけ */
-function skipRelay(channel: string): boolean {
-  return fresh(notes().noCarousel[channel], RELAY_RETRY);
+/** その TS は今回は飛ばしてよいか。確かめてから RELAY_RETRY の間だけ */
+function skipRelay(ts: string): boolean {
+  return fresh(notes().noCarousel[ts], RELAY_RETRY);
 }
 
-/** 「この中継にロゴは載っていない」/「載っていた」を書き留める */
-function markRelay(channel: string, hasLogo: boolean): void {
+/** 「この TS にロゴは載っていない」/「載っていた」を書き留める */
+function markRelay(ts: string, hasLogo: boolean): void {
   const known = notes();
   // 何も変わらないなら書きに行かない。外れの控えが古くなっていたら、時刻を書き直す (書き直さないと毎回開き直す)
   if (
-    hasLogo === !fresh(known.noCarousel[channel], RELAY_RETRY) &&
-    hasLogo === (known.carriers[channel] !== undefined)
+    hasLogo === !fresh(known.noCarousel[ts], RELAY_RETRY) &&
+    hasLogo === (known.carriers[ts] !== undefined)
   )
     return;
   const noCarousel = { ...known.noCarousel };
   const carriers = { ...known.carriers };
   if (hasLogo) {
-    delete noCarousel[channel];
-    carriers[channel] = Date.now();
+    delete noCarousel[ts];
+    carriers[ts] = Date.now();
   } else {
-    noCarousel[channel] = Date.now();
-    delete carriers[channel];
+    noCarousel[ts] = Date.now();
+    delete carriers[ts];
   }
   save({ ...known, noCarousel, carriers });
+}
+
+/** そのケーブルの TS は CDT を流していないと控えてあるか。控えてから `NO_CDT_RETRY` の間だけ */
+function noCdtOn(ts: string): boolean {
+  return fresh(notes().noCdt[ts], NO_CDT_RETRY);
+}
+
+/**
+ * 1 回開いた結果から、その TS で CDT を見たか (true)・来なかったと言えるか (false) を決める。どちらとも言えなければ null。
+ * 来なかったと言えるのは、6 分 (`SWEEP_TIMEOUT`) の上限まで開けていて、実際に `NO_CDT_WINDOW` 以上読んで 1 セクションも来なかったときだけ。
+ * 上限のタイマーは選局を待つ間も進むので、開けないまま 6 分過ぎた回 (`openedMs` が 0) や、選局待ちが長くて少ししか読めなかった回は証拠にしない。
+ * 共有 (`RIDE_TIMEOUT`) や、取り上げられて途中で切れた回も短いので証拠にしない
+ */
+export function cdtVerdict(
+  cdtSections: number,
+  ranOut: boolean,
+  timeout: number,
+  openedMs: number,
+): boolean | null {
+  if (cdtSections > 0) return true;
+  return ranOut && timeout >= SWEEP_TIMEOUT && openedMs >= NO_CDT_WINDOW
+    ? false
+    : null;
+}
+
+/**
+ * ケーブルの TS で「CDT が来ない」と控えるのに要る、実際に読んだ長さ。地上波の CDT は 3 分では実機でほとんど当たらず
+ * (`SWEEP_TIMEOUT`)、それより十分長い 5 分とする。6 分の上限から選局待ちの 1 分ぶんを残す
+ */
+const NO_CDT_WINDOW = 5 * 60_000;
+
+/** ケーブルの TS で CDT が来なかった (`seen` が false)・来た を書き留める */
+function markNoCdt(ts: string, seen: boolean): void {
+  const known = notes();
+  // 何も変わらないなら書きに行かない。控えが古くなっていたら時刻を書き直す
+  if (
+    seen ? known.noCdt[ts] === undefined : fresh(known.noCdt[ts], NO_CDT_RETRY)
+  )
+    return;
+  const noCdt = { ...known.noCdt };
+  if (seen) delete noCdt[ts];
+  else noCdt[ts] = Date.now();
+  save({ ...known, noCdt });
 }
 
 /**
@@ -220,7 +290,7 @@ function markAbsent(): void {
   const known = notes();
   const absent = { ...known.absent };
   for (const service of tunableServices()) {
-    if (service.type !== "GR" && needsLogo(service))
+    if (service.source === "carousel" && needsLogo(service))
       absent[service.id] = Date.now();
   }
   save({ ...known, absent });
@@ -303,16 +373,17 @@ interface Carousel {
 }
 
 /**
- * 中継ごとの読みかけ。**残すのは当たりの中継だけ** (ロゴを積んでいるのはふつう 1 中継なので、溜まっても 1 つ)。
+ * TS ごとの読みかけ。**残すのは当たりの TS だけ** (ロゴを積んでいるのはふつう 1 つなので、溜まっても 1 つ)。
+ * キーが TS なので、アンテナで読みかけた続きを、同じ TS を再送信するケーブルのチャンネルで読める。
  * 読み切ったら・外れと分かったら捨てる (`collect`)。揃ったまま残すと、1 週間後の取り直しで
  * 古い読みかけから書いたことにして、新しいものを取得しなくなる
  */
 const carousels = new Map<string, Carousel>();
 
 /** 前の読みかけ。無ければ新しく (当たりと分かるまでは `carousels` に入れない) */
-function carouselOf(channel: string): Carousel {
+function carouselOf(ts: string): Carousel {
   return (
-    carousels.get(channel) ?? {
+    carousels.get(ts) ?? {
       progress: new CarouselProgress(),
       written: new Set(),
     }
@@ -360,6 +431,7 @@ function watch(networkId: number, carousel?: Carousel): Feed {
     hasSatelliteLogo: { get: () => collector.hasSatelliteLogo },
     carouselRead: { get: () => collector.satelliteCarouselRead },
     counts: { get: () => collector.satelliteCounts },
+    cdtSections: { get: () => collector.cdtSections },
   });
   return feed as Feed;
 }
@@ -372,6 +444,8 @@ interface Feed {
   readonly carouselRead: boolean;
   /** この回に読んだパケットとセクションの数 (記録の 1 行に足す。`waitedMessage`) */
   readonly counts: Readonly<CarouselCounts>;
+  /** この回に受け取った CDT のセクションの数 (`markNoCdt`) */
+  readonly cdtSections: number;
 }
 
 /**
@@ -427,15 +501,71 @@ function repaint(serviceId: number): void {
 }
 
 /**
+ * ロゴの出どころ。
+ *
+ * - `cdt` … その TS の CDT と SDT (地上波。ケーブルの地上波の再送信と自主放送も)。物理チャンネルごとに、そこの局が足りないときに開く
+ * - `carousel` … BS の 1 つの TS に載る全受信機共通データのカルーセル (BS・CS。ケーブルの BS・CS の再送信も)。
+ *   どの TS に載っているかは開いて PAT を見るまで分からない
+ */
+export type LogoSource = "cdt" | "carousel";
+
+/**
+ * その局のロゴをどこから取得するか。取得しない局は null。
+ *
+ * ケーブル (`CATV`) の局は、元の放送 (`types.origin`。original_network_id) で分ける。再送信の局は ONID・SID・TSID が元の放送と同じ。
+ * 地上波の再送信は TS が丸ごと残っている (J:COM の回線で、PAT に地上波のエンジニアリングサービス 0xFFF0 まで載っていた) ので `cdt`、
+ * BS・CS の再送信は `carousel`、自主放送は `cdt`。CDT とカルーセルがケーブルで届くかは、実機ではまだ確かめていない (docs/logo.md「ケーブルの局」)。
+ * ケーブルの TS で 6 分開いても CDT が来なかったものは、`NO_CDT_RETRY` の間は取得しない (`markNoCdt`)。
+ *
+ * 取得しないのは、復号できない局 (`services.decodable`。ライブと録画に使わない)・スカパー！プレミアムの局・4K の局
+ * (TLV。PAT も CDT も来ず、開いても何も読めない)
+ */
+export function logoSource(service: {
+  type: string;
+  network_id: number;
+  transport_stream_id: number | null;
+  transport: string;
+  decodable: boolean;
+}): LogoSource | null {
+  if (!service.decodable || service.transport !== "ts") return null;
+  switch (service.type) {
+    case "GR":
+      return "cdt";
+    case "BS":
+    case "CS":
+      return "carousel";
+    case "CATV": {
+      const from = origin(service.network_id);
+      if (from === "BS" || from === "CS") return "carousel";
+      if (from !== "GR" && from !== "CATV") return null;
+      if (service.transport_stream_id === null) return "cdt";
+      return noCdtOn(tsKey(service.network_id, service.transport_stream_id))
+        ? null
+        : "cdt";
+    }
+    default:
+      return null;
+  }
+}
+
+/** TS のキー (`network_id:transport_stream_id`)。中継の控え (`RelayNotes`) と読みかけ (`carousels`) を引く */
+function tsKey(networkId: number, transportStreamId: number): string {
+  return `${networkId}:${transportStreamId}`;
+}
+
+/**
  * ロゴを取得する単位。1 つの物理チャンネルと、そこに入っている局。
- * `channel` は並びの先頭のエージェントでのチャンネルの名前 (`serviceChannel`。中継の当たり外れを書き留める名前)、
- * `places` は局を受けられる所 (`servicePlaces`。開くときはここから振り分ける)
+ * `channel` は並びの先頭のエージェントでのチャンネルの名前 (`serviceChannel`)、
+ * `places` は局を受けられる所 (`servicePlaces`。開くときはここから振り分ける)、
+ * `ts` はその TS (`tsKey`。当たり外れと読みかけはこちらで控える)
  */
 interface Target {
   type: string;
   channel: string;
   places: string;
   network_id: number;
+  source: LogoSource;
+  ts: string;
 }
 
 /** 局の行から、その局が入っている物理チャンネル */
@@ -445,6 +575,8 @@ function targetOf(service: Target): Target {
     channel: service.channel,
     places: service.places,
     network_id: service.network_id,
+    source: service.source,
+    ts: service.ts,
   };
 }
 
@@ -471,23 +603,24 @@ function storedLogoType(serviceId: number): number | null {
  *
  * 開けるだけ開けて来なかった局 (`gaveUp`) は、次の取り直しの時期まで今のもので足りる。
  *
- * **大きさを見るのは地上波だけ。** 衛星のカルーセル (`LOGO-05`) には 0x05 しか載って
+ * **大きさを見るのは CDT の局だけ。** 衛星のカルーセル (`LOGO-05`) には 0x05 しか載って
  * いないので小さいものは入りようがなく、来なかったときに控える仕組み (`gaveUp`) も
- * 地上波にしか無い。衛星まで見ると、万一のときに毎回 20 分待つことになる
+ * CDT にしか無い。カルーセルまで見ると、万一のときに毎回 20 分待つことになる
  */
-function needsLogo(service: { id: number; type: string }): boolean {
+function needsLogo(service: { id: number; source: LogoSource }): boolean {
   const serviceId = service.id;
   const written = writtenAt(serviceId);
   if (written === 0) return true;
   if (fresh(notes().gaveUp[serviceId], LOGO_MAX_AGE)) return false;
   if (Date.now() - written > LOGO_MAX_AGE) return true;
   return (
-    service.type === "GR" && storedLogoType(serviceId) !== PREFERRED_LOGO_TYPE
+    service.source === "cdt" &&
+    storedLogoType(serviceId) !== PREFERRED_LOGO_TYPE
   );
 }
 
 /**
- * 地上波を上限いっぱいまで開けて、なお足りない局を控える。
+ * CDT のチャンネルを上限いっぱいまで開けて、なお足りない局を控える。
  * **ロゴを 1 つも持っていない局は控えない。** そちらは今までどおり毎回取得する
  */
 function markGaveUp(channel: string): void {
@@ -508,46 +641,57 @@ function markGaveUp(channel: string): void {
 }
 
 /**
- * いま選局できる局。取り残しは見に行かない。
- * 復号できない局も見に行かない (`services.decodable`。ライブに出さず、ケーブルとスカパー！プレミアムの局のロゴはまだ集めない)。
- * **CATV の局もまだ見に行かない。** ここから先は地上波でない局を衛星として扱う (カルーセルを当たりの中継で待つ) ので、CATV を入れると衛星に数えてしまう
+ * いま選局できて、ロゴを取得する局 (`logoSource` が null でない局)。取り残しは見に行かない。
+ * 並びは種別の順 (`BS`・`CATV`・`CS`・`GR`)。カルーセルの TS を当たる順は `relayRank` で決め直す
  */
-function tunableServices(): {
-  id: number;
-  type: string;
-  channel: string;
-  places: string;
-  network_id: number;
-}[] {
-  return (
-    orm()
-      .select({
-        id: services.id,
-        type: services.type,
-        channel: serviceChannel(),
-        places: servicePlaces(),
-        network_id: services.network_id,
-      })
-      .from(services)
-      .where(
-        and(
-          currentServices(),
-          eq(services.decodable, true),
-          ne(services.type, "CATV"),
-        ),
-      )
-      .orderBy(services.type, serviceChannel())
-      .all()
+function tunableServices(): (Target & { id: number })[] {
+  return orm()
+    .select({
+      id: services.id,
+      type: services.type,
+      channel: serviceChannel(),
+      places: servicePlaces(),
+      network_id: services.network_id,
+      transport_stream_id: services.transport_stream_id,
+      transport: services.transport,
+      decodable: services.decodable,
+    })
+    .from(services)
+    .where(and(currentServices(), eq(services.decodable, true)))
+    .orderBy(services.type, serviceChannel())
+    .all()
+    .flatMap((service) => {
       // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は選局できない
-      .filter(
-        (
-          service,
-        ): service is typeof service & {
-          channel: string;
-          places: string;
-        } => service.channel !== null && service.places !== null,
+      if (
+        service.channel === null ||
+        service.places === null ||
+        service.transport_stream_id === null
       )
-  );
+        return [];
+      const source = logoSource(service);
+      if (source === null) return [];
+      return [
+        {
+          id: service.id,
+          type: service.type,
+          channel: service.channel,
+          places: service.places,
+          network_id: service.network_id,
+          source,
+          ts: tsKey(service.network_id, service.transport_stream_id),
+        },
+      ];
+    });
+}
+
+/**
+ * カルーセルの TS を当たる順。アンテナの BS → ケーブルの BS の再送信 → アンテナの CS → ケーブルの CS の再送信。
+ * 実機ではロゴを積んでいたのは BS の 1 つの TS だけ (`RELAY_RETRY`)。同じ TS ならアンテナを先に開く
+ * (ケーブルで BS の TS がカルーセルまで残っているかは、実機で確かめていない)
+ */
+function relayRank(target: Pick<Target, "type" | "network_id">): number {
+  const cable = target.type === "CATV" ? 1 : 0;
+  return (origin(target.network_id) === "BS" ? 0 : 2) + cable;
 }
 
 /**
@@ -565,19 +709,19 @@ function missing(): Target[] {
     if (!targets.has(key)) targets.set(key, targetOf(service));
   };
 
-  // 地上波は中継ごとに入っている局が違う。その中継の局が足りないときだけ開く
+  // CDT は中継ごとに入っている局が違う。その中継の局が足りないときだけ開く
   for (const service of services) {
-    if (service.type === "GR" && needsLogo(service)) add(service);
+    if (service.source === "cdt" && needsLogo(service)) add(service);
   }
 
   /*
-   * **衛星は「その中継の局が足りているか」では選べない。**
+   * **カルーセルは「その中継の局が足りているか」では選べない。**
    *
    * ロゴを積んだ中継 1 つに BS も CS も全部載っているので、中継ごとに見ると
    * BS が揃った時点でその中継が候補から外れ、**そこにしか無い CS が永久に
    * 埋まらない**。
    *
-   * 衛星の局が 1 つでも足りなければ、**まだ外れと分かっていない中継**を当たる。
+   * カルーセルの局が 1 つでも足りなければ、**まだ外れと分かっていない TS**を当たる。
    * どれが当たりかは開いてみないと分からないが (実機の BS はネットワーク 4 の
    * 26 中継のうち `BS15:16625` だけ)、外れは PAT を見た時点で 1 秒ほどで切り上げ、
    * 書き留めて二度目からは飛ばす (`collect` / `markRelay`)。
@@ -586,9 +730,12 @@ function missing(): Target[] {
    * 読み切ってなお来なかった局は行っても来ないので、そこだけを理由に
    * 中継を開き直すと同じことの繰り返しになる
    */
-  if (missingSatellites() > 0) {
-    for (const service of services) {
-      if (service.type !== "GR" && !skipRelay(service.channel)) add(service);
+  if (missingCarousel() > 0) {
+    const relays = services
+      .filter((service) => service.source === "carousel")
+      .sort((a, b) => relayRank(a) - relayRank(b));
+    for (const service of relays) {
+      if (!skipRelay(service.ts)) add(service);
     }
   }
   return [...targets.values()];
@@ -601,15 +748,15 @@ function missingOn(channel: string): number {
 }
 
 /**
- * 衛星でまだ取れていない局の数。
+ * カルーセルでまだ取れていない局の数 (ケーブルの BS・CS の再送信の局も入る)。
  *
  * **衛星のカルーセルは開いた中継の局だけを運ぶのではない。** `BS15:16625` の
  * エンジニアリングサービスには `LOGO-05` と `CS_LOGO-05` が並んで流れていて、
  * **BS と CS の全局ぶん**が入っている。開いた中継の局だけで数えると、先に来る BS で閉じて CS を取りこぼす。
  */
-function missingSatellites(): number {
+function missingCarousel(): number {
   return tunableServices().filter(
-    (s) => s.type !== "GR" && needsLogo(s) && !absentFromCarousel(s.id),
+    (s) => s.source === "carousel" && needsLogo(s) && !absentFromCarousel(s.id),
   ).length;
 }
 
@@ -691,10 +838,10 @@ async function collect(
   openedMs: number;
   counts: Readonly<CarouselCounts> | null;
 }> {
-  const satellite = target.type !== "GR";
-  // 衛星は「開いた中継の局」では見ない。開いた中継以外の局も一緒に取得できる (`missingSatellites`)
+  const satellite = target.source === "carousel";
+  // 衛星は「開いた中継の局」では見ない。開いた中継以外の局も一緒に取得できる (`missingCarousel`)
   const remaining = () =>
-    satellite ? missingSatellites() : missingOn(target.channel);
+    satellite ? missingCarousel() : missingOn(target.channel);
   const before = remaining();
   /** 当たり外れを書き留めたか。毎回書きに行かないための印 */
   let marked = false;
@@ -708,14 +855,14 @@ async function collect(
       controller.abort();
     }, ms);
   let stop = expire(timeout);
-  collecting.add(target.channel);
+  collecting.add(target.ts);
   // 外から止められるようにする。衛星に 20 分かけている最中でも譲れるように
   const give = () => controller.abort();
   signal?.addEventListener("abort", give, { once: true });
   let opened = false;
   /** こちらで見切って閉じた理由。無ければ向こうの都合で切れた */
   let ended: Outcome | null = null;
-  const carousel = satellite ? carouselOf(target.channel) : undefined;
+  const carousel = satellite ? carouselOf(target.ts) : undefined;
   const receivedBefore = carousel?.progress.received ?? 0;
   /** ロゴを積んだ中継だったか */
   let carrier = false;
@@ -744,13 +891,13 @@ async function collect(
        */
       if (satellite && !marked && feed.hasSatelliteLogo !== null) {
         marked = true;
-        markRelay(target.channel, feed.hasSatelliteLogo);
+        markRelay(target.ts, feed.hasSatelliteLogo);
         if (!feed.hasSatelliteLogo) {
           ended = "miss";
           break;
         }
         // 当たり。読みかけを残す。共有 (RIDE_TIMEOUT) でも、カルーセルが 1 回りするまで開いておく
-        if (carousel !== undefined) carousels.set(target.channel, carousel);
+        if (carousel !== undefined) carousels.set(target.ts, carousel);
         carrier = true;
         if (timeout < config.logoCarouselWait) {
           clearTimeout(stop);
@@ -778,7 +925,7 @@ async function collect(
     // 取れなければ次の機会に。チューナーが空いていないだけのことも多い
   } finally {
     clearTimeout(stop);
-    collecting.delete(target.channel);
+    collecting.delete(target.ts);
     signal?.removeEventListener("abort", give);
     controller.abort();
   }
@@ -792,8 +939,7 @@ async function collect(
           ? "yielded"
           : "busy");
   // 読み切った・外れだった読みかけは捨てる。持っていても次に役立たない
-  if (outcome === "done" || outcome === "miss")
-    carousels.delete(target.channel);
+  if (outcome === "done" || outcome === "miss") carousels.delete(target.ts);
   const received = (carousel?.progress.received ?? 0) > receivedBefore;
   /*
    * 途中まででも届いていれば・共通データの SDTT が来ていれば、カルーセルは流れている (ダウンロードの期間中)。
@@ -808,6 +954,19 @@ async function collect(
   // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
   if (!satellite && ranOut && timeout >= SWEEP_TIMEOUT)
     markGaveUp(target.channel);
+  /*
+   * ケーブルの TS は CDT を流しているかが分かっていない (`NO_CDT_RETRY`)。6 分開いて 1 つも来なければ控え、
+   * その間は取得しない。共有でも 1 つ来れば控えを消す
+   */
+  if (!satellite && target.type === "CATV") {
+    const seen = cdtVerdict(
+      feed?.cdtSections ?? 0,
+      ranOut,
+      timeout,
+      openedAt === null ? 0 : Date.now() - openedAt,
+    );
+    if (seen !== null) markNoCdt(target.ts, seen);
+  }
   return {
     found: before - remaining(),
     outcome,
@@ -830,9 +989,9 @@ async function collect(
  * 定期チェック (`awaitCarousel`) では、ダウンロードの期間の外ならこれを使わず、いちばん下で開く (`logo-period.ts`)
  */
 function carouselPriority(target: Target): number {
-  return target.type !== "GR" &&
-    notes().carriers[target.channel] !== undefined &&
-    !skipRelay(target.channel)
+  return target.source === "carousel" &&
+    notes().carriers[target.ts] !== undefined &&
+    !skipRelay(target.ts)
     ? config.priority.carousel
     : SWEEP_PRIORITY;
 }
@@ -1003,6 +1162,8 @@ async function drain(
   const full = new Set<string>();
   /** いま開いている種別ごとの数 (この取得の中だけ) */
   const open = new Map<string, number>();
+  /** この取得で読み切った・外れと分かったカルーセルの TS */
+  const settledTs = new Set<string>();
   const worker = async (index: number) => {
     /** このワーカーが閉じたばかりの選局。次を開くときに引き継ぐ (`freeTuners`) */
     let left: readonly StreamUse[] = index === 0 ? leaving : [];
@@ -1018,11 +1179,15 @@ async function drain(
       // 諦めたぶんも見終えたものとして数える。進み具合が総数に届かなくなる
       /*
        * 衛星は当たりの中継 1 つで BS と CS の全局ぶんが揃う。揃ったあと (読み切ったあと) は、残りの中継を開いて
-       * 当たり外れを確かめても取得できる局は無い
+       * 当たり外れを確かめても取得できる局は無い。
+       * 同じ TS をアンテナとケーブルの両方で受けられるときは、片方で読み切るか外れと分かったら、もう片方は開かない。
+       * CDT のチャンネルも、同じ TS をほかで読んで局が揃っていれば開かない
        */
       if (
         full.has(target.type) ||
-        (target.type !== "GR" && missingSatellites() === 0)
+        settledTs.has(target.ts) ||
+        (target.source === "carousel" && missingCarousel() === 0) ||
+        (target.source === "cdt" && missingOn(target.channel) === 0)
       ) {
         update({ done: state.done + 1 });
         continue;
@@ -1044,11 +1209,16 @@ async function drain(
       update({ channels: [...state.channels, target.channel] });
       // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
       const limit =
-        target.type === "GR" ? SWEEP_TIMEOUT : config.logoCarouselWait;
+        target.source === "cdt" ? SWEEP_TIMEOUT : config.logoCarouselWait;
       const startedAt = Date.now();
       const { found, outcome, carrier, received, openedMs, counts } =
         await collect(target, limit, signal, left, carouselPriority(target));
       open.set(target.type, (open.get(target.type) ?? 1) - 1);
+      if (
+        target.source === "carousel" &&
+        (outcome === "done" || outcome === "miss")
+      )
+        settledTs.add(target.ts);
       /*
        * もう一方のワーカーと同じ空きを取り合って開けなかった。その中継は読んでいないので列へ戻し、この種別はもう一方のワーカーが取る
        */
@@ -1208,7 +1378,7 @@ export async function ride(): Promise<number> {
         if (place === undefined) continue;
         // 自分で開けたものは共有しない。同じチャンネルを二重に読むことになる
         // (`collect` は開きに行く前に `collecting` へ入れるので、選び直しても二重にならない)
-        if (collecting.has(target.channel)) continue;
+        if (collecting.has(target.ts)) continue;
         rides.push(
           collect(target, RIDE_TIMEOUT, undefined, [], SWEEP_PRIORITY, [place]),
         );
@@ -1242,18 +1412,17 @@ let idle: { use: StreamUse; controller: AbortController } | null = null;
  * 上げたときも、番組表の取得がその中継を開くのを何時間も待たずに済む
  */
 async function awaitCarousel(): Promise<number> {
-  if (missingSatellites() === 0) return 0;
+  if (missingCarousel() === 0) return 0;
   const attempt = nextCarouselAttempt(carouselWatch, Date.now());
   if (attempt.at > Date.now()) return 0;
   let found = 0;
   /** この手で閉じたばかりの外れの中継。次を開くときに引き継ぐ (`countFree`) */
   let left: StreamUse[] = [];
   for (;;) {
-    const target = carrierTarget() ?? unprobedRelay();
-    if (target === null || collecting.has(target.channel)) return found;
-    if ((await freeTuners(target.type, left, target)) === 0) return found;
-    // 空きを訊いている間に、共有や「いますぐ」が同じ中継を開いたかもしれない
-    if (collecting.has(target.channel) || state.running) return found;
+    const target = await freeRelay(left);
+    if (target === null) return found;
+    // 空きを訊いている間に、共有や「いますぐ」が同じ TS を開いたかもしれない
+    if (collecting.has(target.ts) || state.running) return found;
     const controller = new AbortController();
     idle = { use: logoUse(target), controller };
     const startedAt = Date.now();
@@ -1298,30 +1467,58 @@ async function awaitCarousel(): Promise<number> {
   }
 }
 
-/** まだ当たり外れを確かめていない衛星の中継。BS から (並びは `tunableServices`) */
-function unprobedRelay(): Target | null {
-  const known = notes();
-  const service = tunableServices().find(
-    (s) =>
-      s.type !== "GR" &&
-      known.carriers[s.channel] === undefined &&
-      !skipRelay(s.channel),
-  );
-  return service === undefined ? null : targetOf(service);
-}
-
-/** 当たりと分かっている中継のうち、いまも選局できて、いちばん最近当たったもの */
-function carrierTarget(): Target | null {
-  const tunable = tunableServices();
-  const known = Object.entries(notes().carriers).sort(([, a], [, b]) => b - a);
-  for (const [channel] of known) {
-    const service = tunable.find(
-      (s) => s.type !== "GR" && s.channel === channel,
-    );
-    if (service === undefined || skipRelay(channel)) continue;
-    return targetOf(service);
+/**
+ * 次に開く中継。当たりと分かっている TS があればその中から、無ければ確かめていない TS から選ぶ。
+ * **その種別のチューナーが空いているものを選ぶ。** 同じ TS をアンテナとケーブルの両方で受けられるとき、
+ * アンテナの衛星のチューナーが塞がっていればケーブルのチャンネルで開く。
+ * 誰かが読んでいる TS (`collecting`) は選ばない
+ */
+async function freeRelay(left: readonly StreamUse[]): Promise<Target | null> {
+  const carriers = carrierTargets();
+  const candidates = carriers.length > 0 ? carriers : unprobedRelays();
+  for (const target of candidates) {
+    if (collecting.has(target.ts)) continue;
+    if ((await freeTuners(target.type, left, target)) > 0) return target;
   }
   return null;
+}
+
+/**
+ * まだ当たり外れを確かめていないカルーセルの TS を受けられるチャンネル。
+ * アンテナの BS → ケーブルの BS の再送信 → CS の順 (`relayRank`)
+ */
+function unprobedRelays(): Target[] {
+  const known = notes();
+  return tunableServices()
+    .filter(
+      (s) =>
+        s.source === "carousel" &&
+        known.carriers[s.ts] === undefined &&
+        !skipRelay(s.ts),
+    )
+    .sort((a, b) => relayRank(a) - relayRank(b))
+    .map(targetOf);
+}
+
+/**
+ * 当たりと分かっている TS を、いま受けられるチャンネル。いちばん最近当たった TS から、同じ TS ならアンテナを先に (`relayRank`)。
+ * アンテナの `BS15:16625` で当たった TS は、それを再送信するケーブルのチャンネルでも当たりになる (控えのキーが TS のため)
+ */
+function carrierTargets(): Target[] {
+  const tunable = tunableServices();
+  const known = Object.entries(notes().carriers).sort(([, a], [, b]) => b - a);
+  const targets = new Map<string, Target>();
+  for (const [ts] of known) {
+    if (skipRelay(ts)) continue;
+    const channels = tunable
+      .filter((s) => s.source === "carousel" && s.ts === ts)
+      .sort((a, b) => relayRank(a) - relayRank(b));
+    for (const service of channels) {
+      const key = `${service.type}:${service.channel}`;
+      if (!targets.has(key)) targets.set(key, targetOf(service));
+    }
+  }
+  return [...targets.values()];
 }
 
 /**
@@ -1394,13 +1591,13 @@ export async function sweepNow(): Promise<{
     return { started: false, message: "空いているチューナーがありません" };
   }
   /*
-   * 地上波を先に回す。中継ごとに違う局が入っているので、数が捌けるのはこちら。
+   * CDT (地上波・ケーブル) を先に回す。中継ごとに違う局が入っているので、数が捌けるのはこちら。
    * 衛星は**当たりと分かっている中継を外れ探しより先に**開く。外れの控えは上で捨てたので、並びのままだと
    * `BS01:16400` から順に当たり直し、途中でチューナーが塞がると当たりの中継 (`BS15:16625`) まで行き着かない (#1939)
    */
   const carriers = notes().carriers;
   const order = (target: Target) =>
-    target.type === "GR" ? 0 : carriers[target.channel] !== undefined ? 1 : 2;
+    target.source === "cdt" ? 0 : carriers[target.ts] !== undefined ? 1 : 2;
   const ordered = [...targets].sort((a, b) => order(a) - order(b));
   const parallel = Math.min(SWEEP_TUNERS, Math.max(...free.values()));
   // 終わるのは数分後。押した人を待たせず、進み具合は画面へ流す
@@ -1524,7 +1721,7 @@ async function run(
  * 取れる局まで「取れません」と出てしまう。
  * カルーセルを読み切った後になお足りない局だけが、本当に取れない局。
  *
- * `satellite` は**衛星でまだ取れていない局の数と、ロゴを積んだ中継** (分かっていなければ null)。
+ * `satellite` は**カルーセルでまだ取れていない局 (ケーブルの BS・CS の再送信も入る) の数と、ロゴを積んだ中継** (分かっていなければ null。`carrierLabel`)。
  * 衛星のロゴはダウンロードの期間にしか流れてこず、揃うまで何回か開き直すことがある。黙っていると
  * 止まっているように見えるので、画面で「いつ続きを読むか」を言う
  */
@@ -1536,7 +1733,7 @@ export function stats(): {
   satellite: { missing: number; carrier: string | null };
 } {
   const rows = tunableServices().map((service) => ({
-    satellite: service.type !== "GR",
+    satellite: service.source === "carousel",
     state: logoState(service.id),
   }));
   const states = rows.map((row) => row.state);
@@ -1551,9 +1748,21 @@ export function stats(): {
     unavailable: states.filter((state) => state === "absent").length,
     satellite: {
       missing: satellite,
-      carrier: satellite > 0 ? (carrierTarget()?.channel ?? null) : null,
+      carrier: satellite > 0 ? carrierLabel() : null,
     },
   };
+}
+
+/**
+ * 画面に出す、ロゴを積んだ中継の名前 (`stats`)。当たりの TS を受けられるチャンネルの先頭 (`carrierTargets`)。
+ * ケーブルのチャンネルなら後ろに「(ケーブル)」を付ける (`QC42` だけでは何のチャンネルか読めない)
+ */
+function carrierLabel(): string | null {
+  const target = carrierTargets()[0];
+  if (target === undefined) return null;
+  return target.type === "CATV"
+    ? `${target.channel} (ケーブル)`
+    : target.channel;
 }
 
 /**

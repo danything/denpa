@@ -51,21 +51,24 @@ config.dataDir = root;
 config.agentUrl = fakeAgentUrl(agent.port!);
 trustFakeAgent();
 
+const { orm } = await import("./db");
+const { placeServices, tsOf } = await import("./fake-channels");
+
+// 控えのキーは TS (`network_id:transport_stream_id`)
+const relay = `4:${tsOf("BS", "BS01_0")}`;
 const notesPath = join(root, "logos", "satellite-relays.json");
 const stale = Date.now() - 8 * 24 * 60 * 60_000;
 mkdirSync(join(root, "logos"), { recursive: true });
 writeFileSync(
   notesPath,
   JSON.stringify({
-    noCarousel: { BS01_0: stale },
+    noCarousel: { [relay]: stale },
     carriers: {},
     absent: {},
     gaveUp: {},
   }),
 );
 
-const { orm } = await import("./db");
-const { placeServices } = await import("./fake-channels");
 const { services } = await import("./schema");
 const { serviceKey } = await import("./tuner");
 const { sweep } = await import("./logo");
@@ -89,7 +92,7 @@ test("古い外れの控えは開き直し、また外れなら時刻を書き�
   const notes = JSON.parse(readFileSync(notesPath, "utf8")) as {
     noCarousel: Record<string, number>;
   };
-  expect(notes.noCarousel["BS01_0"]).toBeGreaterThan(stale);
+  expect(notes.noCarousel[relay]).toBeGreaterThan(stale);
   await sweep();
   expect(opened).toEqual(["BS01_0"]);
 });
