@@ -306,25 +306,27 @@ describe("recordedAutoStart", () => {
     expect(await recordedAutoStart(later)).toBe(true);
   });
 
-  test("JSON として読めない PMT の行は飛ばし、観る画面を開けなくしない", async () => {
-    const ts = join(dir, "broken.ts");
-    const sidecar = join(dir, "broken.bml.jsonl");
-    writeFileSync(ts, recorded());
-    await saveRecordedBml(ts, sidecar, recording(T), 0);
-    // 書きかけで切れた PMT の行が先にある
-    const broken = join(dir, "broken-line.bml.jsonl");
-    writeFileSync(
-      broken,
-      `{"at":0,"message":{"type":"pmt","compo\n${readFileSync(sidecar, "utf8")}`,
-    );
-    expect(await recordedAutoStart(broken)).toBe(true);
-
-    const only = join(dir, "broken-only.bml.jsonl");
-    writeFileSync(only, `{"at":0,"message":{"type":"pmt","compo\n`);
-    expect(await recordedAutoStart(only)).toBe(false);
-  });
-
   test("サイドカーが無ければ false", async () => {
     expect(await recordedAutoStart(join(dir, "none.bml.jsonl"))).toBe(false);
+  });
+
+  test("書きかけで読めない PMT の行は飛ばす (例外にしない)", async () => {
+    const ts = join(dir, "cut.ts");
+    const sidecar = join(dir, "cut.bml.jsonl");
+    writeFileSync(ts, recorded());
+    await saveRecordedBml(ts, sidecar, recording(T), 0);
+    const pmt = readFileSync(sidecar, "utf8")
+      .split("\n")
+      .find((line) => line.includes('"type":"pmt"'))!;
+
+    // PMT の行が途中で切れていて、ほかに PMT が無い
+    const broken = join(dir, "cut-only.bml.jsonl");
+    writeFileSync(broken, pmt.slice(0, pmt.length - 5));
+    expect(await recordedAutoStart(broken)).toBe(false);
+
+    // 切れた行のあとに読める PMT があれば、そちらで決める
+    const after = join(dir, "cut-then.bml.jsonl");
+    writeFileSync(after, `${pmt.slice(0, pmt.length - 5)}\n${pmt}\n`);
+    expect(await recordedAutoStart(after)).toBe(true);
   });
 });

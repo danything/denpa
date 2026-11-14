@@ -190,37 +190,25 @@ const PMT_LINE = '"type":"pmt"';
 export async function recordedAutoStart(sidecarPath: string): Promise<boolean> {
   if (!existsSync(sidecarPath)) return false;
   const input = createReadStream(sidecarPath, { encoding: "utf8" });
-  const lines = createInterface({
-    input,
-    crlfDelay: Number.POSITIVE_INFINITY,
-  });
+  const lines = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY });
   try {
     for await (const line of lines) {
       if (!line.includes(PMT_LINE)) continue;
-      const message = pmtOf(line);
-      if (message !== null && autoStarts(message.components)) return true;
+      // 録画中は最後の行が書きかけのことがある。読めない行は飛ばす (観る画面を開けなくしない)
+      let placed: PlacedMessage;
+      try {
+        placed = JSON.parse(line) as PlacedMessage;
+      } catch {
+        continue;
+      }
+      const { message } = placed;
+      if (message.type === "pmt" && autoStarts(message.components)) return true;
     }
     return false;
-  } catch (failure) {
-    // 読めない変化ログで観る画面ごと開けなくしない (指定が無いのと同じく、d を押してから受信する)
-    console.warn(`[bml] ${sidecarPath} を読めません: ${String(failure)}`);
-    return false;
   } finally {
-    // readline の close は読み元を閉じない。途中でやめたときにファイルを開いたまま残さないよう、読み元も閉じる
+    // 途中でやめたとき、readline を閉じるだけではファイルが閉じないことがある
     lines.close();
     input.destroy();
-  }
-}
-
-/** 変化ログの 1 行の PMT。JSON として読めない行 (書きかけで切れた行など) と、PMT でない行は null */
-function pmtOf(
-  line: string,
-): Extract<PlacedMessage["message"], { type: "pmt" }> | null {
-  try {
-    const { message } = JSON.parse(line) as PlacedMessage;
-    return message.type === "pmt" ? message : null;
-  } catch {
-    return null;
   }
 }
 
