@@ -518,8 +518,11 @@ denpa が渡すオプション (`profile`・`prio_speed`・`realtime`) を持つ
 
 単体テストは `hwenc.test.ts` が引数と名前の読み方を、`hwenc-probe.test.ts` が偽の ffmpeg の返事で Android の探し方を流します。
 
-**実機で確かめていないこと**: arm64 の実機で ffmpeg を起動できるか、ハードウェアのエンコーダが `isHardwareAccelerated` で見つかり、名前を指定して開けるか
-(nv12 と High を受けるか)、上の値で見た目が今の H.264 とそろうか・どれだけ小さくなるか、ライブの遅れ、SoC の熱で速さが落ちるか。
+**実機で確かめたこと** ([#2794](https://github.com/danything/denpa/issues/2794)): MediaTek の端末 (G30A) で、アプリの denpa v2.45.0 が起動時の試しのエンコードを通しました。
+ハードウェアのエンコーダ `c2.mtk.avc.encoder` (H.264) と `c2.mtk.hevc.encoder` (H.265) が `isHardwareAccelerated` で見つかり、名前を指定して開けました。この端末に AV1 のハードウェアのエンコーダはありません。
+
+**実機で確かめていないこと**: 録画とライブを通しでエンコードできるか、上の値で見た目が今の H.264 とそろうか・どれだけ小さくなるか、ライブの遅れ、SoC の熱で速さが落ちるか、
+MediaTek 以外の端末。
 
 ## H.265 は GPU でだけ
 
