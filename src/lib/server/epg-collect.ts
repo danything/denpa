@@ -14,6 +14,7 @@
 
 import { EpgReader } from "@danything/arib/eit";
 import { MmtEpgReader } from "@danything/arib/mh-eit";
+import { type MhSdt, TlvServiceReader } from "@danything/arib/mmt-si";
 import { ServiceReader } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
@@ -36,6 +37,7 @@ import { checkedAt, recordFailed } from "./reception";
 import { resolveConflicts } from "./scheduler";
 import { programs, services } from "./schema";
 import { chunks } from "./stream";
+import { hasUnnamed, nameTlvServices } from "./tlv-names";
 import {
   type AgentChannel,
   type AgentTuner,
@@ -323,6 +325,8 @@ async function collectChannel(
   let changed = false;
   /** 選局を送った所。受信できなかった記録はここに付ける */
   let sentTo: Place | null = null;
+  /** 仮の名前の局がある TLV のチャンネルで受信した MH-SDT[actual] (`tlv-names.ts`) */
+  let named: MhSdt | null = null;
   /*
    * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
    * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
@@ -379,10 +383,23 @@ async function collectChannel(
      * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `lineup-follow.ts` の `WATCH_FOR` だけ (SDT[other] がそろうまで)
      */
     lineup = isSatellite(channel.type) ? new LineupWatch(channel.type) : null;
+    /*
+     * **スキャンで局名を受信できなかった TLV の局は、MH-SDT[actual] も読む** (`tlv-names.ts`)。何秒おきに来るか分からないので、
+     * 来るまで読み続ける (表を 2 度パースするのは、仮の名前の局があるチャンネルだけ)
+     */
+    let names: TlvServiceReader | null =
+      tlv && hasUnnamed(channel) ? new TlvServiceReader() : null;
     for await (const chunk of chunks(stream)) {
       received ||= chunk.length > 0;
       lineup?.feed(chunk);
       ground?.feed(chunk);
+      if (names !== null) {
+        names.feed(chunk);
+        if (names.transport !== null) {
+          named = names.transport;
+          names = null;
+        }
+      }
       if (sdt !== null) {
         sdt.feed(chunk);
         sdtBytes += chunk.length;
@@ -420,6 +437,27 @@ async function collectChannel(
     clearTimeout(timer);
     controller.abort();
     update({ active: state.active.filter((name) => name !== label) });
+  }
+
+  // 自分の TLV ストリームの MH-SDT[actual] なら、仮の局名を放送の局名にする (`tlv-names.ts`)
+  if (
+    named !== null &&
+    named.originalNetworkId === channel.networkId &&
+    named.tlvStreamId === channel.transportStreamId
+  ) {
+    try {
+      const renamed = await nameTlvServices(
+        named.originalNetworkId,
+        named.tlvStreamId,
+        named.services,
+      );
+      if (renamed > 0)
+        console.log(
+          `[epg] ${label}: MH-SDT で ${renamed} 局の局名を受信したので、仮の名前から書き換えました`,
+        );
+    } catch (error) {
+      console.warn(`[epg] ${label} の局名を書けませんでした: ${error}`);
+    }
   }
 
   /*

@@ -323,8 +323,12 @@ TSID で呼べば写しは出ず、詰められても名前が変わらない。
     局が揃ってからも、PAT にある局の PMT が全部来て EIT の具合が分かるまで、読み始めから 10 秒までは読み続ける (PAT に局が無い TS は待たない)
   - 番組表は自分の TS のぶんだけを読む (地上波と同じ)。ロゴはまだ取得しない
   - 選局の答えの Content-Type が `application/x-arib-tlv` なら、TSMF から選んだ TS が分割 TLV (4K の放送) で、流れてくるのは TLV のバイト列 (`tuner.openChannel` の `transport`)。
-    TLV の表で局を読む (`readTlvServices`・`@danything/arib/mmt-si` の `TlvServiceReader`)。TLV-NIT と MH-SDT[actual] が揃ったら揃ったとみなし、
+    TLV の表で局を読む (`readTlvServices`・`@danything/arib/mmt-si` の `TlvServiceReader`)。TLV のチャンネルは最大 60 秒待ち、TLV-NIT と MH-SDT[actual] が揃ったら揃ったとみなし、
     局の元の放送は MH-SDT の original_network_id、TSID の代わりに tlv_stream_id を控えに入れる。リモコン番号は無い。
+    MH-SDT[actual] が来ないまま 60 秒たったら、TLV-NIT のストリームのうち PLT の package をサービスリスト記述子に持つものを自分の TLV ストリームとし、
+    その局を「名前の無い局 (161)」のような仮の局名で入れる。記録の行には「MH-SDT を受信できなかったため、局名は仮の名前です。番組表の取得で受信したら直します」と出す。
+    番組表の取得がそのチャンネルで MH-SDT[actual] を受信したら、エージェントの控えの仮の局名を放送の局名に書き換える (`tlv-names.ts`)。
+    実機のケーブルの BS4K (QC26) の 0.9 秒の録りには MH-SDT[actual] が無かった。何秒おきに来るかは確かめていない
     局ごとの CA_system_id は MPT (PLT から package を引く) のアクセス制御記述子から読み、局が揃ってからも PLT にある局の MPT が全部来るまで、読み始めから 10 秒までは読み続ける。
     チャンネルの控えに `transport: "tlv"` を書き (無ければ TS)、取り込みで `services.transport` に入れる。
     番組表 (MH-EIT) はスクランブルされないので、どの局にも `epgReadable` を書く。スキャン中に流れてきた MH-EIT も読む (`@danything/arib/mh-eit` の `MmtEpgReader`)。
@@ -335,7 +339,7 @@ TSID で呼べば写しは出ず、詰められても名前が変わらない。
   局が揃ってからも、EIT が来ているかスクランブルされていると分かるまで、読み始めから 10 秒までは読み続ける。
   EIT がスクランブルされずに来ていれば、控えに `epgReadable` を書き、番組表に「観られません」の列で出す ([上記](#denpa-が持つもの)。CATV と同じ決まり)
   ([tuner-it930x.md](tuner-it930x.md#スカパープレミアムでカード無しで分かること))
-- 1 チャンネル最大 30 秒。NIT と SDT が両方揃って受信できたとみなす (SDT だけでは
+- 1 チャンネル最大 30 秒 (ケーブルの 4K の TLV は 60 秒)。NIT と SDT が両方揃って受信できたとみなす (SDT だけでは
   どのネットワークのものか分からず、設定に書けない。ケーブルは上のとおり SDT だけで決める)。局名も SDT から `packages/arib/src/aribtext.ts` で読む
 - 録るに値するサービス種別だけ残す
 - **回すのは denpa。** 1 チャンネルずつエージェントに選局を依頼し、流れてきた TS を読む。

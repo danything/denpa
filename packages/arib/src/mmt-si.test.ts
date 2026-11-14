@@ -291,4 +291,27 @@ describe("TlvServiceReader", () => {
     expect(reader.mptsKnown).toBe(true);
     expect(reader.caSystemIdsOf(SERVICE)).toEqual([]);
   });
+
+  test("自分の TLV ストリームは、TLV-NIT のうち PLT の package を持つもの (MH-SDT[actual] が無くても分かる)", () => {
+    const reader = new TlvServiceReader();
+    reader.feed(
+      concatBytes([
+        tlvSi(
+          tlvNitSection(ONID, "高度ＢＳデジタル放送", [
+            [0xb070, ONID, [[0x97, 1]]],
+            [TLV_STREAM, ONID, [[SERVICE, 1]]],
+          ]),
+        ),
+        NULL,
+      ]),
+    );
+    // TLV-NIT だけでは分からない
+    expect(reader.ownStream).toBeNull();
+    reader.feed(concatBytes(plt([[SERVICE, 0xff01]])));
+    expect(reader.ownStream?.tlvStreamId).toBe(TLV_STREAM);
+    expect(reader.ownStream?.services).toEqual([
+      { serviceId: SERVICE, serviceType: 1 },
+    ]);
+    expect(reader.complete).toBe(false);
+  });
 });
