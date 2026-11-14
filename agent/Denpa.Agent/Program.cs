@@ -786,25 +786,32 @@ app.Lifetime.ApplicationStopping.Register(() => Interlocked.Exchange(ref watch, 
  * (止まれの合図のその場で来ていた頃は、録画中のチューナーまで離していた。上の 30 分番組はこれ)。
  * ここで離さないと、番組表やライブの選局が残っている間 Kestrel が 30 秒待ち、そのぶん入れ替えの隙間が伸びる。
  * 離された選局は接続を壊して終わる (録り終えたようには見せない。/denpa/stream)
+ *
+ * **IT930x の機材は、選局を離すより先に閉じる** (It930xDevice.Shutdown。入力を閉じてから EP 0x84 の読み出しを止める)。
+ * 選局を離す処理は全部のチューナーが閉じ終えるのを時間の上限なしに待つので、その後ろに置くと、どれかが終わらないまま
+ * SIGKILL で止められたときに、入力を開けたまま読み出しが止まってブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなる
+ * (docs/tuner-it930x.md「TS のバッファの溢れ」)。閉じたあとは開かないので、止まり際の選局や抜き差しで開き直すこともない
  */
-app.Lifetime.ApplicationStopping.Register(pool.CloseAll);
+app.Lifetime.ApplicationStopping.Register(() => StopSteps.Run(
+    ("IT930x の機材を閉じる", It930xDevice.Shutdown),
+    ("選局を離す", pool.CloseAll)));
 /*
- * 機材を畳むのは、応答を流し終えてから (`ApplicationStopped` は Kestrel が止まったあとに来る)。
- * 止まり際に滑り込んだ選局もここで離す
+ * ほかの機材を畳むのは、応答を流し終えてから (`ApplicationStopped` は Kestrel が止まったあとに来る)。
+ * 止まり際に滑り込んだ選局もここで離す。1 つが失敗しても残りは通す
  */
-app.Lifetime.ApplicationStopped.Register(() =>
-{
-    pool.CloseAll();
+app.Lifetime.ApplicationStopped.Register(() => StopSteps.Run(
+    ("IT930x の機材を閉じる", It930xDevice.Shutdown),
+    ("選局を離す", pool.CloseAll),
     // CECH-ZD1 J はスリープさせて LED を緑に戻してから閉じる (カードのために開いていても)
-    Zd1jBoard.CloseAll();
+    ("CECH-ZD1 J を閉じる", Zd1jBoard.CloseAll),
     // PIX-DT295 は書いた設定を戻してから閉じる (カードのために開いていても)
-    Dt295NativeDevice.CloseAll();
-    // IT930x の機材は受信機をスリープにし、電源を切ってから閉じる
-    It930xDevice.CloseAll();
+    ("PIX-DT295 を閉じる", Dt295NativeDevice.CloseAll),
     // 利用者を全部離してから asicend を止める。SIGTERM で LNB を 0V に戻して終わる
-    lock (daemonsGate) daemonsStopped = true;
-    UserlandDaemon.StopAll();
-});
+    ("asicend を止める", () =>
+    {
+        lock (daemonsGate) daemonsStopped = true;
+        UserlandDaemon.StopAll();
+    })));
 
 /*
  * **LAN の denpa に知らせる** (mDNS。Mdns.cs)。denpa は「エージェントを追加」の候補に出し、登録したエージェントのアドレスが変わったら付け替える。
