@@ -2264,9 +2264,9 @@ async function runCmJob(jobId: number): Promise<void> {
    * (`remuxForEncode`。ffmpeg は TLV を読めない)。詰め替えた MP4 の時刻は録画の物差し (`mmts.ts`) と同じなので、
    * 元の TS から読んだときと同じく境目をそのまま覚える
    */
-  const uhd = raw !== null && recordedTransport(raw) === "tlv";
+  const tlv = raw !== null && recordedTransport(raw) === "tlv";
   let scratch: string | null = null;
-  if (uhd && files.length === 0) {
+  if (tlv && files.length === 0) {
     setPhase(jobId, "remux", "4K の映像と音声を MP4 に詰め替えています");
     const remuxed = await remuxForEncode(raw, recording, signal);
     if (remuxed === null) return finishCanceled(jobId, null);
@@ -2277,7 +2277,7 @@ async function runCmJob(jobId: number): Promise<void> {
     scratch = remuxed.path;
   }
   const ts =
-    scratch ?? (raw !== null && !uhd && !isScrambled(raw) ? raw : null);
+    scratch ?? (raw !== null && !tlv && !isScrambled(raw) ? raw : null);
   try {
     await detectCm(jobId, signal, recording, ts, files);
   } finally {
