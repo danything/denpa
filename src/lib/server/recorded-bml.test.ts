@@ -319,7 +319,7 @@ describe("recordedAutoStart", () => {
       .split("\n")
       .find((line) => line.includes('"type":"pmt"'))!;
 
-    // 指定の無い録画の最後の行が、PMT の途中で切れている
+    // PMT の行が途中で切れていて、ほかに PMT が無い
     const broken = join(dir, "cut-only.bml.jsonl");
     writeFileSync(broken, pmt.slice(0, pmt.length - 5));
     expect(await recordedAutoStart(broken)).toBe(false);
