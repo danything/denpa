@@ -309,4 +309,24 @@ describe("recordedAutoStart", () => {
   test("サイドカーが無ければ false", async () => {
     expect(await recordedAutoStart(join(dir, "none.bml.jsonl"))).toBe(false);
   });
+
+  test("書きかけで読めない PMT の行は飛ばす (例外にしない)", async () => {
+    const ts = join(dir, "cut.ts");
+    const sidecar = join(dir, "cut.bml.jsonl");
+    writeFileSync(ts, recorded());
+    await saveRecordedBml(ts, sidecar, recording(T), 0);
+    const pmt = readFileSync(sidecar, "utf8")
+      .split("\n")
+      .find((line) => line.includes('"type":"pmt"'))!;
+
+    // 指定の無い録画の最後の行が、PMT の途中で切れている
+    const broken = join(dir, "cut-only.bml.jsonl");
+    writeFileSync(broken, pmt.slice(0, pmt.length - 5));
+    expect(await recordedAutoStart(broken)).toBe(false);
+
+    // 切れた行のあとに読める PMT があれば、そちらで決める
+    const after = join(dir, "cut-then.bml.jsonl");
+    writeFileSync(after, `${pmt.slice(0, pmt.length - 5)}\n${pmt}\n`);
+    expect(await recordedAutoStart(after)).toBe(true);
+  });
 });

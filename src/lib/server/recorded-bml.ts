@@ -189,19 +189,26 @@ const PMT_LINE = '"type":"pmt"';
  */
 export async function recordedAutoStart(sidecarPath: string): Promise<boolean> {
   if (!existsSync(sidecarPath)) return false;
-  const lines = createInterface({
-    input: createReadStream(sidecarPath, { encoding: "utf8" }),
-    crlfDelay: Number.POSITIVE_INFINITY,
-  });
+  const input = createReadStream(sidecarPath, { encoding: "utf8" });
+  const lines = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY });
   try {
     for await (const line of lines) {
       if (!line.includes(PMT_LINE)) continue;
-      const { message } = JSON.parse(line) as PlacedMessage;
+      // 録画中は最後の行が書きかけのことがある。読めない行は飛ばす (観る画面を開けなくしない)
+      let placed: PlacedMessage;
+      try {
+        placed = JSON.parse(line) as PlacedMessage;
+      } catch {
+        continue;
+      }
+      const { message } = placed;
       if (message.type === "pmt" && autoStarts(message.components)) return true;
     }
     return false;
   } finally {
+    // 途中でやめたとき、readline を閉じるだけではファイルが閉じないことがある
     lines.close();
+    input.destroy();
   }
 }
 
