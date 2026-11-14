@@ -12,6 +12,7 @@ import {
   stats as learnStats,
 } from "#lib/server/logo-data.js";
 import {
+  logoSource,
   logoState,
   stats as logoStats,
   sweepNow,
@@ -21,13 +22,15 @@ import { DIGITAL_TV, services } from "#lib/server/schema.js";
 import type { ChannelType } from "#lib/types.js";
 
 /**
- * 局ロゴの具合。復号できない局と CATV の局のロゴは取得しない (logo.ts の `tunableServices`) ので `skipped`。
- * ただし CATV の再送信の局は ONID・SID がアンテナの局と同じで、アンテナの局のロゴが同じ行にも書かれる (`logo.store`)。持っていれば `have`
+ * 局ロゴの具合。ロゴを取得しない局 (`logo.logoSource` が null。復号できない局・4K の局・スカパー！プレミアムの局と、
+ * 6 分開いても CDT が来なかったケーブルの TS の局) は `skipped`。
+ * ただし取得しない局でも、ONID・SID の同じ局のロゴが同じ行に書かれていれば (`logo.store`) `have`
  */
-function logoOf(id: number, type: string, decodable: boolean) {
-  if (!decodable) return "skipped" as const;
-  if (type !== "CATV") return logoState(id);
-  return logoState(id) === "have" ? ("have" as const) : ("skipped" as const);
+function logoOf(service: Parameters<typeof logoSource>[0] & { id: number }) {
+  if (logoSource(service) !== null) return logoState(service.id);
+  return logoState(service.id) === "have"
+    ? ("have" as const)
+    : ("skipped" as const);
 }
 
 /**
@@ -35,7 +38,7 @@ function logoOf(id: number, type: string, decodable: boolean) {
  * 確かめたいのはどちらも「この局のロゴが取れているか・合っているか」なので、受信できるチャンネルの表の局の行に
  * 列を 2 つ並べる (`Channels.svelte`。局名と種別を別の表で繰り返さない)。
  *
- * - `logo` … 局ロゴの具合 (`logo.logoState`)。取得しない局 (復号できない局と CATV の局) は `skipped` (`logoOf`)
+ * - `logo` … 局ロゴの具合 (`logo.logoState`)。取得しない局は `skipped` (`logoOf`)
  * - `cm` … CM 検出のロゴを覚えた時刻 (`logo-data.learnedAt`)。覚えていなければ null。
  *   CM 検出の対象でない局 (テレビでない局・同じ映像を流しているサブチャンネル) もいつも null
  */
@@ -46,6 +49,8 @@ function stationLogos() {
       name: services.name,
       type: services.type,
       network_id: services.network_id,
+      transport_stream_id: services.transport_stream_id,
+      transport: services.transport,
       service_type: services.service_type,
       decodable: services.decodable,
     })
@@ -64,12 +69,12 @@ function stationLogos() {
     ),
   );
   return rows
-    .map(({ id, name, type, decodable }) => ({
-      id,
-      name,
-      type: type as ChannelType,
-      logo: logoOf(id, type, decodable),
-      cm: cmShown.has(id) ? learnedAt(id) : null,
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      type: row.type as ChannelType,
+      logo: logoOf(row),
+      cm: cmShown.has(row.id) ? learnedAt(row.id) : null,
     }))
     .sort((a, b) => typeRank(a.type) - typeRank(b.type));
 }

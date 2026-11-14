@@ -13,8 +13,8 @@ import { config } from "./config";
 import { orm } from "./db";
 import { agentChannels, agents, services } from "./schema";
 
-/** チャンネルの名前から作る TS の番号。同じ種別・名前なら同じ TS */
-function tsOf(type: string, channel: string): number {
+/** チャンネルの名前から作る TS の番号。同じ種別・名前なら同じ TS (`placeServices` で `ts` を渡さなかったとき) */
+export function tsOf(type: string, channel: string): number {
   let hash = 0;
   for (const char of `${type}:${channel}`)
     hash = (hash * 31 + char.charCodeAt(0)) % 65_521;
@@ -54,12 +54,15 @@ function placeAgent(): number {
   return listAgents()[0]?.id ?? fakeAgent();
 }
 
-/** `placed` の局を、それぞれのチャンネルに置く。`agent` を渡さなければ `placeAgent` */
+/**
+ * `placed` の局を、それぞれのチャンネルに置く。`agent` を渡さなければ `placeAgent`。
+ * `ts` を渡すとその transport_stream_id にする (アンテナとケーブルで同じ TS を受けるとき)。渡さなければ `tsOf`
+ */
 export function placeServices(
-  placed: readonly { id: number; channel: string }[],
+  placed: readonly { id: number; channel: string; ts?: number }[],
   agent = placeAgent(),
 ): void {
-  for (const { id, channel } of placed) {
+  for (const { id, channel, ts: given } of placed) {
     const service = orm()
       .select({
         type: services.type,
@@ -70,7 +73,7 @@ export function placeServices(
       .where(eq(services.id, id))
       .get();
     if (service === undefined) throw new Error(`局 ${id} がありません`);
-    const ts = tsOf(service.type, channel);
+    const ts = given ?? tsOf(service.type, channel);
     orm()
       .update(services)
       .set({ transport_stream_id: ts })

@@ -14,7 +14,8 @@
  *   総当たりの順に回し (控えの入口を先に)、読めたら残りを NIT の一覧に置き換える。一覧の搬送波がロックしなければ間をあけて試し直し、
  *   それでもロックしなければ前の控えのチャンネルを残す。TSMF で束ねた搬送波は、
  *   束ねた TS をそれぞれ選局する (`QC30:1`…。`tsmfJobs`)。局ごとの CA_system_id も数え、復号できるかを決める (`ca-observe.ts`)。
- *   選局の答えが TLV (分割 TLV から組み立てた 4K の放送。`tuner.openChannel` の `transport`) なら、TLV の表で局を読む (`readTlvServices`)
+ *   選局の答えが TLV (分割 TLV から組み立てた 4K の放送。`tuner.openChannel` の `transport`) なら、TLV の表で局を読む (`readTlvServices`)。
+ *   TLV は最大 60 秒待ち、MH-SDT[actual] が来なくても TLV-NIT と PLT で局が分かれば仮の局名で入れる (`tlv-names.ts`)
  * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。局は復号できない (`services.decodable`)。
  *   カード無しで分かること (CA_system_id・番組表とロゴが来ているか) を数えて記録と受信の設定に出す (`ca-observe.ts`)
  * - SKY と CATV は、番組表 (EIT) がスクランブルされずに来たかを控えに書く。読めれば復号できない局も番組表に出す (`types.epgReadableService`)
@@ -34,6 +35,7 @@ import {
   type FoundService,
   type Network,
   NitReader,
+  SERVICE_TYPES,
   ServiceReader,
 } from "@danything/arib/psi";
 
@@ -63,6 +65,7 @@ import { markRemoved } from "./satellite-lineup";
 import { resolveConflicts } from "./scheduler";
 import { store, stored } from "./settings";
 import { readUntil } from "./stream";
+import { unnamedService } from "./tlv-names";
 import {
   type AgentChannel,
   type AgentTuner,
@@ -293,20 +296,36 @@ export async function readServices(
   );
 }
 
+/**
+ * TLV (4K の放送) のチャンネルで、MH-SDT[actual] を待つ上限 (`readTlvServices`)。
+ *
+ * MH-SDT[actual] が何秒おきに来るかは確かめていない。実機のケーブルの BS4K (QC26) の 0.9 秒には来ず、TS の 30 秒 (`TUNE_TIMEOUT`) で待つと
+ * 局が 1 つも入らなかった。60 秒は TS の SI からの推定で、TS では NIT と SDT[other] でも 10 秒に 1 回は来る (ARIB TR-B14) ので、その 6 回ぶん待つ。
+ * MH-SDT[actual] が来ない TLV のチャンネルは、スキャンのたびに 60 秒かかる。
+ * 延びるのは TLV のチャンネル (ケーブルに 1〜2 本) だけで、総当たりの時間はほとんど変わらない。
+ * 来なくても、自分の TLV ストリームが分かれば局は入れる (`unnamedService`)
+ */
+const TLV_TIMEOUT = 60_000;
+
 /** TLV (4K の放送) を読んだ結果。局ごとの CA_system_id と ECM の packet_id も返す (MPT のアクセス制御記述子) */
 interface TlvScanResult extends ScanResult {
   caSystemIdsOf: (serviceId: number) => number[];
   accessOf: (serviceId: number) => AccessControl[];
+  /** MH-SDT[actual] を受信できず、局を TLV-NIT と PLT から作ったか。局名は仮の名前 (`unnamedService`) */
+  unnamed: boolean;
 }
 
 /**
  * 流れてくる TLV (選局の答えが `application/x-arib-tlv`) を、TLV-NIT と MH-SDT[actual] が揃うまで読む (`TlvServiceReader`)。
  * TS の `readServices` に当たる。局が揃ってからも、PLT にある局の MPT が全部来るまで、読み始めから `OBSERVE_WAIT` までは読み続ける
- * (局ごとの CA_system_id を MPT から読む。TS の PMT と同じ)
+ * (局ごとの CA_system_id を MPT から読む。TS の PMT と同じ)。
+ *
+ * **MH-SDT[actual] が来ないまま終わっても、自分の TLV ストリームが分かれば局を返す** (`TlvServiceReader.ownStream`)。
+ * 局は TLV-NIT のサービスリスト記述子のもので、局名は仮の名前 (`unnamedService`)。番組表の取得が MH-SDT[actual] を受信したら直す (`tlv-names.ts`)
  */
 export async function readTlvServices(
   stream: ReadableStream<Uint8Array>,
-  timeout = TUNE_TIMEOUT,
+  timeout = TLV_TIMEOUT,
   abort?: AbortSignal,
   /** 同じストリームから番組表 (MH-EIT) も取得する。読む時間は延ばさない (`readServices` と同じ) */
   epg?: MmtEpgReader,
@@ -335,14 +354,41 @@ export async function readTlvServices(
     accessOf: (serviceId: number) => reader.accessOf(serviceId),
   };
   if (reader.complete)
-    return { ...result, services: reader.services(), error: null };
+    return {
+      ...result,
+      services: reader.services(),
+      error: null,
+      unnamed: false,
+    };
+  const own = reader.ownStream;
+  if (own !== null)
+    return {
+      ...result,
+      services: own.services
+        .filter((service) => SERVICE_TYPES.has(service.serviceType))
+        .map((service) => ({
+          serviceId: service.serviceId,
+          serviceType: service.serviceType,
+          name: unnamedService(service.serviceId),
+          networkId: own.originalNetworkId,
+          transportStreamId: own.tlvStreamId,
+          remoteControlKeyId: null,
+        })),
+      error: null,
+      unnamed: true,
+    };
   const detail = tail === "" ? "" : ` (${tail})`;
   const why = !signal
     ? "受信できませんでした"
     : reader.network === null && reader.transport === null
       ? "受信はできましたが、局の情報を読み取れません"
       : `${reader.network === null ? "TLV-NIT" : "MH-SDT"} を受信できませんでした`;
-  return { ...result, services: null, error: `${why}${detail}` };
+  return {
+    ...result,
+    services: null,
+    error: `${why}${detail}`,
+    unnamed: false,
+  };
 }
 
 /**
@@ -1106,7 +1152,8 @@ class Scanner {
 
   /**
    * TLV (4K の放送) のチャンネルを読む。局は MH-SDT[actual] から、局ごとの CA_system_id は MPT から (`readTlvServices`)。
-   * 揃わなければ CATV の TS と同じく「局なし」として入れず、回し直さない。
+   * MH-SDT[actual] が来なくても、自分の TLV ストリームが分かれば仮の局名で入れ、記録の行にそう書く (`unnamedService`)。
+   * 局が分からなければ CATV の TS と同じく「局なし」として入れず、回し直さない。
    * 番組表 (MH-EIT) は信号のメッセージで来てスクランブルされないので、どの局も番組表を読めると控えに書く (`types.epgReadableService`)
    */
   private async tlv(
@@ -1119,7 +1166,7 @@ class Scanner {
     const epg = new MmtEpgReader();
     const result = await readTlvServices(
       stream,
-      TUNE_TIMEOUT,
+      TLV_TIMEOUT,
       this.aborter.signal,
       epg,
     );
@@ -1143,7 +1190,11 @@ class Scanner {
     );
     this.keep(type, epg);
     this.onProgress({
-      line: `${channel}: ${services.length} 局  ${describeTlv(services, result.accessOf)}`,
+      line:
+        `${channel}: ${services.length} 局  ${describeTlv(services, result.accessOf)}` +
+        (result.unnamed
+          ? "  MH-SDT を受信できなかったため、局名は仮の名前です。番組表の取得で受信したら直します"
+          : ""),
       ...counts,
       channels: 1,
     });

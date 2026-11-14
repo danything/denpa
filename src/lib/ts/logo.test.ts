@@ -158,6 +158,14 @@ describe("ロゴを集める", () => {
     expect(collector.collected()).toEqual([]);
   });
 
+  test("受け取った CDT のセクションを数える", () => {
+    const collector = new LogoCollector(NETWORK);
+    collector.feed(packetize(0x0011, sdtWithLogo([[1024, 3]])));
+    expect(collector.cdtSections).toBe(0);
+    collector.feed(packetize(0x0029, cdtSection(3, 0x05, PNG)));
+    expect(collector.cdtSections).toBe(1);
+  });
+
   test("大きいロゴが来たら差し替える", () => {
     const collector = new LogoCollector(NETWORK);
     const small = Uint8Array.from([1, 2, 3]);
