@@ -125,7 +125,11 @@ import {
 import { MmtLive, type MmtOut } from "./live-mmt";
 import { tunerOf, yieldedTo } from "./live-yield";
 import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
-import { recordedBroadcast } from "./recorded-broadcast";
+import {
+  broadcastDecided,
+  learnBroadcast,
+  recordedBroadcast,
+} from "./recorded-broadcast";
 import { recordingSize } from "./recording-io";
 import { programs, recordings, services } from "./schema";
 import { LastingScramble, mediaPids } from "./scramble";
@@ -1610,6 +1614,13 @@ class Session {
    */
   hevcVideo = false;
 
+  /**
+   * **追っかけを元の TS で送る前に、録画のストリームから PMT を読むか** (`readsVideo`)。読むときは、読めた放送のコーデックを受け取るもの。
+   * 録り始めたばかりで開く前に録画の PMT を読めなかった追っかけだけ (`openChase`。`recorded-broadcast.broadcastDecided`)。
+   * 映像が HEVC なら、4K の局の録画と同じく放送の HEVC を写したものに替える (`chaseRawServed`)
+   */
+  learnsBroadcast: ((broadcast: BroadcastCodec) => void) | null = null;
+
   /** エンコードが遅れたので軽くしたもの (`lighten`)。作ったときに前のセッションから受け継ぐ */
   private light: Light = { half: false, gpu: false };
   /** いまの ffmpeg がソフトウェアでエンコードしているか (`lighten` で GPU に移せるかを見る) */
@@ -1848,8 +1859,17 @@ class Session {
    * - 段を下げた H.265 (`runEncode`)。4K の局と分かったら、段を下げるコーデックを選び直す (`liveRungCodec`)
    *
    * TS に HEVC を入れて送る 4K の局はケーブルにしか無く、ほかの局は HTTP の応答ヘッダを PMT まで待たせない (`liveServed`)
+   *
+   * 追っかけは、元の TS で送るもののうち、開く前に録画の PMT を読めなかったものだけ (`learnsBroadcast`)
    */
   private readsVideo(): boolean {
+    if (this.source !== undefined)
+      return (
+        this.learnsBroadcast !== null &&
+        this.raw &&
+        this.transport === "ts" &&
+        this.program > 0
+      );
     return (
       ((this.raw && !this.keepsTs) ||
         (!this.raw && this.codec === "hevc" && this.rung !== 0)) &&
@@ -1902,8 +1922,13 @@ class Session {
     return {
       type: "tuned",
       channelType: this.channelType,
-      channel: this.channel,
-      serviceId: this.serviceId,
+      // 追っかけの目印は `<録画の ID>@<開いた位置>` (`openChase`)。答えには録画の ID だけを入れる
+      channel:
+        this.source === undefined
+          ? this.channel
+          : (this.channel.split("@")[0] ?? this.channel),
+      // 受けた局はライブの答えだけに載せる (追っかけには付けない)
+      ...(this.source === undefined ? { serviceId: this.serviceId } : {}),
       codecs: codecsFor(this.codec, this.hevcVideo ? "hevc" : "mpeg2"),
       codec: this.codec,
       raw: this.raw,
@@ -3145,18 +3170,30 @@ class Session {
        * デコーダでは観られないので、HEVC の詰め替え (端末が HEVC を再生できなければエンコード) に替えて、エンコードの経路へ
        * 渡す (`servedFormat`・`switchFormat`)。絞る側 (`ServiceFilter`) も PMT を読むまで何も出さないので、待っても遅れない
        */
+      /*
+       * **追っかけも、開く前に録画の PMT を読めなかったもの (録り始めたばかり) も、送る前に PMT を読む** (`learnsBroadcast`)。
+       * 録画の先頭にはすぐ PMT が書かれるので、伸びている録画のストリームから読む。HEVC なら 4K の局の録画と同じく
+       * 放送の HEVC を写したものに替え (`chaseRawServed`)、読み直したストリームでエンコードの経路へ渡す
+       * (追っかけは ffmpeg を起こすたびに `source` から読み直す。読んだぶんは閉じる)。読めた答えは録画ごとに覚える
+       */
       if (this.readsVideo()) {
         const head = await peekPmt(input, this.program, PMT_WAIT);
         input = head.stream;
         if (this.stopped) return;
-        const served = servedFormat(this.asked, head.video, this.playable);
+        if (chase && head.count !== null)
+          this.learnsBroadcast?.(head.video === "hevc" ? "hevc" : "mpeg2");
+        const served = chase
+          ? chaseRawServed(this.asked, head.video)
+          : servedFormat(this.asked, head.video, this.playable);
         if (served === null) {
           this.died(label, "playable に HEVC・H.264・AV1 が無い", NO_FORMAT);
           return;
         }
         if (!served.raw) {
           this.switchFormat(served);
-          return await this.runEncode(label, input);
+          if (!chase) return await this.runEncode(label, input);
+          void input.return(undefined);
+          return await this.runEncode(label);
         }
       }
       this.formatKnown();
@@ -4642,9 +4679,10 @@ function openChase(
    * 止めたまま回り続け、録画のファイルと字幕の ffmpeg (`runRaw` の finally に来ない) が残っていた
    */
   const reading = { stopped: false };
+  // 元の TS で開いても、録画の PMT を読んで HEVC の写しに替えることがある (`Session.learnsBroadcast`)。そのときの形式で見る
   const stopReading = () =>
     !reading.stopped &&
-    (raw
+    (session.raw
       ? chaseReadHeld({
           asked: viewer.held === true,
           congested: viewer.connection.congested === true,
@@ -4721,6 +4759,16 @@ function openChase(
   session.whenStopped(() => {
     reading.stopped = true;
   });
+  /*
+   * **録り始めたばかりで開く前に PMT を読めなかった録画を元の TS で送るときは、送る前に録画のストリームから PMT を読む**
+   * (`Session.learnsBroadcast`)。TS で送る 4K の局の録画なら、画面の MPEG-2 のデコーダは HEVC をデコードできないので、
+   * 放送の HEVC を写したものに替えて答え直す。読めた答えは覚え、次に開くときはそれで形式を決める。
+   * 答え直す `tuned` (`Session.switchFormat`) には選べる音声も入れる
+   */
+  if (raw && transport === "ts" && !broadcastDecided(path)) {
+    session.audios = tracks;
+    session.learnsBroadcast = (found) => learnBroadcast(path, found);
+  }
   session.add(viewer);
   if (!raw) {
     void session.run();
@@ -4896,6 +4944,20 @@ export function servedFormat(
   if (playable.includes("h264")) return { codec: "h264", raw: false };
   if (playable.includes("av1")) return { codec: "av1", raw: false };
   return null;
+}
+
+/**
+ * **元の TS で開いた追っかけが、録画のストリームの PMT を読んだあとで実際に送る形式** (`Session.runRaw`)。
+ * 開く前に録画の PMT を読めなかった (録り始めたばかり) ので、MPEG-2 の局の録画として元の TS で開いている。
+ * 映像が HEVC なら、4K の局の録画の放送のまま (`chaseForm`) と同じく放送の HEVC を写したもの (`copiesVideo`。変換の枠を使わない)。
+ * HEVC を再生できない端末は、答え (`tuned` の `broadcast`) を見て自分で次の形式に移る。それ以外はリクエストされたまま
+ */
+export function chaseRawServed(
+  asked: { codec: StreamCodec; raw: boolean },
+  video: ServiceVideo | null,
+): { codec: StreamCodec; raw: boolean } {
+  if (video !== "hevc" || !asked.raw) return asked;
+  return { codec: "hevc", raw: false };
 }
 
 /**

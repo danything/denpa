@@ -2816,6 +2816,22 @@ export function livePlayer(options: LivePlayerOptions = {}) {
               tuned = { ...tuned, codec, raw: false };
             }
             if (broadcastHevc === undefined) checkBroadcastHevc();
+          } else if (
+            notice.broadcast === "hevc" &&
+            chase !== null &&
+            chase.broadcast !== "hevc"
+          ) {
+            /*
+             * **元の TS で開いた追っかけの録画が、TS で送る 4K の局のものだった** (録り始めたばかりで、開く前にサーバが
+             * 録画の PMT を読めなかった。`server/live.ts` の `Session.learnsBroadcast`)。答えは放送の HEVC を写したもので、
+             * 下の `start` で MSE に移る。この録画を開いている間は 4K の局の録画として形式を選ぶ (`broadcastKind`)
+             */
+            chase = { ...chase, broadcast: "hevc" };
+            if (!notice.raw) {
+              rawChosen = false;
+              if (notice.codec !== "audio") codec = notice.codec;
+            }
+            if (broadcastHevc === undefined) checkBroadcastHevc();
           }
           const step = servedStep(notice);
           // 追っかけで音声だけを選んでいたときは、実際には段 3 をリクエストしている (`wantedCommand`)

@@ -922,10 +922,14 @@ VPS・SPS・PPS はコマの中にも残ったまま送るので、`hvc1` とし
 #### TS で送る 4K の局の録画
 
 **TS で送る 4K の局の録画も TS (`.m2ts`) で、拡張子では 4K の局と分かりません。追っかけと録画の観る画面は、開く前に録画の先頭の PMT を読んで決めます**
-(`recorded-broadcast.ts` の `recordedBroadcast`)。映像が HEVC なら、4K の局の録画 (`.mmts`) と同じ決め方で形式を選びます。開いたあとで形式を替える仕組みは持ちません。
+(`recorded-broadcast.ts` の `recordedBroadcast`)。映像が HEVC なら、4K の局の録画 (`.mmts`) と同じ決め方で形式を選びます。開いたあとで形式を替えるのは、PMT を読めないまま元の TS で開いた追っかけだけです (下)。
 
 - 読むのは録画の先頭 4MB までです。その局 (`services.service_id`) の PMT が無ければ、今までどおり MPEG-2 の局の録画として扱います。
   録り始めたばかりで PMT がまだ書かれていない録画は、5 秒置いてから開くときに読み直します (`UNDECIDED_WAIT`。同期で読むので、続けて開き直すたびには読まない)。PMT を読めた録画は、録画のパスごとにメモリに覚えます (局の行にも録画の行にも持たない)
+- 開く前に PMT を読めず、画面が放送のまま (`raw`) で開いた追っかけは、元の TS を送る前に、伸びている録画のストリームから PMT を読みます
+  (`Session.learnsBroadcast`。ライブと同じ `peekPmt` で、待つのは 3 秒まで)。映像が HEVC なら、画面の MPEG-2 のデコーダ (WASM) は HEVC をデコードできないので、
+  放送の HEVC を写したものに替えて選局の答え (`tuned`) を `broadcast: "hevc"`・`codec: "hevc"`・`raw: false` で出し直します (`live.chaseRawServed`。ライブの `switchFormat` と同じ)。
+  画面はその録画を開いている間、4K の局の録画として形式を選び、HEVC を再生できなければ次の形式に移ります。読めた答えは覚え (`learnBroadcast`)、次に開くときは読み直さずにそれで決めます
 - 追っかけ (`live.chaseForm`) は、段 0 の `hevc` と画面の放送のまま (`raw`) を、放送の HEVC を写したものにします (ライブと同じ `copiesVideo`。変換の枠を使わない)。
   段を下げた `hevc` は、端末が再生できる形式 (`playable`) から H.265 を外して選び直します。`h264`・`av1` は縮めて SDR にします (`uhdVideoArgs`)。
   セッションには録画の放送のコーデックを渡すので、PMT を読み直す前から 4K の局の引数で起こします (`Session` の `broadcast`)
