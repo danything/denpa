@@ -1792,9 +1792,9 @@ public sealed class Cxd2856Frontend
             {
                 _link.Write(CxdTarget.X, 0x08, 0x00);
             }
-            catch (IOException)
+            catch (Exception cleanup) when (cleanup is IOException or ObjectDisposedException)
             {
-                // 元の失敗を返す
+                // 元の失敗を返す (止めるために USB を閉じられていれば、閉じる書き込みは ObjectDisposedException になる)
             }
             throw;
         }

@@ -798,9 +798,9 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
                 {
                     _power(false);
                 }
-                catch (IOException)
+                catch (Exception cleanup) when (cleanup is IOException or ObjectDisposedException)
                 {
-                    // 元の失敗を返す
+                    // 元の失敗を返す (止めるために USB を閉じられていれば、電源を切る書き込みは ObjectDisposedException になる)
                 }
                 throw;
             }

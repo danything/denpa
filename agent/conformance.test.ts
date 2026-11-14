@@ -54,7 +54,12 @@ type ChannelEntry = { type: string; channel: string };
 const AGENT_CMD = (process.env.AGENT_CMD ?? "agent/publish/denpa-agent").split(
   " ",
 );
-const PORT = Number(process.env.AGENT_TEST_PORT ?? 40881);
+/**
+ * 試すエージェントは、ここから 6 つ先までのポートで待ち受ける。**Linux のエフェメラルポート (既定は 32768〜60999) より下に置く。**
+ * 範囲の中 (40881) にあった頃は、止まれの合図のテストで立てるエージェント (40882) が CI で 2 度応答しなかった (2026-11-08・11-14)。
+ * それまでのテストの接続がクライアント側で 40882 を使っていて、待ち受けられずに落ちたと推定している (エージェントの出力を捨てていたので残っていない)
+ */
+const PORT = Number(process.env.AGENT_TEST_PORT ?? 28881);
 /** 鍵を配るポート (CARD_SHARE_PORT)。普通の API とは別 (agent/Denpa.Agent/CardShareServer.cs) */
 const SHARE_PORT = PORT + 3;
 const SHARE_BASE = `http://127.0.0.1:${SHARE_PORT}`;
@@ -230,8 +235,11 @@ async function ready(
 ): Promise<Agent> {
   const until = Date.now() + ms;
   for (;;) {
-    if (child.exitCode !== null)
-      throw new Error(`:${port} のエージェントが起動直後に落ちました`);
+    // シグナルで落ちたときは exitCode が null のまま (signalCode に入る)。見ないと、落ちたのに応答を待ち続ける
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error(
+        `:${port} のエージェントが起動直後に落ちました (${child.signalCode ?? `終了コード ${child.exitCode}`})`,
+      );
     try {
       const ca = readFileSync(join(tlsDir, "agent.crt"), "utf8");
       const agent = {
@@ -1008,8 +1016,16 @@ async function spawnAgent(
       ...env,
     },
     stdout: "pipe",
-    stderr: "ignore",
+    stderr: "pipe",
   });
+  // 出力は読み続ける (読まないとパイプが埋まってエージェントが止まる)。起動できなかったときに理由として添える
+  let output = "";
+  const drain = (stream: ReadableStream<Uint8Array>) =>
+    (async () => {
+      for await (const chunk of stream)
+        output += new TextDecoder().decode(chunk);
+    })();
+  const drained = Promise.all([drain(other.stdout), drain(other.stderr)]);
   const stop = async () => {
     other.kill("SIGKILL");
     await other.exited;
@@ -1023,7 +1039,8 @@ async function spawnAgent(
     return { card, agent, other, stop };
   } catch (error) {
     await stop();
-    throw error;
+    await drained;
+    throw new Error(`${(error as Error).message}:\n${output}`);
   }
 }
 
@@ -1248,6 +1265,53 @@ describe("カードとスクランブルの復号", () => {
 test("存在しないエンドポイントは 404", async () => {
   expect((await get("/denpa/nope")).status).toBe(404);
 });
+
+/*
+ * **待ち受けるポートが使われていたら、理由を出して 2 で終わる。** 例外のまま落ちていた頃は SIGABRT で終わり、
+ * 終了コードが残らなかった (立てた側は落ちたことに気づけない)
+ */
+test.each([
+  // どちらも上で立てたエージェントが使っている
+  ["AGENT_PORT", { AGENT_PORT: String(PORT) }, PORT],
+  [
+    "CARD_SHARE_PORT",
+    { AGENT_PORT: String(PORT + 2), CARD_SHARE_PORT: String(SHARE_PORT) },
+    SHARE_PORT,
+  ],
+] as const)(
+  "待ち受けるポートをほかのソフトが使っていれば、理由を出して 2 で終わる (%s)",
+  async (_, ports, busyPort) => {
+    const room = mkdtempSync(join(tmpdir(), "denpa-agent-busy-"));
+    try {
+      const busy = Bun.spawn(AGENT_CMD, {
+        cwd: ROOT,
+        env: {
+          ...process.env,
+          TUNERS_FILE: join(room, "tuners.json"),
+          CHANNELS_FILE: join(room, "channels.json"),
+          RAW_DIR: join(room, "recorded"),
+          FAKE_TUNE: TUNE,
+          AGENT_PAIR_TOKEN: TOKEN,
+          ...ports,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out] = await Promise.all([
+        busy.exited,
+        new Response(busy.stdout).text(),
+        new Response(busy.stderr).text(),
+      ]);
+      expect(busy.signalCode).toBeNull();
+      expect(code).toBe(2);
+      expect(out).toContain("ほかのソフトが使っています");
+      expect(out).toContain(`:${busyPort}`);
+    } finally {
+      rmSync(room, { recursive: true, force: true });
+    }
+  },
+  30_000,
+);
 
 /*
  * **後ろのほうに置く。** 定義を書き換えると、前のテストが当てにしている
