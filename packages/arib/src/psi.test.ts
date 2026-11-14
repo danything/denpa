@@ -9,6 +9,7 @@ import {
   withCrc,
 } from "./psi.js";
 import {
+  cableDeliveryDescriptor,
   nitSection,
   packetize,
   patSection,
@@ -450,6 +451,46 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
       transmissionMode: 2,
       frequencies: [557_142_857],
     });
+  });
+
+  test("ケーブルの分配の記述子から周波数・多重フレーム型式・変調・シンボルレートを読む", () => {
+    // QC26 の周波数 (243 MHz) に TSMF で 256QAM。放送は 0243.0000 MHz・005.2740 Msps と BCD で書く
+    const descriptor = cableDeliveryDescriptor(243_000_000, {
+      frameType: 0x1,
+      modulation: 0x05,
+    });
+    expect(descriptor).toEqual([
+      0x44, 11, 0x02, 0x43, 0x00, 0x00, 0xff, 0x12, 0x05, 0x00, 0x52, 0x74,
+      0x0f,
+    ]);
+    const section = nitSection(
+      0xfffe,
+      null,
+      [[0x0021, 0xfffe, [[0x02f0, 0x01]], descriptor]],
+      { name: "ケーブル" },
+    );
+    const parsed = readNit(section);
+    expect(parsed?.name).toBe("ケーブル");
+    expect(parsed?.sections).toEqual([section]);
+    expect(parsed?.transportStreams[0]?.delivery).toEqual({
+      kind: "cable",
+      frequency: 243_000_000,
+      frameType: 0x1,
+      fecOuter: 0x2,
+      modulation: 0x05,
+      symbolRate: 5_274_000,
+      fecInner: 0xf,
+    });
+  });
+
+  test("短すぎるケーブルの分配の記述子は読まない", () => {
+    const parsed = readNit(
+      nitSection(0xfffe, null, [
+        [0x0021, 0xfffe, [[0x02f0, 0x01]], [0x44, 4, 0x02, 0x43, 0x00, 0x00]],
+      ]),
+    );
+    expect(parsed?.name).toBeNull();
+    expect(parsed?.transportStreams[0]?.delivery).toBeNull();
   });
 
   test("分配の記述子が無い TS は null", () => {

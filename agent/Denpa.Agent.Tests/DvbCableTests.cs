@@ -180,6 +180,23 @@ public class DvbCableTests
             (17, 1), (3, 393_000_000), (4, 3), (8, 5_274_000), (6, 2), (1, 0),
         }, CollectionOrdering.Matching);
         await Assert.That(DvbTuner.CableProperties(ChannelTable.SysDvbcAnnexC, qc51.Frequency)[0]).IsEqualTo(((uint)17, (uint)18));
+        // 256QAM (QAM_256 = 5) と QAM_AUTO (6) も渡せる
+        await Assert.That(DvbTuner.CableProperties(ChannelTable.SysDvbcAnnexA, qc51.Frequency, DvbTuner.Qam256)[2]).IsEqualTo(((uint)4, (uint)5));
+        await Assert.That(DvbTuner.CableProperties(ChannelTable.SysDvbcAnnexA, qc51.Frequency, DvbTuner.QamAuto)[2]).IsEqualTo(((uint)4, (uint)6));
+    }
+
+    [Test]
+    public async Task ISDB_C_の変調は_復調器が見分けられれば_QAM_AUTO_を_見分けられなければ_64QAM_と_256QAM_を試す()
+    {
+        await Task.Yield();
+        // linux/dvb/frontend.h の FE_CAN_QAM_AUTO = 0x10000。J:COM の回線には 256QAM の搬送波 (QC26) があった
+        await Assert.That(DvbTuner.CableModulations(0x10000 | 0x2000)).IsEquivalentTo(new[] { DvbTuner.QamAuto }, CollectionOrdering.Matching);
+        await Assert.That(DvbTuner.CableModulations(0x2000 | 0x8000)).IsEquivalentTo(new[] { DvbTuner.Qam64, DvbTuner.Qam256 }, CollectionOrdering.Matching);
+        await Assert.That(DvbTuner.CableModulations(0)).IsEquivalentTo(new[] { DvbTuner.Qam64, DvbTuner.Qam256 }, CollectionOrdering.Matching);
+        // dvb_frontend_info の caps は末尾の 4 バイト (168 バイトのうち 164 から)
+        var info = new byte[168];
+        BitConverter.TryWriteBytes(info.AsSpan(164), 0x10000u);
+        await Assert.That(DeviceProbe.ParseCaps(info)).IsEqualTo(0x10000u);
     }
 
     [Test]

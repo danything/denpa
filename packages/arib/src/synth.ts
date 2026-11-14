@@ -372,12 +372,16 @@ export function nitSection(
   networkId: number,
   remoteControlKeyId: number | null,
   streams: [number, number, [number, number][], number[]?][],
-  /** `other` なら NIT[other] (0x41。ほかのネットワークのもの) */
-  options: SectionPart & { other?: boolean } = {},
+  /** `other` なら NIT[other] (0x41。ほかのネットワークのもの)。`name` を渡すとネットワーク名の記述子 (0x40) を付ける */
+  options: SectionPart & { other?: boolean; name?: string } = {},
 ): Uint8Array {
+  const network = options.name === undefined ? [] : encodeSiText(options.name);
+  const networkDescriptors =
+    network.length === 0 ? [] : [0x40, network.length, ...network];
   const body = [
     ...head(options.other === true ? 0x41 : 0x40, networkId, options),
-    ...be(0xf000),
+    ...be(0xf000 | networkDescriptors.length),
+    ...networkDescriptors,
   ];
 
   const loop: number[] = [];
@@ -436,6 +440,33 @@ export function satelliteDeliveryDescriptor(
     symbol[1]!,
     symbol[2]!,
     (symbol[3]! & 0xf0) | 0x01,
+  ];
+}
+
+/**
+ * ケーブルの分配の記述子 (0x44)。周波数は Hz で渡す (111000000)。
+ * 既定は TS が 1 つの搬送波 (多重フレーム型式番号 0xF)・RS(204,188)・64QAM・5.274 Msps・内符号なし
+ */
+export function cableDeliveryDescriptor(
+  frequency: number,
+  options: {
+    frameType?: number;
+    modulation?: number;
+    symbolRate?: number;
+  } = {},
+): number[] {
+  const symbol = bcdBytes((options.symbolRate ?? 5_274_000) / 100, 7);
+  return [
+    0x44,
+    11,
+    ...bcdBytes(frequency / 100, 8),
+    0xff,
+    ((options.frameType ?? 0x0f) << 4) | 0x02,
+    options.modulation ?? 0x03,
+    symbol[0]!,
+    symbol[1]!,
+    symbol[2]!,
+    (symbol[3]! & 0xf0) | 0x0f,
   ];
 }
 

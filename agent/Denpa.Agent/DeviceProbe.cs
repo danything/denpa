@@ -92,6 +92,22 @@ public static class DeviceProbe
         return [];
     }
 
+    /// <summary>`dvb_frontend_info.caps` の位置 (末尾の 4 バイト。name 128・type 4・周波数とシンボルレートの範囲など 8 × 4 のあと)</summary>
+    private const int CapsAt = 164;
+
+    /// <summary>`dvb_frontend_info.caps` を読む</summary>
+    public static uint ParseCaps(ReadOnlySpan<byte> info) => BitConverter.ToUInt32(info[CapsAt..(CapsAt + 4)]);
+
+    /// <summary>開いたフロントエンドの <c>caps</c> を <c>FE_GET_INFO</c> で問い合わせる。答えなければ 0 (<see cref="DvbTuner"/> が変調の渡し方を決める)</summary>
+    internal static unsafe uint Caps(int fd)
+    {
+        var info = new byte[FrontendInfoSize];
+        fixed (byte* infoAt = info)
+        {
+            return Sys.Ioctl(fd, FeGetInfo, (nint)infoAt) >= 0 ? ParseCaps(info) : 0;
+        }
+    }
+
     /// <summary>`dvb_frontend_info.name` は先頭 128 バイト、NUL で終わる</summary>
     public static string ParseName(ReadOnlySpan<byte> info)
     {

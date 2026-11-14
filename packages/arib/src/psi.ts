@@ -35,8 +35,10 @@ const TABLE_NIT_OTHER = 0x41;
 export const TABLE_SDT_ACTUAL = 0x42;
 const TABLE_SDT_OTHER = 0x46;
 
+const DESC_NETWORK_NAME = 0x40;
 const DESC_SERVICE_LIST = 0x41;
 const DESC_SATELLITE_DELIVERY = 0x43;
+const DESC_CABLE_DELIVERY = 0x44;
 const DESC_TERRESTRIAL_DELIVERY = 0xfa;
 const DESC_SERVICE = 0x48;
 const DESC_TS_INFORMATION = 0xcd;
@@ -504,7 +506,30 @@ export interface TerrestrialDelivery {
   frequencies: number[];
 }
 
-export type Delivery = SatelliteDelivery | TerrestrialDelivery;
+/**
+ * ケーブルの分配の記述子 (0x44)。どの周波数で、どう変調して流れているか。
+ *
+ * **並びは推定。** 有線の告示にある 0x44 の本文は読めていない。同じ系統の有線複数搬送波伝送分配システム記述子 (0xF3。総務省の告示の改正案) は
+ * 周波数 (32)・0xFF (8)・多重フレーム型式番号 (4)・外符号 (4)・変調 (8)・シンボルレート (28)・内符号 (4) の並びで、0x44 も同じと見ている。
+ * DVB (EN 300 468) では、多重フレーム型式番号の 4 ビットは reserved
+ */
+export interface CableDelivery {
+  kind: "cable";
+  /** 周波数 (Hz)。放送は MHz の BCD 8 桁 (小数 4 桁) で書くので、100 Hz 単位 */
+  frequency: number;
+  /** 多重フレーム型式番号。0x1 は TSMF (53 スロット・最大 15 TS)、0xF は TS が 1 つの搬送波 */
+  frameType: number;
+  /** 外符号。0x2 は RS(204,188) */
+  fecOuter: number;
+  /** 変調。0x03 は 64QAM、0x05 は 256QAM */
+  modulation: number;
+  /** シンボルレート (シンボル/秒)。ISDB-C は 5274000 */
+  symbolRate: number;
+  /** 内符号。0xF は内符号なし */
+  fecInner: number;
+}
+
+export type Delivery = SatelliteDelivery | TerrestrialDelivery | CableDelivery;
 
 /** NIT の TS の 1 件。サービスの一覧に、どこで流れているかが付く */
 export interface NetworkTransport extends TransportInfo {
@@ -560,6 +585,23 @@ function terrestrialDelivery(
   };
 }
 
+/**
+ * ケーブルの分配の記述子を読む。周波数は 8 桁の BCD で、上から 4 桁が MHz (0111.0000 MHz)。
+ * シンボルレートは 7 桁で、上から 3 桁が Msym/s (005.2740)
+ */
+function cableDelivery(descriptor: Uint8Array): CableDelivery | null {
+  if (descriptor.length < 11) return null;
+  return {
+    kind: "cable",
+    frequency: bcdDigits(descriptor, 0, 8) * 100,
+    frameType: descriptor[5]! >> 4,
+    fecOuter: descriptor[5]! & 0x0f,
+    modulation: descriptor[6]!,
+    symbolRate: bcdDigits(descriptor, 7, 7) * 100,
+    fecInner: descriptor[10]! & 0x0f,
+  };
+}
+
 /** NIT のセクション 1 つ。表は何本かのセクションに分かれて来るので、そろえるのは `NitReader` */
 interface NitSection {
   /** NIT[other] (ほかのネットワークのもの) なら true */
@@ -568,8 +610,12 @@ interface NitSection {
   version: number;
   sectionNumber: number;
   lastSectionNumber: number;
+  /** ネットワーク名 (0x40)。載っていなければ null */
+  name: string | null;
   remoteControlKeyId: number | null;
   transportStreams: NetworkTransport[];
+  /** セクションのバイト列 (CRC まで) */
+  raw: Uint8Array;
 }
 
 /** NIT のセクションを 1 つ読む。actual (0x40) と other (0x41) のどちらも */
@@ -581,6 +627,10 @@ function parseNitSection(section: Uint8Array): NitSection | null {
   const networkLength = u16(section, 8) & 0x0fff;
   let at = 10 + networkLength;
   if (at + 2 > section.length) return null;
+  let name: string | null = null;
+  for (const [tag, descriptor] of descriptors(section.subarray(10, at))) {
+    if (tag === DESC_NETWORK_NAME) name ??= decodeAribText(descriptor);
+  }
   at += 2; // transport_stream_loop_length
 
   let remoteControlKeyId: number | null = null;
@@ -612,6 +662,8 @@ function parseNitSection(section: Uint8Array): NitSection | null {
         delivery = satelliteDelivery(descriptor) ?? delivery;
       } else if (tag === DESC_TERRESTRIAL_DELIVERY) {
         delivery = terrestrialDelivery(descriptor) ?? delivery;
+      } else if (tag === DESC_CABLE_DELIVERY) {
+        delivery = cableDelivery(descriptor) ?? delivery;
       }
     }
     transportStreams.push({
@@ -629,8 +681,10 @@ function parseNitSection(section: Uint8Array): NitSection | null {
     version: (section[5]! >> 1) & 0x1f,
     sectionNumber: section[6]!,
     lastSectionNumber: section[7]!,
+    name,
     remoteControlKeyId,
     transportStreams,
+    raw: section.slice(),
   };
 }
 
@@ -682,8 +736,12 @@ export interface Network {
   other: boolean;
   networkId: number;
   version: number;
+  /** ネットワーク名 (0x40)。載っていなければ null。`NitReader` を通さずに作った表では省いてよい */
+  name?: string | null;
   remoteControlKeyId: number | null;
   transportStreams: NetworkTransport[];
+  /** セクションのバイト列 (section_number の順)。読み方を確かめるために記録に出す (ケーブルのスキャン)。省いてよい */
+  sections?: Uint8Array[];
 }
 
 /**
@@ -752,10 +810,12 @@ export class NitReader {
       other: section.other,
       networkId: section.networkId,
       version: section.version,
+      name: parts.find((part) => part.name !== null)?.name ?? null,
       remoteControlKeyId:
         parts.find((part) => part.remoteControlKeyId !== null)
           ?.remoteControlKeyId ?? null,
       transportStreams: parts.flatMap((part) => part.transportStreams),
+      sections: parts.map((part) => part.raw),
     });
     return true;
   }

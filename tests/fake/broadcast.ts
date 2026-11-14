@@ -16,6 +16,7 @@ import { CLOCK } from "@danything/arib/pes";
 import {
   aitSection,
   aitSignallingDescriptor,
+  cableDeliveryDescriptor,
   captionDescriptors,
   copyControlDescriptor,
   ddbSection,
@@ -298,6 +299,19 @@ function frequencyOf(type: string, channel: string): number {
   return type === "BS"
     ? 11_727_480 + 19_180 * (transponder - 1)
     : 12_291_000 + 20_000 * (transponder - 2);
+}
+
+/**
+ * ケーブルの自主放送のネットワークか (作り物の 0xFF00 から)。**自主放送の TS には、ケーブル局の搬送波の一覧の NIT を流す。**
+ * 本物と同じく、TS ごとにケーブルの分配の記述子 (0x44) で周波数を載せる。再送信の TS (BS・地上波) は元のネットワークの NIT のまま
+ */
+const cableOwn = (service: FakeService) =>
+  service.type === "CATV" && service.networkId >= 0xff00;
+
+/** ケーブルのチャンネル (`QC30`・`QC30:1`) の中心周波数 (Hz)。エージェントの選局表の QC23〜QC63 と同じ */
+function cableFrequencyOf(channel: string): number {
+  const number = Number(/^QC(\d+)/.exec(channel)?.[1] ?? 23);
+  return (225 + 6 * (number - 23)) * 1_000_000;
 }
 
 /** その種別・ネットワークの TS ごとの局 (NIT に並べる順。TSID の順) */
@@ -683,9 +697,10 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
    * **衛星は、同じネットワークの全部の TS を NIT に載せ、ほかの TS の局名を SDT[other] で流す。**
    * 本物の BS と同じ。denpa は中継器を 1 つ開いて、これで一覧を作る (`satellite.ts`)
    */
-  const network = !isSatellite(first.type)
-    ? [services]
-    : transportsOf(first.type, first.networkId);
+  const network =
+    isSatellite(first.type) || cableOwn(first)
+      ? transportsOf(first.type, first.networkId)
+      : [services];
   if (isSatellite(first.type)) {
     let counter = 1;
     for (const members of network) {
@@ -703,11 +718,17 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
           tsidOf(members[0]!),
           members[0]!.networkId,
           members.map((s) => [s.serviceId, s.serviceType]),
-          !isSatellite(members[0]!.type)
-            ? []
-            : satelliteDeliveryDescriptor(
+          isSatellite(members[0]!.type)
+            ? satelliteDeliveryDescriptor(
                 frequencyOf(members[0]!.type, members[0]!.channel),
-              ),
+              )
+            : cableOwn(members[0]!)
+              ? cableDeliveryDescriptor(
+                  cableFrequencyOf(members[0]!.channel),
+                  // TSMF で束ねた搬送波 (`QC30:1`) は多重フレーム型式 0x1
+                  members[0]!.channel.includes(":") ? { frameType: 0x1 } : {},
+                )
+              : [],
         ]),
       ),
     ),
