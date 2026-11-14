@@ -3169,7 +3169,7 @@ class Session {
        * 渡す (`servedFormat`・`switchFormat`)。絞る側 (`ServiceFilter`) も PMT を読むまで何も出さないので、待っても遅れない
        */
       /*
-       * **追っかけも、開く前に録画の PMT を読めなかったもの (録り始めたばかり) は同じく見る** (`learnsBroadcast`)。
+       * **追っかけも、開く前に録画の PMT を読めなかったもの (録り始めたばかり) も、送る前に PMT を読む** (`learnsBroadcast`)。
        * 録画の先頭にはすぐ PMT が書かれるので、伸びている録画のストリームから読む。HEVC なら 4K の局の録画と同じく
        * 放送の HEVC を写したものに替え (`chaseRawServed`)、読み直したストリームでエンコードの経路へ渡す
        * (追っかけは ffmpeg を起こすたびに `source` から読み直す。読んだぶんは閉じる)。読めた答えは録画ごとに覚える
@@ -4756,15 +4756,16 @@ function openChase(
   session.whenStopped(() => {
     reading.stopped = true;
   });
-  // 形式を替えて答え直すとき (`Session.switchFormat`) の選べる音声
-  session.audios = tracks;
   /*
    * **録り始めたばかりで開く前に PMT を読めなかった録画を元の TS で送るときは、送る前に録画のストリームから PMT を読む**
    * (`Session.learnsBroadcast`)。TS で送る 4K の局の録画なら、画面の MPEG-2 のデコーダは HEVC をデコードできないので、
-   * 放送の HEVC を写したものに替えて答え直す。読めた答えは覚え、次に開くときはそれで形式を決める
+   * 放送の HEVC を写したものに替えて答え直す。読めた答えは覚え、次に開くときはそれで形式を決める。
+   * 答え直す `tuned` (`Session.switchFormat`) には選べる音声も入れる
    */
-  if (raw && transport === "ts" && !broadcastDecided(path))
+  if (raw && transport === "ts" && !broadcastDecided(path)) {
+    session.audios = tracks;
     session.learnsBroadcast = (found) => learnBroadcast(path, found);
+  }
   session.add(viewer);
   if (!raw) {
     void session.run();
