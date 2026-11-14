@@ -1,5 +1,3 @@
-  # bzip2 か gzip かは tar が中身で見分ける (GNU tar も bsdtar も、ファイルから読むときは見分ける)
-  tar -xf "$work/src.tar" --strip-components=1
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
 # Mac (Apple Silicon) 用の ffmpeg / ffprobe を組む。CI の macOS のランナーで流す (.github/workflows/macos-server.yml)。

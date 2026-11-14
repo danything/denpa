@@ -1,5 +1,3 @@
-  # bzip2 か gzip かは tar が中身で見分ける (GNU tar も bsdtar も、ファイルから読むときは見分ける)
-  tar -xf "$work/src.tar" --strip-components=1
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
 # Android のアプリに入れる ffmpeg / ffprobe を NDK で組む (.github/workflows/android.yml)。
