@@ -116,21 +116,26 @@ config.dataDir = root;
 config.agentUrl = fakeAgentUrl(agent.port!);
 trustFakeAgent();
 
-// 前の選局の PAT を見て、当たりの中継まで外れと控えてしまった後
+const { orm } = await import("./db");
+const { placeServices, tsOf } = await import("./fake-channels");
+
+// 前の選局の PAT を見て、当たりの中継まで外れと控えてしまった後 (控えのキーは TS)
 mkdirSync(join(root, "logos"), { recursive: true });
 const now = Date.now();
 writeFileSync(
   join(root, "logos", "satellite-relays.json"),
   JSON.stringify({
-    noCarousel: { BS01_0: now, BS15_0: now, CS02: now },
+    noCarousel: {
+      [`4:${tsOf("BS", "BS01_0")}`]: now,
+      [`4:${tsOf("BS", "BS15_0")}`]: now,
+      [`7:${tsOf("CS", "CS02")}`]: now,
+    },
     carriers: {},
     absent: {},
     gaveUp: {},
   }),
 );
 
-const { orm } = await import("./db");
-const { placeServices } = await import("./fake-channels");
 const { services } = await import("./schema");
 const { serviceKey } = await import("./tuner");
 const { readLogo, stats, sweep, sweepNow, sweepState } = await import("./logo");

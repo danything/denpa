@@ -183,6 +183,8 @@ export class LogoCollector {
   private readonly logos = new Map<number, LogoData>();
   /** service_id → logo_id */
   private readonly links = new Map<number, number>();
+  /** 受け取った CDT のセクションの数 (中身の有無を問わない) */
+  private cdtCount = 0;
 
   /**
    * @param networkId 開いている物理チャンネルのネットワーク。地上波の CDT には
@@ -215,9 +217,18 @@ export class LogoCollector {
     return this.dsmcc.counts;
   }
 
+  /**
+   * 受け取った CDT のセクションの数。ケーブルの TS で、開いていた間に CDT が 1 つも来なかったことを
+   * 見分けるのに使う (server/logo.ts の `markNoCdt`)
+   */
+  get cdtSections(): number {
+    return this.cdtCount;
+  }
+
   feed(chunk: Uint8Array): void {
     for (const packet of this.packets.feed(chunk)) {
       for (const section of this.cdt.feed(packet)) {
+        this.cdtCount++;
         const logo = parseCdt(section);
         if (logo !== null && logo.data.length > 0) this.remember(logo);
       }
