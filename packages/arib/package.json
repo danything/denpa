@@ -1,6 +1,6 @@
 {
   "name": "@danything/arib",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "description": "日本のデジタル放送 (ARIB) の TS と MMT/TLV を読む: PSI・PES・EIT・ARIB の文字・字幕・データ放送、TLV・MMTP・MMT-SI・MH-EIT",
   "license": "MIT",
   "repository": {
