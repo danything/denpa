@@ -1,13 +1,14 @@
 /**
  * **録画の放送のコーデック** (`#lib/live-choice.ts` の `BroadcastCodec`)。追っかけと録画の観る画面は、開く前にこれで形式を決める
- * (`live.chaseForm`・`playback.playbackPlan`)。開いたあとで形式を替える仕組みは持たない。
+ * (`live.chaseForm`・`playback.playbackPlan`)。開いたあとで形式を替えるのは、決まらないまま元の TS で開いた追っかけだけ (下)。
  *
  * - 4K の局の録画 (`.mmts`) は `hevc`
  * - TS の録画 (`.m2ts`) は、先頭の PMT の映像が HEVC なら `hevc` (TS で送る 4K の局。docs/stream.md「TS で送る 4K の局」)、ほかは `mpeg2`。
  *   PMT をまだ読めない (録り始めたばかり)・ファイルを開けないときも `mpeg2`
  *
  * 局の行にも録画の行にも覚えない。読んで決まった答えを、録画のパスごとにメモリに覚える。録り始めたばかりで決まらなかった録画は、
- * `UNDECIDED_WAIT` を過ぎてから開くときに読み直す
+ * `UNDECIDED_WAIT` を過ぎてから開くときに読み直す。決まらないまま元の TS で開いた追っかけは、送る前にセッションが
+ * 録画のストリームから PMT を読み (`live.Session` の `learnsBroadcast`)、読めた答えをここに覚える (`learnBroadcast`)
  */
 
 import { type BroadcastCodec, broadcastCodec } from "#lib/live-choice.js";
@@ -78,6 +79,23 @@ export function recordedBroadcast(
   const broadcast: BroadcastCodec = video === "hevc" ? "hevc" : "mpeg2";
   remember(decided, path, broadcast);
   return broadcast;
+}
+
+/**
+ * **録画の放送のコーデックが決まっているか。** 4K の局の録画 (`.mmts`) と、PMT を読めて覚えている TS の録画は true。
+ * 録り始めたばかりで PMT をまだ読めていない TS の録画は false で、追っかけを元の TS で開くときは送る前に PMT を読む (`live.openChase`)
+ */
+export function broadcastDecided(path: string): boolean {
+  return recordedTransport(path) === "tlv" || decided.has(path);
+}
+
+/**
+ * **追っかけのセッションが録画のストリームから読んだ放送のコーデックを覚える** (`live.Session` の `learnsBroadcast`)。
+ * 次に開くときは読み直さずにこれで形式を決める (`recordedBroadcast`)
+ */
+export function learnBroadcast(path: string, broadcast: BroadcastCodec): void {
+  undecided.delete(path);
+  remember(decided, path, broadcast);
 }
 
 /**

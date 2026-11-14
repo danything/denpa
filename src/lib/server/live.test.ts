@@ -14,6 +14,7 @@ import {
   blameLiveHw,
   CHASE_STREAM_HOLD,
   chaseForm,
+  chaseRawServed,
   copiesVideo,
   encodeArgs,
   EncodeLag,
@@ -1462,6 +1463,17 @@ describe("4K の局のライブ", () => {
     // 4K の局の録画 (.mmts) も同じ決め方
     expect(chaseForm(ask("hevc", 0), "tlv", "hevc", noGpu).copy).toBe(true);
     expect(chaseForm(ask("hevc", 2), "tlv", "hevc", noGpu).codec).toBe("h264");
+  });
+
+  test("元の TS で開いた追っかけは、録画の PMT の映像が HEVC なら放送の HEVC を写したものに替える (chaseRawServed)", () => {
+    const raw = { codec: "h264" as const, raw: true };
+    expect(chaseRawServed(raw, "hevc")).toEqual({ codec: "hevc", raw: false });
+    // MPEG-2 の局の録画と、PMT を読めなかったものは元の TS のまま
+    expect(chaseRawServed(raw, "mpeg2")).toEqual(raw);
+    expect(chaseRawServed(raw, null)).toEqual(raw);
+    // 元の TS でないものは替えない (開く前に形式を決めてある)
+    const encoded = { codec: "h264" as const, raw: false };
+    expect(chaseRawServed(encoded, "hevc")).toEqual(encoded);
   });
 
   test("詰め替えた fMP4 の codecs は Main 10・Level 5.1 の hvc1", () => {

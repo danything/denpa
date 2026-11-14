@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,11 +10,16 @@ import {
   stream,
 } from "@danything/arib/synth";
 
+import { peekPmt, PMT_WAIT } from "./captions";
+import { followFile } from "./chase";
 import {
+  broadcastDecided,
   headVideo,
+  learnBroadcast,
   recordedBroadcast,
   UNDECIDED_WAIT,
 } from "./recorded-broadcast";
+import { chunks } from "./stream";
 
 /**
  * **録画の放送のコーデック** (`recorded-broadcast.ts`)。TS の録画は先頭の PMT の映像で、TS で送る 4K の局 (HEVC) を見分ける。
@@ -98,6 +103,37 @@ describe("録画の放送のコーデック (recordedBroadcast)", () => {
     expect(recordedBroadcast(path, SERVICE)).toBe("hevc");
     rmSync(path);
     expect(recordedBroadcast(path, SERVICE)).toBe("hevc");
+  });
+
+  test("追っかけのセッションが読んだ答えを覚え、次に開くときはそれで決める (learnBroadcast)", () => {
+    const path = recording(filler(5));
+    expect(recordedBroadcast(path, SERVICE, 1_000)).toBe("mpeg2");
+    expect(broadcastDecided(path)).toBe(false);
+    learnBroadcast(path, "hevc");
+    expect(broadcastDecided(path)).toBe(true);
+    // UNDECIDED_WAIT を待たずに、覚えた答えを返す
+    expect(recordedBroadcast(path, SERVICE, 1_001)).toBe("hevc");
+    // 4K の局の録画 (.mmts) は読まずに決まっている
+    expect(broadcastDecided(join(dir, "missing.mmts"))).toBe(true);
+  });
+
+  test("開く前に PMT が無かった録画も、伸びていく録画のストリームからは PMT を読める (追っかけの元の TS)", async () => {
+    const path = recording(filler(5));
+    expect(recordedBroadcast(path, SERVICE, 2_000)).toBe("mpeg2");
+    expect(broadcastDecided(path)).toBe(false);
+    // 録画が書き足すのと同じく、末尾に着いてから PMT を足す (`followFile` が待って読み続ける)
+    let asked = 0;
+    const input = chunks(
+      followFile(path, 0, 1e9, () => {
+        asked++;
+        if (asked === 1) appendFileSync(path, stream(head(0x24), filler(3)));
+        return asked > 1;
+      }),
+    );
+    const peeked = await peekPmt(input, SERVICE, PMT_WAIT);
+    expect(peeked.count).not.toBeNull();
+    expect(peeked.video).toBe("hevc");
+    await peeked.stream.return(undefined);
   });
 
   test("読むのは先頭の決まった量まで。その先の PMT は見ない", () => {
