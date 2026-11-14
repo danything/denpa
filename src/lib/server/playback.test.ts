@@ -13,6 +13,7 @@ import { concatBytes } from "@danything/arib/bytes";
 import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
 import { CLOCK, WRAP } from "@danything/arib/pes";
 import { PACKET, SYNC } from "@danything/arib/psi";
+import { packetize, patSection, programMap } from "@danything/arib/synth";
 import {
   AUDIO_TICKS,
   FRAME_TICKS,
@@ -194,6 +195,44 @@ function uhdRecording() {
   return seed({ service_id: id, ts_path: mmts });
 }
 
+/** TS で送る 4K の局の放送の番号。元の TS の先頭に、映像が HEVC (0x24) の PAT と PMT を置く */
+const HEVC_TS_SERVICE = 0x0400;
+const hevcTs = join(media, "a-uhd.m2ts");
+writeFileSync(
+  hevcTs,
+  concatBytes([
+    packetize(0x0000, patSection([[HEVC_TS_SERVICE, 0x1f0]])),
+    packetize(
+      0x1f0,
+      programMap(HEVC_TS_SERVICE, 0x100, [
+        [0x24, 0x100],
+        [0x11, 0x111],
+      ]),
+    ),
+    synthTs(TS_START, 60),
+  ]),
+);
+
+/** TS で送る 4K の局の元の TS だけを持つ録画の行。局の行も入れる (放送の service_id を引く) */
+function hevcTsRecording() {
+  const id = 6_554_700_000 + HEVC_TS_SERVICE;
+  orm()
+    .insert(services)
+    .values({
+      id,
+      service_id: HEVC_TS_SERVICE,
+      network_id: 0x000b,
+      name: "4K テスト (TS)",
+      type: "CATV",
+      service_type: 1,
+      transport: "ts",
+      updated_at: now,
+    })
+    .onConflictDoNothing()
+    .run();
+  return seed({ service_id: id, ts_path: hevcTs });
+}
+
 describe("何を出せるか (playbackPlan)", () => {
   test("H.264 だけエンコードした録画: ファイル・詰め替え・AV1 への変換。物差しはエンコード済み", async () => {
     const plan = await playbackPlan(seed({ library_path: h264 }));
@@ -312,6 +351,19 @@ describe("何を出せるか (playbackPlan)", () => {
     expect(plan?.mmts?.duration).toBeGreaterThan(3);
   });
 
+  test("TS で送る 4K の局の元の TS だけ: PMT で見分けて、放送の HEVC を写したものと H.264・AV1 への変換。MPEG-2 は出さない", async () => {
+    const plan = await playbackPlan(hevcTsRecording());
+    expect(plan?.info.axis).toBe("ts");
+    expect(plan?.info.broadcast).toBe("hevc");
+    expect(plan?.info.offers).toEqual([
+      { codec: "hevc", way: "stream", codecs: "hvc1.2.4.L153.B0,mp4a.40.2" },
+      { codec: "h264", way: "stream", codecs: "avc1.640029,mp4a.40.2" },
+      { codec: "av1", way: "stream", codecs: "av01.0.08M.08,Opus" },
+    ]);
+    expect(plan?.broadcast).toBe("hevc");
+    expect(plan?.ts?.head).toBe(TS_START);
+  });
+
   test("録っている最中の TS は出さない (追っかけ再生の受け持ち)。何も無ければ null", async () => {
     expect(
       await playbackPlan(seed({ ts_path: ts, finished_at: null })),
@@ -424,6 +476,22 @@ describe("ffmpeg の引数", () => {
     expect(args).not.toContain("-fpsmax");
     expect(joined).toContain("-af pan=stereo|c0=c1|c1=c1");
     expect(args[args.indexOf("-output_ts_offset") + 1]).toBe("-12345.500000");
+  });
+
+  test("TS で送る 4K の局の TS の変換: H.265 は映像を写し、ほかは縮めて SDR にする", () => {
+    const track = { id: "0", stream: 0, side: "both" as const, label: "音声" };
+    const copy = tsTranscodeArgs(1024, track, "hevc", null, 0, 0, "hevc");
+    const joined = copy.join(" ");
+    expect(joined).toContain("-c:v copy -tag:v hvc1");
+    // 写す映像にフィルタとコマの扱いは付けられない
+    expect(copy).not.toContain("-vf");
+    expect(copy).not.toContain("-fps_mode");
+    expect(copy[copy.indexOf("-movflags") + 1]).toContain("+delay_moov");
+    // 音声は AAC (MSE は LATM を受け取らない)
+    expect(joined).toContain("-c:a aac");
+    const h264 = tsTranscodeArgs(1024, track, "h264", null, 0, 1, "hevc");
+    expect(h264[h264.indexOf("-vf") + 1]).toContain("tonemap");
+    expect(h264.join(" ")).not.toContain("bwdif");
   });
 
   test("段を下げた変換: 30 コマにして縮め、音声は 96k。時刻の運び方は同じ", () => {
@@ -638,6 +706,32 @@ describe("流す (streamResponse)", () => {
     ).rejects.toMatchObject({ status: 503 });
     held?.();
     saveSettings({ transcodeLimit: null });
+  });
+
+  test("TS で送る 4K の局の元の TS: H.265 は写すので枠を使わない。段を下げた H.265 は H.265 を外して選ぶ。MPEG-2 は 404", async () => {
+    config.ffmpeg = "true";
+    saveSettings({ transcodeLimit: 1 });
+    const held = holdTranscode();
+    const rec = hevcTsRecording();
+    const copy = await streamResponse(
+      rec,
+      new URLSearchParams({ codec: "hevc" }),
+    );
+    expect(copy.headers.get(CODEC_HEADER)).toBe("hevc");
+    expect(copy.headers.get(RUNG_HEADER)).toBe("0");
+    await copy.body?.cancel();
+    held?.();
+    const lowered = await streamResponse(
+      rec,
+      new URLSearchParams({ codec: "hevc", rung: "1", playable: "hevc,h264" }),
+    );
+    expect(lowered.headers.get(CODEC_HEADER)).toBe("h264");
+    expect(lowered.headers.get(RUNG_HEADER)).toBe("1");
+    await lowered.body?.cancel();
+    saveSettings({ transcodeLimit: null });
+    await expect(
+      streamResponse(rec, new URLSearchParams({ codec: "mpeg2" })),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   test("音声だけは枠を使わない", async () => {

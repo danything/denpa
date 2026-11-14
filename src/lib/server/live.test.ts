@@ -13,6 +13,7 @@ import {
   audioArgs,
   blameLiveHw,
   CHASE_STREAM_HOLD,
+  chaseForm,
   copiesVideo,
   encodeArgs,
   EncodeLag,
@@ -1403,6 +1404,64 @@ describe("4K の局のライブ", () => {
     expect(hevcTsCodec("av1", 1, true, ["av1"], gpu)).toBe("av1");
     // 追っかけは選局の答えを出さないので替えない
     expect(hevcTsCodec("hevc", 1, false, ["av1"], gpu)).toBe("hevc");
+  });
+
+  test("追っかけは開く前に録画の放送のコーデックで形式を決める (chaseForm)", () => {
+    // GPU は無いものとする (設定と DB を読まない)
+    const noGpu = () => null;
+    const ask = (
+      codec: "h264" | "hevc" | "av1",
+      rung: 0 | 1 | 2,
+      raw = false,
+    ) => ({
+      codec,
+      raw,
+      rung,
+      playable: ["hevc" as const, "h264" as const],
+    });
+    // MPEG-2 の局の録画: 段 0 の H.265 は作らないので H.264、段を下げた H.265 はそのまま。元の TS もそのまま
+    expect(chaseForm(ask("hevc", 0), "ts", "mpeg2", noGpu)).toEqual({
+      codec: "h264",
+      raw: false,
+      rung: 0,
+      copy: false,
+    });
+    expect(chaseForm(ask("hevc", 1), "ts", "mpeg2", noGpu)).toEqual({
+      codec: "hevc",
+      raw: false,
+      rung: 1,
+      copy: false,
+    });
+    expect(chaseForm(ask("h264", 2, true), "ts", "mpeg2", noGpu)).toEqual({
+      codec: "h264",
+      raw: true,
+      rung: 0,
+      copy: false,
+    });
+    // TS で送る 4K の局の録画: 段 0 の H.265 と放送のままは放送の HEVC を写す (枠を使わない)
+    for (const asked of [ask("hevc", 0), ask("h264", 0, true)])
+      expect(chaseForm(asked, "ts", "hevc", noGpu)).toEqual({
+        codec: "hevc",
+        raw: false,
+        rung: 0,
+        copy: true,
+      });
+    // 段を下げた H.265 は写さず、H.265 を外して選び直す。ほかのコーデックはそのまま (縮めて SDR にする)
+    expect(chaseForm(ask("hevc", 1), "ts", "hevc", noGpu)).toEqual({
+      codec: "h264",
+      raw: false,
+      rung: 1,
+      copy: false,
+    });
+    expect(chaseForm(ask("av1", 2), "ts", "hevc", noGpu)).toEqual({
+      codec: "av1",
+      raw: false,
+      rung: 2,
+      copy: false,
+    });
+    // 4K の局の録画 (.mmts) も同じ決め方
+    expect(chaseForm(ask("hevc", 0), "tlv", "hevc", noGpu).copy).toBe(true);
+    expect(chaseForm(ask("hevc", 2), "tlv", "hevc", noGpu).codec).toBe("h264");
   });
 
   test("詰め替えた fMP4 の codecs は Main 10・Level 5.1 の hvc1", () => {
