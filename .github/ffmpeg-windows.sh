@@ -12,7 +12,7 @@
 #
 # Linux と同じく、SVT-AV1 と Opus はソースから組んで libavcodec に静的に繋ぎ、x264・dav1d・zimg は配布物
 # (MSYS2 のパッケージの DLL。Linux は Debian のもの) を使う。MSYS2 に opus・svt-av1 のパッケージが入っていると、組むときに
-# そちらの DLL を拾う。そのため x264 は CLI のパッケージ (MSYS2 の ffmpeg を通して opus・svt-av1 も入れる) ではなく、
+# そちらの DLL に繋がる。そのため x264 は CLI のパッケージ (MSYS2 の ffmpeg を通して opus・svt-av1 も入れる) ではなく、
 # ライブラリだけの libx264 を入れる (.github/workflows/windows-server.yml。zip に入る DLL は、そこの bundle で決めた一覧と比べる)。
 # **libav* は Linux と違って静的に繋ぐ** (ffmpeg.exe と ffprobe.exe が
 # それぞれ抱える)。DLL にすると、libavfilter の DLL が libavformat の関数 (metadata フィルタの avio_closep) を解決できず組めない

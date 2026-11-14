@@ -1100,7 +1100,7 @@ public sealed class It930xDevice
             var before = _stopped;
             _stopped = before is null ? which : port => before(port) || which(port);
             var open = Devices.Keys.Where(which).ToList();
-            if (open.Count > 0) Log.Write($"エージェントを止めるので、{It930x.Model} を閉じます (USB のポート {string.Join("、", open)})");
+            if (open.Count > 0) Log.Write($"止めるので、{It930x.Model} を閉じます (USB のポート {string.Join("、", open)})");
             CloseAll(which);
         }
     }

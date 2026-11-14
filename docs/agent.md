@@ -671,7 +671,7 @@ asicen-userland の機材。Linux ではファームウェア待ちだけ) と�
 ```
 TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は T1Protocol)
                   └──────────┬─────────────────────┘
-                     Zd1jBoard (1台ぶん。取る・返す・温めておく)
+                     Zd1jBoard (1 台ぶん。取る・返す・温めておく)
                        ├ Mb86h47 (ブリッジ: メモリ要求・アドレスを広げる・I2C・TS・カードの UART)
                        ├ Dib8096 (DiB8000 + DiB0090。II2c と待ちと記録した値だけを受け取る)
                        └ IUsbDevice → UsbFsDevice (Linux の usbfs) / WinUsbDevice (Windows の WinUSB) / IoKitDevice (macOS の IOKit)
@@ -753,7 +753,7 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
 ```
 TunerPool ── Dt295NativeTuner (選局・TS)    CardLinks ── Dt295NativeCardHandle ── Dt295NativeCard (T=1 は T1Protocol)
                    └──────────┬──────────────────────────────┘
-                     Dt295NativeDevice (1台ぶん。開く・設定を逆順に戻して閉じる)
+                     Dt295NativeDevice (1 台ぶん。開く・設定を逆順に戻して閉じる)
                        ├ Dt295NativeLink (ベンダー要求 0xBC のメモリの読み書き。制御転送を 1 つずつ通す)
                        ├ Dt295NativeBoard (チップのクロック・端子、USB の端点、TS の取り込み)
                        ├ Dt295NativeFrontend (復調とチューナー。I2C は Dt295NativeI2c)

@@ -124,7 +124,7 @@ class DenpaService : Service() {
                 Part(tag, executable, launch.arguments, launch.environment, launch.directory) { code -> worker.post { onExit(code) } }
                     .also { it.start() }
             } catch (error: Exception) {
-                // 書き出しは IOException のほかに PackageManager や AssetManager の実行時例外も投げる。ほかの部品と worker を巻き込まないよう、どれも起動し直しに回す
+                // 書き出しは IOException のほかに PackageManager や AssetManager の実行時例外も送出する。ほかの部品と worker を巻き込まないよう、どれも起動し直しに回す
                 Log.e(TAG, "${label}を起動できませんでした", error)
                 scheduleRestart()
                 return
