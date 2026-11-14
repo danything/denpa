@@ -154,23 +154,25 @@ export function thumbnailPlace(
  * `from` を渡せば、画像はそちら (元の TS) の `place` から取る (`thumbnailPlace`)。
  * 渡さなければ `videoPath` そのものの先頭から (エンコードしない録画・取り込み)。
  * 位置ぴったりのコマではなく、そこからの代表を選ぶ (buildThumbnailArgs)。
+ * `hlg` は 4K の局の録画 (映像が HLG。縮めたあとで SDR に直す)
  */
 export async function writeThumbnail(
   videoPath: string,
   durationSec: number,
-  from?: { source: string; place: ThumbnailPlace; hlg?: boolean },
+  from?: { source: string; place: ThumbnailPlace },
+  hlg = false,
 ): Promise<void> {
   const { thumbnail } = sidecarPaths(videoPath);
   const args =
     from === undefined
-      ? buildThumbnailArgs(videoPath, thumbnail, thumbnailPlace(durationSec))
-      : buildThumbnailArgs(
-          from.source,
+      ? buildThumbnailArgs(
+          videoPath,
           thumbnail,
-          from.place,
-          TS_PROBE,
-          from.hlg === true,
-        );
+          thumbnailPlace(durationSec),
+          [],
+          hlg,
+        )
+      : buildThumbnailArgs(from.source, thumbnail, from.place, TS_PROBE, hlg);
   await run([config.ffmpeg, ...args]);
 }
 

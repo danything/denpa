@@ -1,10 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import {
   closeSync,
   mkdtempSync,
   openSync,
   readSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +13,12 @@ import { join } from "node:path";
 
 import { concatBytes } from "@danything/arib/bytes";
 import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
+import {
+  packetize,
+  patSection,
+  programMap,
+  stream,
+} from "@danything/arib/synth";
 import { SynthMmtAv } from "@danything/arib/synth-mmt-av";
 
 import { config } from "./config";
@@ -19,6 +26,7 @@ import {
   buildArgs,
   combineProgress,
   encodeAttempts,
+  encodeInput,
   encodeOrder,
   encodeProgress,
   expectedFrames,
@@ -437,6 +445,92 @@ describe("4K の局の録画 (詰め替えた MP4 が入力)", () => {
     expect(vf.startsWith("scale=-2:1080,")).toBe(true);
     expect(vf.endsWith("format=nv12,hwupload")).toBe(true);
     expect(args).toContain("hevc_vaapi");
+  });
+});
+
+describe("TS で送る 4K の局の録画 (元の TS が入力)", () => {
+  const SERVICE = 0x0400;
+  const PMT_PID = 0x1f0;
+  const VIDEO_PID = 0x100;
+  const dir = mkdtempSync(join(tmpdir(), "denpa-ts-uhd-"));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  let files = 0;
+  /** PAT と、映像の stream_type が `video` の PMT だけの録画を書いてパスを返す */
+  const recording = (video: number | null, ext = ".m2ts") => {
+    const path = join(dir, `rec-${files++}${ext}`);
+    writeFileSync(
+      path,
+      video === null
+        ? new Uint8Array(0)
+        : stream(
+            packetize(0x0000, patSection([[SERVICE, PMT_PID]])),
+            packetize(
+              PMT_PID,
+              programMap(SERVICE, VIDEO_PID, [
+                [video, VIDEO_PID],
+                [0x11, 0x110],
+              ]),
+            ),
+          ),
+    );
+    return path;
+  };
+
+  test("PMT の映像が HEVC の TS は 4K の局の録画。詰め替えはしない", () => {
+    expect(encodeInput(recording(0x24), SERVICE)).toEqual({
+      tlv: false,
+      uhd: true,
+    });
+    expect(encodeInput(recording(0x02), SERVICE)).toEqual({
+      tlv: false,
+      uhd: false,
+    });
+    // 4K の局の録画 (.mmts) は中身を読まずに、詰め替えて 4K の局の録画として扱う
+    expect(encodeInput(join(dir, "missing.mmts"), SERVICE)).toEqual({
+      tlv: true,
+      uhd: true,
+    });
+    // PMT を読めない TS は MPEG-2 の局の録画
+    expect(encodeInput(recording(null), SERVICE)).toEqual({
+      tlv: false,
+      uhd: false,
+    });
+  });
+
+  const uhd = (codec: "av1" | "h264" | "hevc", hardware?: HwWay) =>
+    buildArgs("/raw/a.m2ts", "/out.mkv", 1, null, codec, {
+      uhd: true,
+      smoothMotion: true,
+      hardware,
+    });
+
+  test("AV1 は 2160p・10 ビット・HLG のまま。インタレ解除も縮めもしない", () => {
+    const args = uhd("av1");
+    expect(argValue(args, "-i")).toBe("/raw/a.m2ts");
+    expect(argValue(args, "-vf")).toBe(`${HLG_PARAMS},format=yuv420p10le`);
+    expect(args).toContain("libsvtav1");
+  });
+
+  test("H.264・H.265 は 1080p・8 ビットの SDR に縮めて直す。インタレ解除はしない", () => {
+    const vf = argValue(uhd("h264"), "-vf")!;
+    expect(vf.startsWith("scale=-2:1080,setparams=")).toBe(true);
+    expect(vf).not.toContain("bwdif");
+    const hevc = uhd("hevc", { device: "/dev/dri/renderD128", kind: "vaapi" });
+    expect(argValue(hevc, "-vf")!.startsWith("scale=-2:1080,")).toBe(true);
+    // 映像のデコードは CPU のまま (GPU でデコードしてインタレ解除する経路は使わない)
+    expect(hevc).not.toContain("-hwaccel");
+  });
+
+  test("字幕は TS の ARIB 字幕を写し、映像と音声は TS の局と同じく名指しする", () => {
+    const args = uhd("av1");
+    const ts = buildArgs("/raw/a.m2ts", "/out.mkv", 1, null, "av1");
+    const maps = (list: string[]) =>
+      list.flatMap((arg, i) => (arg === "-map" ? [list[i + 1]] : []));
+    expect(maps(args)).toEqual(maps(ts));
+    expect(maps(args)).toContain("0:s:0?");
+    expect(argValue(args, "-c:s")).toBe("copy");
+    // 音声 (AAC LATM) は TS の局と同じく Opus にエンコードする
+    expect(argValue(args, "-c:a")).toBe("libopus");
   });
 });
 

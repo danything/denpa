@@ -875,9 +875,20 @@ ffmpeg 7.1 の Matroska は TTML を書けません (`Subtitle codec 94232 is no
 置くものは観る画面に渡すものと同じ形式で、`captions.json` はそれをそのまま返します。時刻は詰め替えた MP4 の時刻から、ffmpeg が 0 に寄せる
 入力の先頭 (`start_time`) と捨てた先頭を引いたものです (推定。実際の放送の字幕では測っていない)。字幕の無い番組では置きません。
 
+**TS で送る 4K の局** (ケーブルの 4K の局のうち、HEVC を TS に入れて送る局) の録画 (`.m2ts`) も、同じ引数でエンコードします。
+拡張子では分からないので、エンコードの前に録画の先頭の PMT を読み、映像が HEVC なら 4K の局の録画として扱います
+(`encoder.encodeInput`。`recorded-broadcast.recordedBroadcast`。[stream.md](stream.md#ts-で送る-4k-の局の録画))。録り終えた録画には PMT が書かれています。
+
+- 縮め方・10bit と HLG・AV1 で GPU を使わないこと・コマ数・サムネイルは、上の 4K の局の録画と同じ
+- 入力は元の TS のままで、詰め替えはしない。復号・音声 (AAC LATM を Opus に)・データ放送の変化ログは TS の局の録画と同じ
+- 字幕は TS の ARIB 字幕を Matroska に写す (TS の局の録画と同じ)。`….captions.json` は置かない
+- CM 検出と局ロゴは元の TS の 2160p のコマから、TS の局の録画と同じ決め方で探す
+- エンコードしない録画のサムネイルも、元の TS から縮めて SDR に直して取る (`recorder.ts`)
+
 確かめたのは合成の素材 (64x64 の HEVC Main10 と AAC。`@danything/arib/synth-mmt-av`) で、詰め替えた MP4 を ffprobe が読み、AV1 は 10bit の HLG、
 H.264 は 1080p の 8bit になるところまでです (`encoder.test.ts`)。4K の HEVC 10bit を SVT-AV1 で 10bit のままエンコードする速さ、出来上がりの大きさ、
 トーンマップの画質は測っていません。実際の 4K の放送は ACAS でスクランブルされていて、まだ録画できないためです。
+TS で送る 4K の局は、合成した TS (PAT と、映像が HEVC の PMT) で見分けと引数を確かめただけです (`encoder.test.ts`)。実際の放送の録画ではエンコードしていません。
 
 ## SVT-AV1 は上流をソースから組みます
 

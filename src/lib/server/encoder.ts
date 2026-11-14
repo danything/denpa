@@ -84,6 +84,7 @@ import {
 } from "./metadata";
 import { remuxMmts } from "./mmts";
 import { saveRecordedBml } from "./recorded-bml";
+import { recordedBroadcast } from "./recorded-broadcast";
 import { recordingSummary, tsHeadOf } from "./recording";
 import { recordingInput } from "./recording-io";
 import { encodeJobs, programs, recordings, services } from "./schema";
@@ -371,8 +372,8 @@ interface EncodeOptions {
    */
   probed?: { duration: number; fps: number };
   /**
-   * 4K の局の録画か (`.mmts` を詰め替えた MP4 が入力)。インタレ解除と引き伸ばしをせず、AV1 は HLG のまま、
-   * H.264・H.265 は 1080p の SDR に直す (`videoArgs`)
+   * 4K の局の録画か (`.mmts` を詰め替えた MP4 か、TS で送る 4K の局の TS が入力。`encodeInput`)。インタレ解除と引き伸ばしをせず、
+   * AV1 は HLG のまま、H.264・H.265 は 1080p の SDR に直す (`videoArgs`)
    */
   uhd?: boolean;
 }
@@ -1185,7 +1186,7 @@ function remuxedPath(input: string): string {
 }
 
 /** 局の行の service_id (放送が名乗っている番号。MPT の MMT_package_id)。局が無ければ 0 */
-function broadcastServiceId(serviceId: number): number {
+export function broadcastServiceId(serviceId: number): number {
   return (
     orm()
       .select({ id: services.service_id })
@@ -1193,6 +1194,26 @@ function broadcastServiceId(serviceId: number): number {
       .where(eq(services.id, serviceId))
       .get()?.id ?? 0
   );
+}
+
+/**
+ * **エンコードする元の録画の扱い** (`runJob`・`recorder.ts` のエンコードしない録画のサムネイル)。
+ *
+ * - `tlv` … 4K の局の録画 (`.mmts`)。ffmpeg に渡す前に MP4 に詰め替え (`remuxForEncode`)、字幕は TTML から文字の配置にして隣に置く。
+ *   データ放送は取り出さない
+ * - `uhd` … 映像が 4K の HEVC (`.mmts` と、PMT の映像が HEVC の TS。`recorded-broadcast.recordedBroadcast`)。
+ *   インタレ解除と引き伸ばしをせず (`videoArgs`)、AV1 は GPU を使わず、コマ数は入力のまま、サムネイルは SDR に直して取る
+ *
+ * TS で送る 4K の局の録画は `uhd` だけが立つ。入力は今までどおり元の TS (復号もする) で、字幕は TS の ARIB 字幕を写し (`captionArgs`)、
+ * データ放送も取り出す。録り終えた録画には PMT が書かれている。PMT を読めない TS は MPEG-2 の局の録画として扱う
+ * @param program その局の放送の番号 (`broadcastServiceId`)
+ */
+export function encodeInput(
+  path: string,
+  program: number,
+): { tlv: boolean; uhd: boolean } {
+  const tlv = recordedTransport(path) === "tlv";
+  return { tlv, uhd: tlv || recordedBroadcast(path, program) === "hevc" };
 }
 
 /**
@@ -1464,11 +1485,14 @@ async function runJob(jobId: number): Promise<void> {
   /** 後から復号させたエージェント (`agents.id`)。有料の番組を復号できたとき、契約中にするのはこのエージェントのカード */
   let decodedBy: number | null = null;
   let sourceTs = input;
-  /** 4K の局の録画 (`.mmts`)。ffmpeg に渡す前に MP4 に詰め替える (`remuxForEncode`) */
-  const uhd = recordedTransport(input) === "tlv";
-  /** 4K の録画の字幕 (詰め替えた MP4 の時刻)。エンコードしたものの隣に置く (`writeCaptions`) */
+  /** `tlv` は ffmpeg に渡す前に MP4 に詰め替える 4K の局の録画 (`.mmts`)、`uhd` は映像が 4K の HEVC の録画 (`encodeInput`) */
+  const { tlv, uhd } = encodeInput(
+    input,
+    broadcastServiceId(recording.service_id),
+  );
+  /** 4K の局の録画 (`.mmts`) の字幕 (詰め替えた MP4 の時刻)。エンコードしたものの隣に置く (`writeCaptions`) */
   let uhdCaptions: CaptionPages["pages"] = [];
-  if (uhd) {
+  if (tlv) {
     setPhase(jobId, "remux", "4K の映像と音声を MP4 に詰め替えています");
     const remuxed = await remuxForEncode(input, recording, signal);
     if (remuxed === null) return finishCanceled(jobId, null);
@@ -1517,7 +1541,7 @@ async function runJob(jobId: number): Promise<void> {
    * カードが鍵を貰えた (`testDecode` が、いま有料の番組を流している間だけ確かめるのと同じ考え)。
    * `cardStatus` は失敗を答えで返すので、カードが読めなくてもエンコードは止まらない (`noteDecoded` が何も書かないだけ)
    */
-  if (!uhd && paidRecording(recording) && isDecoded(sourceTs))
+  if (!tlv && paidRecording(recording) && isDecoded(sourceTs))
     await noteDecoded(recording.service_id, decodedBy ?? recording.agent_id);
 
   // コマ数 (`smoothMotion`) は、局ロゴを開いたあとに本編映像から実測して入れる (measureSmoothMotion)
@@ -2044,10 +2068,11 @@ async function runJob(jobId: number): Promise<void> {
   const output = primary.path;
 
   /*
-   * **4K の録画の字幕は、エンコードしたものの隣に文字の配置で置く** (`writeCaptions`)。
-   * 4K の局にはデータ放送 (BML) が無い (MMT のデータ放送は HTML5 で、まだ読まない) ので、下の取り出しはしない
+   * **4K の局の録画 (`.mmts`) の字幕は、エンコードしたものの隣に文字の配置で置く** (`writeCaptions`)。
+   * MMT の 4K の局にはデータ放送 (BML) が無い (MMT のデータ放送は HTML5 で、まだ読まない) ので、下の取り出しはしない。
+   * TS で送る 4K の局は、字幕を Matroska に写し (`captionArgs`)、データ放送も TS の局と同じく取り出す
    */
-  if (uhd) {
+  if (tlv) {
     for (const p of placed)
       writeCaptions(
         sidecarPaths(p.path).captions,
@@ -2063,7 +2088,7 @@ async function runJob(jobId: number): Promise<void> {
    * (server/recorded-bml.ts)。付け足しなので、失敗してもエンコードは失敗にしない
    */
   try {
-    const changes = uhd
+    const changes = tlv
       ? 0
       : await saveRecordedBml(
           sourceTs,
@@ -2093,20 +2118,24 @@ async function runJob(jobId: number): Promise<void> {
     detection !== null && detection.cm.length > 0
       ? own(primary.skip).keep[0]
       : undefined;
-  await writeThumbnail(output, duration, {
-    source: sourceTs,
-    hlg: uhd,
-    place: thumbnailPlace(duration, {
-      skip: primary.skip,
-      content:
-        content === undefined
-          ? null
-          : {
-              start: content.start + primary.skip,
-              end: content.end + primary.skip,
-            },
-    }),
-  });
+  await writeThumbnail(
+    output,
+    duration,
+    {
+      source: sourceTs,
+      place: thumbnailPlace(duration, {
+        skip: primary.skip,
+        content:
+          content === undefined
+            ? null
+            : {
+                start: content.start + primary.skip,
+                end: content.end + primary.skip,
+              },
+      }),
+    },
+    uhd,
+  );
   /*
    * **もう一方 (H.265・H.264) の隣にも、ポスターとデータ放送の変化ログを複製しておく** (同じもの。ffmpeg を
    * もう一度は回さない)。主を消すと残ったほうが主に繰り上がるので (`files.reconcile`)、
@@ -2235,9 +2264,9 @@ async function runCmJob(jobId: number): Promise<void> {
    * (`remuxForEncode`。ffmpeg は TLV を読めない)。詰め替えた MP4 の時刻は録画の物差し (`mmts.ts`) と同じなので、
    * 元の TS から読んだときと同じく境目をそのまま覚える
    */
-  const uhd = raw !== null && recordedTransport(raw) === "tlv";
+  const tlv = raw !== null && recordedTransport(raw) === "tlv";
   let scratch: string | null = null;
-  if (uhd && files.length === 0) {
+  if (tlv && files.length === 0) {
     setPhase(jobId, "remux", "4K の映像と音声を MP4 に詰め替えています");
     const remuxed = await remuxForEncode(raw, recording, signal);
     if (remuxed === null) return finishCanceled(jobId, null);
@@ -2248,7 +2277,7 @@ async function runCmJob(jobId: number): Promise<void> {
     scratch = remuxed.path;
   }
   const ts =
-    scratch ?? (raw !== null && !uhd && !isScrambled(raw) ? raw : null);
+    scratch ?? (raw !== null && !tlv && !isScrambled(raw) ? raw : null);
   try {
     await detectCm(jobId, signal, recording, ts, files);
   } finally {
