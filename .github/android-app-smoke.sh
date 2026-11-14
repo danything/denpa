@@ -295,7 +295,7 @@ cat "$logs/ffmpeg-smoke-stderr.txt" >&2
 test "$code" = 0
 # 終了コードだけでなく、最後まで流れたかも見る (ffprobe は 10 種類のファイル)
 test "$(grep -cE '^ffprobe .+: ok$' "$logs/ffmpeg-smoke.txt")" = 10
-for line in "ffmpeg: ok" "h264_mediacodec: ok" "no GPU: software encoding: ok" "h264 on mediacodec (c2.android.avc.encoder): ok" "side output closes when ffmpeg fails: ok"; do
+for line in "ffmpeg: ok" "h264_mediacodec: ok" "no GPU: software encoding: ok" "h264 on mediacodec: ok" "side output closes when ffmpeg fails: ok"; do
   grep -qxF "$line" "$logs/ffmpeg-smoke.txt" || { echo "native-smoke の出力に「$line」がありません" >&2; exit 1; }
 done
 # ffmpeg・ffprobe の SELinux の拒否は記録に残す。実行そのものを断られたら止める

@@ -478,7 +478,8 @@ denpa が渡すオプション (`profile`・`prio_speed`・`realtime`) を持つ
 エンコードの本数 (`ENCODE_CONCURRENCY`) は、端末の速さと熱を実機で測ってから既定を決めます。いまは Linux と同じ既定 (2) です。
 
 - 組むのは CI で、NDK (API 29) で Dockerfile の `ffmpeg` 段と同じバージョンと部品を組みます (`.github/ffmpeg-android.sh`)。
-  MediaCodec のエンコーダ `h264_mediacodec`・`hevc_mediacodec`・`av1_mediacodec` と、デコーダ (H.264・H.265・AV1・MPEG-2) はここで足します
+  MediaCodec のエンコーダ `h264_mediacodec`・`hevc_mediacodec`・`av1_mediacodec` と、デコーダ (H.264・H.265・AV1・MPEG-2) はここで足します。
+  bsf の `h264_metadata`・`hevc_metadata` も足します。MediaCodec のエンコーダは高さを 16 の倍数に切り上げて (1080 は 1088) エンコードし、はみ出した分を切り落とす印をこの bsf で付けるためで、無いと 1080 の映像でエンコーダを開けません
 - **libav* は共有ライブラリにし、ffmpeg と ffprobe が共有します** (Linux のイメージと同じ)。Mac・Windows のように libav* を静的に繋いで ffprobe を読む部品だけで別に組むと、
   arm64 で 19.8 MB (圧縮して 9.4 MB) になり、共有ライブラリの 14.0 MB (圧縮して 6.7 MB) より大きいためです (2026-11-12 に両方を組んで測った)。
   実行ファイルは RUNPATH の `$ORIGIN` で、同じ置き場 (アプリの nativeLibraryDir) の libav* を読みます

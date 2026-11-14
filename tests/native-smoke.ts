@@ -384,6 +384,8 @@ function tryArgs(label: string, args: string[]): number {
   ]);
   const err = run.stderr.toString();
   console.log(`${label}: exit ${run.exitCode}`);
+  // Android はエミュレータのソフトウェアのエンコーダで通るはずなので、落ちたら理由を残す
+  if (android && run.exitCode !== 0) console.log(err);
   if (
     /Unknown encoder|Unrecognized option|No such filter|Option not found|Unable to parse option value|Error setting option/.test(
       err,
@@ -493,23 +495,27 @@ if (found.devices.length === 0) {
 
 /*
  * Android: アプリが渡したハードウェアのエンコーダの名前 (`MEDIACODEC_ENCODERS`。エミュレータでは空) を出したうえで、
- * ソフトウェアの c2.android のエンコーダの名前を渡したことにして探し直す。名前で `mediacodec` の方式になり、
+ * ソフトウェアのエンコーダの名前を渡したことにして探し直す。名前で `mediacodec` の方式になり、
  * その名前を ffmpeg に渡して、録画とライブの引数で放送に似せた素材をエンコードできるかを見る。
  * 放送に似せた素材は、どの API のエミュレータにもある H.264 だけで流す (ソフトウェアのエンコーダは遅く、エミュレータの時間を延ばさないため)
  */
 if (android) {
   console.log(`MEDIACODEC_ENCODERS=${config.mediacodecEncoders}`);
   const given = config.mediacodecEncoders;
-  config.mediacodecEncoders = Object.entries(softwareMediacodec)
-    .map(([codec, name]) => `${codec}=${name}`)
-    .join(",");
-  const soft = await probe();
-  console.log(soft.message);
-  const way = hwChain("h264", {})[0];
-  if (way?.kind !== "mediacodec" || way.codecName !== softwareMediacodec.h264)
-    throw new Error(
-      `名前を渡した H.264 が MediaCodec の方式になりません: ${JSON.stringify(soft.devices)}`,
-    );
+  // H.264 のソフトウェアのエンコーダは、Codec2 のもの (c2.android) を先に、通らなければ OMX のもの (Android 10 に残っている) を試す
+  let way: ReturnType<typeof hwChain>[number] | undefined;
+  for (const name of [softwareMediacodec.h264, "OMX.google.h264.encoder"]) {
+    config.mediacodecEncoders = `h264=${name}`;
+    const soft = await probe();
+    console.log(`${name}: ${soft.message}`);
+    const found = hwChain("h264", {})[0];
+    if (found?.kind === "mediacodec" && found.codecName === name) {
+      way = found;
+      break;
+    }
+  }
+  if (way === undefined)
+    throw new Error("名前を渡した H.264 が MediaCodec の方式になりません");
   const hw = hwArgs(way, "h264");
   await ff(
     "-i",
@@ -543,7 +549,8 @@ if (android) {
     "frag_keyframe+empty_moov+default_base_moof",
     at("mediacodec-live.mp4"),
   );
-  console.log(`h264 on mediacodec (${way.codecName}): ok`);
+  console.log(`${way.codecName}: ok`);
+  console.log("h264 on mediacodec: ok");
   config.mediacodecEncoders = given;
   await probe();
 }
