@@ -111,7 +111,7 @@ import { config } from "./config";
 import { scrambledLiveNotice } from "./contracts";
 import { AutoStartWatch, DataBroadcast } from "./databroadcast";
 import { orm } from "./db";
-import { deinterlace } from "./encoder";
+import { aribServiceId, deinterlace } from "./encoder";
 import { followOnAir } from "./epg";
 import { emit, type Yielded } from "./events";
 import {
@@ -1403,7 +1403,7 @@ class Session {
    * ffmpeg に渡すときも同じ fMP4 なので、`start:` を引けばエンコードしたものの物差しになる
    */
   private mmtAnchor: Anchor | null = null;
-  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f]・スクランブルの判定で分け合う (`tap`) */
+  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f]・自動起動の指定・スクランブルの判定で分け合う (`tap`) */
   private readonly packets = new PacketStream();
   /**
    * 入口の部品に自動起動の指定があるか (`tap`。ライブだけ)。PMT だけ読み、決まったときと変わったときに `autoStart` で知らせる。
@@ -2482,13 +2482,13 @@ class Session {
 
   /**
    * 届いた塊を 1 局に絞り (`pump` の説明)、**絞ったあとを** データ放送・時計・
-   * Hybridcast・EIT[p/f]・スクランブルの判定の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
+   * Hybridcast・EIT[p/f]・自動起動の指定 (`AutoStartWatch`)・スクランブルの判定の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
    */
   private tap(filter: ServiceFilter | null, chunk: Uint8Array): Uint8Array {
     const out = filter === null ? chunk : filter.filter(chunk);
     if (filter !== null) this.tsid = filter.transportStreamId;
     if (out.length === 0) return out;
-    // **188 バイトに切るのは 1 回だけ** (5 つの読み取りで使い回す。ライブの処理でいちばん重いところ)
+    // **188 バイトに切るのは 1 回だけ** (6 つの読み取りで使い回す。ライブの処理でいちばん重いところ)
     const receivedAt = Date.now();
     const data = this.data;
     const ait =
@@ -4856,11 +4856,6 @@ function airingAt(serviceId: number, at = Date.now()) {
     lte(programs.start_at, at),
     gt(programs.end_at, at),
   );
-}
-
-/** ffmpeg に名指しさせる放送の番号 (ARIB のサービス ID)。局が無ければ 0 = 探させない */
-export function aribServiceId(serviceId: number): number {
-  return serviceOf(serviceId)?.service_id ?? 0;
 }
 
 /** 局の行のうち、選局と放送の番号に要るぶん */

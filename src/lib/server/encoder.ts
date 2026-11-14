@@ -1185,8 +1185,11 @@ function remuxedPath(input: string): string {
   return `${input}.remux.mp4`;
 }
 
-/** 局の行の service_id (放送が名乗っている番号。MPT の MMT_package_id)。局が無ければ 0 */
-export function broadcastServiceId(serviceId: number): number {
+/**
+ * ffmpeg に名指しさせる放送の番号 (局の行の service_id。ARIB のサービス ID で、4K の局は MPT の MMT_package_id)。
+ * 局が無ければ 0 (名指ししない)。ライブ・追っかけ・観る画面・エンコードで使う
+ */
+export function aribServiceId(serviceId: number): number {
   return (
     orm()
       .select({ id: services.service_id })
@@ -1206,7 +1209,7 @@ export function broadcastServiceId(serviceId: number): number {
  *
  * TS で送る 4K の局の録画は `uhd` だけが立つ。入力は今までどおり元の TS (復号もする) で、字幕は TS の ARIB 字幕を写し (`captionArgs`)、
  * データ放送も取り出す。録り終えた録画には PMT が書かれている。PMT を読めない TS は MPEG-2 の局の録画として扱う
- * @param program その局の放送の番号 (`broadcastServiceId`)
+ * @param program その局の放送の番号 (`aribServiceId`)
  */
 export function encodeInput(
   path: string,
@@ -1232,7 +1235,7 @@ async function remuxForEncode(
   const target = remuxedPath(input);
   const result = await remuxMmts(
     input,
-    broadcastServiceId(recording.service_id),
+    aribServiceId(recording.service_id),
     target,
     signal,
   );
@@ -1486,10 +1489,7 @@ async function runJob(jobId: number): Promise<void> {
   let decodedBy: number | null = null;
   let sourceTs = input;
   /** `tlv` は ffmpeg に渡す前に MP4 に詰め替える 4K の局の録画 (`.mmts`)、`uhd` は映像が 4K の HEVC の録画 (`encodeInput`) */
-  const { tlv, uhd } = encodeInput(
-    input,
-    broadcastServiceId(recording.service_id),
-  );
+  const { tlv, uhd } = encodeInput(input, aribServiceId(recording.service_id));
   /** 4K の局の録画 (`.mmts`) の字幕 (詰め替えた MP4 の時刻)。エンコードしたものの隣に置く (`writeCaptions`) */
   let uhdCaptions: CaptionPages["pages"] = [];
   if (tlv) {

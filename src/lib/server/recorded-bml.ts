@@ -189,8 +189,9 @@ const PMT_LINE = '"type":"pmt"';
  */
 export async function recordedAutoStart(sidecarPath: string): Promise<boolean> {
   if (!existsSync(sidecarPath)) return false;
+  const input = createReadStream(sidecarPath, { encoding: "utf8" });
   const lines = createInterface({
-    input: createReadStream(sidecarPath, { encoding: "utf8" }),
+    input,
     crlfDelay: Number.POSITIVE_INFINITY,
   });
   try {
@@ -201,7 +202,9 @@ export async function recordedAutoStart(sidecarPath: string): Promise<boolean> {
     }
     return false;
   } finally {
+    // readline の close は読み元を閉じない。途中でやめたときにファイルを開いたまま残さないよう、読み元も閉じる
     lines.close();
+    input.destroy();
   }
 }
 

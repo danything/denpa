@@ -175,7 +175,7 @@ function seed(values: Partial<typeof recordings.$inferInsert>) {
   return orm().select().from(recordings).where(eq(recordings.id, id)).get()!;
 }
 
-/** 4K の局の元の録画だけを持つ録画の行。局の行も入れる (放送の service_id を引く。`live.aribServiceId`) */
+/** 4K の局の元の録画だけを持つ録画の行。局の行も入れる (放送の service_id を引く。`encoder.aribServiceId`) */
 function uhdRecording() {
   const id = 6_554_700_000 + UHD_SERVICE;
   orm()
