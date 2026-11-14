@@ -145,7 +145,8 @@ public static class ChannelTable
             /*
              * ISDB-C (ケーブルテレビのトランスモジュレーション方式)。中心周波数で、地上波や CATV のパススルー (C13〜C63) と違って 1/7 MHz は足さない (CXD2856 の仕様書 8.2)。
              * QC は CATV の帯域 (C13〜C63)、QU は UHF 13〜62、QV は VHF 1〜12。C22 と VHF 4〜7 は 6 MHz おきの並びから 2 MHz ずれている。
-             * C24〜C27 は、2 MHz ずらした周波数を載せた資料もあるので (どちらで送られているかは未確認)、ずらした周波数も持つ (CXD2856 の仕様書 8.2 の推定の使い方)
+             * C24〜C27 は、2 MHz ずらした周波数を載せた資料もあるので (どちらで送られているかは未確認)、ずらした周波数も持つ (CXD2856 の仕様書 8.2 の推定の使い方)。
+             * QF<kHz> は中心周波数を直に指す (QF246500)。ケーブル局の NIT に、この並びに乗らない周波数が載っていたときに denpa が使う
              */
             if (name.Length < 3) return null;
             var body = name[2..];
@@ -155,6 +156,11 @@ public static class ChannelTable
             {
                 if (!Number(body[(colon + 1)..], out index, digits: 2) || index > TsmfSelector.MaxIndex) return null;
                 body = body[..colon];
+            }
+            if (name[1] == 'F')
+            {
+                if (!Number(body, out var direct, digits: 6) || direct is < DirectMinKhz or > DirectMaxKhz) return null;
+                return new Tuning(Catv, SysIsdbc, (uint)direct * 1000, NoStreamId, TsmfIndex: index);
             }
             if (!Number(body, out var channel)) return null;
             uint? khz = name[1] switch
@@ -226,6 +232,13 @@ public static class ChannelTable
         tsid = (uint)value;
         return true;
     }
+
+    /// <summary>
+    /// <c>QF&lt;kHz&gt;</c> で選局できる周波数の範囲 (kHz)。VHF 1ch の下端 (90 MHz) から UHF 62ch の上端 (770 MHz) まで。
+    /// ケーブルの選局表の並び (<c>QV1</c>〜<c>QU62</c>) が収まる範囲と同じ
+    /// </summary>
+    private const int DirectMinKhz = 90_000;
+    private const int DirectMaxKhz = 770_000;
 
     /// <summary><paramref name="digits"/> 桁までの数字だけの文字列を読む</summary>
     private static bool Number(string text, out int value, int digits = 3)

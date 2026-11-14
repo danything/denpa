@@ -3,7 +3,9 @@ import { describe, expect, test } from "bun:test";
 import { concatBytes } from "@danything/arib/bytes";
 import { EpgReader } from "@danything/arib/eit";
 import { MmtEpgReader } from "@danything/arib/mh-eit";
+import { NitReader } from "@danything/arib/psi";
 import {
+  cableDeliveryDescriptor,
   eitSection,
   nitSection,
   packetize,
@@ -127,9 +129,12 @@ describe("選局するチャンネル", () => {
 
   test("TSMF で束ねた搬送波は、2 つ目からの TS を番号を付けて回す", () => {
     expect(tsmfJobs("QC30", 3)).toEqual(["QC30:1", "QC30:2"]);
-    // 束ねていない (ヘッダが無い)・C13〜C63 の周波数でない・もう番号の付いたものは足さない
+    // UHF・VHF と、周波数を直に指す名前も同じ
+    expect(tsmfJobs("QU30", 2)).toEqual(["QU30:1"]);
+    expect(tsmfJobs("QF243500", 2)).toEqual(["QF243500:1"]);
+    // 束ねていない (ヘッダが無い)・ケーブルのチャンネルでない・もう番号の付いたものは足さない
     expect(tsmfJobs("QC30", 1)).toEqual([]);
-    expect(tsmfJobs("QU30", 3)).toEqual([]);
+    expect(tsmfJobs("C30", 3)).toEqual([]);
     expect(tsmfJobs("QC30:1", 3)).toEqual([]);
   });
 
@@ -462,6 +467,62 @@ describe("ケーブルの局", () => {
     expect(error).toBeNull();
     expect(services).toEqual([]);
     expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(10);
+  });
+
+  test("ケーブル局の NIT を待つときは、局が揃っても NIT がそろうまで読む", async () => {
+    const data = Uint8Array.from([
+      ...packetize(
+        0x0011,
+        sdtSection(0x0016, 0xfffe, [[0x02f1, 0x01, "自主"]]),
+      ),
+      ...packetize(
+        0x0010,
+        nitSection(0xfffe, null, [
+          [
+            0x0016,
+            0xfffe,
+            [[0x02f1, 0x01]],
+            cableDeliveryDescriptor(321_000_000),
+          ],
+        ]),
+      ),
+    ]);
+    const reader = new NitReader();
+    const { services } = await readServices(
+      fromBytes(data, true),
+      30_000,
+      undefined,
+      undefined,
+      undefined,
+      true,
+      { reader, wait: true },
+    );
+    expect(services?.map((s) => s.serviceId)).toEqual([0x02f1]);
+    expect(reader.actual?.transportStreams[0]?.delivery?.kind).toBe("cable");
+  });
+
+  test("ケーブル局の NIT が来なければ、待っていても局は返す", async () => {
+    const reader = new NitReader();
+    const { services, error } = await readServices(
+      fromBytes(
+        Uint8Array.from(
+          packetize(
+            0x0011,
+            sdtSection(0x0016, 0xfffe, [[0x02f1, 0x01, "自主"]]),
+          ),
+        ),
+        true,
+      ),
+      300,
+      undefined,
+      undefined,
+      undefined,
+      true,
+      { reader, wait: true },
+    );
+    expect(error).toBeNull();
+    expect(services?.map((s) => s.serviceId)).toEqual([0x02f1]);
+    expect(reader.actual).toBeNull();
   });
 
   test("SDT が来なければ SDT が無いと返す (NIT は見ない)", async () => {

@@ -695,9 +695,20 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const uint DtvStatSignalStrength = 62;
     private const uint DtvStatCnr = 63;
 
-    // enum fe_modulation の QAM_64 と、enum fe_spectral_inversion の INVERSION_AUTO (linux/dvb/frontend.h)
-    private const uint Qam64 = 3;
+    // enum fe_modulation の QAM_64・QAM_256・QAM_AUTO と、enum fe_spectral_inversion の INVERSION_AUTO (linux/dvb/frontend.h)
+    internal const uint Qam64 = 3;
+    internal const uint Qam256 = 5;
+    internal const uint QamAuto = 6;
     private const uint InversionAuto = 2;
+
+    /// <summary>enum fe_caps の FE_CAN_QAM_AUTO (linux/dvb/frontend.h)。復調器が変調を自分で見分ける</summary>
+    internal const uint CanQamAuto = 0x10000;
+
+    /// <summary>
+    /// ISDB-C で試す変調の順。**ケーブルの搬送波は 64QAM と 256QAM が混ざる** (J:COM の回線で QC26 が 256QAM だった。2026-11-11)。
+    /// 復調器が変調を見分けられれば (<see cref="CanQamAuto"/>) QAM_AUTO を 1 回、見分けられなければ 64QAM、256QAM の順に試す
+    /// </summary>
+    internal static uint[] CableModulations(uint caps) => (caps & CanQamAuto) != 0 ? [QamAuto] : [Qam64, Qam256];
 
     /// <summary>ISDB-C のシンボルレート (5.274 Mbaud。ITU-T J.83 Annex C)。DVB-C の機材にはボー単位で渡す</summary>
     internal const uint CableSymbolRate = 5_274_000;
@@ -741,6 +752,10 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private bool _streaming;
     /// <summary>ISDB-C を選局するときに渡す方式 (<see cref="DeviceProbe.CableSystem"/>)。DVB-C に対応していなければ null</summary>
     private readonly int? _cableSystem;
+    /// <summary>フロントエンドの <c>caps</c> (<see cref="DeviceProbe.Caps"/>)。ISDB-C の変調の渡し方を決める (<see cref="CableModulations"/>)</summary>
+    private readonly uint _caps;
+    /// <summary>ISDB-C で前にロックした変調 (選局表の周波数ごと)</summary>
+    private readonly Dictionary<uint, uint> _lockedModulation = [];
     /// <summary>ISDB-C を受けている間の、dvr から TSMF の TS を選んで流す処理。ほかの方式では null</summary>
     private DvbCable? _cable;
 
@@ -770,6 +785,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         // recisdb と同じ対応。11v→13V / 15v→18V (SEC_VOLTAGE_13 = 0, SEC_VOLTAGE_18 = 1)
         _voltage = lnb switch { "15v" => 1, "11v" => 0, _ => null };
         _cableSystem = DeviceProbe.CableSystem(DeviceProbe.Delivery((int)_frontend.DangerousGetHandle()));
+        if (_cableSystem is not null) _caps = DeviceProbe.Caps((int)_frontend.DangerousGetHandle());
     }
 
     /// <summary>TS の読み出し側。ISDB-C では TSMF から選んだ TS (<see cref="DvbCable"/>)、ほかの方式は dvr そのもの</summary>
@@ -802,15 +818,14 @@ public sealed unsafe class DvbTuner : ITuneDevice
     };
 
     /// <summary>
-    /// ISDB-C の選局で渡す property。64QAM・5.274 Mbaud で、周波数は選局表の中心周波数 (Hz)。
-    /// 方式は <c>SYS_DVBC_ANNEX_C</c> か <c>SYS_DVBC_ANNEX_A</c> (<see cref="DeviceProbe.CableSystem"/>)。ロールオフは方式で決まるので渡さない。
-    /// 256QAM は渡さない (確かめた回線の搬送波はどれも 64QAM)
+    /// ISDB-C の選局で渡す property。5.274 Mbaud で、周波数は選局表の中心周波数 (Hz)、変調は <see cref="CableModulations"/> の 1 つ。
+    /// 方式は <c>SYS_DVBC_ANNEX_C</c> か <c>SYS_DVBC_ANNEX_A</c> (<see cref="DeviceProbe.CableSystem"/>)。ロールオフは方式で決まるので渡さない
     /// </summary>
-    internal static List<(uint Command, uint Value)> CableProperties(int system, uint hertz) =>
+    internal static List<(uint Command, uint Value)> CableProperties(int system, uint hertz, uint modulation = Qam64) =>
     [
         (DtvDeliverySystem, (uint)system),
         (DtvFrequency, hertz),
-        (DtvModulation, Qam64),
+        (DtvModulation, modulation),
         (DtvSymbolRate, CableSymbolRate),
         (DtvInversion, InversionAuto),
         // これを最後に置いて初めて選局が始まる
@@ -882,18 +897,26 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     /// <summary>
     /// ISDB-C を DVB-C として選局し、ロックを待つ。ずらして送られることがあるチャンネル (<see cref="ChannelTable.Tuning.ShiftedFrequency"/>) は、
-    /// 中心周波数でロックしなければ、ずらした周波数も試す
+    /// 中心周波数でロックしなければ、ずらした周波数も試す。変調は <see cref="CableModulations"/> の順に試し、前にロックした変調を先にする
+    /// (64QAM と 256QAM を試す機材で、256QAM の搬送波を選局するたびに 64QAM の時間切れを待たないため)
     /// </summary>
     private void LockCable(ChannelTable.Tuning tuning)
     {
         var system = _cableSystem ?? throw new IOException(TunerPool.Unaccepted(tuning.Type, tuning));
         uint[] frequencies = tuning.ShiftedFrequency is { } shifted ? [tuning.Frequency, shifted] : [tuning.Frequency];
+        var modulations = CableModulations(_caps);
+        if (_lockedModulation.TryGetValue(tuning.Frequency, out var last))
+            modulations = [last, .. modulations.Where(modulation => modulation != last)];
         foreach (var hertz in frequencies)
         {
-            SetProperties(CableProperties(system, hertz));
-            if (!WaitForLock()) continue;
-            CableFrequency = hertz;
-            return;
+            foreach (var modulation in modulations)
+            {
+                SetProperties(CableProperties(system, hertz, modulation));
+                if (!WaitForLock()) continue;
+                CableFrequency = hertz;
+                _lockedModulation[tuning.Frequency] = modulation;
+                return;
+            }
         }
         throw new IOException(ITuneDevice.SyncFailed);
     }
