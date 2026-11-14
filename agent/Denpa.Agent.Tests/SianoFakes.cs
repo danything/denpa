@@ -46,6 +46,9 @@ internal sealed class FakeSianoUsb : IUsbDevice
     /// <summary>応答しない要求の番号</summary>
     public HashSet<ushort> Mute { get; } = [];
 
+    /// <summary>最初の 1 回だけ応答しない要求の番号 (開き直したとき、機材が最初のパケットを重複として捨てる様子。issue #2755)</summary>
+    public HashSet<ushort> DropFirst { get; } = [];
+
     /// <summary>この数の「データの書き込み」に応答したあとは、応答しない (0 以下なら全部に応答する)</summary>
     public int DataWritesAnswered { get; set; }
 
@@ -138,6 +141,10 @@ internal sealed class FakeSianoUsb : IUsbDevice
             Sent.Add(data.ToArray());
         }
         if (Mute.Contains(number)) return;
+        lock (_gate)
+        {
+            if (DropFirst.Remove(number)) return;
+        }
         switch (number)
         {
             case SianoMessage.Version:
@@ -222,7 +229,7 @@ internal sealed class FakeSianoUsb : IUsbDevice
 internal static class SianoFake
 {
     /// <summary>短い待ち (どれも仕様書 11 の値を縮めたもの)</summary>
-    public static readonly SianoTimings Fast = new(SendMs: 1_000, ResponseMs: 300, RunSettleMs: 400, LockMs: 400, StatsEveryMs: 20, StatsResponseMs: 200, ReadMs: 10);
+    public static readonly SianoTimings Fast = new(SendMs: 1_000, ResponseMs: 300, RunSettleMs: 400, LockMs: 400, StatsEveryMs: 20, StatsResponseMs: 200, ReadMs: 10, VersionRetryMs: 100);
 
     /// <summary>ファームウェアのファイル (仕様書 1.3 と同じ 85,840 バイト。中身は作り物)</summary>
     public static byte[] FirmwareFile(int size = 85_840, uint address = 0x0040_0000, uint? length = null)

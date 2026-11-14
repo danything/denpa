@@ -20,7 +20,7 @@ namespace Denpa.Agent;
 /// <param name="ReadMs">IN の転送要求を 1 回待つ時間 (転送要求は出したままで、止める合図を確かめる間隔)</param>
 internal sealed record SianoTimings(
     int SendMs = 1_000, int ResponseMs = 10_000, int RunSettleMs = 400, int LockMs = 10_000,
-    int StatsEveryMs = 100, int StatsResponseMs = 2_000, int ReadMs = 200);
+    int StatsEveryMs = 100, int StatsResponseMs = 2_000, int ReadMs = 200, int VersionRetryMs = 1_000);
 
 /// <summary>機材が応答しなかった。機材の状態が分からないので、呼ぶ側は閉じて、次に使うときにバージョンの問い合わせからやり直す</summary>
 internal sealed class SianoSilentException(string message) : IOException(message);
@@ -282,14 +282,29 @@ internal sealed class SianoDevice : IDisposable
         }
     }
 
-    /// <summary>要求を送って、その応答 (番号 + 1) を待つ。応答の中身は読まず、届いたことだけを成功とする (仕様書 3.4)。届かなければ <see cref="SianoSilentException"/> を送出する</summary>
-    private void Request(byte[] message, string what)
+    /// <summary>
+    /// 要求を送って、その応答 (番号 + 1) を待つ。応答の中身は読まず、届いたことだけを成功とする (仕様書 3.4)。届かなければ <see cref="SianoSilentException"/> を送出する。
+    /// <paramref name="retryAfterMs"/> を渡すと、その間に応答が無ければ同じ要求を 1 回だけ送り直し、そこから <see cref="SianoTimings.ResponseMs"/> 待つ
+    /// </summary>
+    private void Request(byte[] message, string what, int? retryAfterMs = null)
     {
         var response = (ushort)(System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(message) + 1);
         // 前の要求の遅れた応答を、この要求の応答と取り違えないように、送る直前に数を戻す (仕様書 3.4)
         lock (_sync) _received[response] = 0;
         Send(message);
-        if (!Wait(() => _received.GetValueOrDefault(response) > 0, _timings.ResponseMs))
+        bool Answered() => _received.GetValueOrDefault(response) > 0;
+        if (retryAfterMs is { } first && !Wait(Answered, first))
+        {
+            Note($"{what}に {first / 1000.0:0.#} 秒応答が無いので、送り直します");
+            Send(message);
+            if (Wait(Answered, _timings.ResponseMs))
+            {
+                Note($"送り直した{what}に応答がありました");
+                return;
+            }
+            throw new SianoSilentException($"{what}に機材が応答しません ({(first + _timings.ResponseMs) / 1000.0:0.#} 秒待ちました)");
+        }
+        if (!Wait(Answered, _timings.ResponseMs))
         {
             throw new SianoSilentException($"{what}に機材が応答しません ({_timings.ResponseMs / 1000.0:0.#} 秒待ちました)");
         }
@@ -297,11 +312,19 @@ internal sealed class SianoDevice : IDisposable
 
     // ---- 起動 (仕様書 4) ----
 
-    /// <summary>バージョンの問い合わせ (668 → 669。仕様書 4.1)。やり直しはしない (仕様書 12.3 の「どちらでもよい」のうち、PX-S1UD で使われているほう)</summary>
+    /// <summary>
+    /// バージョンの問い合わせ (668 → 669。仕様書 4.1)。<see cref="SianoTimings.VersionRetryMs"/> の間に応答が無ければ 1 回だけ送り直す
+    /// (仕様書 12.3 では、送り直すかはどちらでもよい)。
+    /// <para>
+    /// PX-S1UD を開き直したとき、1 回目の問い合わせに応答が無いまま止まった報告がある (issue #2755)。開くたびに OUT の端点のストールを
+    /// クリアすると、ホストはデータの交互の印 (DATA0/DATA1) を 0 に戻す。機材がそれに合わせて戻さなければ、最初の 1 パケットを
+    /// 重複として捨てるので、送り直せば届く (推定。実機では確かめていない)。問い合わせは状態を変えないので、2 回届いても害は無い
+    /// </para>
+    /// </summary>
     private SianoVersion AskVersion(string when)
     {
         lock (_sync) _versionPayload = null;
-        Request(SianoMessage.Build(SianoMessage.Version, SianoMessage.FromBoot), "バージョンの問い合わせ");
+        Request(SianoMessage.Build(SianoMessage.Version, SianoMessage.FromBoot), "バージョンの問い合わせ", _timings.VersionRetryMs);
         byte[] payload;
         lock (_sync) payload = _versionPayload ?? [];
         if (_describe) Note($"バージョンの応答 ({when}): 中身 {payload.Length} バイト {Convert.ToHexString(payload)}");

@@ -12,11 +12,11 @@
     "test:a11y": "playwright test"
   },
   "dependencies": {
-    "@astrojs/starlight": "0.43.0",
+    "@astrojs/starlight": "0.43.1",
     "astro": "7.4.12"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
-    "@playwright/test": "1.65.0"
+    "@playwright/test": "1.65.1"
   }
 }
