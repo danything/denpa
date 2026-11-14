@@ -277,7 +277,8 @@ export async function readServices(
  * TLV (4K の放送) のチャンネルで、MH-SDT[actual] を待つ上限 (`readTlvServices`)。
  *
  * MH-SDT[actual] が何秒おきに来るかは確かめていない。実機のケーブルの BS4K (QC26) の 0.9 秒には来ず、TS の 30 秒 (`TUNE_TIMEOUT`) で待つと
- * 局が 1 つも入らなかった。TS の SI は NIT と SDT[other] でも 10 秒に 1 回は来る (ARIB TR-B14) ので、その 6 回ぶん待つ。
+ * 局が 1 つも入らなかった。60 秒は TS の SI からの推定で、TS では NIT と SDT[other] でも 10 秒に 1 回は来る (ARIB TR-B14) ので、その 6 回ぶん待つ。
+ * MH-SDT[actual] が来ない TLV のチャンネルは、スキャンのたびに 60 秒かかる。
  * 延びるのは TLV のチャンネル (ケーブルに 1〜2 本) だけで、総当たりの時間はほとんど変わらない。
  * 来なくても、自分の TLV ストリームが分かれば局は入れる (`unnamedService`)
  */

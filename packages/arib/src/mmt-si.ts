@@ -561,7 +561,8 @@ export class TlvServiceReader {
   }
 
   /**
-   * 自分の TLV ストリーム。TLV-NIT[actual] のストリームのうち、PLT にある package (= service_id) をサービスリスト記述子に持つもの。
+   * 自分の TLV ストリーム。TLV-NIT[actual] のストリームのうち、PLT にある package (= service_id) をサービスリスト記述子に持つ最初の 1 つ
+   * (実機では 1 つに決まる。同じ service_id を持つストリームが 2 つあれば、TLV-NIT で先に来たほう)。
    * TLV-NIT と PLT のどちらかが来ていない・当てはまるストリームが無ければ null
    */
   get ownStream(): TlvNetworkStream | null {

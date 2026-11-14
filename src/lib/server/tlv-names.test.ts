@@ -170,9 +170,9 @@ describe("MH-SDT[actual] を受信できなかった 4K の局 (QC26 の録り)"
         epgReadable: true,
       },
     ]);
-    // ほかの CATV のチャンネルはそのまま預け直す
+    // ほかの CATV のチャンネルはそのまま書き戻す
     expect(saved.find((c) => c.channel === "QC30")).toEqual(ts);
-    // 仮の名前でなくなった局は書き換えない (もう一度受信しても預け直さない)
+    // 仮の名前でなくなった局は書き換えない (もう一度受信しても書き戻さない)
     expect(
       await nameTlvServices(sdt.originalNetworkId, sdt.tlvStreamId, [
         { serviceId: SERVICE, name: "別の名前" },
