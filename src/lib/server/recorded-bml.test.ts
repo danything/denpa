@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,7 +28,7 @@ const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-bml-db-")), "denpa.db");
 const { orm } = await import("./db");
 const { recordings, services } = await import("./schema");
-const { loadRecordedBml, saveRecordedBml, withProgramInfo } =
+const { loadRecordedBml, recordedAutoStart, saveRecordedBml, withProgramInfo } =
   await import("./recorded-bml");
 
 /*
@@ -257,5 +257,56 @@ describe("saveRecordedBml と録画の先頭の放送時刻", () => {
     row(T - 9_500);
     await saveRecordedBml(ts, join(dir, "head2.bml.jsonl"), recording(T), 0);
     expect(tsHeadOf()).toBe(T - 9_500);
+  });
+});
+
+describe("recordedAutoStart", () => {
+  /** 変化ログの PMT から、入口の部品の自動起動の指定を外したもの (`at` は書いた位置のまま) */
+  function flagless(sidecar: string): string {
+    return loadRecordedBml(sidecar)
+      .map((item) => {
+        const { message } = item;
+        if (message.type !== "pmt") return JSON.stringify(item);
+        const components = message.components.map((component) =>
+          component.bxmlInfo?.entryPointInfo === undefined
+            ? component
+            : {
+                ...component,
+                bxmlInfo: {
+                  ...component.bxmlInfo,
+                  entryPointInfo: {
+                    ...component.bxmlInfo.entryPointInfo,
+                    autoStartFlag: false,
+                  },
+                },
+              },
+        );
+        return JSON.stringify({ ...item, message: { ...message, components } });
+      })
+      .join("\n");
+  }
+
+  test("変化ログの PMT の入口の部品に自動起動の指定があれば true", async () => {
+    const ts = join(dir, "auto.ts");
+    const sidecar = join(dir, "auto.bml.jsonl");
+    writeFileSync(ts, recorded());
+    await saveRecordedBml(ts, sidecar, recording(T), 0);
+    expect(await recordedAutoStart(sidecar)).toBe(true);
+
+    const off = join(dir, "auto-off.bml.jsonl");
+    writeFileSync(off, `${flagless(sidecar)}\n`);
+    expect(await recordedAutoStart(off)).toBe(false);
+
+    // 途中で指定が付いた録画も true (再生位置では分けない)
+    const later = join(dir, "auto-later.bml.jsonl");
+    writeFileSync(
+      later,
+      `${flagless(sidecar)}\n${readFileSync(sidecar, "utf8")}`,
+    );
+    expect(await recordedAutoStart(later)).toBe(true);
+  });
+
+  test("サイドカーが無ければ false", async () => {
+    expect(await recordedAutoStart(join(dir, "none.bml.jsonl"))).toBe(false);
   });
 });

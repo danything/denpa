@@ -62,12 +62,18 @@
      * データ放送 (観る画面で、取り出してある録画だけ)。**映像の上の列には置かない**。右端の列は
      * 全画面のタブレットで閉じる・切り抜き・コメントの一覧・削除に使う (`ControlBar`)
      */
-    data?: { on: boolean; toggle: () => void } | undefined;
-    /**
-     * データ放送を常に受信するか (ライブと観る画面で同じ 1 つ。端末ごと。`data-receive.ts`)。開くのは d (ライブは右端の列、
-     * 観る画面はこのメニュー) で、これは開いていなくても受信しておくかの切り替え。観る画面はデータ放送のある録画だけ
-     */
-    receive?: { on: boolean; toggle: () => void } | undefined;
+    data?:
+      | {
+          on: boolean;
+          toggle: () => void;
+          /**
+           * データ放送を自動で受信するか (ライブと観る画面で同じ 1 つ。端末ごと。`data-receive.ts`)。
+           * 行の長押し・右クリック・Shift+D で切り替え (`toggleAuto`)、オンの間は行に「(自動で受信)」と添える
+           */
+          auto: boolean;
+          toggleAuto: () => void;
+        }
+      | undefined;
     /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */
     subtitle?: SettingChoice | undefined;
     /**
@@ -90,7 +96,6 @@
     audio,
     cm,
     data,
-    receive,
     subtitle,
     jikkyo,
     fold = [],
@@ -172,17 +177,8 @@
             on: data.on,
             toggle: data.toggle,
             closes: true,
-          },
-        ]),
-    ...(receive === undefined
-      ? []
-      : [
-          {
-            id: "data-receive",
-            label: "データ放送を常に受信",
-            icon: DATA,
-            on: receive.on,
-            toggle: receive.toggle,
+            note: data.auto ? "自動で受信" : undefined,
+            hold: data.toggleAuto,
           },
         ]),
     ...(jikkyo === undefined

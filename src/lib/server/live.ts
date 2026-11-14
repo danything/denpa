@@ -109,7 +109,7 @@ import {
 } from "./chase";
 import { config } from "./config";
 import { scrambledLiveNotice } from "./contracts";
-import { DataBroadcast } from "./databroadcast";
+import { AutoStartWatch, DataBroadcast } from "./databroadcast";
 import { orm } from "./db";
 import { deinterlace } from "./encoder";
 import { followOnAir } from "./epg";
@@ -1383,6 +1383,11 @@ class Session {
   private mmtAnchor: Anchor | null = null;
   /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f]・スクランブルの判定で分け合う (`tap`) */
   private readonly packets = new PacketStream();
+  /**
+   * 入口の部品に自動起動の指定があるか (`tap`。ライブだけ)。PMT だけ読み、決まったときと変わったときに `autoStart` で知らせる。
+   * 途中から入ってきた人には `add` で渡す
+   */
+  private autoStart: AutoStartWatch | null = null;
   /** ffmpeg が入力で 0 に寄せたぶん (秒)。`start:` から読み取る */
   private startPts = Number.NaN;
   /** 最後に時計を配った時刻 (`tellClock`) */
@@ -1665,6 +1670,10 @@ class Session {
         apps: JSON.parse(this.toldApps),
       });
     }
+    // 自動で受信する端末は、これを見て受信をリクエストする (`data-receive.ts` の `wantsData`)
+    const autoStart = this.autoStart?.value ?? null;
+    if (autoStart !== null)
+      this.tellOne(viewer, { type: "autoStart", on: autoStart });
     // **出したままの人は、局を変えても出したまま** (`refreshData`)
     if (viewer.wantsData) this.refreshData(viewer);
     const clock = this.clockNotice();
@@ -2462,9 +2471,13 @@ class Session {
     const data = this.data;
     const ait =
       this.program > 0 ? (this.ait ??= new AitReader(this.program)) : null;
-    if (this.program > 0 && this.source === undefined)
+    if (this.program > 0 && this.source === undefined) {
       this.onAir ??= new PresentFollowing(this.program);
+      this.autoStart ??= new AutoStartWatch(this.program);
+    }
     const onAir = this.onAir;
+    const autoStart = this.autoStart;
+    let autoStartChanged = false;
     let switched = false;
     const found: Ait[] = [];
     // 追っかけ (録画のファイル) は数えない。掛かったまま録れていても、録画のほうで復号する (`encoder.ts`)
@@ -2478,7 +2491,10 @@ class Session {
       this.clock.feedPacket(packet, receivedAt);
       ait?.feedPacket(packet, found);
       if (onAir?.feedPacket(packet) === true) switched = true;
+      if (autoStart?.feedPacket(packet) === true) autoStartChanged = true;
     }
+    const startsNow = autoStartChanged ? (autoStart?.value ?? null) : null;
+    if (startsNow !== null) this.tell({ type: "autoStart", on: startsNow });
     if (found.length > 0) this.findHybridcast(found);
     if (scramble !== null && scramble.verdict !== null)
       this.judgeScrambled(SCRAMBLE_PACKETS);

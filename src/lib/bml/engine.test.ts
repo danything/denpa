@@ -785,7 +785,7 @@ describe("lockModuleOnMemoryEx", () => {
 });
 
 /**
- * 常に受信している端末 (`DataBroadcast` の `receive`)。**開く前から入口を裏で動かすのは、自動起動の
+ * 自動で受信している端末 (`DataBroadcast` の `receive`)。**開く前から入口を裏で動かすのは、自動起動の
  * 指定 (`auto_start_flag`) がある入口だけ**。開いたら (`open`) 始め、閉じたら (`reset`) 入口へ戻す
  */
 describe("開く前の入口", () => {

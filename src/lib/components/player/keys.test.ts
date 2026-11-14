@@ -36,6 +36,7 @@ function harness() {
     stepSpeed: (direction) => done.push(`speed ${direction}`),
     toggleMute: () => done.push("mute"),
     stepVolume: (direction) => done.push(`volume ${direction}`),
+    toggleDataAuto: () => done.push("data-auto"),
   });
   return {
     done,
@@ -45,6 +46,13 @@ function harness() {
 }
 
 describe("再生画面のキー", () => {
+  test("Shift+D でデータ放送を自動で受信するかを切り替える (d だけでは何もしない)", () => {
+    const { done, press } = harness();
+    expect(press("D", { shiftKey: true })).toBe(true);
+    expect(press("d")).toBe(false);
+    expect(done).toEqual(["data-auto"]);
+  });
+
   test("空白と k で再生/一時停止、左右で 10 秒", () => {
     const { done, press } = harness();
     expect(press(" ")).toBe(true);

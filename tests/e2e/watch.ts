@@ -76,14 +76,50 @@ export async function hideBroken(page: Page): Promise<void> {
   });
 }
 
-/** 録画のサイドカーにデータ放送を置く */
-export function placeDataBroadcast(libraryPath: string, script?: string): void {
+/**
+ * 録画のサイドカーにデータ放送を置く。`autoStart` を false にすると、PMT の入口の部品から自動起動の指定を外す
+ * (データ放送を自動で受信する端末でも、開くまで取得しない録画)
+ */
+export function placeDataBroadcast(
+  libraryPath: string,
+  script?: string,
+  autoStart = true,
+): void {
+  const messages = fakeDataBroadcast(script).map((message) =>
+    autoStart || message["type"] !== "pmt"
+      ? message
+      : withoutAutoStart(message),
+  );
   writeFileSync(
     `${libraryPath.slice(0, libraryPath.length - extname(libraryPath).length)}.bml.jsonl`,
-    `${fakeDataBroadcast(script)
-      .map((message) => JSON.stringify({ at: 0, message }))
-      .join("\n")}\n`,
+    `${messages.map((message) => JSON.stringify({ at: 0, message })).join("\n")}\n`,
   );
+}
+
+/** PMT の通知の入口の部品から、自動起動の指定 (`autoStartFlag`) を外す */
+function withoutAutoStart(
+  pmt: Record<string, unknown>,
+): Record<string, unknown> {
+  const components = pmt["components"] as {
+    bxmlInfo?: { entryPointInfo?: Record<string, unknown> };
+  }[];
+  return {
+    ...pmt,
+    components: components.map((component) =>
+      component.bxmlInfo?.entryPointInfo === undefined
+        ? component
+        : {
+            ...component,
+            bxmlInfo: {
+              ...component.bxmlInfo,
+              entryPointInfo: {
+                ...component.bxmlInfo.entryPointInfo,
+                autoStartFlag: false,
+              },
+            },
+          },
+    ),
+  };
 }
 
 /**

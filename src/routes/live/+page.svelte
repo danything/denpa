@@ -47,6 +47,7 @@
   } from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
+  import { receiveNote } from "#lib/components/player/receive-note.svelte.js";
   import Remote from "#lib/components/player/Remote.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
   import {
@@ -142,6 +143,13 @@
   /** データ放送の映像の上の通知 (`DataBroadcast` の `note`。舞台の通知の列に積む) */
   let dataNote = $state("");
   let dataButton = $state<(() => boolean) | null>(null);
+  /** 自動で受信するかを切り替えたときの通知 (`receive-note.svelte.ts`) */
+  const dataReceive = receiveNote();
+  /** データ放送を自動で受信するかを切り替える (データ放送のボタンの長押し・Shift+D)。切り替えたら通知を出す */
+  function toggleDataAuto(): void {
+    player.toggleReceiveData();
+    dataReceive.show(player.receiveData);
+  }
 
   /**
    * サーバが決めた局で開く (`+page.server.ts` の `start`)。こちらでも同じ判断をしない。サーバは既に
@@ -480,6 +488,9 @@
     stepSpeed: (by) => player.setSpeed(stepSpeed(player.speed, by)),
     toggleMute: player.toggleMute,
     stepVolume: volume.step,
+    toggleDataAuto: () => {
+      if (player.tuned !== null) toggleDataAuto();
+    },
   });
   /** データ放送を出している間は、空白・十字キーはあちらのリモコン (`bml/engine.ts` の `aribKey`) */
   function keys(event: KeyboardEvent): void {
@@ -539,10 +550,10 @@
       </MediaStack>
 
       <!-- データ放送。映像はここ (`media`) とだけ伝えて描くのはエンジンに任せる。局が変わったら作り直す -->
-      <!-- 常に受信する端末は、開く前から動かす (局を映している間だけ。`data-receive.ts`) -->
+      <!-- 自動で受信する端末は、入口に自動起動の指定のある局を映している間、開く前から動かす (`data-receive.ts`) -->
       <DataBroadcast
         on={player.showData}
-        receive={player.receiveData && player.tuned !== null}
+        receive={player.receivingData}
         channel={player.tuned === null
           ? null
           : `${player.tuned.channelType}/${player.tuned.channel}/${player.tuned.serviceId}`}
@@ -590,9 +601,11 @@
             </form>
             <ControlButton
               icon={DATA}
-              label={player.showData ? "データ放送を消す" : "データ放送を出す"}
+              label={`${player.showData ? "データ放送を消す" : "データ放送を出す"}${player.receiveData ? " (自動で受信)" : ""}`}
               on={player.showData}
+              mark={player.receiveData ? "A" : undefined}
               testid="live-data-button"
+              onhold={toggleDataAuto}
               onclick={() =>
                 pressD(player.showData, dataButton, (on) => player.setData(on))}
             />
@@ -822,10 +835,6 @@
               {pip}
               {fullscreen}
               {stage}
-              receive={{
-                on: player.receiveData,
-                toggle: () => player.toggleReceiveData(),
-              }}
               jikkyo={data.jikkyo
                 ? {
                     on: jikkyoOn.on,
@@ -894,6 +903,10 @@
       {#if dataNote !== ""}
         <StageNote testid="live-data-note">{dataNote}</StageNote>
       {/if}
+      {#if dataReceive.text !== ""}
+        <StageNote testid="live-data-receive-note">{dataReceive.text}</StageNote
+        >
+      {/if}
       <!--
                     録画に譲った (`live-player` の `giveWay`)。「ライブに戻る」を置くので、この通知だけ押せる形で並べる
                     (見た目は StageNote と同じ。追っかけの「観る画面で」と同じ扱い)
@@ -954,7 +967,7 @@
       </JikkyoList>
     {/snippet}
     <!--
-      列の先頭。データ放送を開いている間はリモコン (入れ替えない。押しながら局も変えたい。常に受信していても、開くまでは出さない)、
+      列の先頭。データ放送を開いている間はリモコン (入れ替えない。押しながら局も変えたい。自動で受信していても、開くまでは出さない)、
       その下に実況のコメントの一覧 (出している間)
     -->
     {#snippet asideTop()}

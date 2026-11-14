@@ -247,10 +247,12 @@ test.describe("ライブ視聴", () => {
     await expect(menu).toBeVisible();
     await expect(menu).toHaveAttribute("role", "menu");
 
-    // マウスの端末の広い枠では音量のつまみは音のボタンにだけあり (`58-volume`)、先頭はデータ放送を常に受信
-    // (ライブに CM スキップは無い。データ放送を開くのは右端の列の d)。Enter で切り替わり、閉じない
+    // マウスの端末の広い枠では音量のつまみは音のボタンにだけあり (`58-volume`)、先頭はアンビエントモード
+    // (ライブに CM スキップは無く、実況は世帯の設定がオフ。データ放送は右端の列の d で、自動で受信するかも d の長押し)。
+    // Enter で切り替わり、閉じない
     await expect(page.getByTestId("live-volume")).toHaveCount(0);
-    const first = page.getByTestId("live-data-receive");
+    await expect(page.getByTestId("live-data-receive")).toHaveCount(0);
+    const first = page.getByTestId("live-ambient");
     await expect(first).toBeFocused();
     await expect(first).toHaveAttribute("role", "menuitemcheckbox");
     const before = await first.getAttribute("aria-checked");

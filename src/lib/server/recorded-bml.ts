@@ -14,11 +14,18 @@
  * `BmlDecoder` にそのまま流せる。
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { createInterface } from "node:readline";
 
 import type { ResponseMessage } from "@danything/arib/bml-protocol";
 import { eq } from "drizzle-orm";
 
+import { autoStarts } from "#lib/ts/data-auto-start.js";
 import { DataBroadcastCapture } from "#lib/ts/data-capture.js";
 import {
   type PlacedMessage,
@@ -165,6 +172,37 @@ export async function saveRecordedBml(
     `${placed.map((item) => JSON.stringify(item)).join("\n")}\n`,
   );
   return placed.length;
+}
+
+/** 変化ログの 1 行が PMT か。中身は JSON にする前に文字で絞る (モジュールの行は base64 で大きく、引用符を含まない) */
+const PMT_LINE = '"type":"pmt"';
+
+/**
+ * **録画の入口の部品に自動起動の指定があるか** (`ts/data-auto-start.ts` の `autoStarts`)。観る画面は、データ放送を
+ * 自動で受信する端末でこれが true のときだけ、開く前から変化ログを取得する (`components/player/data-receive.ts`)。
+ *
+ * 変化ログの PMT の行だけを JSON にして見る。録画の途中で番組が替わって指定が付いたり外れたりしても、どこかの PMT に
+ * 指定があれば true (再生位置で分けない)。行を先頭から読み、指定のある PMT が見つかったところでやめる。
+ * PMT はふつう先頭近くにあるが、指定が無い録画はファイルを最後まで読む (読むのはサーバの中だけで、端末へは送らない)
+ *
+ * @returns サイドカーが無ければ false
+ */
+export async function recordedAutoStart(sidecarPath: string): Promise<boolean> {
+  if (!existsSync(sidecarPath)) return false;
+  const lines = createInterface({
+    input: createReadStream(sidecarPath, { encoding: "utf8" }),
+    crlfDelay: Number.POSITIVE_INFINITY,
+  });
+  try {
+    for await (const line of lines) {
+      if (!line.includes(PMT_LINE)) continue;
+      const { message } = JSON.parse(line) as PlacedMessage;
+      if (message.type === "pmt" && autoStarts(message.components)) return true;
+    }
+    return false;
+  } finally {
+    lines.close();
+  }
 }
 
 /** サイドカーを読む。無ければ空 (データ放送を持たない録画・古い録画) */

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hold } from "./hold";
   import Icon from "./Icon.svelte";
   import {
     type IconShape,
@@ -23,9 +24,20 @@
     onclick,
     children,
     menu,
+    onhold,
+    mark,
   }: {
     /** アイコン (`icons.ts`)。文字だけのボタンでは省く (`undefined` を渡しても同じ) */
     icon?: IconShape | undefined;
+    /**
+     * 長押し (タッチ)・右クリック・Shift+D でする別の操作 (`hold.ts`)。データ放送のボタン (d) の、自動で受信するかの切り替え
+     */
+    onhold?: (() => void) | undefined;
+    /**
+     * アイコンの右上に添える小さな字。押したときとは別の設定 (長押しで切り替えるもの) が入っている印。
+     * 読み上げには出さないので、同じことを `label` にも書く
+     */
+    mark?: string | undefined;
     /** 読み上げに出す名前。押すと役目が変わるものは、いまの役目を書く */
     label: string;
     /**
@@ -57,11 +69,15 @@
   title={label}
   data-testid={testid}
   {...menu}
+  {@attach onhold !== undefined && hold(onhold)}
 >
   {#if icon !== undefined}
     <Icon {icon} />
   {/if}
   {@render children?.()}
+  {#if mark !== undefined}
+    <span class="ov-mark" aria-hidden="true">{mark}</span>
+  {/if}
 </button>
 
 <style>
@@ -134,6 +150,19 @@
   :global(.ov-btn.ov-danger) {
     --pico-color: var(--dp-on-video-danger);
     --dp-on-mark: currentColor;
+  }
+  /*
+   * 長押しで切り替える設定が入っている印 (`mark`)。アイコンの右上の小さな字で、色はボタンと同じ (色だけに頼らない。
+   * オンの短い線とは別の意味なので、線にはしない)。押せる大きさは変えない
+   */
+  .ov-mark {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    font-size: var(--dp-text-xs);
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
   }
   /* 透かしを減らす設定では、乗せたときの地も透かさない (並びの裏の影は `ControlBar` が濃くする) */
   @media (prefers-reduced-transparency: reduce) {

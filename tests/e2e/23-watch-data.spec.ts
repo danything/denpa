@@ -14,7 +14,7 @@ import { hideBroken, placeDataBroadcast, sharedDataBroadcast } from "./watch";
  *
  * 22-watch から分けた (あちらが e2e の組の時間の下限になっていた)。偽の録画には
  * データ放送が無いので、どのテストもサイドカー (`.bml.jsonl`) を置いてから出す。
- * 常に受信する端末と小窓の中の字幕は 23-watch-data-receive に分けた (どれも録画を録るので、1 本では 1 分を超える)
+ * 自動で受信する端末と小窓の中の字幕は 23-watch-data-receive に分けた (どれも録画を録るので、1 本では 1 分を超える)
  */
 
 /** 小窓を持つ既定の BML を置いた録画。このファイルの中で使い回す */

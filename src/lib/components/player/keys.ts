@@ -29,6 +29,11 @@ export interface PlayerKeys {
   toggleMute?: () => void;
   /** ↑ ↓ (音量。`volume.svelte.ts` の `step`) */
   stepVolume?: (direction: number) => void;
+  /**
+   * Shift+D (データ放送を自動で受信するか。`data-receive.ts`)。データ放送のボタンの長押しと同じ (`hold.ts`)。
+   * データ放送の無い画面・録画は省く
+   */
+  toggleDataAuto?: () => void;
 }
 
 export function playerKeys(
@@ -59,6 +64,7 @@ export function playerKeys(
       m: actions.toggleMute,
       ArrowUp: stepVolume === undefined ? undefined : () => stepVolume(1),
       ArrowDown: stepVolume === undefined ? undefined : () => stepVolume(-1),
+      D: actions.toggleDataAuto,
     };
     const run = map[event.key];
     if (run === undefined) return;

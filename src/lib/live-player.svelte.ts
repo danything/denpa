@@ -474,10 +474,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 最後に選局した局 (`Tuned.serviceId`)。追っかけの間も覚えておき、同じ局へ戻ったら開いたまま */
   let lastService: number | null = null;
   /**
-   * データ放送を常に受信するか (再生の設定の行)。**端末ごとに覚える** (`data-receive.ts`)。開いていなくても
-   * サーバにリクエストし、入口の文書を裏で動かす (`DataBroadcast` の `receive`)
+   * データ放送を自動で受信するか (データ放送のボタンの長押し)。**端末ごとに覚える** (`data-receive.ts`)。
+   * いまの局の入口に自動起動の指定があれば (`autoStart`)、開いていなくてもサーバにリクエストし、入口の文書を裏で動かす
+   * (`DataBroadcast` の `receive`)
    */
   let receiveData = $state(false);
+  /**
+   * いまの局の入口に自動起動の指定があるか (サーバが PMT を読んで知らせる `Notice` の `autoStart`)。
+   * 別の局へ移ったら、次の局の通知が来るまで false
+   */
+  let autoStart = $state(false);
   $effect(() => {
     receiveData = storedDataReceive(read(DATA_RECEIVE_KEY));
     // 選局の指示より先に送らない (`syncData`)。読んだ値に合わせるだけ
@@ -2120,23 +2126,30 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     syncData();
   }
 
-  /** データ放送を常に受信するかを切り替える。端末ごとに覚える (`data-receive.ts`) */
+  /** データ放送を自動で受信するかを切り替える。端末ごとに覚える (`data-receive.ts`) */
   function toggleReceiveData(): void {
     receiveData = !receiveData;
     write(DATA_RECEIVE_KEY, receiveData ? "1" : "0");
     syncData();
   }
 
+  /** いまサーバにリクエストしたいか (`wantsData`) */
+  function wantData(): boolean {
+    return wantsData({
+      open: showData,
+      auto: receiveData,
+      tuned: tuned !== null,
+      autoStart,
+    });
+  }
+
   /**
-   * サーバにリクエストするかを、開いているか・常に受信するか・局を映しているかから決め直す (`wantsData`)。
-   * 変わったときだけ送る。**選局の指示のあとに送る**。前の局のセッションにリクエストすると、前の局のものが届く
+   * サーバにリクエストするかを、開いているか・自動で受信するか・局を映しているか・入口に自動起動の指定があるかから
+   * 決め直す (`wantsData`)。変わったときだけ送る。**リクエストは選局の指示のあとに送る**。前の局のセッションにリクエストすると、
+   * 前の局のものが届く (やめるほうは選局の指示より先に送ってよい。`begin`)
    */
   function syncData(): void {
-    const want = wantsData({
-      open: showData,
-      always: receiveData,
-      tuned: tuned !== null,
-    });
+    const want = wantData();
     // 受け取らないなら、待たせてあるぶんも捨てる
     if (!want) heldData = [];
     if (want === askedData || socket?.readyState !== WebSocket.OPEN) return;
@@ -2193,7 +2206,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     chase = null;
     chaseTimeline = null;
     // 別の局へ移ったらデータ放送を閉じる。サーバへは `begin` の `syncData` で送る
-    if (closesData(lastService, target.serviceId)) showData = false;
+    if (closesData(lastService, target.serviceId)) {
+      showData = false;
+      autoStart = false;
+    }
     lastService = target.serviceId;
     tuned = target;
     audio = target.audio ?? "";
@@ -2464,8 +2480,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
     if (open) {
       const command = wantedCommand();
+      /*
+       * やめるなら選局の指示より先に送る。サーバは受信をリクエストしている人が次の局のセッションに入ると、
+       * 覚えているぶん (実機で約 2MB) をまとめて送る (`server/live.ts` の `refreshData`)
+       */
+      if (!wantData()) syncData();
       if (command !== null) send(command);
-      // 局を映すか (追っかけ・録画に譲るか) で、常に受信のときのリクエストが変わる
+      // 局を映すか (追っかけ・録画に譲るか) で、自動で受信のときのリクエストが変わる
       syncData();
       return;
     }
@@ -2671,6 +2692,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           skew = notice.now - Date.now();
         } else if (notice.type === "hybridcast") {
           hybridcast = notice.apps;
+        } else if (notice.type === "autoStart") {
+          // いまの局の入口に自動起動の指定があるか。自動で受信する端末は、あればリクエストする (`wantsData`)
+          if (chase === null) {
+            autoStart = notice.on;
+            syncData();
+          }
         } else if (notice.type === "timeline") {
           /*
            * 追っかけの物差し。**base はサーバが決めた実際の開始位置に
@@ -3415,9 +3442,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return showData;
     },
     setData,
-    /** データ放送を常に受信するか (端末ごと) */
+    /** データ放送を自動で受信するか (端末ごと) */
     get receiveData() {
       return receiveData;
+    },
+    /**
+     * 開く前から受信して、入口を裏で動かしているか (`DataBroadcast` の `receive`)。自動で受信していて、局を映していて、
+     * その局の入口に自動起動の指定があるとき
+     */
+    get receivingData() {
+      return receiveData && tuned !== null && autoStart;
     },
     toggleReceiveData,
     listenData,

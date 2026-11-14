@@ -1,14 +1,22 @@
 /**
- * データ放送を常に受信するか (ライブと録画の観る画面の、再生の設定の行。両方で同じ 1 つ)。**端末ごとに覚える** (`keep.ts`)。既定はオフ。
+ * データ放送を自動で受信するか (ライブと録画の観る画面の、データ放送のボタン (d) の長押し。両方で同じ 1 つ)。
+ * **端末ごとに覚える** (`keep.ts`)。既定はオフ。
  *
- * 受信するのと開くのは別のこと。受信していると、開く前から入口の文書を裏で動かし、文書が自分で出したもの
- * (番組からの誘導・自動で出る画面) をテレビと同じく映像に重ねる。リモコンを出すのは開いたときだけ
- * (`DataBroadcast` の `receive`)。家の中の端末では受信しておきたいが、出先の回線では要らない、のように端末で変わる。
+ * 受信するのと開くのは別のこと。自動で受信する端末は、放送局が入口に自動起動の指定 (`auto_start_flag`。
+ * `ts/data-auto-start.ts` の `autoStarts`) を付けている局でだけ、開く前から受信して入口の文書を裏で動かし、
+ * 文書が自分で出したもの (番組からの誘導・天気のような自動で出る画面) をテレビと同じく映像に重ねる。
+ * 指定の無い局は d を押すまで受信しない (指定の無い入口は開くまで始まらないので、先に受け取っても使わない)。
+ * リモコンを出すのは開いたときだけ (`DataBroadcast` の `receive`)。家の中の端末では受信しておきたいが、
+ * 出先の回線では要らない、のように端末で変わる。
  *
- * 録画では、変化ログ (`server/recorded-bml.ts`) を開く前から取得して、再生位置に合わせて流す
+ * 録画では、録画の PMT に指定があれば (`server/recorded-bml.ts` の `recordedAutoStart`)、
+ * 変化ログを開く前から取得して、再生位置に合わせて流す
  */
 
-/** 覚えるキー。`1` / `0`。接頭辞の `player-` は、バックグラウンド再生 (`player-background`) と同じく画面をまたいで効くもの */
+/**
+ * 覚えるキー。`1` / `0`。接頭辞の `player-` は、バックグラウンド再生 (`player-background`) と同じく画面をまたいで効くもの。
+ * 名前は「常に受信」だった頃のまま (オンにしていた端末はオンのまま)
+ */
 export const DATA_RECEIVE_KEY = "player-data-always";
 
 /** 覚えていた値。**既定はオフ**。オンにしたことのある端末だけオンで始まる */
@@ -16,22 +24,30 @@ export function storedDataReceive(saved: string | null): boolean {
   return saved === "1";
 }
 
+/** 切り替えたときの通知 */
+export function dataReceiveNote(on: boolean): string {
+  return on ? "データ放送を自動で受信します" : "データ放送を自動で受信しません";
+}
+
 /**
- * サーバに受信をリクエストするか。開いている (d) か、常に受信していて局を映しているとき
- * (追っかけ・録画に譲っている間は局のデータ放送が無いのでリクエストしない)
+ * サーバに受信をリクエストするか。開いている (d) か、自動で受信していて、局を映していて、
+ * その局の入口に自動起動の指定があるとき (`autoStart`。サーバが PMT を読んで知らせる `Notice` の `autoStart`)。
+ * 追っかけ・録画に譲っている間は局のデータ放送が無いので、開いていなければリクエストしない
  */
 export function wantsData(now: {
   open: boolean;
-  always: boolean;
+  auto: boolean;
   tuned: boolean;
+  autoStart: boolean;
 }): boolean {
-  return now.open || (now.always && now.tuned);
+  return now.open || (now.auto && now.tuned && now.autoStart);
 }
 
 /**
  * 選局したら開いたデータ放送を閉じるか。**別の局へ移ったら閉じる** (テレビと同じ。次の局は入口から始まり、d は押されていない)。
  * 開いたままにすると、次の局の入口に出す操作の d が届き (`DataBroadcast` の `knock`)、選局しただけでメニューまで開く。
  * 同じ局のリクエストし直し (`previous` と同じ) と、初めての選局 (`previous` が null) では閉じない。
+ * 自動起動の指定 (`wantsData` の `autoStart`) も、閉じるときに忘れる (次の局の PMT を読むまで分からない)。
  * `previous`・`next` は局の内部 ID (`Tuned.serviceId`)
  */
 export function closesData(previous: number | null, next: number): boolean {
