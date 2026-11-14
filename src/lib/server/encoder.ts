@@ -237,9 +237,9 @@ function videoArgs(
     : [deinterlace(smooth), ...(scale === null ? [] : [scale])];
   if (hardware !== null) {
     /*
-     * **GPU (VA-API・NVENC・QSV・AMF・VideoToolbox・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
+     * **GPU (VA-API・NVENC・QSV・AMF・VideoToolbox・MediaCodec・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
      * 済ませ、エンコードするところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs
-     * (Rockchip MPP・NVENC・AMF・VideoToolbox は出す高さとコマ数でビットレートを決める)。
+     * (Rockchip MPP・NVENC・AMF・VideoToolbox・MediaCodec は出す高さとコマ数でビットレートを決める)。
      * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の方式か
      * ソフトウェアで再エンコードする** (runJob) ので、ここで保険はかけない
      */
@@ -347,7 +347,7 @@ interface EncodeOptions {
   displaySize?: { width: number; height: number };
   /**
    * 映像の高さ (`probeVideo`。引き伸ばすのは横だけなので、出すものも同じ高さ)。
-   * Rockchip MPP・NVENC・AMF・VideoToolbox のビットレートを決めるのに使う (`hwenc.hwBitrate`)。測れなければ 1080 の値
+   * Rockchip MPP・NVENC・AMF・VideoToolbox・MediaCodec のビットレートを決めるのに使う (`hwenc.hwBitrate`)。測れなければ 1080 の値
    */
   height?: number;
   /** 音声トラックの名前。**番組表と同じ言い方** (`arib.audioTitles`) */
@@ -360,7 +360,7 @@ interface EncodeOptions {
   /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
   mediaTitle?: string;
   /**
-   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` / `qsv` / `amf` / `videotoolbox` のどれで)。使えるかどうかは
+   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` / `qsv` / `amf` / `videotoolbox` / `mediacodec` のどれで)。使えるかどうかは
    * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
    * 最後はソフトウェア (undefined)
    */

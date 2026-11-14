@@ -374,7 +374,7 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - アプリの子プロセスの bun で `.github/android-bun-check.js` を流し (debug の受け口)、JIT が動くこと、`localhost` を引けること、
   `/proc` から読めること、bun が自分を子プロセスで起動できること、`TZ=Asia/Tokyo` を解けること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
 - bun が `FFMPEG`・`FFPROBE` の ffmpeg・ffprobe を起動できること。`tests/native-smoke.ts` を bun build で 1 つにまとめてアプリの置き場に置き、
-  debug の受け口で流す (エンコード、4K の局の HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec の H.264 のエンコード、4 本目の出口)
+  debug の受け口で流す (エンコード、4K の局の HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec の H.264 のエンコードと、MediaCodec のエンコーダを名前で選ぶこと、4 本目の出口)
 - 同じ APK を入れ直す (更新) と常駐サービスが始まり直し、書き出した置き場が入れ替わって古いものが消え、DB が残ること
 - エージェントが落ちたらアプリが起動し直すこと、通知の「終了」でエージェントも bun も常駐サービスも残らないこと、端末を起動し直すと常駐サービスが始まること
 

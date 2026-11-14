@@ -207,6 +207,7 @@ Helm は既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.h
 | VA-API       | CQP をやめて VBR (`-b:v` と `-maxrate:v` に段の値)                                               | デコードから GPU なら GPU (`deinterlace_vaapi=rate=frame,scale_vaapi`)、ほかは CPU        |
 | QSV          | ICQ をやめて `-b:v` と `-maxrate` に段の値 (qsvenc.c は 2 つが同じだと CBR)                      | CPU                                                                                       |
 | VideoToolbox | `-b:v` と `-maxrate` に段の値                                                                    | CPU                                                                                       |
+| MediaCodec   | CBR (`-bitrate_mode cbr`) で `-b:v` に段の値。上限の指定を持たない                               | CPU                                                                                       |
 
 - x264 は `ultrafast` にしません。CABAC とデブロックを切るので、低いビットレートでは粗さが目立ちます。静かな場面は crf のぶんだけ小さく、動きの多い場面は上限で抑えます
 - 段 1〜3 の音声は 96k です (256k は 2.4 Mbit/s の回線の 1 割を使う)
@@ -473,30 +474,57 @@ denpa が渡すオプション (`profile`・`prio_speed`・`realtime`) を持つ
 ## Android でエンコードする
 
 **Android のアプリ ([install-android.md](install-android.md)) の ffmpeg は、ソフトウェアのエンコーダ (SVT-AV1・x264・Opus) を Linux と同じに入れ、MediaCodec のエンコーダも組み込んであります。**
-アプリの denpa 本体は、MediaCodec を GPU の探し方 (`hwenc.ts`) にまだつないでいません。探すと GPU の方式が 0 になり、ソフトウェアでエンコードします。
-つなぐのは、ハードウェアのエンコーダの見分け方と画質の指定を実機で決めてからにします (下の「見通し」)。
-エンコードの本数 (`ENCODE_CONCURRENCY`) も、端末の速さと熱を実機で測ってから既定を決めます。いまは Linux と同じ既定 (2) です。
+端末のハードウェアのエンコーダで H.264・H.265・AV1 をエンコードできれば、Mac の VideoToolbox と同じく起動時に自分で見つけて使い、使えなければソフトウェアでエンコードします。
+エンコードの本数 (`ENCODE_CONCURRENCY`) は、端末の速さと熱を実機で測ってから既定を決めます。いまは Linux と同じ既定 (2) です。
 
 - 組むのは CI で、NDK (API 29) で Dockerfile の `ffmpeg` 段と同じバージョンと部品を組みます (`.github/ffmpeg-android.sh`)。
-  MediaCodec のエンコーダ `h264_mediacodec`・`hevc_mediacodec`・`av1_mediacodec` と、デコーダ (H.264・H.265・AV1・MPEG-2) はここで足します
+  MediaCodec のエンコーダ `h264_mediacodec`・`hevc_mediacodec`・`av1_mediacodec` と、デコーダ (H.264・H.265・AV1・MPEG-2) はここで足します。
+  bsf の `h264_metadata`・`hevc_metadata` も足します。MediaCodec のエンコーダは高さを 16 の倍数に切り上げて (1080 は 1088) エンコードし、はみ出した分を切り落とす印をこの bsf で付けるためで、無いと 1080 の映像でエンコーダを開けません
 - **libav* は共有ライブラリにし、ffmpeg と ffprobe が共有します** (Linux のイメージと同じ)。Mac・Windows のように libav* を静的に繋いで ffprobe を読む部品だけで別に組むと、
   arm64 で 19.8 MB (圧縮して 9.4 MB) になり、共有ライブラリの 14.0 MB (圧縮して 6.7 MB) より大きいためです (2026-11-12 に両方を組んで測った)。
   実行ファイルは RUNPATH の `$ORIGIN` で、同じ置き場 (アプリの nativeLibraryDir) の libav* を読みます
 - MediaCodec は JVM の無いプロセス (bun から起動した ffmpeg) からも使えます。FFmpeg は JVM が無ければ NDK の AMediaCodec を使い (`-ndk_codec`)、binder のスレッドも自分で立てます。
   x86_64 のエミュレータ (API 36) で、アプリの子プロセスの bun から起動した ffmpeg が、3 つとも 1 秒の素材をエンコードできました (エミュレータのエンコーダはソフトウェアの `c2.android.*`)
 
-**GPU の探し方につなぐときの見通し (未実装)。** Mac の `probeMac` と同じく、方式を `mediacodec` の 1 行にし、H.264・H.265・AV1 を 1 コマずつ試します。
-ただし FFmpeg の MediaCodec のエンコーダは MIME の種類で選ぶので、ハードウェアのエンコーダが無い端末ではソフトウェアの `c2.android.*` を開き、試しのエンコードが通ってしまいます。
-NDK でエンコーダの一覧を引けるのは API 36 からなので、アプリ (Kotlin) が `MediaCodecList` の `isHardwareAccelerated` (API 29 から) でハードウェアのエンコーダの名前を集めて環境変数で渡し、
-denpa が `-codec_name` でその名前を指定する形を考えています。画質の指定 (ビットレートの表・`-bitrate_mode`) と、SoC の熱で速さが落ちるかは実機で測ってから決めます。
+**ハードウェアのエンコーダは、アプリが名前で選んで denpa に渡します。** FFmpeg の MediaCodec のエンコーダは、名前が無ければ MIME の種類で選びます。
+ハードウェアのエンコーダが無い端末ではソフトウェアの `c2.android.*` を開き、試しのエンコードが通ってしまうためです。NDK でエンコーダの一覧を引けるのは API 36 からなので、一覧はアプリ (Kotlin) が引きます。
 
-**CI** (android.yml の `emulator`) は、エミュレータ (API 29・35) の中で `tests/native-smoke.ts` を bun で流し、MediaCodec の H.264 のエンコードが通ることも確かめます。
-arm64 の実機では、ffmpeg を起動できるか・速さ・MediaCodec のハードウェアのエンコーダのどれも確かめていません。
+- アプリ (`Encoders.kt`) は、`MediaCodecList` のうち `isHardwareAccelerated` (API 29 から。アプリの minSdk は 29) のエンコーダを、`video/avc`・`video/hevc`・`video/av01` ごとに 1 つ選び、
+  `MEDIACODEC_ENCODERS` (`h264=c2.qti.avc.encoder,hevc=c2.qti.hevc.encoder` の形) で渡します。並びは端末が勧める順で、先のものを選びます。別名 (`isAlias`) は外します
+- denpa (`hwenc.probeAndroid`) は、名前のあるコーデックだけを `-codec_name` でその名前を指定して 1 コマ試し、通ったものを `mediacodec (Android)` の 1 行にします。
+  名前が 1 つも無いか、どれも落ちれば行は 0 になり、ソフトウェアでエンコードします (設定の「エンコード」にそう出ます)
+- 使えたら、Linux と同じく設定の「録画」の「エンコード」で録画とライブを別々に選べます ([上](#ライブは別に選んだエンコーダで-gpu-に載る))
+- `-ndk_codec 1` で NDK の AMediaCodec を使います。フレームは CPU で作った nv12 で渡します (MediaCodec の `COLOR_FormatYUV420SemiPlanar`)。
+  デコードとインタレ解除は CPU のままです
+
+**画質の指定は Mac と同じくビットレートです。** MediaCodec にも画質での指定 (`-bitrate_mode cq`) はありますが、持つかどうかが端末で違い、値と画質の対応も測れていないためです。
+
+| 場面   | 指定                                                                                                  | 理由                                                                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 録画   | `-bitrate_mode vbr`、H.264 は `-profile:v high`。Rockchip MPP・NVENC と同じ表のビットレート、`-g 250` | MediaCodec に上限の指定は無い (FFmpeg が `-maxrate` を渡さない) ので平均だけ。H.264 のプロファイルは渡さないとエンコーダ任せ |
+| ライブ | `-bitrate_mode vbr`。同じ表の、いちばん重い映像の値。段を下げたときは `-bitrate_mode cbr` で段の値    | 上限を決められないので、回線に収めるときは CBR にする                                                                        |
+
+- B フレームは使いません。FFmpeg は `-strict experimental` を付けないと MediaCodec の B フレームを断ります (出したパケットに DTS が無いため)
+- 低遅延の指定 (MediaCodec の `latency`・`priority`) は FFmpeg が渡さないので、ライブも録画と同じエンコーダの既定です
+- `-g` は FFmpeg が秒に直して MediaCodec の `i-frame-interval` に渡します (`-g 250` で 30 コマなら 8 秒、ライブの `-g 60` は 1 秒)
+
+**CI** (android.yml の `emulator`) は、エミュレータ (API 29・35) の中で `tests/native-smoke.ts` を bun で流し、次のことを確かめます。
+
+- MediaCodec の H.264 のエンコードが通ること。denpa が渡すオプション (`ndk_codec`・`codec_name`・`bitrate_mode`) を持ち、録画とライブの引数で名前の違いで落ちないこと
+- エミュレータのエンコーダはソフトウェアの `c2.android.*` だけなので、アプリが名前を渡さず (`MEDIACODEC_ENCODERS` が空)、探すと方式が 0 になってソフトウェアでエンコードすること
+- ソフトウェアのエンコーダ (`c2.android.avc.encoder`) の名前を渡したことにして探し直すと、その名前で `mediacodec` の方式になり、録画とライブ (段を下げた CBR) の引数で放送に似せた素材を H.264 にエンコードできること (API 35)
+- **API 29 のエミュレータでは、名前でエンコーダを開けません** (`Failed to create encoder`。`c2.android.*` も `OMX.google.*` も同じで、MIME の種類で選ぶと開ける。原因は確かめていない)。
+  そこでは試しのエンコードが落ちて方式が 0 になり、ソフトウェアでエンコードすることを見ます。Android 10 の端末では、ハードウェアのエンコーダも同じく開けずにソフトウェアになると見ています (推定)
+
+単体テストは `hwenc.test.ts` が引数と名前の読み方を、`hwenc-probe.test.ts` が偽の ffmpeg の返事で Android の探し方を流します。
+
+**実機で確かめていないこと**: arm64 の実機で ffmpeg を起動できるか、ハードウェアのエンコーダが `isHardwareAccelerated` で見つかり、名前を指定して開けるか
+(nv12 と High を受けるか)、上の値で見た目が今の H.264 とそろうか・どれだけ小さくなるか、ライブの遅れ、SoC の熱で速さが落ちるか。
 
 ## H.265 は GPU でだけ
 
 **H.265 は、GPU で H.265 をエンコードできる機材でだけ選べます** (VA-API `hevc_vaapi`
-(Intel・AMD)・NVENC `hevc_nvenc`・QSV `hevc_qsv` と AMF `hevc_amf` (Windows)・VideoToolbox `hevc_videotoolbox` (Mac)・Rockchip MPP `hevc_rkmpp`)。使えるかは AV1・H.264 と同じく起動時の試しのエンコードで
+(Intel・AMD)・NVENC `hevc_nvenc`・QSV `hevc_qsv` と AMF `hevc_amf` (Windows)・VideoToolbox `hevc_videotoolbox` (Mac)・MediaCodec `hevc_mediacodec` (Android)・Rockchip MPP `hevc_rkmpp`)。使えるかは AV1・H.264 と同じく起動時の試しのエンコードで
 決まり、どれも通らなければ設定画面に H.265 の行が出ません。AV1 をデコードできず H.265 ならデコードできる端末
 (数年前のテレビ・スマホ) 向けに、H.264 より小さく持つためのものです。
 

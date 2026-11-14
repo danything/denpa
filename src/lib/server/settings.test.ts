@@ -121,6 +121,7 @@ describe("録画とライブのエンコーダ", () => {
           qsv: [],
           amf: [],
           videotoolbox: [],
+          mediacodec: [],
         },
       },
     });
@@ -133,6 +134,7 @@ describe("録画とライブのエンコーダ", () => {
           qsv: [],
           amf: [],
           videotoolbox: [],
+          mediacodec: [],
         },
       },
     });

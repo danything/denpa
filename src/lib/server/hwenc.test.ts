@@ -14,6 +14,7 @@ import {
   liveHw,
   liveHwArgs,
   nvencBusy,
+  parseMediacodecEncoders,
 } from "./hwenc";
 
 const A: HwDevice = {
@@ -25,6 +26,7 @@ const A: HwDevice = {
   qsv: [],
   amf: [],
   videotoolbox: [],
+  mediacodec: [],
   cqp: [],
   amfTranscoding: [],
   qsvSystem: [],
@@ -39,6 +41,7 @@ const B: HwDevice = {
   qsv: [],
   amf: [],
   videotoolbox: [],
+  mediacodec: [],
   cqp: [],
   amfTranscoding: [],
   qsvSystem: [],
@@ -68,6 +71,7 @@ describe("GPU の方式の選び方", () => {
         qsv: [],
         amf: [],
         videotoolbox: [],
+        mediacodec: [],
       },
       [B.path]: {
         vaapi: ["h264" as const],
@@ -76,6 +80,7 @@ describe("GPU の方式の選び方", () => {
         qsv: [],
         amf: [],
         videotoolbox: [],
+        mediacodec: [],
       },
     };
     expect(hwChain("h264", allow, 0, [A, B])).toEqual([
@@ -96,6 +101,7 @@ describe("GPU の方式の選び方", () => {
             qsv: [],
             amf: [],
             videotoolbox: [],
+            mediacodec: [],
           },
         },
         0,
@@ -223,6 +229,7 @@ describe("ライブを GPU でエンコードする経路", () => {
             qsv: [],
             amf: [],
             videotoolbox: [],
+            mediacodec: [],
           },
         },
         0,
@@ -306,6 +313,7 @@ describe("Rockchip MPP", () => {
     qsv: [],
     amf: [],
     videotoolbox: [],
+    mediacodec: [],
     cqp: [],
     amfTranscoding: [],
     qsvSystem: [],
@@ -334,6 +342,7 @@ describe("Rockchip MPP", () => {
             qsv: [],
             amf: [],
             videotoolbox: [],
+            mediacodec: [],
           },
         },
         0,
@@ -416,6 +425,7 @@ describe("NVIDIA NVENC", () => {
     qsv: [],
     amf: [],
     videotoolbox: [],
+    mediacodec: [],
     gpu: 0,
     cqp: [],
     amfTranscoding: [],
@@ -429,6 +439,7 @@ describe("NVIDIA NVENC", () => {
     qsv: [],
     amf: [],
     videotoolbox: [],
+    mediacodec: [],
     gpu: 1,
   };
 
@@ -471,6 +482,7 @@ describe("NVIDIA NVENC", () => {
             qsv: [],
             amf: [],
             videotoolbox: [],
+            mediacodec: [],
           },
         },
         0,
@@ -668,6 +680,7 @@ describe("Windows の QSV・AMF", () => {
       qsv: ["h264"],
       amf: [],
       videotoolbox: [],
+      mediacodec: [],
       gpu: 1,
       cqp: [],
       amfTranscoding: [],
@@ -726,6 +739,114 @@ describe("Mac の VideoToolbox", () => {
   });
 });
 
+describe("Android の MediaCodec", () => {
+  const M: HwWay = {
+    device: "mediacodec",
+    kind: "mediacodec",
+    codecName: "c2.qti.avc.encoder",
+  };
+  const picture = { height: 720, smooth: false };
+
+  test("録画はエンコーダを名前で開き、表のビットレートを VBR で渡す。H.264 は High", () => {
+    const args = hwArgs(M, "h264", picture);
+    expect(args.device).toEqual([]);
+    expect(args.filter).toEqual(["format=nv12"]);
+    expect(args.encoder).toEqual([
+      "h264_mediacodec",
+      "-ndk_codec",
+      "1",
+      "-codec_name",
+      "c2.qti.avc.encoder",
+      "-profile:v",
+      "high",
+      "-bitrate_mode",
+      "vbr",
+      "-b:v",
+      String(hwBitrate("h264", picture)),
+      "-g",
+      "250",
+    ]);
+    const hevc = hwArgs(
+      { ...M, codecName: "c2.qti.hevc.encoder" },
+      "hevc",
+      picture,
+    ).encoder;
+    expect(hevc.slice(0, 5)).toEqual([
+      "hevc_mediacodec",
+      "-ndk_codec",
+      "1",
+      "-codec_name",
+      "c2.qti.hevc.encoder",
+    ]);
+    expect(hevc).not.toContain("-profile:v");
+  });
+
+  test("名前が無ければ引数を作らない (MIME で選ぶとソフトウェアのエンコーダを開くことがある)", () => {
+    expect(() =>
+      hwArgs({ device: "mediacodec", kind: "mediacodec" }, "h264"),
+    ).toThrow();
+  });
+
+  test("ライブは VBR、段を下げたら上限を持たないので CBR で段の値", () => {
+    const bps = hwBitrate("h264", { height: 1080, smooth: true });
+    const live = liveHwArgs({ way: M, full: false }, "h264");
+    expect(live.input).toEqual([]);
+    expect(live.filter).toEqual(["format=nv12"]);
+    expect(live.encoder.join(" ")).toBe(
+      `h264_mediacodec -ndk_codec 1 -codec_name c2.qti.avc.encoder -profile:v high -bitrate_mode vbr -b:v ${bps}`,
+    );
+    const capped = liveHwArgs({ way: M, full: false }, "h264", {
+      height: 540,
+      bps: 2_000_000,
+    });
+    expect(capped.encoder.join(" ")).toBe(
+      "h264_mediacodec -ndk_codec 1 -codec_name c2.qti.avc.encoder -profile:v high -bitrate_mode cbr -b:v 2000000",
+    );
+  });
+
+  test("hwChain は試しのエンコードが通った名前を方式に添える", () => {
+    const device: HwDevice = {
+      ...A,
+      path: "mediacodec",
+      label: "mediacodec (Android)",
+      vaapi: [],
+      mediacodec: ["hevc", "h264"],
+      mediacodecNames: {
+        hevc: "c2.exynos.hevc.encoder",
+        h264: "c2.exynos.h264.encoder",
+      },
+    };
+    expect(hwChain("hevc", {}, 0, [device])).toEqual([
+      {
+        device: "mediacodec",
+        kind: "mediacodec",
+        codecName: "c2.exynos.hevc.encoder",
+      },
+    ]);
+    expect(liveHw("h264", {}, 0, [device])).toEqual({
+      way: {
+        device: "mediacodec",
+        kind: "mediacodec",
+        codecName: "c2.exynos.h264.encoder",
+      },
+      full: false,
+    });
+    expect(hwChain("av1", {}, 0, [device])).toEqual([]);
+  });
+
+  test("アプリが渡した名前を読む。知らないコーデック・使わない文字・2 つ目は捨てる", () => {
+    expect(parseMediacodecEncoders("")).toEqual({});
+    expect(
+      parseMediacodecEncoders(
+        "h264=c2.qti.avc.encoder, hevc = OMX.qcom.video.encoder.hevc ,vp9=c2.qti.vp9.encoder,av1=bad name,h264=c2.other.avc.encoder,broken",
+      ),
+    ).toEqual({
+      h264: "c2.qti.avc.encoder",
+      hevc: "OMX.qcom.video.encoder.hevc",
+    });
+  });
+});
+
 describe("H.265 (GPU でだけ)", () => {
   const H: HwDevice = {
     ...A,
@@ -740,6 +861,7 @@ describe("H.265 (GPU でだけ)", () => {
     qsv: [],
     amf: [],
     videotoolbox: [],
+    mediacodec: [],
     cqp: [],
     amfTranscoding: [],
     qsvSystem: [],
@@ -754,6 +876,7 @@ describe("H.265 (GPU でだけ)", () => {
     qsv: [],
     amf: [],
     videotoolbox: [],
+    mediacodec: [],
     gpu: 0,
   };
 
