@@ -74,17 +74,27 @@ describe("偽 ffmpeg の「そろうまで終えない」目印", () => {
           },
         },
       );
+    const before = Date.now();
     const first = encode("av1");
     // 偽 ffmpeg のエンコード (0.8 秒) より長く遅らせる
     await Bun.sleep(1500);
     const second = encode("h264");
     expect([await first.exited, await second.exited]).toEqual([0, 0]);
+    const after = Date.now();
 
+    // 落ちたときに、残った時刻とテストから見た時刻をそのまま出す
+    const text = readFileSync(spans, "utf8");
     const at = (kind: string) =>
-      readFileSync(spans, "utf8")
+      text
         .split("\n")
         .filter((line) => line.startsWith(`${kind}\t`))
         .map((line) => Number(line.split("\t")[1]));
-    expect(Math.max(...at("start"))).toBeLessThan(Math.min(...at("end")));
+    const [start, end] = [at("start"), at("end")];
+    const report = `before=${before} after=${after}\n${text}`;
+    // 時刻はテストから見た起動から終了までの間に入る。Ubuntu 26.04 の `date +%s%3N` は最大 0.9 秒ずれた
+    expect(
+      [...start, ...end].every((t) => before <= t && t <= after) ? "" : report,
+    ).toBe("");
+    expect(Math.max(...start) < Math.min(...end) ? "" : report).toBe("");
   });
 });
