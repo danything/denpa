@@ -417,6 +417,123 @@ public class It930xDeviceTests
         while (tuner.Output.Read(drained, 0, drained.Length) > 0) { }
     }
 
+    /// <summary>
+    /// **エージェントを止めるとき (It930xDevice.Shutdown) は、選局を離すより先に、入力を閉じてから読み出しを止める。** 閉じたときの溢れを記録に出し、
+    /// それからは開かない。あとで選局を離しても (TunerPool.CloseAll)、閉じた機材には書かない
+    /// </summary>
+    [Test]
+    public async Task 止めるときは選局を離す前に入力を閉じてから読み出しを止め_それからは開かない()
+    {
+        var (usb, _, _) = Fake();
+        byte[] packet = [It930xBridge.SyncBytes[0], 0x01, 0x00, 0x10, .. new byte[184]];
+        usb.TsSource = () => packet;
+        var opens = 0;
+        var tuner = new It930xTuner("test", 0, () =>
+        {
+            opens++;
+            return Open(usb, "9-60", new FakeClock());
+        }, () => It930xDevice.CloseIfIdle("9-60", TimeSpan.Zero));
+        tuner.Tune(ChannelTable.Parse("T27")!);
+        var buffer = new byte[188];
+        var got = 0;
+        while (got < buffer.Length) got += tuner.Output.Read(buffer, got, buffer.Length - got);
+
+        // Program.cs の ApplicationStopping と同じく、選局を返さないまま止める
+        It930xDevice.Shutdown(port => port == "9-60");
+        List<string> log;
+        lock (usb.Log) log = [.. usb.Log];
+        var disabled = log.LastIndexOf("W DA4C=00");
+        var stopped = log.IndexOf("TS 閉じる");
+        await Assert.That(disabled).IsGreaterThan(-1);
+        await Assert.That(stopped).IsGreaterThan(disabled);
+        await Assert.That(log.Skip(disabled).Take(stopped - disabled)).DoesNotContain("W DA4C=01");
+        await Assert.That(log[^1]).IsEqualTo("W D8C3=01");
+        var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-60")).ToList();
+        await Assert.That(lines.Any(text => text.Contains("TS の入力を閉じました (全体の溢れ (0xDA39) 0、入力ごとの溢れ (0xDA57・0xDA8B〜) 0 0 0 0 0)"))).IsTrue();
+
+        // あとで選局を離しても、閉じた機材の受信機には書かない
+        tuner.Dispose();
+        int written;
+        lock (usb.Log) written = usb.Log.Count;
+        await Assert.That(written).IsEqualTo(log.Count);
+        // 止めたあとは開き直さない
+        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!));
+        await Assert.That(error.Message).Contains("エージェントを止めている");
+        await Assert.That(opens).IsEqualTo(2);
+        lock (usb.Log) written = usb.Log.Count;
+        await Assert.That(written).IsEqualTo(log.Count);
+    }
+
+    /// <summary>
+    /// **閉じるときに入力を閉じられなかったら、受信機をスリープにして電源を切ってから読み出しを止める。** 入力が開いたままなら、TS が入らなくなるまで読み続ける
+    /// </summary>
+    [Test]
+    public async Task 入力を閉じられなければ_受信機をスリープにして電源を切ってから読み出しを止める()
+    {
+        var (usb, _, _) = Fake();
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-61", new FakeClock()), () => It930xDevice.CloseIfIdle("9-61", TimeSpan.Zero));
+        tuner.Tune(ChannelTable.Parse("T27")!);
+        int before;
+        lock (usb.Log) before = usb.Log.Count;
+        // 入力 0 を閉じる書き込みに応答しない (It930xException)
+        usb.OnNote = line =>
+        {
+            if (line == "W DA4C=00") usb.Silent = 1;
+        };
+        It930xDevice.Shutdown(port => port == "9-61");
+        List<string> log;
+        lock (usb.Log) log = [.. usb.Log.Skip(before)];
+        var stopped = log.IndexOf("TS 閉じる");
+        var slept = log.FindIndex(line => line.StartsWith("I2C W", StringComparison.Ordinal));
+        var powerOff = log.IndexOf("W D8C3=01");
+        await Assert.That(slept).IsGreaterThan(-1);
+        await Assert.That(powerOff).IsGreaterThan(slept);
+        await Assert.That(stopped).IsGreaterThan(powerOff);
+        // 読み出しを止めたあとには書かない (スリープと電源は済んでいる)
+        await Assert.That(log.Skip(stopped + 1).Any(line => line.StartsWith('W') || line.StartsWith("I2C", StringComparison.Ordinal))).IsFalse();
+        var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-61")).ToList();
+        await Assert.That(lines.Any(text => text.Contains("TS の入力を閉じられなかったので"))).IsTrue();
+        tuner.Dispose();
+    }
+
+    /// <summary>
+    /// **EP 0x84 の読み出しが IOException でない例外で終わっても、入力を全部閉じる** (スレッドごと落ちて、入力を開けたまま読む側がいなくならない)
+    /// </summary>
+    [Test]
+    public async Task EP_0x84_の読み出しが_IOException_でない例外で終わっても入力を全部閉じる()
+    {
+        var (usb, _, _) = Fake();
+        using var fail = new ManualResetEventSlim();
+        usb.TsSource = () => fail.IsSet ? throw new InvalidOperationException("分ける処理の不具合") : null;
+        var device = Open(usb, "9-62", new FakeClock());
+        try
+        {
+            device.Frontend(0);
+            int opened;
+            lock (usb.Log) opened = usb.Log.LastIndexOf("W DA5A=1F");
+            fail.Set();
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            List<string> after;
+            do
+            {
+                Thread.Sleep(5);
+                lock (usb.Log) after = [.. usb.Log.Skip(opened + 1).Where(TsRouteWrite)];
+            }
+            while (after.Count < 7 && DateTime.UtcNow < deadline);
+            await Assert.That(device.Faulted).IsTrue();
+            await Assert.That(after).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+
+            // 読み出しが失敗した機材では、TS のバッファを捨てても入力を開け直さない (--tune)
+            device.FlushTs();
+            lock (usb.Log) after = [.. usb.Log.Skip(opened + 1).Where(TsRouteWrite)];
+            await Assert.That(after).DoesNotContain("W DA4C=01");
+        }
+        finally
+        {
+            device.Release();
+        }
+    }
+
     [Test]
     public async Task EP_0x84_の読み出しが失敗したら_返されるのを待たずに入力を全部閉じる()
     {
