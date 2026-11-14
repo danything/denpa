@@ -10,7 +10,11 @@ import {
   stream,
 } from "@danything/arib/synth";
 
-import { headVideo, recordedBroadcast } from "./recorded-broadcast";
+import {
+  headVideo,
+  recordedBroadcast,
+  UNDECIDED_WAIT,
+} from "./recorded-broadcast";
 
 /**
  * **録画の放送のコーデック** (`recorded-broadcast.ts`)。TS の録画は先頭の PMT の映像で、TS で送る 4K の局 (HEVC) を見分ける。
@@ -76,11 +80,17 @@ describe("録画の放送のコーデック (recordedBroadcast)", () => {
     expect(recordedBroadcast(recording(head(0x24)), SERVICE + 1)).toBe("mpeg2");
   });
 
-  test("PMT がまだ無かった録画は覚えず、書き足されたら読み直す", () => {
+  test("PMT がまだ無かった録画は、少し置いてから読み直す", () => {
     const path = recording(filler(5));
-    expect(recordedBroadcast(path, SERVICE)).toBe("mpeg2");
+    expect(recordedBroadcast(path, SERVICE, 1_000)).toBe("mpeg2");
     writeFileSync(path, stream(filler(5), head(0x24)));
-    expect(recordedBroadcast(path, SERVICE)).toBe("hevc");
+    // 間を置かずに開き直しても読まない
+    expect(recordedBroadcast(path, SERVICE, 1_000 + UNDECIDED_WAIT - 1)).toBe(
+      "mpeg2",
+    );
+    expect(recordedBroadcast(path, SERVICE, 1_000 + UNDECIDED_WAIT)).toBe(
+      "hevc",
+    );
   });
 
   test("読んで決まった答えは覚える (同じ録画は読み直さない)", () => {

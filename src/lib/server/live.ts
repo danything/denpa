@@ -4020,6 +4020,8 @@ export function chaseForm(
   asked: Pick<ChaseAsked, "codec" | "raw" | "rung" | "playable">,
   transport: Transport,
   broadcast: BroadcastCodec,
+  /** GPU で出せるかの引き方 (`rungCodec`)。テストで差し替えるときだけ渡す */
+  pick?: Parameters<typeof rungCodec>[2],
 ): { codec: StreamCodec; raw: boolean; rung: Rung; copy: boolean } {
   const lowered = asked.rung !== 0 && !asked.raw;
   if (broadcast === "mpeg2" && transport === "ts")
@@ -4034,7 +4036,7 @@ export function chaseForm(
   return {
     codec:
       asked.codec === "hevc"
-        ? liveRungCodec(asked.playable, "hevc")
+        ? liveRungCodec(asked.playable, "hevc", pick)
         : asked.codec,
     raw: false,
     rung: asked.rung,
