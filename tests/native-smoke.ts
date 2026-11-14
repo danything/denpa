@@ -495,62 +495,67 @@ if (found.devices.length === 0) {
 
 /*
  * Android: アプリが渡したハードウェアのエンコーダの名前 (`MEDIACODEC_ENCODERS`。エミュレータでは空) を出したうえで、
- * ソフトウェアのエンコーダの名前を渡したことにして探し直す。名前で `mediacodec` の方式になり、
+ * ソフトウェアの c2.android の H.264 のエンコーダの名前を渡したことにして探し直す。名前で `mediacodec` の方式になり、
  * その名前を ffmpeg に渡して、録画とライブの引数で放送に似せた素材をエンコードできるかを見る。
- * 放送に似せた素材は、どの API のエミュレータにもある H.264 だけで流す (ソフトウェアのエンコーダは遅く、エミュレータの時間を延ばさないため)
+ * 放送に似せた素材は、どの API のエミュレータにもある H.264 だけで流す (ソフトウェアのエンコーダは遅く、エミュレータの時間を延ばさないため)。
+ *
+ * **API 29 のエミュレータでは、名前でエンコーダを開けない** (AMediaCodec_createCodecByName が c2.android も OMX.google も返さず、
+ * MIME の種類で選ぶと開ける。原因は確かめていない)。そこでは方式が 0 になり、ソフトウェアに戻ることだけを見る
  */
 if (android) {
   console.log(`MEDIACODEC_ENCODERS=${config.mediacodecEncoders}`);
   const given = config.mediacodecEncoders;
-  // H.264 のソフトウェアのエンコーダは、Codec2 のもの (c2.android) を先に、通らなければ OMX のもの (Android 10 に残っている) を試す
-  let way: ReturnType<typeof hwChain>[number] | undefined;
-  for (const name of [softwareMediacodec.h264, "OMX.google.h264.encoder"]) {
-    config.mediacodecEncoders = `h264=${name}`;
-    const soft = await probe();
-    console.log(`${name}: ${soft.message}`);
-    const found = hwChain("h264", {})[0];
-    if (found?.kind === "mediacodec" && found.codecName === name) {
-      way = found;
-      break;
-    }
+  const sdk = Number(
+    Bun.spawnSync(["getprop", "ro.build.version.sdk"]).stdout.toString().trim(),
+  );
+  config.mediacodecEncoders = `h264=${softwareMediacodec.h264}`;
+  const soft = await probe();
+  console.log(soft.message);
+  const way = hwChain("h264", {})[0];
+  if (way === undefined && sdk < 30) {
+    if (liveHw("h264", {}) !== null)
+      throw new Error("名前で開けないのに H.264 の方式が残っています");
+    console.log(`h264 on mediacodec: cannot open by name on API ${sdk}`);
+  } else {
+    if (way?.kind !== "mediacodec" || way.codecName !== softwareMediacodec.h264)
+      throw new Error(
+        `名前を渡した H.264 が MediaCodec の方式になりません (API ${sdk})`,
+      );
+    const hw = hwArgs(way, "h264");
+    await ff(
+      "-i",
+      at("in.ts"),
+      "-vf",
+      ["bwdif", ...hw.filter].join(","),
+      "-c:v",
+      ...hw.encoder,
+      "-an",
+      "-f",
+      "matroska",
+      at("mediacodec-h264.mkv"),
+    );
+    const live = liveHwArgs({ way, full: false }, "h264", {
+      height: 540,
+      bps: 2_000_000,
+    });
+    await ff(
+      "-i",
+      at("in.ts"),
+      "-vf",
+      ["bwdif=mode=send_frame", "scale=-2:540", ...live.filter].join(","),
+      "-c:v",
+      ...live.encoder,
+      "-g",
+      "30",
+      "-an",
+      "-f",
+      "mp4",
+      "-movflags",
+      "frag_keyframe+empty_moov+default_base_moof",
+      at("mediacodec-live.mp4"),
+    );
+    console.log("h264 on mediacodec: ok");
   }
-  if (way === undefined)
-    throw new Error("名前を渡した H.264 が MediaCodec の方式になりません");
-  const hw = hwArgs(way, "h264");
-  await ff(
-    "-i",
-    at("in.ts"),
-    "-vf",
-    ["bwdif", ...hw.filter].join(","),
-    "-c:v",
-    ...hw.encoder,
-    "-an",
-    "-f",
-    "matroska",
-    at("mediacodec-h264.mkv"),
-  );
-  const live = liveHwArgs({ way, full: false }, "h264", {
-    height: 540,
-    bps: 2_000_000,
-  });
-  await ff(
-    "-i",
-    at("in.ts"),
-    "-vf",
-    ["bwdif=mode=send_frame", "scale=-2:540", ...live.filter].join(","),
-    "-c:v",
-    ...live.encoder,
-    "-g",
-    "30",
-    "-an",
-    "-f",
-    "mp4",
-    "-movflags",
-    "frag_keyframe+empty_moov+default_base_moof",
-    at("mediacodec-live.mp4"),
-  );
-  console.log(`${way.codecName}: ok`);
-  console.log("h264 on mediacodec: ok");
   config.mediacodecEncoders = given;
   await probe();
 }

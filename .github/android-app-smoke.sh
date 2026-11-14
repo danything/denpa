@@ -295,7 +295,11 @@ cat "$logs/ffmpeg-smoke-stderr.txt" >&2
 test "$code" = 0
 # 終了コードだけでなく、最後まで流れたかも見る (ffprobe は 10 種類のファイル)
 test "$(grep -cE '^ffprobe .+: ok$' "$logs/ffmpeg-smoke.txt")" = 10
-for line in "ffmpeg: ok" "h264_mediacodec: ok" "no GPU: software encoding: ok" "h264 on mediacodec: ok" "side output closes when ffmpeg fails: ok"; do
+# MediaCodec のエンコーダを名前で選んでエンコードできるか。API 29 は名前で開けないので、開けずにソフトウェアに戻ることを見る (tests/native-smoke.ts)
+sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+by_name="h264 on mediacodec: ok"
+if [ "$sdk" -lt 30 ] && grep -qxF "h264 on mediacodec: cannot open by name on API $sdk" "$logs/ffmpeg-smoke.txt"; then by_name="h264 on mediacodec: cannot open by name on API $sdk"; fi
+for line in "ffmpeg: ok" "h264_mediacodec: ok" "no GPU: software encoding: ok" "$by_name" "side output closes when ffmpeg fails: ok"; do
   grep -qxF "$line" "$logs/ffmpeg-smoke.txt" || { echo "native-smoke の出力に「$line」がありません" >&2; exit 1; }
 done
 # ffmpeg・ffprobe の SELinux の拒否は記録に残す。実行そのものを断られたら止める
