@@ -151,6 +151,11 @@ export type Notice =
       type: "tuned";
       channelType: string;
       channel: string;
+      /**
+       * 受けた局 (`TuneCommand.serviceId`)。ライブの選局の答えだけに付き、追っかけには無い。画面は、別の局への選局が
+       * 受けられたと分かってからデータ放送を閉じる (`components/player/data-receive.ts` の `tunedCloses`)
+       */
+      serviceId?: number;
       /** MSE に渡す codecs 文字列。エンコード方式から決まる */
       codecs: string;
       /**

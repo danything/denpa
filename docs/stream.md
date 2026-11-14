@@ -1050,8 +1050,8 @@ channel:
 // 音声だけ (選局だけ。rung を 1〜3 にすると音声は 96k)
 { "type": "tune", "channelType": "GR", "channel": "T27", "serviceId": 1, "codec": "audio", "rung": 3 }
 
-// サーバ → 画面。tuned に、いまの段 (rung) とサーバが選んだコーデック (codec) が入る
-{ "type": "tuned", "channelType": "GR", "channel": "T27", "codec": "hevc", "codecs": "video/mp4; codecs=\"hvc1.1.6.L123.B0,mp4a.40.2\"", "raw": false, "rung": 2, "audio": "0:both", "audios": [] }
+// サーバ → 画面。tuned に、受けた局 (serviceId。ライブだけ)、いまの段 (rung)、サーバが選んだコーデック (codec) が入る
+{ "type": "tuned", "channelType": "GR", "channel": "T27", "serviceId": 1, "codec": "hevc", "codecs": "video/mp4; codecs=\"hvc1.1.6.L123.B0,mp4a.40.2\"", "raw": false, "rung": 2, "audio": "0:both", "audios": [] }
 // 枠が埋まっていて下げられなかったとき (tuned の rung はリクエストより高い)
 { "type": "notice", "message": "サーバが混んでいるため、画質を下げられませんでした" }
 // 2 秒ごとか、塊を捨てた・バッファが動いたとき。dropped は前の pace からの数、speed はエンコードしない経路と測れるまでは null
@@ -1687,6 +1687,9 @@ bml.destroy();
 - **別の局へ移ったら閉じる** (`data-receive.ts` の `closesData`。文書の `epgTune` で移ったときも)。テレビは選局すると次の局の入口から始め、
   d は押されていない。開いたままにしていた頃は、次の局の入口にも出す操作の d を届けていて (`knock`)、選局しただけでメニューまで開いた。
   自動で受信する端末は、次の局の入口に自動起動の指定があれば裏で動かす ([自動で受信する端末](#自動で受信する端末))。同じ局のリクエストし直しと、追っかけから同じ局へ戻ったときは閉じない
+  - 閉じるのは、サーバが選局を受けた答え (`tuned` の `serviceId`) が届いたとき (`closingOnTune`・`tunedCloses`)。答えを待つ間は前の局のデータ放送を出したままで、
+    受信のリクエストだけ選局の指示より先にやめる。サーバが断ったら (復号できない局の `error`) 閉じずに受信のリクエストを戻し、エンジンも前の局のまま作り直さない (`dataChannel`)。
+    リクエストした時点で閉じていた頃は、断られると前の局を受信したまま、データ放送だけが閉じていた
 - **出すまでは透明にしておく** (`opacity`)。入口の文書はほぼ白紙のまま自分で `invisible` を外してくるので、本体が揃う
   (データ取得中が下りる) まで映像のままにする。`visibility` では隠せない。エンジンは描く要素ごとに BML の `visibility` を写すので、
   子の visible が親の hidden を打ち消す

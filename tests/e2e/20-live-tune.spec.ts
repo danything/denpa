@@ -665,6 +665,78 @@ test.describe("ライブ視聴", () => {
   });
 
   /*
+   * **サーバが選局を断ったら、データ放送は前の局のまま。**
+   *
+   * 閉じるのはサーバが選局を受けたとき (`tuned`。`data-receive.ts` の `tunedCloses`)。リクエストした時点で閉じていた頃は、
+   * 断られると (復号できない局の `error`) 前の局を受信したまま、データ放送だけが閉じていた。
+   * 偽の放送に復号できない局は無いので、ライブの WebSocket の間に入り、2 つ目の局への選局の指示をサーバへ渡さずに `error` を返す
+   */
+  test("サーバが選局を断ったら、データ放送を閉じない", async ({ page }) => {
+    let refuse: number | null = null;
+    await page.routeWebSocket(/\/api\/live\/socket/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((message) => {
+        if (typeof message === "string" && refuse !== null) {
+          const command = JSON.parse(message) as {
+            type: string;
+            serviceId?: number;
+          };
+          if (command.type === "tune" && command.serviceId === refuse) {
+            // 0x40 が制御。中身は 9 バイト目から JSON (stream.md#websocket-プロトコル)
+            const body = Buffer.from(
+              JSON.stringify({ type: "error", message: "受信できない局です" }),
+            );
+            const frame = Buffer.alloc(9 + body.length);
+            frame[0] = 0x40;
+            body.copy(frame, 9);
+            ws.send(frame);
+            return;
+          }
+        }
+        server.send(message);
+      });
+    });
+
+    await goto(page, "/live");
+    const channels = page.getByTestId("live-channel");
+    await expect(channels.first()).toBeVisible();
+    if ((await channels.count()) < 2) test.skip();
+    const first = await channels.nth(0).getAttribute("data-service");
+    const second = Number(await channels.nth(1).getAttribute("data-service"));
+    expect(String(second)).not.toBe(first);
+
+    await channels.nth(0).click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    const overlay = page.getByTestId("live-data");
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-data-button").click();
+    await expect(overlay).toHaveAttribute("data-state", "ready", {
+      timeout: 15_000,
+    });
+    expect(await overlay.getAttribute("data-for")).toMatch(
+      new RegExp(`/${first}$`),
+    );
+
+    refuse = second;
+    await channels.nth(1).click();
+    await expect(page.getByTestId("live-status")).toContainText(
+      "受信できない局です",
+    );
+    // 開いたまま、前の局のエンジンのまま (作り直さない)
+    await expect(overlay).toHaveAttribute("data-open", "true");
+    await expect(overlay).toHaveAttribute("data-state", "ready");
+    expect(await overlay.getAttribute("data-for")).toMatch(
+      new RegExp(`/${first}$`),
+    );
+
+    // 受けられれば閉じる
+    refuse = null;
+    await channels.nth(1).click();
+    await expect(overlay).toHaveAttribute("data-open", "false");
+    await expect(overlay).toHaveAttribute("data-state", "off");
+  });
+
+  /*
    * **渡す前に 1 局へ絞る。**
    *
    * ffmpeg は名指しした局を `-probesize` のぶん読む間に見つけられなければ、
