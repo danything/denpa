@@ -460,7 +460,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task バージョンの問い合わせに応答が無ければ_時間切れで断り_やり直さない()
+    public async Task バージョンの問い合わせに応答が無ければ_1_回だけ送り直し_それでも無ければ時間切れで断る()
     {
         var usb = new FakeSianoUsb();
         usb.Mute.Add(SianoMessage.Version);
@@ -468,8 +468,20 @@ public class SianoTests
         var started = Stopwatch.StartNew();
         var error = Assert.Throws<SianoSilentException>(() => device.Start());
         await Assert.That(error.Message).Contains("バージョンの問い合わせ");
-        await Assert.That(started.ElapsedMilliseconds).IsGreaterThanOrEqualTo(SianoFake.Fast.ResponseMs - 20);
-        await Assert.That(usb.Numbers()).IsEqualTo("668");
+        await Assert.That(started.ElapsedMilliseconds).IsGreaterThanOrEqualTo(SianoFake.Fast.VersionRetryMs + SianoFake.Fast.ResponseMs - 20);
+        await Assert.That(usb.Numbers()).IsEqualTo("668 668");
+    }
+
+    [Test]
+    public async Task 開き直して最初の問い合わせを機材が捨てても_送り直した問い合わせで開ける()
+    {
+        // issue #2755: 開き直したあと、1 回目のバージョンの問い合わせに応答が無かった
+        var usb = new FakeSianoUsb { Mode = 6, Modes = 0x40 };
+        usb.DropFirst.Add(SianoMessage.Version);
+        using var device = SianoFake.Device(usb);
+        device.Start();
+        await Assert.That(device.Version!.Ready).IsTrue();
+        await Assert.That(usb.Numbers()).IsEqualTo("668 668");
     }
 
     [Test]
