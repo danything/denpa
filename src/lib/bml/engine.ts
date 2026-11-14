@@ -22,6 +22,8 @@ import type {
 } from "@danything/arib/bml-protocol";
 import { ascii, u16 } from "@danything/arib/bytes";
 
+import { autoStarts } from "#lib/ts/data-auto-start.js";
+
 import {
   type BmlIp,
   type BrowserHost,
@@ -539,14 +541,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   /**
    * 入口を始めてよいか。開いていれば始める。開いていなければ、入口の部品に自動起動の指定
-   * (`auto_start_flag`) があるときだけ始める。テレビは選局したら入口を裏で動かす (`opened` の説明)
+   * (`auto_start_flag`。`ts/data-auto-start.ts` の `autoStarts`) があるときだけ始める。テレビは選局したら入口を裏で動かす (`opened` の説明)
    */
   private mayStart(): boolean {
     if (this.options.opened?.() !== false) return true;
-    return (
-      this.resources.pmt.get(STARTUP_COMPONENT)?.bxmlInfo?.entryPointInfo
-        ?.autoStartFlag === true
-    );
+    return autoStarts(this.resources.pmt.values());
   }
 
   /** 今の文書の残り (待っているイベント・タイマー・続き) を捨てる。文書を替える前に同期で */
@@ -1241,7 +1240,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   /**
-   * 外のアプリを開けるか。**開く前 (常に受信しているだけ) は開けない。** 画面が開く前の起動を断るので、
+   * 外のアプリを開けるか。**開く前 (自動で受信しているだけ) は開けない。** 画面が開く前の起動を断るので、
    * 問い合わせに 1 と答えると、文書は起動を求めたまま返らなくなる
    */
   private appable(): boolean {

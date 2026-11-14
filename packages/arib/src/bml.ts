@@ -140,8 +140,10 @@ export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
 /**
  * PMT から ES を並べる。**部品タグ (component_tag) を持たない ES は数に入れない。**
  * データ放送は「何番の部品か」でしか物を指せないので、番号の無いものは指しようがない。
+ *
+ * `BmlDecoder` の外からも使う。denpa のライブは、カルーセルをデコードする前に入口の部品の自動起動の指定をこれで読む
  */
-function parsePmt(section: Uint8Array): ComponentPMT[] {
+export function parsePmt(section: Uint8Array): ComponentPMT[] {
   const components: ComponentPMT[] = [];
   for (const [streamType, pid, info] of pmtStreams(section)) {
     let componentId: number | undefined;

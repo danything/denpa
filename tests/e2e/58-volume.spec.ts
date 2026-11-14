@@ -663,11 +663,11 @@ test.describe("指の端末の音のボタン", () => {
     await page.keyboard.press("ArrowRight");
     await expect(volume).toHaveValue("100");
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByTestId("live-data-receive")).toBeFocused();
+    await expect(page.getByTestId("live-ambient")).toBeFocused();
     await expect(volume).toHaveValue("100");
     // つまみは行の幅いっぱいの横のカプセルで、高さ 44px (ほかの行と同じ幅)
     const slider = (await volume.boundingBox())!;
-    const row = (await page.getByTestId("live-data-receive").boundingBox())!;
+    const row = (await page.getByTestId("live-ambient").boundingBox())!;
     expect(Math.abs(slider.width - row.width)).toBeLessThan(2);
     expect(slider.height).toBeGreaterThanOrEqual(43.5);
 

@@ -4,6 +4,7 @@
   import Menu from "../Menu.svelte";
   import ControlButton from "./ControlButton.svelte";
   import { stageMenu } from "./controls.svelte";
+  import { hold } from "./hold";
   import Icon from "./Icon.svelte";
   import { BACK, FORWARD, SETTINGS } from "./icons";
   import type {
@@ -147,6 +148,7 @@
     onclick={() => {
       if (item.disabled !== true) item.toggle();
     }}
+    {@attach item.hold !== undefined && hold(item.hold)}
   >
     <Icon icon={item.icon} />
     <span class="label"

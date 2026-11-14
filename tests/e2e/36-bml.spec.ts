@@ -10,6 +10,7 @@ import {
   fakeDataBroadcast,
   feedCaption,
   feedData,
+  feedNotice,
   goto,
   holdCaptions,
   holdMedia,
@@ -242,36 +243,71 @@ test.describe("データ放送のエンジン", () => {
 });
 
 /**
- * **データ放送を常に受信する端末** (ライブの再生の設定。`data-receive.ts`)。
+ * **データ放送を自動で受信する端末** (ライブのデータ放送のボタン (d) の長押し。`data-receive.ts`)。
  *
- * 受信するのと開くのは別のこと。受信していると、開く前から入口の文書を裏で動かし、文書が自分で出したものは
- * テレビと同じく映像に重ねる (番組からの誘導・自動で出る画面)。**リモコンを出すのは開いたときだけ**で、
- * d (開く操作) を届けるのも開いたときだけ
+ * 受信するのと開くのは別のこと。自動で受信する端末は、入口に自動起動の指定がある局でだけ開く前から受信して入口の文書を
+ * 裏で動かし、文書が自分で出したものはテレビと同じく映像に重ねる (番組からの誘導・自動で出る画面)。指定は
+ * サーバが PMT を読んで知らせる (`Notice` の `autoStart`)。**リモコンを出すのは開いたときだけ**で、
+ * d (開く操作) を届けるのも開いたときだけ。
+ *
+ * 偽の放送の PMT にはデータ放送が載っていない (指定の無い局)。サーバは `autoStart: false` を知らせ、
+ * 画面は受信をリクエストしない。指定のある局は、その通知を手で流して作る
  */
-test.describe("データ放送を常に受信する端末", () => {
-  /** 常に受信をオンにした端末で開き、サーバへ送ったデータ放送の指示を控える */
+test.describe("データ放送を自動で受信する端末", () => {
+  /** 自動で受信をオンにした端末で開き、サーバへ送ったデータ放送の指示と、届いた `autoStart` を控える */
   async function prepareReceiving(page: Page): Promise<void> {
     await prepare(page);
     await page.addInitScript(() => {
       localStorage.setItem("player-data-always", "1");
-      const seen = window as unknown as { __data: unknown[] };
+      const seen = window as unknown as {
+        __data: unknown[];
+        __autoStart: boolean[];
+      };
       seen.__data = [];
+      seen.__autoStart = [];
       const send = WebSocket.prototype.send;
       WebSocket.prototype.send = function (payload) {
         if (typeof payload === "string" && payload.includes('"data"'))
           seen.__data.push(JSON.parse(payload));
         send.call(this, payload);
       };
+      // サーバからの制御の通知 (0x40 + 時刻 8 バイト + JSON) のうち `autoStart`
+      const Original = window.WebSocket;
+      window.WebSocket = class extends Original {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols);
+          this.addEventListener("message", (event: MessageEvent) => {
+            if (!(event.data instanceof ArrayBuffer)) return;
+            const bytes = new Uint8Array(event.data);
+            if (bytes[0] !== 0x40) return;
+            const notice = JSON.parse(
+              new TextDecoder().decode(bytes.subarray(9)),
+            ) as { type: string; on?: boolean };
+            if (notice.type === "autoStart")
+              seen.__autoStart.push(notice.on === true);
+          });
+        }
+      };
     });
   }
   const asked = (page: Page) =>
     page.evaluate(() => (window as unknown as { __data: unknown[] }).__data);
+  const told = (page: Page) =>
+    page.evaluate(
+      () => (window as unknown as { __autoStart: boolean[] }).__autoStart,
+    );
 
-  /** 局を選ぶだけ (d は押さない)。エンジンが立つまで */
+  /** 局を選ぶだけ (d は押さない)。サーバが PMT を読んで、指定が無いと知らせるまで */
   async function tuneOnly(page: Page): Promise<void> {
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
     await expect(page.getByTestId("live-title")).toBeVisible();
+    await expect.poll(() => told(page), { timeout: 15_000 }).toContain(false);
+  }
+
+  /** 入口に自動起動の指定がある局にする (サーバの通知を流す)。エンジンが立つまで */
+  async function flagged(page: Page): Promise<void> {
+    await feedNotice(page, [{ type: "autoStart", on: true }]);
     await expect(page.getByTestId("live-data")).toHaveAttribute(
       "data-state",
       "ready",
@@ -279,11 +315,29 @@ test.describe("データ放送を常に受信する端末", () => {
     );
   }
 
-  test("開く前から受信して、文書が出したものを重ねる。リモコンと d は開いてから", async ({
+  test("指定の無い局は、自動で受信していても d を押すまでリクエストしない", async ({
     page,
   }) => {
     await prepareReceiving(page);
     await tuneOnly(page);
+    const overlay = page.getByTestId("live-data");
+    await page.waitForTimeout(1_000);
+    expect(await asked(page)).toEqual([]);
+    await expect(overlay).toHaveAttribute("data-state", "off");
+    // d はいつもどおり効く
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-data-button").click();
+    await expect(overlay).toHaveAttribute("data-open", "true");
+    await expect.poll(() => asked(page)).toEqual([{ type: "data", on: true }]);
+  });
+
+  test("指定のある局は開く前から受信して、文書が出したものを重ねる。リモコンと d は開いてから", async ({
+    page,
+  }) => {
+    await prepareReceiving(page);
+    await tuneOnly(page);
+    expect(await asked(page)).toEqual([]);
+    await flagged(page);
     const overlay = page.getByTestId("live-data");
     await expect(overlay).toHaveAttribute("data-open", "false");
     expect(await asked(page)).toEqual([{ type: "data", on: true }]);
@@ -316,22 +370,24 @@ test.describe("データ放送を常に受信する端末", () => {
     expect(await asked(page)).toEqual([{ type: "data", on: true }]);
   });
 
-  test("閉じてもエンジンは残して入口へ戻る。設定を切ると受信をやめる", async ({
+  test("閉じてもエンジンは残して入口へ戻る。d の右クリックで切ると受信をやめ、Shift+D で戻す", async ({
     page,
   }) => {
     await prepareReceiving(page);
     await tuneOnly(page);
+    await flagged(page);
     const overlay = page.getByTestId("live-data");
+    const button = page.getByTestId("live-data-button");
     // d を聞かない文書。画面の d はデータ放送を閉じる
     await feed(page, "");
     await expect(overlay).toHaveAttribute("data-showing", "true", {
       timeout: 10_000,
     });
     await wakeControls(page, "live-frame");
-    await page.getByTestId("live-data-button").click();
+    await button.click();
     await expect(page.getByTestId("live-remote")).toBeVisible();
     await wakeControls(page, "live-frame");
-    await page.getByTestId("live-data-button").click();
+    await button.click();
     await expect(overlay).toHaveAttribute("data-open", "false");
     await expect(page.getByTestId("live-remote")).toBeHidden();
     // 受信したまま (サーバに off を送らない)。入口から出直して、また出てくる
@@ -341,18 +397,28 @@ test.describe("データ放送を常に受信する端末", () => {
     });
     expect(await asked(page)).toEqual([{ type: "data", on: true }]);
 
-    // 読み直しても覚えている (端末ごと)
-    await page.reload();
-    await expect(overlay).toHaveAttribute("data-state", "ready", {
-      timeout: 15_000,
-    });
+    // オンの間はボタンに印 (「A」) を付け、名前でも言う。⚙ に行は無い
+    await expect(button.locator(".ov-mark")).toHaveText("A");
+    await expect(button).toHaveAttribute(
+      "aria-label",
+      "データ放送を出す (自動で受信)",
+    );
     await wakeControls(page, "live-frame");
     await page.getByTestId("live-settings").click();
-    const row = page.getByTestId("live-data-receive");
-    await expect(row).toHaveAttribute("aria-checked", "true");
-    // 切ると畳んで、サーバにも伝える
-    await row.click();
-    await expect(row).toHaveAttribute("aria-checked", "false");
+    await expect(page.getByTestId("live-settings-menu")).toBeVisible();
+    await expect(page.getByTestId("live-data-receive")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("live-settings-menu")).toBeHidden();
+
+    // 右クリック (マウスの長押し) で切ると、畳んでサーバにも伝える。開きはしない
+    await wakeControls(page, "live-frame");
+    await button.click({ button: "right" });
+    await expect(page.getByTestId("live-data-receive-note")).toHaveText(
+      "データ放送を自動で受信しません",
+    );
+    await expect(button.locator(".ov-mark")).toHaveCount(0);
+    await expect(button).toHaveAttribute("aria-label", "データ放送を出す");
+    await expect(overlay).toHaveAttribute("data-open", "false");
     await expect(overlay).toHaveAttribute("data-state", "off");
     expect(await asked(page)).toEqual([
       { type: "data", on: true },
@@ -361,11 +427,65 @@ test.describe("データ放送を常に受信する端末", () => {
     expect(
       await page.evaluate(() => localStorage.getItem("player-data-always")),
     ).toBe("0");
+
+    // Shift+D でも切り替わる。指定のある局なのでまたリクエストする
+    await page.locator("body").press("Shift+D");
+    await expect(page.getByTestId("live-data-receive-note")).toHaveText(
+      "データ放送を自動で受信します",
+    );
+    await expect(button.locator(".ov-mark")).toHaveText("A");
+    await expect
+      .poll(() => asked(page))
+      .toEqual([
+        { type: "data", on: true },
+        { type: "data", on: false },
+        { type: "data", on: true },
+      ]);
+  });
+
+  test("指で長押しすると切り替え、押したときの開く操作はしない", async ({
+    page,
+  }) => {
+    await prepare(page);
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    const overlay = page.getByTestId("live-data");
+    const button = page.getByTestId("live-data-button");
+    await wakeControls(page, "live-frame");
+    await expect(button.locator(".ov-mark")).toHaveCount(0);
+    const box = (await button.boundingBox())!;
+    const at = {
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: box.x + box.width / 2,
+      clientY: box.y + box.height / 2,
+    };
+    await button.dispatchEvent("pointerdown", at);
+    await page.waitForTimeout(700);
+    await button.dispatchEvent("pointerup", at);
+    await button.dispatchEvent("click", at);
+    await expect(page.getByTestId("live-data-receive-note")).toHaveText(
+      "データ放送を自動で受信します",
+    );
+    await expect(button.locator(".ov-mark")).toHaveText("A");
+    await expect(overlay).toHaveAttribute("data-open", "false");
+    expect(
+      await page.evaluate(() => localStorage.getItem("player-data-always")),
+    ).toBe("1");
+    // 短く押すのは今までどおり開く
+    await wakeControls(page, "live-frame");
+    await button.dispatchEvent("pointerdown", at);
+    await button.dispatchEvent("pointerup", at);
+    await button.dispatchEvent("click", at);
+    await expect(overlay).toHaveAttribute("data-open", "true");
   });
 
   test("自動起動の指定が無い入口は、開くまで始めない", async ({ page }) => {
     await prepareReceiving(page);
     await tuneOnly(page);
+    // サーバの通知では指定があるが、届いた PMT の入口には無い (番組の途中で変わった)。エンジンは PMT の指定に従う
+    await flagged(page);
     const overlay = page.getByTestId("live-data");
     await feedData(
       page,

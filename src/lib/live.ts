@@ -123,7 +123,7 @@ export const CHANNEL = {
    * 0x20 (字幕の画像) と 0x21 (字幕を消す) は以前の取り決めで、もう使わない (番号は空けておく)
    */
   captionText: 0x22,
-  /** データ放送 (JSON。`packages/arib/src/bml-protocol.ts` の `ResponseMessage`)。リクエストされてから送る (`Command` の `data`。押されたか、常に受信する端末) */
+  /** データ放送 (JSON。`packages/arib/src/bml-protocol.ts` の `ResponseMessage`)。リクエストされてから送る (`Command` の `data`。押されたか、自動で受信する端末が自動起動の指定のある局を映しているとき) */
   data: 0x30,
   /** 制御。**ここだけ双方向**で、中身は JSON */
   control: 0x40,
@@ -137,6 +137,16 @@ export const CHANNEL = {
  * 画面が持っている局の一覧からは決められない。選局のたびに現物を送る
  */
 export type Notice =
+  | {
+      /**
+       * いまの局の PMT で、データ放送の入口の部品に自動起動の指定 (`auto_start_flag`) があるか (`server/databroadcast.ts` の `AutoStartWatch`)。
+       * PMT を読んで決まったときと変わったとき、途中から入ってきた人には入ったときに来る。カルーセルは読まない。
+       * 自動で受信する端末は、これが true の局でだけ受信をリクエストする (`components/player/data-receive.ts` の `wantsData`)。
+       * 4K の局 (TLV) と追っかけでは来ない
+       */
+      type: "autoStart";
+      on: boolean;
+    }
   | {
       type: "tuned";
       channelType: string;

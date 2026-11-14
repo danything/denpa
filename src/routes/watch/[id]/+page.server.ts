@@ -12,6 +12,7 @@ import { encodedFile } from "#lib/server/library.js";
 import { sidecarPaths } from "#lib/server/metadata.js";
 import { relative } from "#lib/server/paths.js";
 import { rulerOf } from "#lib/server/playback.js";
+import { recordedAutoStart } from "#lib/server/recorded-bml.js";
 import { recordingFromForm, tsHeadOf } from "#lib/server/recording.js";
 import { lastEncodeError, recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
@@ -31,7 +32,7 @@ interface WatchRow extends Recording {
   encode_error: string | null;
 }
 
-export function load({ params, url }) {
+export async function load({ params, url }) {
   const id = parseId(params.id);
   if (id === null) error(404, "録画が見つかりません");
 
@@ -57,6 +58,14 @@ export function load({ params, url }) {
    */
   const hasData =
     encoded !== null && existsSync(sidecarPaths(encoded).dataBroadcast);
+  /*
+   * 入口に自動起動の指定があるか (変化ログの PMT。`recordedAutoStart`)。データ放送を自動で受信する端末は、これが true の録画でだけ
+   * 開く前から変化ログを取得する。指定の無い録画の入口は d を押すまで始まらない
+   */
+  const autoStart =
+    encoded !== null &&
+    hasData &&
+    (await recordedAutoStart(sidecarPaths(encoded).dataBroadcast));
 
   // 続きの位置は元の TS の物差しで覚えている。この画面の物差し (`playbackPlan` の `axis`) に直して渡す
   if (recording.resume_ms !== null) {
@@ -85,6 +94,8 @@ export function load({ params, url }) {
     playable: encoded !== null || ts !== null,
     broadcast: { postalCode, prefecture },
     hasData,
+    /** データ放送の入口に自動起動の指定があるか (データ放送を自動で受信する端末が、開く前から受信するか) */
+    autoStart,
     /** 元の TS の先頭の放送時刻 (unix ms)。データ放送の時計 (`clock`) を再生位置から出すのに使う */
     head: tsHeadOf(recording),
     /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */

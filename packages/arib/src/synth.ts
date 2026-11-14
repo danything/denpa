@@ -588,17 +588,25 @@ export function programMap(
 /**
  * データ符号化方式記述子 (0xFD)。**BML が載っている ES の目印。**
  *
- * 中身は「入口かどうか」と、カルーセルの回 (dataEventId)。
- * 既定は地上波 (0x0C) の入口つき・960x540
+ * 中身は「入口かどうか」と、自動起動の指定 (`autoStart`。入口のときだけ)、カルーセルの回 (dataEventId)。
+ * 既定は地上波 (0x0C) の入口つき・自動起動つき・960x540
  */
 export function bxmlDescriptor(
-  options: { dataComponentId?: number; entryPoint?: boolean } = {},
+  options: {
+    dataComponentId?: number;
+    entryPoint?: boolean;
+    autoStart?: boolean;
+  } = {},
 ): number[] {
-  const { dataComponentId = 0x0c, entryPoint = true } = options;
+  const {
+    dataComponentId = 0x0c,
+    entryPoint = true,
+    autoStart = true,
+  } = options;
   const body = [
     ...be(dataComponentId),
     // 伝送方式 00 / 入口 / 自動起動 / 解像度 0011 (960x540)
-    ...(entryPoint ? [0x33, 0x70] : [0x00]),
+    ...(entryPoint ? [autoStart ? 0x33 : 0x23, 0x70] : [0x00]),
     0xf8, // dataEventId 0xF / event_section_flag
     0xa0, // 即時取得あり / 蓄積不可 / 起動優先
   ];

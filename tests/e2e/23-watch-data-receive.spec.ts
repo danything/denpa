@@ -15,7 +15,7 @@ import {
 import { hideBroken, placeDataBroadcast, sharedDataBroadcast } from "./watch";
 
 /**
- * 録画を観る画面 (`/watch/<id>`) のデータ放送のうち、常に受信する端末と、小窓の中の字幕。
+ * 録画を観る画面 (`/watch/<id>`) のデータ放送のうち、自動で受信する端末と、小窓の中の字幕。
  *
  * 23-watch-data から分けた (どれも録画を録るので、1 本では 1 分を超える)。偽の録画には
  * データ放送が無いので、どのテストもサイドカー (`.bml.jsonl`) を置いてから出す
@@ -25,12 +25,12 @@ import { hideBroken, placeDataBroadcast, sharedDataBroadcast } from "./watch";
 const withDataBroadcast = sharedDataBroadcast();
 
 /**
- * **データ放送を常に受信する端末** (再生の設定。ライブと同じ 1 つ。`data-receive.ts`)。ライブは 36-bml。
+ * **データ放送を自動で受信する端末** (⚙ の「データ放送」の行の長押し。ライブと同じ 1 つ。`data-receive.ts`)。ライブは 36-bml。
  *
- * 録画でも、開く前から変化ログを流して入口の文書を裏で動かし、文書が自分で出したものは映像に重ねる。
+ * 録画でも、入口に自動起動の指定があれば (変化ログの PMT) 開く前から変化ログを流して入口の文書を裏で動かし、文書が自分で出したものは映像に重ねる。
  * リモコン・キー・d は開いてから。文書からの選局は、開くまでは黙って断る (知らせるのは開いているときだけ)
  */
-test.describe("録画のデータ放送を常に受信する端末", () => {
+test.describe("録画のデータ放送を自動で受信する端末", () => {
   /** 読み込んだときに選局を試し (開く前なので断られる)、d と押されたキーを数える文書 */
   const SCRIPTED = [
     "<script><![CDATA[",
@@ -94,7 +94,7 @@ test.describe("録画のデータ放送を常に受信する端末", () => {
     await expect.poll(() => text(page)).toBe("r:NaN|d1|k21,");
   });
 
-  test("閉じてもエンジンは残す。設定はライブと同じ 1 つで、切ると畳む", async ({
+  test("閉じてもエンジンは残す。行の右クリックで切ると畳み、設定はライブと同じ 1 つ", async ({
     page,
     request,
   }) => {
@@ -120,17 +120,73 @@ test.describe("録画のデータ放送を常に受信する端末", () => {
     await expect(page.getByTestId("live-remote")).toBeHidden();
     await expect(overlay).toHaveAttribute("data-state", "ready");
 
-    // ライブと同じ行。切ると畳む
+    // 「データ放送」の行に「(自動で受信)」と添える。行は 1 つだけ (前の「常に受信」の行は無い)
     await wakeControls(page, "watch-stage");
     await page.getByTestId("watch-settings").click();
-    const row = page.getByTestId("watch-data-receive");
-    await expect(row).toHaveAttribute("aria-checked", "true");
-    await row.click();
+    const row = page.getByTestId("watch-data");
+    await expect(row).toContainText("自動で受信");
+    await expect(page.getByTestId("watch-data-receive")).toHaveCount(0);
+    // 右クリック (マウスの長押し) で切ると畳む。開きはしない
+    await row.click({ button: "right" });
+    await expect(page.getByTestId("watch-data-receive-note")).toHaveText(
+      "データ放送を自動で受信しません",
+    );
+    await expect(row).not.toContainText("自動で受信");
     await expect(row).toHaveAttribute("aria-checked", "false");
     await expect(overlay).toHaveAttribute("data-state", "off");
     expect(
       await page.evaluate(() => localStorage.getItem("player-data-always")),
     ).toBe("0");
+  });
+
+  test("入口に自動起動の指定が無い録画は、自動で受信していても開くまで取得しない", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { id, libraryPath } = await recordOne(page, request);
+    placeDataBroadcast(libraryPath, undefined, false);
+    await page.addInitScript(() =>
+      localStorage.setItem("player-data-always", "1"),
+    );
+    const fetched: string[] = [];
+    page.on("request", (sent) => {
+      if (sent.url().includes(`/api/recordings/${id}/databroadcast`))
+        fetched.push(sent.url());
+    });
+    await goto(page, `/watch/${id}`);
+    const overlay = page.getByTestId("live-data");
+    await page.waitForTimeout(2_000);
+    await expect(overlay).toHaveAttribute("data-state", "off");
+    expect(fetched).toEqual([]);
+    // ⚙ の「データ放送」はいつもどおり効く (押したら取得する)
+    await wakeControls(page, "watch-stage");
+    await page.getByTestId("watch-settings").click();
+    await page.getByTestId("watch-data").click();
+    await expect(overlay).toHaveAttribute("data-state", "ready", {
+      timeout: 15_000,
+    });
+    expect(fetched).toHaveLength(1);
+  });
+
+  test("Shift+D で自動で受信するかを切り替える", async ({ page, request }) => {
+    test.setTimeout(180_000);
+    const id = await withDataBroadcast(page, request);
+    await goto(page, `/watch/${id}`);
+    const overlay = page.getByTestId("live-data");
+    await expect(overlay).toHaveAttribute("data-state", "off");
+    await page.locator("body").press("Shift+D");
+    await expect(page.getByTestId("watch-data-receive-note")).toHaveText(
+      "データ放送を自動で受信します",
+    );
+    // 指定のある録画なので、開く前から流す
+    await expect(overlay).toHaveAttribute("data-state", "ready", {
+      timeout: 15_000,
+    });
+    await expect(overlay).toHaveAttribute("data-open", "false");
+    expect(
+      await page.evaluate(() => localStorage.getItem("player-data-always")),
+    ).toBe("1");
   });
 });
 
