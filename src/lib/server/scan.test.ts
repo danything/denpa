@@ -591,9 +591,28 @@ describe("ケーブルの 4K の局 (TLV)", () => {
     expect("transport" in entry).toBe(false);
   });
 
-  test("MH-SDT が来なければ MH-SDT が無いと返す", async () => {
+  test("MH-SDT が来なくても、TLV-NIT と PLT で自分の TLV ストリームが分かれば、仮の局名で返す", async () => {
     const result = await readTlvServices(
       fromBytes(concatBytes([nit, ...plt, ...mpt]), true),
+      500,
+    );
+    expect(result.error).toBeNull();
+    expect(result.unnamed).toBe(true);
+    expect(result.services).toEqual([
+      {
+        serviceId: SERVICE,
+        serviceType: 1,
+        name: "名前の無い局 (161)",
+        networkId: ONID,
+        transportStreamId: TLV_STREAM,
+        remoteControlKeyId: null,
+      },
+    ]);
+  });
+
+  test("MH-SDT も PLT も来なければ MH-SDT が無いと返す", async () => {
+    const result = await readTlvServices(
+      fromBytes(concatBytes([nit, tlvPacket(0xff, [0, 0])]), true),
       500,
     );
     expect(result.services).toBeNull();

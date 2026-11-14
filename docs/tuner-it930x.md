@@ -274,4 +274,8 @@ denpa-agent --tune it930x:<USB のポート>:<受信機> QC26 --seconds 10 --ecm
 - `--decode` を付けても、TLV は復号しません (B-CAS のカードに MMT の ECM を渡さないため。`--ecm-test` だけが渡します)
 
 PX-MLT5PE と J:COM の回線で受けた QC26 (2026-11-11、先頭の 4 MB) は、TSMF の有効な TS が 1 本で、分割 TLV でした。MPT のアクセス制御記述子の CA_system_id は B-CAS と同じ `0x0005`、ECM の packet_id は `0xFFF1` で、
-映像と音声はどれも奇数の鍵でスクランブルされ、信号 (MPT・ECM・MH-EIT・MH-SDT・TLV-NIT) はスクランブルされていませんでした。カードが ECM に鍵を返すかは、まだ確かめていません。
+映像と音声はどれも奇数の鍵でスクランブルされ、信号 (MPT・ECM・MH-EIT・MH-SDT[other]・TLV-NIT) はスクランブルされていませんでした。カードが ECM に鍵を返すかは、まだ確かめていません。
+
+この 4 MB (0.9 秒) には、自分の TLV ストリームの局名を運ぶ MH-SDT[actual] がありませんでした。何秒おきに来るかは確かめていません。
+スキャンは MH-SDT[actual] を最大 60 秒待ち、来なければ TLV-NIT と PLT で自分の TLV ストリームを見つけて、「名前の無い局 (161)」のような仮の局名で局を入れます。
+スキャンの記録の行には「MH-SDT を受信できなかったため、局名は仮の名前です」と出ます。番組表の取得が MH-SDT[actual] を受信したら、放送の局名に書き換えます ([data.md](data.md))。

@@ -512,11 +512,16 @@ export class MmtTableStream {
  * TLV にはリモコン番号が無い (TLV-NIT に見当たらない) ので null。
  *
  * 局ごとの CA_system_id は、PLT から package (= service_id) の MPT を引き、そのアクセス制御記述子から読む (`caSystemIdsOf`)。
- * free_CA_mode は使わない。実機の BS4K は 0 なのに、映像と音声はスクランブルされていた
+ * free_CA_mode は使わない。実機の BS4K は 0 なのに、映像と音声はスクランブルされていた。
+ *
+ * MH-SDT[actual] が来なくても、自分の TLV ストリームは TLV-NIT と PLT で分かる (`ownStream`)。
+ * 実機のケーブルの BS4K (QC26) の 0.9 秒には、MH-SDT[other] はあったが MH-SDT[actual] は無かった。何秒おきに来るかは確かめていない
  */
 export class TlvServiceReader {
   private readonly tables = new MmtTableStream();
   private plt: Plt | null = null;
+  /** TLV-NIT[actual] の全部のセクションにあった TLV ストリーム (tlv_stream_id → ストリーム) */
+  private readonly streams = new Map<number, TlvNetworkStream>();
   /** package_id (= service_id) → MPT */
   private readonly mpts = new Map<number, Mpt>();
 
@@ -543,12 +548,31 @@ export class TlvServiceReader {
       else if (tableId === TABLE_MPT) {
         const mpt = parseMpt(table);
         if (mpt !== null) this.mpts.set(mpt.packageId, mpt);
-      } else if (tableId === TABLE_TLV_NIT_ACTUAL && this.network === null)
-        this.network = parseTlvNit(table);
-      else if (tableId === TABLE_MH_SDT_ACTUAL && this.transport === null)
+      } else if (tableId === TABLE_TLV_NIT_ACTUAL) {
+        const network = parseTlvNit(table);
+        if (network === null) continue;
+        this.network ??= network;
+        for (const stream of network.streams)
+          this.streams.set(stream.tlvStreamId, stream);
+      } else if (tableId === TABLE_MH_SDT_ACTUAL && this.transport === null)
         this.transport = parseMhSdt(table);
     }
     return this.complete;
+  }
+
+  /**
+   * 自分の TLV ストリーム。TLV-NIT[actual] のストリームのうち、PLT にある package (= service_id) をサービスリスト記述子に持つもの。
+   * TLV-NIT と PLT のどちらかが来ていない・当てはまるストリームが無ければ null
+   */
+  get ownStream(): TlvNetworkStream | null {
+    const packages = new Set(
+      (this.plt?.packages ?? []).map((entry) => entry.packageId),
+    );
+    if (packages.size === 0) return null;
+    for (const stream of this.streams.values())
+      if (stream.services.some((service) => packages.has(service.serviceId)))
+        return stream;
+    return null;
   }
 
   /** 録画の対象になる種類の局だけ (`psi.SERVICE_TYPES`)。揃うまでは空 */
