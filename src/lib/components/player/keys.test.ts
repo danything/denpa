@@ -53,6 +53,14 @@ describe("再生画面のキー", () => {
     expect(done).toEqual(["data-auto"]);
   });
 
+  test("Caps Lock の間も Shift+D で切り替え、Shift 無しの D では切り替えない", () => {
+    const { done, press } = harness();
+    // Caps Lock の間は、Shift 付きで "d"、Shift 無しで "D" が来る
+    expect(press("d", { shiftKey: true })).toBe(true);
+    expect(press("D")).toBe(false);
+    expect(done).toEqual(["data-auto"]);
+  });
+
   test("空白と k で再生/一時停止、左右で 10 秒", () => {
     const { done, press } = harness();
     expect(press(" ")).toBe(true);

@@ -64,13 +64,20 @@ export function playerKeys(
       m: actions.toggleMute,
       ArrowUp: stepVolume === undefined ? undefined : () => stepVolume(1),
       ArrowDown: stepVolume === undefined ? undefined : () => stepVolume(-1),
-      D: actions.toggleDataAuto,
     };
-    const run = map[event.key];
+    const run = isShiftD(event) ? actions.toggleDataAuto : map[event.key];
     if (run === undefined) return;
     event.preventDefault();
     run();
   };
+}
+
+/**
+ * Shift+D か (データ放送を自動で受信するかの切り替え。画面のキー操作と `hold.ts` で同じ)。字ではなく Shift で見る。
+ * Caps Lock の間は Shift 無しで `D`、Shift 付きで `d` が来るので、字で見ると d だけで切り替わり、Shift+D では切り替わらない
+ */
+export function isShiftD(event: KeyboardEvent): boolean {
+  return event.shiftKey && event.key.toLowerCase() === "d";
 }
 
 /**
