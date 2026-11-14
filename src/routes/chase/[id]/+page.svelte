@@ -79,10 +79,11 @@
 
   /** 運転中の注意 (互換モード。`drive-gate.svelte.ts`)。押すまで再生を始めない */
   const drive = driveGate();
-  // 開いた名前が家の中か (サーバが決める)。「自動」の形式をライブと同じ決め方で決める
+  // 開いた名前が家の中かと、その場でエンコードできるコーデック (サーバが決める)。「自動」とメニューをライブと同じ決め方で決める
   const player = livePlayer({
     confirm: drive.confirm,
     indoor: untrack(() => data.indoor),
+    liveCodecs: untrack(() => data.liveCodecs),
   });
   /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
   let video = $state<HTMLVideoElement | null>(null);
@@ -470,6 +471,7 @@
             codec={liveCodecs({
               icon: CODEC,
               choice: player.choice,
+              shown: player.shown,
               format: player.format,
               step: player.step,
               broadcast: player.broadcast,

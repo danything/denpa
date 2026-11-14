@@ -7,7 +7,7 @@ import { expect, goto, pickCodec, wakeControls } from "./helpers";
 /**
  * **ライブの貯め方を実時間で見る部品** (`50-live-pacing`・`51-live-gaps`)。
  *
- * 偽 ffmpeg に本物の AV1 の fMP4 を流させ (`stack.liveFmp4File`)、目印に書いた JSON で届き方を荒らす
+ * 偽 ffmpeg に本物の H.264 の fMP4 を流させ (`stack.liveFmp4File`)、目印に書いた JSON で届き方を荒らす
  * (`tests/fake/fmp4-loop.ts`)。MSE に入れて実際に再生し、`<video>` のバッファと途切れ (`waiting`) を数える。
  *
  * 実時間で流すので 1 本が 30 秒〜1 分かかる。**1 つのスペックに並べない** — CI の組 (`shards.json`) を 1 つだけ長くする
@@ -23,8 +23,12 @@ export async function watch(
   await goto(page, "/live");
   await page.getByTestId("live-channel").first().click();
   await expect(page.getByTestId("live-title")).toBeVisible();
+  /*
+   * 形式を選んでおく (自動のままだと、荒れた届き方で段を下げる)。GPU が無いので、メニューに並ぶエンコードするものは H.264
+   * (偽 ffmpeg は本物の H.264 の fMP4 を流す)
+   */
   await wakeControls(page, "live-frame");
-  await pickCodec(page, "live", "av1");
+  await pickCodec(page, "live", "h264");
   await expect
     .poll(
       () =>

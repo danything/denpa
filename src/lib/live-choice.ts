@@ -10,9 +10,10 @@ import { LIVE_CODECS, type LiveCodec } from "./live";
 
 /**
  * メニューで選んだもの。`auto` は端末と開いた場所 (家の中か) に合わせる (`autoCodec`)。
- * `raw` は放送のまま (MPEG-2 の局は MPEG-2、4K の局は HEVC。`BroadcastCodec`)。ライブは**端末ごとに覚える** (`LAST_COOKIE` の `choice`)
+ * `raw` は放送のまま (MPEG-2 の局は MPEG-2、4K の局は HEVC。`BroadcastCodec`)。エンコードするものはメニューに 1 つだけ並ぶ (`shownCodec`)。
+ * ライブは**端末ごとに覚える** (`LAST_COOKIE` の `choice`)
  */
-export type LiveChoice = "auto" | "av1" | "raw";
+export type LiveChoice = "auto" | LiveCodec | "raw";
 
 /** 実際にリクエストする形式。エンコードするもの (AV1・H.265・H.264) か、放送のまま (`raw`) */
 export type LiveFormat = LiveCodec | "raw";
@@ -35,10 +36,44 @@ export function broadcastFormat(broadcast: BroadcastCodec): LiveFormat {
 }
 
 /**
- * **メニューに並べないコーデック** (ライブ・追っかけ・録画の観る画面。テレビのアプリには `GET /api/playback/options` の `hidden` で渡す)。
- * 外すのはメニューだけで、AV1 を再生できない端末には自動で H.265 や H.264 を流す (サーバは今までどおり出す)
+ * **録画の観る画面のメニューに並べないコーデック** (`ts/playback.ts` の `codecChoices`)。外すのはメニューだけで、
+ * 自動は今までどおり選ぶ。ライブと追っかけのメニューは、サーバがその場でエンコードできるもので決める (`shownCodec`・`hiddenCodecs`)
  */
-export const HIDDEN_CODECS = ["h264", "hevc"] as const;
+export const WATCH_HIDDEN_CODECS = ["h264", "hevc"] as const;
+
+/**
+ * **ライブと追っかけのメニューに並べる、エンコードするコーデック (1 つだけ)。** サーバがその場でエンコードできる並び
+ * (`live`。`server/live.ts` の `liveRealtime`。AV1 → H.265 → H.264 のうち GPU でエンコードできるものと、ソフトウェアの H.264) の先頭から、
+ * この端末で再生できるもの (`plays`)。どれも再生できなければ先頭 (押すと代わりの形式に替えて断り書きを出す)。並びが空なら null。
+ * その画面で出せない形式 (追っかけ・互換モード・4K の局の H.265) は、呼ぶ側が `live` から外して渡す
+ */
+export function shownCodec(
+  live: readonly LiveCodec[],
+  plays: (codec: LiveCodec) => boolean,
+): LiveCodec | null {
+  return live.find(plays) ?? live[0] ?? null;
+}
+
+/**
+ * **テレビのアプリのメニューから外すもの** (`GET /api/playback/options` の `hidden`)。エンコードするコーデックのうち、
+ * サーバがその場でエンコードできる並び (`live`) の先頭以外。アプリは端末で再生できるかを見ずにこれを外す
+ */
+export function hiddenCodecs(live: readonly LiveCodec[]): LiveCodec[] {
+  return LIVE_CODECS.map((codec) => codec.id).filter((id) => id !== live[0]);
+}
+
+/**
+ * **覚えていた選択のうち、いま使うもの。** エンコードするものは、いまメニューに並んでいるもの (`shown`) と同じときだけ使い、
+ * 違えば自動として扱う (GPU が変わった・前のバージョンで選んだ・4K の局を開いた)。覚えた値は書き換えないので、また並べば選んだものに戻る
+ */
+export function keptChoice(
+  choice: LiveChoice,
+  shown: LiveCodec | null,
+): LiveChoice {
+  return choice === "auto" || choice === "raw" || choice === shown
+    ? choice
+    : "auto";
+}
 
 /** 形式の名前 (メニューと断り書き)。放送のまま (`raw`) は放送のコーデックの名前 */
 export function formatLabel(
@@ -52,10 +87,15 @@ export function formatLabel(
 
 /**
  * 覚えていた選択を読む。**知らない値・前の形式の cookie (`codec`・`raw` だけで `choice` が無い) は自動。**
- * メニューに並べない H.264・H.265 (`HIDDEN_CODECS`) を前に選んでいた端末も自動として扱う
+ * H.265・H.264 もそのまま読む。いまメニューに並んでいないものを自動として扱うのは `keptChoice`
  */
 export function readChoice(value: unknown): LiveChoice {
-  return value === "av1" || value === "raw" ? value : "auto";
+  return value === "av1" ||
+    value === "hevc" ||
+    value === "h264" ||
+    value === "raw"
+    ? value
+    : "auto";
 }
 
 /** エンコード済みのコーデック (録画の観る画面で選ぶもの)。並びは GPU でエンコードする順 (`HW_CODECS`) と同じ */

@@ -70,6 +70,8 @@ export const load: PageServerLoad = ({ params, url }) => {
     jikkyoNg: settings().jikkyoNg,
     /** 開いた名前が家の中か (`#lib/host.ts` の `indoorHost`)。「自動」の形式をライブと同じ決め方で画面が決める */
     indoor: viewing.indoor,
+    /** その場でエンコードできるコーデック (`viewing.viewingOptions`)。コーデックのメニューに並べる 1 つを画面が選ぶ */
+    liveCodecs: viewing.liveCodecs,
     /** 実況のチャンネルと先頭・終わりの放送時刻。古いところは過去ログ API、新しいところは NX-Jikkyo から取る */
     jikkyo: recordingJikkyo(rec),
   };

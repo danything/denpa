@@ -438,9 +438,9 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
     await expect(page.getByTestId("live-title")).toBeVisible();
-    // エンコードしたもの (AV1) では出る
+    // エンコードしたもの (H.264) では出る
     await wakeControls(page, "live-frame");
-    await pickCodec(page, "live", "av1");
+    await pickCodec(page, "live", "h264");
     await wakeControls(page, "live-frame");
     await expect(page.getByTestId("live-pip")).toBeVisible();
     await chooseRaw(page);

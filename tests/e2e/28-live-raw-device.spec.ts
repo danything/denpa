@@ -240,15 +240,16 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     await expect(page.getByTestId("live-codec")).toContainText("MPEG-2");
     await expect(page.getByTestId("live-codec")).not.toContainText("自動");
 
-    // AV1 に替えるとエンコードしたものになり、それも覚える
+    // H.264 に替えるとエンコードしたものになり、それも覚える (GPU が無いのでメニューに並ぶのは H.264)
     await wakeControls(page, "live-frame");
-    await pickCodec(page, "live", "av1");
+    await pickCodec(page, "live", "h264");
     await expect(page.getByTestId("live-raw")).toHaveCount(0, {
       timeout: 30_000,
     });
     await goto(page, "/live");
     await expect(page.getByTestId("live-title")).toBeVisible();
-    await expect(page.getByTestId("live-codec")).toContainText("AV1");
+    await expect(page.getByTestId("live-codec")).toContainText("H.264");
+    await expect(page.getByTestId("live-codec")).not.toContainText("自動");
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
   });
 });

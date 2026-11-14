@@ -754,8 +754,9 @@ test.describe("ライブ視聴", () => {
     await expect(page.getByTestId("live-controls")).toBeVisible();
     await openSettings(page, "live");
     await page.getByTestId("live-codec").click();
+    // どれも再生できなければ、その場でエンコードできるものの先頭 (GPU が無いので H.264) を並べる
     await expect(
-      page.locator('[data-testid="live-codec-option"][data-codec="av1"]'),
+      page.locator('[data-testid="live-codec-option"][data-codec="h264"]'),
     ).toBeVisible();
   });
 
