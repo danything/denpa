@@ -10,9 +10,9 @@ public class It930xDeviceTests
     private static readonly It930xModel Pe = It930x.Find(0x0511, 0x024E)!;
 
     /// <summary>PX-MLT5PE の割り当て (仕様書 1.2) のとおりに偽の復調器を並べた偽のブリッジ</summary>
-    private static (FakeIt930x Usb, FakeCxdBus Bus1, FakeCxdBus Bus3) Fake()
+    private static (FakeIt930x Usb, FakeCxdBus Bus1, FakeCxdBus Bus3) Fake(bool disposedThrows = false)
     {
-        var usb = new FakeIt930x();
+        var usb = new FakeIt930x { DisposedThrows = disposedThrows };
         var bus1 = new FakeCxdBus(0x6C, 0x64);
         var bus3 = new FakeCxdBus(0x65, 0x6C, 0x64);
         usb.I2c[1] = bus1;
@@ -713,6 +713,75 @@ public class It930xDeviceTests
         {
             tuner.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 給電を入れたあとの最初の書き込みで <paramref name="act"/> を呼ぶ (選局の途中で、止めるために機材を閉じる形を作る)。
+    /// <c>Shutdown</c> は選局が終わるのを待たないので、実機では別のスレッドから割り込む。偽物では同じスレッドで呼ぶ (ブリッジのロックは入れ直せる)
+    /// </summary>
+    private static void AfterLnbOn(FakeIt930x usb, Action act)
+    {
+        // 選局しているスレッドの書き込みだけを見る (EP 0x84 の読み出しのスレッドの読み書きは飛ばす)
+        var tuning = Environment.CurrentManagedThreadId;
+        var on = false;
+        usb.OnNote = line =>
+        {
+            if (Environment.CurrentManagedThreadId != tuning) return;
+            if (line == "W D8D3=01")
+            {
+                on = true;
+                return;
+            }
+            // 選局の書き込み (I2C) から。給電を入れたあとに溢れを読むのは、読めなくても続ける
+            if (!on || !line.StartsWith("I2C", StringComparison.Ordinal)) return;
+            usb.OnNote = null;
+            act();
+        };
+    }
+
+    /// <summary>
+    /// **選局が失敗したのと同じころに止めるために閉じられても、元の失敗を返し、閉じた機材には書かない**。
+    /// 閉じるときに給電を切れず、給電の要求が残っていると、選局の失敗の後始末が閉じた USB に給電の取り下げを書き、ObjectDisposedException で元の失敗が消えていた
+    /// </summary>
+    [Test]
+    public async Task 選局の失敗と同じころに止めるために閉じられても_元の失敗を返し_閉じた機材には書かない()
+    {
+        var (usb, _, _) = Fake(disposedThrows: true);
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-70", new FakeClock()), () => It930xDevice.CloseIfIdle("9-70", TimeSpan.Zero), "15v");
+        AfterLnbOn(usb, () =>
+        {
+            // 閉じるときに給電を切る書き込みに応答しない。給電の要求は残ったまま閉じる
+            usb.OnNote = line =>
+            {
+                if (line == "W D8D3=00") usb.Silent = 1;
+            };
+            It930xDevice.Shutdown(port => port == "9-70");
+            throw new IOException("選局の途中で応答がありません (偽物)");
+        });
+        // 閉じた USB に書けば ObjectDisposedException になる (偽物も UsbFsDevice と同じ)。元の失敗のまま返る
+        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS15:16625")!));
+        await Assert.That(error.Message).IsEqualTo("選局の途中で応答がありません (偽物)");
+        await Assert.That(usb.Disposed).IsTrue();
+        await Assert.That(tuner.Device!.LnbUsers).IsEqualTo(1);
+        // 給電を切ろうとしたのは閉じたときの 1 回だけ
+        await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01", "W D8D3=00" });
+        tuner.Dispose();
+    }
+
+    /// <summary>
+    /// **選局の途中で止めるために閉じられたら、閉じた USB に書いた失敗は止めたことが分かる文で返す** (ObjectDisposedException のまま返さない)。閉じた機材には書かない
+    /// </summary>
+    [Test]
+    public async Task 選局の途中で止めるために閉じられたら_止めたことが分かる失敗を返す()
+    {
+        var (usb, _, _) = Fake(disposedThrows: true);
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-71", new FakeClock()), () => It930xDevice.CloseIfIdle("9-71", TimeSpan.Zero), "15v");
+        AfterLnbOn(usb, () => It930xDevice.Shutdown(port => port == "9-71"));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS15:16625")!));
+        await Assert.That(error.Message).IsEqualTo("止めるので、選局の途中で PLEX PX-MLT5PE (9-71) を閉じました");
+        await Assert.That(error.InnerException).IsTypeOf<ObjectDisposedException>();
+        await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01", "W D8D3=00" });
+        tuner.Dispose();
     }
 
     [Test]

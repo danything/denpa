@@ -1927,6 +1927,8 @@ class Session {
         this.source === undefined
           ? this.channel
           : (this.channel.split("@")[0] ?? this.channel),
+      // 受けた局はライブの答えだけに載せる (追っかけには付けない)
+      ...(this.source === undefined ? { serviceId: this.serviceId } : {}),
       codecs: codecsFor(this.codec, this.hevcVideo ? "hevc" : "mpeg2"),
       codec: this.codec,
       raw: this.raw,
@@ -4531,6 +4533,7 @@ export function attend(connection: Connection): void {
             type: "tuned",
             channelType,
             channel,
+            serviceId,
             codecs: codecsFor(codec, broadcast),
             codec,
             raw,
