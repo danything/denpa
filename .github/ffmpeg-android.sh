@@ -1,3 +1,5 @@
+  # bzip2 か gzip かは tar が中身で見分ける (GNU tar も bsdtar も、ファイルから読むときは見分ける)
+  tar -xf "$work/src.tar" --strip-components=1
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
 # Android のアプリに入れる ffmpeg / ffprobe を NDK で組む (.github/workflows/android.yml)。
@@ -97,6 +99,18 @@ fetch_tar() {
   tar -x"$2" -f "$work/src.tar" --strip-components=1
   rm -f "$work/src.tar"
 }
+
+# x264 のソース。code.videolan.org に届かないときは、GitHub のミラー (mirror/x264。同じコミット) から取る。
+# 2026-11-14 に code.videolan.org へ繋がらず、Android の ffmpeg が組めなかった
+fetch_x264() {
+  if ! $CURL -o "$work/src.tar" "https://code.videolan.org/videolan/x264/-/archive/${X264_COMMIT}/x264-${X264_COMMIT}.tar.bz2"; then
+    echo "code.videolan.org から x264 を取れないので、GitHub のミラーから取ります" >&2
+    $CURL -o "$work/src.tar" "https://github.com/mirror/x264/archive/${X264_COMMIT}.tar.gz"
+  fi
+  # bzip2 か gzip かは tar が中身で見分ける (GNU tar も bsdtar も、ファイルから読むときは見分ける)
+  tar -xf "$work/src.tar" --strip-components=1
+  rm -f "$work/src.tar"
+}
 # この依存を組むか (引数で 1 つだけ頼まれたら、それだけ)。組み上がり (`.done`) があれば組まない
 want() { { [ -z "$only" ] || [ "$only" = "$1" ]; } && [ ! -e "$deps/$1/.done" ]; }
 
@@ -137,7 +151,7 @@ X264_COMMIT=31e19f92f00c7003fa115047ce50978bc98c3a0d
 if want x264; then
   rm -rf "$deps/x264"
   mkdir "$work/x264" && cd "$work/x264"
-  fetch_tar "https://code.videolan.org/videolan/x264/-/archive/${X264_COMMIT}/x264-${X264_COMMIT}.tar.bz2" j
+  fetch_x264
   CC="$cc" AR=llvm-ar RANLIB=llvm-ranlib STRIP=llvm-strip ./configure --prefix="$deps/x264" --host="$triple" \
     --sysroot="$tc/sysroot" --enable-static --enable-pic --disable-cli
   make -j"$jobs"
