@@ -1,4 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname } from "node:path";
 
 import {
@@ -79,7 +85,8 @@ test.describe("CM のチャプター", () => {
 });
 
 test.describe("コーデックを両方エンコードする", () => {
-  test.afterEach(async ({ request }) => {
+  test.afterEach(async ({ request, stack }) => {
+    rmSync(stack.encodeTogetherFile, { force: true });
     await setRecording(request);
   });
 
@@ -97,6 +104,8 @@ test.describe("コーデックを両方エンコードする", () => {
     test.setTimeout(180_000);
     await syncEpg(request);
     await setRecording(request, { codecs: ["av1", "h264"] });
+    // 偽 ffmpeg は 2 本そろって始まるまで終えない。2 本目の起動が遅れても重なりを時刻の差で見落とさない
+    writeFileSync(stack.encodeTogetherFile, "2");
 
     const programId = await reserveSoon(page, request, "BS");
     const row = page.locator(
