@@ -98,6 +98,7 @@ describe("譲った録画の中身", () => {
     record_to: 2000,
     deleted_at: null,
     ts_path,
+    program: 55,
   });
 
   test("4K の局の録画 (.mmts) は HEVC で開かせる。TS の録画は MPEG-2", () => {

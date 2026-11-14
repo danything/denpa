@@ -20,12 +20,12 @@
 import { eq } from "drizzle-orm";
 
 import type { YieldedRecording } from "#lib/live.js";
-import { recordedTransport } from "#lib/source.js";
 import type { Recording } from "#lib/types.js";
 
 import { orm } from "./db";
+import { recordedBroadcast } from "./recorded-broadcast";
 import { recordingUntil } from "./recorder";
-import { recordings } from "./schema";
+import { recordings, services } from "./schema";
 import { displayTitle } from "./title";
 import { type AgentTuner, recordingOf } from "./tuner";
 
@@ -68,13 +68,16 @@ export function recordingOn(
 const LOOKS = 5;
 const LOOK_WAIT = 300;
 
-/** 録画の行から、画面に渡す形式を作る。消された録画なら null */
+/**
+ * 録画の行から、画面に渡す形式を作る。消された録画なら null
+ * @param rec `program` は局の放送の番号 (ARIB のサービス ID)。局の行が無ければ null
+ */
 export function yieldedRecording(
   id: number,
   rec: Pick<
     Recording,
     "name" | "service_name" | "end_at" | "record_to" | "deleted_at" | "ts_path"
-  >,
+  > & { program: number | null },
 ): YieldedRecording | null {
   if (rec.deleted_at !== null) return null;
   return {
@@ -82,11 +85,14 @@ export function yieldedRecording(
     title: displayTitle(rec.name),
     serviceName: rec.service_name,
     endAt: recordingUntil(rec),
-    // 録っている元の録画の拡張子で分かる (4K の局は `.mmts`。`#lib/source.ts`)。追っかけをこの形式で開かせる
+    /*
+     * 4K の局は `.mmts` の拡張子で、TS で送る 4K の局は録画の PMT で分かる (`recordedBroadcast`)。追っかけをこの形式で開かせる。
+     * 録り始めたばかりで PMT をまだ読めなければ MPEG-2 で、追っかけを開くときにサーバが読み直す (`live.chaseForm`)
+     */
     broadcast:
-      rec.ts_path !== null && recordedTransport(rec.ts_path) === "tlv"
-        ? "hevc"
-        : "mpeg2",
+      rec.ts_path === null
+        ? "mpeg2"
+        : recordedBroadcast(rec.ts_path, rec.program ?? 0),
   };
 }
 
@@ -100,8 +106,10 @@ function lookup(id: number): YieldedRecording | null {
       record_to: recordings.record_to,
       deleted_at: recordings.deleted_at,
       ts_path: recordings.ts_path,
+      program: services.service_id,
     })
     .from(recordings)
+    .leftJoin(services, eq(services.id, recordings.service_id))
     .where(eq(recordings.id, id))
     .get();
   return rec === undefined ? null : yieldedRecording(id, rec);

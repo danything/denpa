@@ -125,6 +125,7 @@ import {
 import { MmtLive, type MmtOut } from "./live-mmt";
 import { tunerOf, yieldedTo } from "./live-yield";
 import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
+import { recordedBroadcast } from "./recorded-broadcast";
 import { recordingSize } from "./recording-io";
 import { programs, recordings, services } from "./schema";
 import { LastingScramble, mediaPids } from "./scramble";
@@ -1148,6 +1149,11 @@ const GPU_BUSY =
 const HEVC_GAVE_UP = "H.265 を GPU でエンコードできませんでした";
 /** 段を下げた AV1 を GPU でエンコードできずに降りたときの文面 (`Session.runEncode`) */
 const AV1_GAVE_UP = "AV1 を GPU でエンコードできませんでした";
+/**
+ * 追っかけの段を下げた H.265 を、開いたあとで 4K の局の録画と分かって止めたときの文面 (`Session.runEncode`)。
+ * 画面は「。ほかの形式に切り替えました」を足して出し、H.265 を外してリクエストし直す
+ */
+const UHD_RUNG_HEVC = "4K の録画は H.265 のまま画質を下げられません";
 /** H.265 をリクエストされたが出せないので H.264 にしたときの断り書き (`attend`) */
 const HEVC_TO_H264 =
   "H.265 を GPU でエンコードできないため、H.264 に切り替えました";
@@ -1536,6 +1542,11 @@ class Session {
      * HEVC の詰め替えに替えない (`readsVideo`)。替えるセッションと共有しないように、目印も分ける (`key`)
      */
     readonly keepsTs = false,
+    /**
+     * 開く前に分かっている放送の映像のコーデック。TS の局は PMT を読んだら決め直す (`runEncode`)。
+     * 追っかけは録画の PMT を読んでから開くので (`recorded-broadcast.ts`)、TS で送る 4K の局の録画は初めから `hevc`
+     */
+    private readonly broadcast: BroadcastCodec = broadcastCodec(transport),
   ) {
     this.list = new TrackList(program);
     this.id = key(
@@ -1904,10 +1915,11 @@ class Session {
           ? null
           : this.track;
       /*
-       * 放送の映像のコーデック。TS の局は MPEG-2 として始め、PMT を読んだら決め直す (下の `peekPmt`)。
+       * 放送の映像のコーデック。開く前に分かっているもの (ライブの TS の局は MPEG-2、追っかけは録画の PMT から) で始め、
+       * PMT を読んだら決め直す (下の `peekPmt`)。
        * TS で送る 4K の局 (`hevc`) は、`hevc` なら映像を写し、ほかは 4K の局と同じく縮めて SDR にする
        */
-      let video = broadcastCodec(this.transport);
+      let video = this.broadcast;
       /** PMT を読むか (`peekPmt`)。4K の局 (`tlv`) の入力は TS ではなく、字幕も映像も別に読む */
       const peeks =
         this.program > 0 && this.transport === "ts" && this.codec !== "audio";
@@ -2012,15 +2024,32 @@ class Session {
           }
           // HTTP のライブは、段を下げた H.265 の形式が決まるまで応答ヘッダを待っている (`readsVideo`)
           this.formatKnown();
-          if (this.stopped || noGpu()) {
+          /*
+           * **追っかけの段を下げた H.265 は、映像を写さない** (写すと段を見ずに 4K の HEVC を送る)。追っかけは開く前に録画の PMT を読んで
+           * 4K の局と分かれば H.265 を選ばない (`chaseForm`) ので、ここへ来るのは録り始めたばかりで開く前に PMT を読めなかったときだけ。
+           * 選局の答えを出し直す仕組みは持たないので止める。画面は段を下げた H.265 が降りたときと同じく、H.265 を外して
+           * 同じ段をリクエストし直す (`live-player.svelte.ts` の `rungOff`)
+           */
+          const lateHevc =
+            this.source !== undefined &&
+            this.rung !== 0 &&
+            copiesVideo(this.transport, video, this.codec);
+          if (this.stopped || noGpu() || lateHevc) {
             /*
              * 追っかけは読み元を閉じる (`stream.chunks` が cancel する)。返ってきた `head.stream` はまだ読み始めて
              * いないので、閉じても中の finally が走らない。元の `read` を閉じる。読みかけがあると
              * それが届くまで閉じられないので、待たない
              */
             if (feed === null) void read.return(undefined);
+            if (this.stopped) return;
+            if (lateHevc)
+              this.died(
+                label,
+                "開いたあとで録画の映像が HEVC と分かり、段を下げた H.265 を写せない",
+                UHD_RUNG_HEVC,
+              );
             // GPU でしかエンコードできない形式 (H.265・段を下げた AV1) を、GPU で出せない
-            if (!this.stopped)
+            else
               this.died(
                 label,
                 `${this.codec} を GPU でエンコードできない`,
@@ -3569,9 +3598,13 @@ export function chaseStream(
       recordingDone(rec.id),
     );
   }
-  // 4K の局の録画の H.265 は放送の HEVC の詰め替え (`openChase`)。エンコードしないので枠を使わない
-  const whole = codec === "hevc" && recordedTransport(source.path) === "tlv";
-  const release = whole ? () => undefined : holdTranscode();
+  // 4K の局の録画の H.265 は放送の HEVC を写す (`chaseForm`)。エンコードしないので枠を使わない
+  const { copy } = chaseForm(
+    { codec, raw: false, rung, playable: [codec] },
+    recordedTransport(source.path),
+    recordedBroadcast(source.path, aribServiceId(source.rec.service_id)),
+  );
+  const release = copy ? () => undefined : holdTranscode();
   if (release === null) return "busy";
   return sessionStream((viewer, hold) =>
     openChase(
@@ -3971,6 +4004,42 @@ export function liveForm<C extends StreamCodec>(
       : { codec, raw: false, downgraded: false };
   const downgraded = codec === "hevc" && !raw && !hevc();
   return { codec: downgraded ? "h264" : codec, raw, downgraded };
+}
+
+/**
+ * **追っかけで送る形式と段** (`openChase`・`chaseStream`)。`broadcast` は録画の放送のコーデック (`recorded-broadcast.ts`)。
+ *
+ * - MPEG-2 の局の録画の H.265 は段 0 では作らない (`#lib/live.ts` の `LiveCodec`) ので H.264 にする。元の TS (`raw`) はそのまま
+ * - 4K の局の録画 (`.mmts` と、TS で送る 4K の局の `.m2ts`) の放送のまま (`raw`) と段 0 の `hevc` は、放送の HEVC を写す (`copy`)。
+ *   `.mmts` は詰め替え (`Session.runMmt`)、`.m2ts` は ffmpeg で写す (`copiesVideo`)。どちらも変換の枠を使わない。
+ *   `raw` で来るのは画面の WebSocket だけ (HTTP の `codec=raw` は元の録画を直に流す)
+ * - 4K の局の録画の段を下げた `hevc` は、H.265 にエンコードしないので `playable` から選び直す (`liveRungCodec`)。
+ *   HTTP は呼ぶ側が 4K の局の決め方で選んである (`viewing.askedFormat`)
+ */
+export function chaseForm(
+  asked: Pick<ChaseAsked, "codec" | "raw" | "rung" | "playable">,
+  transport: Transport,
+  broadcast: BroadcastCodec,
+): { codec: StreamCodec; raw: boolean; rung: Rung; copy: boolean } {
+  const lowered = asked.rung !== 0 && !asked.raw;
+  if (broadcast === "mpeg2" && transport === "ts")
+    return {
+      codec: asked.codec === "hevc" && !lowered ? "h264" : asked.codec,
+      raw: asked.raw,
+      rung: asked.raw ? 0 : asked.rung,
+      copy: false,
+    };
+  if (asked.raw || (asked.codec === "hevc" && !lowered))
+    return { codec: "hevc", raw: false, rung: 0, copy: true };
+  return {
+    codec:
+      asked.codec === "hevc"
+        ? liveRungCodec(asked.playable, "hevc")
+        : asked.codec,
+    raw: false,
+    rung: asked.rung,
+    copy: false,
+  };
 }
 
 /**
@@ -4515,27 +4584,16 @@ function openChase(
   /*
    * **4K の局の録画 (`.mmts`) は TS を経由しない** (`Session.transport`。ライブの 4K の局と同じ)。放送のままは放送の HEVC の詰め替えで
    * (`passthrough`。ffmpeg も枠も使わない)、エンコードするときは詰め替えた fMP4 を ffmpeg に渡す。
-   * TS の録画の H.265 は段 0 では作らない (`#lib/live.ts` の `LiveCodec`) ので H.264 にする
+   * TS で送る 4K の局の録画は、開く前に録画の PMT を読んで 4K の局として形式を決める (`recordedBroadcast`・`chaseForm`)
    */
   const transport = recordedTransport(path);
-  const uhd = transport === "tlv";
-  const lowered = asked.rung !== 0 && !asked.raw;
-  const codec: StreamCodec = !uhd
-    ? asked.codec === "hevc" && !lowered
-      ? "h264"
-      : asked.codec
-    : asked.raw
-      ? "hevc"
-      : // 4K の局の段を下げた変換は H.265 にしない (`liveRungCodec`。呼ぶ側は TS の録画の決め方で選んでいる)
-        lowered && asked.codec === "hevc"
-        ? liveRungCodec(asked.playable, "hevc")
-        : asked.codec;
-  const raw = asked.raw && !uhd;
-  const whole = uhd && codec === "hevc" && !lowered;
+  // ffmpeg に名指しさせる放送の番号。録画 TS は絞ってあるが、探させない理屈はライブと同じ
+  const program = aribServiceId(rec.service_id);
+  const broadcast = recordedBroadcast(path, program);
+  const { codec, raw, rung, copy } = chaseForm(asked, transport, broadcast);
   // 段を下げた追っかけも使う枠は 1 つ (下げないときと同じ)。コーデックは呼ぶ側が選んである (`rungCodec`)
-  const rung = raw || whole ? 0 : asked.rung;
   const release =
-    raw || whole ? (held ?? (() => undefined)) : (held ?? holdTranscode());
+    raw || copy ? (held ?? (() => undefined)) : (held ?? holdTranscode());
   if (release === null) return refuse(BUSY);
   /*
    * **畳んだら読むのをやめる** (`session.whenStopped` で立てる)。止めている間 (`hold`) に畳まれると、`followFile` は
@@ -4561,14 +4619,12 @@ function openChase(
 
   const tracks = audioTracks(parseAudios(rec));
   const audio = pickTrack(tracks, wanted);
-  // ffmpeg に名指しさせる放送の番号。録画 TS は絞ってあるが、探させない理屈はライブと同じ
-  const program = aribServiceId(rec.service_id);
 
   tell({
     type: "tuned",
     channelType: "chase",
     channel: String(rec.id),
-    codecs: codecsFor(codec, broadcastCodec(transport)),
+    codecs: codecsFor(codec, broadcast),
     codec,
     raw,
     rung,
@@ -4611,6 +4667,8 @@ function openChase(
       null,
       rung,
       transport,
+      false,
+      broadcast,
     );
   } catch (failure) {
     // 起こせなかった。取った枠は返す
@@ -4659,12 +4717,23 @@ function chaseSource(
 }
 
 /**
- * 追っかけで読む録画の伝送の形式 (`recordedTransport`)。HTTP の追っかけの `codec=raw` の Content-Type を決める
- * (TS は `video/mp2t`、4K の局は 1 局に絞った TLV の `application/x-arib-tlv`)。録画が無ければ TS
+ * 追っかけで読む録画の伝送の形式 (`recordedTransport`) と放送のコーデック (`recordedBroadcast`)。HTTP の追っかけが使う。
+ * 伝送の形式は `codec=raw` の Content-Type を決め (TS は `video/mp2t`、4K の局は 1 局に絞った TLV の `application/x-arib-tlv`)、
+ * 放送のコーデックは `auto` と段の選び方を決める (`viewing.askedFormat`)。録画が無ければ TS の MPEG-2
  */
-export function chaseTransport(recordingId: number): Transport {
+export function chaseMedia(recordingId: number): {
+  transport: Transport;
+  broadcast: BroadcastCodec;
+} {
   const source = chaseSource(recordingId);
-  return source === undefined ? "ts" : recordedTransport(source.path);
+  if (source === undefined) return { transport: "ts", broadcast: "mpeg2" };
+  return {
+    transport: recordedTransport(source.path),
+    broadcast: recordedBroadcast(
+      source.path,
+      aribServiceId(source.rec.service_id),
+    ),
+  };
 }
 
 /** もう書き足されないか。録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり */
