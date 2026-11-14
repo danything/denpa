@@ -222,7 +222,8 @@
                   <p>
                     使える GPU は Intel・AMD (VA-API)・NVIDIA (NVENC)・Rockchip
                     (MPP) です。Windows では Intel (QSV)・AMD (AMF)・NVIDIA
-                    (NVENC)、Mac では Apple (VideoToolbox)
+                    (NVENC)、Mac では Apple (VideoToolbox)、Android
+                    のアプリでは端末のハードウェアのエンコーダ (MediaCodec)
                     です。見つかれば自動で使います。
                   </p>
                   <p>

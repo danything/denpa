@@ -642,7 +642,7 @@ MPEG-2 をデコードできない端末のように画面が別の形式をリ�
 ### GPU でエンコードする
 
 設定の「録画」の「エンコード」（`/settings/recording#encoding`）のライブの列でそのコーデックのエンコーダに GPU を選んであれば、
-**GPU でエンコードする**（録画とは別に選ぶ。Intel・AMD の VA-API、NVIDIA の NVENC、Windows の Intel の QSV・AMD の AMF、Mac の VideoToolbox、Rockchip MPP。引数と決め方は
+**GPU でエンコードする**（録画とは別に選ぶ。Intel・AMD の VA-API、NVIDIA の NVENC、Windows の Intel の QSV・AMD の AMF、Mac の VideoToolbox、Android の MediaCodec、Rockchip MPP。引数と決め方は
 [encode.md「ライブは別に選んだエンコーダで GPU に載る」](encode.md#ライブは別に選んだエンコーダで-gpu-に載る)）。
 MPEG-2 を GPU でデコードできる環境ではデコードとインタレ解除も GPU に寄せる。`-fpsmax`・字幕の出口（`pipe:3`）・音声はそのまま通る。
 
@@ -1668,6 +1668,9 @@ bml.destroy();
 
 - **描く場所は毎回作り直す。** エンジンは渡された要素に Shadow DOM (`attachShadow`) を張る。Shadow DOM は外せないので、
   同じ要素を渡し直すと 2 度目でエラーになる。**局を変えたときも作り直す** (カルーセルも覚えるものも局ごと)
+- **別の局へ移ったら閉じる** (`data-receive.ts` の `closesData`。文書の `epgTune` で移ったときも)。テレビは選局すると次の局の入口から始め、
+  d は押されていない。開いたままにしていた頃は、次の局の入口にも出す操作の d を届けていて (`knock`)、選局しただけでメニューまで開いた。
+  常に受信する端末は、次の局の入口を自動起動の指定に従って裏で動かす ([常に受信する端末](#常に受信する端末))。同じ局のリクエストし直しと、追っかけから同じ局へ戻ったときは閉じない
 - **出すまでは透明にしておく** (`opacity`)。入口の文書はほぼ白紙のまま自分で `invisible` を外してくるので、本体が揃う
   (データ取得中が下りる) まで映像のままにする。`visibility` では隠せない。エンジンは描く要素ごとに BML の `visibility` を写すので、
   子の visible が親の hidden を打ち消す
@@ -1682,7 +1685,7 @@ bml.destroy();
 
 `browser.*` は放送が呼ぶ 53 種を全部持ち、動かせないもの (予約・PPP・外のアプリ) は規格どおり失敗 (NaN / null / 0) を返す。
 Hybridcast の起動は画面に任せる ([Hybridcast](#hybridcast))。選局 (`epgTune`) も画面に任せる
-(ライブは局の一覧から探して切り替え、録画は失敗を返して「録画の再生中は選局できません」と知らせる)。
+(ライブは局の一覧から探して切り替えてデータ放送を閉じ、録画は失敗を返して「録画の再生中は選局できません」と知らせる)。
 録画では再生位置から放送の時刻を出して渡す (`clock`)。
 
 **移れない文書へ移ろうとしても、今の文書のまま失敗 (NaN) を返す。** `launchDocument` は名前を先に

@@ -140,6 +140,12 @@ export const config = {
    * ここを変えても ffmpeg が使う GPU は変わらない。変えるのはテスト (偽のデバイス) だけ
    */
   nvidiaDir: str("NVIDIA_DIR", "/dev"),
+  /**
+   * Android のアプリが渡す、MediaCodec のハードウェアのエンコーダの名前 (`h264=c2.qti.avc.encoder,hevc=…`)。
+   * 名前のあるコーデックだけを `mediacodec` で試す (server/hwenc.ts の `probeAndroid`)。アプリが `MediaCodecList` で集めて毎回書くので、
+   * `denpa.env` に書いても効かない
+   */
+  mediacodecEncoders: str("MEDIACODEC_ENCODERS", ""),
   /** GPU の試しのエンコード 1 本に待つ上限 (ms)。ドライバが固まっても起動が止まらないように */
   hwProbeTimeout: num("HW_PROBE_TIMEOUT", 20000),
 

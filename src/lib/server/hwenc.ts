@@ -50,6 +50,10 @@ import { run } from "./stream";
  * 番号もデバイスファイルも無い。H.264 と H.265 を 1 コマずつ試す (VideoToolbox に AV1 のエンコーダは無い。
  * docs/encode.md「Mac でエンコードする」)。
  *
+ * **Android は MediaCodec だけ** (`probeAndroid`)。Mac と同じく 1 つの方式 (`mediacodec`) で、アプリが
+ * `MediaCodecList` で集めたハードウェアのエンコーダの名前 (`config.mediacodecEncoders`) があるコーデックだけを、
+ * その名前を指定して 1 コマ試す (docs/encode.md「Android でエンコードする」)。
+ *
  * **H.265 (`hevc`) は GPU でだけエンコードする。** 試しのエンコードは AV1・H.264 と同じく方式ごとに 1 コマ試す。
  * ソフトウェアのエンコーダは無いので、ライブはライブのエンコーダが GPU のときだけ H.265 を出す (`live.liveHevc`)。
  * 追っかけ・その場の変換は H.265 を出さない (回線に合わせて段を下げるときは、GPU があれば出す。`live.rungCodec`)。
@@ -77,6 +81,13 @@ export interface HwDevice {
   amf: HwCodec[];
   /** VideoToolbox でエンコードできたコーデック (Mac の `videotoolbox` のときだけ。H.264 と H.265 だけ試す) */
   videotoolbox: HwCodec[];
+  /** MediaCodec でエンコードできたコーデック (Android の `mediacodec` のときだけ) */
+  mediacodec: HwCodec[];
+  /**
+   * MediaCodec のエンコーダの名前 (`c2.qti.avc.encoder` など)。試しのエンコードが通ったコーデックだけ。
+   * Android の `mediacodec` のときだけある (`probeAndroid`)
+   */
+  mediacodecNames?: Partial<Record<HwCodec, string>>;
   /**
    * GPU の番号。NVENC は ffmpeg の `-gpu` (Linux は `findNvidia` の並び、Windows は番号を順に試したもの)、
    * QSV・AMF は Direct3D 11 のアダプタの番号 (Windows。`probeWindows`)。それぞれのデバイスにだけある
@@ -109,7 +120,7 @@ export interface HwDevice {
 export interface HwEncode {
   /** 一度でも確かめ終わったか。false のうちは画面が `probe()` を待つ (settings/recording/+page.server.ts) */
   probed: boolean;
-  /** 見つかったデバイス、Linux では `HW_DEVICES` に当たった順 (そのあとに NVIDIA の GPU、Rockchip MPP は最後)。Windows と Mac は `probeWindows`・`probeMac` が並べた順。空なら GPU が見えていない */
+  /** 見つかったデバイス、Linux では `HW_DEVICES` に当たった順 (そのあとに NVIDIA の GPU、Rockchip MPP は最後)。Windows・Mac・Android は `probeWindows`・`probeMac`・`probeAndroid` が並べた順。空なら GPU が見えていない */
   devices: HwDevice[];
   /** 画面に出す一言。何が使えて、使えないなら何が理由か */
   message: string;
@@ -127,6 +138,8 @@ export interface HwWay {
   qsvSystem?: true;
   /** GPU の番号 (`HwDevice.gpu`)。NVENC・QSV・AMF のときだけ */
   gpu?: number;
+  /** MediaCodec のエンコーダの名前 (`HwDevice.mediacodecNames`)。MediaCodec のときだけ */
+  codecName?: string;
 }
 
 let state: HwEncode = { probed: false, devices: [], message: "" };
@@ -168,9 +181,16 @@ export function hwChain(
 /**
  * そのデバイスでの方式。AV1 の ICQ が通らなかった VA-API には CQP の印を付ける (`HwDevice.cqp`)。
  * NVENC・QSV・AMF には GPU の番号を添え、高画質の指定が通らなかった AMF には古い世代向けの印を付ける
- * (`HwDevice.amfTranscoding`)。GPU のメモリへ移せなかった QSV には CPU のメモリのまま渡す印を付ける (`HwDevice.qsvSystem`)
+ * (`HwDevice.amfTranscoding`)。GPU のメモリへ移せなかった QSV には CPU のメモリのまま渡す印を付ける (`HwDevice.qsvSystem`)。
+ * MediaCodec にはエンコーダの名前を添える (`HwDevice.mediacodecNames`)
  */
 function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
+  if (kind === "mediacodec") {
+    const codecName = device.mediacodecNames?.[codec];
+    return codecName === undefined
+      ? { device: device.path, kind }
+      : { device: device.path, kind, codecName };
+  }
   if (kind === "qsv" && device.qsvSystem.includes(codec))
     return { device: device.path, kind, gpu: device.gpu ?? 0, qsvSystem: true };
   if (kind === "amf" && device.amfTranscoding.includes(codec))
@@ -298,6 +318,23 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * Apple のソフトウェアのエンコーダに黙って倒れず、試しのエンコードが落ちて x264 に戻る。
  * デバイスは開かない (VideoToolbox が自分でメディアエンジンを選ぶ)。CPU で作ったフレームを nv12 で渡す。
  * `-g 250` は同じ。**画質と大きさは測っていない** (CI の Mac のランナーで試しのエンコードが通り、放送に似せた素材をエンコードできるところまで見ている)
+ *
+ * ## Android (MediaCodec) もビットレートで指定する
+ *
+ * MediaCodec にも画質での指定 (`-bitrate_mode cq`) はあるが、持つかどうかが端末で違い、値と画質の対応も測れていないので、
+ * NVENC と同じ表のビットレートを **VBR** (`-bitrate_mode vbr`) で渡す。MediaCodec に上限の指定は無い (FFmpeg の mediacodecenc.c が
+ * `-maxrate` を渡さない) ので、平均だけ。
+ *
+ * - **エンコーダは名前で指定する** (`-codec_name`。`HwWay.codecName`)。FFmpeg は名前が無ければ MIME の種類で選び、
+ *   ハードウェアのエンコーダが無い端末ではソフトウェアの `c2.android.*` を開いて通ってしまう。名前はアプリが
+ *   `MediaCodecInfo.isHardwareAccelerated` で選んで渡したもの (`config.mediacodecEncoders`)
+ * - `-ndk_codec 1` で NDK の AMediaCodec を使う。bun から起動した ffmpeg には JVM が無い
+ * - H.264 は `-profile:v high` (VideoToolbox と同じ理由。渡さないと何を選ぶかはエンコーダ任せ)。
+ *   持たないエンコーダは開けずに落ち、試しのエンコードが落ちてソフトウェアに戻る
+ * - B フレームは使わない (FFmpeg は `-strict experimental` を付けないと B フレームを断る。出したパケットに DTS が無いため)
+ * - `-g 250` は FFmpeg が秒に直して `i-frame-interval` に渡す (30 コマなら 8 秒)
+ * - デバイスは開かない。CPU で作ったフレームを nv12 で渡す (MediaCodec の `COLOR_FormatYUV420SemiPlanar`。yuv420p を受けない端末がある)。
+ *   **画質と大きさは測っていない** (実機で試していない)
  */
 export function hwArgs(
   way: HwWay,
@@ -365,12 +402,29 @@ export function hwArgs(
       filter: ["format=nv12"],
       encoder: [
         `${codec}_videotoolbox`,
-        ...vtProfile(codec),
+        ...highProfile(codec),
         "-prio_speed",
         "0",
         "-bf",
         "2",
         ...vtRate(hwBitrate(codec, picture)),
+        "-g",
+        "250",
+      ],
+    };
+  }
+  if (way.kind === "mediacodec") {
+    return {
+      device: [],
+      filter: ["format=nv12"],
+      encoder: [
+        `${codec}_mediacodec`,
+        ...mediacodecName(way),
+        ...highProfile(codec),
+        "-bitrate_mode",
+        "vbr",
+        "-b:v",
+        String(hwBitrate(codec, picture)),
         "-g",
         "250",
       ],
@@ -465,7 +519,7 @@ function vaapiQuality(
 }
 
 /**
- * 出す映像の大きさとコマ数。Rockchip MPP・NVENC・AMF・VideoToolbox のビットレートを決める (`hwBitrate`)。
+ * 出す映像の大きさとコマ数。Rockchip MPP・NVENC・AMF・VideoToolbox・MediaCodec のビットレートを決める (`hwBitrate`)。
  * VA-API・QSV は画質で指定するので見ない
  */
 interface Picture {
@@ -483,7 +537,7 @@ interface Picture {
 const LARGEST: Picture = { height: 1080, smooth: true };
 
 /**
- * **Rockchip MPP・NVENC・AMF・VideoToolbox に渡すビットレート (bit/s)。** H.264 は、今の CPU の H.264 (libx264 medium crf 23) と
+ * **Rockchip MPP・NVENC・AMF・VideoToolbox・MediaCodec に渡すビットレート (bit/s)。** H.264 は、今の CPU の H.264 (libx264 medium crf 23) と
  * 同じくらいの画質になる値を、放送を使わずに公開のテスト映像で測って決めた。測り方と測った値は
  * docs/encode.md「画質はビットレートで決める」。**実機の h264_rkmpp・h264_nvenc では測っていない。**
  *
@@ -603,9 +657,40 @@ function amfPreset(way: HwWay): string[] {
     : ["-usage", "high_quality", "-quality", "high_quality"];
 }
 
-/** VideoToolbox の H.264 は High にする (`hwArgs` の説明)。H.265 はエンコーダの既定の Main のまま */
-function vtProfile(codec: HwCodec): string[] {
+/** VideoToolbox と MediaCodec の H.264 は High にする (`hwArgs` の説明)。H.265 と AV1 はエンコーダの既定のまま */
+function highProfile(codec: HwCodec): string[] {
   return codec === "h264" ? ["-profile:v", "high"] : [];
+}
+
+/**
+ * MediaCodec のエンコーダを名前で開く引数 (`hwArgs` の説明)。**名前が無ければ投げる。** 名前を渡さないと FFmpeg は
+ * MIME の種類で選び、ソフトウェアのエンコーダを開くことがあるため。名前は `probeAndroid` と `wayOf` が付ける
+ */
+function mediacodecName(way: HwWay): string[] {
+  if (way.codecName === undefined)
+    throw new Error("MediaCodec のエンコーダの名前がありません");
+  return ["-ndk_codec", "1", "-codec_name", way.codecName];
+}
+
+/**
+ * **アプリが渡した MediaCodec のエンコーダの名前を読む** (`config.mediacodecEncoders`。`h264=c2.qti.avc.encoder,hevc=…`)。
+ * 知らないコーデックと、名前に使わない文字 (英数字・`.`・`_`・`-` のほか) を含むものは捨てる。同じコーデックが 2 つあれば先のもの
+ * (アプリは `MediaCodecList` の並び、つまり端末が勧める順で先のものを書く)
+ */
+export function parseMediacodecEncoders(
+  value: string,
+): Partial<Record<HwCodec, string>> {
+  const out: Partial<Record<HwCodec, string>> = {};
+  for (const item of value.split(",")) {
+    const at = item.indexOf("=");
+    if (at < 0) continue;
+    const codec = item.slice(0, at).trim();
+    const name = item.slice(at + 1).trim();
+    if (!/^[A-Za-z0-9._-]+$/.test(name)) continue;
+    const known = HW_CODECS.find((c) => c === codec);
+    if (known !== undefined && out[known] === undefined) out[known] = name;
+  }
+  return out;
 }
 
 /**
@@ -699,6 +784,10 @@ export function liveHw(
  * `-prio_speed 1` (画質より速さ)・`-bf 0`。ビットレートは録画と同じ表の、いちばん重い映像の値。段を下げたときは平均も上限も段の値にする。
  * **実機では見ていない**
  *
+ * **MediaCodec (Android) も CPU のデコードのまま。** 録画と同じ名前・プロファイルで、ビットレートは同じ表の、いちばん重い映像の値を VBR で。
+ * B フレームは録画と同じく作らない。MediaCodec には上限の指定が無いので、**段を下げたときは CBR** (`-bitrate_mode cbr`) にして段の値を渡す。
+ * 低遅延の指定 (MediaCodec の `latency`・`priority`) は FFmpeg が渡さない。**実機では見ていない**
+ *
  * ## `full`: デコードとインタレ解除も GPU (VA-API だけ)
  *
  * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU でデコードし、フレームを GPU に
@@ -723,6 +812,7 @@ export function liveHw(
  * - QSV は ICQ をやめて、`-b:v` と `-maxrate` に段の値を渡す。FFmpeg の qsvenc.c は 2 つが同じだと CBR を選ぶ
  * - VA-API は CQP をやめて **VBR で上限を決める** (`-b:v` と `-maxrate:v` に同じ値)。CQP は量を場面に任せるので、回線に収まる保証が無い
  * - VideoToolbox も `-b:v` と `-maxrate` に段の値を渡す
+ * - MediaCodec は上限を持たないので、CBR で段の値を渡す
  * - `full` なら GPU の上でインタレ解除して 30 コマにし (`rate=frame`)、そのまま `scale_vaapi` で縮める。フレームを CPU に降ろさない。
  *   `full` でなければ、縮めるのは呼ぶ側の CPU の `scale` (`live.ts` の `rungVideo`)
  *
@@ -795,7 +885,7 @@ export function liveHwArgs(
       filter: base.filter,
       encoder: [
         `${codec}_videotoolbox`,
-        ...vtProfile(codec),
+        ...highProfile(codec),
         "-realtime",
         "1",
         "-prio_speed",
@@ -803,6 +893,21 @@ export function liveHwArgs(
         ...vtRate(bps, peak),
         "-bf",
         "0",
+      ],
+    };
+  }
+  if (way.kind === "mediacodec") {
+    return {
+      input: base.device,
+      filter: base.filter,
+      encoder: [
+        `${codec}_mediacodec`,
+        ...mediacodecName(way),
+        ...highProfile(codec),
+        "-bitrate_mode",
+        cap === null ? "vbr" : "cbr",
+        "-b:v",
+        String(bps),
       ],
     };
   }
@@ -1003,6 +1108,7 @@ function emptyDevice(path: string, label: string): HwDevice {
     qsv: [],
     amf: [],
     videotoolbox: [],
+    mediacodec: [],
     cqp: [],
     amfTranscoding: [],
     qsvSystem: [],
@@ -1022,7 +1128,9 @@ async function probeOnce(): Promise<HwEncode> {
       ? await probeWindows()
       : process.platform === "darwin"
         ? await probeMac()
-        : await probeLinux();
+        : process.platform === "android"
+          ? await probeAndroid()
+          : await probeLinux();
   await probeFull(devices);
   const next: HwEncode = { probed: true, devices, message: describe(devices) };
   state = next;
@@ -1043,6 +1151,35 @@ async function probeMac(): Promise<HwDevice[]> {
       device.videotoolbox.push(codec);
   }
   return device.videotoolbox.length > 0 ? [device] : [];
+}
+
+/**
+ * **Android は MediaCodec で、アプリが名前を渡したコーデックだけ 1 コマずつ試す。** 行は `mediacodec` の 1 つだけ (Mac と同じ)。
+ *
+ * FFmpeg の MediaCodec のエンコーダは、名前が無ければ MIME の種類で選ぶ。ハードウェアのエンコーダが無い端末でもソフトウェアの
+ * `c2.android.*` が開いて試しのエンコードが通ってしまうので、名前を指定して試す。名前は、アプリ (Kotlin) が `MediaCodecList` の
+ * `isHardwareAccelerated` でハードウェアのものを選んで `MEDIACODEC_ENCODERS` に書く (NDK でエンコーダの一覧を引けるのは API 36 から)。
+ * 名前が 1 つも無いか、どれも落ちれば行は 0 になり、ソフトウェアでエンコードする。/dev の探し方 (VA-API・NVENC・Rockchip MPP) は使わない
+ */
+async function probeAndroid(): Promise<HwDevice[]> {
+  const names = parseMediacodecEncoders(config.mediacodecEncoders);
+  const path = "mediacodec";
+  const device: HwDevice = {
+    ...emptyDevice(path, `${path} (Android)`),
+    mediacodecNames: {},
+  };
+  for (const codec of HW_CODECS) {
+    const codecName = names[codec];
+    if (codecName === undefined) continue;
+    if (await tryWay({ device: path, kind: "mediacodec", codecName }, codec)) {
+      device.mediacodec.push(codec);
+      device.mediacodecNames = {
+        ...device.mediacodecNames,
+        [codec]: codecName,
+      };
+    }
+  }
+  return device.mediacodec.length > 0 ? [device] : [];
 }
 
 /** Windows で試す GPU の番号の数。NVENC は ffmpeg の `-gpu`、QSV・AMF は Direct3D 11 のアダプタの番号 */
@@ -1202,6 +1339,7 @@ function wayNote(way: HwWay): string {
   if (way.cqp === true) return "、CQP";
   if (way.amfTranscoding === true) return "、古い世代向けの指定";
   if (way.qsvSystem === true) return "、CPU のメモリから渡す";
+  if (way.codecName !== undefined) return `、${way.codecName}`;
   return "";
 }
 
@@ -1309,6 +1447,11 @@ function describe(devices: HwDevice[]): string {
       return "GPU (NVENC・QSV・AMF) でエンコードできるものが見つかりません (ドライバが入っていないか、GPU がありません)。ソフトウェアでエンコードします";
     if (process.platform === "darwin")
       return "VideoToolbox のハードウェアのエンコーダでエンコードできません。ソフトウェアでエンコードします";
+    if (process.platform === "android")
+      return Object.keys(parseMediacodecEncoders(config.mediacodecEncoders))
+        .length === 0
+        ? "MediaCodec のハードウェアのエンコーダが見つかりません。ソフトウェアでエンコードします"
+        : "MediaCodec のハードウェアのエンコーダでエンコードできません。ソフトウェアでエンコードします";
     return `GPU が見つかりません (${config.hwDevices} に該当するデバイスも、NVIDIA の GPU (${config.nvidiaDir}/nvidia0 など) も、${config.rkmppDevice} もありません)。ソフトウェアでエンコードします`;
   }
   const usable = devices.filter((d) =>

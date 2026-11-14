@@ -27,3 +27,13 @@ export function wantsData(now: {
 }): boolean {
   return now.open || (now.always && now.tuned);
 }
+
+/**
+ * 選局したら開いたデータ放送を閉じるか。**別の局へ移ったら閉じる** (テレビと同じ。次の局は入口から始まり、d は押されていない)。
+ * 開いたままにすると、次の局の入口に出す操作の d が届き (`DataBroadcast` の `knock`)、選局しただけでメニューまで開く。
+ * 同じ局のリクエストし直し (`previous` と同じ) と、初めての選局 (`previous` が null) では閉じない。
+ * `previous`・`next` は局の内部 ID (`Tuned.serviceId`)
+ */
+export function closesData(previous: number | null, next: number): boolean {
+  return previous !== null && previous !== next;
+}

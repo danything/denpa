@@ -240,7 +240,7 @@ class DenpaService : Service() {
     )
 
     /** bun で動かすものに渡す環境変数のうち、denpa 本体の置き場に依らないもの。debug の受け口が確かめ用のスクリプトに渡す */
-    internal fun bunEnvironment(): Map<String, String> = baseEnvironment() + Server.tools(this)
+    internal fun bunEnvironment(): Map<String, String> = baseEnvironment() + Server.tools(this) + Encoders.environment()
 
     /**
      * エージェントの環境変数。合言葉はアプリが先に作っておく (エージェントは `config/tls/pair-token` から読む。

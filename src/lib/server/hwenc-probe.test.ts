@@ -233,6 +233,7 @@ test("/dev/mpp_service があれば、別の行で H.264 と H.265 だけ MPP �
       qsv: [],
       amf: [],
       videotoolbox: [],
+      mediacodec: [],
       full: [],
     });
     const tried = calls.filter((argv) =>
@@ -284,6 +285,7 @@ test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号
       qsv: [],
       amf: [],
       videotoolbox: [],
+      mediacodec: [],
       full: [],
     });
     expect(n1).toMatchObject({
@@ -292,6 +294,7 @@ test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号
       qsv: [],
       amf: [],
       videotoolbox: [],
+      mediacodec: [],
     });
     // GPU の番号はデバイスファイルの並びの位置。デバイスファイルは ffmpeg に渡さない
     const tried = calls.filter((argv) =>
@@ -364,6 +367,7 @@ test("Windows は NVENC・QSV・AMF を番号ごとに試し、通った番号�
     qsv: [],
     amf: [],
     videotoolbox: [],
+    mediacodec: [],
   });
   expect(devices[1]).toMatchObject({
     label: "qsv1 (Intel)",
@@ -601,6 +605,7 @@ test("Mac は VideoToolbox の 1 行で、通ったコーデックだけ使う",
     path: "videotoolbox",
     label: "videotoolbox (Apple)",
     videotoolbox: ["h264"],
+    mediacodec: [],
     vaapi: [],
   });
   expect(describeDevice(devices[0]!)).toBe("VideoToolbox: H.264");
@@ -611,4 +616,88 @@ test("Mac は VideoToolbox の 1 行で、通ったコーデックだけ使う",
     { device: "videotoolbox", kind: "videotoolbox" },
   ]);
   expect(hwChain("hevc", {}, 0, devices)).toEqual([]);
+});
+
+/** Android の探し方 (`probeAndroid`)。OS の名前と、アプリが渡すエンコーダの名前を差し替える */
+async function onAndroid<T>(
+  encoders: string,
+  body: () => Promise<T>,
+): Promise<T> {
+  const before = Object.getOwnPropertyDescriptor(process, "platform")!;
+  const encodersBefore = config.mediacodecEncoders;
+  Object.defineProperty(process, "platform", { value: "android" });
+  config.mediacodecEncoders = encoders;
+  try {
+    return await body();
+  } finally {
+    Object.defineProperty(process, "platform", before);
+    config.mediacodecEncoders = encodersBefore;
+  }
+}
+
+test("Android でハードウェアのエンコーダの名前が無ければ、何も試さずにソフトウェアにする", async () => {
+  answer = () => 0;
+  calls.length = 0;
+  const { devices, message } = await onAndroid("", () => probe());
+  expect(devices).toEqual([]);
+  // 名前を渡さずに試すと、ソフトウェアの c2.android.* が開いて通ってしまう。/dev の探し方も使わない
+  expect(calls).toEqual([]);
+  expect(liveHw("h264", {}, 0, devices)).toBeNull();
+  expect(message).toBe(
+    "MediaCodec のハードウェアのエンコーダが見つかりません。ソフトウェアでエンコードします",
+  );
+});
+
+test("Android は名前のあるコーデックだけを名前で試し、通ったものを MediaCodec の 1 行にする", async () => {
+  answer = (argv) => (argv.join(" ").includes("hevc_mediacodec") ? 1 : 0);
+  calls.length = 0;
+  const { devices, message } = await onAndroid(
+    "hevc=c2.qti.hevc.encoder,h264=c2.qti.avc.encoder",
+    () => probe(),
+  );
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines).toHaveLength(2);
+  expect(
+    lines.some((l) =>
+      l.includes(
+        "hevc_mediacodec -ndk_codec 1 -codec_name c2.qti.hevc.encoder",
+      ),
+    ),
+  ).toBe(true);
+  expect(
+    lines.some((l) =>
+      l.includes("h264_mediacodec -ndk_codec 1 -codec_name c2.qti.avc.encoder"),
+    ),
+  ).toBe(true);
+  expect(devices).toHaveLength(1);
+  expect(devices[0]).toMatchObject({
+    path: "mediacodec",
+    label: "mediacodec (Android)",
+    mediacodec: ["h264"],
+    mediacodecNames: { h264: "c2.qti.avc.encoder" },
+    vaapi: [],
+  });
+  expect(describeDevice(devices[0]!)).toBe("MediaCodec: H.264");
+  expect(message).toBe(
+    "デバイスが 1 個見つかり、1 個で GPU エンコードできます",
+  );
+  expect(hwChain("h264", {}, 0, devices)).toEqual([
+    {
+      device: "mediacodec",
+      kind: "mediacodec",
+      codecName: "c2.qti.avc.encoder",
+    },
+  ]);
+  expect(hwChain("hevc", {}, 0, devices)).toEqual([]);
+});
+
+test("Android で名前を渡したエンコーダがどれも落ちれば、行は 0 でソフトウェアにする", async () => {
+  answer = () => 1;
+  const { devices, message } = await onAndroid("h264=c2.qti.avc.encoder", () =>
+    probe(),
+  );
+  expect(devices).toEqual([]);
+  expect(message).toBe(
+    "MediaCodec のハードウェアのエンコーダでエンコードできません。ソフトウェアでエンコードします",
+  );
 });

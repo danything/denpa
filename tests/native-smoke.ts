@@ -12,7 +12,9 @@
  * - GPU のエンコーダ (Windows は NVENC・QSV・AMF、Mac は VideoToolbox) が組み込まれ、denpa が渡すオプションを持つか。
  *   GPU で試せないランナーでは、試しのエンコードが全部落ちて、ソフトウェアでエンコードするか
  * - Android は MediaCodec のエンコーダ (H.264・H.265・AV1) が組み込まれ、NDK の MediaCodec で (JVM の無いプロセスから) エンコードできるか。
- *   denpa の GPU の探し方 (hwenc.ts) にはまだつないでいないので、探すと GPU の方式は 0 になる
+ *   エミュレータのエンコーダはソフトウェアの `c2.android.*` だけなので、アプリはハードウェアのエンコーダの名前を渡さず (`MEDIACODEC_ENCODERS` が空)、
+ *   探すと GPU の方式は 0 になるか。ソフトウェアのエンコーダの名前を渡したことにして探し直すと、その名前で `mediacodec` の方式になり、
+ *   録画とライブの引数で放送に似せた素材をエンコードできるか
  * - ffmpeg の 4 本目の出口 (stream.sideOutput。Windows では名前付きパイプ、Mac は `pipe:3`) で、進み具合と matroska を受けられるか
  * - スリープを止められるか (awake.ts。Android は常駐サービスが止めるので見ない)。Windows は `powercfg /requests` に bun が出るか (管理者で動くランナーだけで読める)、
  *   Mac は `pmset -g assertions` にこのプロセスの `PreventUserIdleSystemSleep` が出るか
@@ -64,22 +66,27 @@ const encoders = Bun.spawnSync([
   "-hide_banner",
   "-encoders",
 ]).stdout.toString();
-// GPU のエンコーダ (Windows は NVENC・QSV・AMF、Mac は VideoToolbox) は、ランナーで GPU を使えなくても組み込んである。
-// VideoToolbox に AV1 のエンコーダは無い。Android の MediaCodec は hwenc.ts にまだつないでいないので、ここには入れずに下で別に試す
+// GPU のエンコーダ (Windows は NVENC・QSV・AMF、Mac は VideoToolbox、Android は MediaCodec) は、ランナーで GPU を使えなくても組み込んである。
+// VideoToolbox に AV1 のエンコーダは無い
 const gpuKinds = windows
   ? (["nvenc", "qsv", "amf"] as const)
   : android
-    ? ([] as const)
+    ? (["mediacodec"] as const)
     : (["videotoolbox"] as const);
-const gpuCodecs = windows
-  ? (["h264", "hevc", "av1"] as const)
-  : (["h264", "hevc"] as const);
+const gpuCodecs =
+  windows || android
+    ? (["h264", "hevc", "av1"] as const)
+    : (["h264", "hevc"] as const);
 const gpuEncoders = gpuKinds.flatMap((kind) =>
   gpuCodecs.map((codec) => `${codec}_${kind}`),
 );
-const mediacodec = android
-  ? ["h264", "hevc", "av1"].map((codec) => `${codec}_mediacodec`)
-  : [];
+const mediacodec = android ? gpuEncoders : [];
+/** エミュレータにあるソフトウェアの MediaCodec のエンコーダ (AV1 は Android 14 から)。選び方を通すために名前で指定する */
+const softwareMediacodec = {
+  h264: "c2.android.avc.encoder",
+  hevc: "c2.android.hevc.encoder",
+  av1: "c2.android.av1.encoder",
+} as const;
 for (const name of [
   "libx264",
   "libsvtav1",
@@ -87,7 +94,6 @@ for (const name of [
   "aac",
   "mjpeg",
   ...gpuEncoders,
-  ...mediacodec,
 ]) {
   if (!new RegExp(`\\b${name}\\b`).test(encoders))
     throw new Error(`エンコーダがありません: ${name}`);
@@ -278,6 +284,7 @@ const options: Record<string, string[]> = {
   qsv: ["preset", "async_depth"],
   amf: ["usage", "quality", "rc", "async_depth"],
   videotoolbox: ["profile", "prio_speed", "realtime"],
+  mediacodec: ["ndk_codec", "codec_name", "bitrate_mode"],
 };
 /**
  * 名前の付いた値で渡すオプションは、その値も選択肢にあるか見る。AMF は録画の高画質の指定 (`high_quality`)、
@@ -289,6 +296,7 @@ const choices: Record<string, Record<string, string[]>> = {
     quality: ["high_quality", "quality", "speed"],
     rc: ["vbr_peak", "vbr_latency"],
   },
+  mediacodec: { bitrate_mode: ["vbr", "cbr"] },
 };
 /** `-h encoder=…` の、あるオプションの下に並ぶ選択肢の名前 */
 function choicesOf(help: string, option: string): string[] {
@@ -376,6 +384,8 @@ function tryArgs(label: string, args: string[]): number {
   ]);
   const err = run.stderr.toString();
   console.log(`${label}: exit ${run.exitCode}`);
+  // Android はエミュレータのソフトウェアのエンコーダで通るはずなので、落ちたら理由を残す
+  if (android && run.exitCode !== 0) console.log(err);
   if (
     /Unknown encoder|Unrecognized option|No such filter|Option not found|Unable to parse option value|Error setting option/.test(
       err,
@@ -388,7 +398,9 @@ for (const kind of gpuKinds) {
   for (const codec of gpuCodecs) {
     const way: Way = windows
       ? { device: `${kind}0`, kind, gpu: 0 }
-      : { device: kind, kind };
+      : android
+        ? { device: kind, kind, codecName: softwareMediacodec[codec] }
+        : { device: kind, kind };
     const source = ["-f", "lavfi", "-i", "nullsrc=s=256x256:r=30:d=0.2"];
     const hw = hwArgs(way, codec);
     tryArgs(`${codec}_${kind}`, [
@@ -463,9 +475,9 @@ if (found.devices.length === 0) {
     );
     console.log(`${codec} on ${way.kind}: ok`);
   }
-  // 試しのエンコードが全部落ちる ffmpeg (いつも 1 で終わる `false`。Mac) で探し直すと、方式は 0 になってソフトウェアに戻る
+  // 試しのエンコードが全部落ちる ffmpeg (いつも 1 で終わる `false`。Mac・Android) で探し直すと、方式は 0 になってソフトウェアに戻る
   if (!windows) {
-    config.ffmpeg = "/usr/bin/false";
+    config.ffmpeg = android ? "/system/bin/false" : "/usr/bin/false";
     const none = await probe();
     console.log(none.message);
     if (none.devices.length !== 0)
@@ -479,6 +491,73 @@ if (found.devices.length === 0) {
     console.log("GPU fails: software encoding: ok");
     config.ffmpeg = ffmpeg;
   }
+}
+
+/*
+ * Android: アプリが渡したハードウェアのエンコーダの名前 (`MEDIACODEC_ENCODERS`。エミュレータでは空) を出したうえで、
+ * ソフトウェアの c2.android の H.264 のエンコーダの名前を渡したことにして探し直す。名前で `mediacodec` の方式になり、
+ * その名前を ffmpeg に渡して、録画とライブの引数で放送に似せた素材をエンコードできるかを見る。
+ * 放送に似せた素材は、どの API のエミュレータにもある H.264 だけで流す (ソフトウェアのエンコーダは遅く、エミュレータの時間を延ばさないため)。
+ *
+ * **API 29 のエミュレータでは、名前でエンコーダを開けない** (AMediaCodec_createCodecByName が c2.android も OMX.google も返さず、
+ * MIME の種類で選ぶと開ける。原因は確かめていない)。そこでは方式が 0 になり、ソフトウェアに戻ることだけを見る
+ */
+if (android) {
+  console.log(`MEDIACODEC_ENCODERS=${config.mediacodecEncoders}`);
+  const given = config.mediacodecEncoders;
+  const sdk = Number(
+    Bun.spawnSync(["getprop", "ro.build.version.sdk"]).stdout.toString().trim(),
+  );
+  config.mediacodecEncoders = `h264=${softwareMediacodec.h264}`;
+  const soft = await probe();
+  console.log(soft.message);
+  const way = hwChain("h264", {})[0];
+  if (way === undefined && sdk < 30) {
+    if (liveHw("h264", {}) !== null)
+      throw new Error("名前で開けないのに H.264 の方式が残っています");
+    console.log(`h264 on mediacodec: cannot open by name on API ${sdk}`);
+  } else {
+    if (way?.kind !== "mediacodec" || way.codecName !== softwareMediacodec.h264)
+      throw new Error(
+        `名前を渡した H.264 が MediaCodec の方式になりません (API ${sdk})`,
+      );
+    const hw = hwArgs(way, "h264");
+    await ff(
+      "-i",
+      at("in.ts"),
+      "-vf",
+      ["bwdif", ...hw.filter].join(","),
+      "-c:v",
+      ...hw.encoder,
+      "-an",
+      "-f",
+      "matroska",
+      at("mediacodec-h264.mkv"),
+    );
+    const live = liveHwArgs({ way, full: false }, "h264", {
+      height: 540,
+      bps: 2_000_000,
+    });
+    await ff(
+      "-i",
+      at("in.ts"),
+      "-vf",
+      ["bwdif=mode=send_frame", "scale=-2:540", ...live.filter].join(","),
+      "-c:v",
+      ...live.encoder,
+      "-g",
+      "30",
+      "-an",
+      "-f",
+      "mp4",
+      "-movflags",
+      "frag_keyframe+empty_moov+default_base_moof",
+      at("mediacodec-live.mp4"),
+    );
+    console.log("h264 on mediacodec: ok");
+  }
+  config.mediacodecEncoders = given;
+  await probe();
 }
 
 if (!(await holdAwake(true))) throw new Error("スリープを止められません");

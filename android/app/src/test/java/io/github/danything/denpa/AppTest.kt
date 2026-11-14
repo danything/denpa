@@ -83,6 +83,15 @@ class ServerTest {
         assertEquals("dev", Server.denpaVersion("0.0.0-dev"))
         assertEquals("dev", Server.denpaVersion(null))
     }
+
+    @Test
+    fun ハードウェアのエンコーダはコーデックと名前の組を並べて渡す() {
+        assertEquals(
+            "h264=c2.qti.avc.encoder,hevc=c2.qti.hevc.encoder",
+            Encoders.format(listOf("h264" to "c2.qti.avc.encoder", "hevc" to "c2.qti.hevc.encoder")),
+        )
+        assertEquals("", Encoders.format(emptyList()))
+    }
 }
 
 class AgentStatusTest {

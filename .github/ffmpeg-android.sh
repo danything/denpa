@@ -24,7 +24,9 @@
 # **GPU のエンコーダは MediaCodec を組む** (h264_mediacodec・hevc_mediacodec・av1_mediacodec。docs/encode.md「Android でエンコードする」)。
 # FFmpeg は JVM の無いプロセスでは NDK の AMediaCodec を使い (`ndk_codec`)、binder のスレッドも自分で立てる (compat/android/binder.c)。
 # configure が JNI を求めるので `--enable-jni` も付ける (JVM が無ければ使われない)。繋ぐのは Android にある libmediandk.so と libandroid.so。
-# Dockerfile の一覧に無い (Linux は組まない) ので、ここで足す。denpa の GPU の探し方 (src/lib/server/hwenc.ts) にはまだつないでいない
+# Dockerfile の一覧に無い (Linux は組まない) ので、ここで足す (denpa の GPU の探し方は src/lib/server/hwenc.ts の probeAndroid)。
+# bsf の h264_metadata・hevc_metadata も足す。MediaCodec のエンコーダは幅と高さを 16 の倍数に切り上げて (1080 は 1088) エンコードし、
+# はみ出した分をこの bsf で切り落とす印を付ける。無いと 1080 の映像でエンコーダを開けない (エミュレータで「Bitstream filter not found」で落ちた)
 #
 # 入れ先には APK に入れる形で置く (android/app/build.gradle.kts の DENPA_FFMPEG)。
 #
@@ -97,6 +99,18 @@ fetch_tar() {
   tar -x"$2" -f "$work/src.tar" --strip-components=1
   rm -f "$work/src.tar"
 }
+
+# x264 のソース。code.videolan.org に届かないときは、GitHub のミラー (mirror/x264。同じコミット) から取る。
+# 2026-11-14 に code.videolan.org へ繋がらず、Android の ffmpeg が組めなかった
+fetch_x264() {
+  if ! $CURL -o "$work/src.tar" "https://code.videolan.org/videolan/x264/-/archive/${X264_COMMIT}/x264-${X264_COMMIT}.tar.bz2"; then
+    echo "code.videolan.org から x264 を取れないので、GitHub のミラーから取ります" >&2
+    $CURL -o "$work/src.tar" "https://github.com/mirror/x264/archive/${X264_COMMIT}.tar.gz"
+  fi
+  # bzip2 か gzip かは tar が中身で見分ける (GNU tar も bsdtar も、ファイルから読むときは見分ける)
+  tar -xf "$work/src.tar" --strip-components=1
+  rm -f "$work/src.tar"
+}
 # この依存を組むか (引数で 1 つだけ頼まれたら、それだけ)。組み上がり (`.done`) があれば組まない
 want() { { [ -z "$only" ] || [ "$only" = "$1" ]; } && [ ! -e "$deps/$1/.done" ]; }
 
@@ -137,7 +151,7 @@ X264_COMMIT=31e19f92f00c7003fa115047ce50978bc98c3a0d
 if want x264; then
   rm -rf "$deps/x264"
   mkdir "$work/x264" && cd "$work/x264"
-  fetch_tar "https://code.videolan.org/videolan/x264/-/archive/${X264_COMMIT}/x264-${X264_COMMIT}.tar.bz2" j
+  fetch_x264
   CC="$cc" AR=llvm-ar RANLIB=llvm-ranlib STRIP=llvm-strip ./configure --prefix="$deps/x264" --host="$triple" \
     --sysroot="$tc/sysroot" --enable-static --enable-pic --disable-cli
   make -j"$jobs"
@@ -245,7 +259,8 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
   --disable-debug \
   "${components[@]}" \
   --enable-encoder=h264_mediacodec,hevc_mediacodec,av1_mediacodec \
-  --enable-decoder=h264_mediacodec,hevc_mediacodec,av1_mediacodec,mpeg2_mediacodec
+  --enable-decoder=h264_mediacodec,hevc_mediacodec,av1_mediacodec,mpeg2_mediacodec \
+  --enable-bsf=h264_metadata,hevc_metadata
 # 実行ファイルの RUNPATH に `$ORIGIN` を書く。configure に渡すと、configure の試しのリンクでシェルが `$$` を展開してしまうので、
 # 書き出した config.mak に足す (make が `$$` を `$` にし、シェルには引用符の中で渡る)
 echo "LDEXEFLAGS += -Wl,-rpath,'\$\$ORIGIN'" >> ffbuild/config.mak
@@ -282,7 +297,7 @@ for exe in libffmpeg.so libffprobe.so; do
 done
 
 # 組み込んだか (configure は依存が見つからないと黙って外す)。エミュレータや端末でなくても、一覧は実行ファイルの中の文字列で分かる
-for name in libx264 libsvtav1 libopus libdav1d h264_mediacodec hevc_mediacodec av1_mediacodec zscale tonemap setparams; do
+for name in libx264 libsvtav1 libopus libdav1d h264_mediacodec hevc_mediacodec av1_mediacodec h264_metadata hevc_metadata zscale tonemap setparams; do
   grep -qF "$name" "$lib/libavcodec.so" "$lib/libavfilter.so" || { echo "ffmpeg に $name が組み込まれていません" >&2; exit 1; }
 done
 

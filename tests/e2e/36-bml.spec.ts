@@ -233,10 +233,10 @@ test.describe("データ放送のエンジン", () => {
     await expect(
       page.locator(`[data-testid="live-channel"][data-service="${to.id}"]`),
     ).toHaveAttribute("data-current", "true", { timeout: 15_000 });
-    // 局が変わったのでデータ放送のエンジンは作り直される (出したまま)
+    // 別の局へ移ったのでデータ放送は閉じる (テレビと同じく、次の局の入口に d を届けない)
     await expect(page.getByTestId("live-data")).toHaveAttribute(
-      "data-for",
-      new RegExp(`/${to.id}$`),
+      "data-open",
+      "false",
     );
   });
 });

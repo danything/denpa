@@ -93,6 +93,11 @@ export interface Stack {
   encodeArgsFile: string;
   /** 偽 ffmpeg がエンコードしていた間 (`start`/`end`・ミリ秒・入力・出力をタブで区切った行が 1 行ずつ足される。`helpers.encodeSpans`) */
   encodeSpansFile: string;
+  /**
+   * 本数を書いて置くと、偽 ffmpeg は同じ録画のエンコードがその本数そろって始まるまで終えない (30 秒で諦める)。
+   * コーデックを同時にエンコードしていることを、時刻の差に頼らずに確かめるのに使う
+   */
+  encodeTogetherFile: string;
 }
 
 /** 資格情報を持たずに呼ぶ関数。返るのは素の Response */
@@ -204,6 +209,7 @@ export async function boot(
     hwDir: `${root}/gpu`,
     encodeArgsFile: `${root}/encode-ffmpeg-args`,
     encodeSpansFile: `${root}/encode-ffmpeg-spans`,
+    encodeTogetherFile: `${root}/encode-together`,
   };
 
   rmSync(root, { recursive: true, force: true });
@@ -283,6 +289,7 @@ export async function boot(
       NVIDIA_DIR: stack.hwDir,
       FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
       FAKE_FFMPEG_ENCODE_SPANS_FILE: stack.encodeSpansFile,
+      FAKE_FFMPEG_ENCODE_TOGETHER_FILE: stack.encodeTogetherFile,
       FAKE_FFMPEG_FAIL_ENCODER_FILE: stack.failEncoderFile,
       /*
        * 新しいバージョンの通知。GitHub の代わりに偽通知先が「最新のリリース」を返す

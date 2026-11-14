@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { storedDataReceive, wantsData } from "./data-receive";
+import { closesData, storedDataReceive, wantsData } from "./data-receive";
 
 describe("データ放送を常に受信するか", () => {
   test("オンにしたことのある端末だけオンで始まる", () => {
@@ -16,5 +16,12 @@ describe("データ放送を常に受信するか", () => {
     // 追っかけ・録画に譲っている間は、常に受信でもリクエストしない (開いていれば今までどおり)
     expect(wantsData({ open: false, always: true, tuned: false })).toBe(false);
     expect(wantsData({ open: true, always: true, tuned: false })).toBe(true);
+  });
+
+  test("別の局へ移ったら、開いたデータ放送を閉じる (次の局に d を届けない)", () => {
+    expect(closesData(1, 2)).toBe(true);
+    // 同じ局のリクエストし直し・初めての選局では閉じない
+    expect(closesData(1, 1)).toBe(false);
+    expect(closesData(null, 1)).toBe(false);
   });
 });
