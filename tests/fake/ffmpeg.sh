@@ -2,7 +2,12 @@
 # 偽 ffmpeg。E2E で「エンコードが走って mkv が出来る」ところまでを実 ffmpeg 無しで通す。
 # 本物と同じく stderr に Duration を、-progress の key=value ブロックを fd 3 (エンコードするほうの `-progress pipe:3`。
 # 開いていなければ stdout) に書き出す。
-set -uo pipefail
+#
+# **pipefail は付けない。** 引数は `printf '%s\n' "$@" | grep -q …` で探す。grep -q は見つけた所で終わり、
+# printf は残りの引数を閉じたパイプへ書いて SIGPIPE で終わる。pipefail だとこれがパイプライン全体の失敗になり、
+# 見つかったのに見つからなかったことになる。CM 検出を一緒にするエンコードが無音を返さず、作業ファイルも書かずに
+# 0 で終わり、置くところで `ENOENT ... rename` になった (CI でたまに。`src/lib/server/fake-ffmpeg.test.ts`)
+set -u
 
 # **渡された引数を、控えのファイルへ 1 回ぶん足す** (`---` の行に続けて 1 行に 1 つ)。テスト側は `---` で切って読む。
 #
