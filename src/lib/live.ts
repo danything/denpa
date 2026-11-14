@@ -30,7 +30,7 @@ export type LiveCodec = "h264" | "hevc" | "av1";
 
 /**
  * エンコード方式と名前。並びは小さい順で、コーデックのメニューもこの順 (「自動」のあと。選ぶのは端末の相性だけなので、説明は付けない)。
- * メニューに並べるのは `#lib/live-choice.ts` の `HIDDEN_CODECS` を除いたもの
+ * ライブと追っかけのメニューに並べるのは、このうちの 1 つ (`#lib/live-choice.ts` の `shownCodec`。録画の観る画面は `WATCH_HIDDEN_CODECS` を除いたもの)
  */
 export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
   { id: "av1", label: CODEC_LABEL.av1 },

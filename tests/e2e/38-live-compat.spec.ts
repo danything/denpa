@@ -9,7 +9,6 @@ import {
   feedNotice,
   goto,
   openSettings,
-  pickCodec,
   syncEpg,
   test,
   wakeControls,
@@ -24,18 +23,19 @@ import {
  * (`tests/fake/fmp4-loop.ts`)。映像は VideoDecoder が、音は WASM (`wasm/decoder.c`、28-live-raw と同じ
  * デコーダ。AAC は ADTS の先頭を付けて、Opus は OpusHead で) がデコードする。
  *
- * 描くのは AV1 (H.264 はメニューに並ばず、自動は AV1 を先に選ぶ)。箱の読み方 (avcC・esds) は単体試験 (`ts/fmp4.test.ts`) が見る
+ * 描くのは AV1 (互換モードの自動は AV1 を先に選ぶ)。箱の読み方 (avcC・esds) は単体試験 (`ts/fmp4.test.ts`) が見る
  */
 
 const TESLA =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Tesla/2026.32.1";
 
-/** 選局して、AV1 にしておく (H.264 を描けない端末では、自分で AV1 に寄せている) */
+/**
+ * 選局して、自動で AV1 になるのを待つ (互換モードの自動は AV1 → H.264 → MPEG-2)。GPU が無いので
+ * メニューに並ぶエンコードするものは H.264 で、AV1 は選べない
+ */
 async function watchAv1(page: Page): Promise<void> {
   await expect(page.getByTestId("live-title")).toBeVisible();
-  await wakeControls(page, "live-frame");
-  await pickCodec(page, "live", "av1");
-  await expect(page.getByTestId("live-codec")).toContainText("AV1");
+  await expect(page.getByTestId("live-codec")).toContainText("自動 (AV1)");
 }
 
 /** canvas に描いて、音も鳴らしていること (数が進む・映像が変わる) */
@@ -126,11 +126,8 @@ test.describe("互換モード", () => {
     // 注意は入れたときに見せたので、ライブでは出さない
     await expect(page.getByTestId("drive-notice")).toBeHidden();
 
-    // 自動は描ける形式の先頭 (互換モードは AV1 → H.264 → MPEG-2)。H.264 と H.265 はメニューに並ばない
+    // 自動は描ける形式の先頭 (互換モードは AV1 → H.264 → MPEG-2。Opus は WASM)
     await expect(page.getByTestId("live-codec")).toContainText("自動 (AV1)");
-    await expectDrawn(page);
-    // 選んでも同じ AV1 (Opus は WASM)
-    await watchAv1(page);
     await expectDrawn(page);
 
     // 止める・再開する (再開は放送の今から)
@@ -334,8 +331,8 @@ test.describe("互換モードの追っかけ", () => {
 
     await goto(page, `/chase/${id}`);
     await expect(page.getByTestId("chase-title")).toBeVisible();
-    await wakeControls(page, "chase");
-    await pickCodec(page, "chase", "av1");
+    // 互換モードの自動は AV1 から (GPU が無いので、メニューに並ぶエンコードするものは H.264)
+    await expect(page.getByTestId("chase-codec")).toContainText("自動 (AV1)");
     await expectDrawn(page, "chase");
 
     // 速さは等速だけ (切り替えを出さない)

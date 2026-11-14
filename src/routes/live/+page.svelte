@@ -125,10 +125,11 @@
   const player = livePlayer({
     confirm: drive.confirm,
     separateAudio: separateLiveAudio,
-    // 選んでいるもの (覚えている選択)、開いた名前が家の中か、H.265 を出せるか。どれもサーバが決める (`+page.server.ts`)
+    // 選んでいるもの (覚えている選択)、開いた名前が家の中か、H.265 を出せるか、その場でエンコードできるコーデック。どれもサーバが決める (`+page.server.ts`)
     choice: untrack(() => data.choice),
     indoor: untrack(() => data.indoor),
     hevc: untrack(() => data.hevc),
+    liveCodecs: untrack(() => data.liveCodecs),
     // 最初の 1 回に繋ぐチケット。ページと一緒に受け取る (`+page.server.ts`)
     ticket: untrack(() => data.ticket),
   });
@@ -837,6 +838,7 @@
               codec={liveCodecs({
                 icon: CODEC,
                 choice: player.choice,
+                shown: player.shown,
                 format: player.format,
                 step: player.step,
                 broadcast: player.broadcast,

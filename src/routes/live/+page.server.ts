@@ -147,8 +147,8 @@ export function load(event) {
    * 番組表から名指しで来た局 (`?service=`。無い番号は使わない) → 前回の局 (`LAST_COOKIE`) → 一覧の先頭
    */
   const viewing = viewingOptions(url);
-  // 選択 (自動・AV1・MPEG-2) は局が変わっても引き継ぐ (その端末で出るかの話)。前に H.264・H.265 を選んでいた端末は自動
-  const kept = readKept(cookies.get(LAST_COOKIE));
+  // 選択 (自動・エンコードするもの・MPEG-2) は局が変わっても引き継ぐ (その端末で出るかの話)。いまその場でエンコードできないものを選んでいた端末は自動
+  const kept = readKept(cookies.get(LAST_COOKIE), viewing.liveCodecs);
   const start = liveStart(
     channels,
     Number(url.searchParams.get("service")),
@@ -192,6 +192,8 @@ export function load(event) {
     indoor: viewing.indoor,
     /** ライブで H.265 を出せるか (ライブのエンコーダが GPU のときだけ。`viewing.viewingOptions`) */
     hevc: viewing.hevc,
+    /** その場でエンコードできるコーデック (`viewing.viewingOptions`)。コーデックのメニューに並べる 1 つを画面が選ぶ */
+    liveCodecs: viewing.liveCodecs,
     postalCode: current.postalCode,
     prefecture: current.prefecture,
     bmlNetwork: current.bmlNetwork,

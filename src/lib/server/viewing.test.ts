@@ -30,27 +30,29 @@ const {
 } = await import("./viewing");
 
 describe("観るときの決まり (画面の load と GET /api/playback/options)", () => {
-  test("設定が無ければ、外の名前は外・家の中のアドレスは家の中。外すコーデックはいつも H.264 と H.265", () => {
+  test("設定が無ければ、外の名前は外・家の中のアドレスは家の中。GPU が無ければその場でエンコードできるのは H.264 だけで、AV1 と H.265 を外させる", () => {
     expect(
-      viewingOptions(new URL("https://dp.example.com/live"), false),
+      viewingOptions(new URL("https://dp.example.com/live"), ["h264"]),
     ).toEqual({
       indoor: false,
-      hidden: ["h264", "hevc"],
+      liveCodecs: ["h264"],
+      hidden: ["av1", "hevc"],
       hevc: false,
     });
-    expect(viewingOptions(new URL("http://192.168.1.20:3000/"), false)).toEqual(
-      {
-        indoor: true,
-        hidden: ["h264", "hevc"],
-        hevc: false,
-      },
-    );
+    expect(
+      viewingOptions(new URL("http://192.168.1.20:3000/"), ["h264"]),
+    ).toEqual({
+      indoor: true,
+      liveCodecs: ["h264"],
+      hidden: ["av1", "hevc"],
+      hevc: false,
+    });
   });
 
   test("家の中の名前に載せた名前は家の中", () => {
     saveSettings({ indoorHosts: ["dp.l.example.com"] });
     expect(
-      viewingOptions(new URL("https://dp.l.example.com/live"), false).indoor,
+      viewingOptions(new URL("https://dp.l.example.com/live"), ["h264"]).indoor,
     ).toBe(true);
     // 同じ家でも、外の名前で開けば外
     expect(viewingOptions(new URL("https://dp.example.com/live")).indoor).toBe(
@@ -59,10 +61,25 @@ describe("観るときの決まり (画面の load と GET /api/playback/options
     saveSettings({ indoorHosts: [] });
   });
 
-  test("ライブで H.265 を出せるか (ライブのエンコーダが GPU か) をそのまま返す", () => {
+  test("GPU で H.265 と H.264 をエンコードできれば H.265 を出せて、テレビのアプリには AV1 と H.264 を外させる", () => {
     expect(
-      viewingOptions(new URL("https://dp.example.com/live"), true).hevc,
-    ).toBe(true);
+      viewingOptions(new URL("https://dp.example.com/live"), ["hevc", "h264"]),
+    ).toEqual({
+      indoor: false,
+      liveCodecs: ["hevc", "h264"],
+      hidden: ["av1", "h264"],
+      hevc: true,
+    });
+  });
+
+  test("GPU で AV1 もエンコードできれば、テレビのアプリには H.265 と H.264 を外させる", () => {
+    const options = viewingOptions(new URL("https://dp.example.com/live"), [
+      "av1",
+      "hevc",
+      "h264",
+    ]);
+    expect(options.hidden).toEqual(["hevc", "h264"]);
+    expect(options.hevc).toBe(true);
   });
 });
 
@@ -99,8 +116,16 @@ describe("前回の局と選択の控え (cookie)", () => {
     expect(readKept(undefined)).toEqual({ choice: "auto" });
   });
 
-  test("H.264 の選択は自動 (メニューに並べないので)", () => {
-    expect(readKept(cookie({ choice: "h264" })).choice).toBe("auto");
+  test("エンコードするものの選択は、いまその場でエンコードできるときだけ読み、できなければ自動", () => {
+    expect(readKept(cookie({ choice: "h264" })).choice).toBe("h264");
+    expect(readKept(cookie({ choice: "hevc" }), ["hevc", "h264"]).choice).toBe(
+      "hevc",
+    );
+    expect(readKept(cookie({ choice: "hevc" }), ["h264"]).choice).toBe("auto");
+    expect(readKept(cookie({ choice: "av1" }), ["hevc", "h264"]).choice).toBe(
+      "auto",
+    );
+    expect(readKept(cookie({ choice: "raw" }), ["h264"]).choice).toBe("raw");
   });
 });
 
@@ -360,6 +385,10 @@ describe("4K の局の形式", () => {
     expect(warmFormat("raw", false, "hevc")).toBe("hevc");
     expect(warmFormat("auto", true, "hevc")).toBe("hevc");
     expect(warmFormat("auto", false, "hevc")).toBe("av1");
+    // 4K の局では H.265 にエンコードしないので、選んでいた H.265 は自動 (家の中は詰め替え、外は AV1)
+    expect(warmFormat("hevc", true, "hevc")).toBe("hevc");
+    expect(warmFormat("hevc", false, "hevc")).toBe("av1");
+    expect(warmFormat("h264", false, "hevc")).toBe("h264");
     expect(
       liveStart(
         [{ id: 30, type: "CATV", channel: "QC28", broadcast: "hevc" }],

@@ -119,7 +119,7 @@
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { read as stored, write as remind } from "#lib/keep.js";
-  import { HIDDEN_CODECS } from "#lib/live-choice.js";
+  import { WATCH_HIDDEN_CODECS } from "#lib/live-choice.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { BROADCAST_HEVC, codecsFor, type LiveCodec } from "#lib/live.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
@@ -687,7 +687,7 @@
   onMount(() => {
     localLookup = loadOffline(rec.id).catch(() => null);
     const asked = stored(CODEC_KEY);
-    // メニューに並べない H.264・H.265 (`HIDDEN_CODECS`) を前に選んでいた端末は、自動として扱う
+    // メニューに並べない H.264・H.265 (`WATCH_HIDDEN_CODECS`) を前に選んでいた端末は、自動として扱う
     choice = asked === "av1" || asked === "mpeg2" ? asked : "auto";
     void (async () => {
       const [held, got] = await Promise.all([
@@ -1482,7 +1482,7 @@
   /**
    * メニューに並べるもの。この端末で観られる方式があるコーデックが 2 つ以上あるときだけ出す。
    * 互換モードは流せるもの (H.264・AV1・MPEG-2) を並べて描けない形式は押せなくし (ライブと同じ)、
-   * 端末に保存したものを描いている間は出さない。H.264・H.265 (`HIDDEN_CODECS`) は並べない (自動では選ぶ)
+   * 端末に保存したものを描いている間は出さない。H.264・H.265 (`WATCH_HIDDEN_CODECS`) は並べない (自動では選ぶ)
    */
   const codecMenu = $derived.by(
     (): { key: string; label: string; disabled?: boolean }[] => {
@@ -1492,7 +1492,8 @@
         compat && canvasAbility !== null
           ? canvasChoices(info, canvasAbility)
               .filter(
-                (item) => !HIDDEN_CODECS.some((codec) => codec === item.codec),
+                (item) =>
+                  !WATCH_HIDDEN_CODECS.some((codec) => codec === item.codec),
               )
               // 並びはほかのメニューと同じ (`MENU_ORDER`)。`canvasChoices` の並びは選ぶ順 (`pickCanvas`) のまま
               .sort(
@@ -1504,7 +1505,7 @@
                 label: codecLabel(item.codec),
                 disabled: !item.drawable,
               }))
-          : codecChoices(info, ability(), HIDDEN_CODECS).map((codec) => ({
+          : codecChoices(info, ability(), WATCH_HIDDEN_CODECS).map((codec) => ({
               key: codec,
               label: codecLabel(codec),
             }));
