@@ -230,7 +230,7 @@ COPY patches/ /patches/
 #   hevc は GPU で H.265 にエンコードした録画 (その場の変換・CM 検出のやり直し) と、ほかの録画ソフトから移した録画。
 #   ac3・eac3・mp2・aac_latm は、ほかの録画ソフトから移した録画 (サムネイル・音声だけ) のため
 # - lavfi の入力 (GPU の試しの素材) は wrapped_avframe で届くので、その「デコーダ」も要る。
-#   pcm_s16le のデコーダは、イメージの確かめで lavfi の音 (sine) を受けるためだけ
+#   pcm_s16le のデコーダは lavfi の音 (sine) を受けるため。データ放送だけの局のライブの無音 (live.ts の SILENCE) と、イメージの確かめで使う
 # - エンコーダ: wrapped_avframe と pcm_s16le は `-f null` の既定。mpeg2video は GPU の試しの素材、mjpeg はサムネイル、
 #   rawvideo は CM 検出のロゴのコマ。H.265 (hevc_*) は GPU のものだけで、libx265 は組まない
 #   (ソフトウェアでは H.265 をエンコードしない。docs/encode.md「H.265 は GPU でだけ」)。
@@ -245,8 +245,8 @@ COPY patches/ /patches/
 #   (hwenc.ts の liveHwArgs の `cap`。フレームを CPU に降ろさないため)
 # - setparams・zscale・tonemap (libzimg) は 4K の局のライブで、HLG (BT.2020・10 ビット) を SDR (BT.709・8 ビット) に直す
 #   (live.ts の HLG_TO_SDR)
-# - testsrc2・sine・telecine・tinterlace・noise は denpa は使わず、イメージの確かめで素材を作るためだけ
-#   (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
+# - sine はデータ放送だけの局のライブの無音 (live.ts の SILENCE) とイメージの確かめで使う。testsrc2・telecine・tinterlace・noise は denpa は使わず、
+#   イメージの確かめで素材を作るためだけ (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
 RUN case "${TARGETARCH}" in \
       amd64) arch_dev=libffmpeg-nvenc-dev arch_flags="--enable-ffnvcodec --enable-nvenc" ;; \
       arm64) arch_dev=libdrm-dev arch_flags="--enable-libdrm --enable-rkmpp" ;; \

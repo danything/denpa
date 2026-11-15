@@ -1030,7 +1030,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         const from = upAsk.from;
         upAsk = null;
         adapter.abandon(now);
-        act({ step: from, reason: "slow" }, now);
+        // 上げた段が映らないので戻す。回線の細さで下げるのではないので、繋ぎ直したあとの見送り (`holdsDown`) を通さない
+        act({ step: from, reason: "slow" }, now, true);
       }
       return;
     }
@@ -1200,7 +1201,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 決まったことをする。段を動かすなら断り書きを出してリクエストし直す (前のコマを貼ったまま。`requestAgain`)。
    * `encode`・`pinned` は断り書きだけで、ほかの理由の断り書きは上書きしない (サーバが軽くしたときの文は `encode` で替える。`replacesWarning`)
    */
-  function act(decision: AdaptDecision | null, now: number): void {
+  function act(
+    decision: AdaptDecision | null,
+    now: number,
+    /** 上げた段が映らずに戻すとき。見送り (`holdsDown`) を通さない */
+    revert = false,
+  ): void {
     if (decision === null) {
       if (standing !== null && now - standing.at >= ADAPT_HOLD) {
         if (warning === standing.text) warning = "";
@@ -1220,7 +1226,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * サーバの入れ替え (`restarting`) の前後と、切れた接続を繋ぎ直したあとしばらく (`holdsDown`) は、回線が細いとして下げない。
      * 届かないのは回線のせいではない。断り書きは出さず、段もそのまま
      */
-    if (holdsDown(decision.reason, now, restartingAt, holdDownUntil)) return;
+    if (!revert && holdsDown(decision.reason, now, restartingAt, holdDownUntil))
+      return;
     /*
      * 追っかけには音声だけが無い。段 3 のまま流す。互換モードも同じ (映像の無い fMP4 を canvas に流す経路を
      * 確かめていない)

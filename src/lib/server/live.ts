@@ -2759,6 +2759,11 @@ class Session {
     } finally {
       if (own) await stream.return(undefined);
       endInput(proc);
+      /*
+       * 無音を流している ffmpeg は TS を読まないので、入力を閉じても終わらない。止めないと、チューナーから外されたときも
+       * 終わるのを待ったまま (`runEncode`) になり、セッションが畳まれない
+       */
+      if (this.silent) proc.kill();
     }
   }
 
