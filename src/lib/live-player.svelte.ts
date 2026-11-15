@@ -2787,6 +2787,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             dropped: notice.dropped,
             speed: notice.speed,
           };
+        } else if (notice.type === "audios") {
+          /*
+           * サーバが PMT を読んで、選べる音声を組み直した。MPEG-2 のままでは、データ放送が選んだ音声を画面が足している
+           * (`setAudio`) ので、選んでいる間は残す
+           */
+          const chosen = broadcastTrack(audio);
+          audios =
+            chosen === undefined ||
+            notice.audios.some((track) => track.id === audio)
+              ? notice.audios
+              : [...notice.audios, chosen];
         } else if (notice.type === "captions") {
           captionTracks = notice.tracks;
           captionTrack = notice.track;

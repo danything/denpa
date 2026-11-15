@@ -26,6 +26,7 @@ import type {
   ComponentPMT,
   ESEvent,
   ModuleFile,
+  NPTReference,
   ResponseMessage,
 } from "./bml-protocol.js";
 import { u16, u32 } from "./bytes.js";
@@ -60,6 +61,12 @@ const DESC_DATA_COMPONENT = 0xfd;
  * 0x0C/0x0D が地上波、0x07 が BS、0x0B が CS
  */
 const BXML_COMPONENT_IDS = new Set([0x07, 0x0b, 0x0c, 0x0d]);
+
+/**
+ * DSM-CC を運ぶ ES の stream_type (ISO/IEC 13818-6 の type B・C・D)。
+ * **イベントメッセージだけを運ぶ ES は、データ符号化方式記述子が BML でなくても読む** (`BmlDecoder.onPmt`)
+ */
+const DSMCC_STREAM_TYPES = new Set([0x0b, 0x0c, 0x0d]);
 
 /** zlib。Compression Type 記述子で運用されるのはこれだけ */
 const COMPRESSION_ZLIB = 0;
@@ -192,6 +199,30 @@ export function pmtAudios(section: Uint8Array): (number | null)[] {
 const u33 = (data: Uint8Array, at: number) =>
   (data[at]! & 1) * 0x100000000 + u32(data, at + 1);
 
+/** STC・NPT の一周 (33 ビット・90kHz) */
+const WRAP_33 = 2 ** 33;
+
+/**
+ * いまの NPT (90kHz)。TR-B14 第二分冊の NPT 値の算出に従う。
+ * 進む (scale 1/1) か止まっている (scale 0/1) ときだけ求め、ほかの速さ (運用されない) は null
+ */
+function nptAt(reference: NPTReference, stc: number): number | null {
+  if (reference.scaleDenominator !== 1) return null;
+  if (reference.scaleNumerator === 0) return reference.NPTReference;
+  if (reference.scaleNumerator !== 1) return null;
+  const elapsed = (stc - reference.STCReference + WRAP_33) % WRAP_33;
+  return (reference.NPTReference + elapsed) % WRAP_33;
+}
+
+/**
+ * NPT 参照記述子が言う時刻 (STC_Reference) に STC が達したか。**達する前の参照は使わない。**
+ * 放送は切り替える少し前から次の参照を送るので、達する前に使うと NPT が先へ飛ぶ。
+ * 33 ビットで一周するので、差が半周より大きいものはまだ先とみなす
+ */
+function reached(reference: NPTReference, stc: number): boolean {
+  return (stc - reference.STCReference + WRAP_33) % WRAP_33 < WRAP_33 / 2;
+}
+
 /** ストリーム記述子 (table_id 0x3D)。NPT と イベントメッセージが載っている */
 function parseEsEvents(section: Uint8Array): ESEvent[] {
   const events: ESEvent[] = [];
@@ -266,6 +297,13 @@ const MAX_CAROUSEL_SIZE = 64 * 1024 * 1024;
 /** カルーセルが流れている ES 1 本ぶんの覚え書き */
 interface Component {
   componentId: number;
+  /**
+   * カルーセル (DII・DDB) を組み立てるか。BML の符号化方式が付いた ES だけ true。
+   * false の ES はイベントメッセージ (ストリーム記述子) だけを読む
+   */
+  carousel: boolean;
+  /** 使い始めた NPT 参照 (`reached`)。時刻指定のイベントメッセージを起こす時刻を決める */
+  npt: NPTReference | null;
   sections: SectionAssembler;
   /** DII の transaction_id。**変わっていなければ組み立て直さない** */
   transactionId: number | null;
@@ -303,6 +341,10 @@ export class BmlDecoder {
   private readonly components = new Map<number, Component>();
   /** 最後に配った PMT。**変わったときだけ配る** */
   private sent: string | null = null;
+  /** PMT の PCR_PID。読むまでは null */
+  private pcrPid: number | null = null;
+  /** 最後に読んだ PCR の基準部 (90kHz)。**放送の STC**。時刻指定のイベントメッセージに使う (`dueEvents`) */
+  private stc: number | null = null;
 
   constructor(private readonly send: (message: ResponseMessage) => void) {}
 
@@ -325,6 +367,7 @@ export class BmlDecoder {
     const pid = packetPid(packet);
     // 同じ PID を 2 つの用途で使うこともあるので、else でつながない
     for (const section of this.pmt.feed(packet, pid)) this.onPmt(section);
+    if (pid === this.pcrPid) this.readPcr(packet);
     if (pid === PID_TIME)
       for (const section of this.time.feed(packet)) this.onTime(section);
     const component = this.components.get(pid);
@@ -334,7 +377,25 @@ export class BmlDecoder {
     }
   }
 
+  /** 適応フィールドの PCR の基準部 (90kHz)。拡張部 (27MHz の端数) は使わない */
+  private readPcr(packet: Uint8Array): void {
+    if (
+      (packet[3]! & 0x20) === 0 ||
+      packet[4]! < 7 ||
+      (packet[5]! & 0x10) === 0
+    )
+      return;
+    this.stc =
+      packet[6]! * 2 ** 25 +
+      packet[7]! * 2 ** 17 +
+      packet[8]! * 2 ** 9 +
+      packet[9]! * 2 +
+      (packet[10]! >> 7);
+  }
+
   private onPmt(section: Uint8Array): void {
+    const pcrPid = u16(section, 8) & 0x1fff;
+    this.pcrPid = pcrPid === 0x1fff ? null : pcrPid;
     const components = parsePmt(section);
     if (components.length === 0) return;
     const audios = pmtAudios(section);
@@ -350,11 +411,23 @@ export class BmlDecoder {
     }
 
     for (const component of components) {
-      // カルーセルが流れているのは、BML の符号化方式が付いた ES だけ
-      if (component.bxmlInfo === undefined) continue;
-      if (this.components.has(component.pid)) continue;
+      /*
+       * カルーセルが流れているのは、BML の符号化方式が付いた ES だけ。**イベントメッセージは、運用では文書とは別の ES で
+       * 送られる** (文書の `es_ref` で指す)。その ES に BML の符号化方式が付いているとは限らないので、DSM-CC の ES は
+       * どれもストリーム記述子を読む
+       */
+      const carousel = component.bxmlInfo !== undefined;
+      if (!carousel && !DSMCC_STREAM_TYPES.has(component.streamType)) continue;
+      const held = this.components.get(component.pid);
+      if (held !== undefined) {
+        // 番組が替わって、イベントメッセージだけの ES にカルーセルが載ることがある
+        if (carousel) held.carousel = true;
+        continue;
+      }
       this.components.set(component.pid, {
         componentId: component.componentId,
+        carousel,
+        npt: null,
         // DSM-CC は section_syntax_indicator が立たないことがある (psi.ts)
         sections: new SectionAssembler(component.pid, "syntax"),
         transactionId: null,
@@ -380,13 +453,44 @@ export class BmlDecoder {
       this.send({
         type: "esEventUpdated",
         componentId: component.componentId,
-        events: parseEsEvents(section),
+        events: this.dueEvents(component, parseEsEvents(section)),
         dataEventId: extension >> 12,
       });
       return;
     }
+    if (!component.carousel) return;
     if (section[0] === TABLE_DII) this.onDii(component, section);
     else this.onDdb(component, section);
+  }
+
+  /**
+   * **時刻指定 (NPT) のイベントメッセージは、NPT がその時刻に達したら、すぐ起きるもの (time_mode 0) として配る。**
+   *
+   * NPT は PCR (STC) と NPT 参照記述子から求める。描く側 (denpa の `bml/engine.ts`) は PCR を受け取らない
+   * (映像の再生位置で動く) ので、PCR を読めるここで決める。放送は同じストリーム記述子を繰り返し送るので、
+   * 達したあとに届いた回で起きる。達していないものと、NPT が分からないもの (参照がまだ来ていない・PCR を読んでいない) は、
+   * 時刻指定のまま配る (描く側は起こさない)
+   */
+  private dueEvents(component: Component, events: ESEvent[]): ESEvent[] {
+    const stc = this.stc;
+    if (stc === null) return events;
+    for (const event of events)
+      if (event.type === "nptReference" && reached(event, stc))
+        component.npt = event;
+    const npt = component.npt === null ? null : nptAt(component.npt, stc);
+    if (npt === null) return events;
+    return events.map((event) =>
+      event.type === "nptEvent" && event.eventMessageNPT <= npt
+        ? {
+            type: "immediateEvent",
+            eventMessageGroupId: event.eventMessageGroupId,
+            timeMode: 0,
+            eventMessageType: event.eventMessageType,
+            eventMessageId: event.eventMessageId,
+            privateDataByte: event.privateDataByte,
+          }
+        : event,
+    );
   }
 
   private onDii(component: Component, section: Uint8Array): void {

@@ -187,6 +187,15 @@ export type Notice =
       broadcast?: BroadcastCodec;
     }
   | {
+      /**
+       * **選べる音声が変わった** (`server/live.ts` の `followAudios`)。`tuned` の `audios` を置き換える。
+       * `tuned` は PMT を読む前に番組表だけで組んで送るので、PMT を読んで番組表に無い音声の ES が分かったときと、
+       * 番組が替わったときに来る。エンコードしている音声 (`tuned` の `audio`) は変わらない
+       */
+      type: "audios";
+      audios: AudioTrack[];
+    }
+  | {
       /** 選べる字幕。ffmpeg が入口で読んだストリーム一覧から分かるので、1 枚も届いていなくても来る (`captions.ts` の `TrackList`) */
       type: "captions";
       tracks: CaptionTrack[];

@@ -228,6 +228,11 @@ function langNames(audio: Audio): string[] {
 
 export interface Audio {
   componentType: number;
+  /**
+   * 部品タグ (`audio_component_descriptor` の `component_tag`)。PMT の音声の ES と突き合わせる (`audioTracks` の `pmt`)。
+   * 古い行と、番組表を引き継いだ行には無い
+   */
+  componentTag?: number;
   langs?: string[];
   samplingRate?: number;
   /**
@@ -296,13 +301,32 @@ export interface AudioTrack {
  *
  * **番組表が何も言っていなければ 1 つだけ返す。** 音声が無いことはないので、
  * 何も出せないより「そのまま出す」1 つを置くほうが確か
+ *
+ * @param pmt PMT の音声の ES の部品タグ (PMT の順。`@danything/arib/bml` の `pmtAudios`)。渡せば**並びと本数は PMT に従う。**
+ *   番組表の音声は部品タグで突き合わせ (タグを持たない古い行は並びで)、番組表に無い ES も「音声 N」として並べる。
+ *   PMT に無い音声は選んでも鳴らないので並べない。渡さなければ (PMT をまだ読んでいない) 番組表だけで決める
  */
-export function audioTracks(audios: Audio[]): AudioTrack[] {
+export function audioTracks(
+  audios: Audio[],
+  pmt?: readonly (number | null)[],
+): AudioTrack[] {
+  const placed: readonly (Audio | undefined)[] =
+    pmt === undefined || pmt.length === 0 ? audios : onPmt(audios, pmt);
   // 音声が 2 本以上あるときだけ「音声 1/音声 2」を添える。1 本のときは邪魔なだけ
-  const many = audios.length > 1;
+  const many = placed.length > 1;
   const tracks: AudioTrack[] = [];
 
-  audios.forEach((audio, stream) => {
+  placed.forEach((audio, stream) => {
+    // 番組表に無い ES。種別も名前も分からないので、何本目かで呼ぶ
+    if (audio === undefined) {
+      tracks.push({
+        id: `${stream}:both`,
+        stream,
+        side: "both",
+        label: many ? `音声 ${stream + 1}` : "音声",
+      });
+      return;
+    }
     // 放送が名乗っていれば、何本目かは添えない (「主音声ステレオ」に「音声 1」を足しても長いだけ)
     const named = audio.text !== undefined && audio.text !== "";
     const head = many && !named ? `音声 ${stream + 1} ` : "";
@@ -342,6 +366,23 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
   if (tracks.length === 0)
     return [{ id: "0:both", stream: 0, side: "both", label: "音声" }];
   return tracks;
+}
+
+/**
+ * 番組表の音声を、PMT の音声の ES の並びに置き直す (`audioTracks` の `pmt`)。番組表に無い ES は undefined。
+ * 番組表の音声が 1 つも部品タグを持たない (古い行・引き継いだ行) ときは、番組表の並びが PMT の並びと同じとみなす
+ */
+function onPmt(
+  audios: Audio[],
+  pmt: readonly (number | null)[],
+): (Audio | undefined)[] {
+  if (!audios.some((audio) => audio.componentTag !== undefined))
+    return pmt.map((_, index) => audios[index]);
+  return pmt.map((tag) =>
+    tag === null
+      ? undefined
+      : audios.find((audio) => audio.componentTag === tag),
+  );
 }
 
 /**

@@ -25,6 +25,7 @@ import {
   APPLICATION_TYPE_HTML5,
   CONTROL,
 } from "@danything/arib/ait";
+import { pmtAudios } from "@danything/arib/bml";
 import type { ResponseMessage } from "@danything/arib/bml-protocol";
 import {
   CAPTION_TEXT_VERSION,
@@ -33,7 +34,13 @@ import {
 import { PresentFollowing } from "@danything/arib/eit";
 import { MmtPresentFollowing } from "@danything/arib/mh-eit";
 import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
-import { PacketStream } from "@danything/arib/psi";
+import {
+  packetPid,
+  PacketStream,
+  PID_PAT,
+  PmtTracker,
+  TABLE_PMT,
+} from "@danything/arib/psi";
 import { ServiceFilter, StreamsWatch } from "@danything/arib/service-filter";
 import { and, eq, gt, lte } from "drizzle-orm";
 
@@ -1516,6 +1523,11 @@ class Session {
    * 途中から入ってきた人には `add` で渡す
    */
   private autoStart: AutoStartWatch | null = null;
+  /**
+   * PMT の音声の ES の部品タグ (`tap`。ライブだけ)。**選べる音声の並びと本数はこれで決める** (`arib.audioTracks` の `pmt`)。
+   * 番組表には載っていない副音声の ES が、PMT にだけあることがある。読むまでは null
+   */
+  private audioWatch: PmtAudioWatch | null = null;
   /** ffmpeg が入力で 0 に寄せたぶん (秒)。`start:` から読み取る */
   private startPts = Number.NaN;
   /** 最後に時計を配った時刻 (`tellClock`) */
@@ -2701,9 +2713,12 @@ class Session {
     if (this.program > 0 && this.source === undefined) {
       this.onAir ??= new PresentFollowing(this.program);
       this.autoStart ??= new AutoStartWatch(this.program);
+      this.audioWatch ??= new PmtAudioWatch(this.program);
     }
     const onAir = this.onAir;
     const autoStart = this.autoStart;
+    const audioWatch = this.audioWatch;
+    let audiosChanged = false;
     let autoStartChanged = false;
     let switched = false;
     const found: Ait[] = [];
@@ -2719,6 +2734,7 @@ class Session {
       ait?.feedPacket(packet, found);
       if (onAir?.feedPacket(packet) === true) switched = true;
       if (autoStart?.feedPacket(packet) === true) autoStartChanged = true;
+      if (audioWatch?.feedPacket(packet) === true) audiosChanged = true;
     }
     const startsNow = autoStartChanged ? (autoStart?.value ?? null) : null;
     if (startsNow !== null) this.tell({ type: "autoStart", on: startsNow });
@@ -2731,7 +2747,29 @@ class Session {
     ) {
       this.followOnAir(onAir);
     }
+    // 番組が替わったら、番組表の音声 (名前・デュアルモノか) も替わる
+    if (audiosChanged || switched) this.followAudios();
     return out;
+  }
+
+  /** PMT の音声の ES の部品タグ。読むまでは null (`audioWatch`)。同じ局を選局する人の `nowPlaying` も使う (`pmtSeen`) */
+  get pmtAudioTags(): readonly (number | null)[] | null {
+    return this.audioWatch?.value ?? null;
+  }
+
+  /**
+   * **選べる音声を、PMT と番組表から組み直す。変わったら `audios` で知らせる。**
+   *
+   * 選局の答え (`tuned`) は PMT を読む前に出すので、番組表だけで組んだ一覧になっている。番組表に無い副音声の ES は
+   * そこに入らず、番組が替わっても選局し直すまで前の番組の一覧が残っていた。エンコードしている音声 (`audio`) は替えない
+   */
+  private followAudios(): void {
+    const tags = this.pmtAudioTags;
+    if (tags === null || this.transport === "tlv") return;
+    const next = nowPlaying(this.serviceId, this.audio.id, false, tags).audios;
+    if (JSON.stringify(next) === JSON.stringify(this.audios)) return;
+    this.audios = next;
+    this.tell({ type: "audios", audios: next });
   }
 
   /**
@@ -5119,16 +5157,19 @@ interface NowPlaying {
  * @param serviceId 局の内部 ID (`services.id`)。画面から届くのはこれ
  * @param wanted 画面が求めてきた音声 (`AudioTrack.id`)。無いものなら先頭
  * @param whole 4K の局の放送の HEVC と AAC を、エンコードせずに詰め替えて送るか (`Session.passthrough`)
+ * @param pmt PMT の音声の ES の部品タグ (`Session.pmtAudioTags`)。省けば、同じ局を流しているセッションが読んだもの (`pmtSeen`)。
+ *   どれも読んでいなければ番組表だけで決める
  */
 function nowPlaying(
   serviceId: number,
   wanted: string | undefined,
   whole = false,
+  pmt = pmtSeen(serviceId),
 ): NowPlaying {
   const row = Number.isFinite(serviceId) ? serviceOf(serviceId) : undefined;
   const transport = row?.transport ?? "ts";
   const decide = (program: number, audios: Audio[]): NowPlaying => {
-    const all = audioTracks(audios);
+    const all = audioTracks(audios, transport === "tlv" ? undefined : pmt);
     const tracks =
       transport === "tlv"
         ? whole
@@ -5152,6 +5193,53 @@ function nowPlaying(
     .where(airingAt(serviceId))
     .get();
   return decide(row.service_id, parseAudios(program));
+}
+
+/**
+ * **いま同じ局を流しているセッションが読んだ PMT の音声** (`Session.pmtAudioTags`)。どれも読んでいなければ undefined。
+ *
+ * 流れているものだけを見る。畳んだセッションの PMT は番組が替わったあとも残るので、PMT に無くなった音声を
+ * 選ばせると ffmpeg が音声を名指しできずに降りる。音声を選び直すと、選局し直す前のセッションがまだ流れているので、そちらの PMT が使える
+ */
+function pmtSeen(serviceId: number): readonly (number | null)[] | undefined {
+  for (const session of sessions.values()) {
+    if (session.serviceId !== serviceId || !session.alive) continue;
+    const tags = session.pmtAudioTags;
+    if (tags !== null) return tags;
+  }
+  return undefined;
+}
+
+/**
+ * PMT の音声の ES の部品タグを読む (`Session.audioWatch`)。PMT だけ読み、**並びが初めて決まったか変わったら true** を返す
+ * (`databroadcast.ts` の `AutoStartWatch` と同じ作り)
+ */
+export class PmtAudioWatch {
+  private readonly pmt: PmtTracker;
+  private now: (number | null)[] | null = null;
+
+  /** @param program 放送が名乗っている番号 */
+  constructor(program: number) {
+    this.pmt = new PmtTracker(program);
+  }
+
+  get value(): readonly (number | null)[] | null {
+    return this.now;
+  }
+
+  feedPacket(packet: Uint8Array): boolean {
+    const pid = packetPid(packet);
+    if (pid !== PID_PAT && pid !== this.pmt.pid) return false;
+    let changed = false;
+    for (const section of this.pmt.feed(packet, pid)) {
+      if (section[0] !== TABLE_PMT) continue;
+      const next = pmtAudios(section);
+      if (JSON.stringify(next) === JSON.stringify(this.now)) continue;
+      this.now = next;
+      changed = true;
+    }
+    return changed;
+  }
 }
 
 /** その局でいま流れている番組 (`programs` の絞り込み) */

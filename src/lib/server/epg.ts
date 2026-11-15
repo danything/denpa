@@ -755,10 +755,14 @@ export function savePrograms(
             : /*
                * **放送が付けた名前も残す。** 解説放送や二重音声は、
                * 種別も言語も同じ音声が 2 本並ぶので、符号だけでは
-               * 「ステレオ (日本語)」が 2 つになって見分けが付かない
+               * 「ステレオ (日本語)」が 2 つになって見分けが付かない。
+               * 部品タグは、ライブで PMT の音声の ES と突き合わせる (`arib.audioTracks`)
                */
               event.audios.map((a) => ({
                 componentType: a.componentType,
+                ...(a.componentTag === undefined
+                  ? {}
+                  : { componentTag: a.componentTag }),
                 langs: a.langs,
                 ...(a.text === undefined ? {} : { text: a.text }),
                 ...(a.main === undefined ? {} : { main: a.main }),
