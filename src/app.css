@@ -607,6 +607,12 @@ html[data-status-bar="translucent"]:not([data-stage-fullscreen]) body::before {
 html[data-status-bar="translucent"][data-theme="light"] body::before {
   background: #0b0c0f;
 }
+/* 透かしを減らす設定では透かさず、地の色で塗る (ほかの透かす面と同じ。docs/design.md 3 章) */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-status-bar="translucent"]:not([data-theme="light"]) body::before {
+    background: var(--dp-bg);
+  }
+}
 
 /*
  * **舞台を広げている間 (iPhone の全画面の代わり。`player/fullscreen.svelte.ts`) は
@@ -721,14 +727,35 @@ thead th {
  * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表の取得)。値が変わったら
  * なめらかに伸ばす (`--dp-duration`)。**動いているあいだ** (`.running`。付けるのは
  * 呼ぶ側。`JobProgress` など) は、伸びたところを明るさで脈打たせる (動かすのはファイルの最後)。
- * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
+ * **長さの分からないもの (値の無いバー) は、溝いっぱいを半分の濃さで塗り、全体を透明度だけで脈打たせる** (動かすのはファイルの最後)。
+ * Pico の左右に流れる動きは背景の位置を毎フレーム描き直し、ソフトウェアで描く端末でも止まらなかった (docs/design.md 7 章)。
+ * 止まった姿 (動きを減らす設定・`data-lite`) も溝いっぱいなので、途中まで進んだバーに見えない
  */
 progress[value]::-webkit-progress-value {
   transition: inline-size var(--dp-duration) var(--dp-ease);
 }
+progress:indeterminate {
+  background: color-mix(
+    in srgb,
+    var(--pico-progress-color) 50%,
+    var(--pico-progress-background-color)
+  );
+  animation: none;
+}
+progress:indeterminate::-webkit-progress-value {
+  background-color: transparent;
+}
+progress:indeterminate::-moz-progress-bar {
+  background-color: transparent;
+}
 @keyframes progress-shine {
   50% {
     opacity: 0.7;
+  }
+}
+@keyframes progress-wait {
+  50% {
+    opacity: 0.5;
   }
 }
 /* 走っている取り込み・スキャン・ロゴや番組表の取得の状態と記録 */
@@ -1536,7 +1563,8 @@ a.button {
  * **控えのボタンも字だけにする。** 一覧では行ごとに同じボタンが並ぶので、地の付いたボタンの列が
  * 縦に立つと番組名より目立つ。押せることは字の色・指を乗せたときの地・カーソルで分かる。
  * 押せる高さは 40px (観る画面の操作バーが狭い枠で下げる下限と同じ。`player/ControlButton.svelte`)。行の右に寄せる。
- * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする。主のボタン (追っかけ・削除の「確定」) は件の面の上なので太字だけ (上の「浮いたものの中」)
+ * 削除・取消の 1 回目は、ほかの所と同じく控えのボタンの字で、指を乗せたときだけ赤くする (上の `.outline.danger`。行だけ字を変えない)。
+ * 主のボタン (追っかけ・削除の「確定」) は件の面の上なので太字だけ (上の「浮いたものの中」)
  */
 .row-actions {
   --dp-btn-h: 2.5rem;
@@ -1552,9 +1580,6 @@ a.button {
   padding-block: 0;
   padding-inline: var(--dp-space-3);
   font-size: var(--dp-text-sm);
-}
-.row-actions .outline.danger {
-  --dp-btn-text: var(--dp-muted);
 }
 
 /*
@@ -2348,20 +2373,21 @@ dialog[open] > article {
  * カードを 2 列に積んでいた頃は、目が左右を行き来して、どこまで読んだのか分からなくなった。
  * 左の一覧の隣に左寄せで置く。文と欄だけの節は読みやすい幅で止める (`.readable`)。表のある節は広く使う
  *
- * **設定の欄は低く (36px)。** 欄が 42px のままだと、項目の多い画面で欄ばかりが目に付いた。
- * 字の大きさは変えない (16px より小さいと iPhone は押したときに拡大する)。
- * 指で押す端末では 40px 以上を保つ。中のボタン (`.small` でないもの) も同じ高さに揃う
+ * **設定の欄は小さいボタンと同じ段の高さ (`--dp-btn-h-sm`。34px、指で押す端末は 40px)。** 欄が 42px のままだと、
+ * 項目の多い画面で欄ばかりが目に付いた。高さは段から上下の余白を逆算する (段のほかに値を作らない。docs/design.md の「入力欄」)。
+ * 字の大きさは変えない (16px より小さいと iPhone は押したときに拡大する)。中のボタン (`.small` でないもの) も同じ高さに揃う
  */
 .sections {
-  --pico-form-element-spacing-vertical: 0.25rem;
+  --pico-form-element-spacing-vertical: calc(
+    (
+        var(--dp-btn-h-sm) - 1rem * var(--pico-line-height) -
+          var(--pico-border-width) * 2
+      ) /
+      2
+  );
   --pico-form-element-spacing-horizontal: 0.625rem;
   display: flex;
   flex-direction: column;
-}
-@media (pointer: coarse) {
-  .sections {
-    --pico-form-element-spacing-vertical: 0.45rem;
-  }
 }
 .sections.readable {
   max-width: 45rem;
@@ -2449,7 +2475,7 @@ dialog[open] > article {
     color: var(--pico-color);
     font-size: var(--dp-text-sm);
   }
-  /* 右が字を打つ欄・選ぶ欄の行は、名前を欄の字の高さに下ろす (欄 36px、指で押す端末は 42px) */
+  /* 右が字を打つ欄・選ぶ欄の行は、名前を欄の字の高さに下ろす (欄 34px、指で押す端末は 40px) */
   .setting-rows
     > .field:has(> :is(input:not([type="checkbox"], [type="radio"]), select))
     > .field-label {
@@ -2459,7 +2485,7 @@ dialog[open] > article {
     .setting-rows
       > .field:has(> :is(input:not([type="checkbox"], [type="radio"]), select))
       > .field-label {
-      padding-top: 0.6rem;
+      padding-top: 0.5rem;
     }
   }
 }
@@ -2846,6 +2872,10 @@ dialog[open] > article {
   }
   :root:not([data-lite]) progress.running[value]::-moz-progress-bar {
     animation: progress-shine var(--dp-shine) ease-in-out infinite;
+  }
+  /* 値の無いバーは全体を透明度だけで脈打たせる (Pico の背景の位置を流す動きは上で消してある) */
+  :root:not([data-lite]) progress:indeterminate {
+    animation: progress-wait var(--dp-shine) ease-in-out infinite;
   }
   :root:not([data-lite]) .skeleton::after {
     animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
