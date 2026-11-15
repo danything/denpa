@@ -7,10 +7,11 @@ import { logoUnusable } from "#lib/format.js";
 import { orm } from "#lib/server/db.js";
 import { encodedFiles } from "#lib/server/library.js";
 import { rulerOf } from "#lib/server/playback.js";
-import { recordings } from "#lib/server/schema.js";
+import { recordings, services } from "#lib/server/schema.js";
 import { displayTitle } from "#lib/server/title.js";
 import { recordedTransport, tsPathOf } from "#lib/source.js";
 import { fromTsTime } from "#lib/ts/watch.js";
+import { hasVideo } from "#lib/types.js";
 
 /**
  * **観られる録画の一覧** (画面の外のもの向けの API。docs/api.md)。新しい順。
@@ -50,8 +51,10 @@ export function GET({ url }) {
       cmNote: recordings.cm_note,
       audio_type: recordings.audio_type,
       audios: recordings.audios,
+      serviceType: services.service_type,
     })
     .from(recordings)
+    .leftJoin(services, eq(services.id, recordings.service_id))
     .where(
       and(
         ne(recordings.state, "deleted"),
@@ -96,7 +99,17 @@ export function GET({ url }) {
         })),
         ...(ts === null || recordedTransport(ts) === "tlv"
           ? []
-          : [{ source: "ts" as const, codec: "mpeg2", url: file("ts") }]),
+          : [
+              {
+                source: "ts" as const,
+                // 映像の無い局 (ラジオ・データ放送) の録画は映像が無い。局が分からなければ今までどおり MPEG-2
+                codec:
+                  row.serviceType !== null && !hasVideo(row.serviceType)
+                    ? "none"
+                    : "mpeg2",
+                url: file("ts"),
+              },
+            ]),
       ];
       return {
         id: row.id,

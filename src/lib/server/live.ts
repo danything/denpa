@@ -2741,6 +2741,8 @@ class Session {
     own: boolean,
   ): Promise<void> {
     const writer = proc.stdin as import("bun").FileSink;
+    // この ffmpeg が無音を流しているか。起こし直して切り替わっても、止めるのはこの ffmpeg のときの値で決める (`finally`)
+    const silent = this.silent;
     /*
      * 4K の局は TS を経由しない。1 局に絞って詰め替えた fMP4 を渡す (`live-mmt.ts`)。ffmpeg ごとに作り直す
      * (fMP4 は init から出し直し、時刻 0 も数え直す。ffmpeg の `start:` もそこから読み直す)
@@ -2792,7 +2794,7 @@ class Session {
           break;
         }
         // 無音を流しているときは、ffmpeg は TS を読まない (`encodeArgs` の `silent`)。データ放送などへ分けるだけ
-        if (out.length === 0 || this.silent) continue;
+        if (out.length === 0 || silent) continue;
         // **書けたことを待つ** (上の説明)。待たないと、失敗したときに受け止める先がない
         await writer.write(out);
         await writer.flush();
@@ -2800,6 +2802,11 @@ class Session {
     } finally {
       if (own) await stream.return(undefined);
       endInput(proc);
+      /*
+       * 無音を流している ffmpeg は TS を読まないので、入力を閉じても終わらない。止めないと、チューナーから外されたときも
+       * 終わるのを待ったまま (`runEncode`) になり、セッションが畳まれない
+       */
+      if (silent) proc.kill();
     }
   }
 
