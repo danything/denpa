@@ -129,3 +129,19 @@ describe("README の印の間を差し替える", () => {
     expect(() => replaceBlock(`${END}\n${START}\n`, "x")).toThrow();
   });
 });
+
+describe("報告や提案のリンク先", () => {
+  test("Issue を立てた人は Issue の一覧、Discussion だけの人は Discussion の一覧へ飛ぶ", () => {
+    const text = render([
+      { kind: "issue", number: 5, login: "a" },
+      { kind: "discussion", number: 6, login: "a" },
+      { kind: "discussion", number: 7, login: "b" },
+    ]);
+    expect(text).toContain(
+      '<a href="https://github.com/danything/denpa/issues?q=author%3Aa">',
+    );
+    expect(text).toContain(
+      '<a href="https://github.com/danything/denpa/discussions?discussions_q=author%3Ab">',
+    );
+  });
+});
