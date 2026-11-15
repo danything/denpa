@@ -500,7 +500,7 @@ internal sealed class AsicenTuner : ITuneDevice
     /// 衛星は名前に TSID があれば TSID で、無ければ (NIT を読むための選局と CS) スロット 0 で選ぶ。
     /// </para>
     /// </summary>
-    public static byte[] TuneRequest(ReadOnlySpan<byte> epoch, ulong lease, ChannelTable.Tuning tuning, uint streamId)
+    public static byte[] TuneRequest(ReadOnlySpan<byte> epoch, ulong lease, ChannelTable.Tuning tuning)
     {
         var payload = new byte[43];
         epoch.CopyTo(payload);
@@ -509,9 +509,9 @@ internal sealed class AsicenTuner : ITuneDevice
         BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(25), tuning.Satellite ? (ulong)tuning.Frequency * 1000 : tuning.Frequency);
         if (tuning.Satellite)
         {
-            var byId = streamId != ChannelTable.NoStreamId;
+            var byId = tuning.StreamId != ChannelTable.NoStreamId;
             payload[33] = (byte)(byId ? 1 : 2);
-            BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(34), byId ? (ushort)streamId : (ushort)0);
+            BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(34), byId ? (ushort)tuning.StreamId : (ushort)0);
         }
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(39), (uint)TuneTimeout.TotalMilliseconds);
         return payload;
@@ -602,7 +602,7 @@ internal sealed class AsicenTuner : ITuneDevice
         lease.End();
         if (_lease == 0) throw lease.Broken();
 
-        var request = TuneRequest(control.Epoch, _lease, tuning, tuning.StreamId);
+        var request = TuneRequest(control.Epoch, _lease, tuning);
         var frequencyHz = BinaryPrimitives.ReadUInt64LittleEndian(request.AsSpan(25));
         byte[] tuned;
         try

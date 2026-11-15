@@ -1041,7 +1041,7 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 誰も使っていなければ、<see cref="IdleGrace"/> のあとに閉じる (チューナーが捨てられたとき・カードを閉じたとき)。
-    /// 待つ間に取り直されたら閉じない。すぐには電源を切らない (下の <paramref name="grace"/>)
+    /// 待つ間に取り直されたら閉じない
     /// </summary>
     public static void CloseIfIdle(string port) => CloseIfIdle(port, IdleGrace);
 
