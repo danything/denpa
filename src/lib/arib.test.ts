@@ -264,8 +264,13 @@ describe("audioTracks (PMT の音声の ES と突き合わせる)", () => {
     ]);
   });
 
-  test("PMT に音声が無ければ (読めていない) 番組表だけで決める", () => {
+  test("PMT に音声が無いか、音声に部品タグが 1 つも無ければ、番組表だけで決める", () => {
     expect(audioTracks([main], [])).toEqual(audioTracks([main]));
+    const two = [
+      main,
+      { componentType: 3, componentTag: 0x11, langs: ["jpn"] },
+    ];
+    expect(audioTracks(two, [null])).toEqual(audioTracks(two));
   });
 });
 

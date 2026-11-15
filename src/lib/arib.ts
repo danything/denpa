@@ -304,14 +304,17 @@ export interface AudioTrack {
  *
  * @param pmt PMT の音声の ES の部品タグ (PMT の順。`@danything/arib/bml` の `pmtAudios`)。渡せば**並びと本数は PMT に従う。**
  *   番組表の音声は部品タグで突き合わせ (タグを持たない古い行は並びで)、番組表に無い ES も「音声 N」として並べる。
- *   PMT に無い音声は選んでも鳴らないので並べない。渡さなければ (PMT をまだ読んでいない) 番組表だけで決める
+ *   PMT に無い音声は選んでも鳴らないので並べない。渡さない (PMT をまだ読んでいない) か、PMT の音声に部品タグが 1 つも無ければ、番組表だけで決める
  */
 export function audioTracks(
   audios: Audio[],
   pmt?: readonly (number | null)[],
 ): AudioTrack[] {
+  // 部品タグを 1 つも持たない PMT (放送では運用されない) は突き合わせられないので、番組表だけで決める
   const placed: readonly (Audio | undefined)[] =
-    pmt === undefined || pmt.length === 0 ? audios : onPmt(audios, pmt);
+    pmt === undefined || pmt.every((tag) => tag === null)
+      ? audios
+      : onPmt(audios, pmt);
   // 音声が 2 本以上あるときだけ「音声 1/音声 2」を添える。1 本のときは邪魔なだけ
   const many = placed.length > 1;
   const tracks: AudioTrack[] = [];
