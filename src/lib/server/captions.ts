@@ -225,7 +225,7 @@ export function pmtVideo(section: Uint8Array): ServiceVideo | null {
 const AUDIO_STREAMS: ReadonlySet<number> = new Set([0x03, 0x04, 0x0f, 0x11]);
 
 /** **PMT に音声があるか** (`AUDIO_STREAMS`)。データ放送だけの局は映像も音声も無い */
-export function pmtAudio(section: Uint8Array): boolean {
+function pmtAudio(section: Uint8Array): boolean {
   for (const [type] of pmtStreams(section))
     if (AUDIO_STREAMS.has(type)) return true;
   return false;

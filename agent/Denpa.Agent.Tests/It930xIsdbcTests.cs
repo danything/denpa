@@ -159,7 +159,7 @@ public class It930xIsdbcTests
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Missing);
             await Assert.That(tuner.IsdbcFailedSignal!.Locked).IsTrue();
-            // 止めるのは出口だけで、ブリッジの入力は閉じない (閉じる書き込みは、開いたときの TS の経路の設定の 1 回だけ)
+            // 止めるのは出口だけで、ブリッジの入力は閉じない (閉じる書き込みは、開いたときに TS の経路を設定する 1 回だけ)
             int closes;
             lock (usb.Log) closes = usb.Log.Count(line => line == $"W {TsEnable:X4}=00");
             await Assert.That(closes).IsEqualTo(1);
@@ -200,7 +200,7 @@ public class It930xIsdbcTests
     }
 
     [Test]
-    public async Task C24_から_C27_は表の周波数でロックしなければ_2_MHz_ずらした周波数を試す()
+    public async Task QC24_から_QC27_は表の周波数でロックしなければ_2_MHz_ずらした周波数を試す()
     {
         await Task.Yield();
         var (usb, _, bus3) = Fake();

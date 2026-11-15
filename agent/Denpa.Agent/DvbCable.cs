@@ -68,7 +68,7 @@ internal sealed class DvbCable
     public void Stop()
     {
         _stopped = true;
-        // dvr の読み出しは 200ms ごとに止める合図を確かめるので、ふつうはすぐ戻る
+        // dvr の読み出しは 200 ms ごとに止める合図を確かめるので、ふつうはすぐ戻る
         _thread.Join(TimeSpan.FromSeconds(2));
         _output.Complete();
     }

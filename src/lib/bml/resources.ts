@@ -270,7 +270,7 @@ export class Resources {
 
   /**
    * 名前を解決する。`base` は今の文書 (`/40/0000/startup.bml`・通信の文書なら URL)。
-   * http・https は通信のもの (`Ref.url`)。通信の文書の中の相対の名前は文書の URL から解決し、
+   * http・https は通信のもの (`Ref.url`)。通信の文書に書かれた相対の名前は、その文書の URL から解決し、
    * `arib-dc://` だけを放送のものとして引く。どちらでも指せない名前 (ftp: など) は null
    */
   resolve(url: string, base: string | null): Ref | null {

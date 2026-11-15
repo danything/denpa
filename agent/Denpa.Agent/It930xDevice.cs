@@ -418,7 +418,7 @@ public sealed class It930xDevice
     public long TsReads => Interlocked.Read(ref _tsReads);
 
     /// <summary>
-    /// 前に溢れを記録に出してから、読み出しのスレッドが EP 0x84 の Read の外にいた時間のいちばん長いもの (ms)。
+    /// 前に溢れの変化を記録に出してから、読み出しのスレッドが EP 0x84 の Read の外にいた時間のいちばん長いもの (ms)。
     /// 転送要求は Read の中でしか出し直さないので、これが長いと、出してある転送要求 (<see cref="It930xBridge.TsDepth"/> 個) が全部埋まり、
     /// ブリッジのバッファが溢れる。溢れの記録に添え、読み出しが止まったのか、ブリッジの中で溢れたのかを分ける (#2805)
     /// </summary>
@@ -663,7 +663,7 @@ public sealed class It930xDevice
         var cause = before is { System: true }
             ? "全体の溢れが前から立っていて EP 0x84 から TS が出ないため、入力にも溜まったと推定します"
             : "EP 0x84 の読み出しが追いつかなかったと推定します";
-        // 前に記録に出してから今までに、読み出しのスレッドが Read の外にいたいちばん長い時間。出したら数え直す
+        // 前に記録に出してから今までに、読み出しのスレッドが Read の外にいたいちばん長い時間。溢れが下りたと出すときも数え直す
         var away = TakeLongestAway();
         Log.Write(overflow.Any
             ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}。読み出しのスレッドが EP 0x84 の読み出しを離れていた時間は、いちばん長くて {away} ms です"
@@ -908,7 +908,7 @@ public sealed class It930xDevice
         ?? throw new IOException($"{Model.Name} に受信機 {receiver} はありません (0〜{Model.Receivers.Count - 1})");
 
     /// <summary>
-    /// 受信機の TS を <paramref name="output"/> に流し始める。ブリッジには書かない (入力は開いたときから全部開いている。<see cref="Setup"/>)。
+    /// 受信機の TS を <paramref name="output"/> に流し始める。ブリッジには書かない (入力は最初の受信機を開いたときから全部開いている。<see cref="OpenInputs"/>)。
     /// 5 つの入力は 1 つの経路にまとまるので、ほかの受信機が流している間にブリッジの TS の経路を書き換えないため。
     /// 流し始める前に溢れを読み、立っていれば記録に出す (<see cref="WatchOverflow"/>)
     /// </summary>
@@ -1403,7 +1403,7 @@ public sealed class It930xTuner : ITuneDevice
     {
         "GR" => "地上波",
         ChannelTable.Sky => "スカパー！プレミアム",
-        ChannelTable.Catv => "ISDB-C (ケーブルテレビ)",
+        ChannelTable.Catv => "ケーブル",
         _ => type,
     };
 
@@ -1560,7 +1560,7 @@ public sealed class It930xTuner : ITuneDevice
     public TunerSignal? IsdbcFailedSignal { get; private set; }
 
     /// <summary>
-    /// 最後の ISDB-C の選局がロックしなかったときに、周波数ごとに読んだ復調器とチューナーの状態 (<see cref="CxdIsdbcLockFailure"/>)。
+    /// 最後の ISDB-C の選局がロックしなかったときに、周波数ごとに読んだ復調器の状態 (<see cref="CxdIsdbcLockFailure"/>)。
     /// 常駐の記録 (<see cref="TunerPool"/>) と <c>--tune</c> が 1 つ 1 行で出す。ロックしたか、ISDB-C でなければ空
     /// </summary>
     public IReadOnlyList<CxdIsdbcLockFailure> IsdbcLockFailures { get; private set; } = [];

@@ -380,7 +380,7 @@ export class Dom {
         );
         attribute("streamPosition", "streamposition", "number");
         attribute("streamLooping", "streamlooping", "number", 1);
-        // 主音声の切り替え (STD-B24 第二編)。同じ局のほかの音声の ES を出す (J:COM テレビのラジオ選局など)
+        // 主音声の切り替え (STD-B24 第二編。J:COM テレビのラジオ選局など)。替えるのはエンジン (`setMainAudio`)
         object.method(this.realm, "setMainAudioStream", (_, args) =>
           host.setMainAudio(toStr(args[0])),
         );

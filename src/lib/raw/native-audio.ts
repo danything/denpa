@@ -4,7 +4,7 @@
  * 同期は映像の時計に合わせ、AudioContext 上では連続する音声の間隔を保つ。
  *
  * **Audio Session はこれが持つ** (作ったら `playback`、畳んだら戻す)。音は常に Web Audio で鳴るので、
- * 言わずにおくと iOS は効果音として扱い、消音スイッチで黙り、裏へ回すと止める (`#lib/sound.ts` の `playbackSession`)
+ * 言わずにおくと iOS は効果音として扱い、消音スイッチで鳴らさず、裏へ回すと止める (`#lib/sound.ts` の `playbackSession`)
  */
 import { Outlet, playbackSession } from "#lib/sound.js";
 

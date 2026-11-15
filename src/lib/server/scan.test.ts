@@ -28,8 +28,8 @@ import {
 } from "@danything/arib/synth-mmt";
 
 import { CaObserver } from "./ca-observe";
+import { catvChannels } from "./cable";
 import {
-  catvChannels,
   channelEntry,
   channelsFor,
   dedupeCatv,

@@ -56,7 +56,7 @@ public static class Zd1j
         }
     }
 
-    /// <summary>設定に書いたのと同じ形式で。種別は地上波だけ</summary>
+    /// <summary>挿さっている機材を、設定に書くのと同じ形式で返す。種別は地上波だけ</summary>
     public static List<TunerSpec> Detect() =>
         [.. Ports(Log.Write).Select(port => new TunerSpec($"{Model} {port}", ["GR"], false, Device(port)))];
 
@@ -518,23 +518,23 @@ public sealed class Zd1jTuner : ITuneDevice
 
 /// <summary>
 /// TS を 1 回流すぶん。EP 0x81 の転送要求を 16 本出しっぱなしにして、192 バイトの単位から取り出し、
-/// <see cref="Pipe"/> (8MB) に詰める。読み出し側は <see cref="DeviceStream"/> (asicend から受けるときと同じ形)
+/// <see cref="Pipe"/> (8 MB) に詰める。読み出し側は <see cref="DeviceStream"/> (asicend から受けるときと同じ形)
 /// </summary>
 internal sealed class Zd1jStream
 {
     private const byte Endpoint = 0x81;
 
     /// <summary>
-    /// 1 本の転送要求の大きさ。仕様書 9.4 の「1536 バイト (192 と 512 の公倍数) の倍数」で、64KB に収まるいちばん大きいもの (64,512 バイト)
+    /// 1 本の転送要求の大きさ。仕様書 9.4 の「1536 バイト (192 と 512 の公倍数) の倍数」で、64 KB に収まるいちばん大きいもの (64,512 バイト)
     /// </summary>
     private const int TransferSize = 42 * 1536;
 
     /// <summary>
-    /// 出しっぱなしにする転送要求の数。仕様書 9.3 の例 (64KB を 16 本)。地上波 (約 17Mbps) で約 0.5 秒ぶんで、読む側が少し遅れても抜けない
+    /// 出しっぱなしにする転送要求の数。仕様書 9.3 の例 (64 KB を 16 本)。地上波 (約 17 Mbps) で約 0.5 秒ぶんで、読む側が少し遅れても抜けない
     /// </summary>
     private const int Depth = 16;
 
-    /// <summary>1 回の読み出しの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。転送要求は裏で出したまま)</summary>
+    /// <summary>1 回の読み出しの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300 ms。転送要求は裏で出したまま)</summary>
     private const int ReadTimeoutMs = 300;
 
     private readonly Pipe _pipe = TsBuffer.New();
@@ -636,7 +636,7 @@ public sealed class Zd1jCard : ICardLink
     private readonly Func<Zd1jBoard> _acquire;
     private Zd1jBoard? _board;
     private T1Protocol? _t1;
-    /// <summary>1 ブロックの待ち (仕様書 13.7 の「500ms から。ATR の BWI で変わる」)</summary>
+    /// <summary>1 ブロックの待ち (仕様書 13.7 の「500 ms から。ATR の BWI で変わる」)</summary>
     private int _blockWaitMs = 500;
 
     public string Name { get; }

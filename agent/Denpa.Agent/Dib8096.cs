@@ -11,7 +11,7 @@ namespace Denpa.Agent;
  * 仕様書が「参考の実装の振る舞い」と書いた所はそのとおりにし、仕様書に無かった所は「仕様書に無い」と書いた。
  *
  * レジスタの書き方: D[n] は DiB8000 のレジスタ n (10 進)、T[0xNN] は DiB0090 のレジスタ (16 進)。どちらも 16 ビット。
- * 待ちは 0.1ms 単位で数える所が多い (DiB0090 と AGC の状態機械)。
+ * 待ちは 0.1 ms 単位で数える所が多い (DiB0090 と AGC の状態機械)。
  */
 
 /// <summary>DiB8096 の待ちと時計。ボードは待つ前に溜めた I2C を流し、待ちの間に流し始めの準備を回す (Zd1j.cs)</summary>
@@ -57,15 +57,15 @@ public sealed class Dib8096
     private readonly DibMemory? _memory;
 
     /*
-     * 仕様書の外の、選局を縮める工夫 (どれも仕様書に無い。数字の根拠は各定数に):
-     * - DiB0090 のキャパシタの較正 (7.3.5。二分探索で約 17 歩・約 165ms) の結果を周波数ごとに保存して使い回す
-     * - 温度の較正 (7.3.3。約 44ms) は直前に測ってから TemperatureReuseMs 以内なら飛ばす
+     * 仕様書の外の、選局を縮める工夫 (どれも仕様書に無い。数字の根拠は各定数に)。
+     * - DiB0090 のキャパシタの較正 (7.3.5。二分探索で約 17 歩・約 165 ms) の結果を周波数ごとに保存して使い回す
+     * - 温度の較正 (7.3.3。約 44 ms) は直前に測ってから TemperatureReuseMs 以内なら飛ばす
      * - 復調器の探索で、シンボルの数の時間切れに関わらない段は FastPollMs ごとに読む (Floor)
      *
-     * 3 つの数字 (60 秒・3ms・許容値 50) は、実機 (CECH-ZD1 J、T27・T21、2026-10-26) で 13 回選局して 1 回も同期を落とさず、
-     * 保存した値での選局が中央 800ms → 617ms になった値。本番の記録 (選局ごとの 1 行。LastSummary) でも、2026-10-26〜27 の 17 回で
+     * 3 つの数字 (60 秒・3 ms・許容値 50) は、実機 (CECH-ZD1 J、T27・T21、2026-10-26) で 13 回選局して 1 回も同期を落とさず、
+     * 保存した値での選局が中央 800 ms → 617 ms になった値。本番の記録 (選局ごとの 1 行。LastSummary) でも、2026-10-26〜27 の 17 回で
      * 同期を落とさず、キャパシタを使い回したときの ADC のずれは -39〜0 (許容 +50 に届かない)、温度は 60 秒あまりで ±2 (2532 秒で +14)
-     * だった。保存した値で合わせた選局は 481〜791ms
+     * だった。保存した値で合わせた選局は 481〜791 ms
      */
 
     /// <summary>
@@ -93,15 +93,15 @@ public sealed class Dib8096
     private double _temperatureAt = double.NegativeInfinity;
 
     /// <summary>
-    /// 最後の選局の、使い回しと較正の様子 (<c>--tune</c> の内訳に出す)。上の 3 つの数字を実機の値から決めるための記録:
-    /// キャパシタの ADC の差、温度の変化と経過秒、3ms 間隔で回した段ごとの歩数
+    /// 最後の選局の、使い回しと較正の様子 (<c>--tune</c> の内訳に出す)。上の 3 つの数字を実機の値から決めるための記録で、
+    /// キャパシタの ADC の差、温度の変化と経過秒、3 ms 間隔で回した段ごとの歩数
     /// </summary>
     private readonly List<string> _notes = [];
 
     /// <summary>キャパシタの較正をやり直した理由 (なければ「保存した値なし」)</summary>
     private string _capReason = "";
 
-    /// <summary>3ms 間隔で回した段ごとの歩数 (最後の選局)</summary>
+    /// <summary>3 ms 間隔で回した段ごとの歩数 (最後の選局)</summary>
     private readonly Dictionary<Step, int> _fastSteps = [];
 
     private int? _temperatureLast;
@@ -167,8 +167,8 @@ public sealed class Dib8096
         _i2c.Write(TunerAddress, [(byte)register, (byte)(value >> 8), (byte)value]);
 
     /// <summary>
-    /// 0.1ms 単位の待ちをミリ秒に直す。参考の実装と同じく <c>floor(10 × (t + 99) / 100)</c> ms に丸め上げる (t = 0 でも 9ms)。
-    /// **仕様書の値そのまま (切り上げただけ) では同期しない** (仕様書に「10ms 未満の待ちは同期しないことがある」とあり、実機でも
+    /// 0.1 ms 単位の待ちをミリ秒に直す。参考の実装と同じく <c>floor(10 × (t + 99) / 100)</c> ms に丸め上げる (t = 0 でも 9 ms)。
+    /// **仕様書の値そのまま (切り上げただけ) では同期しない** (仕様書に「10 ms 未満の待ちは同期しないことがある」とあり、実機でも
     /// 1 回目・2 回目とも同期しなかった)
     /// </summary>
     private static int Ms(int tenths) => 10 * (tenths + 99) / 100;
@@ -254,7 +254,7 @@ public sealed class Dib8096
             D(register, value);
         }
         D(906, 0x2D98);
-        // PLL: 前置分周 1・倍率 18 で 216MHz、内部クロック 54,000,000 Hz、IF 0
+        // PLL: 前置分周 1・倍率 18 で 216 MHz、内部クロック 54,000,000 Hz、IF 0
         D(901, 0x0112);
         D(902, 0x050F);
         D(902, 0x0507);
@@ -449,7 +449,7 @@ public sealed class Dib8096
             T(0x40, 0x0108);
         }
         if ((TunerVersion & 0x1F) >= 3) Fuses();
-        // 水晶 12MHz
+        // 水晶 12 MHz
         T(0x14, 2);
         // 残っている較正 (仕様書の「宿題」)。DC は開くときに (CalibrateDc)、WBD と温度は最初の選局で走る
         _dcPending = _wbdPending = _tempPending = true;
@@ -595,7 +595,7 @@ public sealed class Dib8096
     }
 
     /// <summary>
-    /// 最後の選局の要約の 1 行。常駐のときも記録に出し (Zd1jTuner)、3 つの数字 (60 秒・3ms・許容値 50) を本番の記録で見直すのに使う。
+    /// 最後の選局の要約の 1 行。常駐のときも記録に出し (Zd1jTuner)、3 つの数字 (60 秒・3 ms・許容値 50) を本番の記録で見直すのに使う。
     /// 形式: <c>選局 &lt;Hz&gt; Hz: &lt;経路&gt;、ロックまで &lt;ms&gt;ms、キャパシタ: &lt;…&gt;、温度: &lt;…&gt;、&lt;同期した / ロックしたがデータはまだ / 同期しなかった&gt;</c>
     /// </summary>
     public string LastSummary { get; private set; } = "";
@@ -716,7 +716,7 @@ public sealed class Dib8096
 
     // --- DiB0090 の選局 (7.3) -------------------------------------------
 
-    /// <summary>状態が「終わり」になるまで回す。待ちは 0.1ms 単位</summary>
+    /// <summary>状態が「終わり」になるまで回す。待ちは 0.1 ms 単位</summary>
     private void RunTuner()
     {
         _tunerState = TunerStart;
@@ -734,7 +734,7 @@ public sealed class Dib8096
         }
     }
 
-    /// <summary>1 歩。待ち (0.1ms) を返す</summary>
+    /// <summary>1 歩。待ち (0.1 ms) を返す</summary>
     private int TunerStep()
     {
         if (_tunerState == TunerStart && (_wbdPending || _tempPending)) T(0x23, T(0x23) & ~0x4000);
@@ -1381,7 +1381,7 @@ public sealed class Dib8096
                 if (_tunerBand == Band.Cband && ((_ltDefault >> 10) & 7) != 0)
                 {
                     // 10〜12 ビットの欄だけを半分にする。ほかのビット (13・14) は残す。
-                    // C バンド (170MHz 以下) だけの処理で、日本の地上波 (UHF) では通らない。実機では確かめていない
+                    // C バンド (170 MHz 以下) だけの処理で、日本の地上波 (UHF) では通らない。実機では確かめていない
                     var half = ((_ltDefault >> 10) & 7) / 2;
                     _ltDefault = (_ltDefault & ~(7 << 10)) | (half << 10);
                 }
@@ -1665,7 +1665,7 @@ public sealed class Dib8096
     private DemodState _demodState;
     private double _deadline;
 
-    /// <summary>1 シンボルの長さ (ms)。6MHz では計算上いつも 0.1ms (参考の実装の振る舞い)</summary>
+    /// <summary>1 シンボルの長さ (ms)。6 MHz では計算上いつも 0.1 ms (参考の実装の振る舞い)</summary>
     private const double Symbol = 0.1;
 
     /// <summary>探索の上限 (参考の実装。機材は 2 秒前後で終わる)</summary>
@@ -1682,8 +1682,8 @@ public sealed class Dib8096
     }
 
     /// <summary>
-    /// 7.5 の状態機械を回す。**1 歩の間は仕様書では最低 10ms** (7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
-    /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)。それに関わらない段だけ 3ms に詰める (<see cref="Floor"/>)
+    /// 7.5 の状態機械を回す。**1 歩の間は仕様書では最低 10 ms** (7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
+    /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)。それに関わらない段だけ 3 ms に詰める (<see cref="Floor"/>)
     /// </summary>
     private DibLock Search()
     {
@@ -1774,23 +1774,23 @@ public sealed class Dib8096
     }
 
     /// <summary>
-    /// 次の段を回すまでの最低の間 (ms)。仕様書 (参考の実装) はどの段も最低 10ms。
-    /// シンボルの数の時間切れに関わらない段は <see cref="FastPollMs"/> に詰める (仕様書に無い)。段ごとの根拠:
+    /// 次の段を回すまでの最低の間 (ms)。仕様書 (参考の実装) はどの段も最低 10 ms。
+    /// シンボルの数の時間切れに関わらない段は <see cref="FastPollMs"/> に詰める (仕様書に無い)。段ごとの根拠は次のとおり。
     /// <list type="bullet">
     /// <item>開始・探索の始め・段 2・段 3・段 9: 書いて次へ進むだけで、待って読むものが無い。間を空けても機材の進みは変わらない
-    /// (段 3 のあとの間は、段 4 を下の 10ms 側に入れたので詰めない)</item>
+    /// (段 3 のあとの間は、段 4 を下の 10 ms 側に入れたので詰めない)</item>
     /// <item>段 1: 探索の終わりの割り込み (D[1284]) を読むだけ。時間切れは外側の 5 秒だけで、早く読んでも読み出しが増えるだけ</item>
-    /// <item>段 10: 時間切れは実時間 (200ms × 数) なので、読む間隔を詰めても時間切れの長さは変わらない</item>
-    /// <item>段 5・段 7 (と、そこから入る段 6・段 8) は 10ms のまま: 時間切れがシンボルの数 (2 × L・20 × n シンボル、6MHz で数 ms) で、
-    /// 10ms ごとに読む前提の長さになっている。詰めると機材が同期を判定する前に時間切れになる。段 8 の前の 14 シンボルの待ちも同じ</item>
-    /// <item>段 4 も 10ms のまま: 段 3 でチャンネルの共通設定を書いてから復調器をやり直すまでの間で、機材がその設定を取り込むのに
+    /// <item>段 10: 時間切れは実時間 (200 ms × 数) なので、読む間隔を詰めても時間切れの長さは変わらない</item>
+    /// <item>段 5・段 7 (と、そこから入る段 6・段 8) は 10 ms のまま: 時間切れがシンボルの数 (2 × L・20 × n シンボル、6 MHz で数 ms) で、
+    /// 10 ms ごとに読む前提の長さになっている。詰めると機材が同期を判定する前に時間切れになる。段 8 の前の 14 シンボルの待ちも同じ</item>
+    /// <item>段 4 も 10 ms のまま: 段 3 でチャンネルの共通設定を書いてから復調器をやり直すまでの間で、機材がその設定を取り込むのに
     /// 要る時間が仕様書から分からない。段 4 は段 5 の時間切れ (シンボルの数) を立てる所でもある</item>
     /// </list>
     /// </summary>
     private int Floor(Step next) =>
         next is not (Step.Step4 or Step.Step5 or Step.Step6 or Step.Step7 or Step.Step8) ? FastPollMs : 10;
 
-    /// <summary>1 歩。次の段と待ち (0.1ms)</summary>
+    /// <summary>1 歩。次の段と待ち (0.1 ms)</summary>
     private (Step Next, int Wait) DemodStep(Step step)
     {
         switch (step)
@@ -1939,7 +1939,7 @@ public sealed class Dib8096
                 var k = D(568);
                 // 仕様書の段 10 は「最長の階層」のビットだけを待ち、時間切れのときに 0x00E0 (どれかの階層) で判定する。
                 // 最長の階層は参考の実装の振る舞いで 1 セグメントの階層 A になりがちで、そのインターリーブが深いぶん待つ
-                // (実機で 600ms)。時間切れのときの判定 (と 8.1 の「データが出る」) と同じく、どれかの階層が揃えば先へ進む
+                // (実機で 600 ms)。時間切れのときの判定 (と 8.1 の「データが出る」) と同じく、どれかの階層が揃えば先へ進む
                 if ((k & 0x00E0) != 0)
                 {
                     _demodState = DemodState.DataLocked;
@@ -2272,7 +2272,7 @@ public sealed class Dib8096
         Both,
     }
 
-    /// <summary>7.5.7 ダイバーシティの入力。バージョン 0x8002 は D[903] のビット 3 を 30ms 落とす (選局ごとに 3 回)</summary>
+    /// <summary>7.5.7 ダイバーシティの入力。バージョン 0x8002 は D[903] のビット 3 を 30 ms 落とす (選局ごとに 3 回)</summary>
     private void Diversity(DiversityMode mode)
     {
         var sw = D(273) & 0xFFF0;
