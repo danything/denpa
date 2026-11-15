@@ -256,7 +256,7 @@ public static class DeviceProbe
     /// <para>
     /// <c>GET /denpa/tuners</c> の <c>receivable</c> に入れ、denpa はこれに無い種別を設定で選ばせず、保存でも断る。
     /// 定義の <c>types</c> は画面から書き換えられるので、BS/CS 専用の受信機に GR を入れて保存でき、
-    /// その台に割り振られた地上波の選局が受信機の確認 (<see cref="UserlandReceiver.Check"/>) で全部断られていた (#2386)
+    /// その台に割り振られた地上波の選局が受信機の確認 (<see cref="AsicenReceiver.Check"/>) で全部断られていた (#2386)
     /// </para>
     /// </summary>
     public static string[]? Receivable(string? device) =>
