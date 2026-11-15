@@ -277,11 +277,6 @@
   .name {
     overflow-wrap: anywhere;
   }
-  .row-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--dp-space-2);
-  }
   .row-actions button {
     margin: 0;
   }

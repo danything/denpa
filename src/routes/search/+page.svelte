@@ -999,10 +999,7 @@
     white-space: nowrap;
   }
   .hit .row-actions {
-    display: flex;
     flex: none;
-    align-items: center;
-    gap: var(--dp-space-1);
   }
   .none {
     margin: 0;

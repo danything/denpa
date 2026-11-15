@@ -1564,12 +1564,16 @@ a.button {
  * 縦に立つと番組名より目立つ。押せることは字の色・指を乗せたときの地・カーソルで分かる。
  * 押せる高さは 40px (観る画面の操作バーが狭い枠で下げる下限と同じ。`player/ControlButton.svelte`)。
  * **指で押す端末 (`pointer: coarse`) では 44px 四方** (車のタブレットで押したつもりの隣が開かない大きさ)。行の右に寄せる。
+ * ボタンの間はどの一覧も 4px、指で押す端末では 8px。
  * 削除・取消の 1 回目は、ほかの所と同じく控えのボタンの字で、指を乗せたときだけ赤くする (上の `.outline.danger`。行だけ字を変えない)。
  * 主のボタン (追っかけ・削除の「確定」) は件の面の上なので太字だけ (上の「浮いたものの中」)
  */
 .row-actions {
   --dp-btn-h: 2.5rem;
   --dp-btn-h-sm: 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: var(--dp-space-1);
   margin-inline-start: auto;
 }
 .row-actions :is(button, a.button) {
@@ -1586,6 +1590,7 @@ a.button {
   .row-actions {
     --dp-btn-h: 2.75rem;
     --dp-btn-h-sm: 2.75rem;
+    gap: var(--dp-space-2);
   }
   .row-actions :is(button, a.button) {
     min-width: 2.75rem;
