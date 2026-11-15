@@ -29,6 +29,7 @@ import {
   busyAnswer,
   CODEC_HEADER,
   covers,
+  failureText,
   PACE_HEADER,
   type Ranges,
   retryable,
@@ -79,8 +80,8 @@ interface RemuxOptions {
   start: number;
   /** どの音声で始めるか */
   audio: string;
-  /** 繋ぎ直している・打ち切った・戻った・混んでいて断られた */
-  state(state: StreamState): void;
+  /** 繋ぎ直している・打ち切った・戻った・混んでいて断られた。打ち切ったときは理由 (`failureText`) を添える */
+  state(state: StreamState, reason?: string): void;
   /** 応答を受けるたびに呼ぶ */
   heard?(stream: StreamHeard): void;
 }
@@ -362,8 +363,9 @@ export function remuxPlayer(
     // 切れた (繋がらない・途中で落ちた・サーバの 5xx) ならリクエストし直す。読めない中身
     // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面が観られる先の案内を出す
     if (video.error !== null || !retryable(error)) {
-      console.warn("[remux] 流せませんでした", error);
-      options.state("failed");
+      const reason = failureText(video.error, error);
+      console.warn(`[remux] 流せませんでした: ${reason}`, error);
+      options.state("failed", reason);
       return;
     }
     // 倍々に待って、観ていた位置からリクエストし直す
