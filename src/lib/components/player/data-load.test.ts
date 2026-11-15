@@ -19,7 +19,7 @@ describe("データ放送のエンジンの読み込み (loadEngine)", () => {
     expect(warned).toEqual([]);
   });
 
-  test("読み込めなければ null を返し、理由をコンソールに出す (投げたままにしない)", async () => {
+  test("読み込めなければ例外を投げずに null を返し、理由をコンソールに出す", async () => {
     const warned: string[] = [];
     expect(
       await loadEngine(
