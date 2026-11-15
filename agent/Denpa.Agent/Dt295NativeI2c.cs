@@ -45,7 +45,7 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
     public bool Alive { get; private set; }
 
     /// <summary>
-    /// 準備 (仕様書 6.4。値は 6.4 と、実機の常駐イメージの観測による): 0xFD8010 |= 0x10、0xFD8014 &= ~0x10、0xFD80B0 |= 1、0xFD80C0 = 0、
+    /// 準備 (仕様書 6.4。値は 6.4 と、実機の常駐イメージの観測による): 0xFD8010 |= 0x10、0xFD8014 &amp;= ~0x10、0xFD80B0 |= 1、0xFD80C0 = 0、
     /// 0xFD8FF8 = 6、0xFD8FF4 = 0x10、0xFD8FE8 = 0x3C、0xFD8FE4 = 0x42。読み戻しは確かめず、記録に出す。<see cref="Alive"/> を決める。
     /// 元の値を返すので、終わったら <see cref="Restore"/> で戻す
     /// </summary>

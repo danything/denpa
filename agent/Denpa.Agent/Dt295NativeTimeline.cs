@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 設定から最初の TS までの時間の内訳 (<c>--dt295-probe</c> が表にする)。段ごとに、開始の時刻・かかった時間・制御転送の数・I2C の転送の数を取る。
-/// 段は入れ子にできる (親の行は子の行を含む)。待ち (<see cref="Wait"/>) は、仕様書の待ちか、ホストが決めた待ちかを理由に書く。
+/// 段は入れ子にできる (親の行は子の行を含む)。待ち (<see cref="Dt295TimelineExtensions.Wait"/>) は、仕様書の待ちか、ホストが決めた待ちかを理由に書く。
 /// <see cref="Dt295NativeDevice"/> に渡さなければ (null) 何も取らない
 /// </summary>
 public sealed class Dt295Timeline

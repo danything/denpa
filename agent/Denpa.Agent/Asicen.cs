@@ -157,9 +157,12 @@ public static class AsicenUserland
     {
         if (ports.Count == 1) return ValidId(ports[0]) ? ports[0] : null;
         if (ports.Count != 2) return null;
-        var parents = ports.Select(port => port.LastIndexOf('.') is var dot and > 0 ? port[..dot] : null).Distinct().ToList();
+        var parents = ports.Select(HubOf).Distinct().ToList();
         return parents is [{ } parent] && ValidId(parent) ? parent : null;
     }
+
+    /// <summary>内蔵ハブのポート (<c>1-2.1</c> → <c>1-2</c>)。ハブの下に無ければ null</summary>
+    private static string? HubOf(string port) => port.LastIndexOf('.') is var dot and > 0 ? port[..dot] : null;
 
     /// <summary>
     /// <c>asicend --list-json</c> の出力 (dtv-userland-core の docs/json-discovery.md の <c>userland.discovery</c> 1.0) を読む。
@@ -304,7 +307,7 @@ public static class AsicenUserland
     public sealed record Function(string Usb, string Port, bool Loader)
     {
         /// <summary>内蔵ハブのポート (<c>1-2.1</c> → <c>1-2</c>)。ハブの下に無ければ null</summary>
-        public string? Parent => Port.LastIndexOf('.') is var dot and > 0 ? Port[..dot] : null;
+        public string? Parent => HubOf(Port);
 
         /// <summary>内蔵ハブのどのポートか (<c>1-2.1</c> → 1)</summary>
         public int Slot => Port.LastIndexOf('.') is var dot and > 0 && int.TryParse(Port[(dot + 1)..], out var slot) ? slot : 0;
@@ -785,7 +788,10 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         return new Selection(FdArguments([], firmware, allowLnb), () => lend(enclosure.Ports));
     }
 
-    /// <summary>動いていなければ起動して ready まで待つ。駄目なら理由を添えて例外を送出する</summary>
+    /// <summary>
+    /// 動いていなければ起動して ready まで待つ。駄目なら理由を添えて例外を送出する。
+    /// ランタイムルートはここで作る (<see cref="AsicenUserland.CreateRuntimeDir"/>)
+    /// </summary>
     public void Ensure()
     {
         if (Running)
@@ -800,48 +806,20 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         AsicenUserland.CheckSocketPath(runtimeDir, Id);
         // 機材を並べるのはロックの外で
         var (args, lend) = select();
-        var listed = "";
-        // asicend は止まるときに給電を切る。前の給電の要求は消して、次の選局でオンにし直す
-        AsicenLnb.Forget(Id);
-        Listed = null;
-        _allowsLnb = args.Contains("--allow-lnb-power");
-        Launch(asicend, fds => [.. FdOptions(fds), .. args, "--runtime-dir", runtimeDir, "--instance", Id],
-            () =>
-            {
-                var (code, output) = Control("list", TimeSpan.FromSeconds(5));
-                listed = output;
-                return code == 0;
-            },
-            () =>
-            {
-                Listed = AsicenUserland.ParseList(listed, Write);
-                if (Listed is null)
-                {
-                    Write($"機種と受信機を問い合わせられません (asicenctl list: {listed})");
-                    return;
-                }
-                Write($"{Listed.Model} 受信機 {Listed.Receivers.Count} つ: "
-                    + string.Join(", ", Listed.Receivers.Select(receiver => $"#{receiver.Index} {string.Join("/", receiver.Types)}")));
-            },
-            lend);
-    }
-
-    /// <summary>
-    /// 起動して、<paramref name="ready"/> が通るまで待つ。ランタイムルートはここで作る (<see cref="AsicenUserland.CreateRuntimeDir"/>)
-    /// </summary>
-    /// <param name="args">引数を、継がせた fd の番号から組む (<see cref="AsicenUserland.Start"/>)</param>
-    /// <param name="lend">継がせる fd の複製を作る (Android)。起動する直前に呼ぶ</param>
-    private void Launch(
-        string asicend, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, Func<bool> ready, Action onReady, Func<InheritedFds>? lend)
-    {
         lock (_gate)
         {
+            // 待つ間にほかの受信機の選局が起動していれば、その asicend と問い合わせた受信機をそのまま使う
             if (Running) return;
             _process?.Dispose();
             _process = null;
+            // asicend は止まるときに給電を切る。前の給電の要求は消して、次の選局でオンにし直す
+            AsicenLnb.Forget(Id);
+            Listed = null;
+            _allowsLnb = args.Contains("--allow-lnb-power");
 
             AsicenUserland.CreateRuntimeDir(runtimeDir);
-            var process = AsicenUserland.Start(asicend, args, lend);
+            var process = AsicenUserland.Start(
+                asicend, fds => [.. FdOptions(fds), .. args, "--runtime-dir", runtimeDir, "--instance", Id], lend);
             _process = process;
             _stderr = "";
             _ = Task.Run(async () =>
@@ -863,10 +841,11 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
                 {
                     throw new IOException($"asicend が終了しました (exit {process.ExitCode}: {_stderr}){Hint(process.ExitCode)}");
                 }
-                if (ready())
+                var (code, listed) = Control("list", TimeSpan.FromSeconds(5));
+                if (code == 0)
                 {
                     Write("ready");
-                    onReady();
+                    Read(listed);
                     return;
                 }
                 Thread.Sleep(500);
@@ -875,6 +854,19 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
             Stop();
             throw new IOException($"asicend が {ReadyTimeout.TotalSeconds} 秒以内に ready になりません ({_stderr})");
         }
+    }
+
+    /// <summary>ready になった asicend の <c>asicenctl list</c> の出力から、機種と受信機を控える</summary>
+    private void Read(string listed)
+    {
+        Listed = AsicenUserland.ParseList(listed, Write);
+        if (Listed is null)
+        {
+            Write($"機種と受信機を問い合わせられません (asicenctl list: {listed})");
+            return;
+        }
+        Write($"{Listed.Model} 受信機 {Listed.Receivers.Count} つ: "
+            + string.Join(", ", Listed.Receivers.Select(receiver => $"#{receiver.Index} {string.Join("/", receiver.Types)}")));
     }
 
     /// <summary>

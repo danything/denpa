@@ -429,11 +429,11 @@ public class AsicenTests
         }
 
         var t27 = ChannelTable.Parse("T27")!;
-        await Assert.That(AsicenTuner.TuneRequest(epoch, 1, t27, t27.StreamId)).IsEquivalentTo(With5s(AsicenRecorded.TuneT27));
+        await Assert.That(AsicenTuner.TuneRequest(epoch, 1, t27)).IsEquivalentTo(With5s(AsicenRecorded.TuneT27));
         var bs03 = ChannelTable.Parse("BS03:16433")!;
-        await Assert.That(AsicenTuner.TuneRequest(epoch, 5, bs03, bs03.StreamId)).IsEquivalentTo(With5s(AsicenRecorded.TuneBs03));
+        await Assert.That(AsicenTuner.TuneRequest(epoch, 5, bs03)).IsEquivalentTo(With5s(AsicenRecorded.TuneBs03));
         var cs2 = ChannelTable.Parse("CS2")!;
-        await Assert.That(AsicenTuner.TuneRequest(epoch, 6, cs2, cs2.StreamId)).IsEquivalentTo(With5s(AsicenRecorded.TuneCs2));
+        await Assert.That(AsicenTuner.TuneRequest(epoch, 6, cs2)).IsEquivalentTo(With5s(AsicenRecorded.TuneCs2));
     }
 
     [Test]

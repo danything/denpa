@@ -116,4 +116,44 @@ public class AsicenDaemonTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Test]
+    public async Task 同時に起動を待った選局は_先に起動した_asicend_の受信機を消さない()
+    {
+        await Task.Yield();
+        var tag = Guid.NewGuid().ToString("N")[..6];
+        var dir = Directory.CreateDirectory(Path.Combine("/tmp", $"denpa-{tag}")).FullName;
+        var list = "printf 'model=PX-W3U3\\nreceiver=0 device=1 local=0 system=ISDB-S\\n'";
+        foreach (var (name, body) in new[] { ("asicend", "exec sleep 60"), ("asicenctl", list) })
+        {
+            var path = Path.Combine(dir, name);
+            File.WriteAllText(path, $"#!/bin/sh\n{body}\n");
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        // 1 回目の select (遅れた選局) は、もう 1 つの選局が起動し終えるまで止める。
+        // 遅れた選局は、動いていないのを見て機材を並べている間に、先を越された形になる
+        using var started = new ManualResetEventSlim();
+        var calls = 0;
+        var daemon = new AsicenDaemon($"{tag}c", dir, Path.Combine(dir, "r"), () =>
+        {
+            if (Interlocked.Increment(ref calls) == 1) started.Wait(TimeSpan.FromSeconds(30));
+            return new([]);
+        });
+        try
+        {
+            var late = Task.Run(daemon.Ensure);
+            while (Volatile.Read(ref calls) == 0) Thread.Yield();
+            await Task.Run(daemon.Ensure);
+            await Assert.That(daemon.Listed?.Model).IsEqualTo("PX-W3U3");
+            started.Set();
+            await late;
+            await Assert.That(daemon.Running).IsTrue();
+            await Assert.That(daemon.Listed?.Model).IsEqualTo("PX-W3U3");
+        }
+        finally
+        {
+            daemon.Stop();
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }
