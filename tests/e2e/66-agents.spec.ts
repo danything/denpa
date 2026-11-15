@@ -249,7 +249,10 @@ test.describe("2 台のエージェント", () => {
   });
 });
 
-/** 地上波の局 (`/api/services`) */
+/**
+ * 地上波のテレビの局 (`/api/services`)。スキャンした控えではデータ放送の局 (ＭＸデータ１) も入るが、
+ * そのライブは音声だけ (H.264 ではない) なので外す
+ */
 async function grServices(
   appUrl: string,
 ): Promise<{ id: number; live: string }[]> {
@@ -257,8 +260,9 @@ async function grServices(
     id: number;
     type: string;
     live: string;
+    video: boolean;
   }[];
-  return services.filter((service) => service.type === "GR");
+  return services.filter((service) => service.type === "GR" && service.video);
 }
 
 /**

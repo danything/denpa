@@ -9,7 +9,7 @@ import {
   pes,
 } from "@danything/arib/synth-av";
 
-import { lastVideoPts, type ReadAt, seekTs, sinceHead, tsHead } from "./seek";
+import { lastMediaPts, type ReadAt, seekTs, sinceHead, tsHead } from "./seek";
 
 /** 空のパケット (PID 0x1FFF)。放送の量 (1 秒に数 MB) に近づけて、二分探索に幅を持たせる */
 function nullPacket(): Uint8Array {
@@ -126,7 +126,7 @@ describe("時刻から位置を引く (seekTs)", () => {
     const first = await seekTs(read, bytes.length, head, 0);
     expect(sinceHead(first!.pts, head)).toBeCloseTo(0.5, 3);
     const last = await seekTs(read, bytes.length, head, 10_000);
-    expect(last!.pts).toBe(lastVideoPts(bytes)!);
+    expect(last!.pts).toBe(lastMediaPts(bytes)!);
   });
 
   test("PTS が一周をまたぐ録画でも引ける", async () => {
@@ -146,6 +146,34 @@ describe("時刻から位置を引く (seekTs)", () => {
   });
 
   test("末尾の映像の PTS から尺を出せる", () => {
-    expect(sinceHead(lastVideoPts(bytes)!, head)).toBeCloseTo(120, 0);
+    expect(sinceHead(lastMediaPts(bytes)!, head)).toBeCloseTo(120, 0);
+  });
+});
+
+describe("映像の無い録画 (ラジオ)", () => {
+  // 合成した録画から映像の PES (PID 0x100) を抜く
+  const full = recording(900_000, 60);
+  const packets: Uint8Array[] = [];
+  for (let at = 0; at + PACKET <= full.length; at += PACKET) {
+    const pid = ((full[at + 1]! & 0x1f) << 8) | full[at + 2]!;
+    if (pid !== 0x100) packets.push(full.subarray(at, at + PACKET));
+  }
+  const bytes = new Uint8Array(packets.length * PACKET);
+  packets.forEach((packet, i) => bytes.set(packet, i * PACKET));
+  const head = tsHead(bytes) as number;
+  const read = readerOf(bytes);
+
+  test("音声の PES で位置を引く", async () => {
+    for (const target of [0, 12.3, 45]) {
+      const mark = await seekTs(read, bytes.length, head, target);
+      expect(mark).not.toBeNull();
+      const at = sinceHead(mark!.pts, head);
+      expect(at).toBeLessThanOrEqual(target + 1e-9);
+      expect(target - at).toBeLessThan(AUDIO_TICKS / CLOCK + 1e-9);
+    }
+  });
+
+  test("末尾の音声の PTS から尺を出せる", () => {
+    expect(sinceHead(lastMediaPts(bytes)!, head)).toBeCloseTo(60, 0);
   });
 });

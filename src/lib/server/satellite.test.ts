@@ -153,9 +153,19 @@ describe("NIT と SDT から一覧を作る", () => {
       transportStreamId: 16625,
       remoteControlKeyId: null,
       services: [
-        { serviceId: 101, serviceType: 0x01, name: "NHK BS" },
-        // エンジニアリングサービスも残す (取り込みで映像の無いものを落とす。スキャンと同じ)
-        { serviceId: 929, serviceType: 0xa4, name: "BS 929" },
+        {
+          serviceId: 101,
+          serviceType: 0x01,
+          name: "NHK BS",
+          partialReception: false,
+        },
+        // エンジニアリングサービスも残す (取り込みで落とす。スキャンと同じ)
+        {
+          serviceId: 929,
+          serviceType: 0xa4,
+          name: "BS 929",
+          partialReception: false,
+        },
       ],
     });
   });

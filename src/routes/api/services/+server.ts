@@ -11,7 +11,7 @@ import {
   watchableServices,
 } from "#lib/server/epg.js";
 import { reservationStates } from "#lib/server/reservations.js";
-import { programs, services } from "#lib/server/schema.js";
+import { hasVideo, programs, services } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 
 /**
@@ -25,6 +25,7 @@ import { settings } from "#lib/server/settings.js";
  * オフのときは null。
  * `airing` はブラウザのライブの一覧に出る局か (`watchableServices`)。本チャンネルと同じ番組を流している
  * サブチャンネルと、放送を終えた局 (局名が「-」) は false。番組がまだ無い本チャンネルは true。アプリの局の一覧も、これを見て同じ局を外す
+ * `video` は映像のある局か (`types.hasVideo`)。ラジオとデータ放送の局は false で、ライブは音声だけになる (`live.AUDIO_FORM`)
  */
 export function GET() {
   const rows = orm()
@@ -36,6 +37,7 @@ export function GET() {
       name: services.name,
       remoteControlKey: services.remote_control_key,
       hasLogo: services.has_logo,
+      serviceType: services.service_type,
     })
     .from(services)
     .where(currentServices())
@@ -95,6 +97,7 @@ export function GET() {
       live: `api/services/${row.id}/live`,
       now: nowOf.get(row.id) ?? null,
       airing: watchable.has(row.id),
+      video: hasVideo(row.serviceType),
       jikkyo: jikkyo
         ? jikkyoChannel({
             type: row.type,

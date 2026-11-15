@@ -27,20 +27,26 @@ config.dataDir = dirname(config.dbPath);
 const asked: string[] = [];
 
 function channel(serviceId: number, name: string, serviceType = 1) {
+  const services: {
+    serviceId: number;
+    serviceType: number;
+    name: string;
+    partialReception?: boolean;
+  }[] = [{ serviceId, serviceType, name }];
   return {
     type: "GR",
     channel: "T16",
     networkId: 32391,
     transportStreamId: 32391,
     remoteControlKeyId: 9,
-    services: [{ serviceId, serviceType, name }],
+    services,
   };
 }
 
 /** エージェントが返すチャンネル。テストの途中で入れ替える */
-let offered = [
+let offered: ReturnType<typeof channel>[] = [
   channel(23608, "ＴＯＫＹＯ　ＭＸ"),
-  // データ放送。映像が入っていないので取り込まない
+  // 部分受信の印の無い控え (印を書く前のスキャン) のデータ放送。ワンセグかもしれないので取り込まない
   channel(700, "ＭＸデータ１", 192),
 ];
 
@@ -117,6 +123,53 @@ describe("syncServicesOnly", () => {
   test("何度呼んでも増えない", async () => {
     syncServicesOnly(await readChannels());
     expect(orm().select({ n: count() }).from(services).get()).toEqual({ n: 1 });
+  });
+
+  test("ラジオと、部分受信でないと控えにあるデータ放送の局を取り込む。ワンセグと、印の無いデータ放送の局は落とす", async () => {
+    const before = offered;
+    const ids = () =>
+      orm()
+        .select({ id: services.id, type: services.service_type })
+        .from(services)
+        .orderBy(services.id)
+        .all();
+    offered = [
+      {
+        ...channel(23608, "ＴＯＫＹＯ　ＭＸ"),
+        services: [
+          { serviceId: 23608, serviceType: 1, name: "ＴＯＫＹＯ　ＭＸ" },
+          { serviceId: 23620, serviceType: 2, name: "ＭＸラジオ" },
+          {
+            serviceId: 23615,
+            serviceType: 192,
+            name: "ＭＸデータ",
+            partialReception: false,
+          },
+          {
+            serviceId: 24136,
+            serviceType: 192,
+            name: "ＭＸワンセグ",
+            partialReception: true,
+          },
+          // スキャンし直す前の控え。ワンセグかもしれないので落とす
+          { serviceId: 700, serviceType: 192, name: "ＭＸデータ１" },
+          // エンジニアリング
+          { serviceId: 23699, serviceType: 0xa4, name: "ＥＮＧ" },
+        ],
+      },
+    ];
+    try {
+      syncServicesOnly(await readChannels());
+      expect(ids()).toEqual([
+        { id: 3239123608, type: 1 },
+        { id: 3239123615, type: 192 },
+        { id: 3239123620, type: 2 },
+      ]);
+    } finally {
+      offered = before;
+      orm().delete(services).run();
+      syncServicesOnly(await readChannels());
+    }
   });
 });
 
@@ -932,6 +985,7 @@ describe("番組表に出す局", () => {
       0,
     ),
     type,
+    service_type: 1,
   });
   const program = (serviceId: number, name: string, start = 0, end = 1) => ({
     service_id: serviceId,
@@ -1004,6 +1058,7 @@ describe("番組表に出す局", () => {
         0,
       ),
       type: "BS",
+      service_type: 1,
     });
     const services = [
       // BS朝日1〜3
@@ -1043,6 +1098,16 @@ describe("番組表に出す局", () => {
     const programs = [program(1, "ニュース"), program(2, "ニュース")];
 
     expect(airing(services, programs).map((s) => s.id)).toEqual([1, 2]);
+  });
+
+  test("映像の無い局 (ラジオ・データ放送) は、テレビの局と同じ TS でも束ねない", () => {
+    // データ放送の局 (0) はテレビの局 (1) よりサービス ID が若い。束ねるとテレビの局がサブチャンネルになって消える
+    const data = { ...service(0, "T9"), service_type: 0xc0 };
+    const radio = { ...service(2, "T9"), service_type: 2 };
+    const services = [data, service(1, "T9"), radio];
+    const programs = [program(1, "ニュース"), program(2, "ニュース")];
+
+    expect(airing(services, programs).map((s) => s.id)).toEqual([0, 1, 2]);
   });
 });
 

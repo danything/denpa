@@ -13,7 +13,7 @@
  * いま本チャンネルと同じ番組を流しているサブを外す (`epg.airing`)。決め方はここ (`splitOf`) と同じ
  */
 import { toHalfWidth } from "./fold";
-import { origin } from "./types";
+import { hasVideo, origin } from "./types";
 
 /** 鍵ごとの並びに足す */
 function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
@@ -31,6 +31,8 @@ export interface Station {
   type: string;
   /** original_network_id。CATV の局が元はどの放送かを見る (`types.origin`) */
   network_id: number;
+  /** ARIB のサービス種別 (`services.service_type`)。映像の無い局 (ラジオ・データ放送) は束ねない (`mainOf`) */
+  service_type: number;
 }
 
 /** 表に置く番組 */
@@ -61,6 +63,8 @@ export interface Airing {
  *   地上波・BS と同じ決まりになる。CS の再送信と CATV の自主放送は束ねない
  * - **CS と SKY は束ねない。** 1 つの TS に別々の会社の局が入っていて、同じ TS でも
  *   同じ番組を流す仲間とは限らない
+ * - **映像の無い局 (ラジオ・データ放送。`types.hasVideo`) は束ねない。** テレビの局と同じ TS に入っていても、同じ映像を流す仲間ではない。
+ *   束ねると、サービス ID の若いデータ放送の局がテレビの局を自分のサブチャンネルにしてしまう
  *
  * 束ねるのはチャンネルの名前ではなく TS で見る (同じ TS を、中継局やエージェントによって別のチャンネルで受けることがある)
  */
@@ -69,6 +73,7 @@ export function mainOf(services: Station[]): Map<number, number> {
     const kind =
       service.type === "CATV" ? origin(service.network_id) : service.type;
     return (kind === "GR" || kind === "BS") &&
+      hasVideo(service.service_type) &&
       service.transport_stream_id !== null
       ? `${service.type}:${service.network_id}:${service.transport_stream_id}`
       : null;

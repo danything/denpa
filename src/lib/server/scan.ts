@@ -21,8 +21,8 @@
  * - SKY と CATV は、番組表 (EIT) がスクランブルされずに来たかを控えに書く。読めれば復号できない局も番組表に出す (`types.epgReadableService`)
  * - 1 チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす。CATV は SDT だけで揃ったとみなす
  *   (`ServiceReader` の `requireNit`)
- * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
- *   映像の無いものは取り込みで落とす: `schema.DIGITAL_TV`)
+ * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入る)。局ごとに部分受信の局 (ワンセグ) かを
+ *   控えに書き (NIT の部分受信記述子)、取り込みはワンセグとエンジニアリングなどを落とす (`schema.importedService`)
  *
  * **録画中でも実行できる。** 選局はエージェントの取り合いに加わるので、録画が
  * 使っているチューナーは取られないだけ (空きが無ければ待ち、飛ばさない)。
@@ -387,6 +387,7 @@ export async function readTlvServices(
           networkId: own.originalNetworkId,
           transportStreamId: own.tlvStreamId,
           remoteControlKeyId: null,
+          partialReception: false,
         })),
       error: null,
       unnamed: true,
@@ -453,6 +454,8 @@ export function channelEntry(
         serviceId: service.serviceId,
         serviceType: service.serviceType,
         name: service.name,
+        // 部分受信の局 (ワンセグ) は取り込まない (`schema.importedService`)。新しいスキャンはどの局にも書く
+        partialReception: service.partialReception,
         ...(caSystemIdsOf === undefined
           ? {}
           : { caSystemIds: caSystemIdsOf(service.serviceId) }),

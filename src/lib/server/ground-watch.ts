@@ -6,7 +6,7 @@
  *
  * - **続けて選局できないチャンネル** (`reception.failingGround`)。周波数が変わったなら、スキャンし直せば選局できる
  * - **局の顔ぶれがスキャンの結果と違うチャンネル。** 番組表の取得がチャンネルを開いたときに SDT を読み、そのチャンネルに入っている
- *   局 (テレビ) をスキャンの結果と比べる。局が増えた・減ったなら、スキャンし直せば入る
+ *   局 (取り込む種別の局。テレビ・ラジオ・データ放送) をスキャンの結果と比べる。局が増えた・減ったなら、スキャンし直せば入る
  *
  * どちらもヘッダーの印 (`ChannelAlert.svelte`) に出し、起きたときに通知の「チャンネルの変更」も送る。
  * スキャンし直すか、受信できるようになれば消える
@@ -14,7 +14,7 @@
 import { SdtReader, type TransportInfo } from "@danything/arib/psi";
 
 import { failingGround } from "./reception";
-import { DIGITAL_TV } from "./schema";
+import { IMPORTED_SERVICE_TYPES } from "./schema";
 import type { AgentChannel } from "./tuner";
 import { notify } from "./webhook";
 
@@ -27,7 +27,7 @@ const notified = new Set<string>();
 /** 番組表の取得がチャンネルを読むついでに、SDT を読む長さ (SDT は 2 秒に 1 回は流れる) */
 const WATCH_FOR = 15_000;
 
-/** テレビの局のサービス ID を並べた文字列 (比べるため) */
+/** 取り込む種別の局のサービス ID を並べた文字列 (比べるため) */
 const shapeOf = (ids: Iterable<number>) =>
   [...ids].sort((a, b) => a - b).join(",");
 
@@ -48,12 +48,12 @@ export function compareGround(
   if (ts.services.length === 0) return;
   const broadcast = shapeOf(
     ts.services
-      .filter((service) => service.serviceType === DIGITAL_TV)
+      .filter((service) => IMPORTED_SERVICE_TYPES.has(service.serviceType))
       .map((service) => service.serviceId),
   );
   const kept = shapeOf(
     channel.services
-      .filter((service) => service.serviceType === DIGITAL_TV)
+      .filter((service) => IMPORTED_SERVICE_TYPES.has(service.serviceType))
       .map((service) => service.serviceId),
   );
   if (broadcast === kept) mismatched.delete(channel.channel);

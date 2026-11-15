@@ -28,8 +28,10 @@ import { emit } from "./events";
 import { moveFile, removeIfExists } from "./fsx";
 import { libraryPath, recordedPath } from "./library";
 import { refreshLineup } from "./lineup-follow";
-import { writeThumbnail } from "./metadata";
+import { sidecarPaths, writeThumbnail } from "./metadata";
 import { PfEvent } from "./pf-event";
+import { saveRecordedBml } from "./recorded-bml";
+import { recordedMedia } from "./recorded-broadcast";
 import { fillTsHead, recordingSummary } from "./recording";
 import { appendRecording } from "./recording-io";
 import { duplicateAtStart } from "./rules";
@@ -810,7 +812,13 @@ function finish(recordingId: number, size: number): void {
    * **エンコードするのは、予約と録り終えたときの設定のどちらもエンコードするときだけ。** 予約したあとに
    * 設定を「エンコードしない」に変えたら、前からある予約も元の TS をそのまま置く (`encoder.runJob` と同じ決まり)
    */
-  if ((reservation?.encode ?? true) && settings().encode) {
+  /*
+   * **映像の無い録画 (ラジオ・データ放送の局) はエンコードしない** (`recorded-broadcast.recordedMedia`)。
+   * 映像のエンコードはできないので、エンコードする設定でも「エンコードしない」と同じく元の TS をそのまま置く
+   */
+  const program = aribServiceId(recording.service_id);
+  const { video } = recordedMedia(recording.ts_path!, program);
+  if (video && (reservation?.encode ?? true) && settings().encode) {
     enqueue(recording.id);
     return;
   }
@@ -820,10 +828,22 @@ function finish(recordingId: number, size: number): void {
   moveFile(recording.ts_path!, dest);
   /*
    * 4K の局の録画 (TLV) は ffmpeg が読めないので、サムネイルを作らない (エンコードすれば、詰め替えた MP4 から作る。`encoder.ts`)。
-   * TS で送る 4K の局の録画は、縮めて SDR に直して取る (`encoder.encodeInput` の `uhd`)
+   * TS で送る 4K の局の録画は、縮めて SDR に直して取る (`encoder.encodeInput` の `uhd`)。映像の無い録画には作るものが無い
    */
-  const kind = encodeInput(dest, aribServiceId(recording.service_id));
-  if (!kind.tlv)
+  const kind = encodeInput(dest, program);
+  if (!video) {
+    /*
+     * 映像の無い録画のデータ放送は、エンコードするときと同じくサイドカーに取り出す (`recorded-bml.ts`)。観る画面の物差しは元の TS なので
+     * 先頭で捨てた長さは 0。付け足しなので、失敗しても録画は失敗にしない
+     */
+    void saveRecordedBml(dest, sidecarPaths(dest).dataBroadcast, recording, 0)
+      .then(() => emit("recordings"))
+      .catch((error: unknown) =>
+        console.warn(
+          `[recorder] 録画 ${recording.id} のデータ放送を取り出せませんでした: ${String(error)}`,
+        ),
+      );
+  } else if (!kind.tlv)
     void writeThumbnail(
       dest,
       (recording.end_at - recording.start_at) / 1000,

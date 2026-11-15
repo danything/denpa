@@ -84,7 +84,7 @@ import {
 } from "./metadata";
 import { remuxMmts } from "./mmts";
 import { saveRecordedBml } from "./recorded-bml";
-import { recordedBroadcast } from "./recorded-broadcast";
+import { recordedBroadcast, recordedMedia } from "./recorded-broadcast";
 import { recordingSummary, tsHeadOf } from "./recording";
 import { recordingInput } from "./recording-io";
 import { encodeJobs, programs, recordings, services } from "./schema";
@@ -1427,6 +1427,11 @@ async function runJob(jobId: number): Promise<void> {
     fail(jobId, recording, "元の TS がありません");
     return;
   }
+  // 映像の無い録画 (ラジオ・データ放送の局) はエンコードしない。元の TS のまま観る画面で再生する (`recorder.finish`)
+  if (!recordedMedia(input, aribServiceId(recording.service_id)).video) {
+    fail(jobId, recording, NO_VIDEO);
+    return;
+  }
 
   // 前の回が落ちて取り残した中間ファイルを片付けてから始める (この元の TS のぶんだけ)
   clearScratch(input);
@@ -2259,6 +2264,15 @@ async function runCmJob(jobId: number): Promise<void> {
   // エンコードせずに置いた録画 (「エンコードしない」) は、置き場の TS が元の TS そのもの (`tsPathOf`)
   const raw = tsPathOf(recording);
   const files = encodedFiles(recording).map((entry) => entry.path);
+  // 映像の無い録画 (ラジオ・データ放送の局) は CM を検出しない (CM 検出は映像のロゴと場面の切り替わりを読む)
+  if (
+    raw !== null &&
+    files.length === 0 &&
+    !recordedMedia(raw, aribServiceId(recording.service_id)).video
+  ) {
+    fail(jobId, recording, NO_VIDEO_CM, what);
+    return;
+  }
   /*
    * **4K の録画 (`.mmts`) は、エンコードしたものがあればそちらから読む。** 無ければ MP4 に詰め替えてから読む
    * (`remuxForEncode`。ffmpeg は TLV を読めない)。詰め替えた MP4 の時刻は録画の物差し (`mmts.ts`) と同じなので、
@@ -2450,6 +2464,13 @@ export const CM_CUT_ALREADY =
 /** 映像コーデックをどれも選んでいない (「エンコードしない」)。エンコードするジョブも、ホームの再エンコードも断る */
 export const NO_CODEC =
   "映像コーデックが選ばれていません。設定で選んでください";
+
+/** 映像の無い録画 (ラジオ・データ放送の局) のエンコードを断る理由。元の TS のまま観られる (`recorder.finish`) */
+export const NO_VIDEO =
+  "映像の無い録画はエンコードしません。元の TS のまま観られます";
+
+/** 映像の無い録画の CM 検出を断る理由 */
+const NO_VIDEO_CM = "映像の無い録画は CM を検出しません";
 
 /**
  * 段階の中の進み具合 (CM 検出だけやり直すとき)。読んだコマの時刻 ÷ 尺。

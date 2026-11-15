@@ -78,6 +78,11 @@ export interface PlaybackInfo {
    * 録画しか無いときの「自動」の順で、MPEG-2 の場所に HEVC を入れる (`autoOrder`。ライブの 4K の局と同じ)
    */
   broadcast?: BroadcastCodec;
+  /**
+   * **映像の無い録画 (ラジオ・データ放送の局) だけ** false。`offers` は音声だけの fMP4 (`codecs` が `mp4a.40.2`) 1 つで、
+   * `/stream` はどの `codec` をリクエストしても音声だけを返す (音声も無い録画は無音)。画面は段を動かさない
+   */
+  video?: false;
 }
 
 /**
@@ -280,6 +285,16 @@ export function pickOffer(
   choice: CodecChoice | "mpeg2" = "auto",
   indoor = false,
 ): Picked | null {
+  /*
+   * 映像の無い録画は音声だけの fMP4 1 つ。AAC を受け取れない端末は無い (ライブの音声だけと同じ) ので、端末には聞かない。
+   * テレビのアプリの `?playable=` も映像のコーデックしか言わないので、聞くと選べない
+   */
+  if (info.video === false) {
+    const offer = info.offers.find((o) => o.way === "stream");
+    return offer === undefined || offer.codec === "mpeg2"
+      ? null
+      : { way: "stream", codec: offer.codec, type: AUDIO_TYPE };
+  }
   const files = byOrder(
     info.offers.filter((offer) => offer.way === "file"),
     ENCODED_ORDER,
@@ -368,6 +383,9 @@ export function autoPick(
   const picked = pickOffer(info, playableAbility(formats), "auto", indoor);
   if (picked === null) return null;
   if (picked.way === "raw") return picked;
+  // 映像の無い録画は音声だけ。映像のコーデックを再生できるかは問わない (`pickOffer`)
+  if (info.video === false && picked.way === "stream")
+    return { way: "stream", codec: picked.codec };
   if (picked.codec === "mpeg2" || !formats.includes(picked.codec)) return null;
   return picked.way === "file"
     ? { way: "file", codec: picked.codec, source: picked.source }
@@ -410,6 +428,8 @@ export function codecChoices(
   can: MediaAbility,
   hidden: readonly PlayCodec[] = [],
 ): PlayCodec[] {
+  // 映像の無い録画は音声だけなので、映像のコーデックは並べない
+  if (info.video === false) return [];
   return MENU_ORDER.filter((codec) =>
     codec === "mpeg2"
       ? playsRaw(info, can)

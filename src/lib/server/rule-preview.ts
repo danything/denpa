@@ -268,6 +268,8 @@ async function countPreview(
         ? extended
         : sql<Program["extended"]>`NULL`,
     service_type: serviceTable.type,
+    // 映像の無い局は、局を名指ししたルールだけが当てる (`rules.missOf`。予約を立てるときと同じ)
+    arib_service_type: serviceTable.service_type,
     service_name: serviceTable.name,
     service_has_logo: serviceTable.has_logo,
     service_channel: shareKey(),

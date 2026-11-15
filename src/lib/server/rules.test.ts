@@ -394,7 +394,7 @@ describe("番組からルールを作る", () => {
 describe("当たらない理由", () => {
   const miss = (
     fields: Partial<Rule>,
-    p: Program,
+    p: Program & { arib_service_type?: number },
     type = "GR",
     paidOk: PaidAllowed = NO_PAID,
   ) =>
@@ -408,6 +408,23 @@ describe("当たらない理由", () => {
   });
 
   test("当たれば null", () => {
+    expect(miss({ keyword: "テストアニメ" }, anime)).toBeNull();
+  });
+  test("映像の無い局 (ラジオ・データ放送) の番組は、局を名指ししたルールだけが当てる", () => {
+    const radio = { ...anime, arib_service_type: 2 };
+    const data = { ...anime, arib_service_type: 0xc0 };
+    // キーワードだけ・種別だけのルールは当てない (取り込む前からあるルールが急に録り始めない)
+    expect(miss({ keyword: "テストアニメ" }, radio)).toBe("videoless");
+    expect(miss({ service_types: ["GR"] }, data)).toBe("videoless");
+    // 局を名指ししていれば当てる (種別と一緒でも)
+    expect(
+      miss({ keyword: "テストアニメ", service_ids: [7] }, radio),
+    ).toBeNull();
+    expect(miss({ service_types: ["BS"], service_ids: [7] }, data)).toBeNull();
+    // テレビの局と、種別を読まない呼び出し (検索の「これからの放送」) は今までどおり
+    expect(
+      miss({ keyword: "テストアニメ" }, { ...anime, arib_service_type: 1 }),
+    ).toBeNull();
     expect(miss({ keyword: "テストアニメ" }, anime)).toBeNull();
   });
   test("有料放送は、契約中と確かめた局だけ当てる", () => {

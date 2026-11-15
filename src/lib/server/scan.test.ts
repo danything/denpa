@@ -181,7 +181,7 @@ describe("選局するチャンネル", () => {
 });
 
 describe("チャンネル定義の組み立て", () => {
-  test("見つけたサービスを局名ごと並べる", () => {
+  test("見つけたサービスを局名ごと並べ、部分受信の局 (ワンセグ) かも書く", () => {
     const entry = channelEntry("GR", "T27", [
       {
         serviceId: 1032,
@@ -190,6 +190,7 @@ describe("チャンネル定義の組み立て", () => {
         networkId: 32391,
         transportStreamId: 23608,
         remoteControlKeyId: 9,
+        partialReception: false,
       },
       {
         serviceId: 1024,
@@ -198,6 +199,16 @@ describe("チャンネル定義の組み立て", () => {
         networkId: 32391,
         transportStreamId: 23608,
         remoteControlKeyId: 9,
+        partialReception: false,
+      },
+      {
+        serviceId: 1408,
+        serviceType: 0xc0,
+        name: "TOKYO MX ワンセグ",
+        networkId: 32391,
+        transportStreamId: 23608,
+        remoteControlKeyId: 9,
+        partialReception: true,
       },
     ]);
     expect(entry).toEqual({
@@ -207,8 +218,24 @@ describe("チャンネル定義の組み立て", () => {
       transportStreamId: 23608,
       remoteControlKeyId: 9,
       services: [
-        { serviceId: 1024, serviceType: 1, name: "TOKYO MX1" },
-        { serviceId: 1032, serviceType: 1, name: "TOKYO MX2" },
+        {
+          serviceId: 1024,
+          serviceType: 1,
+          name: "TOKYO MX1",
+          partialReception: false,
+        },
+        {
+          serviceId: 1032,
+          serviceType: 1,
+          name: "TOKYO MX2",
+          partialReception: false,
+        },
+        {
+          serviceId: 1408,
+          serviceType: 0xc0,
+          name: "TOKYO MX ワンセグ",
+          partialReception: true,
+        },
       ],
     });
   });
@@ -624,6 +651,7 @@ describe("ケーブルの 4K の局 (TLV)", () => {
           serviceId: SERVICE,
           serviceType: 1,
           name: "ＢＳでんぱ　４Ｋ",
+          partialReception: false,
           caSystemIds: [0x0005],
           epgReadable: true,
         },
@@ -667,6 +695,7 @@ describe("ケーブルの 4K の局 (TLV)", () => {
         networkId: ONID,
         transportStreamId: TLV_STREAM,
         remoteControlKeyId: null,
+        partialReception: false,
       },
     ]);
   });

@@ -71,6 +71,11 @@ const AGENT_CHANNEL = object({
       serviceType: number,
       name: string,
       /**
+       * 部分受信の局 (ワンセグ) か。スキャンが NIT の部分受信記述子から書く (`psi.FoundService`)。
+       * 書く前の控えには無い。取り込みは、無い控えのデータ放送 (0xC0) の局を、ワンセグかもしれないので落とす (`schema.importedService`)
+       */
+      partialReception: optional(boolean),
+      /**
        * PMT の CA 記述子にあった CA_system_id (`ca-observe.ts`)。TLV なら MPT のアクセス制御記述子のもの (`TlvServiceReader`)。
        * スキャンで PMT か MPT を読む CATV の局だけが持つ。CA 記述子が無ければ空。復号できるかはこれで決める (`types.decodableService`)
        */

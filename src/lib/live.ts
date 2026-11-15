@@ -175,6 +175,11 @@ export type Notice =
       /** 選べる音声。1 つしか無ければ画面は切り替えを出さない */
       audios: AudioTrack[];
       /**
+       * **映像の無い局 (ラジオ・データ放送) と映像の無い録画の追っかけだけ** false。どの形式をリクエストしても `codec` は `audio`
+       * (`server/live.ts` の `AUDIO_FORM`。音声も無い局は無音)。画面は回線に合わせて段を動かさない
+       */
+      video?: false;
+      /**
        * サーバが PMT を読んで、TS に HEVC を入れて送る 4K の局と分かったときだけ `hevc`。画面はその局を開いている間、
        * 「放送のまま」を HEVC の詰め替えとして扱う (`Tuned.broadcast`)。放送のままをリクエストしても、答えは `hevc` になる
        * (`server/live.ts` の `servedFormat`)
