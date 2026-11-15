@@ -1343,7 +1343,8 @@ describe("主音声の切り替え (setMainAudioStream)", () => {
     // 音声でない部品・PMT に無い部品は替えない
     expect(host.setMainAudio("/40")).toBe(false);
     expect(host.setMainAudio("/73")).toBe(false);
-    expect(host.setMainAudio("/71")).toBe(true);
+    // いまの局を明示した書き方 (/-1/71) も、音声の object の data と同じく受ける
+    expect(host.setMainAudio("/-1/71")).toBe(true);
     expect(host.mainAudioRef()).toBe("/71");
     expect(host.setMainAudio("/10")).toBe(true);
     expect(host.setMainAudio("/72")).toBe(true);
