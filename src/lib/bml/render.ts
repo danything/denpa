@@ -137,6 +137,25 @@ export function videoRect(
   return null;
 }
 
+/**
+ * JPEG を描く大きさ ([幅, 高さ])。**背景 (background-image) と object で同じ決まり。**
+ * 960x540 の面では静止画プレーンが 1920x1080 なので、画像の半分の大きさで描く。描く箱も画像も 960x540 のときだけ
+ * (全面の静止画) そのまま (STD-B24 第二分冊 付属 2 表 5-3、TR-B14 第二分冊のスケーリング。web-bml の `fixJPEGScaling`
+ * も同じ)。720x480 の面は静止画プレーンと同じ大きさなのでそのまま
+ */
+export function jpegSize(
+  resolutionWidth: number,
+  box: { width: number; height: number },
+  [width, height]: [number, number],
+): [number, number] {
+  if (resolutionWidth !== 960) return [width, height];
+  const full =
+    box.width === 960 && box.height === 540 && width === 960 && height === 540;
+  return full
+    ? [width, height]
+    : [Math.floor(width / 2), Math.floor(height / 2)];
+}
+
 /** 四角に穴を開ける clip-path (要素の中の座標) */
 function hole(rect: Rect): string {
   const { left: l, top: t } = rect;
@@ -329,15 +348,18 @@ export class Renderer {
       const source = url === null ? null : this.host.image(url, "image/jpeg");
       if (source !== null) {
         image = `background-image:url("${source.url}");background-repeat:${element.tag === "body" ? "repeat" : "no-repeat"}`;
-        // 960x540 の画面では静止画を半分の大きさで描く (960x540 の画像はそのまま)
-        if (
-          source.width !== null &&
-          source.height !== null &&
-          this.host.resolution().width === 960
-        ) {
-          const full = source.width === 960 && source.height === 540;
-          const scale = full ? 1 : 0.5;
-          image += `;background-size:${source.width * scale}px ${source.height * scale}px`;
+        if (source.width !== null && source.height !== null) {
+          const resolution = this.host.resolution();
+          // body の大きさは面 (resolution) そのもの
+          const box =
+            element.tag === "body"
+              ? resolution
+              : { width: s.width, height: s.height };
+          const [w, h] = jpegSize(resolution.width, box, [
+            source.width,
+            source.height,
+          ]);
+          image += `;background-size:${w}px ${h}px`;
         }
       }
     }
@@ -504,21 +526,11 @@ export class Renderer {
     img.style.cssText = "position:absolute;left:0;top:0;display:block;";
     img.src = source.url;
     const size = (width: number, height: number): void => {
-      // JPEG は 960x540 の画面で半分の大きさ (付属 2 表 5-3。960x540 で 960x540 の画像だけそのまま)
-      let w = width;
-      let h = height;
-      if (type === "image/jpeg" && this.host.resolution().width === 960) {
-        const s = element.style();
-        if (!(
-          s.width === 960 &&
-          s.height === 540 &&
-          width === 960 &&
-          height === 540
-        )) {
-          w = Math.floor(width / 2);
-          h = Math.floor(height / 2);
-        }
-      }
+      const s = element.style();
+      const [w, h] =
+        type === "image/jpeg"
+          ? jpegSize(this.host.resolution().width, s, [width, height])
+          : [width, height];
       img.style.width = `${w}px`;
       img.style.height = `${h}px`;
     };

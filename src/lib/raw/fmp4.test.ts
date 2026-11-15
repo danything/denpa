@@ -39,17 +39,33 @@ class FakeDecoder {
   reset(): void {
     this.state = "unconfigured";
   }
-  decode(): void {}
+  decode(): void {
+    decoded++;
+  }
+  flush(): Promise<void> {
+    flushes.push(decoded);
+    return Promise.resolve();
+  }
 }
+/** 渡したコマの数と、flush を呼んだときにそれまで渡していた数 */
+let decoded = 0;
+let flushes: number[] = [];
 
-const globals = globalThis as { VideoDecoder?: unknown };
+const globals = globalThis as {
+  VideoDecoder?: unknown;
+  EncodedVideoChunk?: unknown;
+};
 let saved: unknown;
+let savedChunk: unknown;
 beforeAll(() => {
   saved = globals.VideoDecoder;
+  savedChunk = globals.EncodedVideoChunk;
   globals.VideoDecoder = FakeDecoder;
+  globals.EncodedVideoChunk = class {};
 });
 afterAll(() => {
   globals.VideoDecoder = saved;
+  globals.EncodedVideoChunk = savedChunk;
 });
 
 const file = new Uint8Array(
@@ -112,6 +128,46 @@ describe("Fmp4Video (追っかけで抱えきれないとき)", () => {
     video.feed(init);
     feedRounds(video, 50);
     expect(seen.full).toBe(0);
+  });
+});
+
+/*
+ * **末尾まで読んだら、渡しきってから 1 回だけ flush する** (`finish`)。B フレームを並べ替えるデコーダは
+ * 最後の数枚を次のコマが来るまで持っているので、呼ばないと録画の最後の数コマが描かれない
+ */
+describe("Fmp4Video (末尾)", () => {
+  /** 時計をずっと先に進めて刻む (待たせているコマを全部渡す) */
+  const drain = (video: Fmp4Video) => {
+    for (let i = 0; i < 200; i++) video.tick(2 ** 40);
+  };
+
+  test("finish のあと、待たせているコマを渡しきってから flush を 1 回呼ぶ", () => {
+    decoded = 0;
+    flushes = [];
+    const { video } = watcher(false);
+    video.feed(init);
+    for (const data of media) video.feed(data);
+    video.finish();
+    drain(video);
+    expect(decoded).toBeGreaterThan(1);
+    expect(flushes).toEqual([decoded]);
+  });
+
+  test("finish が無ければ flush しない。reset で取り消す", () => {
+    decoded = 0;
+    flushes = [];
+    const { video } = watcher(false);
+    video.feed(init);
+    for (const data of media) video.feed(data);
+    drain(video);
+    expect(flushes).toEqual([]);
+
+    video.finish();
+    video.reset();
+    video.feed(init);
+    for (const data of media) video.feed(data);
+    drain(video);
+    expect(flushes).toEqual([]);
   });
 });
 

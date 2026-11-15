@@ -183,12 +183,14 @@ const KEY = {
   red: 22,
   green: 23,
   yellow: 24,
-  data1: 25,
-  data2: 26,
 } as const;
 
-/** キーの組 (TR-B14 第二分冊 5.3.1 表 5-5)。used-key-list で受けるかを決める */
-function keyGroup(code: number): string | null {
+/**
+ * キーの組 (TR-B14 第二分冊 5.3.1 表 5-5)。used-key-list で受けるかを決める。
+ * データ 1・データ 2 (25・26。accesskey の E・F) はどの組にも無いので、文書には届かない
+ * (web-bml の `keyCodeToKeyGroup` も同じ表)。d (20) は組を見ずに DataButtonPressed だけを起こす (`key`)
+ */
+export function keyGroup(code: number): string | null {
   if (code >= KEY.up && code <= KEY.right) return "basic";
   if (code === KEY.enter || code === KEY.back) return "basic";
   if (code >= KEY.blue && code <= KEY.yellow) return "data-button";
@@ -196,15 +198,13 @@ function keyGroup(code: number): string | null {
   return null;
 }
 
-/** accesskey の字 (付属 2 5.4.2.3) */
+/** accesskey の字 (付属 2 5.4.2.3)。E・F (データ 1・2) のキーは組に無く届かないので持たない (`keyGroup`) */
 const ACCESS_KEYS: Record<number, string> = {
   [KEY.back]: "X",
   [KEY.blue]: "B",
   [KEY.red]: "R",
   [KEY.green]: "G",
   [KEY.yellow]: "Y",
-  [KEY.data1]: "E",
-  [KEY.data2]: "F",
 };
 
 /*
@@ -218,6 +218,13 @@ export const MAX_QUEUE = 512;
 export const MAX_TIMERS = 64;
 /** 「1 回だけ知らせる」ために覚えておく数 */
 const MAX_REPORTED = 256;
+/**
+ * 取得を待っている画像と、「無い」と決めた画像を持つ数 (それぞれ)。画像のキーはモジュールとファイルの組なので、
+ * 文書を移るたびに別のキーが増えうる。1 つの文書が描く画像の数より十分大きくする。
+ * 待ちが上限なら新しい取得を始めず、待ちが 1 つ終わったら描き直して取得する。「無い」は古いものから消す。
+ * 消した画像は、次に描くときに 1 回取得し直して、すぐ「無い」に戻る
+ */
+export const MAX_IMAGES = 256;
 
 type Job =
   | {
@@ -373,6 +380,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private depth = 0;
   /** 取得して「無い」と決まった画像。モジュールが届き直すまで取得しない */
   private readonly missingImages = new Set<string>();
+  /** 待ちが上限 (`MAX_IMAGES`) で取得を始めなかった画像がある。待ちが 1 つ終わったら描き直す */
+  private imagesDeferred = false;
   private receiver: ReceiverInfo = { zipcode: "", prefecture: 255 };
   /** 扱えない名前だと知らせたもの (同じものを何度も知らせない) */
   private readonly reported = new Set<string>();
@@ -1843,21 +1852,32 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const file = this.resources.file(ref);
     if (file === null) {
       const key = refToPath(ref);
-      if (!this.waitingImages.has(key) && !this.missingImages.has(key)) {
-        this.waitingImages.add(key);
-        void this.resources.fetch(ref).then(() => {
-          this.waitingImages.delete(key);
-          // 描けるようにならなかった (来ないと決まった・押さえた古いバージョンに無い) なら描き直さない。
-          // 描き直すとまたここへ来て、すぐ「無い」と返るのをくり返す (2026-10-12 本番で
-          // タブが固まった)。モジュールが届き直したら探し直す
-          if (this.resources.file(ref) === null) {
-            this.missingImages.add(key);
-            return;
-          }
-          this.doc?.touch();
-          this.drawSoon();
-        });
+      if (this.waitingImages.has(key) || this.missingImages.has(key))
+        return null;
+      if (this.waitingImages.size >= MAX_IMAGES) {
+        this.imagesDeferred = true;
+        return null;
       }
+      this.waitingImages.add(key);
+      void this.resources.fetch(ref).then(() => {
+        this.waitingImages.delete(key);
+        // 上限で取得を始めなかった画像がある。空いたので、描き直して取得させる
+        const deferred = this.imagesDeferred;
+        this.imagesDeferred = false;
+        // 描けるようにならなかった (来ないと決まった・押さえた古いバージョンに無い) なら描き直さない。
+        // 描き直すとまたここへ来て、すぐ「無い」と返るのをくり返す (2026-10-12 本番で
+        // タブが固まった)。モジュールが届き直したら探し直す
+        if (this.resources.file(ref) === null) {
+          if (this.missingImages.size >= MAX_IMAGES) {
+            const oldest = this.missingImages.values().next();
+            if (oldest.done !== true) this.missingImages.delete(oldest.value);
+          }
+          this.missingImages.add(key);
+          if (!deferred) return;
+        }
+        this.doc?.touch();
+        this.drawSoon();
+      });
       return null;
     }
     const png = type === "image/x-arib-png";
@@ -2066,7 +2086,10 @@ export function createBml(options: BmlOptions): Bml {
   return new Engine(options);
 }
 
-/** 押したキー (KeyboardEvent.key) → AribKeyCode。英字は大文字でも同じ */
+/**
+ * 押したキー (KeyboardEvent.key) → AribKeyCode。英字は大文字でも同じ。
+ * e・f (データ 1・2) は文書に届かない (`keyGroup`) ので割り当てず、プレイヤーの操作 (f の全画面) に残す
+ */
 const KEYS = new Map<string, number>([
   ["ArrowUp", KEY.up],
   ["ArrowDown", KEY.down],
@@ -2081,8 +2104,6 @@ const KEYS = new Map<string, number>([
   ["r", KEY.red],
   ["g", KEY.green],
   ["y", KEY.yellow],
-  ["e", KEY.data1],
-  ["f", KEY.data2],
 ]);
 
 /** 押したキー (KeyboardEvent.key) を AribKeyCode に。対応が無ければ -1 */

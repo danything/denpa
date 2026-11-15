@@ -40,8 +40,7 @@ import {
   busyAnswer,
   ORIGIN_HEADER,
   retryable,
-  retryWait,
-  STREAM_RETRIES,
+  StreamRetry,
   type StreamState,
 } from "#lib/ts/playback.js";
 import { inWrap, sinceHead } from "#lib/ts/seek.js";
@@ -182,8 +181,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   let audio = options.audio;
   let run = 0;
   let controller: AbortController | null = null;
-  let retries = 0;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  const retry = new StreamRetry((state) => options.state(state));
   let closed = false;
   /** リクエストし直してから渡したバイト数 (デコードし始める前の区切り。`EARLY_BYTES`) */
   let fed = 0;
@@ -286,8 +284,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   async function load(from: number): Promise<void> {
     const mine = ++run;
     controller?.abort();
-    if (retryTimer !== null) clearTimeout(retryTimer);
-    retryTimer = null;
+    retry.cancel();
     // 飛んだ。前の音はすぐ止める (映像は次が描けるまで前のまま)
     engine.reset();
     time = from;
@@ -348,10 +345,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         else
           for (const segment of splitter.feed(value))
             engine.feed(own(segment.data), 0);
-        if (retries > 0) {
-          retries = 0;
-          options.state("flowing");
-        }
+        retry.flowing();
       }
       // 末尾まで読んだ。残りを鳴らしきったら終わり
       engine.finish();
@@ -365,23 +359,9 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         options.state("failed");
         return;
       }
-      retry();
+      // 切れた。倍々に待って、観ていた位置からリクエストし直す
+      retry.schedule(() => void load(position()));
     }
-  }
-
-  /** 切れた。倍々に待って、観ていた位置からリクエストし直す */
-  function retry(): void {
-    if (retries >= STREAM_RETRIES) {
-      options.state("failed");
-      return;
-    }
-    const wait = retryWait(retries);
-    retries++;
-    options.state("retrying");
-    retryTimer = setTimeout(() => {
-      retryTimer = null;
-      void load(position());
-    }, wait);
   }
 
   const ticker = setInterval(() => {
@@ -468,7 +448,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
       closed = true;
       run++;
       controller?.abort();
-      if (retryTimer !== null) clearTimeout(retryTimer);
+      retry.cancel();
       clearInterval(ticker);
       engine.destroy();
     },

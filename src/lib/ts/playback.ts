@@ -163,6 +163,50 @@ export function retryWait(retries: number): number {
   return Math.min(10_000, 1000 * 2 ** retries);
 }
 
+/**
+ * 切れたときに、倍々に待ってリクエストし直す (`retryWait`)。続けて `STREAM_RETRIES` 回を超えたら打ち切る。
+ * MSE で流すとき (`remux-player.ts`) と canvas に描くとき (`canvas-player.ts`) で同じものを使う
+ */
+export class StreamRetry {
+  private retries = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private readonly state: (state: StreamState) => void) {}
+
+  /** リクエストし直すのを待っている間 */
+  get waiting(): boolean {
+    return this.timer !== null;
+  }
+
+  /** 切れた。待ってから `again` を呼ぶ。上限を超えていれば `failed` にして呼ばない */
+  schedule(again: () => void): void {
+    if (this.retries >= STREAM_RETRIES) {
+      this.state("failed");
+      return;
+    }
+    const wait = retryWait(this.retries);
+    this.retries++;
+    this.state("retrying");
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      again();
+    }, wait);
+  }
+
+  /** 届き始めた。リクエストし直していたなら数を戻して `flowing` にする */
+  flowing(): void {
+    if (this.retries === 0) return;
+    this.retries = 0;
+    this.state("flowing");
+  }
+
+  /** 待っているリクエストし直しをやめる (別の位置からリクエストした・閉じた)。数はそのまま */
+  cancel(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+}
+
 /** リクエストし直せば直りうる失敗か (繋がらない・途中で落ちた・サーバの 5xx)。4xx・読めない中身は何度やっても同じ */
 export function retryable(error: unknown): boolean {
   return (
