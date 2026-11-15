@@ -32,6 +32,9 @@ public sealed record It930xOverflow(bool System, IReadOnlyList<bool> Inputs)
     /// <summary>溢れた入力の番号</summary>
     public IEnumerable<int> Overflowed => Enumerable.Range(0, Inputs.Count).Where(input => Inputs[input]);
 
+    /// <summary>同じ値か (record の比べ方は <see cref="Inputs"/> を参照で比べるので、中身で比べる)。<paramref name="other"/> が null なら false</summary>
+    public bool SameAs(It930xOverflow? other) => other is not null && System == other.System && Inputs.SequenceEqual(other.Inputs);
+
     public override string ToString() =>
         $"全体の溢れ (0xDA39) {(System ? 1 : 0)}、入力ごとの溢れ (0xDA57・0xDA8B〜) {string.Join(" ", Inputs.Select(input => input ? 1 : 0))}";
 }

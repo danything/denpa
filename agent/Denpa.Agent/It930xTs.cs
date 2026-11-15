@@ -56,6 +56,9 @@ internal sealed class It930xTsDemux
     /// <summary>入力ごとに分けたパケットの数</summary>
     public IReadOnlyList<long> Packets => _packets;
 
+    /// <summary>入力 <paramref name="input"/> に分けたパケットの数。<see cref="Push"/> と別のスレッドから読む</summary>
+    public long PacketsOf(int input) => Volatile.Read(ref _packets[input]);
+
     /// <summary>揃っていない間に飛ばしたバイトの数。EP からのバイト列が 188 バイトの並びから外れたときに増える。原因は USB の取りこぼしか、ブリッジの問題</summary>
     public long Skipped { get; private set; }
 
