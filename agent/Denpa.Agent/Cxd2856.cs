@@ -104,10 +104,16 @@ public sealed record CxdPreviousTune(string Mode, uint Khz, bool Locked, long Be
 /// <param name="SinceInitMs">受信機を初期化してから、この選局を始めるまで (ms)</param>
 /// <param name="TunesSinceInit">初期化してから何回目の選局か (1 から数える。どの方式も数え、地上波のプリセットを外した選局し直しと、ずらした周波数の試し直しも 1 回と数える)</param>
 /// <param name="Previous">この受信機の前の選局。受信機を作ってから初めての選局なら null</param>
+/// <param name="Modulation">復調器が見分けた変調 (<c>64QAM</c> など。バンク <c>40</c> の <c>19</c>。仕様書 9.4)。自動の探索がロックしていなければ null</param>
+/// <param name="CnDb">C/N (dB。仕様書 9.4)。自動の探索がロックしていなければ null</param>
+/// <param name="SymbolRateMsps">シンボルレート (Msps。仕様書 9.5)。自動の探索がロックしていなければ null</param>
+/// <param name="PreRsBer">誤り訂正の前の BER (仕様書 9.5)。測り終えていなければ null</param>
+/// <param name="Uncorrected">訂正できなかったパケットの数 (仕様書 9.5)。読めなければ null</param>
 public sealed record CxdIsdbcLockFailure(
     uint Khz, bool Retuned, long WaitMs, long DemodLockMs, long TsLockMs, bool DemodLocked, bool TsLocked,
     int? IfAgc, double? CarrierOffsetKhz,
-    long SinceInitMs, int TunesSinceInit, CxdPreviousTune? Previous)
+    long SinceInitMs, int TunesSinceInit, CxdPreviousTune? Previous,
+    string? Modulation = null, double? CnDb = null, double? SymbolRateMsps = null, double? PreRsBer = null, int? Uncorrected = null)
 {
     /// <summary>記録と <c>--tune</c> に出す 1 行</summary>
     public string Describe()
@@ -122,6 +128,9 @@ public sealed record CxdIsdbcLockFailure(
             + $"最後に読んだ値 bit0={Bit(DemodLocked)} bit5={Bit(TsLocked)}  "
             + $"復調器の IF の AGC {(IfAgc is { } agc ? $"{agc}" : "-")}  "
             + $"搬送波のずれ {(CarrierOffsetKhz is { } offset ? $"{offset:F1} kHz" : "-")}  "
+            + $"変調 {Modulation ?? "-"}  C/N {(CnDb is { } cn ? $"{cn:F1} dB" : "-")}  "
+            + $"シンボルレート {(SymbolRateMsps is { } rate ? $"{rate:F4} Msps" : "-")}  "
+            + $"誤り訂正の前の BER {(PreRsBer is { } ber ? $"{ber:E2}" : "-")}  訂正できなかったパケット {(Uncorrected is { } bad ? $"{bad}" : "-")}  "
             + $"初期化から {SinceInitMs} ms・{TunesSinceInit} 回目の選局  前の選局 {previous}";
     }
 }
@@ -1714,9 +1723,11 @@ public sealed class Cxd2856Frontend
     private CxdIsdbcLockFailure ReadIsdbcLockFailure(long waited, long demodLock, long tsLock, bool demod, bool ts)
     {
         CxdIsdbcDetail? detail = null;
+        CxdIsdbcSignal? read = null;
         try
         {
-            lock (_busLock) detail = Cxd2856.IsdbcDetail(_demod.ReadIsdbcSignal());
+            lock (_busLock) read = _demod.ReadIsdbcSignal();
+            detail = Cxd2856.IsdbcDetail(read.Value);
         }
         catch (IOException)
         {
@@ -1725,7 +1736,11 @@ public sealed class Cxd2856Frontend
         return new CxdIsdbcLockFailure(
             _khz, _retuned, waited, demodLock, tsLock, demod, ts,
             detail?.IfAgc, detail?.CarrierOffsetKhz,
-            (_current?.At ?? _nowMs()) - _initAt, _tunes, _previous);
+            (_current?.At ?? _nowMs()) - _initAt, _tunes, _previous,
+            // 変調と C/N で、変調を取り違えているのか C/N が足りないのかを分ける (復調はロックしても TS のロックが立たない搬送波があった)
+            read?.Modulation is { } modulation ? Cxd2856.J83bModulationName(modulation) : null,
+            read?.Modulation is { } named ? Cxd2856.IsdbcCnDb(named, read.Value.CnRaw) : null,
+            detail?.SymbolRateMsps, detail?.PreRsBer, detail?.Uncorrected);
     }
 
     /// <summary>方式の名前 (<see cref="CxdPreviousTune.Mode"/>)</summary>
