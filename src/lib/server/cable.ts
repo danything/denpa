@@ -228,14 +228,14 @@ export function retryableChannel(
 }
 
 /**
- * **NIT に載っているのにロックしなかった TS を、NIT の service_list_descriptor からチャンネルにする。** スキャンで局が見つかったチャンネル (`found`) は作らない。
+ * **NIT に載っているのにロックしなかった TS を、NIT の service_list_descriptor からチャンネルにする。** 作るのは `unlocked` (ロックしなかった、かつ局が見つかっていないチャンネル) だけ。ロックしたのに局が無かったチャンネルは作らない。
  * 局は service_list_descriptor の service_id と種別で、残す種別は `keep` (`psi.SERVICE_TYPES`)。局名は NIT に無いので、
  * 前の控えの名前 (`known`。`${original_network_id}:${service_id}`) か、無ければ仮の名前 (`unnamed`)。
  * 番組表の取得がその TS の SDT[actual] を受信したら、仮の名前を放送の局名にする (`tlv-names.ts`)。局が 1 つも無い TS は作らない
  */
 export function listedEntries(
   lineups: readonly CableLineup[],
-  found: (channel: string) => boolean,
+  unlocked: (channel: string) => boolean,
   known: ReadonlyMap<string, string>,
   keep: ReadonlySet<number>,
   unnamed: (serviceId: number) => string,
@@ -246,7 +246,7 @@ export function listedEntries(
       carrier.streams.forEach((stream, index) => {
         const channel =
           index === 0 ? carrier.channel : `${carrier.channel}:${index}`;
-        if (found(channel)) return;
+        if (!unlocked(channel)) return;
         const services = stream.serviceList
           .filter((service) => keep.has(service.serviceType))
           .map((service) => ({

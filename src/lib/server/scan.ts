@@ -806,7 +806,7 @@ class Scanner {
    * **ケーブル局の NIT に載っているのにロックしなかったチャンネルを、間をあけて試し直す** (`CABLE_RETRY`)。
    * 前の控えにある搬送波のうち、NIT に TS が載っていないネットワークのものも同じく試し直す (`cable.retryableChannel`)。
    * NIT を読めた回は、そのあと総当たりでロックしなかった残りのチャンネルも、最後に 1 回だけ試し直す。ロックは回によってできたりできなかったりするため。
-   * NIT を読めなかった回は、残りが 100 本前後になってスキャンが長く延びるので試し直さない。
+   * NIT を読めなかった回は、残りが 100 チャンネル前後になってスキャンが長く延びるので試し直さない。
    * チューナーは選局のたびにエージェントが選ぶので、ほかのチューナーで開くこともある
    */
   private async retryCable(workers: AgentTuner[]): Promise<void> {
@@ -878,7 +878,8 @@ class Scanner {
       return;
     const entries = listedEntries(
       cable.lineups,
-      (channel) => this.found.has(`CATV:${channel}`),
+      (channel) =>
+        cable.unlocked.has(channel) && !this.found.has(`CATV:${channel}`),
       knownNames(cable.previous),
       SERVICE_TYPES,
       unnamedService,

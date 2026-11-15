@@ -287,7 +287,7 @@ describe("控え", () => {
  * 局名は前の控えか仮の名前。残す種別だけを入れ、局が 1 つも残らない TS は作らない
  */
 describe("ロックしなかった TS を NIT から入れる", () => {
-  test("見つかったチャンネルは作らず、TSMF の 2 つ目からは番号を付け、局名は前の控えか仮の名前", () => {
+  test("ロックしたチャンネルは作らず、TSMF の 2 つ目からは番号を付け、局名は前の控えか仮の名前", () => {
     const lineup = cableLineupFrom(
       network(
         jcomNit([
@@ -302,7 +302,8 @@ describe("ロックしなかった TS を NIT から入れる", () => {
     )!;
     const entries = listedEntries(
       [lineup],
-      (channel) => channel === "QC39",
+      // QC39 はロックした (局が見つかった、または局が無かった) チャンネル
+      (channel) => channel !== "QC39",
       new Map([["65534:650", "前の名前"]]),
       new Set([0x01, 0xc0]),
       (serviceId) => `仮 ${serviceId}`,
