@@ -98,7 +98,7 @@ fi
 
 # NVIDIA の NVENC (`h264_nvenc` / `hevc_nvenc` / `av1_nvenc`)。本物はデバイスファイルを受けず、GPU を番号 (`-gpu N`) で受ける。
 # ここでは denpa と同じく `NVIDIA_DIR` の nvidia<番号> を番号の順に並べ、**N 番目が在れば上の GPU と同じく通し、
-# 無ければ初期化で落ちる** (本物も、コンテナから見える GPU の数を超えた番号では降りる)
+# 無ければ初期化で落ちる** (本物も、コンテナから見える GPU の数を超えた番号では失敗して終了する)
 if printf '%s\n' "$@" | grep -qE -- '^(h264|hevc|av1)_nvenc$'; then
     gpu=0
     prev=""
@@ -174,8 +174,8 @@ if [ "$input" = "pipe:0" ]; then
     # E2E から「映像側は入口で落ちる」と指示するための目印。
     #
     # 実機の tvk (T15) で出た形をそのまま真似る。局が 3 つ入っている TS で
-    # -probesize が足りず、-map が解決できないまま降りる。**1 バイトも出さずに
-    # 降りるので、伝えないと画面は前のコマを貼ったまま 6 秒たって黒くなるだけ**。
+    # -probesize が足りず、-map が解決できないまま終了する。**1 バイトも出さずに
+    # 終了するので、伝えないと画面は前のコマを貼ったまま 6 秒たって黒くなるだけ**。
     # 字幕側は落とさない (映像だけが死ぬ場合を試したい)
     if [ -f "${FAKE_FFMPEG_LIVE_FAIL_FILE:-/nonexistent}" ] &&
         printf '%s\n' "$@" | grep -qx -- 'libx264'; then
@@ -195,7 +195,7 @@ if [ "$input" = "pipe:0" ]; then
     fi
 
     # 字幕を持たない放送 (E2E が偽の放送の PMT から字幕を外すのと一緒に置く)。本物と同じ言い分で、
-    # 字幕の出口をリクエストされていたら組み立ての時点で降りる (`server/captions.ts` の `NO_SUBTITLE`)。
+    # 字幕の出口をリクエストされていたら組み立ての時点で終了する (`server/captions.ts` の `NO_SUBTITLE`)。
     # 起こしたことは上で残してあるので、テストから起こし直したかを数えられる
     if [ -f "${FAKE_FFMPEG_NO_CAPTIONS_FILE:-/nonexistent}" ]; then
         map="$(printf '%s\n' "$@" | grep -E '^0(:p:[0-9]+)?:s:[0-9]+$' | head -1)"
@@ -226,7 +226,7 @@ if [ "$input" = "pipe:0" ]; then
     # (`server/live.ts` の pump)、渡ったものの PAT に局が 1 つしか無いことを
     # テストから確かめられるようにする。**頭だけ。** 全部残すと際限なく太る
     #
-    # **写し先が閉じても tee は降ろさない** (`--output-error=warn-nopipe`)。head は 200KB で
+    # **写し先が閉じても tee は終了しない** (`--output-error=warn-nopipe`)。head は 200KB で
     # 抜けるので、既定の tee はそこで SIGPIPE を受けて死に、**偽 ffmpeg ごと終わって**
     # 「映像を出せませんでした」になる。偽の放送が本物の映像を流すようになって量が増え、
     # 10 秒ほどのテストでも 200KB に届くようになった (docs/stream.md#放送そのままmpeg-2を送る)
@@ -284,7 +284,7 @@ if [ -f "${FAKE_FFMPEG_SLOW_FILE:-/nonexistent}" ] && [ "$output" != "-" ]; then
     steps=100
     # **止められてもすぐには消えない。本物もそう。** SIGTERM を受けてから溜めた
     # コマを書き出して mux を締めるので、実測で 1 秒ほどかかる (923ms / 1078ms)。
-    # 中止が「畳み終わってから返る」ことを試すには、この間が要る
+    # 中止が「後始末を終えてから返る」ことを試すには、この間が要る
     trap 'sleep 2; exit 143' TERM
 fi
 for i in $(seq 1 "$steps"); do

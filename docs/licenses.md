@@ -254,7 +254,7 @@ MediaCodec (GPU でのエンコード)・zlib は Android の一部 (`libmediand
 ## ブラウザへ配る束・サーバの束に入る主なもの
 
 `package.json` に runtime の `dependencies` は無く、adapter-bun が全部を `build/` に
-畳み込みます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は Apache-2.0 の
+まとめます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は Apache-2.0 の
 `drizzle-orm` と、ISC の Lucide** (アイコンの図形)。
 
 | 名前                                                                | 何に                                                                                                 | 出どころ                                                                            | ライセンス     |

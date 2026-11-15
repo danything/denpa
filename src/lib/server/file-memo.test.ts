@@ -136,11 +136,11 @@ describe("sharing", () => {
     };
     const first = share("1", make);
     const second = share("1", make);
-    fail(new Error("降りた"));
+    fail(new Error("失敗した"));
     const settled = await Promise.allSettled([first, second]);
     expect(
       settled.map((r) => r.status === "rejected" && String(r.reason)),
-    ).toEqual(["Error: 降りた", "Error: 降りた"]);
+    ).toEqual(["Error: 失敗した", "Error: 失敗した"]);
     expect(made).toBe(1);
     expect(await share("1", () => Promise.resolve(3))).toBe(3);
   });

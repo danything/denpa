@@ -207,10 +207,10 @@ describe("録画の字幕 (recordingCaptions)", () => {
   });
 
   /*
-   * シークのたびにリクエストし直すので、前の繋ぎが切れたと分かるのが遅れると並ぶ。古いものから畳む
-   * (録っている最中の録画は書き足しを待ち続けるので、畳まない限り閉じない)
+   * シークのたびにリクエストし直すので、前の繋ぎが切れたと分かるのが遅れると並ぶ。古いものから止める
+   * (録っている最中の録画は書き足しを待ち続けるので、止めない限り閉じない)
    */
-  test("1 本の録画に起動する ffmpeg は上限まで。超えたら古いものを畳む", async () => {
+  test("1 本の録画に起動する ffmpeg は上限まで。超えたら古いものを止める", async () => {
     const streams = Array.from({ length: CAPTION_PER_RECORDING + 1 }, () =>
       recordingCaptions(RECORDING_NOW, 0)!,
     );
@@ -268,7 +268,7 @@ describe("ライブの字幕 (liveCaptions)", () => {
     expect(liveCaptions(SERVICE + 1)).toBeNull();
   });
 
-  // 脇の字幕 API は畳む判断に数えない。字幕のためだけにチューナーを使い続けない
+  // 脇の字幕 API はセッションを終えるかの判断に数えない。字幕のためだけにチューナーを使い続けない
   test("字幕 API が抜けても映像は続き、映像が抜けたら字幕 API も閉じる", async () => {
     // 段 0 は枠を使わないので "busy" にはならない
     const media = liveStream(SERVICE, "raw") as ReadableStream<Uint8Array>;
@@ -280,7 +280,7 @@ describe("ライブの字幕 (liveCaptions)", () => {
     // 映像はまだ流れている (同じセッションをもう一度共有できる)
     const second = liveCaptions(SERVICE);
     expect(second).not.toBeNull();
-    // 映像が抜けたら畳まれて、字幕 API も閉じる (読み切れる)
+    // 映像が抜けたらセッションが終わり、字幕 API も閉じる (読み切れる)
     await media.cancel();
     await new Response(second!).arrayBuffer();
     expect(liveCaptions(SERVICE)).toBeNull();
@@ -295,7 +295,7 @@ describe("変換したライブの字幕と時計 (liveCaptions の codec)", () 
     expect(encoded).not.toBeNull();
     expect(liveCaptions(SERVICE)).toBeNull();
     expect(liveCaptions(SERVICE, 1, "av1")).toBeNull();
-    // 映像が抜けたら畳まれて、こちらも閉じる (読み切れる)
+    // 映像が抜けたらセッションが終わり、こちらも閉じる (読み切れる)
     await media.cancel();
     await new Response(encoded!).arrayBuffer();
     expect(liveCaptions(SERVICE, 1, "h264")).toBeNull();

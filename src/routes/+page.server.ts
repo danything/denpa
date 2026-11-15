@@ -73,7 +73,7 @@ interface RecordingRow extends Recording {
   job_eta_ms: number | null;
   job_log: string | null;
   /**
-   * 中止をリクエストしてあって、まだ畳み終わっていない。中止のボタンを回したまま
+   * 中止をリクエストしてあって、まだ中止が済んでいない。中止のボタンを回したまま
    * にするための印 (`encoder.isCanceling`)。DB には無く、動いている間だけ
    */
   job_canceling: boolean;
@@ -412,7 +412,7 @@ export const actions = {
   cancelEncode: async ({ request }) => {
     const id = await formId(request);
     if (id === null) return fail(400, { message: "ジョブ ID が不正です" });
-    // 畳み終わってから返る。ここで待たないと、この直後の読み直しが
+    // 中止が済んでから返る。ここで待たないと、この直後の読み直しが
     // まだ「エンコード中」を読んで、押しても何も変わらないように見える
     await cancelEncode(id);
     return { success: true };
@@ -456,7 +456,7 @@ export const actions = {
    * 録り逃しを一覧から消す。**消すのは予約の行そのもの**。録画の行が無い
    * (始まらないまま終わった) ので、失敗した録画の削除とは消す先が違う。
    * 放って置いても履歴の片付け (14 日) で消えるが、見るたびに並んだままなのは
-   * 失敗した録画と同じで、確かめ終わったら畳みたい
+   * 失敗した録画と同じで、確かめ終わったら消したい
    */
   deleteMissed: async ({ request }) => {
     const id = await formId(request);

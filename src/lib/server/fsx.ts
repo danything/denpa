@@ -31,7 +31,7 @@ export function removeIfExists(path: string | null | undefined): void {
 }
 
 /**
- * ファイルを消した後に空になったフォルダ (シリーズ) を畳む。
+ * ファイルを消した後に空になったフォルダ (シリーズ) を消す。
  * encodedDir 自身より上には絶対に遡らない。encodedDir の外 (名前の先頭が同じだけの隣のフォルダも) には触らない
  */
 export function pruneEmptyDirs(path: string): void {

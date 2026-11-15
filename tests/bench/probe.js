@@ -299,7 +299,7 @@ globalThis.__benchInstall = (options) => {
     try {
       measured = await bench.measure(ms);
     } catch (error) {
-      // 諦めて worker を畳んだ (「再生が追いつきません」など)。失敗として残す
+      // 諦めて worker を止めた (「再生が追いつきません」など)。失敗として残す
       const reason =
         document
           .querySelector('[data-testid="watch-stage"]')

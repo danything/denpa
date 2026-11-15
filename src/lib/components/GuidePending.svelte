@@ -17,7 +17,7 @@
 
   /**
    * 番組表 (`/guide`) へ移っている途中なら、その行き先。着いた・取り消されたら null。
-   * 終わりは `navigating.complete` で見る (`navigating` は畳まれた遷移で真のまま残るので当てにしない。
+   * 終わりは `navigating.complete` で見る (`navigating` は取り消された遷移で真のまま残るので当てにしない。
    * [reload.svelte.ts](../reload.svelte.ts))。土台 (`+layout.svelte`) と番組表が使う
    */
   export function guideNavigation(): { readonly to: URL | null } {

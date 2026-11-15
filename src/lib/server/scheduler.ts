@@ -298,7 +298,7 @@ export async function tick(): Promise<void> {
     stopped.push(recordingUse(id));
   }
 
-  // 持ち主のいない「録画中」を畳む。起動時の回収だけでは畳めない場合がある (`failStrayRecordings`)
+  // 持ち主のいない「録画中」を終える。起動時の回収だけでは終えられない場合がある (`failStrayRecordings`)
   if (failStrayRecordings(at) > 0) {
     emit("recordings");
     emit("reservations");

@@ -4,7 +4,7 @@ import { expect, goto, test } from "./helpers";
  * **ライブで局がスクランブルされたまま届いたら、理由を出して止める** (`server/live.ts` の `SCRAMBLE_PACKETS`)。
  *
  * 本物のエージェントは、カードが鍵を返さなかった (未契約の) 局をスクランブルされたまま流す。それを ffmpeg に渡すと
- * `Failed to set value '0:p:201:s:0' for option 'map'` で降りて、画面は何も出ないまま止まっていた
+ * `Failed to set value '0:p:201:s:0' for option 'map'` で終了して、画面は何も出ないまま止まっていた
  * (BS10プレミアムをケーブルで受けたときに実機で出た)。
  * 録画がスクランブルされたまま録れたときは `15-scramble`
  */

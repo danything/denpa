@@ -15,7 +15,7 @@ mock.module("./webhook", () => ({
 }));
 
 const { config } = await import("./config");
-// 元の TS の置き場とエンコード済みの置き場を同じ実在ディレクトリへ。重複は畳まれて 1 つになる
+// 元の TS の置き場とエンコード済みの置き場を同じ実在ディレクトリへ。重複はまとめられて 1 つになる
 const dir = mkdtempSync(join(tmpdir(), "denpa-disk-"));
 config.rawDir = dir;
 config.encodedDir = dir;

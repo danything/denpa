@@ -69,7 +69,7 @@ export function playerVolume(options: Options): Volume {
   /** いま Web Audio に通している `<video>` */
   let tapped: HTMLVideoElement | null = null;
   let current: HTMLVideoElement | null = null;
-  /** Audio Session を `playback` にしたか。畳むときに戻す */
+  /** Audio Session を `playback` にしたか。破棄するときに戻す */
   let session = false;
 
   $effect(() => {
@@ -185,7 +185,7 @@ export function playerVolume(options: Options): Volume {
     };
   });
 
-  // 画面を離れたら畳む
+  // 画面を離れたら後始末する
   $effect(() => () => {
     window.removeEventListener("pointerdown", wake, true);
     window.removeEventListener("keydown", wake, true);

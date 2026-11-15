@@ -96,7 +96,7 @@ describe("停止のシグナルの受け取り", () => {
    * 後始末が外れて誰も聞いていない状態になり、デプロイがもう一度走ると
    * Node の既定どおり録画の途中でも終わっていた
    */
-  test("2 度目の合図は受け取るだけで、畳み直さない", () => {
+  test("2 度目の合図は受け取るだけで、停止の処理をやり直さない", () => {
     for (const signal of SIGNALS) process.removeAllListeners(signal);
 
     let drains = 0;
@@ -114,7 +114,7 @@ describe("停止のシグナルの受け取り", () => {
 
   /*
    * **起動の途中に来た合図を捨てない** (`hold-signals.ts`)。コンテナの PID 1 では
-   * 誰も受け取らない SIGTERM が捨てられ、入れ替えの始まった Pod が 6 時間降りなかった
+   * 誰も受け取らない SIGTERM が捨てられ、入れ替えの始まった Pod が 6 時間終了しなかった
    */
   test("入口が取っておいた合図を、引き取ったところで受け直す", () => {
     for (const signal of SIGNALS) process.removeAllListeners(signal);
@@ -128,7 +128,7 @@ describe("停止のシグナルの受け取り", () => {
       received.push(signal);
     });
     expect(received).toEqual(["SIGTERM"]);
-    // 受け直すのは 1 度だけ。あとの引き取りや合図では畳み直さない
+    // 受け直すのは 1 度だけ。あとの引き取りや合図では停止の処理をやり直さない
     expect(global["__denpaHeldSignal"]).toBeUndefined();
     process.emit("SIGTERM");
     expect(drains).toBe(1);

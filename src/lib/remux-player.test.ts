@@ -219,7 +219,7 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     expect(requests.at(-1)).toBe("remux?from=103&audio=1");
   });
 
-  test("畳んだら読むのをやめる", async () => {
+  test("閉じたら読むのをやめる", async () => {
     const { video, player } = start(100);
     await settle();
     player.destroy();

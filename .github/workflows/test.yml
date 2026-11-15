@@ -458,7 +458,7 @@ jobs:
           # 自分のこと (About.cs)。macOS では CCID ドライバも (`defaults` をここで実際に起こす)
           call https://127.0.0.1:25300/denpa/about | tee about.json; echo
           jq -e '.version == "dev" and .os == "macos" and .arch == "arm64" and (.ccidDriver == "apple" or .ccidDriver == "ifd-ccid")' about.json
-          # SIGTERM で畳めること (録画していなければすぐ終わる)
+          # SIGTERM で終了できること (録画していなければすぐ終わる)
           kill -TERM "$pid"
           for _ in $(seq 20); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
           if kill -0 "$pid" 2>/dev/null; then echo "SIGTERM で終わりません" >&2; exit 1; fi

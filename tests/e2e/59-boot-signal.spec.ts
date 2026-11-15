@@ -9,9 +9,9 @@ import { TEST_ROOT } from "../stack";
  * **起動の途中に来た SIGTERM を捨てない** (`src/lib/server/hold-signals.ts`)。
  *
  * コンテナの中の denpa は PID 1 で、受け手のいない合図はカーネルが捨てる。アプリが引き取る前に
- * Pod の入れ替えが始まると SIGTERM が消え、6 時間 (`terminationGracePeriodSeconds`) 降りなかった。
+ * Pod の入れ替えが始まると SIGTERM が消え、6 時間 (`terminationGracePeriodSeconds`) 終了しなかった。
  * ここでは PID 1 にならないので、取っておかなければ既定どおり合図で殺される。
- * **アプリが受けて自分で降りた (終了コード 0・受けた記録あり) ことを見る。**
+ * **アプリが受けて自分で終了した (終了コード 0・受けた記録あり) ことを見る。**
  *
  * 合図を送る時機は、入口 (`server.js`) が `build/index.js` を読む直前に出す `ADDRESS_HEADER` の
  * 知らせで計る。そこはもう取っておく側がいて、アプリはまだ引き取っていない。
@@ -19,7 +19,7 @@ import { TEST_ROOT } from "../stack";
  * 普段のスタックは要らないので、helpers の `test` (スタックを立てる) は使わない
  */
 // oxlint-disable-next-line no-empty-pattern -- Playwright は分割代入でないと受け付けない
-test("起動の途中に SIGTERM を受けても、起動を終えてから降りる", async ({}, info) => {
+test("起動の途中に SIGTERM を受けても、起動を終えてから終了する", async ({}, info) => {
   const root = `${TEST_ROOT}/boot-signal-${info.workerIndex}`;
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
@@ -58,7 +58,7 @@ test("起動の途中に SIGTERM を受けても、起動を終えてから降�
   try {
     const { code, signal } = await exited;
     expect(sent, log).toBe(true);
-    // 合図で殺されていない。アプリが受け、録画が無いのですぐ降りた
+    // 合図で殺されていない。アプリが受け、録画が無いのですぐ終了した
     expect({ code, signal }, log).toEqual({ code: 0, signal: null });
     expect(log).toContain("[boot] SIGTERM を受けました (録画 0 件)");
   } finally {

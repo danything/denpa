@@ -617,8 +617,8 @@ export function enqueue(
 }
 
 /**
- * 中止を指示したジョブが畳み終わるのを待っている呼び出し。
- * 畳み終わり (`pump` の finally) で呼ばれる
+ * 中止を指示したジョブの後始末が終わるのを待っている呼び出し。
+ * 後始末が終わったところ (`pump` の finally) で呼ばれる
  */
 const stopping = new Map<number, (() => void)[]>();
 
@@ -626,12 +626,12 @@ const stopping = new Map<number, (() => void)[]>();
  * 中止を待つ上限。**押した人を待たせすぎない。**
  *
  * ffmpeg は SIGTERM から 1 秒ほどで終わる (実測 923ms / 1078ms)。この待ちは
- * その 1 秒を待って**畳んだ結果を返す**ためのもので、間に合わなければ待つのをやめて
- * 返す。あとは畳み終わりの通知 (SSE) が追いつく
+ * その 1 秒を待って**後始末の済んだ結果を返す**ためのもので、間に合わなければ待つのをやめて
+ * 返す。あとは後始末が終わったときの通知 (SSE) が追いつく
  */
 const CANCEL_WAIT_MS = 5_000;
 
-/** 畳み終わるまで待つ。上限を超えたら待つのをやめる (中止は続く) */
+/** 後始末が終わるまで待つ。上限を超えたら待つのをやめる (中止は続く) */
 function settled(jobId: number): Promise<void> {
   if (!runningJobs.has(jobId)) return Promise.resolve();
   return new Promise((resolve) => {
@@ -647,14 +647,14 @@ function settled(jobId: number): Promise<void> {
   });
 }
 
-/** 畳み終わったことを、待っている呼び出しに伝える */
+/** 後始末が終わったことを、待っている呼び出しに伝える */
 function wakeStopping(jobId: number): void {
   for (const done of stopping.get(jobId) ?? []) done();
   stopping.delete(jobId);
 }
 
 /**
- * エンコードを中止する。**畳み終わってから返す。**
+ * エンコードを中止する。**後始末が終わってから返す。**
  *
  * 中止を伝えるだけで返すと、押した直後の読み直しは ffmpeg が終わる前に届き、画面が変わらない。
  * ffmpeg は SIGTERM から 1 秒ほどで終わるので、待ってから返せば押した人の画面は
@@ -695,9 +695,9 @@ export async function cancel(jobId: number): Promise<void> {
 }
 
 /**
- * 中止を指示されて、まだ畳み終わっていないか。
+ * 中止を指示されて、まだ後始末が終わっていないか。
  *
- * 一覧の行に添えて、中止のボタンを**畳み終わるまで回したままにする**ための
+ * 一覧の行に添えて、中止のボタンを**後始末が終わるまで回したままにする**ための
  * もの。押した返事 (`cancel`) は上限で切り上げることがあるので、返事だけで
  * ボタンを戻すと「回るのが止まったのにまだエンコード中」になる
  */
@@ -723,7 +723,7 @@ function setPhase(jobId: number, phase: EncodePhase, log: string): void {
  * 段階の名前 (「CM 検出中」) だけでは、進んでいるのか止まっているのかが分からない。
  *
  * **中止を指示された後は書き換えない**。`cancel` が書いた「中止しています」を、
- * 畳むまでの間に通る段階が上書きしないように
+ * 後始末が終わるまでの間に通る段階が上書きしないように
  */
 function setStep(jobId: number, log: string): void {
   if (canceled.has(jobId)) return;
@@ -1316,7 +1316,7 @@ function fail(
  * 中止で終わったときの後始末。
  *
  * 出来かけの作業ファイルだけ捨てて、元の録画には触らない。
- * どの段階で止めても同じやり方で畳めるように 1 か所にまとめてある。
+ * どの段階で止めても同じやり方で後始末できるように 1 か所にまとめてある。
  */
 function finishCanceled(jobId: number, working: string | null): void {
   removeIfExists(working);
@@ -1514,7 +1514,7 @@ async function runJob(jobId: number): Promise<void> {
     const result = await descramble(input, target, signal);
     if (!result.ok) {
       removeIfExists(target);
-      // 中止で切ったときは失敗にしない。下の後始末で canceled として畳む
+      // 中止で切ったときは失敗にしない。下の後始末で canceled として終える
       if (canceled.has(jobId)) return finishCanceled(jobId, target);
       // 有料の番組が、カードは読めているのに掛かったまま。その局を未契約に下げる (`contracts.noteStillScrambled`)
       if (result.stillScrambled === true && paidRecording(recording))
@@ -2008,7 +2008,7 @@ async function runJob(jobId: number): Promise<void> {
       outTimeUs: done.result.outTimeUs,
     });
   });
-  // 1 本が投げても、ほかが終わるまで待ってから畳む (動いている ffmpeg と作業ファイルを残さない)
+  // 1 本が投げても、ほかが終わるまで待ってから後始末する (動いている ffmpeg と作業ファイルを残さない)
   const settledTasks = await Promise.allSettled([firstTask, ...otherTasks]);
   const thrown = settledTasks.find((task) => task.status === "rejected");
   if (thrown !== undefined) {
@@ -2570,7 +2570,7 @@ export function pump(): void {
     // 待機中が動き出したことも伝える。押した直後に何も変わらないと止まって見える
     emit("recordings");
     void (next.kind === "cm" ? runCmJob(jobId) : runJob(jobId))
-      // 中止したあとに投げたものは失敗にしない (中止として畳む)
+      // 中止したあとに投げたものは失敗にしない (中止として終える)
       .catch((error) =>
         canceled.has(jobId)
           ? finishCanceled(jobId, null)
@@ -2581,7 +2581,7 @@ export function pump(): void {
         procs.delete(jobId);
         aborts.delete(jobId);
         canceled.delete(jobId);
-        // 中止を押して待っている人に、畳み終わったことを伝える
+        // 中止を押して待っている人に、後始末が終わったことを伝える
         wakeStopping(jobId);
         emit("recordings");
         // 持ち枠を返す。空いた枠に次のジョブが入る (`slots` の `onFree` が pump を呼ぶ)

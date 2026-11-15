@@ -326,7 +326,7 @@ export class CaptionPainter {
     });
   }
 
-  /** 畳む。canvas は消して返す */
+  /** 破棄する。canvas は消して返す */
   close(): void {
     this.resize?.disconnect();
     window.removeEventListener("resize", this.rescale);

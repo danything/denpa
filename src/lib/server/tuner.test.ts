@@ -152,8 +152,8 @@ describe("retryWhileBusy", () => {
     expect(waits).toHaveLength(0);
   });
 
-  /** 畳まれたなら待たない。見ている人はもう別の局へ行っている */
-  test("畳まれたら待たずに諦める", async () => {
+  /** セッションが終わったなら待たない。見ている人はもう別の局へ行っている */
+  test("セッションが終わったら待たずに諦める", async () => {
     const { waits, wait } = clock();
     let asked = 0;
     await expect(

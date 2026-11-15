@@ -1010,7 +1010,7 @@ function logoUse(target: Target): StreamUse {
  * いた。もう 1 台は当たりの中継を読んでいる最中なので、空きが 0 に見える。
  * そこにしかいないなら空きとして数え、開くときに `after` で引き継ぐ。
  *
- * **利用者のいない選局 (余韻) も空きとして数える。** エージェントは誰も読まなくなった選局を 5 秒畳まずに残し
+ * **利用者のいない選局 (余韻) も空きとして数える。** エージェントは誰も読まなくなった選局を 5 秒閉じずに残し
  * (`TunerPool.Linger`)、その間に来た要求に使い回す。一覧ではチャンネルが付いたまま利用者が空になる。
  * これを使用中と数えていた頃は、外れの中継を閉じた直後や番組表の取得が終わった直後に空きが 0 に見え、
  * BS と CS のチューナーが共通の 2 台の環境で、当たりの中継まで行き着かずに「CS の空きチューナーが無くなったため、
@@ -1393,7 +1393,7 @@ export async function ride(): Promise<number> {
   return results.reduce((sum, { found }) => sum + found, 0);
 }
 
-/** 自分で開いて待っている当たりの中継。「いますぐ」が押されたら畳んで譲る */
+/** 自分で開いて待っている当たりの中継。「いますぐ」が押されたら閉じて譲る */
 let idle: { use: StreamUse; controller: AbortController } | null = null;
 
 /**
@@ -1574,7 +1574,7 @@ export async function sweepNow(): Promise<{
     return { started: false, message: "ロゴはすべて集め終えています" };
   }
   /*
-   * 空いているチューナーで待っている当たりの中継 (`awaitCarousel`) は畳んで、ここから開き直す。
+   * 空いているチューナーで待っている当たりの中継 (`awaitCarousel`) は閉じて、ここから開き直す。
    * 読みかけは残るので損はしない。閉じたことがエージェントに届く前に空きを訊くので、引き継ぐ (`countFree`)
    */
   const leaving: StreamUse[] = [];
@@ -1613,7 +1613,7 @@ export async function sweepNow(): Promise<{
 /** 走っている取得を外から止めるための手段。譲ってもらうときに使う */
 let inflight: AbortController | null = null;
 
-/** 止まるのを待つ。開いているストリームを畳むだけなのですぐ終わる */
+/** 止まるのを待つ。開いているストリームを閉じるだけなのですぐ終わる */
 async function settled(): Promise<boolean> {
   for (let i = 0; i < 50 && state.running; i++) await Bun.sleep(100);
   return !state.running;

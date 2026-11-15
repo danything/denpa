@@ -298,7 +298,7 @@
   let canvasCodec = $state<CanvasCodec | null>(null);
   /** canvas に描くプレイヤー。`canvasCodec` が決まって、映像の箱ができたら作る */
   let canvas: CanvasPlayer | null = null;
-  /** canvas のプレイヤーがあるか (`canvas` は畳み直しの都度替わるので、画面の出し分けはこちらで見る) */
+  /** canvas のプレイヤーがあるか (`canvas` は作り直しの都度替わるので、画面の出し分けはこちらで見る) */
   let drawing = $state(false);
   /** 端末に保存した録画を描くときの読み込み元 (`mkv-source.ts`)。サーバから流しているなら null */
   let localMkv: MkvSource | null = null;
@@ -512,12 +512,12 @@
     noteAdapt(busyNote(down));
   }
 
-  /** canvas のプレイヤーを畳む (切り替える・打ち切る) */
+  /** canvas のプレイヤーを閉じる (切り替える・打ち切る) */
   function stopCanvas(): void {
     canvas?.destroy();
     canvas = null;
     canvasStuck = false;
-    // 作り直しの途中で畳んだ (失敗した・打ち切った・選び直した)。替える前の段は忘れる (残すと段を動かさなくなる)
+    // 作り直しの途中で閉じた (失敗した・打ち切った・選び直した)。替える前の段は忘れる (残すと段を動かさなくなる)
     stepFrom = null;
     drawing = false;
     drawingLocal = false;
@@ -819,7 +819,7 @@
     return from;
   }
 
-  /** 「続きから」を消す時計。続けて出したら前の時計は止める (先に消さない)。画面を離れたら畳む */
+  /** 「続きから」を消す時計。続けて出したら前の時計は止める (先に消さない)。画面を離れたら止める */
   let continuedTimer: ReturnType<typeof setTimeout> | null = null;
   /** **黙って途中から始めない。** 続きから始めたと言って、しばらくで引っ込める */
   function showContinued(): void {
@@ -1151,7 +1151,7 @@
   }
 
   /**
-   * **用意できた側に入れ替える** (`prepareStep`)。同じコマの間に、映す側と音を出す側を替え、いままでのプレイヤーを畳む。
+   * **用意できた側に入れ替える** (`prepareStep`)。同じコマの間に、映す側と音を出す側を替え、いままでのプレイヤーを閉じる。
    * 位置は用意した側のまま (いまの再生と同じ所)。いままでの `<video>` を空にして出るイベントは、映していない側のものなので受けない
    */
   function handOver(
@@ -1469,7 +1469,7 @@
 
   /**
    * 観るものを `fresh` に替えて、いまの位置 (`position`。省けばいま再生している位置) から観直す。
-   * 元の TS (`raw`) は canvas に描き、それ以外は `<video>` で観る。描いていた canvas は畳む
+   * 元の TS (`raw`) は canvas に描き、それ以外は `<video>` で観る。描いていた canvas は破棄する
    */
   function replay(fresh: Picked | null, position = mediaTime()): void {
     // 段を替えるために裏で用意していたものは捨てる (選び直したほうを観る)
@@ -2674,7 +2674,7 @@
     if (following === target) return;
     following = target;
     eachFrame(target, (meta) => {
-      // 別の映像に移った (画面を閉じた) ら、こちらは畳む
+      // 別の映像に移った (画面を閉じた) ら、こちらは閉じる
       if (following !== target) return false;
       /*
        * 映したコマの時刻 (`mediaTime`) で外す。`currentTime` は代入した時点で飛んだ先を返すのに、

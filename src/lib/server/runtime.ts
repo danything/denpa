@@ -222,7 +222,7 @@ export function start(): void {
   nowAndEvery(config.reconcileInterval, "disk", checkDisk);
 
   /*
-   * 古い履歴を畳む。終わった予約と、消した録画の行が対象。
+   * 古い履歴を消す。終わった予約と、消した録画の行が対象。
    * 実体はもう無いので、消えて困るものはない。照合と同じ周期でよい
    */
   nowAndEvery(config.reconcileInterval, "prune", pruneHistory);
@@ -470,14 +470,14 @@ const HELD = "__denpaHeldSignal";
  */
 function installShutdownHooks(): void {
   /*
-   * **畳むのは 1 度だけ。** 引き取りは 2 度ある (下) ので、`takeOverSignals` の中の印だけでは
-   * 1 度目の引き取りのあとに受けた合図と、2 度目のあとに受けた合図で 2 度畳みかねない
+   * **停止の処理は 1 度だけ。** 引き取りは 2 度ある (下) ので、`takeOverSignals` の中の印だけでは
+   * 1 度目の引き取りのあとに受けた合図と、2 度目のあとに受けた合図で 2 度停止の処理を始めかねない
    */
   let draining = false;
   /*
-   * **落ちても降りる。** `drain` の中で投げると、`void` で捨てているぶん
+   * **落ちても終了する。** `drain` の中で投げると、`void` で捨てているぶん
    * 誰も受け止めず、**プロセスが生きたまま残る** = 入れ替えが止まる。
-   * 受け止めて、使っているものだけ放して降りる
+   * 受け止めて、使っているものだけ放して終了する
    */
   const onSignal = (signal: NodeJS.Signals) => {
     if (draining) return;
@@ -535,7 +535,7 @@ export function takeOverSignals(
   let taken = 0;
   let draining = false;
   const receive = (signal: NodeJS.Signals) => {
-    // もう畳んでいる最中。2 度目からは受け取るだけで何もしない
+    // もう停止の処理の最中。2 度目からは受け取るだけで何もしない
     if (draining) return;
     draining = true;
     onSignal(signal);
@@ -567,16 +567,16 @@ const DRAIN_REPORT = 60_000;
 const RESTART_NOTICE_FLUSH = 200;
 
 /**
- * 何があっても降りる。**降り損ねを「ぶら下がったまま」にしない。**
+ * 何があっても終了する。**終了できずに残ったままにしない。**
  *
- * 実機で、消しはじめられた Pod が **40 分たっても降りてこない**ことがあった
+ * 実機で、消しはじめられた Pod が **40 分たっても終了しない**ことがあった
  * (録画はとうに終わり、`activeRecordingIds()` も 0、SIGTERM は捕まえていて
  * `/proc/1/status` の `SigCgt` に 15 が立っている。それでも生きている)。
  * こうなると `terminationGracePeriodSeconds` (6 時間) を使い切るまで
  * **新しい Pod が上がらない**。Recreate なので、その間ずっと古いまま。
  *
  * 待つループを回す前に**先に目覚ましを掛ける**。ループの中で何が起きても、
- * `SHUTDOWN_WAIT` を過ぎたら降りる。原因が分からなくても、
+ * `SHUTDOWN_WAIT` を過ぎたら終了する。原因が分からなくても、
  * 「入れ替えが 6 時間止まる」だけは起こさない
  */
 function forceExitAfter(ms: number, why: string): void {
@@ -596,7 +596,7 @@ function forceExitAfter(ms: number, why: string): void {
 async function drain(signal: string): Promise<void> {
   /*
    * **まず残す。** 何をしているかを先に書いておかないと、この先で躓いたときに
-   * 「合図を受け取ったのかどうか」すら分からない。実際、降りてこない Pod を
+   * 「合図を受け取ったのかどうか」すら分からない。実際、終了しない Pod を
    * 調べたときに、記録から読み取れることが何も無かった
    */
   const recordings = activeRecordingIds().length;
@@ -608,7 +608,7 @@ async function drain(signal: string): Promise<void> {
     process.exit(0);
   }
 
-  // ループを回す前に掛ける。**この先で何が起きても降りる**
+  // ループを回す前に掛ける。**この先で何が起きても終了する**
   forceExitAfter(config.shutdownWait, "待ち時間を使い切りました");
 
   beginDraining();

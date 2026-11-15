@@ -43,7 +43,7 @@
  *
  * その場で変換するもの (映像をエンコードし直す) は枠を 1 つ使う (`transcode.ts`)。埋まっていたら
  * 503。詰め替え・元の TS をそのまま流すのは軽いので数えない。**読まれずに詰まった ffmpeg は
- * 5 分で畳む** (止めたまま放っておかれた画面のぶんの枠を返すため)
+ * 5 分で止める** (止めたまま放っておかれた画面のぶんの枠を返すため)
  */
 
 import { existsSync, statSync } from "node:fs";
@@ -673,7 +673,7 @@ const FMP4_OUT = [
  *     -ss 30  25.025               …
  *     -ss 0    0.067                0.046
  *
- * 音声の無い入れ物でも降りないよう `?` を付ける
+ * 音声の無い入れ物でも失敗しないよう `?` を付ける
  */
 export function copyArgs(
   path: string,
@@ -949,7 +949,7 @@ export function audioOnlyArgs(
  * **録画ファイルの音声だけ** (`GET /api/recordings/<id>/file?audio=only`。スマートスピーカーへの Cast など)。
  * 元がどれ (元の TS・4K の局の元の録画・AV1・H.265・H.264) でも同じ形式で出せるよう、主音声を AAC 192k に再エンコードして ADTS で流す。
  * 4K の局の元の録画 (`.mmts`) は ffmpeg が読めないので、denpa が詰め替えた fMP4 を標準入力へ流す (`audioResponse` と同じ)。
- * 読めなければ null。本文は `transcodeBody` で作る。止まった ffmpeg・読まれなくなった応答は、観る画面の変換と同じく畳む。
+ * 読めなければ null。本文は `transcodeBody` で作る。止まった ffmpeg・読まれなくなった応答は、観る画面の変換と同じく止める。
  * 音声だけなので、その場で変換する本数の枠は使わない (`audioResponse` と同じ理由)
  */
 export async function fileAudioBody(
@@ -991,7 +991,7 @@ export async function fileAudioBody(
   );
 }
 
-/** 読まれずに詰まった ffmpeg を畳むまで (ms) */
+/** 読まれずに詰まった ffmpeg を止めるまで (ms) */
 const IDLE_LIMIT = 5 * 60_000;
 /** 詰まりを見る間隔 (ms) */
 const IDLE_CHECK = 30_000;
@@ -1002,13 +1002,13 @@ interface Attempt {
   /** 標準入力へ流し込むもの (TS が元)。起こすたびに読み直す */
   input?: () => ReadableStream<Uint8Array>;
   /**
-   * 前の手が 1 バイトも出せずに降り、これで出せたときに呼ぶ (GPU のせいだったと覚える)。
-   * 渡すのは降りた前の手の標準エラーの全文 (理由で覚えるかを決める。`hwenc.nvencBusy`)
+   * 前の手が 1 バイトも出せずに終了し、これで出せたときに呼ぶ (GPU のせいだったと覚える)。
+   * 渡すのは終了した前の手の標準エラーの全文 (理由で覚えるかを決める。`hwenc.nvencBusy`)
    */
   blame?: (failed: string) => void;
   /**
-   * これが 1 バイトも出せずに降り、次の手も無いときに呼ぶ (標準エラーの全文を渡す)。ソフトウェアに降りられない GPU
-   * (段を下げた AV1・H.265) が、降りた方式を覚えるのに使う (`withFallback`)
+   * これが 1 バイトも出せずに終了し、次の手も無いときに呼ぶ (標準エラーの全文を渡す)。ソフトウェアに切り替えられない GPU
+   * (段を下げた AV1・H.265) が、失敗した方式を覚えるのに使う (`withFallback`)
    */
   gaveUp?: (failed: string) => void;
 }
@@ -1018,13 +1018,13 @@ interface Attempt {
  * (録画ファイルの音声だけ `fileAudioBody` も)。
  *
  * - 読まれたぶんしか読み出さない。相手が読まなければ出力が詰まり、ffmpeg も止まる
- * - 1 バイトも出さずに降りたら、次の手 (GPU → ソフトウェア) で起こし直す。次で出せたら、降りた手の標準エラーを添えて `blame` を呼ぶ
- * - `IDLE_LIMIT` のあいだ読まれなければ畳む。閉じられた・読み切った・落ちたときも畳む
+ * - 1 バイトも出さずに終了したら、次の手 (GPU → ソフトウェア) で起こし直す。次で出せたら、失敗した手の標準エラーを添えて `blame` を呼ぶ
+ * - `IDLE_LIMIT` のあいだ読まれなければ止める。閉じられた・読み切った・落ちたときも止める
  * - **読みに来て ffmpeg が出すのを待っている間は、「読まれない」ではなく「ffmpeg が出さない」として数える。**
  *   上限は同じ `IDLE_LIMIT`。分けていなかった頃は、出だしの遅い ffmpeg を待っている相手を
  *   「読まれない」(`idle`) で切っていた (単体テストで `sh` の起動が上限の 50ms に間に合わなかった回に落ちた)。
- *   何も出さずに固まった ffmpeg は、相手が切らなくても畳む (枠を持ったまま残さない)
- * - 畳んだら `done` を呼ぶ (枠を返す)
+ *   何も出さずに固まった ffmpeg は、相手が切らなくても止める (枠を持ったまま残さない)
+ * - 止めたら `done` を呼ぶ (枠を返す)
  * - `pace` があれば、出したものと ffmpeg を待った時間を渡す (送り出しの具合。`server/pace.ts`)
  */
 export function transcodeBody(
@@ -1037,7 +1037,7 @@ export function transcodeBody(
   let index = 0;
   let proc: ReturnType<typeof spawnAttempt> | null = null;
   let sent = false;
-  /** 1 つ前の手が降りたときの標準エラー (`Attempt.blame` に渡す) */
+  /** 1 つ前の手が失敗したときの標準エラー (`Attempt.blame` に渡す) */
   let failed = "";
   let finished = false;
   let lastRead = Date.now();
@@ -1098,7 +1098,7 @@ export function transcodeBody(
     },
   });
 
-  /** ffmpeg の出力から 1 つ渡す (1 バイトも出さずに降りていたら次の手で起こし直す) */
+  /** ffmpeg の出力から 1 つ渡す (1 バイトも出さずに終了していたら次の手で起こし直す) */
   async function fill(
     controller: ReadableStreamDefaultController<Uint8Array>,
   ): Promise<void> {
@@ -1170,7 +1170,7 @@ function spawnAttempt(attempt: Attempt) {
         }
       } finally {
         endInput(proc);
-        // ffmpeg が先に降りたときも、読みかけのファイルを閉じる
+        // ffmpeg が先に終了したときも、読みかけのファイルを閉じる
         source.cancel().catch(() => undefined);
       }
     })().catch(() => undefined);
@@ -1179,7 +1179,7 @@ function spawnAttempt(attempt: Attempt) {
     read: () => out.read(),
     exited: proc.exited,
     why: async () => (await stderr).trim().split("\n").slice(-3).join(" / "),
-    /** 標準エラーの全文。降りた理由の行が最後の 3 行に入るとは限らない (`Attempt.blame`) */
+    /** 標準エラーの全文。失敗した理由の行が最後の 3 行に入るとは限らない (`Attempt.blame`) */
     log: () => stderr,
     stop: () => {
       source?.cancel().catch(() => undefined);
@@ -1460,10 +1460,10 @@ async function audioResponse(
 }
 
 /**
- * GPU でエンコードできるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える。
+ * GPU でエンコードできるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに失敗したら覚える。
  * NVENC の同時に開ける数を超えただけなら覚えない (`live.blameLiveHw`)。
  *
- * **段を下げた AV1・H.265 はソフトウェアに降りない** (`live.softwareEncodes`)。GPU が降りたらそこで止め、降りた方式を覚える (`gaveUp`)。
+ * **段を下げた AV1・H.265 はソフトウェアに切り替えない** (`live.softwareEncodes`)。GPU が失敗したらそこで止め、失敗した方式を覚える (`gaveUp`)。
  * 画面が同じ段をリクエストし直すと、覚えている間は次のコーデックになる (`live.rungCodec`)
  */
 function withFallback(

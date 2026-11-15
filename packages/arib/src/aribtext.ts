@@ -220,7 +220,7 @@ export function decodeAribText(data: Uint8Array): string {
     if (byte <= 0x20 || byte === 0x7f || byte === 0xa0 || byte === 0xff) {
       at++;
       switch (byte) {
-        case 0x0d: // APR。改行。直後の LF は同じ 1 回として畳む
+        case 0x0d: // APR。改行。直後の LF は同じ 1 回の改行として扱う
           out += "\n";
           if (data[at] === 0x0a) at++;
           break;

@@ -50,7 +50,7 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** 偽 ffprobe。ファイル名に h264 / av1 / hevc があればその中身を、無ければ読めない (1 で降りる) */
+/** 偽 ffprobe。ファイル名に h264 / av1 / hevc があればその中身を、無ければ読めない (終了コード 1 で終わる) */
 const PROBE = join(dir, "ffprobe");
 writeFileSync(
   PROBE,
@@ -751,12 +751,12 @@ describe("流す (streamResponse)", () => {
 });
 
 describe("ffmpeg の出力を本文にする (transcodeBody)", () => {
-  test("1 バイトも出さずに降りたら次の手で起こし直し、次で出せたら前のせいだったと覚える", async () => {
+  test("1 バイトも出さずに終了したら次の手で起こし直し、次で出せたら前のせいだったと覚える", async () => {
     const blamed: string[] = [];
     let done = 0;
     const body = transcodeBody(
       [
-        // 降りた理由の行は最後の 3 行に入るとは限らない。全文を渡す (覚えるかを理由で決める。`hwenc.nvencBusy`)
+        // 失敗した理由の行は最後の 3 行に入るとは限らない。全文を渡す (覚えるかを理由で決める。`hwenc.nvencBusy`)
         {
           argv: [
             "sh",
@@ -786,7 +786,7 @@ describe("ffmpeg の出力を本文にする (transcodeBody)", () => {
     expect(await new Response(body).text()).toBe("流し込んだもの");
   });
 
-  /** 畳まれるまで待つ (上限を超えてから定期チェックが畳むまでの間がある) */
+  /** 止められるまで待つ (上限を超えてから定期チェックが止めるまでの間がある) */
   const until = async (ok: () => boolean) => {
     for (let i = 0; i < 500 && !ok(); i++) await Bun.sleep(10);
   };
@@ -796,7 +796,7 @@ describe("ffmpeg の出力を本文にする (transcodeBody)", () => {
    * 上限より遅いと、待っている相手を `idle` で切っていた (CI で `sh` の起動が 50ms に
    * 間に合わなかった回に、下の「読まれない」のテストが最初の読みで落ちた)
    */
-  test("ffmpeg の出だしが上限より短く遅れただけなら畳まない", async () => {
+  test("ffmpeg の出だしが上限より短く遅れただけなら止めない", async () => {
     let done = 0;
     const body = transcodeBody(
       [{ argv: ["sh", "-c", "sleep 0.3; printf ok"] }],
@@ -811,7 +811,7 @@ describe("ffmpeg の出力を本文にする (transcodeBody)", () => {
     expect(done).toBe(1);
   });
 
-  test("待っている間に ffmpeg が何も出さないまま上限を超えたら畳む", async () => {
+  test("待っている間に ffmpeg が何も出さないまま上限を超えたら止める", async () => {
     let done = 0;
     const body = transcodeBody(
       [{ argv: ["sh", "-c", "exec sleep 30"] }],
@@ -826,7 +826,7 @@ describe("ffmpeg の出力を本文にする (transcodeBody)", () => {
     expect(done).toBe(1);
   });
 
-  test("読まれないまま置かれたら畳む", async () => {
+  test("読まれないまま置かれたら止める", async () => {
     let done = 0;
     // 上限は `sh` の起動より十分長く (最初の読みが「何も出さない」で切られないように)
     const body = transcodeBody(
@@ -852,7 +852,7 @@ describe("ffmpeg の出力を本文にする (transcodeBody)", () => {
 
 /**
  * 録画ファイルの音声だけ (`file?audio=only`)。前は ffmpeg の出力をそのまま本文にしていて、何も出さずに固まった ffmpeg は
- * 相手が切るまで残っていた。観る画面の変換と同じ `transcodeBody` で畳む
+ * 相手が切るまで残っていた。観る画面の変換と同じ `transcodeBody` で止める
  */
 describe("録画ファイルの音声だけ (fileAudioBody)", () => {
   test("主音声を AAC の ADTS にする ffmpeg を起こし、出したものを本文にする", async () => {
@@ -876,7 +876,7 @@ describe("録画ファイルの音声だけ (fileAudioBody)", () => {
     expect(argv).not.toContain(mmts);
   });
 
-  test("ffmpeg が何も出さないまま上限を超えたら畳む", async () => {
+  test("ffmpeg が何も出さないまま上限を超えたら止める", async () => {
     const stuck = join(dir, "stuck-ffmpeg");
     writeFileSync(stuck, "#!/bin/sh\nexec sleep 30\n");
     chmodSync(stuck, 0o755);

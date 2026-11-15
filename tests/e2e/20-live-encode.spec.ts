@@ -619,9 +619,9 @@ test.describe("ライブ視聴", () => {
   /*
    * **字幕を持たない放送では、初めから字幕の出力を指定しない。**
    *
-   * 指定すると ffmpeg は入口を探り終えてから降り、字幕なしで起こし直すまで映像が 1.5 秒ほど遅れていた
+   * 指定すると ffmpeg は入口を探り終えてから終了し、字幕なしで起こし直すまで映像が 1.5 秒ほど遅れていた
    * (実機の CS で、開くたびに)。PMT には ES が全部並んでいるので、起こす前に読めば分かる
-   * (`server/captions.ts` の `peekCaptions`)。偽 ffmpeg は本物と同じく、指定されたら降りる
+   * (`server/captions.ts` の `peekCaptions`)。偽 ffmpeg は本物と同じく、指定されたら終了する
    */
   test("字幕を持たない放送では、ffmpeg を起こし直さずに開く", async ({
     page,
@@ -641,7 +641,7 @@ test.describe("ライブ視聴", () => {
       expect(args).not.toContain("pipe:3");
       expect(args.some((arg) => /:s:\d+$/.test(arg))).toBe(false);
 
-      // 起こし直していれば、降りてすぐ 2 回目が足される。少し待っても 1 回のまま
+      // 起こし直していれば、終了してすぐ 2 回目が足される。少し待っても 1 回のまま
       await page.waitForTimeout(2_000);
       const runs = readFileSync(stack.liveArgsFile, "utf8")
         .split("---\n")

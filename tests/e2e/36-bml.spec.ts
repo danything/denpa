@@ -410,7 +410,7 @@ test.describe("データ放送を自動で受信する端末", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("live-settings-menu")).toBeHidden();
 
-    // 右クリック (マウスの長押し) で切ると、畳んでサーバにも伝える。開きはしない
+    // 右クリック (マウスの長押し) で切ると、エンジンを止めてサーバにも伝える。開きはしない
     await wakeControls(page, "live-frame");
     await button.click({ button: "right" });
     await expect(page.getByTestId("live-data-receive-note")).toHaveText(

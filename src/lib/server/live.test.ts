@@ -113,7 +113,7 @@ describe("ライブのエンコード方法", () => {
    * ffmpeg は名指しした局を `-probesize` のぶん読む間に見つけられなければ、
    * **そのまま終了する**。実機の tvk (T15。tvk1/2/3 + ワンセグ + データで、
    * 局ごとに 14 本以上のストリーム) では 400KB でも足りず、
-   * `Failed to set value '0:p:24632:v:0' for option 'map'` で降りていた。
+   * `Failed to set value '0:p:24632:v:0' for option 'map'` で失敗して終了していた。
    *
    * わざと probesize を下げて T15 で測ったもの (3 回ずつ):
    *
@@ -248,7 +248,7 @@ describe("ライブのエンコード方法", () => {
 
   /*
    * **字幕を持たない放送はある** (ショッピングやサブチャンネル)。
-   * そこで字幕を求めると ffmpeg は組み立ての時点で降りて**映像も出ない**ので、
+   * そこで字幕を求めると ffmpeg は組み立ての時点で失敗して終了し、**映像も出ない**ので、
    * 字幕を外して再エンコードできるようにしてある (`Session.run`)
    */
   test("字幕なしでも組める", () => {
@@ -504,7 +504,7 @@ describe("使えなかった理由", () => {
 
   /*
    * **言い換えるのは「同期しなかった」ときだけ。** 塞がっていたときや
-   * ffmpeg が降りたときに「放送休止です」と出すと、今度はこちらが嘘をつく
+   * ffmpeg が失敗して終了したときに「放送休止です」と出すと、今度はこちらが嘘をつく
    */
   test("別の理由で使えなかったときは言い換えない", () => {
     expect(whyNotTuned("チューナーに空きがありません", until)).toBe(
@@ -536,8 +536,8 @@ describe("名指しの選局を断られたときの文面 (pinnedNotTuned)", ()
     );
   });
 });
-describe("ffmpeg が局の映像・音声を指定できずに降りた (missingMedia)", () => {
-  test("映像か音声の指定で降りた行なら、どちらかを返す", () => {
+describe("ffmpeg が局の映像・音声を指定できずに失敗した (missingMedia)", () => {
+  test("映像か音声の指定で失敗した行なら、どちらかを返す", () => {
     expect(
       missingMedia(
         "Failed to set value '0:p:24632:v:0' for option 'map': Invalid argument",
@@ -554,7 +554,7 @@ describe("ffmpeg が局の映像・音声を指定できずに降りた (missing
   });
 
   /*
-   * 字幕の指定で降りたのは、字幕なしで起こし直す (`NO_SUBTITLE`)。実機の BS10プレミアム (未契約) で出た行。
+   * 字幕の指定で失敗したのは、字幕なしで起こし直す (`NO_SUBTITLE`)。実機の BS10プレミアム (未契約) で出た行。
    * スクランブルされたままだったことは、届いた TS の印で別に決める (`LastingScramble`)
    */
   test("字幕の指定とほかの行は見ない", () => {
@@ -745,9 +745,9 @@ describe("GPU でエンコードする", () => {
 
   /*
    * 消費者向けの GPU は同時に開けるエンコードの数に上限がある (`hwenc.nvencBusy`)。
-   * 超えて降りたのは GPU が壊れているのではないので、15 分外すことはしない
+   * 超えて失敗したのは GPU が壊れているのではないので、15 分外すことはしない
    */
-  test("同時に開ける数を超えて降りただけなら、方式を覚えない", () => {
+  test("同時に開ける数を超えて失敗しただけなら、方式を覚えない", () => {
     // ほかのテストと混ざらないよう、ここだけのデバイス
     const hw = {
       way: { device: "/dev/nvidia-test-busy", kind: "nvenc" as const, gpu: 0 },
@@ -891,7 +891,7 @@ describe("元の TS が尽きたあと (rawEnding)", () => {
     );
   });
 
-  test("畳んだあとは何も伝えない", () => {
+  test("終えたあとは何も伝えない", () => {
     expect(rawEnding({ chase: true, fed: true, stopped: true })).toBe("quiet");
     expect(rawEnding({ chase: false, fed: true, stopped: true })).toBe("quiet");
   });
@@ -957,7 +957,7 @@ describe("エンコードが遅れたときの軽い組み合わせ", () => {
       step: "half",
       light: { half: true, gpu: false },
     });
-    // 答えは 1 回だけ (セッションはここで畳む)
+    // 答えは 1 回だけ (セッションはここで終える)
     expect(lag.tick(20_000, 0.5, base)).toBeNull();
   });
 
@@ -1628,7 +1628,7 @@ describe("TS で送る 4K の局のライブ", () => {
       codec: "av1",
       raw: false,
     });
-    // 再生できる形式が無い (呼ぶ側が「再生できる形式がありません」で畳む)
+    // 再生できる形式が無い (呼ぶ側が「再生できる形式がありません」で終える)
     expect(servedFormat(raw, "hevc", ["raw"])).toBeNull();
     // MPEG-2 の局・読めなかったとき・放送のままでないものは、リクエストされたまま
     expect(servedFormat(raw, "mpeg2", null)).toEqual(raw);

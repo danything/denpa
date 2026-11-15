@@ -28,7 +28,7 @@ let sides = 0;
  *
  * **ffmpeg には `-y` を付ける。** 付けないと ffmpeg は出力が既にあるかを `access` で確かめ、Windows ではそれが
  * 名前付きパイプへの 1 本目の接続になる。受けるのは 1 本だけなので、本物の書き込みが開けずに
- * 「Error opening output file」で降りる (ライブの字幕で起きた)
+ * 「Error opening output file」で失敗する (ライブの字幕で起きた)
  */
 export function sideOutput(): SideOutput {
   if (process.platform !== "win32") {
@@ -291,7 +291,7 @@ export async function run(
    * **もう押されている合図は、起こす前に見る。** `abort` のリスナーは押された
    * *瞬間*にしか呼ばれないので、押された後に起こした道具には届かず、最後まで
    * 走り切っていた。中止を押したあとに CM 検出が無音検出へ落ち、字幕まで
-   * 画像にしてから畳んでいたのはこれ。殺されたときと同じコード (143 = SIGTERM) で返す
+   * 画像にしてから終わっていたのはこれ。殺されたときと同じコード (143 = SIGTERM) で返す
    */
   if (options.signal?.aborted === true) {
     return { code: 143, stdout: new Uint8Array(), stderr: "中止されました" };

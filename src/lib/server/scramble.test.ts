@@ -258,7 +258,7 @@ describe("ライブで局がスクランブルされたまま届き続けてい�
     expect(watch.verdict).toBe("scrambled");
   });
 
-  test("決める前に ffmpeg が降りたら、いちばん新しく数えたぶんで決める", () => {
+  test("決める前に ffmpeg が終了したら、いちばん新しく数えたぶんで決める", () => {
     const watch = new LastingScramble(500, 3000);
     feed(watch, 49, true, 0);
     // 49 個ではまだ言えない

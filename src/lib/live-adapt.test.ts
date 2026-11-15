@@ -128,7 +128,7 @@ describe("断り書きの上書き", () => {
     expect(replacesWarning("encode", encode, encode)).toBe(true);
   });
 
-  test("ほかの理由の断り書き (GPU から降りた・混んでいた) は上書きしない", () => {
+  test("ほかの理由の断り書き (GPU からソフトウェアに切り替えた・混んでいた) は上書きしない", () => {
     const busy = "サーバが混んでいるため、画質を下げられませんでした";
     expect(replacesWarning("encode", busy, null)).toBe(false);
     expect(replacesWarning("pinned", busy, null)).toBe(false);

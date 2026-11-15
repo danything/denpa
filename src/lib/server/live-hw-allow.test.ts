@@ -115,7 +115,7 @@ test("ライブの H.265 は、ライブの印で GPU に載るときだけ出�
   expect(liveHevc([C])).toBe(false);
 });
 
-test("GPU が H.265 をエンコードできずに降りたら、覚えている間は出さない。同時に開ける数を超えただけなら覚えない", () => {
+test("GPU が H.265 をエンコードできずに失敗したら、覚えている間は出さない。同時に開ける数を超えただけなら覚えない", () => {
   const D: HwDevice = { ...A, path: "/dev/dri/renderD131", vaapi: ["hevc"] };
   saveSettings({ hwAllow: {}, liveHwAllow: {} });
   const hw = pickLiveHw("hevc", true, [D]);
@@ -163,7 +163,7 @@ test("AV1 もエンコードできる GPU なら AV1 → H.265 → H.264。H.265
   expect(liveRealtime([A])).toEqual(["av1", "h264"]);
 });
 
-test("GPU が H.265 をエンコードできずに降りたら、覚えている間は並べない", () => {
+test("GPU が H.265 をエンコードできずに失敗したら、覚えている間は並べない", () => {
   const G: HwDevice = {
     ...A,
     path: "/dev/dri/renderD134",

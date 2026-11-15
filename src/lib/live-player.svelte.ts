@@ -388,7 +388,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** AV1 を受け取れなかった (`start`)。**この画面を開いている間は**自動で AV1 を選ばない。選び直せば試し直す */
   let av1GaveUp = false;
   /**
-   * H.265 を受け取れなかった (`start`)、またはサーバが GPU でエンコードできずに降りた (`error`)。AV1 と同じく、
+   * H.265 を受け取れなかった (`start`)、またはサーバが GPU でエンコードできずに失敗した (`error`)。AV1 と同じく、
    * **この画面を開いている間は**自動で H.265 を選ばない。選び直せば試し直す
    */
   let hevcGaveUp = false;
@@ -496,7 +496,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let awaiting = false;
   /** 詰まっているか。`<video>` は `waiting` から `playing` まで、canvas は詰まった次の刻みまで (`adapt`) */
   let stuck = false;
-  /** 段を下げた変換で GPU が降りたコーデック (AV1・H.265 はソフトウェアに降りない)。段を下げるときの `playable` から外す */
+  /** 段を下げた変換で GPU のエンコードが失敗したコーデック (AV1・H.265 はソフトウェアに切り替えない)。段を下げるときの `playable` から外す */
   const rungOff = new Set<LiveCodec>();
   /** `encode`・`pinned` の断り書きと、最後に出した時刻。その状態が `ADAPT_HOLD` のあいだ来なければ消す */
   let standing: { text: string; at: number } | null = null;
@@ -892,7 +892,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 飛んだ直後の 1 コマは測らない (`unslipper`)。選局し直しの追いつき (`pacing` の `seek`) も含む
     video.addEventListener("seeking", () => unslipping.seeked());
     eachFrame(video, (frame) => {
-      // 別の映像に移ったら、こちらは畳む
+      // 別の映像に移ったら、こちらは閉じる
       if (following !== video) return false;
       // 映した 1 枚の時刻と再生位置の差 (`slip`)。`requestVideoFrameCallback` を持つブラウザでだけ測れる
       if (frame !== undefined) {
@@ -1859,7 +1859,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 繋ぎも含めて畳む。**画面を離れるときと、繋ぎ直すとき**
+   * 繋ぎも含めて閉じる。**画面を離れるときと、繋ぎ直すとき**
    *
    * @param keepList 選んでいる字幕を残すか (`forget`)。同じ局へ繋ぎ直すときだけ true
    */
@@ -1960,10 +1960,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     thaw();
     void audioContextForLive?.close().catch(() => undefined);
     audioContextForLive = null;
-    // 字幕を描くものも畳む (canvas の大きさを読む `ResizeObserver` を外す)
+    // 字幕を描くものも破棄する (canvas の大きさを読む `ResizeObserver` を外す)
     painter?.close();
     painter = null;
-    // コマごとの貼り直し (`follow`) も畳む
+    // コマごとの貼り直し (`follow`) も止める
     following = null;
   }
 
@@ -2725,7 +2725,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             !rungOff.has(codec)
           ) {
             /*
-             * 段を下げた変換で GPU が降りた (AV1・H.265 はソフトウェアに降りない)。段を下げている間はそのコーデックを
+             * 段を下げた変換で GPU のエンコードが失敗した (AV1・H.265 はソフトウェアに切り替えない)。段を下げている間はそのコーデックを
              * `playable` から外し、同じ段をリクエストし直す (サーバが次のコーデックを選ぶ)
              */
             rungOff.add(codec);
@@ -2740,7 +2740,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             broadcastKind() === "mpeg2"
           ) {
             /*
-             * H.265 でリクエストして降りた (サーバが GPU でエンコードできなかった。ソフトウェアには降りられない)。
+             * H.265 でリクエストして失敗した (サーバが GPU でエンコードできなかった。ソフトウェアには切り替えられない)。
              * この画面を開いている間は H.265 をやめて、次の形式でリクエストし直す (`decideFormat`)。
              * 4K の局の `hevc` は詰め替えで GPU を使わないので、エラーは形式のせいではない。ここには入れない
              */
@@ -2777,7 +2777,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
               void tune(element, tuned, true);
           }
         } else if (notice.type === "notice") {
-          // 映像は出ている。断り書きに残す (GPU でエンコードできずにソフトウェアへ降りた、サーバが混んでいて段を下げられなかった、など)
+          // 映像は出ている。断り書きに残す (GPU でエンコードできずにソフトウェアへ切り替えた、サーバが混んでいて段を下げられなかった、など)
           note(notice.message);
           standing = null;
         } else if (notice.type === "pace") {
@@ -3102,7 +3102,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     codecs: string,
     baked: LiveCodec,
   ): void {
-    // canvas で描いていたものからエンコードしたものへ戻るとき (打ち切った・選び直した)。canvas を畳んで <video> を出す
+    // canvas で描いていたものからエンコードしたものへ戻るとき (打ち切った・選び直した)。canvas を破棄して <video> を出す
     stopRaw();
     // iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある (`ts/media-source.ts`)
     const picked = pickMediaSource();
@@ -3307,7 +3307,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       engine.selectAudio(track.stream, track.side);
   }
 
-  /** RawEngine を畳む。**エンコードしたものに戻るときと、画面を離れるとき** */
+  /** RawEngine を破棄する。**エンコードしたものに戻るときと、画面を離れるとき** */
   function stopRaw(): void {
     if (rawTimer !== null) clearInterval(rawTimer);
     rawTimer = null;

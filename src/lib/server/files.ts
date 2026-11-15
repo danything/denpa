@@ -309,9 +309,9 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
   }
 
   /*
-   * **すでに空のフォルダも畳む。**
+   * **すでに空のフォルダも消す。**
    *
-   * 上の掃除は、ファイルを消したフォルダしか畳まない。ファイルの無い
+   * 上の掃除は、ファイルを消したフォルダしか消さない。ファイルの無い
    * フォルダは `walk` のファイルの一覧に出ないので、**ずっと残る**。
    *
    * 深いものから試す。親は子が消えてはじめて空になる。**空でなければ
@@ -337,7 +337,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
 
   if (swept > 0)
     console.log(`[files] 元の動画の無いサイドカーを片付けました: ${swept} 件`);
-  if (pruned > 0) console.log(`[files] 空のフォルダを畳みました: ${pruned} 件`);
+  if (pruned > 0) console.log(`[files] 空のフォルダを消しました: ${pruned} 件`);
   return { swept, strays, pruned };
 }
 
@@ -393,7 +393,7 @@ function walk(
 /**
  * 古い履歴を捨てる。
  *
- * 残すのは「録れたか」を後から確かめるためだけなので、期限を切って畳む。
+ * 残すのは「録れたか」を後から確かめるためだけなので、期限を切って消す。
  * 対象は**終わった予約**と**消した録画の行**だけ。ファイルが残っているものには
  * 触らない (消すかどうかは人が決める)。
  */

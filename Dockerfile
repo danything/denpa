@@ -372,7 +372,7 @@ RUN bun run build && find build -name "*.map" -delete
 #
 # **node_modules は載せない。**
 #
-# adapter-bun の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
+# adapter-bun の出力は要るものを取り込んでいて、外から引くのは `node:*` と
 # bun の組み込み (`bun:sqlite`・`bun:ffi`) だけ。載せていた頃は playwright も vite も
 # typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
 # 置くのは下のものだけ: build/ (アプリ)、server.js (入口) とそれが読む
@@ -380,7 +380,7 @@ RUN bun run build && find build -name "*.map" -delete
 # (マイグレーション)。これで起動して /api/health が答えるかは CI で毎回見ている
 # (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy。Windows・Mac は test.yml の server-windows・server-macos)
 #
-# 引き換えに、**外から引くものを増やすなら畳み込ませること** — package.json の
+# 引き換えに、**外から引くものを増やすなら取り込ませること** — package.json の
 # `dependencies` に足すと adapter-bun がそれを外に出すので、ここで転ぶ。
 # 依存を全部 devDependencies に置いて `dependencies` を空にしてあるのはそのため
 # ---------------------------------------------------------------------------
