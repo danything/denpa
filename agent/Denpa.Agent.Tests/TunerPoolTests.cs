@@ -261,7 +261,7 @@ public class TunerPoolTests
             await FirstChunk(low, cancel);
 
             var high = Background(() => rig.Pool.Open("GR", "T28", 10, "rec 1"));
-            // 取り上げられたら、取り上げた側は前の読み出し (1 回 300ms) が止まるのを待っている
+            // 取り上げられたら、取り上げた側は前の読み出し (1 回 300 ms) が止まるのを待っている
             await Assert.That(await Drain(low, cancel)).IsEqualTo(TunerPool.PreemptedBy("rec 1"));
             rig.Pool.Replace([Spec("B", "fake:b"), Spec("A", "fake:a")]);
 

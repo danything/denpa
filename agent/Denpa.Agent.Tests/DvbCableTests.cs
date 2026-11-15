@@ -170,7 +170,7 @@ public class DvbCableTests
     }
 
     [Test]
-    public async Task ISDB_C_は_64QAM_5274_kbaud_で_中心周波数を渡す()
+    public async Task ISDB_C_は_5274_kbaud_で_中心周波数と変調を渡す()
     {
         await Task.Yield();
         var qc51 = ChannelTable.Parse("QC51")!;
@@ -200,15 +200,15 @@ public class DvbCableTests
     }
 
     [Test]
-    public async Task ロックしなかった変調のあと_電波の印を読まなければ_ほかの変調を試さない()
+    public async Task ロックしなかった変調のあと_FE_HAS_SIGNAL_を読まなければ_ほかの変調を試さない()
     {
         await Task.Yield();
         // linux/dvb/frontend.h の FE_HAS_SIGNAL = 0x01、FE_HAS_CARRIER = 0x02
         await Assert.That(DvbTuner.TriesOtherModulations(true, 0)).IsFalse();
         await Assert.That(DvbTuner.TriesOtherModulations(true, 0x02)).IsFalse();
-        // 電波が来ていれば、搬送波の印が無くても (変調が違うと立たない復調器がある) ほかの変調を試す
+        // 電波が来ていれば、FE_HAS_CARRIER が無くても (変調が違うと立たない復調器がある) ほかの変調を試す
         await Assert.That(DvbTuner.TriesOtherModulations(true, 0x01)).IsTrue();
-        // 印を立てると分かるまで (一度もロックしていない) は、印が無くても全部試す
+        // FE_HAS_SIGNAL を立てると分かるまで (一度もロックしていない) は、立っていなくても全部試す
         await Assert.That(DvbTuner.TriesOtherModulations(false, 0)).IsTrue();
     }
 
