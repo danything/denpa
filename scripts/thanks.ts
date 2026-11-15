@@ -108,23 +108,39 @@ function people(items: Item[], kinds: Kind[]): Person[] {
     .sort((a, b) => a.numbers[0]! - b.numbers[0]!);
 }
 
-/** 印の間に入れる Markdown。誰もいない段は見出しごと出さない */
+/** その人がマージされた PR の一覧 (GitHub の検索) */
+const prsOf = (login: string) =>
+  `https://github.com/danything/denpa/pulls?q=is%3Apr+is%3Amerged+author%3A${login}`;
+
+/** その人が立てた Issue の一覧 (GitHub の検索)。Discussion はこの検索に出ない */
+const issuesOf = (login: string) =>
+  `https://github.com/danything/denpa/issues?q=author%3A${login}`;
+
+/**
+ * 印の間に入れる Markdown。**名前を「、」でつないだ段落にする** (人が増えて、1 人 1 行の箇条書きでは長くなった)。
+ * 番号は並べず、名前からその人の PR・Issue の一覧へ飛ぶ。誰もいない段は見出しごと出さない
+ */
 export function render(items: Item[]): string {
-  const block = (title: string, list: Person[]) =>
+  const block = (
+    title: string,
+    list: Person[],
+    link: (login: string) => string,
+  ) =>
     list.length === 0
       ? []
       : [
           `**${title}** (ありがとうございます):`,
           "",
-          ...list.map(
-            (p) =>
-              `- [@${p.login}](https://github.com/${p.login}) (${p.numbers.map((n) => `[#${n}](https://github.com/danything/denpa/issues/${n})`).join(" ")})`,
-          ),
+          list.map((p) => `[@${p.login}](${link(p.login)})`).join("、"),
           "",
         ];
   return [
-    ...block("手を入れてくれた人", people(items, ["pr"])),
-    ...block("報告や提案をくれた人", people(items, ["issue", "discussion"])),
+    ...block("手を入れてくれた人", people(items, ["pr"]), prsOf),
+    ...block(
+      "報告や提案をくれた人",
+      people(items, ["issue", "discussion"]),
+      issuesOf,
+    ),
   ]
     .join("\n")
     .trim();

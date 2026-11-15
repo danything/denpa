@@ -80,7 +80,7 @@ describe("GitHub から読む", () => {
 });
 
 describe("一覧の形", () => {
-  test("最初に関わった順に並べ、番号は小さい順。持ち主は載せない", () => {
+  test("最初に関わった順に名前を「、」でつなぎ、名前からその人の PR・Issue の一覧へ飛ぶ。持ち主は載せない", () => {
     const text = render([
       { kind: "pr", number: 662, login: "fetburner" },
       { kind: "pr", number: 188, login: "Khronos31" },
@@ -94,13 +94,11 @@ describe("一覧の形", () => {
       [
         "**手を入れてくれた人** (ありがとうございます):",
         "",
-        "- [@Khronos31](https://github.com/Khronos31) ([#188](https://github.com/danything/denpa/issues/188))",
-        "- [@fetburner](https://github.com/fetburner) ([#662](https://github.com/danything/denpa/issues/662))",
+        "[@Khronos31](https://github.com/danything/denpa/pulls?q=is%3Apr+is%3Amerged+author%3AKhronos31)、[@fetburner](https://github.com/danything/denpa/pulls?q=is%3Apr+is%3Amerged+author%3Afetburner)",
         "",
         "**報告や提案をくれた人** (ありがとうございます):",
         "",
-        "- [@Khronos31](https://github.com/Khronos31) ([#184](https://github.com/danything/denpa/issues/184) [#377](https://github.com/danything/denpa/issues/377))",
-        "- [@fetburner](https://github.com/fetburner) ([#668](https://github.com/danything/denpa/issues/668))",
+        "[@Khronos31](https://github.com/danything/denpa/issues?q=author%3AKhronos31)、[@fetburner](https://github.com/danything/denpa/issues?q=author%3Afetburner)",
       ].join("\n"),
     );
   });
@@ -110,7 +108,7 @@ describe("一覧の形", () => {
       [
         "**報告や提案をくれた人** (ありがとうございます):",
         "",
-        "- [@a](https://github.com/a) ([#5](https://github.com/danything/denpa/issues/5))",
+        "[@a](https://github.com/danything/denpa/issues?q=author%3Aa)",
       ].join("\n"),
     );
   });
