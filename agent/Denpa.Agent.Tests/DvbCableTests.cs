@@ -200,13 +200,14 @@ public class DvbCableTests
     }
 
     [Test]
-    public async Task ロックしなかった変調のあと_搬送波の印を読まなければ_ほかの変調を試さない()
+    public async Task ロックしなかった変調のあと_電波の印を読まなければ_ほかの変調を試さない()
     {
         await Task.Yield();
         // linux/dvb/frontend.h の FE_HAS_SIGNAL = 0x01、FE_HAS_CARRIER = 0x02
         await Assert.That(DvbTuner.TriesOtherModulations(true, 0)).IsFalse();
-        await Assert.That(DvbTuner.TriesOtherModulations(true, 0x01)).IsFalse();
-        await Assert.That(DvbTuner.TriesOtherModulations(true, 0x03)).IsTrue();
+        await Assert.That(DvbTuner.TriesOtherModulations(true, 0x02)).IsFalse();
+        // 電波が来ていれば、搬送波の印が無くても (変調が違うと立たない復調器がある) ほかの変調を試す
+        await Assert.That(DvbTuner.TriesOtherModulations(true, 0x01)).IsTrue();
         // 印を立てると分かるまで (一度もロックしていない) は、印が無くても全部試す
         await Assert.That(DvbTuner.TriesOtherModulations(false, 0)).IsTrue();
     }
