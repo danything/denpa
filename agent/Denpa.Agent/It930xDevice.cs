@@ -408,6 +408,20 @@ public sealed class It930xDevice
     /// </summary>
     private long _longestAway;
 
+    /// <summary>
+    /// 読み出しのスレッドが Read から戻った時刻 (<see cref="Environment.TickCount64"/>)。Read に入ったら 0。
+    /// 溢れを記録に出すときに、まだ Read の外で止まっていれば、その時間も数える (戻ってからでないと <see cref="_longestAway"/> に入らない)
+    /// </summary>
+    private long _awaySince;
+
+    /// <summary>今の時点までの、Read の外にいたいちばん長い時間 (ms)。数え直す</summary>
+    private long TakeLongestAway()
+    {
+        var since = Interlocked.Read(ref _awaySince);
+        var now = since == 0 ? 0 : Environment.TickCount64 - since;
+        return Math.Max(Interlocked.Exchange(ref _longestAway, 0), now);
+    }
+
     private void RecordAway(long ms)
     {
         var seen = Interlocked.Read(ref _longestAway);
@@ -633,10 +647,10 @@ public sealed class It930xDevice
         var cause = before is { System: true }
             ? "全体の溢れが前から立っていて EP 0x84 から TS が出ないため、入力にも溜まったと推定します"
             : "EP 0x84 の読み出しが追いつかなかったと推定します";
-        // 前に記録に出してから、読み出しのスレッドが Read の外にいたいちばん長い時間。出したら数え直す
-        var away = Interlocked.Exchange(ref _longestAway, 0);
+        // 前に記録に出してから今までに、読み出しのスレッドが Read の外にいたいちばん長い時間。出したら数え直す
+        var away = TakeLongestAway();
         Log.Write(overflow.Any
-            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause} (読み出しのスレッドが EP 0x84 の読み出しを離れていたのは、いちばん長くて {away} ms)"
+            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}。読み出しのスレッドが EP 0x84 の読み出しを離れていた時間は、いちばん長くて {away} ms です"
             : $"[{Label}] {when}に TS のバッファの溢れが下りていました");
         return overflow;
     }
@@ -694,13 +708,13 @@ public sealed class It930xDevice
             _readerRunning = true;
             _readerOpened.Set();
             var buffer = new byte[It930xBridge.TsTransferSize];
-            var returned = 0L;
             while (!_stopping)
             {
                 // 転送要求を出し直すのは Read の中だけ。Read の外にいた時間 (受信機ごとに分ける処理・スレッドが止められていた間) を測る
+                var returned = Interlocked.Exchange(ref _awaySince, 0);
                 if (returned != 0) RecordAway(Environment.TickCount64 - returned);
                 var got = input.Read(buffer, TsReadTimeoutMs);
-                returned = Environment.TickCount64;
+                Interlocked.Exchange(ref _awaySince, Environment.TickCount64);
                 if (got <= 0) continue;
                 Interlocked.Add(ref _tsBytes, got);
                 Interlocked.Increment(ref _tsReads);
@@ -724,6 +738,8 @@ public sealed class It930xDevice
         {
             // どの終わり方でも、開くのを待っている Setup を待たせたままにしない (読み出しを始められていなければ _readerRunning は false のまま)
             _readerOpened.Set();
+            // 読み出しを終えたあとは、Read の外にいる時間として数えない (`TakeLongestAway`)
+            Interlocked.Exchange(ref _awaySince, 0);
         }
     }
 
