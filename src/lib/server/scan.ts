@@ -621,6 +621,8 @@ class Scanner {
   private readonly retired = new Set<AgentTuner>();
   /** 503 を受けた種別と、そのときの理由。受けられる並びが全部止まったら `unusable` に移す (`dropUnusable`) */
   private readonly pending = new Map<ChannelType, string>();
+  /** 総当たりで回す種別 (`ground`)。`dropUnusable` はこの種別だけを見る */
+  private readonly scanning = new Set<ChannelType>();
   /**
    * 受けられる並びが全部止まった種別と、エージェントが返した理由。その種別の残りのチャンネルは回さず、
    * 控えも書き換えない (`runScan`)。1 件も見つからなければ、この理由をスキャンの失敗に出す
@@ -930,6 +932,7 @@ class Scanner {
     tuners: AgentTuner[],
   ): Promise<void> {
     const queue: Job[] = [];
+    for (const [type] of targets) this.scanning.add(type);
     for (const [type, channels] of targets) {
       if (!tuners.some((tuner) => tuner.types.includes(type))) {
         this.onProgress({
@@ -1016,6 +1019,8 @@ class Scanner {
    */
   private dropUnusable(workers: AgentTuner[], queue: Job[]): void {
     for (const [type, reason] of this.pending) {
+      // このスキャンで回していない種別は数えない (止めた並びが受けていただけ)
+      if (!this.scanning.has(type)) continue;
       if (this.live(workers).some((tuner) => tuner.types.includes(type)))
         continue;
       this.pending.delete(type);
@@ -1119,7 +1124,10 @@ class Scanner {
         if (error instanceof TunerUnusableError) {
           queue.unshift(job);
           this.retired.add(tuner);
-          this.pending.set(type, error.reason ?? error.message);
+          // この並びが受けていた種別は全部、ほかに受けられる並びが残っているかを確かめ直す (`dropUnusable`)。残っていなければ回さない
+          for (const kind of types)
+            if (!this.pending.has(kind))
+              this.pending.set(kind, error.reason ?? error.message);
           return;
         }
         const counts = first ? { scanned: 1 } : {};
