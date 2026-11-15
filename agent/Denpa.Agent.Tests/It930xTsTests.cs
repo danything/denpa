@@ -30,12 +30,12 @@ public class It930xTsTests
             "R F41F 1", "W F41F=04",
             "R DA10 1", "W DA10=00",
             "R F41A 1", "W F41A=01",
-            // IT9300_configOutput: リセット → EP4 を止める → NAK を外す → 有効 → 転送の大きさ (65,424 / 4 = 0x3FE4) → 最大パケット長 (512 / 4)
+            // IT9300_configOutput (IT930x の仕様書 6.4 の表の 3〜11): リセット → EP4 を止める → NAK を外す → 有効 → 転送の大きさ (153,408 / 4 = 0x95D0) → 最大パケット長 (512 / 4)
             "R DA1D 1", "W DA1D=01",
             "R DD11 1", "W DD11=00",
             "R DD13 1", "W DD13=00",
             "R DD11 1", "W DD11=20",
-            "W DD88=E43F",
+            "W DD88=D095",
             "W DD0C=80",
             // シリアル・パラレルの出力を止める → リセットを外す → p_br_reg_top_host_reverse
             "R DA05 1", "W DA05=00",
@@ -135,14 +135,47 @@ public class It930xTsTests
     }
 
     [Test]
-    public async Task EP_0x84_の読み出しは_SDK_と同じ大きさで_SDK_より多く出す()
+    public async Task EP_0x84_の転送は仕様書_6_4_の大きさで_転送要求は最大パケット長の倍数にして公開の実装より多く出す()
     {
-        // URB_BUFSIZE (188 × 348) は 188 バイトのパケットの区切りで、EP 0x84 の転送の大きさ (0xDD88) は 4 バイト単位
-        await Assert.That(It930xBridge.TsTransferSize).IsEqualTo(188 * 348);
+        // ブリッジの転送 (0xDD88) は 188 × 816 = 153,408 バイト。188 バイトのパケットの区切りで、4 バイト単位 (0x95D0)
+        await Assert.That(It930xBridge.TsTransferSize).IsEqualTo(188 * 816);
         await Assert.That(It930xBridge.TsTransferSize % 188).IsEqualTo(0);
-        await Assert.That(It930xBridge.TsTransferSize % 4).IsEqualTo(0);
-        // BR_URB_COUNT (8) より少なくしない
+        await Assert.That(It930xBridge.TsTransferSize / 4).IsEqualTo(0x95D0);
+        // ホストの転送要求は 512 の倍数に切り上げた 153,600 バイト (仕様書 6.4 の WinUSB 版の実装と同じ。RAW_IO の決まり)
+        await Assert.That(It930xBridge.TsRequestSize).IsEqualTo(153_600);
+        await Assert.That(It930xBridge.TsRequestSize % It930xBridge.TsMaxPacket).IsEqualTo(0);
+        // 公開の実装の 6〜8 本より多く出し、前と同じく約 4 MB を受けておく。Linux の usbfs の既定 (16 MB) に IT930x の機材 3 台が収まる
         await Assert.That(It930xBridge.TsDepth).IsGreaterThanOrEqualTo(8);
+        await Assert.That((long)It930xBridge.TsRequestSize * It930xBridge.TsDepth).IsGreaterThan(3_900_000L);
+        await Assert.That((long)It930xBridge.TsRequestSize * It930xBridge.TsDepth).IsLessThan(4_200_000L);
+        await Assert.That(3L * It930xBridge.TsRequestSize * It930xBridge.TsDepth).IsLessThan(16L * 1024 * 1024);
+    }
+
+    [Test]
+    public async Task 受信の始めにバッファを捨てるときは_0xDA1D_の_bit0_を立てて_EP_0x84_を読み_戻す()
+    {
+        // 仕様書 6.4 の「受信の始め」の 1。0xDA1D の bit0 だけを書き換え、512 バイトずつ 1,024 バイトまで読む。512 バイトのあとの時間切れで終える
+        var usb = new FakeIt930x();
+        var bridge = new It930xBridge(usb, _ => { });
+        await Assert.That(bridge.PurgeTs()).IsEqualTo(512);
+        await Assert.That(usb.Log).IsEquivalentTo(new[] { "R DA1D 1", "W DA1D=01", "TS R 512", "TS R 0", "R DA1D 1", "W DA1D=00" });
+
+        // 1,024 バイト届けば、そこで終える
+        usb.Log.Clear();
+        usb.PurgeBytes = 2048;
+        await Assert.That(bridge.PurgeTs()).IsEqualTo(1024);
+        await Assert.That(usb.Log).IsEquivalentTo(new[] { "R DA1D 1", "W DA1D=01", "TS R 512", "TS R 512", "R DA1D 1", "W DA1D=00" });
+
+        // 読み出しが失敗しても 0xDA1D の bit0 は戻す
+        usb.Log.Clear();
+        usb.PurgeReadFails = true;
+        Assert.Throws<IOException>(() => bridge.PurgeTs());
+        await Assert.That(usb.Log).IsEquivalentTo(new[] { "R DA1D 1", "W DA1D=01", "R DA1D 1", "W DA1D=00" });
+
+        // EP 0x84 のリセットは、ストールをクリアする要求 (デバイスとホストの両方)
+        usb.Log.Clear();
+        bridge.ResetTsEndpoint();
+        await Assert.That(usb.Log).IsEquivalentTo(new[] { "CLEAR_HALT 84" });
     }
 
     // ---------------------------------------------------------------------
@@ -442,10 +475,13 @@ public class It930xTsTests
         await Assert.That(text).Contains("2 回で 1128 バイト");
         await Assert.That(text).Contains("入力ごとのパケット: 0 (0x17) 3、1 (0x27) 0、2 (0x37) 0、3 (0x57) 0、4 (0x67) 2");
         await Assert.That(text).Contains("飛ばした 0 バイト、知らない同期バイトのパケット 1 個、揃いが外れた 0 回");
-        // 転送要求を出してから入力を開け、終わったら入力を閉じて EP 0x84 をリセットしてから読み出しを閉じる。そのあと REBOOT する
+        // バッファを捨て、転送要求を出してから入力を開け、終わったら入力を閉じて EP 0x84 をリセットしてから読み出しを閉じる。そのあと REBOOT する
         var log = usb.Log;
-        var opened = log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}");
+        var opened = log.IndexOf($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}");
         await Assert.That(opened).IsGreaterThan(log.IndexOf("W DA7C=67"));
+        // 転送要求を出す前に、受信の始めと同じくバッファを捨てて EP 0x84 をリセットする (IT930x の仕様書 6.4)
+        await Assert.That(log.Skip(opened - 7).Take(7)).IsEquivalentTo(new[] { "R DA1D 1", "W DA1D=01", "TS R 512", "TS R 0", "R DA1D 1", "W DA1D=00", "CLEAR_HALT 84" });
+        await Assert.That(text).Contains("EP 0x84 から 512 バイト届きました");
         await Assert.That(log.Skip(opened + 1).Take(6)).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
         var closed = log.IndexOf("TS 閉じる");
         await Assert.That(log.Skip(closed - 7).Take(7)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });

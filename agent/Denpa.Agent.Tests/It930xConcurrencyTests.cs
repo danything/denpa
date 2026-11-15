@@ -346,7 +346,7 @@ public partial class It930xConcurrencyTests
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
-        // 受信機 1 (PX-MLT5PE の入力 1) のパケットを、1 回の読み出しで 348 個 (65,424 バイト) ずつ流し続ける
+        // 受信機 1 (PX-MLT5PE の入力 1) のパケットを、1 回の読み出しで 348 個 (65,424 バイト) ずつ流し続ける (転送の大きさによらない)
         var packet = new byte[188];
         packet[0] = It930xBridge.SyncBytes[1];
         var chunk = Enumerable.Repeat(packet, 348).SelectMany(bytes => bytes).ToArray();
@@ -376,7 +376,7 @@ public partial class It930xConcurrencyTests
     }
 
     [Test]
-    public async Task TS_のバッファを捨てるときは入力を全部閉じてリセットし_開け直す()
+    public async Task 受信をやり直すときは転送要求を取り消してから受信の始めの手順をし_入力には触らない()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
@@ -388,12 +388,13 @@ public partial class It930xConcurrencyTests
             tuner.Tune(ChannelTable.Parse("T27")!);
             int from;
             lock (usb.Log) from = usb.Log.Count;
-            tuner.FlushTs();
-            // SDK の DRV_ResetRxPort (閉じる側) のあと、IT930x_probe と同じ順で開け直す
-            await Assert.That(RouteWrites(usb, from)).IsEquivalentTo(new[]
+            tuner.RestartStream();
+            List<string> log;
+            lock (usb.Log) log = [.. usb.Log.Skip(from)];
+            // IT930x の仕様書 6.4: 転送要求を取り消す → 0xDA1D の bit0 ← 1、EP 0x84 を読む、bit0 ← 0 → EP 0x84 のリセット → 転送要求を出す。入力の開閉は書かない
+            await Assert.That(log).IsEquivalentTo(new[]
             {
-                "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00",
-                "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F",
+                "TS 閉じる", "R DA1D 1", "W DA1D=01", "TS R 512", "TS R 0", "R DA1D 1", "W DA1D=00", "CLEAR_HALT 84", $"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}",
             });
             await Assert.That(Flowing(tuner)).IsTrue();
         }
@@ -404,29 +405,40 @@ public partial class It930xConcurrencyTests
     }
 
     [Test]
-    public async Task TS_のバッファを捨てるときに入力を閉じられなければ_開け直さずにその失敗を返す()
+    public async Task 受信をやり直す途中でブリッジに書けなければ_読む側のいない入力を閉じて失敗を返す()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
         var device = It930xDevice.Acquire("11-13", () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
         try
         {
+            device.Frontend(0);
             int from;
             lock (usb.Log) from = usb.Log.Count;
-            // 入力を閉じる最初の書き込みに応答しない
-            usb.Silent = 1;
-            Assert.Throws<It930xException>(device.FlushTs);
-            await Assert.That(RouteWrites(usb, from).Where(line => line.EndsWith("=01", StringComparison.Ordinal))).IsEmpty();
+            // 転送要求を取り消したあとの、0xDA1D を読む最初のコマンドに応答しない
+            usb.OnNote = line =>
+            {
+                if (line == "TS 閉じる") usb.Silent = 1;
+            };
+            Assert.Throws<It930xException>(() => device.RestartStream("テスト"));
+            usb.OnNote = null;
+            await Assert.That(device.Faulted).IsTrue();
+            // 転送要求を出し直さず、入力を全部閉じて EP 0x84 をリセットした (読む側がいないまま入力に TS を入れない)
+            List<string> log;
+            lock (usb.Log) log = [.. usb.Log.Skip(from)];
+            await Assert.That(log).DoesNotContain($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}");
+            await Assert.That(log.Where(It930xDeviceTests.TsRouteWrite)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
         }
         finally
         {
+            usb.OnNote = null;
             device.Release();
             It930xDevice.CloseIfIdle("11-13", TimeSpan.Zero);
         }
     }
 
     [Test]
-    public async Task 閉じた機材では_TS_のバッファを捨てず_閉じた入力を開け直さない()
+    public async Task 閉じた機材では受信をやり直さず_閉じた入力を開け直さない()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
@@ -435,13 +447,15 @@ public partial class It930xConcurrencyTests
         It930xDevice.CloseIfIdle("11-14", TimeSpan.Zero);
         int from;
         lock (usb.Log) from = usb.Log.Count;
-        device.FlushTs();
-        await Assert.That(RouteWrites(usb, from)).IsEmpty();
+        await Assert.That(device.RestartStream("テスト")).IsFalse();
+        int count;
+        lock (usb.Log) count = usb.Log.Count;
+        await Assert.That(count).IsEqualTo(from);
         await Assert.That(usb.Registers.GetValueOrDefault(It930xBridge.TsEnable)).IsEqualTo((byte)0);
     }
 
     [Test]
-    public async Task TS_のバッファを捨てるのと閉じるのが重なっても_閉じたあとに入力は開いていない()
+    public async Task 受信をやり直すのと閉じるのが重なっても_閉じたあとに入力は開いていない()
     {
         await Task.Yield();
         for (var round = 0; round < 20; round++)
@@ -452,7 +466,7 @@ public partial class It930xConcurrencyTests
             device.Release();
             var errors = Together(2, index =>
             {
-                if (index == 0) device.FlushTs();
+                if (index == 0) device.RestartStream("テスト");
                 else It930xDevice.CloseIfIdle(port, TimeSpan.Zero);
             });
             await Assert.That(errors.Select(error => error.ToString())).IsEmpty();

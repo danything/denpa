@@ -232,11 +232,14 @@ public static class It930xProbe
         output.WriteLine($"TS の経路: 設定しました ({bridge.Commands - commands} コマンド、{clock.ElapsedMilliseconds} ms)。"
             + $"ブリッジに残っていたバッファ {before}{(before.Empty ? "" : $"、捨てたあと {after}")}");
         var demux = new It930xTsDemux(It930xBridge.SyncBytes);
-        var buffer = new byte[It930xBridge.TsTransferSize];
+        var buffer = new byte[It930xBridge.TsRequestSize];
         long bytes = 0;
         var reads = 0;
+        // 受信の始めと同じく、バッファを捨てて EP 0x84 をリセットしてから転送要求を出す (IT930x の仕様書 6.4。It930xDevice と同じ)
+        output.WriteLine($"TS の経路: 受信の始めにバッファを捨てる読み出しで、EP 0x{It930xBridge.TsIn:X2} から {bridge.PurgeTs()} バイト届きました (0 なら {It930xBridge.PurgeTimeoutMs} ms の時間切れ)");
+        bridge.ResetTsEndpoint();
         var started = clock.Elapsed;
-        using (var input = usb.OpenInStream(It930xBridge.TsIn, It930xBridge.TsTransferSize, It930xBridge.TsDepth))
+        using (var input = usb.OpenInStream(It930xBridge.TsIn, It930xBridge.TsRequestSize, It930xBridge.TsDepth))
         {
             try
             {

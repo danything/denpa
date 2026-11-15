@@ -30,7 +30,7 @@ internal sealed class It930xTsDemux
     private readonly It930xTsOutput?[] _outputs;
     private readonly long[] _packets;
     private readonly It930xTsOutput?[] _targets;
-    private byte[] _store = new byte[It930xBridge.TsTransferSize + 2 * PacketSize];
+    private byte[] _store = new byte[It930xBridge.TsRequestSize + 2 * PacketSize];
     private int _used;
     private bool _aligned;
 

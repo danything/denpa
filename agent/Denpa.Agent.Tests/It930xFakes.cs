@@ -143,6 +143,7 @@ internal sealed class FakeIt930x : IUsbDevice
         if (endpoint != 0x84) throw new InvalidOperationException($"EP 0x{endpoint:X2} の転送要求を出した");
         if (TsOpenFails) throw new IOException("fake-it930x の EP 0x84 の転送要求を出せません");
         Note($"TS {transferSize} {depth}");
+        _tsOpen++;
         return new FakeTsIn(this);
     }
 
@@ -162,7 +163,11 @@ internal sealed class FakeIt930x : IUsbDevice
             return chunk.Length;
         }
 
-        public void Dispose() => owner.Note("TS 閉じる");
+        public void Dispose()
+        {
+            owner._tsOpen--;
+            owner.Note("TS 閉じる");
+        }
     }
 
     public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs)
@@ -204,6 +209,8 @@ internal sealed class FakeIt930x : IUsbDevice
                 Note($"W {address:X4}={Convert.ToHexString(values)}");
                 var resetBefore = Registers.GetValueOrDefault(CardResetOutput);
                 for (var i = 0; i < values.Length; i++) Registers[address + (uint)i] = values[i];
+                // 0xDA1D の bit0 を 1 にすると、EP 0x84 から捨てる分が出る (IT930x の仕様書 6.4)
+                if (address == 0xDA1D && (values[0] & 1) != 0) _purgeLeft = PurgeBytes;
                 // GPIOH14 を 0 から 1 に戻すとリセットが解除され、カードがあれば ATR を返す (IT9300_bcasResetCard)
                 if (address == CardResetOutput && resetBefore == 0 && values[0] == 1 && CardAtr is { } atr && Registers.GetValueOrDefault(CardDetectInput) == 0)
                 {
@@ -347,10 +354,43 @@ internal sealed class FakeIt930x : IUsbDevice
         return (ushort)~sum;
     }
 
+    /// <summary>
+    /// <c>0xDA1D</c> の bit0 を 1 にしたあと、EP 0x84 の同期の読み出し (受信の始めにバッファを捨てる読み出し) が返すバイトの数 (IT930x の仕様書 6.4 は 512 が出ると書く)。
+    /// 最大パケット長 (512) ずつ返し、尽きたら時間切れ (0)
+    /// </summary>
+    public int PurgeBytes { get; set; } = 512;
+
+    private int _purgeLeft;
+
+    /// <summary>EP 0x84 の同期の読み出しを失敗にする (ストールなど)</summary>
+    public bool PurgeReadFails { get; set; }
+
+    /// <summary>EP 0x84 の同期の読み出し。<c>TS R 512</c> の形で控える。転送要求を出している間に読んだらテストを失敗にする</summary>
+    private int ReadTsOnce(Span<byte> buffer)
+    {
+        if (_tsOpen > 0) throw new InvalidOperationException("EP 0x84 の転送要求を出している間に、同期の読み出しをした");
+        if (PurgeReadFails) throw new IOException("fake-it930x: EP 0x84 から読めません (Broken pipe)");
+        var got = Math.Min(_purgeLeft, buffer.Length);
+        _purgeLeft -= got;
+        buffer[..got].Clear();
+        Note($"TS R {got}");
+        return got;
+    }
+
+    /// <summary>出している EP 0x84 の転送要求の組の数</summary>
+    private volatile int _tsOpen;
+
+    public void ClearHalt(byte endpoint)
+    {
+        if (_tsOpen > 0) throw new InvalidOperationException("EP 0x84 の転送要求を出している間に、ストールをクリアした");
+        Note($"CLEAR_HALT {endpoint:X2}");
+    }
+
     public int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         ObjectDisposedException.ThrowIf(Disposed && DisposedThrows, this);
         if (_gone) throw GoneAsProtocolError ? new IOException("fake-it930x: Protocol error") : new UsbGoneException("fake-it930x が抜かれました");
+        if (endpoint == 0x84) return ReadTsOnce(buffer);
         if (endpoint != 0x81) throw new InvalidOperationException($"EP 0x{endpoint:X2} から読んだ");
         if (_late.TryDequeue(out var late)) return Copy(late, buffer);
         if (!_replies.TryDequeue(out var reply)) return 0;
