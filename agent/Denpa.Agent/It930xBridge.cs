@@ -139,36 +139,47 @@ public sealed class It930xBridge
     public static readonly IReadOnlyList<byte> SyncBytes = [0x17, 0x27, 0x37, 0x57, 0x67];
 
     /// <summary>
-    /// EP 0x84 の 1 回の転送の大きさ (ブリッジの側。<see cref="Ep4Length"/> に 4 で割って書く)。188 × 816 = 153,408 バイトで、しきい値は 0x95D0 (IT930x の仕様書 6.4)。
-    /// 仕様書 6.4 の公開の実装の多くと公式の Windows ドライバーが使う値で、仕様書 11.3 が選んだもの。前は 188 × 348 = 65,424 バイト (仕様書 6.4 の PLEX の公開ドライバーの値) だった
+    /// EP 0x84 の 1 回の転送の大きさ (ブリッジの側。<see cref="Ep4Length"/> に 4 で割って書く)。188 × 348 = 65,424 バイトで、しきい値は 0x3FE4。
+    /// IT930x の仕様書 6.4 の PLEX の公開ドライバーの値で、PX-MLT5PE・PX-Q3PE4・PX-MLT8PE の実機で受けられている。
+    /// 仕様書 11.3 が選んだ 188 × 816 = 153,408 バイトにはしない。ブリッジはしきい値までたまってから転送を渡し、時間で早く区切るとは仕様書のどこにも無いので、
+    /// 1 回の転送が埋まるまでの時間がそのまま最初の TS が届くまでの遅れになる。地上波 1 本 (約 16.85 Mbps) で、65,424 バイトは約 31 ms、153,408 バイトは約 73 ms。
+    /// ライブの放送のままの経路は、始まりの遅れを短くするのを先にする
     /// </summary>
-    public const int TsTransferSize = 188 * 816;
+    public const int TsTransferSize = 188 * 348;
 
     /// <summary>EP 0x84 の最大パケット長 (<c>IT9300User_USB20_MAX_PACKET_SIZE</c>。High-Speed の bulk)</summary>
     public const int TsMaxPacket = 512;
 
     /// <summary>
-    /// ホストが出す 1 回の転送要求の大きさ。<see cref="TsTransferSize"/> を最大パケット長の倍数に切り上げた 153,600 バイト (IT930x の仕様書 6.4 の WinUSB 版の実装と同じ)。
+    /// ホストが出す 1 回の転送要求の大きさ。<see cref="TsTransferSize"/> を最大パケット長の倍数に切り上げた 65,536 バイト
+    /// (IT930x の仕様書 6.4 の WinUSB 版の実装も、同じように 512 の倍数に切り上げる)。
     /// WinUSB の RAW_IO は、最大パケット長の倍数でない転送要求を受け付けないため。ほかの OS でも同じ値にする。
-    /// ブリッジが 153,408 バイトごとに短いパケットで区切れば、転送はそこで終わる。区切らずに続けて送っても、512 バイトの倍数なので、
-    /// パケットが転送要求の残りに入りきらない誤り (EOVERFLOW) にはならない。受けたバイト列は、転送の区切りによらず分けられる (<see cref="It930xTsDemux"/>)
+    /// ブリッジは 65,424 バイトごとに短いパケット (400 バイト) で区切ると推定している (前は転送要求も 65,424 バイトで、区切らなければ誤りになるはずだが、実機で受けられていた)。区切れば転送はそこで終わる。
+    /// 区切らずに続けて送っても、512 バイトの倍数なので、パケットが転送要求の残りに入りきらない誤り (EOVERFLOW) にはならない。受けたバイト列は、転送の区切りによらず分けられる (<see cref="It930xTsDemux"/>)
     /// </summary>
     public const int TsRequestSize = (TsTransferSize + TsMaxPacket - 1) / TsMaxPacket * TsMaxPacket;
 
     /// <summary>
     /// EP 0x84 に出したままにする転送要求の数。仕様書 6.4 の公開の実装は 5〜8 本 (多くは 153,408 バイト × 6 で約 0.9 MB)。
-    /// こちらは 26 × 153,600 バイト (約 4 MB) にして、前の 64 × 65,424 バイト (約 4.2 MB) とほぼ同じ量を受けておく。5 つの入力の合計が 200 Mbps でも約 160 ms ぶん。
+    /// こちらは 64 × 65,536 バイト (約 4.2 MB) で、5 つの入力の合計が 200 Mbps でも約 170 ms ぶんを受けておける。
     /// 公開の実装は完了のコールバックか優先度の高いスレッドで出し直すが、こちらは読み出しのスレッドが Read の中でしか出し直さない。
     /// そのスレッドが CPU の制限や GC で止まっても、ブリッジのバッファを溢れさせないため (<see cref="It930xOverflow"/>)。
-    /// Linux の usbfs が全機材で使える量 (既定 16 MB) に、IT930x の機材 3 台 (約 12 MB) と CECH-ZD1 J (約 1 MB)・PIX-DT295 (約 0.5 MB) を足した約 13.5 MB が収まる
+    /// Linux の usbfs が全機材で使える量 (既定 16 MB) に、IT930x の機材 3 台 (約 12.6 MB) と CECH-ZD1 J (約 1 MB)・PIX-DT295 (約 0.5 MB) を足した約 14.1 MB が収まる
     /// </summary>
-    public const int TsDepth = 26;
+    public const int TsDepth = 64;
 
     /// <summary>受信の始めにブリッジの TS のバッファを捨てるとき (<see cref="PurgeTs"/>)、EP 0x84 から読む長さ (IT930x の仕様書 6.4)</summary>
     public const int PurgeLength = 1024;
 
-    /// <summary><see cref="PurgeTs"/> の読み出しの時間切れ (ms。IT930x の仕様書 6.4・10)</summary>
+    /// <summary><see cref="PurgeTs"/> の最初の読み出しの時間切れ (ms。IT930x の仕様書 6.4・10)</summary>
     public const int PurgeTimeoutMs = 2000;
+
+    /// <summary>
+    /// <see cref="PurgeTs"/> で最初のパケットが届いたあと、残りを待つ時間切れ (ms。仕様書に無い)。仕様書は 512 バイトで時間切れになるのを成功とするので、
+    /// 2000 ms の残りを待つと、ふつうの場合に受信の始めが毎回 2 秒遅れる。続きのパケットがあれば、同じ転送の 2 つ目としてもうブリッジに来ている
+    /// (High-Speed の 512 バイトは 1 µs ほどで、USB の予定の 1 マイクロフレームは 125 µs)。OS の予定と応答の遅れを見込んで 20 ms にする
+    /// </summary>
+    public const int PurgeRestTimeoutMs = 20;
 
     /// <summary>入力を全部閉じてから EP 0x84 をリセットするまでの待ち (ms。SDK の <c>DRV_ResetRxPort</c> の <c>mdelay(10)</c>)</summary>
     public const int InputsOffSettleMs = 10;
@@ -511,8 +522,9 @@ public sealed class It930xBridge
     ///
     /// <para>
     /// 仕様書は 1,024 バイトの読み出しを 1 回で、512 バイトを読んで時間切れなら成功とする。Linux の usbfs の同期の bulk の読み出しは、
-    /// 時間切れのときに読めた長さを返さないので、最大パケット長 (512 バイト) ずつ、同じ時間切れの中で読む。
-    /// 1,024 バイトの転送で時間切れになる長さは 0 か 512 だけ (短いパケットが来れば転送はそこで終わる) なので、読めるパケットは 1 回の読み出しと同じ
+    /// 時間切れのときに読めた長さを返さないので、最大パケット長 (512 バイト) ずつ読む。
+    /// 1,024 バイトの転送で時間切れになる長さは 0 か 512 だけ (短いパケットが来れば転送はそこで終わる) なので、届いたかどうかの分け方は 1 回の読み出しと同じ。
+    /// 最初のパケットは <see cref="PurgeTimeoutMs"/> まで待ち、2 つ目は <see cref="PurgeRestTimeoutMs"/> だけ待つ (ふつうの 512 バイトのときに 2 秒待たないため。仕様書と違う所)
     /// </para>
     /// </summary>
     public int PurgeTs()
@@ -521,13 +533,11 @@ public sealed class It930xBridge
         try
         {
             Span<byte> buffer = stackalloc byte[TsMaxPacket];
-            var deadline = Environment.TickCount64 + PurgeTimeoutMs;
             var total = 0;
             while (total < PurgeLength)
             {
-                var left = deadline - Environment.TickCount64;
-                if (left <= 0) break;
-                var got = _usb.Read(TsIn, buffer, (int)left);
+                // 最初のパケットは 2000 ms まで待ち、そのあとは短く待つ (PurgeRestTimeoutMs)
+                var got = _usb.Read(TsIn, buffer, total == 0 ? PurgeTimeoutMs : PurgeRestTimeoutMs);
                 if (got <= 0) break;
                 total += got;
                 if (got < TsMaxPacket) break;

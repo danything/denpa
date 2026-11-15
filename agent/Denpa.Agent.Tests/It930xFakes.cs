@@ -362,16 +362,25 @@ internal sealed class FakeIt930x : IUsbDevice
 
     private int _purgeLeft;
 
+    /// <summary>EP 0x84 の同期の読み出しで渡された時間切れ (ms)</summary>
+    public List<int> PurgeTimeouts { get; } = [];
+
+    /// <summary>EP 0x84 の同期の読み出しで何も届かないとき、時間切れまで本当に待つ (既定はすぐ 0 を返す)</summary>
+    public bool PurgeWaits { get; set; }
+
     /// <summary>EP 0x84 の同期の読み出しを失敗にする (ストールなど)</summary>
     public bool PurgeReadFails { get; set; }
 
     /// <summary>EP 0x84 の同期の読み出し。<c>TS R 512</c> の形で控える。転送要求を出している間に読んだらテストを失敗にする</summary>
-    private int ReadTsOnce(Span<byte> buffer)
+    private int ReadTsOnce(Span<byte> buffer, int timeoutMs)
     {
         if (_tsOpen > 0) throw new InvalidOperationException("EP 0x84 の転送要求を出している間に、同期の読み出しをした");
         if (PurgeReadFails) throw new IOException("fake-it930x: EP 0x84 から読めません (Broken pipe)");
+        lock (PurgeTimeouts) PurgeTimeouts.Add(timeoutMs);
         var got = Math.Min(_purgeLeft, buffer.Length);
         _purgeLeft -= got;
+        // 実機と同じく、届かなければ時間切れまで待つ (PurgeWaits のとき)
+        if (got == 0 && PurgeWaits) Thread.Sleep(timeoutMs);
         buffer[..got].Clear();
         Note($"TS R {got}");
         return got;
@@ -390,7 +399,7 @@ internal sealed class FakeIt930x : IUsbDevice
     {
         ObjectDisposedException.ThrowIf(Disposed && DisposedThrows, this);
         if (_gone) throw GoneAsProtocolError ? new IOException("fake-it930x: Protocol error") : new UsbGoneException("fake-it930x が抜かれました");
-        if (endpoint == 0x84) return ReadTsOnce(buffer);
+        if (endpoint == 0x84) return ReadTsOnce(buffer, timeoutMs);
         if (endpoint != 0x81) throw new InvalidOperationException($"EP 0x{endpoint:X2} から読んだ");
         if (_late.TryDequeue(out var late)) return Copy(late, buffer);
         if (!_replies.TryDequeue(out var reply)) return 0;

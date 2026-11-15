@@ -206,7 +206,7 @@ public class It930xDeviceTests
         var device = Open(usb, "9-27", new FakeClock());
         List<string> log;
         lock (usb.Log) log = [.. usb.Log];
-        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。電源を入れてから転送要求を出す (TS 153600 26)
+        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。電源を入れてから転送要求を出す (TS 65536 64)
         var configured = log.IndexOf("W DA7C=67");
         var reading = log.IndexOf($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}");
         await Assert.That(log.IndexOf("W DA4C=00")).IsLessThan(configured);
@@ -276,7 +276,7 @@ public class It930xDeviceTests
             "R DD11 1", "W DD11=00",
             "R DD13 1", "W DD13=00",
             "R DD11 1", "W DD11=20",
-            "W DD88=D095", "W DD0C=80",
+            "W DD88=E43F", "W DD0C=80",
             "R DA05 1", "W DA05=00",
             "R DA06 1", "W DA06=00",
             "R DA1D 1", "W DA1D=00",
