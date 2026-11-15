@@ -284,6 +284,20 @@ done
 sort -u -o "$out/licenses/msys2-packages.txt" "$out/licenses/msys2-packages.txt"
 printf 'ffmpeg %s\nSVT-AV1 %s\nOpus %s\n' "$FFMPEG_VERSION" "$SVT_AV1_VERSION" "$OPUS_VERSION" > "$out/licenses/versions.txt"
 
+# DIAG (temporary)
+(
+  cd "$work/build-ffmpeg"
+  t() { echo "=== DIAG: $*"; if ./ffmpeg_g.exe -hide_banner -loglevel error "$@" -f null -; then echo "=== OK"; else echo "=== FAIL $?"; gdb -q -batch -ex run -ex bt -ex 'info registers rsp rip' -ex 'x/8i $pc-16' --args ./ffmpeg_g.exe -hide_banner -loglevel error "$@" -f null - 2>&1 | tail -60; fi; }
+  t -f lavfi -i testsrc2=s=320x240:r=30:d=1
+  t -f lavfi -i sine=d=1
+  t -f lavfi -i sine=d=1 -c:a libopus
+  t -f lavfi -i sine=d=1 -c:a aac
+  t -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v libsvtav1 -preset 12
+  t -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v libx264
+  t -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v mpeg2video
+  t -f lavfi -i testsrc2=s=320x240:r=30:d=1 -vf scale=160:120
+) || true
+
 # 置いたものだけで動くか (MSYS2 の DLL の置き場を PATH から外す)。エンコーダは試しに 1 秒ずつ流す
 cd "$out"
 export PATH="/c/Windows/System32:/c/Windows"

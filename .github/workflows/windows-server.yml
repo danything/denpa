@@ -102,6 +102,7 @@ jobs:
             mingw-w64-ucrt-x86_64-libvpl
             mingw-w64-ucrt-x86_64-ffnvcodec-headers
             mingw-w64-ucrt-x86_64-amf-headers
+            mingw-w64-ucrt-x86_64-gdb
 
       # 組み上がり (入れ先は .github/ffmpeg-windows.sh の `deps`)。ffmpeg が当たらなかったときだけ使う
       - name: Restore Opus
