@@ -9,7 +9,7 @@ import { COOKIE, destroy } from "#lib/server/session.js";
  * `end_session_endpoint` へ送ると、同じ Entra で入っている他のものまで
  * 巻き添えで切れる。「denpa から出たい」と「Microsoft から出たい」は別の話。
  *
- * 出たあとに `/` へ戻すと、SSO が効いている間は黙って入り直してしまい、
+ * 出たあとに `/` へ戻すと、SSO が効いている間は画面に何も出さずにログインし直してしまい、
  * 出られたのかどうか画面から分からない。行き先は出たことを伝える画面 (`/login/out`) にする。
  *
  * **POST だけ。** GET でも出られると、よそのページに `<img src=".../logout">` を置くだけで

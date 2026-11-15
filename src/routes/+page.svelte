@@ -769,7 +769,7 @@
   });
 </script>
 
-<!-- 聞き返しは他所を触ったら取り下げる (`stand`)。巻いたら、先頭に貼り付いている日 (カレンダーの印) を読み直す (`trackPinned`) -->
+<!-- 「削除を確定」は、ほかの所を押したら元に戻す (`stand`)。巻いたら、先頭に貼り付いている日 (カレンダーの印) を読み直す (`trackPinned`) -->
 <svelte:window onclick={deleting.stand} onscroll={trackPinned} />
 
 <!--

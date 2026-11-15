@@ -107,7 +107,7 @@
     toneFrame(frame, dark ? "dark" : "light", WASH_LUMINANCE);
     const pixels = glowPixels(frame, GLANCE.width, GLANCE.height, at);
     context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
-    // ページの上の端の色をブラウザの枠の色にする (`washTop`)。描いたときだけ測るので、毎フレームの手間は無い
+    // ページ上端の色を、ブラウザの枠に塗る (`washTop`)。描いたときだけ測るので、毎フレームの手間は無い
     const background = fromHex(themeBackground());
     if (background === null) return;
     const next = washTop(pixels, at.width, background, dark ? "dark" : "light");

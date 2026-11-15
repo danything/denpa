@@ -165,7 +165,7 @@
 
 <!--
   **LNB は選ぶ欄にする。** エージェントが読むのは小文字の `15v` / `11v` だけで (`Tuning.cs`)、
-  `15V` と打つと黙って給電されない。見せる字は大文字 (電圧の書き方)
+  `15V` と打つと、エラーにならずに給電されない。見せる字は大文字 (電圧の書き方)
 -->
 {#snippet lnbField(name: string, lnb: string)}
   <label class="field">
@@ -780,7 +780,7 @@
     background: var(--dp-hover-soft);
   }
   /*
-     * **「⋯」で開いている行は、左の縦線と主の色の太字の名前で示し、地は塗らない** (docs/design.md の選んでいる印)。
+     * **「⋯」で開いている行は、左の縦線と、主の色で太字にした名前で示し、地は塗らない** (docs/design.md の選んでいる印)。
      * 縦線は行の上から中身の下まで 1 本に続ける (行の先頭の欄と中身の欄に半分ずつ引く)
      */
   .tuners .main:has(+ .detail.open) .name-cell > .truncate:first-child {

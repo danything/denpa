@@ -1564,7 +1564,7 @@
   /** d ボタンで出しているか */
   let showData = $state(false);
   /**
-   * データ放送を自動で受信するか (⚙ の「データ放送」の行の長押し。ライブと同じ 1 つを端末ごとに覚える。`data-receive.ts`)。
+   * データ放送を自動で受信するか (⚙ の「データ放送」を長押しして切り替える。ライブと同じ 1 つを端末ごとに覚える。`data-receive.ts`)。
    * 録画の入口に自動起動の指定があれば (`data.autoStart`)、開く前から変化ログを取得して流し、入口の文書を裏で動かす
    * (`DataBroadcast` の `receive`)
    */
@@ -1584,7 +1584,7 @@
   let dataChannel = $state<string | null>(null);
   /** 変化ログ。押されてから取得する */
   let dataTimeline: PlacedMessage[] = [];
-  /** エンジンへ流す関数。`DataBroadcast` が open のたびに預けてくる */
+  /** エンジンへ流す関数。`DataBroadcast` が open のたびに渡してくる */
   let dataEmit: ((message: ResponseMessage) => void) | null = null;
   /** どこまで流したか (再生位置 ms)。まだなら -1 */
   let dataFed = -1;
@@ -1602,7 +1602,7 @@
   }
 
   /**
-   * 自動で受信するかを切り替える (⚙ の「データ放送」の行の長押し・Shift+D)。ライブと同じ 1 つを端末ごとに覚え (`data-receive.ts`)、
+   * 自動で受信するかを切り替える (⚙ の「データ放送」を長押し・Shift+D)。ライブと同じ 1 つを端末ごとに覚え (`data-receive.ts`)、
    * 切り替えたら通知を出す
    */
   function toggleReceiveData(): void {
@@ -1659,7 +1659,7 @@
   }
 
   /**
-   * `DataBroadcast` がエンジンへの入口を預けてくる (作り直すたびに新しいものを)。
+   * `DataBroadcast` がエンジンへの入口を渡してくる (作り直すたびに新しいものを)。
    * **預かった直後に、いまの再生位置まで積んで追いつく** (`replayAt`)
    */
   function listenData(emit: ((message: ResponseMessage) => void) | null): void {
@@ -1765,7 +1765,7 @@
   $effect(() => {
     const target = data.jikkyo;
     jikkyo.set(target?.channel ?? null, jikkyoActive);
-    // 録画の終わりは予定なので、少し後ろまで訊く (今より後は fetchKakolog が切る)
+    // 録画の終わりは予定なので、少し後ろまで取得する (今より後は fetchKakolog が切る)
     if (target !== null && jikkyoActive)
       untrack(() => jikkyo.kakolog(target.head, () => target.end + 60_000));
   });
