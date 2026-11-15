@@ -209,6 +209,72 @@ describe("audioTracks", () => {
 });
 
 /**
+ * **PMT を読んだら、並びと本数は PMT に従う。** 番組表が主音声しか載せていなくても、
+ * 副音声の ES が PMT にあれば選べる (スポーツ中継の副音声で、番組表に載っていないもの)
+ */
+describe("audioTracks (PMT の音声の ES と突き合わせる)", () => {
+  const main = { componentType: 3, componentTag: 0x10, langs: ["jpn"] };
+
+  test("番組表に無い ES も「音声 N」として並べる", () => {
+    const tracks = audioTracks([{ ...main, main: true }], [0x10, 0x11]);
+    expect(tracks).toEqual([
+      {
+        id: "0:both",
+        stream: 0,
+        side: "both",
+        label: "音声 1 ステレオ (日本語)",
+        main: true,
+      },
+      { id: "1:both", stream: 1, side: "both", label: "音声 2" },
+    ]);
+  });
+
+  test("部品タグで突き合わせ、何本目かは PMT の並びで数える", () => {
+    const tracks = audioTracks(
+      [
+        { ...main, text: "主音声" },
+        { componentType: 3, componentTag: 0x11, langs: ["jpn"], text: "解説" },
+      ],
+      [0x11, 0x10],
+    );
+    expect(tracks.map((track) => [track.id, track.label])).toEqual([
+      ["0:both", "解説 (日本語)"],
+      ["1:both", "主音声 (日本語)"],
+    ]);
+  });
+
+  test("PMT に無い音声は並べない", () => {
+    const tracks = audioTracks(
+      [main, { componentType: 3, componentTag: 0x11, langs: ["eng"] }],
+      [0x10],
+    );
+    expect(tracks.map((track) => track.label)).toEqual(["ステレオ (日本語)"]);
+  });
+
+  test("部品タグを持たない番組表 (古い行) は、並びが PMT と同じとみなす", () => {
+    const tracks = audioTracks(
+      [{ componentType: 2, langs: ["jpn", "eng"] }],
+      [0x10, 0x11],
+    );
+    expect(tracks.map((track) => track.id)).toEqual([
+      "0:main",
+      "0:sub",
+      "0:both",
+      "1:both",
+    ]);
+  });
+
+  test("PMT に音声が無いか、音声に部品タグが 1 つも無ければ、番組表だけで決める", () => {
+    expect(audioTracks([main], [])).toEqual(audioTracks([main]));
+    const two = [
+      main,
+      { componentType: 3, componentTag: 0x11, langs: ["jpn"] },
+    ];
+    expect(audioTracks(two, [null])).toEqual(audioTracks(two));
+  });
+});
+
+/**
  * **番組が変われば音声の構成も変わる。** 二カ国語の映画が終わればステレオに
  * 戻るので、覚えていた ID が選べなくなる。無いものを指定されたら主音声に落とす。
  * 落とさないと、番組が変わった瞬間に音が出なくなる

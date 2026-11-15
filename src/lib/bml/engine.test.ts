@@ -1118,6 +1118,79 @@ describe("MNG", () => {
   });
 });
 
+describe("イベントメッセージ (EventMessageFired)", () => {
+  /** 部品 `component` のストリーム記述子。すぐ起きるイベントメッセージ 1 つ */
+  const eventOn = (
+    component: number,
+    options: { group?: number; dataEventId?: number; id?: number } = {},
+  ): ResponseMessage => ({
+    type: "esEventUpdated",
+    componentId: component,
+    dataEventId: options.dataEventId ?? 1,
+    events: [
+      {
+        type: "immediateEvent",
+        eventMessageGroupId: options.group ?? 0,
+        timeMode: 0,
+        eventMessageType: 0,
+        eventMessageId: ((options.id ?? 3) << 8) | 1,
+        privateDataByte: [0x42, 0x41, 0x4c, 0x4c],
+      },
+    ],
+  });
+  const script = `function start() { browser.Ureg[1] = "ready"; }
+        function fired() {
+            var e = document.currentEvent;
+            browser.Ureg[2] = e.privateData + "|" + e.esRef + "|" + e.messageId + "|" + e.messageGroupId;
+        }`;
+  /** 文書を開き、`ready` になるまで待つ */
+  async function opening(beitem: string): Promise<Bml> {
+    const { bml } = open();
+    feedAll(
+      bml,
+      carousel([
+        startup(
+          `<bevent><beitem id="e" type="EventMessageFired" subscribe="subscribe" onoccur="fired();" ${beitem}/></bevent>`,
+          script,
+        ),
+      ]),
+    );
+    const { done } = await watch(() => inside(bml).ureg[1] === "ready");
+    expect(done).toBe(true);
+    return bml;
+  }
+
+  test("文書と別の部品 (DII の無い部品) で送られたものも、今の文書の回と同じなら起こす", async () => {
+    const bml = await opening('es_ref="/41"');
+    bml.feed(eventOn(0x41));
+    const { done } = await watch(() => inside(bml).ureg[2] !== "", 2_000);
+    expect(done).toBe(true);
+    expect(inside(bml).ureg[2]).toBe("BALL|/41|3|0");
+  });
+
+  test("message_group_id 0 は、今の文書の回 (data_event_id) と違えば起こさない", async () => {
+    const bml = await opening('es_ref="/41"');
+    bml.feed(eventOn(0x41, { dataEventId: 2 }));
+    await watch(() => false, 200);
+    expect(inside(bml).ureg[2]).toBe("");
+  });
+
+  test("message_group_id 1 は、回が違っても起こす", async () => {
+    const bml = await opening('es_ref="/41" message_group_id="1"');
+    bml.feed(eventOn(0x41, { group: 1, dataEventId: 2 }));
+    const { done } = await watch(() => inside(bml).ureg[2] !== "", 2_000);
+    expect(done).toBe(true);
+    expect(inside(bml).ureg[2]).toBe("BALL|/41|3|1");
+  });
+
+  test("es_ref の部品と違う部品で送られたものは起こさない", async () => {
+    const bml = await opening('es_ref="/41"');
+    bml.feed(eventOn(0x42));
+    await watch(() => false, 200);
+    expect(inside(bml).ureg[2]).toBe("");
+  });
+});
+
 describe("ライブのように流し続けても、持つものと占める時間が一定に収まる", () => {
   /** 入口の部品のモジュール 1 つ */
   const moduleOf = (

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
+import { PacketStream } from "@danything/arib/psi";
+import {
+  packetize,
+  patSection,
+  programMap,
+  stream,
+} from "@danything/arib/synth";
+
 import {
   askedTrack,
   type AudioSide,
@@ -39,6 +47,7 @@ import {
   parseCommand,
   parsePlayable,
   pinnedNotTuned,
+  PmtAudioWatch,
   rawEnding,
   rawOpeningLine,
   rungCodec,
@@ -1726,5 +1735,41 @@ describe("カードの番号", () => {
     expect(answers.size).toBe(0);
     expect(card.id).toBeNull();
     expect(told).toEqual([]);
+  });
+});
+
+describe("PmtAudioWatch", () => {
+  /** 局 1024 の PMT。音声の ES の部品タグを並べる */
+  const pmt = (tags: number[]) =>
+    packetize(
+      0x1f0,
+      programMap(1024, 0x100, [
+        [0x02, 0x100, [0x52, 0x01, 0x00]],
+        ...tags.map((tag, i): [number, number, number[]] => [
+          0x0f,
+          0x110 + i,
+          [0x52, 0x01, tag],
+        ]),
+      ]),
+    );
+  const feed = (watch: PmtAudioWatch, ...parts: Uint8Array[]): boolean[] => {
+    const out: boolean[] = [];
+    for (const packet of new PacketStream().feed(stream(...parts)))
+      out.push(watch.feedPacket(packet));
+    return out;
+  };
+
+  test("PMT の音声の部品タグを読み、初めて決まったときと変わったときだけ true を返す", () => {
+    const watch = new PmtAudioWatch(1024);
+    const pat = packetize(0x0000, patSection([[1024, 0x1f0]]));
+    expect(feed(watch, pat, pmt([0x10]), pmt([0x10]))).toEqual([
+      false,
+      true,
+      false,
+    ]);
+    expect(watch.value).toEqual([0x10]);
+    // 副音声の ES が足された
+    expect(feed(watch, pmt([0x10, 0x11]))).toEqual([true]);
+    expect(watch.value).toEqual([0x10, 0x11]);
   });
 });

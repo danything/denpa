@@ -66,6 +66,12 @@ const OTHER_SHIFT = SCHEDULE_OTHER_MIN - SCHEDULE_ACTUAL_MIN;
 
 interface EventAudio {
   componentType: number;
+  /**
+   * 部品タグ (component_tag)。**PMT の音声の ES と突き合わせる** (PMT の stream_identifier_descriptor と同じ値)。
+   * 番組表の並びと PMT の並びは揃うとは限らず、番組表に無い音声の ES が PMT にだけあることもある。
+   * 4K の局 (MH-EIT。`mh-eit.ts`) は PMT が無いので持たない
+   */
+  componentTag?: number;
   langs: string[];
   samplingRate?: number;
   /**
@@ -392,6 +398,7 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
         const samplingRate = SAMPLING_RATE[(flags >> 1) & 0x07];
         event.audios.push({
           componentType: data[1]!,
+          componentTag: data[2]!,
           langs,
           // 表に無い符号 (予約) なら付けない
           ...(samplingRate === undefined ? {} : { samplingRate }),

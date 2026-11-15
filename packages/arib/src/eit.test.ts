@@ -197,7 +197,13 @@ describe("EIT の解析", () => {
     const found = parsed?.events[0];
     expect(found?.genres).toEqual([{ lv1: 7, lv2: 0 }]);
     expect(found?.audios).toEqual([
-      { componentType: 3, langs: ["jpn"], samplingRate: 48000, main: true },
+      {
+        componentType: 3,
+        componentTag: 0x10,
+        langs: ["jpn"],
+        samplingRate: 48000,
+        main: true,
+      },
     ]);
     expect(found?.video).toEqual({ type: "mpeg2", resolution: "1080i" });
   });
@@ -224,6 +230,7 @@ describe("EIT の解析", () => {
     expect(parsed?.events[0]?.audios).toEqual([
       {
         componentType: 3,
+        componentTag: 0x10,
         langs: ["jpn"],
         samplingRate: 48000,
         text: "主音声ステレオ",
@@ -231,6 +238,7 @@ describe("EIT の解析", () => {
       },
       {
         componentType: 3,
+        componentTag: 0x11,
         langs: ["jpn"],
         samplingRate: 48000,
         text: "解説ステレオ",
@@ -260,7 +268,13 @@ describe("EIT の解析", () => {
     const found = parsed?.events[0];
     expect(found?.video).toBeNull();
     expect(found?.audios).toEqual([
-      { componentType: 3, langs: ["jpn"], samplingRate: 48000, main: true },
+      {
+        componentType: 3,
+        componentTag: 0x10,
+        langs: ["jpn"],
+        samplingRate: 48000,
+        main: true,
+      },
     ]);
   });
 

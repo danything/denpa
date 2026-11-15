@@ -694,10 +694,16 @@ class Engine implements DomHost, BrowserHost, RenderHost {
           event.eventMessageGroupId !== group
         )
           continue;
+        /*
+         * **message_group_id 0 は、今の文書のカルーセルの回 (data_event_id) と同じときだけ起こす。** 比べるのは
+         * 今の文書の部品の DII。イベントメッセージは運用では文書とは別の部品 (`es_ref`) で送られ、その部品には DII が無い。
+         * イベントの部品の DII と比べていた頃は、別の部品で送られたものが 1 つも起きなかった
+         */
         if (
           group === 0 &&
-          this.resources.dii.get(message.componentId)?.dataEventId !==
-            message.dataEventId
+          (component === null ||
+            this.resources.dii.get(component)?.dataEventId !==
+              message.dataEventId)
         )
           continue;
         const id = event.eventMessageId >> 8;
