@@ -80,6 +80,7 @@ import {
   undecodableReason,
 } from "#lib/types.js";
 
+import { cardIdOf } from "./agent-cards";
 import { placesOfService, serviceChannel } from "./agent-channels";
 import type { Place } from "./agent-order";
 import {
@@ -1776,6 +1777,8 @@ class Session {
     const clock = this.clockNotice();
     if (clock !== null) this.tellOne(viewer, clock);
     if (this.note !== null) this.tellOne(viewer, this.note);
+    if (this.cardId !== null)
+      this.tellOne(viewer, { type: "card", id: this.cardId });
   }
 
   /**
@@ -2499,6 +2502,7 @@ class Session {
       this.serviceId,
     );
     this.agent = place.agent;
+    this.learnCard(place.agent);
     this.locating = this.locate(place);
     this.settle();
     return stream;
@@ -2508,7 +2512,28 @@ class Session {
   private readonly tuning: (() => void)[] = [];
   /** 送ったエージェント (`agents.id`)。スクランブルされたまま届いた理由を、そのエージェントのカードで決める (`endScrambled`) */
   private agent: number | null = null;
+  /** そのエージェントが復号に使うカードの番号 (`learnCard`)。分からなければ null */
+  private cardId: string | null = null;
   private settled = false;
+
+  /**
+   * **選局したエージェントのカードの番号を、観ている人に知らせる** (`Notice` の `card`)。データ放送の `getIRDID` に渡すもの。
+   * 待たずに選局を進め、分かったら知らせる。途中から来た人には `add` で渡す
+   */
+  private learnCard(agent: number): void {
+    // 別のエージェントで選局し直したら、前のカードの番号は渡さない (取れなければ渡さないまま)
+    this.cardId = null;
+    // 双方向がオフなら知らせない。データ放送に渡すのは双方向がオンのときだけ (`DataBroadcast` の `cardId`)
+    if (!settings().bmlNetwork) return;
+    void cardIdOf(agent)
+      .then((id) => {
+        // 応答を待つ間に別のエージェントで選局し直していたら、古いほうは捨てる
+        if (id === null || this.agent !== agent || id === this.cardId) return;
+        this.cardId = id;
+        this.tell({ type: "card", id });
+      })
+      .catch(() => undefined);
+  }
 
   /**
    * チューナーを使えたら呼ぶ。使えずに畳んだときも呼ぶ。もうどちらかになっていればその場で。

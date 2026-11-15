@@ -425,6 +425,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 音声だけになったことを段の切り替えにも数えない (`asked` は局を替えたときのために持ち越す)
    */
   let videoless = false;
+  /** 選局したエージェントのカードの番号 (`card`)。データ放送の `getIRDID` に渡す。局を替えたら null に戻す */
+  let cardId = $state<string | null>(null);
   /** 映像の無い局でデータ放送を自動で開いたか。閉じたあとに開き直さない。局を替えたら (`tune` の `keepList` が false) 下ろす */
   let openedVideoless = false;
   const adapter = new RungAdapter();
@@ -2294,6 +2296,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   ): Promise<void> {
     chase = null;
     chaseTimeline = null;
+    // 別の局へ移るなら、カードの番号は選局したエージェントから知らされ直す (`card`)
+    if (!keepList) cardId = null;
     if (!keepList) openedVideoless = false;
     /*
      * 別の局へ移るなら、サーバが選局を受けたら (`tuned`) データ放送を閉じる (`closingOnTune`)。それまでは前の局の
@@ -2739,6 +2743,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
            */
           fallback = notice.recording;
           reconnect();
+        } else if (notice.type === "card") {
+          cardId = notice.id;
         } else if (notice.type === "restarting") {
           // サーバが入れ替えで止まる。このあと切れて繋ぎ直すまで、届かないのを回線の細さに数えない (`act`)
           restartingAt = Date.now();
@@ -3603,6 +3609,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return speed;
     },
     setSpeed,
+    /** 選局したエージェントのカードの番号 (データ放送の `getIRDID` に渡す) */
+    get cardId() {
+      return cardId;
+    },
     /** データ放送を出しているか */
     get showData() {
       return showData;

@@ -98,6 +98,11 @@ export interface BrowserHost {
   /** Hybridcast のアプリを開けるか (双方向がオンで、データ放送を開いていて、AIT にアプリがある)。無ければ開けない */
   canStartApp?(): boolean;
   /**
+   * `getIRDID(type)` の答え。渡せないなら null。種別 5 に B-CAS カードの番号を、48 ビットを 16 進 12 桁にして返す
+   * (規格の本文では確かめていない。ほかの実装が実際の放送で確かめた形。文書は 10 進のままだと数として読めない)
+   */
+  irdId?(type: number): string | null;
+  /**
    * Hybridcast のアプリを開く (startAITControlledApp)。`hint` は数の引数 (どのアプリかの手がかり。
    * organisation_id・application_id など)。開けたら true
    */
@@ -484,7 +489,12 @@ export function defineBrowser(host: BrowserHost): HostObject {
   fn("isSupportedMedia", (args) =>
     ["1", "2", "4"].includes(str(args, 0)) ? 1 : 0,
   );
-  fn("getIRDID", () => null);
+  // 受信機の番号 (B-CAS カード)。渡せるのは種別 5 だけで、何を訊かれたかは記録に出す (`BrowserHost.irdId`)
+  fn("getIRDID", (args) => {
+    const type = toNumber(args[0]);
+    host.log(`getIRDID(${type})`);
+    return host.irdId?.(type) ?? null;
+  });
   fn("getResidentAppVersion", () => null);
   fn("random", (args) => {
     const n = toNumber(args[0]);
