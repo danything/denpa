@@ -89,7 +89,7 @@ public sealed record CxdPreviousTune(string Mode, uint Khz, bool Locked, long Be
 
 /// <summary>
 /// ISDB-C の選局がロックしなかったときに読んだ状態 (仕様書 8.6・9.5)。ロックが不安定な理由を探すため、常駐の記録と <c>--tune</c> に 1 行で出す。
-/// ロックの段は、仕様書にあるビット (バンク <c>40</c> の <c>88</c> の bit0 と <c>10</c> の bit5) だけを見る。AGC や搬送波の段を示すビットと、
+/// どこまでロックしたかは、仕様書にあるビット (バンク <c>40</c> の <c>88</c> の bit0 と <c>10</c> の bit5) だけで見る。AGC や搬送波がどの状態にあるかを示すビットと、
 /// チューナーの PLL のロックを読むレジスタは仕様書に無いので読まない。チューナーの AGC (仕様書 9.7) は、読むとチューナーの状態を動かすので読まない
 /// </summary>
 /// <param name="Khz">選局した中心周波数 (kHz)</param>
@@ -102,7 +102,7 @@ public sealed record CxdPreviousTune(string Mode, uint Khz, bool Locked, long Be
 /// <param name="IfAgc">復調器の IF の AGC の出力 (<c>49</c>〜<c>4A</c> の 12 ビット。仕様書 9.5)。読めなければ null</param>
 /// <param name="CarrierOffsetKhz">搬送波のずれ (kHz。仕様書 9.5)。自動の探索がロックしていなければ null</param>
 /// <param name="SinceInitMs">受信機を初期化してから、この選局を始めるまで (ms)</param>
-/// <param name="TunesSinceInit">初期化してから何回目の選局か (1 から数える。どの方式も数える)</param>
+/// <param name="TunesSinceInit">初期化してから何回目の選局か (1 から数える。どの方式も数え、地上波のプリセットを外した選局し直しと、ずらした周波数の試し直しも 1 回と数える)</param>
 /// <param name="Previous">この受信機の前の選局。受信機を作ってから初めての選局なら null</param>
 public sealed record CxdIsdbcLockFailure(
     uint Khz, bool Retuned, long WaitMs, long DemodLockMs, long TsLockMs, bool DemodLocked, bool TsLocked,
