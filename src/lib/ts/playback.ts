@@ -103,6 +103,12 @@ type AutoPick =
 export const ORIGIN_HEADER = "X-Denpa-Origin";
 
 /**
+ * MPEG-2 をそのまま流すときの応答ヘッダ。**流し始めたバイト位置** (元の TS の先頭から数える)。
+ * 画面はこれに受け取ったバイト数を足しておき、途中で切れたら続きを `?offset=` でリクエストする (`ts/raw-resume.ts`)
+ */
+export const OFFSET_HEADER = "X-Denpa-Offset";
+
+/**
  * 流すときの応答ヘッダ (`stream`・`chase`・`live`)。**中身の形式** (`h264` / `hevc` / `av1`、音声だけなら `audio`、
  * 放送のままの TS なら `raw`。`stream?codec=mpeg2` も `raw`)。段を下げたとき (`?rung=`) と `codec=auto` はサーバが `?playable=` から
  * 選ぶので、画面はこれで MSE に渡す codecs を決める (`#lib/live.ts` の `codecsFor`)
@@ -171,6 +177,8 @@ export function retryWait(retries: number): number {
 export class StreamRetry {
   private retries = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** `retrying` を言わずに繋ぎ直しているか (`schedule` の `quiet`) */
+  private quiet = false;
 
   constructor(private readonly state: (state: StreamState) => void) {}
 
@@ -179,15 +187,21 @@ export class StreamRetry {
     return this.timer !== null;
   }
 
-  /** 切れた。待ってから `again` を呼ぶ。上限を超えていれば `failed` にして呼ばない */
-  schedule(again: () => void): void {
+  /**
+   * 切れた。待ってから `again` を呼ぶ。上限を超えていれば `failed` にして呼ばない。
+   * `quiet` なら `retrying` を言わない (手元に溜まっているぶんを再生しながら続きをリクエストするとき)。
+   * 手元を使い切ったら、呼ぶ側が `starved` を呼ぶ
+   */
+  schedule(again: () => void, quiet = false): void {
     if (this.retries >= STREAM_RETRIES) {
+      this.quiet = false;
       this.state("failed");
       return;
     }
     const wait = retryWait(this.retries);
     this.retries++;
-    this.state("retrying");
+    this.quiet = quiet;
+    if (!quiet) this.state("retrying");
     this.timer = setTimeout(() => {
       this.timer = null;
       again();
@@ -198,7 +212,15 @@ export class StreamRetry {
   flowing(): void {
     if (this.retries === 0) return;
     this.retries = 0;
+    this.quiet = false;
     this.state("flowing");
+  }
+
+  /** `retrying` を言わずに繋ぎ直している間に、手元を使い切って止まった。ここから `retrying` を言う */
+  starved(): void {
+    if (!this.quiet) return;
+    this.quiet = false;
+    this.state("retrying");
   }
 
   /** 待っているリクエストし直しをやめる (別の位置からリクエストした・閉じた)。数はそのまま */

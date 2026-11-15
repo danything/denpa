@@ -6,7 +6,8 @@ import { recordingOr404 } from "#lib/server/recording.js";
  *
  * - `?codec=h264` / `hevc` / `av1` … fMP4。エンコード済みと同じコーデックなら詰め替えるだけ、違えば変換
  *   (その場の変換の枠を使う。埋まっていれば 503)。`hevc` は段を下げないなら詰め替えだけ
- * - `?codec=mpeg2` … 元の TS を飛び先からそのまま。物差しの 0 にあたる PTS を `X-Denpa-Origin` で返す (`X-Denpa-Codec` は `raw`)
+ * - `?codec=mpeg2` … 元の TS を飛び先からそのまま。物差しの 0 にあたる PTS を `X-Denpa-Origin`、流し始めたバイト位置を
+ *   `X-Denpa-Offset` で返す (`X-Denpa-Codec` は `raw`)。`?offset=<バイト>` ならそのバイトからちょうど続きを流す (切れたあとの続き)
  * - `?codec=audio` … 音声だけの fMP4 (AAC 96k。回線が段 3 でも足りないとき)
  *
  * `?from=<秒>` は物差し (`playback` の `axis`) の上の位置 (シークはリクエストし直す)。

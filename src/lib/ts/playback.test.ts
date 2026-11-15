@@ -92,6 +92,42 @@ describe("StreamRetry", () => {
     }
   });
 
+  test("quiet なら retrying を言わず、手元を使い切ったら (starved) 1 度だけ言う", () => {
+    const { retry, states, fire, restore } = fake();
+    try {
+      // 黙っていなければ starved は何も言わない
+      retry.starved();
+      expect(states).toEqual([]);
+      retry.schedule(() => {}, true);
+      expect(states).toEqual([]);
+      retry.starved();
+      retry.starved();
+      expect(states).toEqual(["retrying"]);
+      fire();
+      // 届き始めたら flowing。そのあとの starved は何も言わない
+      retry.schedule(() => {}, true);
+      fire();
+      retry.flowing();
+      retry.starved();
+      expect(states).toEqual(["retrying", "flowing"]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("quiet でも数は数え、上限を超えたら failed にする", () => {
+    const { retry, states, fire, restore } = fake();
+    try {
+      for (let i = 0; i <= STREAM_RETRIES; i++) {
+        retry.schedule(() => {}, true);
+        fire();
+      }
+      expect(states).toEqual(["failed"]);
+    } finally {
+      restore();
+    }
+  });
+
   test("cancel すると待っていたものは呼ばない", () => {
     const { retry, restore } = fake();
     const saved = globalThis.clearTimeout;

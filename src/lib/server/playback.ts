@@ -67,6 +67,7 @@ import {
   BUSY,
   CODEC_HEADER,
   type EncodedSource,
+  OFFSET_HEADER,
   ORIGIN_HEADER,
   PACE_HEADER,
   type PlayAudio,
@@ -1244,7 +1245,7 @@ export async function streamResponse(
   if (codec === "mpeg2") {
     if (!plan.info.offers.some((o) => o.codec === "mpeg2"))
       error(404, "この形式では再生できません");
-    return rawResponse(plan, from);
+    return rawResponse(plan, from, query.get("offset"));
   }
 
   // 段を下げないなら `offers` にあるものだけ。下げるなら、変換の元があればどの形式でもよい (コーデックはサーバが選ぶ)
@@ -1609,27 +1610,42 @@ async function tsAttempts(
 }
 
 /**
- * **MPEG-2 は元の TS を飛び先から流す。** 物差しの 0 にあたる PTS をヘッダで渡す (`ORIGIN_HEADER`)。
- * 画面は PES の PTS から自分で時刻を出す。枠は使わない (サーバは読んで渡すだけ)
+ * **MPEG-2 は元の TS を飛び先から流す。** 物差しの 0 にあたる PTS (`ORIGIN_HEADER`) と、流し始めたバイト位置
+ * (`OFFSET_HEADER`) をヘッダで渡す。画面は PES の PTS から自分で時刻を出す。枠は使わない (サーバは読んで渡すだけ)。
+ *
+ * `offset` (`?offset=`) があれば、秒で探さずにそのバイト位置からちょうど流す。途中で切れた画面が、受け取ったバイトの
+ * 続きをリクエストする (`ts/raw-resume.ts`)。パケットの切れ目に揃えない (画面は受け取った続きのバイトを待っている)
  */
 async function rawResponse(
   plan: PlaybackPlan,
   from: number,
+  offset: string | null,
 ): Promise<Response> {
   const ts = plan.ts;
   if (ts === null) error(404, "この形式では再生できません");
-  const mark = await seekFrom(ts, plan.skip, from);
-  if (mark === null) error(404, "この形式では再生できません");
+  const start = offset === null ? null : rawOffset(offset, ts.size);
+  if (start === undefined)
+    error(400, "offset は 0 から録画の大きさまでの整数です");
+  const at = start ?? (await seekFrom(ts, plan.skip, from))?.at;
+  if (at === undefined) error(404, "この形式では再生できません");
   const origin = inWrap(ts.head + Math.round(plan.skip * CLOCK));
-  return new Response(recordingStream(ts.path, mark.at), {
+  return new Response(recordingStream(ts.path, at), {
     headers: {
       "Content-Type": "video/mp2t",
       "Cache-Control": "no-store",
       // `live`・`chase` の放送のままと同じ値 (`codec=mpeg2` でリクエストされても `raw`)
       [CODEC_HEADER]: "raw",
       [ORIGIN_HEADER]: String(origin),
+      [OFFSET_HEADER]: String(at),
     },
   });
+}
+
+/** `?offset=` を読む。0 から `size` (末尾。中身は空になる) までの整数でなければ undefined */
+export function rawOffset(asked: string, size: number): number | undefined {
+  if (!/^\d+$/.test(asked)) return undefined;
+  const at = Number(asked);
+  return Number.isSafeInteger(at) && at <= size ? at : undefined;
 }
 
 /**

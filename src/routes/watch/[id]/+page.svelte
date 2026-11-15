@@ -390,10 +390,15 @@
             : codec === "mpeg2" && step === 0
               ? "ts-mpeg2"
               : "fmp4",
-        request: (at, audio, signal) =>
+        // `offset` は元の TS の続きをリクエストするとき (`canvas-player.ts` の `resume`)
+        request: (at, audio, signal, offset) =>
           local !== null
             ? Promise.resolve(local.request(at))
-            : fetch(canvasUrl(codec, at, audio), { signal }),
+            : fetch(
+                canvasUrl(codec, at, audio) +
+                  (offset === undefined ? "" : `&offset=${offset}`),
+                { signal },
+              ),
         heard: (response) => {
           const heard = heardOf(response);
           stepCodec = heard.codec;

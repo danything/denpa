@@ -580,7 +580,10 @@ PMT に N 本目の音声が無ければ、音声無しでエンコードしま�
   詰め替えは `from` の手前のキーフレームから、変換は元の TS なら `from` の 1 秒手前の映像から始まります
 - `mpeg2` … 元の TS を `from` の 1 秒手前の映像から流します (`video/mp2t`)。**`X-Denpa-Origin` に物差しの 0 にあたる PTS** (90kHz) を返します。
   物差しの時刻 = (PTS − `X-Denpa-Origin`) を 33 ビットの一周の中で取って 90000 で割ったもの。`audio` は効きません (全部の音声が入る)。
-  `X-Denpa-Codec` は `live`・`chase` の放送のままと同じ `raw` です
+  `X-Denpa-Codec` は `live`・`chase` の放送のままと同じ `raw` です。
+  **`X-Denpa-Offset` に流し始めたバイト位置** (元の TS の先頭から) を返します。途中で切れたら、これに受け取ったバイト数を足した値を
+  `?offset=<バイト>` に渡すと、そのバイトからちょうど続きを流します (`from` は効かない。パケットの切れ目に揃えない)。
+  0 から録画の大きさまでの整数でなければ 400、大きさと同じなら中身は空です
 - `audio` (`codec=audio`) … 音声だけの fragmented MP4 (`audio/mp4`。AAC 96k)。時刻は映像のときと同じ物差しです。
   映像をデコードもエンコードもしないので、その場で変換する本数の枠は使いません (ファイルとライブの `audio=only` と同じ)
 - fragmented MP4 には `X-Denpa-Codec`・`X-Denpa-Rung`・`X-Denpa-Pace` (送り出しの具合を読む id。[上記](#送り出しの具合-get-apiplaybackpaceidid)) を付けます
