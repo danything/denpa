@@ -310,7 +310,7 @@ export function encodeArgs(
   half = false,
   side = "pipe:3",
   transport: Transport = "ts",
-  video: BroadcastCodec = transport === "tlv" ? "hevc" : "mpeg2",
+  video: BroadcastCodec = broadcastCodec(transport),
   silent = false,
 ): string[] {
   if (silent) return silentArgs(rung);
@@ -567,7 +567,8 @@ export function videoArgs(
 ): { input: string[]; filter: string; encoder: string[] } {
   if (rung !== 0) return rungVideo(codec, hw, interlaced, rung, fps);
   const smooth = !(half && interlaced);
-  // キーフレームは 1 秒ごと。合流の待ちはキーフレームの間隔で決まる
+  // キーフレームは放送 (60 コマ。半分に間引けば 30 コマ) で 1 秒ごと。合流の待ちはキーフレームの間隔で決まる。
+  // エンコード済みの録画の変換 (`interlaced` が false) は元のコマ数に関係なく 60 コマごと
   const gop = smooth ? "60" : "30";
   if (hw !== null) {
     const gpu = liveHwArgs(
@@ -1977,7 +1978,6 @@ class Session {
         (!this.raw && this.codec === "hevc" && this.rung !== 0)) &&
       this.channelType === "CATV" &&
       this.transport === "ts" &&
-      this.source === undefined &&
       this.program > 0
     );
   }
@@ -2603,6 +2603,22 @@ class Session {
    * だけ**それの追っかけに切り替える。HTTP で観ているもの (テレビのアプリ) にはストリームの中で伝えられ
    * ないので、同じものを通知 (`yielded`) でも流す
    */
+  /** 放送のままの経路 (`runRaw`・`readTlv`) が読み終えたあとの扱い (`rawEnding`) */
+  private async endRaw(label: string, chase: boolean): Promise<void> {
+    switch (rawEnding({ chase, fed: this.fed, stopped: this.stopped })) {
+      case "ended":
+        this.tell({ type: "ended" });
+        return;
+      case "lost":
+        return await this.lose(label);
+      case "died":
+        this.died(label, "放送が途切れました", "映像を出せませんでした");
+        return;
+      case "quiet":
+        return;
+    }
+  }
+
   private async lose(label: string): Promise<void> {
     /*
      * 使った直後に取り上げられたら、調べた答えがまだ戻っていないことがある。待ってから読む。
@@ -2876,7 +2892,9 @@ class Session {
       software: this.software,
       gpuReady: () =>
         codec !== "audio" &&
-        liveHwAvailable(codec, this.transport !== "tlv") !== null,
+        // 起こすときと同じ経路で引く (`runEncode` の `pickHw`。映像が HEVC ならデコードを GPU に載せない)
+        liveHwAvailable(codec, this.broadcast !== "hevc" && !this.hevcVideo) !==
+          null,
     });
     if (verdict === null) return;
     if (verdict === "heavy") {
@@ -3386,18 +3404,7 @@ class Session {
         // 届く前に切れたのは選局の失敗 (下の catch)。届いたあとなら外された
         if (!this.fed || chase) throw error;
       }
-      switch (rawEnding({ chase, fed: this.fed, stopped: this.stopped })) {
-        case "ended":
-          this.tell({ type: "ended" });
-          return;
-        case "lost":
-          return await this.lose(label);
-        case "died":
-          this.died(label, "放送が途切れました", "映像を出せませんでした");
-          return;
-        case "quiet":
-          return;
-      }
+      return await this.endRaw(label, chase);
     } catch (error) {
       if (chase) this.died(label, String(error), "録画を読めませんでした");
       else await this.notTuned(label, error);
@@ -3484,18 +3491,7 @@ class Session {
     }
     // 作り直す (`restart`)・畳む (`takeMmt`) と決めて抜けたなら、終わりの扱いはそちらで済んでいる
     if (left) return;
-    switch (rawEnding({ chase, fed: this.fed, stopped: this.stopped })) {
-      case "ended":
-        this.tell({ type: "ended" });
-        return;
-      case "lost":
-        return await this.lose(label);
-      case "died":
-        this.died(label, "放送が途切れました", "映像を出せませんでした");
-        return;
-      default:
-        return;
-    }
+    await this.endRaw(label, chase);
   }
 
   /**

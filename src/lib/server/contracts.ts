@@ -46,7 +46,7 @@ export interface ContractRow {
   cardId: string;
   serviceId: number;
   serviceName: string;
-  /** 局を選局するチャンネル (`agent-channels.serviceChannel`)。エージェントの控えに無ければ null */
+  /** 画面に出す局のチャンネル (`agent-channels.serviceChannel`)。エージェントの控えに無ければ null */
   channel: string | null;
   type: string;
   state: ContractState;

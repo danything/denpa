@@ -844,7 +844,8 @@ function finish(recordingId: number, size: number): void {
   } else if (!kind.tlv)
     void writeThumbnail(
       dest,
-      (recording.end_at - recording.start_at) / 1000,
+      // 録れた長さ。途中で切れた録画で、位置が尺を超えないように
+      (recording.duration_ms ?? recording.end_at - recording.start_at) / 1000,
       undefined,
       kind.uhd,
     );

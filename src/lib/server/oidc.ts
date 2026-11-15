@@ -87,16 +87,11 @@ export function forget(): void {
 const encoder = new TextEncoder();
 
 function base64Url(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return Buffer.from(bytes).toString("base64url");
 }
 
 function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4));
-  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new Uint8Array(Buffer.from(value, "base64url"));
 }
 
 /** ID トークンの 1 節 (base64url の JSON) を開く */
@@ -256,14 +251,20 @@ async function publicKey(kid: string): Promise<CryptoKey> {
       typeof e !== "string"
     )
       continue;
-    const key = await crypto.subtle.importKey(
-      "jwk",
-      { kty, n, e, key_ops: ["verify"], ext: true },
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-      true,
-      ["verify"],
-    );
-    keys.set(name, key);
+    try {
+      keys.set(
+        name,
+        await crypto.subtle.importKey(
+          "jwk",
+          { kty, n, e, key_ops: ["verify"], ext: true },
+          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+          true,
+          ["verify"],
+        ),
+      );
+    } catch {
+      // 中身の読めない RSA の鍵も飛ばす。ほかの鍵でのログインを止めない
+    }
   }
   const found = keys.get(kid);
   if (found === undefined)
