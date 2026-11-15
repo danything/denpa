@@ -1,6 +1,9 @@
+import { createHash } from "node:crypto";
 import { statSync } from "node:fs";
 
+import { DRCS_REPLACE } from "@danything/arib/b24-tables";
 import { joinBytes } from "@danything/arib/bytes";
+import { CAPTION_TEXT_VERSION } from "@danything/arib/caption-text";
 import { error } from "@sveltejs/kit";
 
 import { pagesFromMkv } from "#lib/server/captions.js";
@@ -47,6 +50,15 @@ const made = fileMemo<Made>(16);
 const extracting = sharing<Made>();
 
 const MISSING = "字幕がありません";
+
+/**
+ * 字幕を作る側のバージョン。JSON の形式 (`CAPTION_TEXT_VERSION`) と、外字の置き換え表の中身の MD5 の先頭 8 桁。
+ * 表に足したり値を直したりしたら、端末に控えてある古い JSON (置き換える前の画像) を 304 で使い続けさせない
+ */
+const CAPTION_TAG = `c${CAPTION_TEXT_VERSION}.${createHash("md5")
+  .update(JSON.stringify([...DRCS_REPLACE]))
+  .digest("hex")
+  .slice(0, 8)}`;
 
 /**
  * 字幕を抜いてデコードし、JSON にする。字幕を持たない (抜けたものが空・画像の字幕) ならその理由。
@@ -127,11 +139,15 @@ export async function GET({ params, request }) {
   /*
    * **持たせてよいが、毎回確かめさせる** (チャプターと同じ)。再エンコードしても置き場所は同じ名前のことがあり、
    * 捨てる先頭の長さが変われば字幕の時刻も変わる。`no-cache` + ETag (ファイルの大きさと更新時刻) にして、変わっていなければ 304。
-   * 元の TS はエンコードが終わると物差しが変わるので控えさせない
+   * 元の TS はエンコードが終わると物差しが変わるので控えさせない。
+   * **ETag には字幕を作る側の変化も入れる** (`CAPTION_TAG`)。外字の置き換え表に足すと、同じファイルでも作り直した JSON を渡す
    */
   const stat =
     path === null ? undefined : statSync(path, { throwIfNoEntry: false });
-  const tag = stat === undefined ? null : fileEtag(stat);
+  const tag =
+    stat === undefined
+      ? null
+      : fileEtag(stat).replace(/"$/, `-${CAPTION_TAG}"`);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Cache-Control": ts ? "no-store" : "private, no-cache",
