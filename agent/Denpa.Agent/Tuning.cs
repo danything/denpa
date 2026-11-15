@@ -739,8 +739,10 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// </summary>
     private const int DvrBuffer = 8 * 1024 * 1024;
 
-    /// <summary>同期を待つ上限。過ぎたら「電波が来ていない」</summary>
-    private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>同期を待つ上限 (ms)。過ぎたら「電波が来ていない」。ISDB-C では 1 つの周波数・変調につき、この時間だけ待つ</summary>
+    internal const int LockTimeoutMs = 5000;
+
+    private static readonly TimeSpan LockTimeout = TimeSpan.FromMilliseconds(LockTimeoutMs);
 
     private readonly SafeFileHandle _frontend;
     private readonly SafeFileHandle _demux;
@@ -814,6 +816,14 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// <summary>最後の ISDB-C の選局でロックした周波数 (Hz。<c>--tune</c> が出す)。ISDB-C でないか、ロックしなかったなら null</summary>
     public uint? CableFrequency { get; private set; }
 
+    /// <summary>最後の ISDB-C の選局でロックしたときに渡した変調 (<see cref="Qam64"/>・<see cref="Qam256"/>・<see cref="QamAuto"/>。<c>--tune</c> が出す)。ISDB-C でないか、ロックしなかったなら null</summary>
+    public uint? CableModulation { get; private set; }
+
+    /// <summary>最後の ISDB-C の選局で渡した変調 (渡した順。同じ変調は 1 つにまとめる)。<c>--tune</c> がロックしなかったときに出す</summary>
+    public IReadOnlyList<uint> TriedModulations => _triedModulations;
+
+    private readonly List<uint> _triedModulations = [];
+
     /// <summary>ISDB-C を選局するときの方式の名前 (<c>--tune</c> が出す)。DVB-C に対応していなければ null</summary>
     public string? CableSystemName => _cableSystem switch
     {
@@ -846,6 +856,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
         Tsmf = null;
         Tlv = null;
         CableFrequency = null;
+        CableModulation = null;
+        _triedModulations.Clear();
         // 選局し直す間は止める。前のチャンネルの残りが混ざったまま流れると、
         // 読む側 (denpa) には途中で中身が変わったようにしか見えない
         if (_streaming)
@@ -916,6 +928,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         {
             foreach (var modulation in modulations)
             {
+                if (!_triedModulations.Contains(modulation)) _triedModulations.Add(modulation);
                 SetProperties(CableProperties(system, hertz, modulation));
                 if (!WaitForLock())
                 {
@@ -924,11 +937,59 @@ public sealed unsafe class DvbTuner : ITuneDevice
                     continue;
                 }
                 CableFrequency = hertz;
+                CableModulation = modulation;
                 _lockedModulation[tuning.Frequency] = modulation;
                 return;
             }
         }
         throw new IOException(ITuneDevice.SyncFailed);
+    }
+
+    /// <summary>
+    /// ドライバが報告する変調 (<c>FE_GET_PROPERTY</c> の <c>DTV_MODULATION</c>)。<c>--tune</c> が QAM_AUTO でロックしたときに読み、常駐の選局では読まない。
+    /// カーネルは、ドライバに <c>get_frontend</c> があれば受けている値を読み直してから返し、無ければ渡した値 (QAM_AUTO) をそのまま返す。読めなければ null
+    /// </summary>
+    public uint? ReportedModulation()
+    {
+        if (_frontend.IsClosed) return null;
+        var property = new byte[PropertySize];
+        BitConverter.TryWriteBytes(property.AsSpan(0), DtvModulation);
+        // struct dtv_properties { u32 num; struct dtv_property *props; } (SetProperties と同じ)
+        var header = new byte[16];
+        BitConverter.TryWriteBytes(header.AsSpan(0), 1u);
+        fixed (byte* props = property)
+        fixed (byte* headerAt = header)
+        {
+            BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
+            if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeGetProperty, (nint)headerAt) < 0) return null;
+        }
+        return BitConverter.ToUInt32(property.AsSpan(PropertyDataAt));
+    }
+
+    /// <summary>enum fe_modulation の値の名前 (linux/dvb/frontend.h の QAM_16 = 1〜QAM_AUTO = 6)。<c>--tune</c> が出す</summary>
+    internal static string ModulationName(uint modulation) => modulation switch
+    {
+        1 => "16QAM",
+        2 => "32QAM",
+        Qam64 => "64QAM",
+        4 => "128QAM",
+        Qam256 => "256QAM",
+        QamAuto => "QAM_AUTO",
+        _ => $"変調の値 {modulation}",
+    };
+
+    /// <summary>
+    /// <c>--tune</c> が ISDB-C で出す変調。ロックしたら渡した変調を出し、QAM_AUTO でロックしたらドライバが報告した値 (<see cref="ReportedModulation"/>) を出す。
+    /// 報告が読めないか QAM_AUTO のままなら、自動と出す。ロックしなかったら試した変調を並べる
+    /// </summary>
+    internal static string CableModulationLabel(uint? locked, uint? reported, IReadOnlyList<uint> tried)
+    {
+        if (locked is not { } modulation)
+            return tried.Count == 0 ? "変調 -" : $"試した変調 {string.Join("・", tried.Select(ModulationName))}";
+        if (modulation != QamAuto) return ModulationName(modulation);
+        return reported is { } value && value != QamAuto
+            ? $"{ModulationName(value)} (QAM_AUTO でロックし、ドライバが報告した変調)"
+            : "変調は自動 (QAM_AUTO。ドライバから変調を読めなかった)";
     }
 
     /// <summary>

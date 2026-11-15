@@ -432,7 +432,7 @@ public static class Probe
                     if (failed.CableFrequency is { } tried) output.WriteLine($"    ロックした周波数 {tried} Hz");
                     // ロックしなかった周波数ごとに、待つ間に立ったビットと、復調器の状態 (常駐の記録と同じ 1 行。CxdIsdbcLockFailure)
                     foreach (var unlocked in failed.IsdbcLockFailures) output.WriteLine($"    {unlocked.Describe()}");
-                    foreach (var line in TsmfLines(failed.IsdbcLocked, failed.Tsmf)) output.WriteLine($"    {line}");
+                    foreach (var line in TsmfLines(failed.IsdbcLocked, failed.Tsmf, CxdIsdbcUnlocked)) output.WriteLine($"    {line}");
                     if (failed.IsdbcFailedSignal is { } last)
                     {
                         output.WriteLine($"    {(last.Locked ? "ロック中" : "ロックしていない")}  C/N {(last.Cn is { } lastCn ? $"{lastCn:F1} dB" : "-")}  強度 {(last.StrengthDbm is { } lastDbm ? $"{lastDbm:F1} dBm (目安)" : "-")}");
@@ -441,11 +441,11 @@ public static class Probe
                     // ロックしたのに TS が 1 パケットも届かなかった (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、ブリッジのバッファを捨てて選局し直す
                     if (failed.IsdbcLocked && failed.Tsmf is { Received: 0 }) RetryAfterFlush(failed, tuning, name, output);
                 }
-                // DVB の機材の ISDB-C は、渡した方式と、ロックしていれば TSMF の判定を出す (ロックしなければ Tsmf は null)
+                // DVB の機材の ISDB-C は、渡した方式と変調 (ロックしなければ試した変調) と、ロックしていれば TSMF の判定を出す (ロックしなければ Tsmf は null)
                 if (tuning.IsdbC && tuner is DvbTuner dvbFailed)
                 {
-                    output.WriteLine($"    {dvbFailed.CableSystemName}  64QAM  {DvbTuner.CableSymbolRate / 1000} kbaud");
-                    foreach (var line in TsmfLines(dvbFailed.Tsmf is not null, dvbFailed.Tsmf)) output.WriteLine($"    {line}");
+                    output.WriteLine($"    {dvbFailed.CableSystemName}  {DvbModulation(dvbFailed)}  {DvbTuner.CableSymbolRate / 1000} kbaud");
+                    foreach (var line in TsmfLines(dvbFailed.Tsmf is not null, dvbFailed.Tsmf, DvbIsdbcUnlocked)) output.WriteLine($"    {line}");
                 }
                 continue;
             }
@@ -464,14 +464,14 @@ public static class Probe
                 // ISDB-C は TSMF の判定と、ヘッダーにある TS の一覧も出す (CXD2856 の仕様書 8.7)
                 if (tuning.IsdbC)
                 {
-                    foreach (var line in TsmfLines(it930x.IsdbcLocked, it930x.Tsmf)) output.WriteLine($"    {line}");
+                    foreach (var line in TsmfLines(it930x.IsdbcLocked, it930x.Tsmf, CxdIsdbcUnlocked)) output.WriteLine($"    {line}");
                 }
             }
-            // DVB の機材の ISDB-C は、渡した方式と受けた周波数、TSMF の判定を出す
+            // DVB の機材の ISDB-C は、渡した方式とロックした変調、受けた周波数、TSMF の判定を出す
             if (tuning.IsdbC && tuner is DvbTuner dvb)
             {
-                output.WriteLine($"    {dvb.CableSystemName}  64QAM  {DvbTuner.CableSymbolRate / 1000} kbaud  受けた周波数 {dvb.CableFrequency} Hz");
-                foreach (var line in TsmfLines(true, dvb.Tsmf)) output.WriteLine($"    {line}");
+                output.WriteLine($"    {dvb.CableSystemName}  {DvbModulation(dvb)}  {DvbTuner.CableSymbolRate / 1000} kbaud  受けた周波数 {dvb.CableFrequency} Hz");
+                foreach (var line in TsmfLines(true, dvb.Tsmf, DvbIsdbcUnlocked)) output.WriteLine($"    {line}");
             }
             // 選んだ TS が分割 TLV なら、組み立てた TLV を数える。B-CAS のカードに MMT の ECM を渡さないので --decode でも復号しない (TunerPool の Lease と同じ)
             var tlv = tuner.Format == StreamFormat.Tlv;
@@ -600,15 +600,26 @@ public static class Probe
         }
     }
 
+    /// <summary>CXD2856ER (IT930x の機材) の ISDB-C がロックしなかったときに添える待ち方 (<see cref="Cxd2856Frontend.IsdbcLockTimeoutMs"/>)</summary>
+    internal static string CxdIsdbcUnlocked => $"{Cxd2856Frontend.IsdbcLockTimeoutMs} ms の間に、復調と TS のロックがそろわなかった";
+
+    /// <summary>DVB の機材の ISDB-C がロックしなかったときに添える待ち方 (<see cref="DvbTuner.LockTimeoutMs"/>)</summary>
+    internal static string DvbIsdbcUnlocked => $"1 つの周波数・変調につき {DvbTuner.LockTimeoutMs} ms 待ち、FE_HAS_LOCK が立たなかった";
+
+    /// <summary>DVB の機材の ISDB-C の変調。QAM_AUTO でロックしたときだけ、ドライバが報告する変調を読む (<see cref="DvbTuner.CableModulationLabel"/>)</summary>
+    private static string DvbModulation(DvbTuner tuner) => DvbTuner.CableModulationLabel(
+        tuner.CableModulation, tuner.CableModulation == DvbTuner.QamAuto ? tuner.ReportedModulation() : null, tuner.TriedModulations);
+
     /// <summary>
     /// <c>--tune</c> が ISDB-C で出す、ロックと TSMF の判定 (CXD2856 の仕様書 8.6・8.7)。ヘッダーを受けていれば、相対 TS 番号ごとの TSID・original_network_id・有効かどうか・
     /// スロットの数と、選んだ TS、ヘッダーの 188 バイトも出す。TSID と original_network_id の並びは仕様書の推定なので、そう書いて出す
     /// </summary>
-    internal static IEnumerable<string> TsmfLines(bool locked, TsmfSelector? tsmf)
+    /// <param name="unlocked">ロックしなかったときに括弧で添える、機材ごとの待ち方 (<see cref="CxdIsdbcUnlocked"/>・<see cref="DvbIsdbcUnlocked"/>)</param>
+    internal static IEnumerable<string> TsmfLines(bool locked, TsmfSelector? tsmf, string unlocked)
     {
         if (!locked || tsmf is null)
         {
-            yield return $"ISDB-C: ロックしませんでした ({Cxd2856Frontend.IsdbcLockTimeoutMs} ms の間に、復調と TS のロックがそろわなかった)";
+            yield return $"ISDB-C: ロックしませんでした ({unlocked})";
             yield break;
         }
         yield return "ISDB-C: ロックしました";
