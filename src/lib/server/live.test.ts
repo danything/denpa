@@ -14,6 +14,7 @@ import {
   AUDIO_FORM,
   audioArgs,
   blameLiveHw,
+  CardNumber,
   CHASE_STREAM_HOLD,
   chaseForm,
   chaseRawServed,
@@ -1646,5 +1647,67 @@ describe("データ放送が選んだ音声のエンコード", () => {
     const main = encodeArgs(1, stereo, "h264");
     expect(main.join(" ")).toContain("-map 0:p:1:a:0 ");
     expect(main.join(" ")).not.toContain("a:0?");
+  });
+});
+
+/**
+ * **選局したエージェントのカードの番号を知らせる** (`CardNumber`。データ放送の `getIRDID`)。選局し直したら前の番号を渡さず、
+ * 応答を待つ間に別のエージェントへ移ったら古い応答を捨てる。双方向がオフなら知らせない
+ */
+describe("カードの番号", () => {
+  /** 訊いた順に、手で応答を返せる `cardIdOf` の代わり */
+  const setup = (network = true) => {
+    const answers = new Map<number, (id: string | null) => void>();
+    const told: string[] = [];
+    let agent: number | null = null;
+    const card = new CardNumber(
+      (asked) =>
+        new Promise((resolve) => {
+          answers.set(asked, resolve);
+        }),
+      () => network,
+      () => agent,
+      (id) => told.push(id),
+    );
+    const tune = (to: number) => {
+      agent = to;
+      return card.learn(to);
+    };
+    return { answers, told, card, tune };
+  };
+
+  test("応答を受けたら覚えて知らせ、選局し直したら前の番号を null に戻す", async () => {
+    const { answers, told, card, tune } = setup();
+    const first = tune(1);
+    answers.get(1)!("0000111122223333");
+    await first;
+    expect(card.id).toBe("0000111122223333");
+    expect(told).toEqual(["0000111122223333"]);
+
+    void tune(2);
+    expect(card.id).toBeNull();
+  });
+
+  test("応答を待つ間に別のエージェントへ移ったら、古い応答を捨てる", async () => {
+    const { answers, told, card, tune } = setup();
+    const first = tune(1);
+    const second = tune(2);
+    answers.get(1)!("0000111122223333");
+    await first;
+    expect(card.id).toBeNull();
+    expect(told).toEqual([]);
+
+    answers.get(2)!("4444555566667777");
+    await second;
+    expect(card.id).toBe("4444555566667777");
+    expect(told).toEqual(["4444555566667777"]);
+  });
+
+  test("双方向がオフなら訊かず、知らせない", async () => {
+    const { answers, told, card, tune } = setup(false);
+    await tune(1);
+    expect(answers.size).toBe(0);
+    expect(card.id).toBeNull();
+    expect(told).toEqual([]);
   });
 });

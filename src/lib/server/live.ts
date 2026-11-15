@@ -1439,6 +1439,41 @@ export function openingLine(
   );
 }
 
+/**
+ * **選局したエージェントのカードの番号を覚えて、観ている人に知らせる** (`Notice` の `card`。`Session.learnCard`)。
+ * データ放送の `getIRDID` に渡すもの。待たずに選局を進め、分かったら知らせる
+ */
+export class CardNumber {
+  /** いまのエージェントが復号に使うカードの番号。分からなければ null */
+  id: string | null = null;
+
+  constructor(
+    /** エージェントのカードの番号を訊く (`cardIdOf`) */
+    private readonly lookup: (agent: number) => Promise<string | null>,
+    /** 双方向がオンか (`settings().bmlNetwork`) */
+    private readonly network: () => boolean,
+    /** いま選局しているエージェント (`Session.agent`) */
+    private readonly current: () => number | null,
+    private readonly tell: (id: string) => void,
+  ) {}
+
+  /** エージェント `agent` で選局した。返す Promise は、応答を受けて知らせるか捨てるかを決めたところで解決する */
+  learn(agent: number): Promise<void> {
+    // 別のエージェントで選局し直したら、前のカードの番号は渡さない (取れなければ渡さないまま)
+    this.id = null;
+    // 双方向がオフなら知らせない。データ放送に渡すのは双方向がオンのときだけ (`DataBroadcast` の `cardId`)
+    if (!this.network()) return Promise.resolve();
+    return this.lookup(agent)
+      .then((id) => {
+        // 応答を待つ間に別のエージェントで選局し直していたら、古いほうは捨てる
+        if (id === null || this.current() !== agent || id === this.id) return;
+        this.id = id;
+        this.tell(id);
+      })
+      .catch(() => undefined);
+  }
+}
+
 class Session {
   private readonly viewers = new Set<Viewer>();
   /**
@@ -1777,8 +1812,8 @@ class Session {
     const clock = this.clockNotice();
     if (clock !== null) this.tellOne(viewer, clock);
     if (this.note !== null) this.tellOne(viewer, this.note);
-    if (this.cardId !== null)
-      this.tellOne(viewer, { type: "card", id: this.cardId });
+    if (this.card.id !== null)
+      this.tellOne(viewer, { type: "card", id: this.card.id });
   }
 
   /**
@@ -2512,27 +2547,20 @@ class Session {
   private readonly tuning: (() => void)[] = [];
   /** 送ったエージェント (`agents.id`)。スクランブルされたまま届いた理由を、そのエージェントのカードで決める (`endScrambled`) */
   private agent: number | null = null;
-  /** そのエージェントが復号に使うカードの番号 (`learnCard`)。分からなければ null */
-  private cardId: string | null = null;
+  /** そのエージェントが復号に使うカードの番号 (`learnCard`) */
+  private readonly card = new CardNumber(
+    cardIdOf,
+    () => settings().bmlNetwork,
+    () => this.agent,
+    (id) => this.tell({ type: "card", id }),
+  );
   private settled = false;
 
   /**
-   * **選局したエージェントのカードの番号を、観ている人に知らせる** (`Notice` の `card`)。データ放送の `getIRDID` に渡すもの。
-   * 待たずに選局を進め、分かったら知らせる。途中から来た人には `add` で渡す
+   * **選局したエージェントのカードの番号を、観ている人に知らせる** (`CardNumber`)。途中から来た人には `add` で渡す
    */
   private learnCard(agent: number): void {
-    // 別のエージェントで選局し直したら、前のカードの番号は渡さない (取れなければ渡さないまま)
-    this.cardId = null;
-    // 双方向がオフなら知らせない。データ放送に渡すのは双方向がオンのときだけ (`DataBroadcast` の `cardId`)
-    if (!settings().bmlNetwork) return;
-    void cardIdOf(agent)
-      .then((id) => {
-        // 応答を待つ間に別のエージェントで選局し直していたら、古いほうは捨てる
-        if (id === null || this.agent !== agent || id === this.cardId) return;
-        this.cardId = id;
-        this.tell({ type: "card", id });
-      })
-      .catch(() => undefined);
+    void this.card.learn(agent);
   }
 
   /**

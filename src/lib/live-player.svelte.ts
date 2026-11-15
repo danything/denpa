@@ -57,6 +57,7 @@ import { writeCookie } from "#lib/cookie.js";
 import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
+  dropsHeldFrame,
   holdsDown,
   LagMeter,
   PROBE_GIVE_UP,
@@ -1228,9 +1229,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     const { step } = decision;
     /*
      * サーバの入れ替え (`restarting`) の前後と、切れた接続を繋ぎ直したあとしばらく (`holdsDown`) は、回線が細いとして下げない。
-     * 届かないのは回線のせいではない。断り書きは出さず、段もそのまま
+     * 届かないのは回線のせいではない。断り書きは出さず、段もそのまま。上げた段を戻すとき (`revert`) は見送らない
      */
-    if (!revert && holdsDown(decision.reason, now, restartingAt, holdDownUntil))
+    if (holdsDown(decision.reason, now, restartingAt, holdDownUntil, revert))
       return;
     /*
      * 追っかけには音声だけが無い。段 3 のまま流す。互換モードも同じ (映像の無い fMP4 を canvas に流す経路を
@@ -2942,6 +2943,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
               notice.codecs,
               notice.codec === "audio" ? "h264" : notice.codec,
             );
+          /*
+           * **映像の無い局は、前の局のフレームをすぐ剥がす** (`dropsHeldFrame`)。次のコマが来ないので、待つと `HOLD_MOST` まで残る。
+           * canvas に描く経路は canvas に前の局のフレームが残っているので、それも隠す (次の局の 1 枚目で出し直す)
+           */
+          if (dropsHeldFrame(notice)) {
+            thaw();
+            if (canvas) engine?.hide();
+          }
         }
         return;
       }

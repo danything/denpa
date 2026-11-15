@@ -197,6 +197,25 @@ export function lineupJobs(lineup: CableLineup): string[] {
 }
 
 /**
+ * **NIT の一覧に無いチャンネルのうち、総当たりの残りとして列の後ろに戻すもの** (`scan.ts` の `adoptCable`)。
+ * `pulled` は列から抜いた総当たりの CATV、`seen` は列に入れた・回したチャンネル。
+ * 再送信の TS が NIT に載っていなければ全部戻す。載っていれば、前の控え (`previous`) にあるチャンネルだけ戻す。
+ * NIT に載らない搬送波 (BS4K の再送信の QC26 など) を回さずにいると、試し直しにも残すのにも入らず消える
+ * (`retryableChannel`・`keepUnlocked` は、回してロックしなかったチャンネルだけを見る)
+ */
+export function restChannels(
+  pulled: readonly string[],
+  seen: ReadonlySet<string>,
+  others: boolean,
+  previous: readonly AgentChannel[],
+): string[] {
+  const before = new Set(previous.map((entry) => entry.channel));
+  return pulled.filter(
+    (channel) => !seen.has(channel) && (!others || before.has(channel)),
+  );
+}
+
+/**
  * 読めたケーブル局の NIT に TS が載っているネットワーク (`original_network_id`)。
  * このネットワークの TS で NIT に載っていないものは、無くなった搬送波とみなす (`retryableChannel`)
  */

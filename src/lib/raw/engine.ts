@@ -295,6 +295,14 @@ export class RawEngine {
   }
 
   /**
+   * いま出ているフレームを隠す (映像の無い局を開いた)。**次のコマを描いたら (`shown`) また出す**。
+   * フレームは worker の canvas にあって画面の側から消せないので、canvas ごと見えなくする
+   */
+  hide(): void {
+    this.canvas.style.visibility = "hidden";
+  }
+
+  /**
    * もう届かない (録画の末尾まで読んだ)。残りを鳴らしきったら `ended`。
    *
    * **デコーダを読み終えるまでは `Playout` に伝えない。** 伝えると「末尾まで読んだのに鳴らすものが無い」が
@@ -487,6 +495,8 @@ export class RawEngine {
         break;
       case "shown":
         this.shownAt = Date.now();
+        // 映像の無い局で隠した canvas を、映像のある局の 1 枚目で出し直す (`hide`)
+        this.canvas.style.visibility = "";
         this.events.shown();
         break;
       case "size":
