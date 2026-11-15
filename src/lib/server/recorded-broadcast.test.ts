@@ -100,6 +100,29 @@ describe("録画に映像と音声があるか (recordedMedia)", () => {
       audio: true,
     });
   });
+
+  test("録り始めに PMT を読めなくても、あとで書かれれば読み直して決める (読み直しの間を待たない)", () => {
+    const path = recording(filler(3));
+    // 放送のコーデックは読めず、読み直しの間に入る
+    expect(recordedBroadcast(path, SERVICE)).toBe("mpeg2");
+    expect(recordedMedia(path, SERVICE)).toEqual({ video: true, audio: true });
+    // 録っているうちにラジオの PMT が書かれた
+    appendFileSync(
+      path,
+      stream(
+        packetize(0x0000, patSection([[SERVICE, PMT_PID]])),
+        packetize(PMT_PID, programMap(SERVICE, 0x110, [[0x0f, 0x110]])),
+      ),
+    );
+    expect(recordedMedia(path, SERVICE)).toEqual({ video: false, audio: true });
+  });
+
+  test("追っかけが放送のコーデックだけを覚えた録画も、PMT を読んで決める", () => {
+    const path = only([[0x0f, 0x110]]);
+    learnBroadcast(path, "mpeg2");
+    expect(broadcastDecided(path)).toBe(true);
+    expect(recordedMedia(path, SERVICE)).toEqual({ video: false, audio: true });
+  });
 });
 
 describe("録画の放送のコーデック (recordedBroadcast)", () => {

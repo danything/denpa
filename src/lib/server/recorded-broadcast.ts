@@ -97,18 +97,31 @@ export interface RecordedMedia {
 const contents = new Map<string, RecordedMedia>();
 
 /**
- * **録画に映像と音声があるか。** TS の録画は先頭の PMT を読んで決める (`recordedBroadcast` と同じ読み方・覚え方)。
+ * **録画に映像と音声があるか。** TS の録画は先頭の PMT を読んで決め、読めた答えを覚える (`recordedBroadcast` と同じ PMT)。
  * 映像の無い録画 (ラジオ・データ放送の局) はエンコードせず元の TS を置き (`recorder.finish`)、観る画面は音声だけで流す
  * (音声も無ければ無音。`playback.playbackPlan`)。
- * 4K の局の録画 (`.mmts`) と、PMT を読めない録画は両方あるものとして扱う (今までどおり)
+ *
+ * - **覚えていなければ、そのたびに PMT を読む。** `recordedBroadcast` の読み直しの間 (`UNDECIDED_WAIT`) は待たない。
+ *   追っかけが放送のコーデックだけを覚えた録画 (`learnBroadcast`) と、録り始めに PMT を読めなかった録画でも、録り終えたときに読み直して決める
+ * - 4K の局の録画 (`.mmts`) は両方ある
+ * - **PMT を読めない録画 (まだ書かれていない・壊れている) は、両方あるものとして扱う。** テレビの録画が今までどおりエンコードに回るように。
+ *   映像の無い録画を取り違えてエンコードしても、エンコードが失敗するだけで元の TS は残る
  */
-export function recordedMedia(
-  path: string,
-  program: number,
-  now = Date.now(),
-): RecordedMedia {
-  if (recordedTransport(path) !== "tlv") recordedBroadcast(path, program, now);
-  return contents.get(path) ?? { video: true, audio: true };
+export function recordedMedia(path: string, program: number): RecordedMedia {
+  const both = { video: true, audio: true };
+  if (recordedTransport(path) === "tlv") return both;
+  const held = contents.get(path);
+  if (held !== undefined) return held;
+  const media = headMedia(path, program);
+  if (media === undefined) return both;
+  const found = { video: media.video !== null, audio: media.audio };
+  remember(contents, path, found);
+  // 放送のコーデックも同じ PMT で決まる。まだ覚えていなければ覚える
+  if (!decided.has(path)) {
+    undecided.delete(path);
+    remember(decided, path, media.video === "hevc" ? "hevc" : "mpeg2");
+  }
+  return found;
 }
 
 /**

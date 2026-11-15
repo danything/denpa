@@ -2106,13 +2106,16 @@ class Session {
           stream = head.stream;
           // 読んだぶんは返ってきたストリームの先頭にある。ライブは起こし直してもこちらを使う
           if (feed !== null) feed = head.stream;
-          // 映像の無い局の PMT に音声も無い (データ放送だけの局)。ffmpeg に TS を渡さず、無音を流す (`encodeArgs` の `silent`)
-          if (!this.video && head.audio === false) {
-            this.silent = true;
+          /*
+           * 映像の無い局の PMT に音声も無い (データ放送だけの局)。ffmpeg に TS を渡さず、無音を流す (`encodeArgs` の `silent`)。
+           * PMT を読むたびに決め直す (音声が付けば下ろす)。読めなかった (`null`) なら音声があるものとして渡す
+           */
+          const silent = !this.video && head.audio === false;
+          if (silent && !this.silent)
             console.log(
               `[live] ${this.id}: 映像も音声も無い局なので、無音を流します`,
             );
-          }
+          this.silent = silent;
           /*
            * 指定した本数目が無ければ指定しない。`captionless` には覚えない。毎回 PMT を読むので、
            * 番組が替わって字幕が付けばすぐ出せる
