@@ -688,7 +688,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       const wantId = numberAttr(beitem, "message_id", 255);
       const wantVersion = numberAttr(beitem, "message_version", 255);
       for (const event of message.events) {
-        // 時刻指定 (NPT) のイベントは NPT を持たないので動かせない。すぐ起きるものだけ
+        // 起こすのはすぐ起きるものだけ。時刻指定 (NPT) のものは、NPT が達するとサーバが直して送る (`@danything/arib` の `dueEvents`)
         if (
           event.type !== "immediateEvent" ||
           event.eventMessageGroupId !== group

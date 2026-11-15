@@ -6,6 +6,7 @@
  * テレビのアプリは再生できる形式 (`?playable=`) を送り、サーバが同じ `pickOffer` で選んで `auto` で返す (`autoPick`)
  */
 
+import { CODEC_LABEL } from "../hw";
 import { codecsFor, type LiveCodec } from "../live";
 import {
   autoOrder,
@@ -445,10 +446,9 @@ export function failureText(
   return error === undefined ? "" : String(error);
 }
 
-const WAY_LABEL: Record<PlayCodec, string> = {
-  av1: "AV1",
-  hevc: "H.265",
-  h264: "H.264",
+/** 幕に添えるコーデックの名前。エンコードするものは設定と同じ (`#lib/hw.ts` の `CODEC_LABEL`) */
+const PLAY_CODEC_LABEL: Record<PlayCodec, string> = {
+  ...CODEC_LABEL,
   mpeg2: "MPEG-2",
 };
 
@@ -465,7 +465,7 @@ export function pickedText(
   picked: Picked,
   local = false,
 ): string {
-  const codec = WAY_LABEL[picked.codec];
+  const codec = PLAY_CODEC_LABEL[picked.codec];
   if (picked.way === "raw") return `${codec} (元の TS)`;
   if (picked.way === "stream") {
     const how = info !== null && transcodes(info, picked) ? "変換" : "詰め替え";
@@ -487,7 +487,7 @@ export function offersText(info: PlaybackInfo | null): string {
   return `サーバが出せる形式: ${info.offers
     .map(
       (offer) =>
-        `${WAY_LABEL[offer.codec]} ${offer.way}${offer.codecs === undefined ? "" : ` (${offer.codecs})`}`,
+        `${PLAY_CODEC_LABEL[offer.codec]} ${offer.way}${offer.codecs === undefined ? "" : ` (${offer.codecs})`}`,
     )
     .join("、")}`;
 }
