@@ -83,7 +83,11 @@
   }
 
   function checkContracts(): Promise<void> {
-    return run("check", "checkContracts", "契約を確認できませんでした");
+    return run(
+      "check",
+      "checkContracts",
+      "カードの契約を確かめられませんでした",
+    );
   }
 
   function testUnverified(): Promise<void> {

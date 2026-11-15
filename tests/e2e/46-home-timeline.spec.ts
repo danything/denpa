@@ -510,7 +510,7 @@ test.describe("ホームの 1 本の一覧", () => {
     expect(box.height).toBeGreaterThanOrEqual(63.5);
     // 1 段目に時刻と番組名、2 段目に局
     await expect(row.locator(".t-time")).toHaveText(
-      /\d{1,2}:\d{2}–\d{1,2}:\d{2}/,
+      /\d{1,2}:\d{2}〜\d{1,2}:\d{2}/,
     );
     await expect(row.locator(".row-meta")).toContainText("BS11");
     // 行を押すと再生、詳細は ⓘ から

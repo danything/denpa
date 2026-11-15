@@ -156,8 +156,7 @@
           ({item.note})</span
         >{/if}</span
     >
-    <span class="switch" data-on={item.on ? "" : undefined} aria-hidden="true"
-    ></span>
+    <span class="s-switch" class:on={item.on} aria-hidden="true"></span>
   </button>
 {/snippet}
 
@@ -319,37 +318,20 @@
   .volume {
     margin: 0.125rem 0 var(--dp-space-1);
   }
-  /* オン/オフのスイッチ。状態は行の `aria-checked` で読ませ、これは見た目だけ */
-  .switch {
-    position: relative;
-    flex-shrink: 0;
-    width: 2.25rem;
-    height: 1.25rem;
-    border-radius: var(--dp-radius-full);
-    /* 切っているときの地は文字色を薄めたもの。線の色 (`--dp-line`) では暗いほうで面に沈む */
-    background: color-mix(in srgb, currentColor 28%, transparent);
-    transition: background-color var(--dp-duration) var(--dp-ease);
-  }
-  .switch::after {
-    content: "";
-    position: absolute;
-    top: 0.125rem;
-    left: 0.125rem;
-    width: 1rem;
-    height: 1rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-on-video);
-    box-shadow: 0 1px 2px color-mix(in srgb, var(--dp-video) 30%, transparent);
-    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-  }
   /*
+   * オン/オフのスイッチ。形と動きは `app.css` の `.s-switch` で、ここは色だけ。状態は行の `aria-checked` で読ませ、これは見た目だけ。
+   * 切っているときの地は文字色を薄めたもの (線の色 `--dp-line` では暗いほうで面に沈む)。
    * 入っているときもテーマの主の色は使わない (映像の上はテーマで変えない。docs/design.md の「色」)。
    * 白を濃く敷いた溝にし、オン/オフは丸の位置でも分かる。メニューの面はいつも暗い (app.css の `.overlay-menu`)
    */
-  .switch[data-on] {
-    background: color-mix(in srgb, var(--dp-on-video) 60%, transparent);
+  .s-switch {
+    background: color-mix(in srgb, currentColor 28%, transparent);
   }
-  .switch[data-on]::after {
-    transform: translateX(1rem);
+  .s-switch::after {
+    background: var(--dp-on-video);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--dp-video) 30%, transparent);
+  }
+  .s-switch.on {
+    background: color-mix(in srgb, var(--dp-on-video) 60%, transparent);
   }
 </style>

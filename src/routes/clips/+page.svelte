@@ -417,6 +417,10 @@
   let hold: ReturnType<typeof setTimeout> | undefined;
   let held = false;
   let holdFrom = { x: 0, y: 0 };
+  $effect(() => () => {
+    clearTimeout(hold);
+    clearTimeout(copiedTimer);
+  });
   function onholdstart(clip: Clip, event: PointerEvent): void {
     held = false;
     clearTimeout(hold);
@@ -1024,7 +1028,7 @@
     width: 1.75rem;
     height: 1.75rem;
     border-radius: 50%;
-    background: color-mix(in srgb, var(--dp-video) 55%, transparent);
+    background: var(--dp-video-veil);
     color: transparent;
     box-shadow: inset 0 0 0 2px var(--dp-on-video);
     transition:
@@ -1226,7 +1230,7 @@
     padding: 2.5rem var(--dp-space-4) var(--dp-space-4);
     background: linear-gradient(
       to top,
-      color-mix(in srgb, var(--dp-video) 82%, transparent),
+      var(--dp-video-veil-strong),
       transparent
     );
     pointer-events: none;

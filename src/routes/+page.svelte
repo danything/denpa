@@ -95,7 +95,7 @@
 
   /** 取り消せるか。サーバ・番組表・検索と同じ判定 (`format.cancelable`) */
   const cancelable = (res: { state: string; end_at: number }) =>
-    isCancelable(res.state, res.end_at, Date.now());
+    isCancelable(res.state, res.end_at, minute.now);
 
   /** 端末への保存の結果。フォームではないので自前で持つ */
   let offlineNote = $state<Notice | null>(null);
@@ -336,7 +336,7 @@
     void data;
     return Date.now();
   });
-  /** 分ごとに進むいまの時刻 (`HomeContext.now`)。「いま」の時刻・あと何分か・進み具合のバーだけが使う */
+  /** 分ごとに進むいまの時刻 (`HomeContext.now`)。「いま」の時刻・あと何分か・進み具合のバーと、取り消せるか (`cancelable`) が使う */
   const minute = minuteClock();
 
   /** 終わった予約と、それで録れた録画を 1 本に (`mergeRecorded`)。録画の行が代わりに立つ */
@@ -825,8 +825,7 @@
       {#snippet older()}
         {#if data.recordings.length >= 300 && pastDone}
           <div class="row-empty muted small">
-            新しい順に 300
-            件まで表示しています。古いものは検索で探してください。
+            新しい順に 300 件まで表示しています。古いものは検索で探してください
           </div>
         {/if}
         {#if !pastDone}

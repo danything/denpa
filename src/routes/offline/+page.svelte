@@ -59,6 +59,8 @@
    * サーバからも消えることが分かる言葉で聞き返す
    */
   const deleting = arming('[data-testid="offline-delete"]');
+  /** 端末で消して、オンラインに戻ったらサーバでも消す録画の数 */
+  const pendingDeletes = $derived(Object.keys(offline.pendingDelete).length);
 
   async function load(): Promise<void> {
     list = (await videos.all()).sort((a, b) => b.startAt - a.startAt);
@@ -67,6 +69,7 @@
 
   onMount(() => () => {
     stop();
+    deleting.fire();
     for (const url of posterUrls.values()) URL.revokeObjectURL(url);
     posterUrls.clear();
   });
@@ -96,12 +99,14 @@
   async function play(item: OfflineVideo): Promise<void> {
     if (item.state !== "ready" || item.video === undefined) return;
     stop();
+    const mine = session;
     playing = item;
     src = URL.createObjectURL(item.video);
     poster =
       item.poster === undefined ? null : URL.createObjectURL(item.poster);
     // 前回の続きから。オフライン中の位置は resumeQueue に覚えている
     const kept = await resumeQueue.get(item.id);
+    if (mine !== session) return;
     startAt = kept?.at ?? 0;
     if (video !== null) video.currentTime = startAt;
   }
@@ -209,7 +214,7 @@
     if (playing === null) return;
     if (Math.abs(at - lastKept) < 5) return;
     lastKept = at;
-    // 落としたものはエンコードしたもの
+    // 端末に保存したものはエンコードしたもの
     void rememberResume(playing.id, at, length, "encoded");
   }
   function onTime(): void {
@@ -333,9 +338,10 @@
   {:else}
     <ul class="item-list">
       {#each list as item (item.id)}
+        {@const thumb = posterUrl(item)}
         <li class="row item">
-          {#if posterUrl(item) !== null}
-            <img src={posterUrl(item)} alt="" class="thumb" />
+          {#if thumb !== null}
+            <img src={thumb} alt="" class="thumb" />
           {:else}
             <div class="thumb blank"></div>
           {/if}
@@ -356,6 +362,14 @@
             <span class="tag keep">
               保存中{progress === null ? "…" : ` ${percent(progress)}`}
             </span>
+            <!-- 進み具合は件の面の下端いっぱいに敷く (ホームの行と同じ)。取れないときは動いているだけのバー -->
+            <progress
+              class="row-bar"
+              class:running={progress !== null}
+              value={progress ?? undefined}
+              max="1"
+              aria-label="端末への保存の進み具合"
+            ></progress>
           {:else if item.state === "failed"}
             <span class="tag error keep">保存に失敗</span>
           {:else}
@@ -378,34 +392,22 @@
           {:else}
             <button
               type="button"
-              class="small keep {deleting.armed === item.id
-                ? 'danger'
-                : 'outline danger'}"
+              class="small keep danger"
+              class:outline={deleting.armed !== item.id}
               onclick={() => remove(item)}
               data-testid="offline-delete"
             >
               {deleting.armed === item.id ? "端末とサーバから削除" : "削除"}
             </button>
           {/if}
-          <!-- 進み具合は件の面の下端いっぱいに敷く (ホームの行と同じ)。取れないときは動いているだけのバー -->
-          {#if item.state === "downloading"}
-            {@const progress = offline.entries[item.id]?.progress ?? null}
-            <progress
-              class="row-bar"
-              class:running={progress !== null}
-              value={progress ?? undefined}
-              max="1"
-              aria-label="端末への保存の進み具合"
-            ></progress>
-          {/if}
         </li>
       {/each}
     </ul>
   {/if}
 
-  {#if Object.keys(offline.pendingDelete).length > 0}
+  {#if pendingDeletes > 0}
     <p class="pending tiny muted">
-      {Object.keys(offline.pendingDelete).length} 件は、次にオンラインに戻ったときにサーバからも削除します。
+      {pendingDeletes} 件は、次にオンラインに戻ったときにサーバからも削除します。
     </p>
   {/if}
 </div>

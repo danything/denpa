@@ -212,7 +212,7 @@
 </script>
 
 <!-- 予約の行 (これから・録画中・「完了した予約も表示」で出る終わった予約) -->
-{#snippet resRow(item: Item & { kind: "res" }, nested: boolean)}
+{#snippet resRow(item: Item & { kind: "res" })}
   {@const res = item.res}
   <div
     data-testid="reservation-row"
@@ -302,7 +302,7 @@
 {/snippet}
 
 <!-- 録り逃しの行。観るものが無いので、押すと詳細だけ出す。置くのは畳むための削除だけ -->
-{#snippet missedRow(item: Item & { kind: "missed" }, nested: boolean)}
+{#snippet missedRow(item: Item & { kind: "missed" })}
   {@const res = item.res}
   <div
     data-testid="missed-row"
@@ -317,7 +317,6 @@
         start={res.start_at}
         end={res.end_at}
         name={res.name}
-        testid="missed-state"
         open={() => ctx.openMissed(res)}
       />
       <RowMeta
@@ -359,7 +358,7 @@
     録画の行。押すと再生。中身を読みたいときは行の「詳細」から。
     置き場と尺と切った CM の位置は属性にだけ持たせる (確かめる手段は残しておきたい)
 -->
-{#snippet recRow(item: Item & { kind: "rec" }, nested: boolean)}
+{#snippet recRow(item: Item & { kind: "rec" })}
   {@const rec = item.rec}
   {@const link = ctx.watchLink(rec)}
   {@const shown = rowState(rec)}
@@ -592,9 +591,9 @@
 {/snippet}
 
 {#if item.kind === "res"}
-  {@render resRow(item, nested)}
+  {@render resRow(item)}
 {:else if item.kind === "missed"}
-  {@render missedRow(item, nested)}
+  {@render missedRow(item)}
 {:else}
-  {@render recRow(item, nested)}
+  {@render recRow(item)}
 {/if}

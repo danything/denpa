@@ -68,17 +68,14 @@
     phase = "sending";
     total = file.size;
     try {
-      const begun = await call<{ offset: number; prepared: boolean }>(
-        "upload",
-        {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name: file.name,
-            size: file.size,
-            lastModified: file.lastModified,
-          }),
-        },
-      );
+      const begun = await call<{ offset: number }>("upload", {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          lastModified: file.lastModified,
+        }),
+      });
       sent = begun.offset;
       let retries = 0;
       while (sent < file.size) {

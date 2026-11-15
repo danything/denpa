@@ -452,11 +452,10 @@
       display: none;
     }
   }
+  /* 高さと字の大きさは設定の欄の段のまま (`app.css` の `.sections`。16px より小さいと iPhone が押したときに拡大する) */
   .encoder {
     width: auto;
     max-width: 100%;
-    padding-block: var(--dp-space-1);
-    font-size: var(--dp-text-sm);
   }
   .hw-line {
     margin-top: var(--dp-space-1);

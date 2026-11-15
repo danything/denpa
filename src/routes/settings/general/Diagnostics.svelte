@@ -459,7 +459,10 @@
 
       {#if rows.length === 0}
         <p class="small muted" data-testid="logs-empty">
-          {query.trim() !== "" || problemsOnly
+          {query.trim() !== "" ||
+          problemsOnly ||
+          !showServer ||
+          hiddenAgents.length > 0
             ? "当てはまるものはありません"
             : "ログはまだありません"}
         </p>
