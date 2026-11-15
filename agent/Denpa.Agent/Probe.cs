@@ -438,7 +438,7 @@ public static class Probe
                         output.WriteLine($"    {(last.Locked ? "ロック中" : "ロックしていない")}  C/N {(last.Cn is { } lastCn ? $"{lastCn:F1} dB" : "-")}  強度 {(last.StrengthDbm is { } lastDbm ? $"{lastDbm:F1} dBm (目安)" : "-")}");
                         foreach (var line in IsdbcSignalLines(failed.CableModulation, failed.CablePer, failed.IsdbcDetail)) output.WriteLine($"    {line}");
                     }
-                    // ロックしたのに TS が 1 パケットも届かなかった (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、ブリッジのバッファを捨てて選局し直す
+                    // ロックしたのに TS が 1 パケットも届かなかった (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、受信をやり直して選局し直す
                     if (failed.IsdbcLocked && failed.Tsmf is { Received: 0 }) RetryAfterFlush(failed, tuning, name, output);
                 }
                 // DVB の機材の ISDB-C は、渡した方式と変調 (ロックしなければ試した変調) と、ロックしていれば TSMF の判定を出す (ロックしなければ Tsmf は null)
@@ -481,21 +481,21 @@ public static class Probe
                 ? CountTlv(tuner.Output, name, options.EcmTest ? source : null, seconds, output, error)
                 : Count(tuner.Output, name, descramble ? new Descrambler(source) : null, seconds, 0, output, error);
             results.Add(new ChannelResult(name, true, measured.Rate, measured.Bytes, measured.Bytes == 0 ? "TS が届かない" : null));
-            // ロックしたのに TS が 1 バイトも届かなかった (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、ブリッジのバッファを捨ててからもう一度受ける
+            // ロックしたのに TS が 1 バイトも届かなかった (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、受信をやり直して (IT930x の仕様書 6.4) からもう一度受ける
             if (measured.Bytes == 0 && tuner is It930xTuner stalled)
             {
                 ShowTsOutput(stalled, output);
-                output.WriteLine("    ブリッジの入力を全部閉じて EP 0x84 をリセットし (0xDA1D)、入力を開け直してから、もう一度受けます");
+                output.WriteLine("    転送要求を取り消し、ブリッジの TS のバッファを捨て (0xDA1D)、EP 0x84 をリセットして出し直してから、もう一度受けます");
                 try
                 {
-                    stalled.FlushTs();
+                    stalled.RestartStream();
                     var again = Count(tuner.Output, name, null, seconds, 0, output, error);
-                    output.WriteLine(again.Bytes > 0 ? "    バッファを捨てたあと TS が届きました" : "    バッファを捨てても TS は届きません");
+                    output.WriteLine(again.Bytes > 0 ? "    受信をやり直したあと TS が届きました" : "    受信をやり直しても TS は届きません");
                     ShowBridge(stalled.Device, output);
                 }
                 catch (IOException failure)
                 {
-                    output.WriteLine($"    バッファを捨てられませんでした ({failure.Message})");
+                    output.WriteLine($"    受信をやり直せませんでした ({failure.Message})");
                 }
             }
             // IT930x の機材は C/N と強度も出す (受け終えたあとの値)
@@ -582,21 +582,21 @@ public static class Probe
 
     /// <summary>
     /// ISDB-C でロックしたのに TS が 1 パケットも届かず、TSMF の判定で失敗したとき (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、
-    /// ブリッジのバッファを捨ててから同じチャンネルを選局し直して、TS が届くようになったかを出す
+    /// 受信をやり直して (IT930x の仕様書 6.4) から同じチャンネルを選局し直して、TS が届くようになったかを出す
     /// </summary>
     private static void RetryAfterFlush(It930xTuner tuner, ChannelTable.Tuning tuning, string name, TextWriter output)
     {
         ShowTsOutput(tuner, output);
-        output.WriteLine("    ロックしたのに TS が届きませんでした。ブリッジの入力を全部閉じて EP 0x84 をリセットし (0xDA1D)、入力を開け直してから選局し直します");
+        output.WriteLine("    ロックしたのに TS が届きませんでした。転送要求を取り消し、ブリッジの TS のバッファを捨て (0xDA1D)、EP 0x84 をリセットして出し直してから選局し直します");
         try
         {
-            tuner.FlushTs();
+            tuner.RestartStream();
             tuner.Tune(tuning);
-            output.WriteLine($"    バッファを捨てたあと TS が届きました ({tuner.Tsmf?.Received ?? 0} パケット)");
+            output.WriteLine($"    受信をやり直したあと TS が届きました ({tuner.Tsmf?.Received ?? 0} パケット)");
         }
         catch (IOException failure)
         {
-            output.WriteLine($"    バッファを捨てて選局し直しても失敗しました: {name}: {failure.Message}{(tuner.Tsmf is { } tsmf ? $" ({tsmf.Received} パケット)" : "")}");
+            output.WriteLine($"    受信をやり直して選局し直しても失敗しました: {name}: {failure.Message}{(tuner.Tsmf is { } tsmf ? $" ({tsmf.Received} パケット)" : "")}");
         }
     }
 

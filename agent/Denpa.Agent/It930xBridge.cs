@@ -138,24 +138,51 @@ public sealed class It930xBridge
     /// </summary>
     public static readonly IReadOnlyList<byte> SyncBytes = [0x17, 0x27, 0x37, 0x57, 0x67];
 
-    /// <summary>EP 0x84 の 1 回の転送の大きさ (SDK の <c>URB_BUFSIZE</c>。188 × 348 = 65,424 バイト)</summary>
+    /// <summary>
+    /// EP 0x84 の 1 回の転送の大きさ (ブリッジの側。<see cref="Ep4Length"/> に 4 で割って書く)。188 × 348 = 65,424 バイトで、しきい値は 0x3FE4。
+    /// IT930x の仕様書 6.4 の PLEX の公開ドライバーの値で、PX-MLT5PE・PX-Q3PE4・PX-MLT8PE の実機で受けられている。
+    /// 仕様書 11.3 が選んだ 188 × 816 = 153,408 バイトにはしない。ブリッジはしきい値までたまってから転送を渡し、時間で早く区切るとは仕様書のどこにも無いので、
+    /// 1 回の転送が埋まるまでの時間がそのまま最初の TS が届くまでの遅れになる。地上波 1 本 (約 16.85 Mbps) で、65,424 バイトは約 31 ms、153,408 バイトは約 73 ms。
+    /// ライブの放送のままの経路は、始まりの遅れを短くするのを先にする
+    /// </summary>
     public const int TsTransferSize = 188 * 348;
 
+    /// <summary>EP 0x84 の最大パケット長 (<c>IT9300User_USB20_MAX_PACKET_SIZE</c>。High-Speed の bulk)</summary>
+    public const int TsMaxPacket = 512;
+
     /// <summary>
-    /// EP 0x84 に出したままにする転送要求の数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>)。
-    /// 64 × 65,424 バイトは約 4 MB で、5 つの入力の合計が 200 Mbps でも約 160 ms ぶんを受けておける。
-    /// 読み出しのスレッドが CPU の制限や GC で止まっても、ブリッジのバッファを溢れさせないため。溢れると、電源を抜くまで TS が届かなかった
-    /// (<see cref="It930xOverflow"/>)。Linux の usbfs が全機材で使える量 (既定 16 MB) に、IT930x の機材 3 台 (約 12.6 MB) と
-    /// CECH-ZD1 J (約 1 MB)・PIX-DT295 (約 0.5 MB) を足した約 14.1 MB が収まる。
-    /// 16 のときも、PX-MLT5PE の実機で 5 つの受信機がそれぞれ約 30 Mbps を流して足りた (2026-11-10)
+    /// ホストが出す 1 回の転送要求の大きさ。<see cref="TsTransferSize"/> を最大パケット長の倍数に切り上げた 65,536 バイト
+    /// (IT930x の仕様書 6.4 の WinUSB 版の実装も、同じように 512 の倍数に切り上げる)。
+    /// WinUSB の RAW_IO は、最大パケット長の倍数でない転送要求を受け付けないため。ほかの OS でも同じ値にする。
+    /// ブリッジは 65,424 バイトごとに短いパケット (400 バイト) で区切ると推定している (前は転送要求も 65,424 バイトで、区切らなければ誤りになるはずだが、実機で受けられていた)。区切れば転送はそこで終わる。
+    /// 区切らずに続けて送っても、512 バイトの倍数なので、パケットが転送要求の残りに入りきらない誤り (EOVERFLOW) にはならない。受けたバイト列は、転送の区切りによらず分けられる (<see cref="It930xTsDemux"/>)
+    /// </summary>
+    public const int TsRequestSize = (TsTransferSize + TsMaxPacket - 1) / TsMaxPacket * TsMaxPacket;
+
+    /// <summary>
+    /// EP 0x84 に出したままにする転送要求の数。仕様書 6.4 の公開の実装は 5〜8 本 (多くは 153,408 バイト × 6 で約 0.9 MB)。
+    /// こちらは 64 × 65,536 バイト (約 4.2 MB) で、5 つの入力の合計が 200 Mbps でも約 170 ms ぶんを受けておける。
+    /// 公開の実装は完了のコールバックか優先度の高いスレッドで出し直すが、こちらは読み出しのスレッドが Read の中でしか出し直さない。
+    /// そのスレッドが CPU の制限や GC で止まっても、ブリッジのバッファを溢れさせないため (<see cref="It930xOverflow"/>)。
+    /// Linux の usbfs が全機材で使える量 (既定 16 MB) に、IT930x の機材 3 台 (約 12.6 MB) と CECH-ZD1 J (約 1 MB)・PIX-DT295 (約 0.5 MB) を足した約 14.1 MB が収まる
     /// </summary>
     public const int TsDepth = 64;
 
+    /// <summary>受信の始めにブリッジの TS のバッファを捨てるとき (<see cref="PurgeTs"/>)、EP 0x84 から読む長さ (IT930x の仕様書 6.4)</summary>
+    public const int PurgeLength = 1024;
+
+    /// <summary><see cref="PurgeTs"/> の最初の読み出しの時間切れ (ms。IT930x の仕様書 6.4・10)</summary>
+    public const int PurgeTimeoutMs = 2000;
+
+    /// <summary>
+    /// <see cref="PurgeTs"/> で最初のパケットが届いたあと、残りを待つ時間切れ (ms。仕様書に無い)。仕様書は 512 バイトで時間切れになるのを成功とするので、
+    /// 2000 ms の残りを待つと、ふつうの場合に受信の始めが毎回 2 秒遅れる。続きのパケットがあれば、同じ転送の 2 つ目としてもうブリッジに来ている
+    /// (High-Speed の 512 バイトは 1 µs ほどで、USB の予定の 1 マイクロフレームは 125 µs)。OS の予定と応答の遅れを見込んで 20 ms にする
+    /// </summary>
+    public const int PurgeRestTimeoutMs = 20;
+
     /// <summary>入力を全部閉じてから EP 0x84 をリセットするまでの待ち (ms。SDK の <c>DRV_ResetRxPort</c> の <c>mdelay(10)</c>)</summary>
     public const int InputsOffSettleMs = 10;
-
-    /// <summary>EP 0x84 の最大パケット長 (<c>IT9300User_USB20_MAX_PACKET_SIZE</c>)</summary>
-    private const int TsMaxPacket = 512;
 
     // TS の経路のレジスタ (brRegister.h)。位置と幅は 1 ビットのものだけ添える
     /// <summary><c>p_br_mp2if_ignore_sync_byte</c></summary>
@@ -490,8 +517,50 @@ public sealed class It930xBridge
     }
 
     /// <summary>
+    /// ブリッジの TS のバッファを捨てる (IT930x の仕様書 6.4 の「受信の始め」の 1)。<c>0xDA1D</c> の bit0 ← 1、EP 0x84 から <see cref="PurgeLength"/> バイトを
+    /// <see cref="PurgeTimeoutMs"/> まで読む、<c>0xDA1D</c> の bit0 ← 0 (読み出しが失敗しても書く)。EP 0x84 の転送要求を出していない間に呼ぶ。読んだバイトの数を返す。
+    ///
+    /// <para>
+    /// 仕様書は 1,024 バイトの読み出しを 1 回で、512 バイトを読んで時間切れなら成功とする。Linux の usbfs の同期の bulk の読み出しは、
+    /// 時間切れのときに読めた長さを返さないので、最大パケット長 (512 バイト) ずつ読む。
+    /// 1,024 バイトの転送で時間切れになる長さは 0 か 512 だけ (短いパケットが来れば転送はそこで終わる) なので、届いたかどうかの分け方は 1 回の読み出しと同じ。
+    /// 最初のパケットは <see cref="PurgeTimeoutMs"/> まで待ち、2 つ目は <see cref="PurgeRestTimeoutMs"/> だけ待つ (ふつうの 512 バイトのときに 2 秒待たないため。仕様書と違う所)
+    /// </para>
+    /// </summary>
+    public int PurgeTs()
+    {
+        WriteRegisterBits(Mp2Reset, 0, 1, 1);
+        try
+        {
+            Span<byte> buffer = stackalloc byte[TsMaxPacket];
+            var total = 0;
+            while (total < PurgeLength)
+            {
+                // 最初のパケットは 2000 ms まで待ち、そのあとは短く待つ (PurgeRestTimeoutMs)
+                var got = _usb.Read(TsIn, buffer, total == 0 ? PurgeTimeoutMs : PurgeRestTimeoutMs);
+                if (got <= 0) break;
+                total += got;
+                if (got < TsMaxPacket) break;
+            }
+            return total;
+        }
+        finally
+        {
+            WriteRegisterBits(Mp2Reset, 0, 1, 0);
+        }
+    }
+
+    /// <summary>
+    /// EP 0x84 をリセットする (IT930x の仕様書 6.4 の「受信の始め」の 3)。ストールをクリアする要求 (CLEAR_FEATURE の ENDPOINT_HALT) をデバイスへ送り、ホストの側のデータトグルも戻す
+    /// (Linux は USBDEVFS_CLEAR_HALT、Windows は WinUsb_ResetPipe。macOS の ClearPipeStall はホストの側だけ)。
+    /// 仕様書の資料は、ホストの側だけ・両方・しないで違い、どれも受信できている。
+    /// 両方にするのは、<c>0xDA1D</c> でブリッジの側のデータトグルが戻るかが分からず、ホストの側だけを戻すと食い違うおそれがあるため (推定)。転送要求を出す前に呼ぶ
+    /// </summary>
+    public void ResetTsEndpoint() => _usb.ClearHalt(TsIn);
+
+    /// <summary>
     /// 入力 0〜4 のうち使う入力 (<see cref="ConfigureTs"/> で同期バイトが 0 でないもの) を全部開ける (SDK の <c>IT930x_probe</c> の「Enable TsPort」: <c>IT9300_enableTsPort</c> を入力ごと → <c>IT9300_setIgnoreFail</c>)。
-    /// 開けるのは最初の受信機を開いたときの 1 回 (と、バッファを捨てたあとの <see cref="It930xDevice.FlushTs"/>) で、受信機ごとには開け閉めしない。SDK も、受信を始める・止めるときは EP 0x84 の転送要求だけを出し入れし、入力には触らない。
+    /// 開けるのは最初の受信機を開いたときの 1 回で、受信機ごとには開け閉めしない。SDK と IT930x の仕様書 6.4 も、受信を始める・止めるときは EP 0x84 の転送要求だけを出し入れし、入力には触らない。
     /// 5 つの入力は 1 つの経路にまとまるので、ほかの入力が流している間に 1 つだけ開け閉めしない
     /// </summary>
     /// <remarks>使わない入力は閉じたままにする (IT930x の仕様書 5)</remarks>
@@ -507,7 +576,8 @@ public sealed class It930xBridge
 
     /// <summary>
     /// 入力 0〜4 を全部閉じ、<see cref="InputsOffSettleMs"/> 待ってから EP 0x84 をリセットする (SDK の <c>DRV_ResetRxPort</c> の閉じる側。
-    /// <c>p_br_reg_mp2_sw_rst</c> に 1 を書いてから 0 を書く)。機材を閉じるときと、TS が届かないときにブリッジのバッファを捨てるときに使う
+    /// <c>p_br_reg_mp2_sw_rst</c> に 1 を書いてから 0 を書く)。機材を閉じるときと、開いたときに溢れていてリセットし直すとき (<see cref="ResetTs"/>) に使う。
+    /// IT930x の仕様書 6.4 の公開の実装は受信の終わりにブリッジへ書かず、入力も開けたまま。こちらは閉じるときに入力を閉じる (<see cref="It930xDevice"/> の閉じる順)
     /// </summary>
     public void DisableTsInputs()
     {

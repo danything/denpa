@@ -302,7 +302,7 @@ internal sealed class CxdBoard : IIt930xBoard
 /// **ロックの順。** 受信機は並べて選局されるので (常駐のスキャン)、ロックは次の順でだけ取り、逆には取らない。
 /// <c>Registry</c> → この機材の <c>_gate</c> (使っている側の数)。
 /// <see cref="It930xTuner"/> の <c>_gate</c> → 受信機ごとの <c>_receiverGates</c> (<see cref="Frontend"/>・<see cref="CxdBoard.KeepMatching"/>) → <see cref="Cxd2856Frontend"/> の受信機の操作 →
-/// 同じバスの受信機で 1 つのバスのロック (<c>_buses</c>) → <see cref="It930xBridge"/> のコマンドのロック。<see cref="FlushTs"/> は <c>_gate</c> を持ったままブリッジのコマンドを送る (<c>_gate</c> → ブリッジのコマンドのロック)。LNB の給電の <c>_lnbGate</c> → ブリッジのコマンドのロック。
+/// 同じバスの受信機で 1 つのバスのロック (<c>_buses</c>) → <see cref="It930xBridge"/> のコマンドのロック。<see cref="RestartStream"/> は <c>_gate</c> を持ったままブリッジのコマンドを送り、読み出しのスレッドが止まるのを待つ (読み出しのスレッドは <c>_gate</c> を取らない) (<c>_gate</c> → ブリッジのコマンドのロック)。LNB の給電の <c>_lnbGate</c> → ブリッジのコマンドのロック。
 /// <see cref="CxdBoard.KeepMatching"/> はほかの受信機の <c>_receiverGates</c> と受信機の操作を取るが、その受信機の <see cref="It930xTuner"/> の <c>_gate</c> は取らない
 /// (選局の途中なら、受信機の操作のロックで選局が終わるのを待つ)。I2C の並びが同じバスで交わらないことは It930xConcurrencyTests.cs で確かめる
 /// </para>
@@ -575,7 +575,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// ブリッジの設定と電源 (IT930x の仕様書 4.2・5・7.2・7.3)。そのあと EP 0x84 を読み始める。
+    /// ブリッジの設定と電源 (IT930x の仕様書 4.2・5・7.2・7.3)。そのあと受信を始める (<see cref="StartStream"/>)。
     /// 入力は、最初の受信機を開いたときに機種が使うものを全部開ける (<see cref="OpenInputs"/>)
     /// </summary>
     private void Setup()
@@ -589,24 +589,140 @@ public sealed class It930xDevice
         Bridge.ConfigureTs(new bool[It930xBridge.TsInputs], Model.SyncBytes);
         RecoverOverflow();
         if (Model.PowerWhileOpen) Power(true);
-        // SDK (IT930x_probe) と同じく、EP 0x84 の転送要求を出して残りを読み捨ててから入力を開ける。ブリッジに来たパケットは読み続け、出口の無い入力のものは捨てる
-        _reader = new Thread(ReadTs) { IsBackground = true, Name = "it930x-ts" };
-        _reader.Start();
         try
         {
-            // 転送要求を出し終える (読み出しのスレッドが OpenInStream から戻る) まで待つ。出せなかったら、入力を開けずに開くのを失敗にする
-            if (!_readerOpened.Wait(ReaderStartTimeout) || !_readerRunning)
-            {
-                throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しを始められませんでした");
-            }
-            if (_faulted) throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しが、開いている間に失敗しました");
+            StartStream();
         }
         catch
         {
             // 開くのに失敗した機材は呼ぶ側が USB を閉じるので、その前に読み出しを止める
-            _stopping = true;
-            _reader.Join(TimeSpan.FromSeconds(2));
+            StopReader();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 受信を始める (IT930x の仕様書 6.4 の「受信の始め」)。ブリッジの TS のバッファを捨て (<see cref="It930xBridge.PurgeTs"/>)、EP 0x84 をリセットし
+    /// (<see cref="It930xBridge.ResetTsEndpoint"/>)、転送要求を全部出す (<see cref="StartReader"/>)。復調器の TS の端子は、受信機ごとに選局したときに出す。
+    ///
+    /// <para>
+    /// 仕様書の公開の実装は、受信している受信機が 0 から 1 になるたびにこれをし、最後の受信機が止めるときに転送要求を取り消す。
+    /// こちらは機材を開いている間ずっと転送要求を出しておくので、機材を開くたびと、受信をやり直すとき (<see cref="RestartStream"/>) にする。
+    /// 開くときは入力を閉じたままで捨てる (PLEX の公開ドライバーと同じ時期。仕様書 6.4 の [P])
+    /// </para>
+    /// <para>
+    /// **捨てる読み出しで何も届かなくても、受信は始める** (仕様書の公開の実装は受信の開始を失敗にする。仕様書と違う所)。
+    /// 開くのを失敗にすると内蔵カードリーダーも使えなくなるが、TS が届かないかは、選局でロックしたあとに確かめられる (<see cref="It930xTuner"/>) ため。読んだバイトの数は記録に出す
+    /// </para>
+    /// </summary>
+    private void StartStream()
+    {
+        int purged;
+        try
+        {
+            purged = Bridge.PurgeTs();
+        }
+        catch (IOException error) when (error is not (UsbGoneException or It930xException))
+        {
+            // EP 0x84 の読み出しの失敗 (ストールなど)。このあと EP 0x84 をリセットする
+            purged = -1;
+            Log.Write($"[{Label}] 受信の始めに、ブリッジの TS のバッファを捨てる読み出しが失敗しました ({error.Message})。EP 0x84 をリセットして続けます");
+        }
+        if (purged >= 0)
+        {
+            Log.Write(purged > 0
+                ? $"[{Label}] 受信の始めに、ブリッジの TS のバッファを捨てました (EP 0x84 から {purged} バイト)"
+                : $"[{Label}] 受信の始めにブリッジの TS のバッファを捨てる読み出しで、EP 0x84 から {It930xBridge.PurgeTimeoutMs} ms 待っても何も届きませんでした。続けます");
+        }
+        try
+        {
+            Bridge.ResetTsEndpoint();
+        }
+        catch (IOException error) when (error is not UsbGoneException)
+        {
+            Log.Write($"[{Label}] EP 0x84 をリセットできませんでした ({error.Message})。そのまま転送要求を出します");
+        }
+        StartReader();
+    }
+
+    /// <summary>
+    /// 読み出しのスレッドを始め、EP 0x84 の転送要求を出し終える (読み出しのスレッドが OpenInStream から戻る) まで待つ。
+    /// 出せなかったら <see cref="IOException"/> (読み出しのスレッドが、開けていた入力を閉じている)
+    /// </summary>
+    private void StartReader()
+    {
+        _stopping = false;
+        _readerRunning = false;
+        _readerOpened.Reset();
+        _reader = new Thread(ReadTs) { IsBackground = true, Name = "it930x-ts" };
+        _reader.Start();
+        if (!_readerOpened.Wait(ReaderStartTimeout) || !_readerRunning)
+        {
+            throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しを始められませんでした");
+        }
+        if (_faulted) throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しが、開いている間に失敗しました");
+    }
+
+    /// <summary>読み出しのスレッドを止め、転送要求を取り消し終えるまで待つ。止まれば true</summary>
+    private bool StopReader()
+    {
+        _stopping = true;
+        return _reader?.Join(TimeSpan.FromSeconds(2)) ?? true;
+    }
+
+    /// <summary>
+    /// 受信をやり直す (IT930x の仕様書 6.4・6.5)。転送要求を全部取り消してから、受信を始める手順 (<see cref="StartStream"/>) をする。入力は開けたままで触らない。
+    /// 仕様書の公開の実装で、溢れたあとにブリッジの側で戻す操作は受信の始めのバッファを捨てることだけで、そのあと TS が戻るかは確かめられていない (仕様書 12)。
+    /// 流しているほかの受信機の TS も、その間は欠ける。閉じた機材・読み出しが失敗した機材では何もせずに false を返す。
+    /// 途中で失敗したら、読む側のいない入力を閉じ、機材を使えないものにしてから例外を送出する
+    /// </summary>
+    /// <param name="why">記録に出すきっかけ (「受信機 0 の TS が届かないため」)</param>
+    public bool RestartStream(string why)
+    {
+        lock (_gate)
+        {
+            if (_closed || _faulted) return false;
+            Log.Write($"[{Label}] {why}、受信をやり直します (転送要求を取り消し、ブリッジの TS のバッファを捨て、EP 0x84 をリセットして出し直す)");
+            try
+            {
+                if (!StopReader()) throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しを止められませんでした");
+                StartStream();
+                return true;
+            }
+            catch (Exception error) when (error is IOException or ObjectDisposedException)
+            {
+                /*
+                 * やり直せなかったら、機材を使えないものにして入力を閉じる。読み出しのスレッドが止まらなかった・転送要求を出し終えるのを待ちきれなかったときも、
+                 * 止める印を立てて終わらせる (残ったスレッドが転送要求を出し続けていても、読む側として当てにしない)。次に取る側が開き直す。
+                 * 読み出しのスレッドが失敗して先に閉じていても、もう一度閉じるだけ
+                 */
+                _stopping = true;
+                var faulted = _faulted;
+                _faulted = true;
+                if (error is not UsbGoneException) CloseInputs();
+                if (!faulted)
+                {
+                    for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete(error.Message);
+                }
+                throw;
+            }
+        }
+    }
+
+    /// <summary>受信をやり直した溢れ (<see cref="RestartOnce"/>。同じ溢れのままでは 1 回だけ)。<c>_gate</c> の中で読み書きする</summary>
+    private It930xOverflow? _restartedFor;
+
+    /// <summary>
+    /// 全体の溢れが立ったままで、ロックした受信機の TS が届かないときに、受信を 1 回だけやり直す (<see cref="RestartStream"/>)。
+    /// 同じ溢れのまま前にやり直していれば、やり直さずに false を返す
+    /// </summary>
+    internal bool RestartOnce(It930xOverflow overflow, string why)
+    {
+        lock (_gate)
+        {
+            if (overflow.SameAs(_restartedFor)) return false;
+            _restartedFor = overflow;
+            return RestartStream(why);
         }
     }
 
@@ -761,10 +877,10 @@ public sealed class It930xDevice
     {
         try
         {
-            using var input = _usb.OpenInStream(It930xBridge.TsIn, It930xBridge.TsTransferSize, It930xBridge.TsDepth);
+            using var input = _usb.OpenInStream(It930xBridge.TsIn, It930xBridge.TsRequestSize, It930xBridge.TsDepth);
             _readerRunning = true;
             _readerOpened.Set();
-            var buffer = new byte[It930xBridge.TsTransferSize];
+            var buffer = new byte[It930xBridge.TsRequestSize];
             while (!_stopping)
             {
                 // 転送要求を出し直すのは Read の中だけ。Read の外にいた時間 (受信機ごとに分ける処理・スレッドが止められていた間) を測る
@@ -884,25 +1000,6 @@ public sealed class It930xDevice
                 CloseInputs();
                 throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しが、開いている間に失敗しました");
             }
-        }
-    }
-
-    /// <summary>
-    /// ブリッジの TS のバッファを捨てる (IT930x の仕様書 6.3)。SDK の <c>DRV_ResetRxPort</c> と同じく、入力を全部閉じ、10 ms 待ってから <c>0xDA1D</c> に 1 と 0 を書き、
-    /// 入力を全部開け直す。流しているほかの受信機の TS も、その間は欠ける。ロックしているのに TS が届かないときに <c>--tune</c> が試す。
-    /// 閉じた機材では何もしない (閉じる処理が閉じた入力を開け直さない)。閉じる処理とは <c>_gate</c> で交わらないようにする
-    /// </summary>
-    public void FlushTs()
-    {
-        lock (_gate)
-        {
-            if (_closed) return;
-            // 閉じるのに失敗したら、その例外をそのまま送出する。閉じきったか分からない入力を開け直さず、元の失敗を隠さない
-            Bridge.DisableTsInputs();
-            // 読み出しが失敗した機材では開け直さない (読む側がいない)。開け直す前後に失敗したら、読み出しのスレッドと前後しても最後に閉じる
-            if (!_inputsOpen || _faulted) return;
-            Bridge.EnableTsInputs();
-            if (_faulted) CloseInputs();
         }
     }
 
@@ -1231,8 +1328,7 @@ public sealed class It930xDevice
             Log.Write($"[{Label}] TS の入力を閉じられなかったので、受信機をスリープにして電源を切ってから EP 0x84 の読み出しを止めます");
             Quiet();
         }
-        _stopping = true;
-        _reader?.Join(TimeSpan.FromSeconds(2));
+        StopReader();
         for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete();
         if (inputsClosed) Quiet();
         _usb.Dispose();
@@ -1368,10 +1464,10 @@ public sealed class It930xTuner : ITuneDevice
         lock (_gate) return (_frontend as CxdReceiver)?.Chip.ReadTsOutput();
     }
 
-    /// <summary>ブリッジの TS のバッファを捨てる (IT930x の仕様書 6.3。<see cref="It930xDevice.FlushTs"/>)。<c>--tune</c> が、TS が届かないときに試す</summary>
-    public void FlushTs()
+    /// <summary>受信をやり直す (IT930x の仕様書 6.4。<see cref="It930xDevice.RestartStream"/>)。<c>--tune</c> が、TS が届かないときに試す</summary>
+    public void RestartStream()
     {
-        lock (_gate) _device?.FlushTs();
+        lock (_gate) _device?.RestartStream("TS が届かないため");
     }
 
     /// <summary>初期化の前に読んだチューナーの <c>62</c> (CXD2856 の仕様書 10.3。<see cref="Cxd2856Frontend.PowerProbe"/>)。<c>--tune</c> が出す。CXD2856ER の機種だけ</summary>
@@ -1617,24 +1713,37 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>
     /// 全体の溢れが立ったままの機材で、ロックした受信機の TS が EP 0x84 から届くかを確かめる (流し始めたあと)。
     /// <paramref name="before"/> (流し始める前に数えた、この受信機の入力のパケット) から増えれば、印は立ったままでも TS は届くので、この機材を使い続ける。
-    /// <see cref="TsProbeMs"/> 待っても増えなければ、閉じるまでこの機材の選局を断り (<see cref="It930xDevice.Jammed"/>)、この選局も断る。
+    /// <see cref="TsProbeMs"/> 待っても増えなければ、受信を 1 回だけやり直して (<see cref="It930xDevice.RestartOnce"/>。IT930x の仕様書 6.4 の受信の始めの手順)、もう一度 <see cref="TsProbeMs"/> 待つ。
+    /// それでも増えなければ、閉じるまでこの機材の選局を断り (<see cref="It930xDevice.Jammed"/>)、この選局も断る。
     /// 同じ溢れのまま、並べて選局したほかの受信機に TS が届いていれば、この選局だけを <see cref="TsMissing"/> で失敗にする (<see cref="TunerStalledException"/>。プールはほかのチューナーで選局し直す)
     /// </summary>
     private void Probe(It930xDevice device, It930xOverflow suspect, long before)
     {
         var waited = Stopwatch.StartNew();
+        var flowing = Arrives(device, before)
+            || (device.RestartOnce(suspect, $"全体の溢れが立ったままで、受信機 {_receiver} がロックしてから {TsProbeMs} ms 待っても TS が届かないため")
+                && Arrives(device, device.InputPackets(_receiver)));
+        if (flowing)
+        {
+            device.Confirm(_receiver, suspect, flowing: true, waited.ElapsedMilliseconds);
+            return;
+        }
+        var blocked = device.Confirm(_receiver, suspect, flowing: false, waited.ElapsedMilliseconds);
+        StopOutput();
+        if (blocked) Refuse(suspect);
+        throw new TunerStalledException(TsMissing);
+    }
+
+    /// <summary>この受信機の入力のパケットが <paramref name="before"/> から <see cref="TsProbeMs"/> のうちに増えたか</summary>
+    private bool Arrives(It930xDevice device, long before)
+    {
+        var waited = Stopwatch.StartNew();
         while (device.InputPackets(_receiver) == before)
         {
-            if (waited.ElapsedMilliseconds >= TsProbeMs)
-            {
-                var blocked = device.Confirm(_receiver, suspect, flowing: false, waited.ElapsedMilliseconds);
-                StopOutput();
-                if (blocked) Refuse(suspect);
-                throw new TunerStalledException(TsMissing);
-            }
+            if (waited.ElapsedMilliseconds >= TsProbeMs) return false;
             Thread.Sleep(5);
         }
-        device.Confirm(_receiver, suspect, flowing: true, waited.ElapsedMilliseconds);
+        return true;
     }
 
     /// <summary>
