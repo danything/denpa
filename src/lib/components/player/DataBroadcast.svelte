@@ -67,7 +67,7 @@
     /** 通知を受け取る関数を預ける。`null` を渡すと外れる */
     listen: (handler: ((message: ResponseMessage) => void) | null) => void;
     /**
-     * 指のリモコン (`Remote.svelte`) から押すための関数 (bind で受け取る)。入れ物ができたら入り、畳んだら null。
+     * 指のリモコン (`Remote.svelte`) から押すための関数 (bind で受け取る)。入れ物ができたら入り、破棄したら null。
      * 有るかどうかが、そのままリモコンを出すかどうか
      */
     press?: ((code: number) => void) | null;
@@ -96,7 +96,7 @@
     tune?: ((service: Service) => boolean) | null;
     /**
      * 文書が主音声を替えた (`setMainAudioStream`)。PMT の音声の ES の何本目か (0 から)。null はふだんの音声に戻す。
-     * エンジンを畳んだとき (局が替わった・閉じた) も null。渡さなければ文書の切り替えは音に出ない
+     * エンジンを破棄したとき (局が替わった・閉じた) も null。渡さなければ文書の切り替えは音に出ない
      */
     mainAudio?: ((index: number | null) => void) | null;
     /**
@@ -292,7 +292,7 @@
   let host = $state<HTMLDivElement | null>(null);
   /** いま動いているエンジン */
   let engine = $state<Bml | null>(null);
-  /** 文書が主音声を替えているか (`mainAudio`)。畳むときに戻す */
+  /** 文書が主音声を替えているか (`mainAudio`)。破棄するときに戻す */
   let audioChosen = false;
   /** 読み込み中か。**押してすぐは何も出ないので、「データ取得中」を出す** */
   let loading = $state(false);
@@ -813,7 +813,7 @@
     if (want !== null) void open();
   });
 
-  // 受信したまま開いた・閉じた。エンジンが無ければ (読み込み中・受信していない) 作るとき・畳むときに済む
+  // 受信したまま開いた・閉じた。エンジンが無ければ (読み込み中・受信していない) 作るとき・破棄するときに済む
   $effect(() => {
     const now = on;
     untrack(() => {

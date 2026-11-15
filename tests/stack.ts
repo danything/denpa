@@ -65,12 +65,12 @@ export interface Stack {
   /** ライブ視聴で偽 ffmpeg に渡された引数。エンコード方式の指定を確かめるのに使う */
   liveArgsFile: string;
   /**
-   * これを置くとライブ視聴の映像側の偽 ffmpeg が、実機と同じ言い分を残して降りる。
+   * これを置くとライブ視聴の映像側の偽 ffmpeg が、実機と同じメッセージを残して終了する。
    * **黙って消えず、画面に理由が出る**ことを確かめるのに使う
    */
   liveFailFile: string;
   /**
-   * これを置くとライブ視聴の偽 ffmpeg が、字幕を持たない放送を受けた本物と同じく、字幕の出口を頼まれたら降りる。
+   * これを置くとライブ視聴の偽 ffmpeg が、字幕を持たない放送を受けた本物と同じく、字幕の出口をリクエストされたら終了する。
    * 偽の放送の PMT は既定で字幕を載せない (`/__control/captions` で載せる)
    */
   liveNoCaptionsFile: string;
@@ -165,7 +165,7 @@ async function waitFor(
 async function stop(started: Started): Promise<void> {
   if (started.proc.exitCode !== null) return;
   started.proc.kill("SIGTERM");
-  // SHUTDOWN_WAIT=0 なのですぐ止まる。それでも降りてこなければ強制終了する
+  // SHUTDOWN_WAIT=0 なのですぐ止まる。それでも終了しなければ強制終了する
   const until = Date.now() + 5000;
   while (started.proc.exitCode === null && Date.now() < until) {
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -486,7 +486,7 @@ export interface Spare {
   /** この denpa の録画の置き場 (古い denpa の置き場を写す先) */
   encodedDir: string;
   rawDir: string;
-  /** 降りるのを待ってから (取り込むと自分で降りる)、同じ DB と置き場でもう一度起こす */
+  /** 終了するのを待ってから (取り込むと自分で終了する)、同じ DB と置き場でもう一度起こす */
   restart: () => Promise<void>;
   shutdown: () => Promise<void>;
 }

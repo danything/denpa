@@ -703,7 +703,7 @@ function vtRate(bps: number, peak = bps * 2): string[] {
 }
 
 /**
- * **NVENC が同時に開けるエンコードの数を超えて降りたか** (ffmpeg の標準エラーの全文か 1 行)。
+ * **NVENC が同時に開けるエンコードの数を超えて失敗したか** (ffmpeg の標準エラーの全文か 1 行)。
  *
  * 消費者向けの GeForce は、システム全体で同時に開けるエンコードの数に上限がある (いまの NVIDIA の
  * 一覧では 12)。超えるとドライバはエンコードを開くところ (`nvEncOpenEncodeSessionEx`) で断り、FFmpeg の
@@ -712,7 +712,7 @@ function vtRate(bps: number, peak = bps * 2): string[] {
  * (NV_ENC_ERR_INCOMPATIBLE_CLIENT_KEY) を返す。本当に GPU のメモリが尽きたときも前者になるが、
  * どちらも「空けば通る」ので同じに扱ってよい。
  *
- * **これで降りたものは GPU の故障ではない。** その 1 本だけソフトウェアでエンコードし、
+ * **これで失敗したものは GPU の故障ではない。** その 1 本だけソフトウェアでエンコードし、
  * 方式を覚えて外すことはしない (`live.ts` の `blameLiveHw`)。録画は今までどおり次の方式へ倒れるだけ
  * (`encoder.ts` は落ちた方式を覚えない)。**実機の上限で確かめてはいない** (手元に NVIDIA の GPU が無い)
  */
@@ -767,10 +767,10 @@ export function liveHw(
  *
  * **Rockchip MPP は録画と同じ AVBR を、いちばん重い映像の値で** (`LARGEST`。ライブはコマ数と
  * 大きさが映像の来る前に決まらない)。`-async_depth` は持たない (渡すと使われない引数として
- * ffmpeg が降りる)。MPP の H.264 は B フレームを作らないので `-bf` も要らない。
+ * ffmpeg が失敗する)。MPP の H.264 は B フレームを作らないので `-bf` も要らない。
  *
  * **NVENC も同じ表の、いちばん重い映像の値を VBR で。** 遅れを作らない引数は NVENC の引数で渡す。
- * `-async_depth` は持たず (渡すと降りる)、代わりに `-delay 0` (出来たコマを溜めずにすぐ出す。既定は
+ * `-async_depth` は持たず (渡すと失敗する)、代わりに `-delay 0` (出来たコマを溜めずにすぐ出す。既定は
  * 作業用の面の数 − 1 コマぶん溜める)。`-tune ll` (低遅延向けの調整)、`-zerolatency 1` (並べ替えの待ちを作らない)、
  * `-bf 0`。preset は `p2` (7 段の速いほうから 2 つ目)。**どれも実機では見ていない**。
  * デコードとインタレ解除を GPU に寄せる (`full`) のは VA-API だけで、NVENC は実機で確かめてから
@@ -1467,7 +1467,7 @@ function wayNote(way: HwWay): string {
  * それをライブと同じ引数 (`liveHwArgs` の `full`) でデコードして、インタレ解除して、エンコードする。
  *
  * **GPU でデコードできなかったら必ず落ちる。** ffmpeg は `-hwaccel` が使えないと黙って CPU で
- * デコードするが、そのフレームは GPU に無いので `deinterlace_vaapi` が受け取れずに降りる。
+ * デコードするが、そのフレームは GPU に無いので `deinterlace_vaapi` が受け取れずに失敗する。
  * 「通った = GPU でデコードできた」と読んでよい
  */
 async function probeFull(devices: HwDevice[]): Promise<void> {

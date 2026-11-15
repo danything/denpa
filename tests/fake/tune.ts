@@ -54,7 +54,7 @@ const stop = broadcast(services, knobs, (data) => {
     out.write(data);
     out.flush();
   } catch {
-    // 読む側がいなくなった (エージェントに止められた)。静かに畳む
+    // 読む側がいなくなった (エージェントに止められた)。何も出さずに終える
     closed = true;
     stop();
   }

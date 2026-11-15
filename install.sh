@@ -263,14 +263,14 @@ start_denpa() {
   wait_and_open "$3" "$genkan"
 }
 
-# genkan は外さない (ほかのプロジェクトも乗る)。残っていることと、畳み方を言う
+# genkan は外さない (ほかのプロジェクトも乗る)。残っていることと、止め方を伝える
 genkan_left() {
   [ -d "$HOME/genkan" ] || return 0
   say "  genkan $HOME/genkan (80・443 と Arcane。要らなければ cd ~/genkan && docker compose down)。"
   say "  genkan を外したら compose.override.yml の genkan への登録も消してください"
 }
 
-# 止める (コンテナを畳むだけ。~/denpa も録画もボリュームも残す)
+# 止める (コンテナを止めるだけ。~/denpa も録画もボリュームも残す)
 stop_denpa() {
   if [ -f "$DENPA_DIR/compose.yml" ] && docker_ready "" ""; then compose down; fi
 }
@@ -348,7 +348,7 @@ TRAY_PLIST="/Library/LaunchAgents/$TRAY_LABEL.plist"
 LOGS=/Library/Logs/denpa
 PORT=25252
 
-# 止める。**録画中なら終わるまで待つ** (本体もエージェントも SIGTERM で録画を待ってから畳む。plist の ExitTimeOut)。
+# 止める。**録画中なら終わるまで待つ** (本体もエージェントも SIGTERM で録画を待ってから終了する。plist の ExitTimeOut)。
 # $1 は launchctl のドメインとラベル (system/… か gui/<uid>/…)
 #
 # **消えるまで待つ。** bootout は止まるのに時間の掛かるサービスだと待たずに返る (EINPROGRESS)。
@@ -389,7 +389,7 @@ mac_pair_token() {
 docker_era() { [ -f "$DENPA_DIR/compose.yml" ] && head -1 "$DENPA_DIR/compose.yml" | grep -q "^$MARK"; }
 
 # **前のバージョンは Mac で denpa 本体を Docker (Docker Desktop / OrbStack) で動かしていた** (~/denpa/compose.yml の 1 行目が印)。
-# コンテナを畳み (録画中なら stop_grace_period で終わるまで待つ)、DB の入ったボリュームの中身を $DATA へ写し、
+# コンテナを止め (録画中なら stop_grace_period で終わるまで待つ)、DB の入ったボリュームの中身を $DATA へ写し、
 # compose.yml を外す。ボリュームは消さずに残す。録画は同じ ~/Movies/denpa にあるので動かさない。
 # 古いエージェント (LaunchAgent) が動いている間に呼ぶ (コンテナの録画はそれを使う)。
 # 途中で止まっても、流し直せば続きから (写した DB があれば写し直さない)

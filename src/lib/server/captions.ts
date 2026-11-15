@@ -560,7 +560,7 @@ const PING = new TextEncoder().encode(JSON.stringify({ type: "ping" }));
 export interface CaptionOut {
   /** WebSocket と同じ形式で 1 フレーム渡す。**字幕 (文字の配置) と、選べる字幕の通知だけ通す** */
   send(kind: number, pts: bigint, payload: Uint8Array): void;
-  /** 終わり (録画を読み切った・セッションが畳まれた) */
+  /** 終わり (録画を読み切った・セッションが終わった) */
   close(): void;
   /** 読まれずに溜まっているか (`CAPTION_FEED_HOLD`)。作る側が待てるなら待つ */
   backedUp(): boolean;
@@ -628,7 +628,7 @@ export function captionFeed(
           finish();
           throw error;
         }
-        // 作っている最中に閉じた (セッションがもう畳まれていた) ら、すぐ後始末する
+        // 作っている最中に閉じた (セッションがもう終わっていた) ら、すぐ後始末する
         if (closed) leave();
         else detach = leave;
       },

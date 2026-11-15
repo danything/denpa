@@ -121,7 +121,7 @@ async function playOnce(
     return null;
   }
   await page.waitForTimeout(WARM);
-  // 測っている途中で諦めて worker を畳んだら失敗として数える
+  // 測っている途中で諦めて worker を止めたら失敗として数える
   return page
     .evaluate(
       (ms) => (globalThis as unknown as BenchWindow).__bench!.measure(ms),
@@ -183,7 +183,7 @@ test("DECODED_MOST を振って、コマの出方と持つ量を比べる", asyn
 
     /*
      * **GPU のあるふだんの Chrome で測る**ときは、ここで立てたままにする。コンテナのポートを外へ出して
-     * (`-p 4180:4180`)、http://localhost:4180/ を開き、`probe.js` を貼って測る。`out/stop` を置けば降りる
+     * (`-p 4180:4180`)、http://localhost:4180/ を開き、`probe.js` を貼って測る。`out/stop` を置けば終了する
      */
     if (process.env["BENCH_SERVE"] === "1") {
       rmSync(`${OUT}/stop`, { force: true });

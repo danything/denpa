@@ -95,7 +95,7 @@ describe("collapseDoubled", () => {
     expect(rows(collapseDoubled(doubled))).toEqual(rows(small));
   });
 
-  test("4 倍でも畳み切る。片方だけ水増しなら片方だけ畳む", () => {
+  test("4 倍でも元の大きさまで縮める。片方だけ水増しなら片方だけ縮める", () => {
     expect(
       rows(collapseDoubled(grey(["####", "####", "....", "...."]))),
     ).toEqual(["#", "."]);
@@ -201,7 +201,7 @@ describe("smoothDrcs", () => {
   });
 
   test("一辺 64 に届くまで 2 倍ずつ。256 は超えない", () => {
-    /** 斜めの線 (畳めない) を `size`x`size` で送ったときの、送る画像の大きさ */
+    /** 斜めの線 (縮められない) を `size`x`size` で送ったときの、送る画像の大きさ */
     const sizeOf = (size: number) => {
       const drcs = smoothDrcs(
         size,

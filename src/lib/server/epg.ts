@@ -685,7 +685,7 @@ export function savePrograms(
         end_at: sql.placeholder("end_at"),
         name: sql.placeholder("name"),
         description: sql.placeholder("description"),
-        // JSON の列は**こちらで畳んで渡す** (`encoded`)。drizzle に任せると null まで "null" になる
+        // JSON の列は**こちらで文字列にして渡す** (`encoded`)。drizzle に任せると null まで "null" になる
         extended: sql`${sql.placeholder("extended")}`,
         genres: sql`${sql.placeholder("genres")}`,
         genre_detail: sql`${sql.placeholder("genre_detail")}`,
@@ -862,7 +862,7 @@ function timed(
   );
 }
 
-/** 列の畳み方で DB に渡す形式にする。null は null のまま (drizzle がふだん通す形式と同じ) */
+/** 列の変換 (`mapToDriverValue`) で DB に渡す形式にする。null は null のまま (drizzle がふだん通す形式と同じ) */
 function encoded<T>(
   column: { mapToDriverValue(value: T): unknown },
   value: T | null,

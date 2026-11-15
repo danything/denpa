@@ -555,7 +555,7 @@ describe("NVIDIA NVENC", () => {
     });
   });
 
-  test("同時に開ける数を超えて降りたかを、ffmpeg のエラー文で見分ける", () => {
+  test("同時に開ける数を超えて失敗したかを、ffmpeg のエラー文で見分ける", () => {
     // 新しいドライバと古いドライバのエラー文 (FFmpeg の nvenc.c が出す形式)
     expect(
       nvencBusy(
@@ -567,7 +567,7 @@ describe("NVIDIA NVENC", () => {
         "Stream mapping:\n[av1_nvenc @ 0x1] OpenEncodeSessionEx failed: incompatible client key (21): (no details)\n[av1_nvenc @ 0x1] No capable devices found\n",
       ),
     ).toBe(true);
-    // ほかの理由で降りたものは GPU のせい (覚えて外す)
+    // ほかの理由で失敗したものは GPU のせい (覚えて外す)
     expect(
       nvencBusy(
         "[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: unsupported device (2): (no details)",

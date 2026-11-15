@@ -58,12 +58,12 @@ export function ambientMode(options: Options): Ambient {
     on = storedAmbient(read(AMBIENT_KEY));
   });
 
-  /** `<video>` のコマを縮める worker。初めて要るときに作り、画面を離れたら畳む */
+  /** `<video>` のコマを縮める worker。初めて要るときに作り、画面を離れたら終了する */
   let worker: Worker | null = null;
   let broken = false;
   let asked = 0;
   const waiting = new Map<number, (bitmap: ImageBitmap | null) => void>();
-  /** worker を畳み、待っているものには null を返す */
+  /** worker を終了し、待っているものには null を返す */
   function retire(): void {
     worker?.terminate();
     worker = null;
@@ -98,7 +98,7 @@ export function ambientMode(options: Options): Ambient {
         if (settle === undefined) event.data.bitmap?.close();
         else settle(event.data.bitmap);
       };
-      // 読み込めない (CSP など) なら、もう使わない。worker は畳み、画面の側で縮める
+      // 読み込めない (CSP など) なら、もう使わない。worker は終了し、画面の側で縮める
       worker.onerror = () => {
         broken = true;
         retire();

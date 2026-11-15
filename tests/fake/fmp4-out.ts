@@ -70,7 +70,7 @@ if (
   const clip = readClip(
     new Uint8Array(await Bun.file(`${import.meta.dir}/${name}`).arrayBuffer()),
   );
-  // 書き切ってから降りる (`process.stdout.write` のまま降りると、大きいものは尻が落ちる)
+  // 書き切ってから終了する (`process.stdout.write` のまま終了すると、大きいものは尻が落ちる)
   await Bun.write(Bun.stdout, clipFrom(clip, Math.max(0, seconds), CLIP));
   process.exit(0);
 }

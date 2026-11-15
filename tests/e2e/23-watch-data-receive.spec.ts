@@ -94,7 +94,7 @@ test.describe("録画のデータ放送を自動で受信する端末", () => {
     await expect.poll(() => text(page)).toBe("r:NaN|d1|k21,");
   });
 
-  test("閉じてもエンジンは残す。行の右クリックで切ると畳み、設定はライブと同じ 1 つ", async ({
+  test("閉じてもエンジンは残す。行の右クリックで切るとエンジンを止め、設定はライブと同じ 1 つ", async ({
     page,
     request,
   }) => {
@@ -126,7 +126,7 @@ test.describe("録画のデータ放送を自動で受信する端末", () => {
     const row = page.getByTestId("watch-data");
     await expect(row).toContainText("自動で受信");
     await expect(page.getByTestId("watch-data-receive")).toHaveCount(0);
-    // 右クリック (マウスの長押し) で切ると畳む。開きはしない
+    // 右クリック (マウスの長押し) で切るとエンジンを止める。開きはしない
     await row.click({ button: "right" });
     await expect(page.getByTestId("watch-data-receive-note")).toHaveText(
       "データ放送を自動で受信しません",

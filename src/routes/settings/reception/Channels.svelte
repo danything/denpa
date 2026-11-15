@@ -269,7 +269,7 @@
       />{/if}
     {#if scan.state === "running"}
       <!--
-                十数分かかるので、途中で降りられるようにしてある。中断しても設定は書き換えない
+                十数分かかるので、途中で中断できるようにしてある。中断しても設定は書き換えない
                 (途中までの結果で上書きすると、まだ回っていない局の定義が消える)
             -->
       <button type="submit" class="small outline danger" formaction="?/scanStop"

@@ -492,7 +492,7 @@ describe("アプリ向けの字幕 API", () => {
     expect(notices).toEqual(["clock", "captions"]);
   });
 
-  // 映像が終わった (セッションが畳まれた・エンコードできなくなった) ら、字幕 API も閉じる
+  // 映像が終わった (セッションが終わった・エンコードできなくなった) ら、字幕 API も閉じる
   test("ended / error の通知で閉じて後始末する", async () => {
     for (const type of ["ended", "error"]) {
       let left = 0;
@@ -516,7 +516,7 @@ describe("アプリ向けの字幕 API", () => {
     expect(left).toBe(1);
   });
 
-  // 共有したそばから閉じた (共有する相手がもう畳まれていた) ときも、後始末を取りこぼさない
+  // 共有したそばから閉じた (共有する相手がもう終わっていた) ときも、後始末を取りこぼさない
   test("作っている最中に閉じても後始末する", () => {
     let left = 0;
     captionFeed((out) => {

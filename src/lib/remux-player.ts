@@ -100,7 +100,7 @@ export interface RemuxPlayer {
   switchTo(codecs: string | null, url: StreamUrl): Promise<SwitchResult>;
   /** 受け取りの速さ (bit/s。`ts/meter.ts`)。まだ測れていなければ null */
   throughput(): number | null;
-  /** 畳む。読んでいるストリームを切る (サーバの ffmpeg も止まる) */
+  /** 閉じる。読んでいるストリームを切る (サーバの ffmpeg も止まる) */
   destroy(): void;
 }
 
@@ -421,7 +421,7 @@ export function remuxPlayer(
     } finally {
       if (pendingSwitch === asking) pendingSwitch = null;
     }
-    // 待っている間に飛んだ・畳んだ。飛んだ先は前の段のまま読んでいる
+    // 待っている間に飛んだ・閉じた。飛んだ先は前の段のまま読んでいる
     if (before !== run || closed || asking.signal.aborted) {
       asking.abort();
       return "failed";
@@ -521,7 +521,7 @@ export function remuxPlayer(
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("timeupdate", nudge);
       media.removeEventListener("startstreaming", nudge);
-      // sourceopen が来る前に畳むと、そこで解放しないまま残る (2 回解放しても害は無い)
+      // sourceopen が来る前に閉じると、そこで解放しないまま残る (2 回解放しても害は無い)
       URL.revokeObjectURL(objectUrl);
     },
   };

@@ -301,7 +301,7 @@
   </div>
 {/snippet}
 
-<!-- 録り逃しの行。観るものが無いので、押すと詳細だけ出す。置くのは畳むための削除だけ -->
+<!-- 録り逃しの行。観るものが無いので、押すと詳細だけ出す。置くのは一覧から消すための削除だけ -->
 {#snippet missedRow(item: Item & { kind: "missed" })}
   {@const res = item.res}
   <div

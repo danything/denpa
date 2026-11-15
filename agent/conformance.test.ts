@@ -424,7 +424,7 @@ beforeAll(async () => {
  * わざと離さない作りで、次に開く人はその選局を共有するのが正しい。
  */
 afterEach(async () => {
-  // 途中で落ちたテストの開きっぱなしも畳む
+  // 途中で落ちたテストの開きっぱなしも閉じる
   for (const close of [...opened]) close();
 
   const until = Date.now() + 10_000;
@@ -742,7 +742,7 @@ describe("チューナー", () => {
    * ここで大事なのは「エラーとして伝わること」ではなく **「勝手には終わらない
    * ものが終わった」こと**。HTTP を 1 枚挟むと、送っている途中の
    * ReadableStream を `error()` にしても向こうには**正常終了として届く**
-   * (Bun は残りの chunk を打ち切って畳むだけで、接続を壊さない)。
+   * (Bun は残りの chunk を打ち切って閉じるだけで、接続を壊さない)。
    *
    * なので API の約束はこうする。**選局は利用者が切るまで終わらない。**
    * 向こうから終わったなら、それは失敗である。読む側 (denpa) は EOF を
@@ -1470,7 +1470,7 @@ describe("機材の定義", () => {
 });
 
 /**
- * **止められても、録画 (`use=rec`) の選局が終わるまで畳まない。** ライブ視聴などほかの利用者は待たない
+ * **止められても、録画 (`use=rec`) の選局が終わるまで終了しない。** ライブ視聴などほかの利用者は待たない
  *
  * ここが既定 (30 秒) のままだった頃は、Pod を入れ替えるだけで TS が切れ、
  * 始まって 10 秒の 30 分番組が丸ごと失敗した (実機)。denpa 側は録画が終わるまで
@@ -1526,7 +1526,7 @@ describe("止まれの合図を受けたとき", () => {
       const still = await rec.reader.read();
       expect(still.done).toBe(false);
 
-      // 離せばそこで畳む
+      // 離せばそこで終了する
       rec.abort();
       expect(await exitsWithin(other, 15_000)).toBe(true);
     } finally {
@@ -1585,7 +1585,7 @@ describe("止まれの合図を受けたとき", () => {
       expect(other.exitCode).toBeNull();
       expect((await second.reader.read()).done).toBe(false);
 
-      // 録画が終われば、ライブが開いていても待たずに畳む (ライブは一緒に切れる)
+      // 録画が終われば、ライブが開いていても待たずに終了する (ライブは一緒に切れる)
       second.abort();
       expect(await exitsWithin(other, 10_000)).toBe(true);
       // 残りを読み切れば終わる (接続ごと壊れて終わってもよい)。流れ続けることはない
@@ -1616,7 +1616,7 @@ describe("止まれの合図を受けたとき", () => {
       );
 
       other.kill("SIGTERM");
-      // 30 秒より十分短く。偽の選局を畳む間だけ待つ
+      // 30 秒より十分短く。偽の選局を終える間だけ待つ
       expect(await exitsWithin(other, 10_000)).toBe(true);
 
       aborter.abort();
@@ -1727,7 +1727,7 @@ describe("定義の書き換えと選局", () => {
     { name: "off0", types: ["GR"], disabled: true },
   ];
 
-  test("名前を変えずに無効にしたチューナーの選局は畳み、利用者を残さない", async () => {
+  test("名前を変えずに無効にしたチューナーの選局は終え、利用者を残さない", async () => {
     expect(
       (await request("PUT", "/denpa/tuners", { tuners: FOUR })).status,
     ).toBe(200);
@@ -1742,7 +1742,7 @@ describe("定義の書き換えと選局", () => {
       expect(
         (await request("PUT", "/denpa/tuners", { tuners: off })).status,
       ).toBe(200);
-      // 畳まれたので読めなくなる。読めなくなること自体が合図
+      // 選局が終わったので読めなくなる。読めなくなること自体が合図
       const ended = await Promise.race([
         drain(stream.reader as ReadableStreamDefaultReader),
         sleep(5000).then(() => null),

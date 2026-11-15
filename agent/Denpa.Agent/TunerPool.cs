@@ -38,11 +38,11 @@ public sealed record TuneOptions(string? FakeTune = null);
 public sealed class TunerPool(
     IReadOnlyList<TunerSpec> specs, Action onChange, TuneOptions tune, Func<TunerSpec, ITuneDevice>? openDevice = null)
 {
-    /// <summary>誰も読まなくなってから選局を畳むまでの間</summary>
+    /// <summary>誰も読まなくなってから選局を終えるまでの間</summary>
     public static readonly TimeSpan Linger = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// **選局を受けてから最初の TS が届くまでの上限。** 超えたら、その選局を失敗として畳んで利用者に理由を返し、
+    /// **選局を受けてから最初の TS が届くまでの上限。** 超えたら、その選局を失敗として終えて利用者に理由を返し、
     /// そのチューナーはそのチャンネルで後回しにする (<see cref="Starve"/>)。前の読み出しを待つ 2 秒、デバイスを開く時間、
     /// 同期の待ち (機材によって 5〜15 秒) を含めた長さで、ふつうは 1 秒前後で届く。
     /// この上限が無かったときは、本番で PX-MLT8PE の受信機に入ったライブの選局が答えを返さないまま止まり、画面が「読み込み中」のままだった。
@@ -150,7 +150,7 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// 走っている選局は**そのまま続ける**。名前かデバイスが変わった・消えた・無効にしたチューナーのものだけ、
-    /// 失敗として畳み、開いているデバイスも手放す。使っているデバイスが別物になったのに流し続けると、
+    /// 失敗として終え、開いているデバイスも手放す。使っているデバイスが別物になったのに流し続けると、
     /// 何が録れているのか分からなくなる。無効にしたのに使い続けると、ほかのソフトから使えない。
     /// </para>
     ///
@@ -358,7 +358,7 @@ public sealed class TunerPool(
             {
                 /*
                  * **待つ間に取り上げられた・定義が変わった選局は、開きも選局もしない。** `spec` はロックの中で写したもので、
-                 * 定義が並べ替わったあとに開くと、古いデバイスが新しい定義の番号に残る。利用者には畳んだ側が理由を伝えてある
+                 * 定義が並べ替わったあとに開くと、古いデバイスが新しい定義の番号に残る。利用者には選局を終えた側が理由を伝えてある
                  */
                 if (Acquire(index, spec, lease) is not { } held) return sink;
                 lock (held.Gate)
@@ -366,7 +366,7 @@ public sealed class TunerPool(
                     if (lease.Stopped) return sink;
                     /*
                      * **合っていても、続いていなければ選局し直す。** DVB は合ったまま
-                     * だが、asicen-userland は利用者がいなくなると TS のストリームを畳む
+                     * だが、asicen-userland は利用者がいなくなると TS のストリームを閉じる
                      * (受信機は取ったまま。AsicenUdtv.cs)。合っている印だけ残っていて中身が無い場合を、合っているとみなさない
                      */
                     if (held.Channel != channel || !held.Device.Tuned)
@@ -393,7 +393,7 @@ public sealed class TunerPool(
                         lease.LockMs = (held.Device as It930xTuner)?.LockMs ?? -1;
                     }
                     /*
-                     * **選局している間に畳まれたら、読み出しを始めない** (取り上げられた・TS を待つ上限を過ぎた)。利用者には畳んだ側が理由を伝えてある。
+                     * **選局している間に選局が終えられたら、読み出しを始めない** (取り上げられた・TS を待つ上限を過ぎた)。利用者には選局を終えた側が理由を伝えてある。
                      * 上限を過ぎたのなら合っている印も消す。残すと、次の選局が選局し直さずに読み始める
                      */
                     if (lease.Stopped)
@@ -478,9 +478,9 @@ public sealed class TunerPool(
     }
 
     /// <summary>
-    /// **最初の TS が <see cref="FirstTsLimit"/> までに届かなかった選局を畳む。** 利用者には理由を返し、
+    /// **最初の TS が <see cref="FirstTsLimit"/> までに届かなかった選局を終える。** 利用者には理由を返し、
     /// そのチューナーはそのチャンネルで後回しにし (<see cref="UnsyncedFor"/>)、次の選局では選局し直す。
-    /// 取り上げられた選局、もう TS が届いた選局、失敗で畳んだ選局には何もしない
+    /// 取り上げられた選局、もう TS が届いた選局、失敗で終えた選局には何もしない
     /// </summary>
     private void Starve(Lease lease)
     {
@@ -497,7 +497,7 @@ public sealed class TunerPool(
         {
             if (_held.TryGetValue(lease.Tuner, out var held)) held.Channel = null;
         }
-        Log.Write($"[{lease.Name}] {lease.Channel}: {reason}。この選局を畳みます");
+        Log.Write($"[{lease.Name}] {lease.Channel}: {reason}。この選局を終えます");
         onChange();
     }
 
@@ -507,7 +507,7 @@ public sealed class TunerPool(
 
     /// <summary>
     /// 開きっぱなしの実体を取り出す。**無ければ、そのとき 1 度だけ開く。** 手放したデバイスがまだ閉じていなければ、閉じ終わるまで待ってから開く。
-    /// <paramref name="lease"/> がもう畳まれていれば開かずに null (<see cref="Open"/>)
+    /// <paramref name="lease"/> がもう終えられていれば開かずに null (<see cref="Open"/>)
     /// </summary>
     private Held? Acquire(int index, TunerSpec spec, Lease lease)
     {
@@ -522,8 +522,8 @@ public sealed class TunerPool(
         {
             if (_held.TryGetValue(index, out var open)) return open;
             /*
-             * **畳まれた選局は開かない。** 定義を書き換える側 (Replace) は、選局を畳んでから `_deviceGate` を取って手放すデバイスを選ぶ。
-             * ここで畳まれていなければ、定義はロックの中で写したときのままか、ここで開いたデバイスをこのあと Replace が手放す
+             * **終えられた選局は開かない。** 定義を書き換える側 (Replace) は、選局を終えてから `_deviceGate` を取って手放すデバイスを選ぶ。
+             * ここで選局が終えられていなければ、定義はロックの中で写したときのままか、ここで開いたデバイスをこのあと Replace が手放す
              */
             if (lease.Stopped) return null;
 
@@ -576,7 +576,7 @@ public sealed class TunerPool(
     }
 
     /// <summary>
-    /// 実体を手放す。**定義が変わったときと、止めるときだけ。** 取り合いのロックの中で呼び、選局を畳んだあとで呼ぶ。
+    /// 実体を手放す。**定義が変わったときと、止めるときだけ。** 取り合いのロックの中で呼び、選局を終えたあとで呼ぶ。
     /// 一覧から外すのはここで、閉じるのは別のスレッド (<see cref="Held.Close"/>)。返す Task はロックの外で待つ
     /// </summary>
     private Task Retire(Func<int, bool> which)
@@ -633,7 +633,7 @@ public sealed class TunerPool(
             lock (_gate)
             {
                 // デスクランブラが別のスレッドで配っているので、入れ物は Sinks のロックの下で触る。
-                // もう外されていれば (取り上げられた・選局が落ちた) 何もしない。畳んだ選局をもう一度畳まない
+                // もう外されていれば (取り上げられた・選局が落ちた) 何もしない。終えた選局をもう一度終えない
                 bool removed;
                 lock (lease.Sinks) removed = lease.Sinks.Remove(leaving);
                 if (removed && lease.Sinks.Count == 0) ScheduleRelease(lease);
@@ -664,7 +664,7 @@ public sealed class TunerPool(
     }
 
     /// <summary>
-    /// 選局を畳む。**利用者に理由を伝えてから、読むのをやめさせる。**
+    /// 選局を終える。**利用者に理由を伝えてから、読むのをやめさせる。**
     ///
     /// <para>
     /// **`Sinks` はそのロックの下で触る。** 利用者に配る側 (<c>StartNative</c>) は
@@ -977,7 +977,7 @@ public sealed class TunerPool(
         lock (_gate) return [.. _leases.Where(pair => pair.Value.Descrambling).OrderBy(pair => pair.Key).Select(pair => Tuners[pair.Key].Name)];
     }
 
-    /// <summary>全部畳む。止めるときに使う。デバイスを閉じるのは、読み出しと選局が終わってから (<see cref="Replace"/> と同じ)</summary>
+    /// <summary>全部の選局を終える。止めるときに使う。デバイスを閉じるのは、読み出しと選局が終わってから (<see cref="Replace"/> と同じ)</summary>
     public void CloseAll()
     {
         Task closing;
@@ -1153,10 +1153,10 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
 
     private volatile bool _starved;
 
-    /// <summary>最初の TS が上限までに届かずに畳んだ (<see cref="TunerPool.FirstTsLimit"/>)</summary>
+    /// <summary>最初の TS が上限までに届かずに終えた (<see cref="TunerPool.FirstTsLimit"/>)</summary>
     public bool Starved => _starved;
 
-    /// <summary>まだ TS が 1 度も届いていなければ、届かなかった印と理由を残して true。畳むのは呼んだ側</summary>
+    /// <summary>まだ TS が 1 度も届いていなければ、届かなかった印と理由を残して true。選局を終えるのは呼んだ側</summary>
     public bool Starve(string reason)
     {
         if (Volatile.Read(ref _firstReadMs) >= 0 || _stopped || _drained) return false;
@@ -1204,7 +1204,7 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
 
     private volatile bool _stopped;
 
-    /// <summary>畳む指示が出た (<see cref="Stop"/>)。取り上げられたか、定義が変わったか、止めるとき</summary>
+    /// <summary>選局を終える指示が出た (<see cref="Stop"/>)。取り上げられたか、定義が変わったか、止めるとき</summary>
     public bool Stopped => _stopped;
 
     private volatile Task? _pump;
@@ -1227,8 +1227,8 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
     /// **確保したままのデバイスから読んで、復号して配る。** 選局そのものはプールがやる。
     ///
     /// <para>
-    /// デバイスは**チューナーごとに開きっぱなし**で、ここでは閉じない (畳むときも読むのをやめるだけ。<see cref="Stop"/>)。
-    /// 失敗を伝えずに終わると空のファイルが残るので、**ストリームが途切れたら失敗として畳む。**
+    /// デバイスは**チューナーごとに開きっぱなし**で、ここでは閉じない (選局を終えるときも読むのをやめるだけ。<see cref="Stop"/>)。
+    /// 失敗を伝えずに終わると空のファイルが残るので、**ストリームが途切れたら失敗として終える。**
     /// </para>
     ///
     /// <para>
@@ -1245,14 +1245,14 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
         // HTTP の API が、プールが増えるまで待たされる
         _pump = Task.Factory.StartNew(
             () => Read(tuner, queue.Writer), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        // デスクランブラは待たない (Await)。デバイスに触らず、配り先も畳むときに空になっている
+        // デスクランブラは待たない (Await)。デバイスに触らず、配り先も選局を終えるときに空になっている
         _ = Task.Factory.StartNew(
             () => Descramble(queue.Reader, onExit), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
     /// <summary>
     /// 鍵の要る利用者がいるか (<see cref="Sink.WantsKeys"/>)。番組表・ロゴ・スキャンだけならカードに問い合わせない
-    /// (<see cref="Descrambler"/>)。利用者がいない間 (畳むのを待っている間) は null で、今のままにして
+    /// (<see cref="Descrambler"/>)。利用者がいない間 (選局を終えるのを待っている間) は null で、今のままにして
     /// 戻ってきたライブを溜め直させない
     /// </summary>
     private bool? WantsKeys()
@@ -1407,7 +1407,7 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
             Log.Write($"[{Name}] {Channel}: {b25.Undecodable} パケットをスクランブルされたまま流しました"
                 + (b25.LastError is { } why ? $" ({why})" : ""));
         }
-        // 畳む指示で終わったのなら、それは失敗ではない
+        // 選局を終える指示で終わったのなら、それは失敗ではない
         if (!_stopped) onExit();
     }
 
@@ -1418,8 +1418,8 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
     private static readonly TimeSpan OverflowReport = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// 溢れた回数を取り出して記録する。**溢れても選局は続いている**ので畳まない。
-    /// 誰が読んでいたか (<see cref="Readers"/>) と、いちばん空いた時間も添える (読み方は docs/agent.md「リングバッファが溢れても畳まない」)
+    /// 溢れた回数を取り出して記録する。**溢れても選局は続いている**ので終えない。
+    /// 誰が読んでいたか (<see cref="Readers"/>) と、いちばん空いた時間も添える (読み方は docs/agent.md「リングバッファが溢れても選局を続ける」)
     /// </summary>
     private void ReportOverflows(DeviceStream? ring)
     {
@@ -1540,7 +1540,7 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
 
     /// <summary>
     /// **止まりきるまで待つ。呼ぶのはロックの外で。** 次の選局はこれが返ってから始める (<see cref="TunerPool.Open"/>)。
-    /// 待つのは読み出しだけ。デスクランブラはデバイスに触らず、配り先も畳むときに空になっている。
+    /// 待つのは読み出しだけ。デスクランブラはデバイスに触らず、配り先も選局を終えるときに空になっている。
     /// それでも止まらないときは記録に残す (記録を残さずに進むと、取り合いの窓が開いていたのか確かめようが無い)。
     /// **何度呼んでも、どれも止まるまで待つ** (取り上げた側とデバイスを閉じる側が同時に待つことがある)
     /// </summary>

@@ -9,7 +9,7 @@ config.encodedDir = join(root, "encoded");
 
 const { pruneEmptyDirs } = await import("./fsx");
 
-test("空になったフォルダを畳むのは置き場の中だけ。置き場そのものは残す", () => {
+test("空になったフォルダを消すのは置き場の中だけ。置き場そのものは残す", () => {
   const series = join(config.encodedDir, "シリーズ", "S1");
   mkdirSync(series, { recursive: true });
   pruneEmptyDirs(join(series, "x.mkv"));

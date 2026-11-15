@@ -108,7 +108,7 @@ test.describe("PWA", () => {
         ).toBeLessThanOrEqual(doc.clientH + 1);
         /*
          * **土台は画面ちょうど。** 単位 (`vh` / `dvh`) で言い当てず、
-         * `html` から `%` で降ろしているので、ずれようがない。
+         * `html` から `%` で高さを受け継いでいるので、ずれようがない。
          * 実機では `100dvh` が 56px 大きく出て、ここがずれていた
          */
         expect(doc.rootH, `${path} の土台が ${width}px で画面と違う`).toBe(
@@ -123,7 +123,7 @@ test.describe("PWA", () => {
    *
    * `100vh` も `100dvh` も「画面の高さ」を*言い当てようとする*もので、
    * 携帯では当たらないことがある (実機の PWA で 56px 大きく出た)。
-   * `html` に高さを与えて `%` で降ろせば、言い当てる余地が無い
+   * `html` に高さを与えて `%` で受け継げば、言い当てる余地が無い
    */
   test("土台の高さに画面単位を使わない", async () => {
     const layout = await readFile("src/routes/+layout.svelte", "utf8");

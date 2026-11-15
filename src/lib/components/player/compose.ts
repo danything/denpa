@@ -64,7 +64,7 @@ export function captionDrawn(
 export interface Composed {
   /** 字幕を重ねたストリーム。代わりの `<video>` に繋ぐ */
   readonly stream: MediaStream;
-  /** 畳む。**元のストリームも止める** (`captureStream` で取ったものは止めないと取り続ける) */
+  /** 破棄する。**元のストリームも止める** (`captureStream` で取ったものは止めないと取り続ける) */
   stop: () => void;
 }
 

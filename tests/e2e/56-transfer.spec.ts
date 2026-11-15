@@ -207,7 +207,7 @@ test.describe("denpa を別の機械へ移す", () => {
 
     await page.getByTestId("transfer-apply").click();
     await expect(page.getByTestId("transfer-restarting")).toBeVisible();
-    // e2e には起こし直す人がいないので、降りたら起こす
+    // e2e には起こし直す人がいないので、終了したら起こす
     await spare.restart();
     await expect(page.getByTestId("transfer-imported")).toBeVisible({
       timeout: 60_000,

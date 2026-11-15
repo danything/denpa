@@ -6,11 +6,11 @@ import { navigating } from "$app/state";
  *
  * 読み直しは通知 (`liveUpdates`) と復帰 (`+layout.svelte`) から来るので、いつ遷移に重なるかは運。
  * 遷移の最中に来たものは、終わってから 1 回だけ流す (行き先はどのみち新しく読むので、待たせて損は無い)。
- * SvelteKit 2 の `invalidateAll` は走っている遷移を、エラーを出さずに畳んでいた (押した先へ行かない) のでこうした。
- * 3 の `refreshAll` は畳まないが、重ねる理由も無いので残してある
+ * SvelteKit 2 の `invalidateAll` は走っている遷移を、エラーを出さずに取り消していた (押した先へ行かない) のでこうした。
+ * 3 の `refreshAll` は取り消さないが、重ねる理由も無いので残してある
  *
  * 終わったかどうかは `navigating` ではなく、その遷移の約束 (`complete`) で見る。
- * 畳まれた遷移は `navigating` を下ろさないが、`complete` は通っても畳まれても必ず片が付く
+ * 取り消された遷移は `navigating` を下ろさないが、`complete` は通っても取り消されても必ず片が付く
  */
 
 /** 遷移の最中に来た「読み直して」。終わってから 1 回だけ流す */
@@ -38,7 +38,7 @@ export function followNavigation(): void {
       return;
     }
     let stale = false;
-    // 畳まれた遷移は `complete` が reject される。どちらでも同じように片を付ける
+    // 取り消された遷移は `complete` が reject される。どちらでも同じように片を付ける
     const settle = (): void => {
       // 次の遷移がもう始まっているなら、流すのはあちらが終わってから
       if (stale) return;

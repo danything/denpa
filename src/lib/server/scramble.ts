@@ -201,7 +201,7 @@ export class LastingScramble {
   }
 
   /**
-   * **いまスクランブルされたままと言えるか** (ffmpeg が `verdict` の決まる前に降りたとき)。いちばん新しく数えた窓 (`newest`) で決める。
+   * **いまスクランブルされたままと言えるか** (ffmpeg が `verdict` の決まる前に終了したとき)。いちばん新しく数えた窓 (`newest`) で決める。
    * 窓がまだ無ければ言えない (false)
    */
   stillScrambled(least: number): boolean {

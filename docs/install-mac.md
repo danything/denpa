@@ -124,7 +124,7 @@ root でないと書けないので、`sudo nano "/Library/Application Support/d
 **前のバージョンは denpa 本体を Docker (Docker Desktop・OrbStack) で、エージェントをログインしたら起こす LaunchAgent で動かしていました。**
 `~/denpa/compose.yml` (install.sh が置いた印の付いたもの) があれば、上げるときに install.sh が次のことを 1 度だけします。
 
-1. `docker compose down` で本体のコンテナを畳む (録画中なら、コンテナの stop_grace_period で終わるまで待つ。古いエージェントはこの間も動かしておく)
+1. `docker compose down` で本体のコンテナを止める (録画中なら、コンテナの stop_grace_period で終わるまで待つ。古いエージェントはこの間も動かしておく)
 2. Docker のボリューム `denpa_denpa-data` の中身 (DB・局ロゴ・鍵) を `/Library/Application Support/denpa/data` に写す。
    `docker run … alpine tar` で書き出し、Mac の `tar` で開く (持ち主は root にする)
 3. `~/denpa/compose.yml` を外す。**ボリュームは消さずに残す** (確かめたら `docker volume rm denpa_denpa-data` で消してよい)

@@ -191,7 +191,7 @@ describe("JSON の列", () => {
     ]);
   });
 
-  test("書くときは JSON に畳む", () => {
+  test("書くときは JSON の文字列にする", () => {
     const db = migrated();
     drizzle({ client: db })
       .insert(schema.rules)

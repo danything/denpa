@@ -44,7 +44,7 @@ public interface ITuneDevice : IDisposable
     ///
     /// <para>
     /// DVB は一度合わせたら合ったまま。asicen-userland は読む側がいなくなると
-    /// TS のストリームを畳む (受信機は取ったまま) ので、**同じチャンネルでも選局し直しが要る**ことがある。
+    /// TS のストリームを閉じる (受信機は取ったまま) ので、**同じチャンネルでも選局し直しが要る**ことがある。
     /// TunerPool は「同じチャンネルならそのまま」の前にここを見る。
     /// </para>
     /// </summary>
@@ -181,8 +181,8 @@ internal static class TsBuffer
     internal const int Depth = 8 * 1024 * 1024;
 
     /// <summary>
-    /// 読む側がいないまま、バッファが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を畳むまでの間
-    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く打ち切ると、TunerPool が畳む前に TS が途切れる)
+    /// 読む側がいないまま、バッファが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を終えるまでの間
+    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く打ち切ると、TunerPool が選局を終える前に TS が途切れる)
     /// </summary>
     internal static TimeSpan StallLimit => TunerPool.Linger;
 
@@ -243,11 +243,11 @@ internal static class TsBuffer
 }
 
 /// <summary>
-/// デバイスからの読み出し側。**待っている最中でも畳める。**
+/// デバイスからの読み出し側。**待っている最中でも止められる。**
 ///
 /// <para>
 /// 素直に開いて読むと、<c>read</c> で待っている間は誰にも止められない。
-/// TS が来なくなったチューナーを確保したまま、畳もうとしても畳めない、という
+/// TS が来なくなったチューナーを確保したまま、止めようとしても止められない、という
 /// 止まり方をする。<c>poll</c> で待って**時々印を確かめる**ようにしてある。
 /// </para>
 ///
@@ -266,7 +266,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>読み出し側そのもの。**リングバッファの大きさはここに設定する** (<c>DvbTuner.StartFilter</c>)</summary>
     public SafeFileHandle Handle => handle;
 
-    /// <summary>この間隔で、畳む印が立っていないか確かめる</summary>
+    /// <summary>この間隔で、止める印が立っていないか確かめる</summary>
     private const int WakeMs = 200;
 
     /// <summary>Pipe に詰めた TS の読み出し側 (<see cref="Piped"/>)。あれば fd は使わない</summary>
@@ -430,14 +430,14 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     private const int EIntr = 4;
 
     /// <summary>
-    /// **読むのが追いつかず、ドライバのリングバッファが溢れた。** 選局はそのまま続いているので畳まない
-    /// (docs/agent.md「リングバッファが溢れても畳まない」)
+    /// **読むのが追いつかず、ドライバのリングバッファが溢れた。** 選局はそのまま続いているので終えない
+    /// (docs/agent.md「リングバッファが溢れても選局を続ける」)
     /// </summary>
     private static readonly int EOverflow = OperatingSystem.IsMacOS() ? 84 : 75;
 
     private volatile bool _closed;
 
-    /// <summary>畳む指示が出たか (<see cref="Piped"/> に渡す。使い回す)</summary>
+    /// <summary>止める指示が出たか (<see cref="Piped"/> に渡す。使い回す)</summary>
     private Func<bool>? _stopped;
 
     private int _overflows;
@@ -461,7 +461,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     /// <summary>
     /// 前回呼ばれてからリングバッファが溢れた回数と、**そのとき読む側がどれだけ空いていたか** (バッファが浅いのか
-    /// 読む側が止まっているのかを分ける。docs/agent.md「リングバッファが溢れても畳まない」)。
+    /// 読む側が止まっているのかを分ける。docs/agent.md「リングバッファが溢れても選局を続ける」)。
     /// **呼んだら 0 に戻る** (デバイスは選局を跨いで開きっぱなしなので、どの選局のぶんか分からなくなる)
     /// </summary>
     public (int Count, int WorstGapMs, int Stale) TakeOverflows()
@@ -520,7 +520,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
-    /// 畳む。Pipe に詰めた TS を待っている読む側の待ちは**すぐ終わらせる** (200 ms ごとの確認を待たない。
+    /// 止める。Pipe に詰めた TS を待っている読む側の待ちは**すぐ終わらせる** (200 ms ごとの確認を待たない。
     /// 混んだ CI では 500 ms を超えていた)。印を立ててから待ちを終わらせる (待ちが終わった側がその印を確かめて戻る)
     /// </summary>
     public void Stop()
@@ -576,7 +576,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     {
         if (_piped is not null)
         {
-            // 抜ける合図を渡されなければ、畳む指示が出たかだけを見る (使い回す。読むたびに作ると確保が積もる)
+            // 抜ける合図を渡されなければ、止める指示が出たかだけを確かめる (使い回す。読むたびに作ると確保が積もる)
             var read = _piped.Read(buffer.AsSpan(offset, count), giveUp is null ? (_stopped ??= () => _closed) : () => _closed || giveUp());
             if (read is null) return 0;
             if (read > 0) return read.Value;
@@ -744,7 +744,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     /// <summary>
     /// **dvr のリングバッファの大きさ。** 全 PID を <c>DMX_OUT_TS_TAP</c> で流すので、溜まるのは demux のフィルタではなく dvr。
-    /// 既定 (≒1.8 MB) は地上波で 0.9 秒ぶんしかなく、8 MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても畳まない」)
+    /// 既定 (≒1.8 MB) は地上波で 0.9 秒ぶんしかなく、8 MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても選局を続ける」)
     /// </summary>
     private const int DvrBuffer = 8 * 1024 * 1024;
 

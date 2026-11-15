@@ -18,7 +18,7 @@ import {
  *
  * Web Audio で鳴らす音を、言わずにおくと iOS は効果音と同じに扱い、**Safari を裏へ回すと止める**。
  * 小窓で観ていても音だけ消えた (iPhone 15 Pro Max、iOS 27.2)。消音スイッチで黙らないのも `<video>` と
- * 同じになる。畳むときは既定 (`auto`) に戻す。
+ * 同じになる。破棄するときは既定 (`auto`) に戻す。
  *
  * これが言える端末 (Safari) では `<audio>` を通さない (`Outlet.route`)
  */
@@ -58,7 +58,7 @@ export class Outlet {
   private wanted = false;
   /** 止めているか (`hold`)。`<audio>` も止めておく。外から見て「止まっている」と分かるように */
   private held = false;
-  /** `<audio>` の出口。一度作ったら畳むまで使い回す */
+  /** `<audio>` の出口。一度作ったら破棄するまで使い回す */
   private out: Through | null = null;
   private passing = false;
   private gone = false;

@@ -3,7 +3,7 @@
  * WebKit の MSE → MediaElementAudioSource が音声を渡さない問題を避ける (WebKit だけ。`native-audio-choice.ts`)。
  * 同期は映像の時計に合わせ、AudioContext 上では連続する音声の間隔を保つ。
  *
- * **Audio Session はこれが持つ** (作ったら `playback`、畳んだら戻す)。音は常に Web Audio で鳴るので、
+ * **Audio Session はこれが持つ** (作ったら `playback`、破棄したら戻す)。音は常に Web Audio で鳴るので、
  * 言わずにおくと iOS は効果音として扱い、消音スイッチで鳴らさず、裏へ回すと止める (`#lib/sound.ts` の `playbackSession`)
  */
 import { Outlet, playbackSession } from "#lib/sound.js";
@@ -55,7 +55,7 @@ export class NativeAudio {
   private readonly outlet: Outlet;
   private readonly muteGain: GainNode;
   private readonly timer: ReturnType<typeof setInterval>;
-  /** `<video>`・window に付けたリスナー。畳むときにまとめて外す */
+  /** `<video>`・window に付けたリスナー。破棄するときにまとめて外す */
   private readonly listening = new AbortController();
   private frames: Frame[] = [];
   private nodes = new Set<AudioBufferSourceNode>();
@@ -87,9 +87,9 @@ export class NativeAudio {
    */
   private frozen = false;
   /**
-   * @param context 鳴らす AudioContext。**畳んでも閉じない** (閉じるのは渡した側)。iOS の Safari は、押したとき以外に作った
+   * @param context 鳴らす AudioContext。**破棄しても閉じない** (閉じるのは渡した側)。iOS の Safari は、押したとき以外に作った
    *   AudioContext を止めたまま始めるので、画質を切り替えるたびに新しく作ると自動再生を断られたことになり、消音になっていた (#2728)。
-   *   畳むときは自分のつないだ音だけを外す
+   *   破棄するときは自分のつないだ音だけを外す
    */
   constructor(
     private readonly video: HTMLVideoElement,

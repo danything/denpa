@@ -7,7 +7,7 @@
 #
 # 渡したフォルダを Docker のボリューム denpa_denpa-data の中身として、偽の docker が tar にして渡す。
 # 前のバージョンが置いたもの (~/denpa/compose.yml・compose.override.yml、ユーザーの下のエージェントの置き場) も作っておく。
-# 確かめること: コンテナを畳んでからボリュームを読み、DB を本体の置き場へ写し、compose.yml を外し、
+# 確かめること: コンテナを止めてからボリュームを読み、DB を本体の置き場へ写し、compose.yml を外し、
 # 古いエージェントの置き場を消す。compose.override.yml とボリュームには触らない
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -42,7 +42,7 @@ sudo -E env PATH="$fake:$PATH" bash install.sh --no-open
 cat "$log"
 grep -qx 'docker compose down' "$log"
 grep -q '^docker run --rm -v denpa_denpa-data:/d ' "$log"
-# コンテナを畳んでから読む
+# コンテナを止めてから読む
 [ "$(grep -n 'compose down' "$log" | cut -d: -f1)" -lt "$(grep -n '^docker run' "$log" | cut -d: -f1)" ]
 data="/Library/Application Support/denpa/data"
 sudo test -f "$data/denpa.db"
