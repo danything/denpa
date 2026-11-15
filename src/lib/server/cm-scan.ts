@@ -190,7 +190,8 @@ export function scanOutputs(
  * `'…'` の中の `'` は、いったん閉じて `\'` を挟んで開き直す
  */
 export function filterPath(path: string): string {
-  const value = path.replaceAll("\\", "/").replace(/[':]/g, "\\$&");
+  // `\` は `/` に替えたあとなので残らないが、エスケープの対象には入れておく (引数の中の `\` はエスケープの印)
+  const value = path.replaceAll("\\", "/").replace(/[\\':]/g, "\\$&");
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
