@@ -145,6 +145,11 @@ test.describe("観る画面でその場で流す", () => {
         },
       }),
     );
+    /*
+     * ファイルは返さずに待たせる。偽 ffmpeg が作るファイルは動画として読めないので、返すと `<video>` が読めずにストリームへ移る
+     * (`fallBackFromFile`。移るところは下のテストが見る)
+     */
+    await page.route(`**/api/recordings/${id}/file?**`, () => undefined);
     let busy = false;
     await page.route(`**/api/recordings/${id}/stream?**`, (route) =>
       busy
@@ -266,7 +271,7 @@ test.describe("観る画面でその場で流す", () => {
       "H.264 のファイル (avc1.640028,opus): MEDIA_ERR_SRC_NOT_SUPPORTED",
     );
 
-    // ストリームがあれば、そちらへ移る (Playwright の Chromium の MSE は H.264 を受け取れないので AV1 の変換)
+    // ストリームがあれば、そちらへ移る。詰め替え (エンコード済みと同じ H.264) を変換より先に
     offers = [
       file,
       { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
@@ -275,7 +280,7 @@ test.describe("観る画面でその場で流す", () => {
     const asked = streamRequests(page);
     await goto(page, `/watch/${id}`);
     await expect.poll(() => asked.length).toBeGreaterThan(0);
-    expect(asked[0]?.searchParams.get("codec")).toBe("av1");
+    expect(asked[0]?.searchParams.get("codec")).toBe("h264");
     await expect(detail).toHaveCount(0);
   });
 });
