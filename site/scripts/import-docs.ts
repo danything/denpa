@@ -499,7 +499,9 @@ function attrs(tag: string): Record<string, string> {
 
 /**
  * README の生の HTML の画像を Markdown に直す (HTML のままだと Astro の画像の最適化が効かない)。
- * 真ん中に置いた 1 枚は画像に、画像を並べた表は `.shots` の並びにする
+ * 真ん中に置いた 1 枚は画像に、画面の画像 (`docs/images/`) を並べた表は `.shots` の並びにする。
+ * 謝辞のアイコンの表 (`scripts/thanks.ts`。画像は GitHub のアイコン) はそのまま HTML で出す。
+ * 作り替えると、アイコンだけのリンクになって名前がリンクの外に出る
  */
 function convertReadmeHtml(text: string): string {
   const image = (tag: string) => {
@@ -514,7 +516,11 @@ function convertReadmeHtml(text: string): string {
     const cells = [...inner.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(
       (m) => m[1]!,
     );
-    if (!cells.length || !cells.every((c) => c.includes("<img"))) return whole;
+    if (
+      !cells.length ||
+      !cells.every((c) => /<img [^>]*src="(?:\.\/)?docs\/images\//.test(c))
+    )
+      return whole;
     const items = cells.map((cell) => {
       const img = /<img [^>]*>/.exec(cell)![0];
       const link = /<a href="([^"]+)"/.exec(cell)?.[1];

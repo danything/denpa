@@ -79,8 +79,16 @@ describe("GitHub から読む", () => {
   });
 });
 
+/** 1 人ぶんの表のマス (`thanks.ts` の `person`) */
+const cell = (login: string, link: string) =>
+  `<td align="center"><a href="${link}"><img src="https://github.com/${login}.png?size=96" width="48" height="48" alt=""><br><sub>@${login}</sub></a></td>`;
+const prs = (login: string) =>
+  `https://github.com/danything/denpa/pulls?q=is%3Apr+is%3Amerged+author%3A${login}`;
+const issues = (login: string) =>
+  `https://github.com/danything/denpa/issues?q=author%3A${login}`;
+
 describe("一覧の形", () => {
-  test("最初に関わった順にアイコンと名前を空白で並べ、名前からその人の PR・Issue の一覧へ飛ぶ。持ち主は載せない", () => {
+  test("最初に関わった順に、アイコンの下に名前を置いたマスを表に並べ、名前からその人の PR・Issue の一覧へ飛ぶ。持ち主は載せない", () => {
     const text = render([
       { kind: "pr", number: 662, login: "fetburner" },
       { kind: "pr", number: 188, login: "Khronos31" },
@@ -94,11 +102,39 @@ describe("一覧の形", () => {
       [
         "**手を入れてくれた人** (ありがとうございます):",
         "",
-        `<a href="https://github.com/danything/denpa/pulls?q=is%3Apr+is%3Amerged+author%3AKhronos31"><img src="https://github.com/Khronos31.png?size=48" width="24" height="24" alt="">&nbsp;@Khronos31</a> <a href="https://github.com/danything/denpa/pulls?q=is%3Apr+is%3Amerged+author%3Afetburner"><img src="https://github.com/fetburner.png?size=48" width="24" height="24" alt="">&nbsp;@fetburner</a>`,
+        "<table>",
+        `<tr>${cell("Khronos31", prs("Khronos31"))}${cell("fetburner", prs("fetburner"))}</tr>`,
+        "</table>",
         "",
         "**報告や提案をくれた人** (ありがとうございます):",
         "",
-        `<a href="https://github.com/danything/denpa/issues?q=author%3AKhronos31"><img src="https://github.com/Khronos31.png?size=48" width="24" height="24" alt="">&nbsp;@Khronos31</a> <a href="https://github.com/danything/denpa/issues?q=author%3Afetburner"><img src="https://github.com/fetburner.png?size=48" width="24" height="24" alt="">&nbsp;@fetburner</a>`,
+        "<table>",
+        `<tr>${cell("Khronos31", issues("Khronos31"))}${cell("fetburner", issues("fetburner"))}</tr>`,
+        "</table>",
+      ].join("\n"),
+    );
+  });
+
+  test("1 行に 7 人ずつ並べ、8 人目から次の行にする", () => {
+    const logins = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    const text = render(
+      logins.map((login, i) => ({
+        kind: "issue" as const,
+        number: i + 1,
+        login,
+      })),
+    );
+    expect(text).toBe(
+      [
+        "**報告や提案をくれた人** (ありがとうございます):",
+        "",
+        "<table>",
+        `<tr>${logins
+          .slice(0, 7)
+          .map((l) => cell(l, issues(l)))
+          .join("")}</tr>`,
+        `<tr>${cell("h", issues("h"))}</tr>`,
+        "</table>",
       ].join("\n"),
     );
   });
@@ -108,7 +144,9 @@ describe("一覧の形", () => {
       [
         "**報告や提案をくれた人** (ありがとうございます):",
         "",
-        `<a href="https://github.com/danything/denpa/issues?q=author%3Aa"><img src="https://github.com/a.png?size=48" width="24" height="24" alt="">&nbsp;@a</a>`,
+        "<table>",
+        `<tr>${cell("a", issues("a"))}</tr>`,
+        "</table>",
       ].join("\n"),
     );
   });
