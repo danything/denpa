@@ -452,7 +452,8 @@ public sealed class TunerPool(
                 return Open(type, channel, priority, use, after, pin, service, from);
             }
             if (unsynced && tried.Count > 0) Log.Write($"[{spec.Name}] {channel}: {UnsyncedReason(attempts)}");
-            throw new IOException(reason);
+            // 使えないチューナーで終わったことは型で返す。HTTP では 503 にする (Program.cs の /denpa/stream)
+            throw unusable ? new TunerUnusableException(reason) : new IOException(reason);
         }
         // 同期した。前に同期しなかった印は消して、元の順に戻す (TS を待つ上限を過ぎて付けた印は残す)
         if (lease.TunedMs >= 0 && !lease.Starved)

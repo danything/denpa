@@ -615,6 +615,8 @@ public class TunerPoolTests
         {
             var error = Assert.Throws<IOException>(() => mixed.Pool.Open("GR", "T26", 3, "epg T26"));
             await Assert.That(error.Message).IsEqualTo($"B: {ITuneDevice.SyncFailed}");
+            // 最後に同期しなかったのは使えるチューナーなので、使えないチューナーの型 (HTTP の 503) にはしない
+            await Assert.That(error is TunerUnusableException).IsFalse();
             await Assert.That(Tunes(mixed, "fake:a")).IsEqualTo(1);
         }
         finally
@@ -627,8 +629,11 @@ public class TunerPoolTests
         {
             var error = Assert.Throws<IOException>(() => only.Pool.Open("GR", "T26", 3, "epg T26"));
             await Assert.That(error.Message).IsEqualTo("A: 電源を抜いて入れ直してください");
+            // 使えないチューナーで終わったことは型で返す (HTTP の 503。スキャンはそのチューナーを外す)
+            await Assert.That(error is TunerUnusableException).IsTrue();
+            await Assert.That(Assert.Throws<IOException>(() => only.Pool.Open("GR", "T28", 3, "scan T28")) is TunerUnusableException).IsTrue();
             Assert.Throws<IOException>(() => only.Pool.Open("GR", "T27", 3, "epg T27"));
-            await Assert.That(Tunes(only, "fake:a")).IsEqualTo(2);
+            await Assert.That(Tunes(only, "fake:a")).IsEqualTo(3);
         }
         finally
         {
