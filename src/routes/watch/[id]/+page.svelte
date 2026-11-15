@@ -202,7 +202,7 @@
   const ready = $derived(data.playable);
   /*
    * 端末に保存してあればオンラインでもそちらを観る (docs/offline.md)。字幕・チャプター・データ放送も
-   * 落としてあるものを使う。確かめ終わるまで src を渡さない。先に渡すとサーバから読み始め、
+   * 端末に保存してあるものを使う。確かめ終わるまで src を渡さない。先に渡すとサーバから読み始め、
    * あとから blob に差し替わって読み直しになる
    */
   let localSrc = $state<string | null>(null);
@@ -2233,7 +2233,7 @@
 
   /**
    * CM 検出をやり直したら、チャプターだけ取り直す (`chapters` の通知)。位置も再生も触らない
-   * (いまいる所が CM になれば次のコマで `hopCm` が飛ぶ)。端末に保存したものは落としたときのまま
+   * (いまいる所が CM になれば次のコマで `hopCm` が飛ぶ)。端末に保存したものは保存したときのまま
    */
   liveUpdates([], {
     chapters: (payload) => {
@@ -2509,7 +2509,7 @@
       }
     } catch (error) {
       // 出せないだけ。観るのに支障は無い
-      console.warn("[captions] 取れませんでした", error);
+      console.warn("[captions] 取得できませんでした", error);
       // 繋がらなかった。字幕を入れ直したときに取り直す (`setCaptions`。コマごとには取り直さない)
       captionsFailed = true;
     }
@@ -2524,7 +2524,7 @@
 
   /** 動き出した。「読み込み中」を引っ込める */
   function flowing(): void {
-    if (buffering) buffering = false;
+    buffering = false;
   }
 
   function clearCaptions(): void {
@@ -2691,7 +2691,7 @@
     togglePlay,
     seekBy,
     toggleCaptions,
-    snapshot: () => void snapshot(),
+    snapshot,
     toggleFull: fullscreen.toggle,
     stepSpeed: (by) => setSpeed(stepSpeed(speed, by)),
     toggleMute,
@@ -2965,7 +2965,7 @@
             icon={shooter.saved ? CHECK : CAMERA}
             label="この場面を切り抜く"
             testid="watch-shot"
-            onclick={() => void snapshot()}
+            onclick={snapshot}
           />
           <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`jikkyoList`) -->
           {#if jikkyoList.can}
@@ -3171,8 +3171,8 @@
                     on: captions,
                     languages: captionLanguages,
                     language: captionLanguage,
-                    onoff: (on) => setCaptions(on),
-                    onlanguage: (index) => setCaptionLanguage(index),
+                    onoff: setCaptions,
+                    onlanguage: setCaptionLanguage,
                   })
                 : undefined}
               codec={codecMenu.length > 0

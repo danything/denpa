@@ -376,18 +376,17 @@ export const actions = {
         return fail(500, {
           message:
             result.error === undefined
-              ? "この局で復号を試せませんでした"
-              : `この局で復号を試せませんでした: ${result.error}`,
+              ? "この局の復号を確かめられませんでした"
+              : `この局の復号を確かめられませんでした: ${result.error}`,
         });
       }
       return {
         success: true,
-        decodeOk: result.decodeOk,
         contracts: await rowsOf(agent),
       };
     } catch (error) {
       return fail(500, {
-        message: `この局で復号を試せませんでした: ${reason(error)}`,
+        message: `この局の復号を確かめられませんでした: ${reason(error)}`,
       });
     }
   },

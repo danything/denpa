@@ -457,7 +457,7 @@
         >
           ・ロゴ <strong>{data.logoSweep.found} 局</strong
           >{#if data.logoSweep.channels.length > 0}・受信中 {data.logoSweep.channels.join(
-              ", ",
+              "、",
             )}{/if}
         </JobProgress>
         {#if data.logoSweep.message !== ""}
@@ -856,11 +856,7 @@
   }
   .scan-control select {
     width: auto;
-    height: auto;
     margin: 0;
-    padding: var(--dp-space-1) var(--dp-space-6) var(--dp-space-1)
-      var(--dp-space-2);
-    font-size: var(--dp-text-sm);
   }
   .scan-control button {
     margin: 0;

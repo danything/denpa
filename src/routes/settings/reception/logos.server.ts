@@ -3,7 +3,7 @@ import { type Actions, fail } from "@sveltejs/kit";
 import { parseId } from "#lib/id.js";
 import { forgetMaterials } from "#lib/server/cm-material-store.js";
 import { orm } from "#lib/server/db.js";
-import { currentServices, typeRank } from "#lib/server/epg.js";
+import { currentServices } from "#lib/server/epg.js";
 import {
   forgetLogoData,
   learnedAt,
@@ -68,15 +68,13 @@ function stationLogos() {
       (row) => row.id,
     ),
   );
-  return rows
-    .map((row) => ({
-      id: row.id,
-      name: row.name,
-      type: row.type as ChannelType,
-      logo: logoOf(row),
-      cm: cmShown.has(row.id) ? learnedAt(row.id) : null,
-    }))
-    .sort((a, b) => typeRank(a.type) - typeRank(b.type));
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    type: row.type as ChannelType,
+    logo: logoOf(row),
+    cm: cmShown.has(row.id) ? learnedAt(row.id) : null,
+  }));
 }
 
 export function load() {

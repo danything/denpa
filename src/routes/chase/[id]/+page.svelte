@@ -104,6 +104,7 @@
   let encoded = $state(false);
   liveUpdates([], {
     recordings: () => {
+      if (encoded) return;
       void fetch(resolve(`api/recordings/${data.rec.id}`))
         .then((res) => (res.ok ? res.json() : null))
         .then((body: { encoded?: boolean } | null) => {
@@ -353,7 +354,7 @@
           icon={shooter.saved ? CHECK : CAMERA}
           label="この場面を切り抜く"
           testid="chase-shot"
-          onclick={() => void snapshot()}
+          onclick={snapshot}
         />
         <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`jikkyoList`) -->
         {#if jikkyoList.can}

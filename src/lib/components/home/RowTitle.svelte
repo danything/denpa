@@ -29,13 +29,14 @@
     open,
     fresh = false,
   }: {
-    /** 先頭に置く放送の時刻 (`21:30–22:00`。狭い画面は始まりだけ) */
+    /** 先頭に置く放送の時刻 (`21:30〜22:00`。狭い画面は始まりだけ) */
     start: number;
     end: number;
     /** ふつうの状態 (予約済み・視聴可能)。画面には出さず、読み上げにだけ渡す。ほかの状態は 3 段目 */
     state?: string | undefined;
     name: string;
-    testid: string;
+    /** 読み上げの状態 (`state`) に付ける目印 */
+    testid?: string;
     open: string | (() => void);
     fresh?: boolean;
   } = $props();
@@ -44,7 +45,7 @@
 <!-- 番組名が長ければ番組名だけを「…」で切る -->
 <div class="title-line">
   <span class="t-time num"
-    >{time(start)}<span class="t-end">–{time(end)}</span></span
+    >{time(start)}<span class="t-end">〜{time(end)}</span></span
   >
   {#if typeof open === "string"}
     <!-- 行いっぱいが押せる範囲なので、先読みは押したときだけ (一覧の上でマウスを動かすだけで何本も読み込まない) -->

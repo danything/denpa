@@ -6,7 +6,7 @@
    * - アプリの HTML は中継で取り、差し込み (`#lib/hybridcast/shim.ts`) を入れて sandbox の iframe へ渡す
    * - iframe からのリクエスト (通信・記憶・映像の置き場・選局・字幕・閉じる) は postMessage で受ける。
    *   **送り元が自分の iframe かを必ず見る**
-   * - 通信は中継 (`/api/bml/proxy`・`/api/bml/post`) を通す。決まり (公開アドレスだけ・10 秒・4MB・
+   * - 通信は中継 (`/api/bml/proxy`・`/api/bml/post`) を通す。決まり (公開アドレスだけ・10 秒・4 MB・
    *   cookie も UA も受信機を見分けるものも送らない) はデータ放送と同じ
    * - 受信機の記憶はアプリの配信元 (オリジン) ごとに分けて覚える (`storageKey`)
    * - データ放送の Greg と NVRAM を写して渡し、書かれたら戻す (`broadcast`・`onwrite`。`#lib/hybridcast/compat.ts`)
@@ -337,8 +337,11 @@
     return () => watcher.disconnect();
   });
 
+  /** リモコンの戻ると d。`AribKeyCode` (`bml/engine.ts` の `KEY`) と同じ値 (番号で書く理由は `Remote.svelte`) */
+  const BACK = 19;
+  const DATA_BUTTON = 20;
   press = (code, down) => {
-    if (code === 19 || code === 20) {
+    if (code === BACK || code === DATA_BUTTON) {
       if (down) onclose();
       return;
     }

@@ -146,8 +146,8 @@
 <style>
   .toasts {
     position: fixed;
-    right: 1rem;
-    bottom: calc(1rem + var(--dp-tabbar, 0px));
+    right: var(--dp-space-4);
+    bottom: calc(var(--dp-space-4) + var(--dp-tabbar, 0px));
     z-index: var(--dp-z-toast);
     display: flex;
     flex-direction: column;

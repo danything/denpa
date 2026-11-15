@@ -157,10 +157,10 @@
    */
   .ov-mark {
     position: absolute;
-    top: 0.25rem;
-    right: 0.25rem;
+    top: var(--dp-space-1);
+    right: var(--dp-space-1);
     font-size: var(--dp-text-xs);
-    font-weight: 700;
+    font-weight: var(--dp-weight-bold);
     line-height: 1;
     pointer-events: none;
   }

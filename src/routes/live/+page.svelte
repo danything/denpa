@@ -521,6 +521,21 @@
 
 <svelte:window onkeydown={keys} />
 
+<!-- 実況に書き込む 1 行。映像の上 (一覧を出せない形) とコメントの一覧の下で同じもの -->
+{#snippet compose(panel: boolean, focus: boolean)}
+  <JikkyoCompose
+    feed={jikkyo}
+    air={() => player.airTime()}
+    lag={player.fromAir}
+    paused={player.paused}
+    {panel}
+    {focus}
+    bind:text={draft}
+    official={data.niconico}
+    onclose={closeWriting}
+  />
+{/snippet}
+
 <!--
     映像を左、局を右 (YouTube の再生画面と同じ形)。広い画面ではページごとスクロールさせず、動くのは右の一覧だけ
     (`+layout.svelte` の `fill`)。1000px 未満では縦に積む
@@ -628,7 +643,7 @@
             icon={shooter.saved ? CHECK : CAMERA}
             label="この場面を切り抜く"
             testid="live-shot"
-            onclick={() => void snapshot()}
+            onclick={snapshot}
           />
           <!--
             右の列の先頭に「コメントの一覧」(書ける間は下に書き込む 1 行) を出す・しまう (`canList`)。
@@ -649,17 +664,7 @@
         <ControlBar shown={controls.shown} testid="live-controls">
           <!-- 一覧を出せない形で書き込む 1 行 (操作バーのすぐ上。`writing`) -->
           {#if writing}
-            <JikkyoCompose
-              feed={jikkyo}
-              air={() => player.airTime()}
-              lag={player.fromAir}
-              paused={player.paused}
-              panel={false}
-              focus
-              bind:text={draft}
-              official={data.niconico}
-              onclose={closeWriting}
-            />
+            {@render compose(false, true)}
           {/if}
           <!--
                         上に位置、下に押すもの (観る画面と同じ二段)。放送の今にいる間は右端に張り付かせる
@@ -966,17 +971,7 @@
     {#snippet commentList()}
       <JikkyoList feed={jikkyo} air={() => player.airTime()}>
         {#if canWrite}
-          <JikkyoCompose
-            feed={jikkyo}
-            air={() => player.airTime()}
-            lag={player.fromAir}
-            paused={player.paused}
-            panel
-            focus={opened}
-            bind:text={draft}
-            official={data.niconico}
-            onclose={closeWriting}
-          />
+          {@render compose(true, opened)}
         {/if}
       </JikkyoList>
     {/snippet}

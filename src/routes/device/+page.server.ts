@@ -24,7 +24,6 @@ export function load({ url, locals }) {
   const code = normalizeUserCode(raw);
   const viaToken = locals.token !== undefined;
   return {
-    code,
     viaToken,
     view: code === null || viaToken ? null : viewCode(code),
   };
