@@ -223,6 +223,17 @@ describe("pickTrack", () => {
     expect(pickTrack(tracks, undefined).id).toBe("0:main");
   });
 
+  // データ放送が選んだ音声 (`N:es`。J:COM テレビのラジオ選局) は番組表に無くても、その ES を選ぶ
+  test("データ放送が選んだ音声は、番組表の一覧に無くても PMT の音声の N 本目を選ぶ", () => {
+    expect(pickTrack(tracks, "2:es")).toEqual({
+      id: "2:es",
+      stream: 2,
+      side: "both",
+      label: "データ放送の音声",
+    });
+    expect(askedTrack("2:es")).toBe("2:es");
+  });
+
   /*
    * **どれが主音声かは放送が言っている** (`main_component_flag`)。
    * 並び順の 1 本目が主音声とは限らないので、言っているならそちらに従う

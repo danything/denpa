@@ -30,7 +30,7 @@ import {
   stepOrder,
   SWITCH_NOTE,
 } from "#lib/adapt.js";
-import type { AudioTrack } from "#lib/arib.js";
+import { type AudioTrack, broadcastTrack } from "#lib/arib.js";
 import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
 import { CaptionPainter } from "#lib/components/player/caption-draw.js";
 import {
@@ -235,7 +235,11 @@ function remember(target: Tuned, choice: LiveChoice): void {
       channelType: target.channelType,
       channel: target.channel,
       serviceId: target.serviceId,
-      ...(target.audio === undefined ? {} : { audio: target.audio }),
+      // データ放送が選んだ音声 (`N:es`) は覚えない。次に開いたときは、データ放送が選び直すまでふだんの音声
+      ...(target.audio === undefined ||
+      broadcastTrack(target.audio) !== undefined
+        ? {}
+        : { audio: target.audio }),
       choice,
     }),
   );
@@ -1979,6 +1983,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // MPEG-2 では再エンコードしない。TS には全部の音声が入っている (`RawEngine.selectAudio`。ライブも追っかけも)
     if (raw && engine !== null) {
       audio = id;
+      // データ放送が選んだ音声は番組表の一覧に無い。選んでいる間は足して「音声」に出し、戻したら外す (サーバの `nowPlaying` と同じ)
+      const chosen = broadcastTrack(id);
+      audios = audios.filter((track) => broadcastTrack(track.id) === undefined);
+      if (chosen !== undefined) audios = [...audios, chosen];
       if (tuned !== null) {
         tuned = { ...tuned, audio: id };
         remember(tuned, choice);
@@ -3188,7 +3196,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 選んでいる音声を RawEngine に伝える。**再エンコードしない** (`setAudio`) */
   function pickAudio(): void {
     const track =
-      audios.find((candidate) => candidate.id === audio) ?? audios[0];
+      broadcastTrack(audio) ??
+      audios.find((candidate) => candidate.id === audio) ??
+      audios[0];
     if (engine !== null && track !== undefined)
       engine.selectAudio(track.stream, track.side);
   }

@@ -34,6 +34,10 @@ export interface DomHost {
   subscribed(element: BmlElement): void;
   /** object の streamStatus を書いた (音・MNG) */
   stream(element: BmlElement, status: string): void;
+  /** 主音声を替える (映像の object の `setMainAudioStream`)。替えられたら true */
+  setMainAudio(ref: string): boolean;
+  /** 今の主音声 (`getMainAudioStream`。`/10` の形式) */
+  mainAudioRef(): string;
 }
 
 interface Accessor {
@@ -367,8 +371,13 @@ export class Dom {
         );
         attribute("streamPosition", "streamposition", "number");
         attribute("streamLooping", "streamlooping", "number", 1);
-        object.method(this.realm, "setMainAudioStream", () => false);
-        object.method(this.realm, "getMainAudioStream", () => "/10");
+        // 主音声の切り替え (STD-B24 第二編)。同じ局のほかの音声の ES を出す (J:COM テレビのラジオ選局など)
+        object.method(this.realm, "setMainAudioStream", (_, args) =>
+          host.setMainAudio(toStr(args[0])),
+        );
+        object.method(this.realm, "getMainAudioStream", () =>
+          host.mainAudioRef(),
+        );
         break;
       case "beitem":
         object.define("type", () => element.attr("type") ?? "");

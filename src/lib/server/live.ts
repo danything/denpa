@@ -4882,10 +4882,12 @@ function nowPlaying(
           ? audioTracks([])
           : all.filter((track) => track.stream === 0)
         : all;
+    const audio = pickTrack(tracks, wanted);
     return {
       program,
-      audios: tracks,
-      audio: pickTrack(tracks, wanted),
+      // データ放送が選んだ音声 (`arib.broadcastTrack`) は番組表の一覧に無いので、選んでいる間は足して画面の「音声」に出す
+      audios: tracks.includes(audio) ? tracks : [...tracks, audio],
+      audio,
       transport,
     };
   };

@@ -93,6 +93,11 @@
     /** 文書が別の局へ選局したい (epgTune)。選局は画面がやり、切り替えたら true。渡さなければいつも失敗 */
     tune?: ((service: Service) => boolean) | null;
     /**
+     * 文書が主音声を替えた (`setMainAudioStream`)。PMT の音声の ES の何本目か (0 から)。null はふだんの音声に戻す。
+     * エンジンを畳んだとき (局が替わった・閉じた) も null。渡さなければ文書の切り替えは音に出ない
+     */
+    mainAudio?: ((index: number | null) => void) | null;
+    /**
      * この番組に載っている Hybridcast (AIT)。文書が起動を求めたら (startAITControlledApp) 映像の上に開く
      * (`HybridcastFrame`)。双方向がオフ (`network`) なら開かない。文書の問い合わせにも「無い」と答える
      */
@@ -118,6 +123,7 @@
     network,
     clock = null,
     tune = null,
+    mainAudio = null,
     apps = [],
     serviceName = "",
     captions = false,
@@ -278,6 +284,8 @@
   let host = $state<HTMLDivElement | null>(null);
   /** いま動いているエンジン */
   let engine = $state<Bml | null>(null);
+  /** 文書が主音声を替えているか (`mainAudio`)。畳むときに戻す */
+  let audioChosen = false;
   /** 読み込み中か。**押してすぐは何も出ないので、「データ取得中」を出す** */
   let loading = $state(false);
   /** BML の文書が見える状態か (`onVisible`)。BML は `invisible` で始まり、d を受けたアプリが自分で外して出てくる */
@@ -645,6 +653,10 @@
       },
       // 選局は画面に任せる (エンジンは選局先を渡すだけ)。開くまでは断る (勝手に局を替えない)
       onTune: (service) => on && (tune?.(service) ?? false),
+      onMainAudio: (index) => {
+        audioChosen = index !== null;
+        mainAudio?.(index);
+      },
       // 開くまでは、自動起動の指定がある入口だけ動かす (`receive`)
       opened: () => on,
       // Hybridcast。双方向がオフなら開かない (エンジンも問い合わせに「無い」と答える)
@@ -748,6 +760,11 @@
     place();
     engine?.destroy();
     engine = null;
+    // 文書が替えた主音声は、文書と一緒に戻す
+    if (audioChosen) {
+      audioChosen = false;
+      mainAudio?.(null);
+    }
     videoRect = null;
     if (roundFont !== null) document.fonts.delete(roundFont);
     roundFont = null;
