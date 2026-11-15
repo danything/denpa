@@ -70,7 +70,7 @@ internal readonly record struct CxdIsdbcSignal(
     byte Search, byte Ts, byte? Modulation, int CnRaw, byte[]? Per, byte[]? Locked, byte BerLength, byte[]? Ber, byte[]? Uncorrected, int IfAgc);
 
 /// <summary>
-/// ISDB-C でほかに読める値 (仕様書 9.5)。出どころは PLEX の公開ドライバに入っている Sony の手順だけ (仕様書 13)。PX-MLT5PE の実機で読めたが、値が正しいかはほかの受信機と比べていない。<c>--tune</c> の出力にだけ出す。値が無ければ null
+/// ISDB-C でほかに読める値 (仕様書 9.5)。出どころは PLEX の公開ドライバに入っている Sony の手順だけ (仕様書 13)。PX-MLT5PE の実機で読めたが、値が正しいかはほかの受信機と比べていない。<c>--tune</c> の出力と、ISDB-C がロックしなかったときの記録 (<see cref="CxdIsdbcLockFailure"/>) に出す。値が無ければ null
 /// </summary>
 /// <param name="Inverted">復調器がスペクトルの反転を見つけたか</param>
 /// <param name="CarrierOffsetKhz">搬送波のずれ (kHz)</param>
@@ -104,8 +104,8 @@ public sealed record CxdPreviousTune(string Mode, uint Khz, bool Locked, long Be
 /// <param name="SinceInitMs">受信機を初期化してから、この選局を始めるまで (ms)</param>
 /// <param name="TunesSinceInit">初期化してから何回目の選局か (1 から数える。どの方式も数え、地上波のプリセットを外した選局し直しと、ずらした周波数の試し直しも 1 回と数える)</param>
 /// <param name="Previous">この受信機の前の選局。受信機を作ってから初めての選局なら null</param>
-/// <param name="Modulation">復調器が見分けた変調 (<c>64QAM</c> など。バンク <c>40</c> の <c>19</c>。仕様書 9.4)。自動の探索がロックしていなければ null</param>
-/// <param name="CnDb">C/N (dB。仕様書 9.4)。自動の探索がロックしていなければ null</param>
+/// <param name="Modulation">復調器が見分けた変調 (<c>64QAM</c> など。バンク <c>40</c> の <c>19</c>。仕様書 9.4)。自動の探索がロックしていないか、読めなければ null</param>
+/// <param name="CnDb">C/N (dB。仕様書 9.4)。自動の探索がロックしていないか、読めなければ null</param>
 /// <param name="SymbolRateMsps">シンボルレート (Msps。仕様書 9.5)。自動の探索がロックしていなければ null</param>
 /// <param name="PreRsBer">誤り訂正の前の BER (仕様書 9.5)。測り終えていなければ null</param>
 /// <param name="Uncorrected">訂正できなかったパケットの数 (仕様書 9.5)。読めなければ null</param>
