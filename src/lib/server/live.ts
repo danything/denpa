@@ -1673,6 +1673,12 @@ class Session {
   private silent = false;
 
   /**
+   * **映像の無い局で、ffmpeg が音声を見つけられずに降りた** (`runEncode`)。PMT に音声の ES が載っていても中身が流れていない局がある
+   * (BS 朝日のデータ放送の局)。立ったら無音を流して起こし直し、このセッションの間は立てたままにする
+   */
+  private audioAbsent = false;
+
+  /**
    * **追っかけを元の TS で送る前に、録画のストリームから PMT を読むか** (`readsVideo`)。読むときは、読めた放送のコーデックを受け取るもの。
    * 録り始めたばかりで開く前に録画の PMT を読めなかった追っかけだけ (`openChase`。`recorded-broadcast.broadcastDecided`)。
    * 映像が HEVC なら、4K の局の録画と同じく放送の HEVC を写したものに替える (`chaseRawServed`)
@@ -2110,7 +2116,8 @@ class Session {
            * 映像の無い局の PMT に音声も無い (データ放送だけの局)。ffmpeg に TS を渡さず、無音を流す (`encodeArgs` の `silent`)。
            * PMT を読むたびに決め直す (音声が付けば下ろす)。読めなかった (`null`) なら音声があるものとして渡す
            */
-          const silent = !this.video && head.audio === false;
+          const silent =
+            !this.video && (head.audio === false || this.audioAbsent);
           if (silent && !this.silent)
             console.log(
               `[live] ${this.id}: 映像も音声も無い局なので、無音を流します`,
@@ -2333,6 +2340,13 @@ class Session {
          * **局の映像か音声を指定できずに降りた。** 字幕を外しても、エンコード方式を替えても同じところで降りるので、
          * 起こし直さずに理由を伝える (映像の無い局・`-probesize` のうちに見つけられなかった局)
          */
+        if (this.noMedia === "音声" && !this.video && !this.audioAbsent) {
+          console.log(
+            `[live] ${label}: 映像の無い局の音声が流れていないので、無音を流して起こし直します`,
+          );
+          this.audioAbsent = true;
+          continue;
+        }
         if (this.noMedia !== null) {
           this.died(
             label,
