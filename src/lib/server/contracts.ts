@@ -658,7 +658,7 @@ function saveDecode(
         decode_ok: decodeOk,
         decoded_at: decodeOk ? now : null,
         // **カードが答えた行 (code がある) は状態を変えない。** カードが期限切れと答えた局を、
-        // 復号できたことで契約中に戻すと、定期の確認まで契約中と扱う (振り分けと手で予約したときの通知。カードの答えを信じる)
+        // 復号できたことで契約中に戻すと、定期の確認まで契約中と扱う (有料の番組の自動予約・振り分け・手で予約したときの通知。カードの答えを信じる)
         state: sql`CASE WHEN ${cardContracts.code} IS NULL THEN ${state} ELSE ${cardContracts.state} END`,
         checked_at: now,
       },
