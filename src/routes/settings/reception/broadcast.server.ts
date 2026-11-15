@@ -35,7 +35,7 @@ export const actions = {
         message: "郵便番号は数字 7 桁で入れてください (例 1000001)",
       });
     }
-    // 選ぶ欄なので、表に無い番号は画面の外から来たもの。黙って未設定にせず断る
+    // 選ぶ欄なので、表に無い番号は画面の外から来たもの。未設定にして通さず、断る
     const field = form.get("prefecture");
     const prefecture = parsePrefectureField(
       field === null ? null : String(field),

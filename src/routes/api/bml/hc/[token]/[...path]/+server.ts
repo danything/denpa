@@ -3,7 +3,7 @@
  * ([hc-relay.ts](../../../../../../lib/server/hc-relay.ts) の `relayAsset`)。
  *
  * - **ログインは見ない** (使い捨てのオリジンの iframe からの読み込みには cookie が付かない)。トークンが許可証
- * - 取り方の決まりは `/api/bml/proxy` と同じ (`fetchForBml`。公開アドレスだけ・10 秒・4MB)。双方向を切ってあれば 403
+ * - 取り方の決まりは `/api/bml/proxy` と同じ (`fetchForBml`。公開アドレスだけ・10 秒・4 MB)。双方向を切ってあれば 403
  */
 
 import { requireBmlNetwork } from "#lib/server/bml-network.js";

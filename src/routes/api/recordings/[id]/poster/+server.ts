@@ -13,7 +13,7 @@ import { recordingOr404 } from "#lib/server/recording.js";
  * 作ってあるので、読んで返すだけ。
  *
  * **無い録画もある。** ポスターより前にエンコードしたもの、エンコードする前のもの、4K の局をエンコードせずに置いたもの、切り出しに
- * 失敗したもの。そのときは 404 を返して、一覧は画像を出さずに済ませる (`+page.svelte`)。
+ * 失敗したもの。そのときは 404 を返して、一覧は画像を出さずに済ませる (`home/Poster.svelte`)。
  */
 export function GET({ params }) {
   const recording = recordingOr404(params.id);
