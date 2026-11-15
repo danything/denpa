@@ -2118,7 +2118,10 @@ async function runJob(jobId: number): Promise<void> {
    * ソフトウェアデコードで数百コマぶん重い。元の TS の MPEG-2/H.264 なら軽い。
    * 位置は元の TS の時刻で決める (`thumbnailPlace`)。CM があれば本編の最初の区間から取る (CM の映像を避ける)
    */
-  const duration = (recording.end_at - recording.start_at) / 1000;
+  // 測った元の TS の尺。途中で切れた録画は予定の尺より短く、予定の尺で決めると位置が尺を超えて何も出ない
+  const duration = Number.isFinite(measured.duration)
+    ? measured.duration
+    : (recording.end_at - recording.start_at) / 1000;
   const content =
     detection !== null && detection.cm.length > 0
       ? own(primary.skip).keep[0]

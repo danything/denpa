@@ -14,7 +14,6 @@ import { peekPmt, PMT_WAIT } from "./captions";
 import { followFile } from "./chase";
 import {
   broadcastDecided,
-  headVideo,
   learnBroadcast,
   recordedBroadcast,
   recordedMedia,
@@ -218,11 +217,5 @@ describe("録画の放送のコーデック (recordedBroadcast)", () => {
     expect(peeked.count).not.toBeNull();
     expect(peeked.video).toBe("hevc");
     await peeked.stream.return(undefined);
-  });
-
-  test("読むのは先頭の決まった量まで。その先の PMT は見ない", () => {
-    const path = recording(stream(filler(20), head(0x24)));
-    expect(headVideo(path, SERVICE, 188 * 10)).toBeUndefined();
-    expect(headVideo(path, SERVICE)).toBe("hevc");
   });
 });

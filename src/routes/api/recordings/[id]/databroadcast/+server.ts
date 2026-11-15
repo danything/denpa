@@ -7,13 +7,13 @@ import { recordingOr404 } from "#lib/server/recording.js";
 /**
  * 録画のデータ放送 (再生位置つきの変化ログ)。**d ボタンで開いたときに読む。**
  *
- * エンコードするときに元の TS から取り出してサイドカーへ置いてある (`server/recorded-bml.ts`)。
+ * エンコードするとき (映像の無い録画は、元の TS を置くとき。`recorder.finish`) に元の TS から取り出してサイドカーへ置いてある (`server/recorded-bml.ts`)。
  * ここは録画 ID から場所を引いて、そのまま JSON で配るだけ。持っていない録画
  * (データ放送の無い局・古い録画) は空を返す。画面はそれを見て「出せない」と出す。
  */
 export function GET({ params }) {
   const recording = recordingOr404(params.id);
-  // サイドカーは主 (library_path) の隣。エンコードが終わっていなければ持っていない
+  // サイドカーは主 (library_path) の隣。保存先に置くまでは持っていない
   if (recording.library_path === null) return json([]);
 
   // 番組の名乗りが無いと描く側が入口を開かない。書いていなかった頃のサイドカーにも足す

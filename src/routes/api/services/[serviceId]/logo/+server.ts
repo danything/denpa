@@ -16,7 +16,7 @@ export function GET({ params, setHeaders }) {
 
   setHeaders({
     "Content-Type": "image/png",
-    "Cache-Control": "public, max-age=86400",
+    "Cache-Control": "private, max-age=86400",
   });
   return new Response(logo as BodyInit);
 }

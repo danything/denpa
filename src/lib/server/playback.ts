@@ -89,7 +89,7 @@ import type { Recording } from "#lib/types.js";
 import { programSpec } from "./captions";
 import { chapterList } from "./cm";
 import { config } from "./config";
-import { aribServiceId } from "./encoder";
+import { aribServiceId, programSpan } from "./encoder";
 import { type LiveHw, nvencBusy } from "./hwenc";
 import { type EncodedColumns, encodedFile, encodedFiles } from "./library";
 import {
@@ -117,6 +117,7 @@ import {
 } from "./recording-io";
 import { endInput, run } from "./stream";
 import { holdTranscode } from "./transcode";
+import { tsProbe } from "./ts-probe";
 
 /** エンコード済みのファイル 1 本の中身 (ffprobe で読む。`probeMedia`) */
 interface MediaFile {
@@ -1741,14 +1742,19 @@ export async function captionArgs(recording: Recording): Promise<{
       ? null
       : await probeTs(path);
   if (ts === null) return null;
+  /*
+   * 探り方と字幕の選び方はエンコードと同じ (`encoder.captionArgs`)。前の番組から録った TS では、本編の字幕が
+   * 先頭の探りより後に現れ、ffmpeg は局の外に並べる (#2189)。録画の TS は 1 局に絞ってあるので局は名指ししない
+   */
   return {
     argv: [
       "-v",
       "error",
       "-copyts",
+      ...tsProbe(programSpan(recording).programStart),
       ...recordingInput(ts.path),
       "-map",
-      `${programSpec(aribServiceId(recording.service_id))}:s:0`,
+      "0:s:0",
       "-output_ts_offset",
       (-presented(ts.head)).toFixed(6),
       ...out,

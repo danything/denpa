@@ -156,20 +156,6 @@ export function learnBroadcast(path: string, broadcast: BroadcastCodec): void {
 }
 
 /**
- * **TS の録画の先頭 `limit` バイトから、その局の PMT の映像のコーデックを読む** (`captions.PmtPeek`)。
- * PMT を読めなければ undefined (まだ書かれていない・開けない)。映像の無い PMT は null
- */
-export function headVideo(
-  path: string,
-  program: number,
-  limit = PMT_SEARCH,
-): ServiceVideo | null | undefined {
-  if (program <= 0) return undefined;
-  return withRecording(path, (handle) => peekAt(handle, program, 0, limit))
-    ?.video;
-}
-
-/**
  * 先頭の PMT に映像が無い録画で、ほかに PMT を読む位置の数。録画を `MEDIA_SAMPLES` 等分した区切り (先頭を除く) から読む。
  * 映像の無い局の録画は小さい (映像のぶんが無い) ので、読み足しても軽い
  */

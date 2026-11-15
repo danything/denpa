@@ -169,7 +169,8 @@ export async function writeThumbnail(
           videoPath,
           thumbnail,
           thumbnailPlace(durationSec),
-          [],
+          // 元の TS を読むときは、ほかの元の TS を読む ffmpeg と同じ探り (`TS_PROBE`)
+          videoPath.endsWith(".mkv") ? [] : TS_PROBE,
           hlg,
         )
       : buildThumbnailArgs(from.source, thumbnail, from.place, TS_PROBE, hlg);

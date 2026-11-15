@@ -53,9 +53,9 @@ export async function GET({ params, url, request }) {
     .from(services)
     .where(eq(services.id, serviceId))
     .get();
-  if (row !== undefined && !row.decodable)
-    error(409, undecodableReason(row.type, row.transport));
-  const transport = row?.transport ?? "ts";
+  if (row === undefined) error(404, "局がありません");
+  if (!row.decodable) error(409, undecodableReason(row.type, row.transport));
+  const { transport } = row;
   const asked =
     liveAudioOnly(url) ??
     askedFormat(url, "live", {}, broadcastCodec(transport));

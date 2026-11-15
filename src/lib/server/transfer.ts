@@ -356,8 +356,9 @@ export async function exportArchive(): Promise<{
   const cleanup = () => {
     if (cleaned) return;
     cleaned = true;
-    rmSync(work, { recursive: true, force: true });
+    // 消せなくても (Windows で開いたままのファイルがある) 次の書き出しは断らない
     exporting = false;
+    rmSync(work, { recursive: true, force: true });
   };
   try {
     mkdirSync(work, { recursive: true });
@@ -427,8 +428,12 @@ export async function exportArchive(): Promise<{
         }
       },
       async cancel(reason) {
-        cleanup();
-        await reader.cancel(reason);
+        // 読んでいる写しを閉じてから消す
+        try {
+          await reader.cancel(reason);
+        } finally {
+          cleanup();
+        }
       },
     });
     return { stream, filename: `denpa-export-${stamp(at)}.tar.zst` };
@@ -628,8 +633,16 @@ async function prepare(): Promise<void> {
           );
         const path = join(staging(), entry.name);
         mkdirSync(dirname(path), { recursive: true });
-        // 同じ名前が 2 つあれば、2 つめで断る (`wx`)
-        const fd = openSync(path, "wx");
+        // 同じ名前が 2 つあれば、2 つめで断る (`wx`)。ファイルのせいなので、空きが無いときと分けて 400 にする
+        let fd: number;
+        try {
+          fd = openSync(path, "wx");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+          throw new Error(
+            `同じ名前 (${JSON.stringify(entry.name)}) が 2 つ入っています`,
+          );
+        }
         return {
           write: (chunk) => {
             for (let at = 0; at < chunk.length;)
