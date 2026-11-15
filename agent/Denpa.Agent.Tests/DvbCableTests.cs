@@ -200,6 +200,31 @@ public class DvbCableTests
     }
 
     [Test]
+    public async Task tune_は_ロックした変調を出し_QAM_AUTO_ならドライバが報告した変調を出す()
+    {
+        await Task.Yield();
+        // 64QAM と 256QAM を試す機材は、ロックした変調をそのまま出す
+        await Assert.That(DvbTuner.CableModulationLabel(DvbTuner.Qam64, null, [DvbTuner.Qam64])).IsEqualTo("64QAM");
+        await Assert.That(DvbTuner.CableModulationLabel(DvbTuner.Qam256, null, [DvbTuner.Qam64, DvbTuner.Qam256])).IsEqualTo("256QAM");
+        // QAM_AUTO でロックし、ドライバが受けている変調 (DTV_MODULATION) を返した
+        await Assert.That(DvbTuner.CableModulationLabel(DvbTuner.QamAuto, DvbTuner.Qam256, [DvbTuner.QamAuto]))
+            .IsEqualTo("256QAM (QAM_AUTO でロックし、ドライバが報告した変調)");
+        // get_frontend の無いドライバは渡した QAM_AUTO をそのまま返す。ioctl が失敗したときも同じ文を出す
+        await Assert.That(DvbTuner.CableModulationLabel(DvbTuner.QamAuto, DvbTuner.QamAuto, [DvbTuner.QamAuto]))
+            .IsEqualTo("変調は自動 (QAM_AUTO。ドライバが変調を報告しなかった)");
+        await Assert.That(DvbTuner.CableModulationLabel(DvbTuner.QamAuto, null, [DvbTuner.QamAuto]))
+            .IsEqualTo("変調は自動 (QAM_AUTO。ドライバが変調を報告しなかった)");
+        // ロックしなかったら、試した変調を並べる
+        await Assert.That(DvbTuner.CableModulationLabel(null, null, [DvbTuner.Qam64, DvbTuner.Qam256])).IsEqualTo("試した変調 64QAM・256QAM");
+        await Assert.That(DvbTuner.CableModulationLabel(null, null, [DvbTuner.Qam64])).IsEqualTo("試した変調 64QAM");
+        await Assert.That(DvbTuner.CableModulationLabel(null, null, [])).IsEqualTo("変調 -");
+        // enum fe_modulation の QAM_16 = 1、QAM_32 = 2、QAM_128 = 4 (linux/dvb/frontend.h)
+        await Assert.That(DvbTuner.ModulationName(1)).IsEqualTo("16QAM");
+        await Assert.That(DvbTuner.ModulationName(4)).IsEqualTo("128QAM");
+        await Assert.That(DvbTuner.ModulationName(9)).IsEqualTo("変調の値 9");
+    }
+
+    [Test]
     public async Task ロックしなかった変調のあと_FE_HAS_SIGNAL_を読まなければ_ほかの変調を試さない()
     {
         await Task.Yield();

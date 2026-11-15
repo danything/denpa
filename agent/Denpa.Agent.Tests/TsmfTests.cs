@@ -565,13 +565,16 @@ public class TsmfTests
     public async Task tune_の出力は_TSMF_の_TS_の一覧と選んだ_TS_と失敗の様子を書く()
     {
         var slots = TsmfFake.Alternate();
-        // ロックしなかった
-        await Assert.That(Probe.TsmfLines(false, null).Single()).Contains("ロックしませんでした");
+        // ロックしなかった。待った時間は機材ごとに出す (CXD2856ER は 1 秒、DVB の機材は 1 つの周波数・変調につき 5 秒)
+        await Assert.That(Probe.TsmfLines(false, null, Probe.CxdIsdbcUnlocked).Single())
+            .IsEqualTo("ISDB-C: ロックしませんでした (1000 ms の間に、復調と TS のロックがそろわなかった)");
+        await Assert.That(Probe.TsmfLines(false, null, Probe.DvbIsdbcUnlocked).Single())
+            .IsEqualTo("ISDB-C: ロックしませんでした (1 つの周波数・変調につき 5000 ms 待ち、FE_HAS_LOCK が立たなかった)");
 
         // ヘッダーあり。相対 TS 番号 2 と 3 が有効で、1 本目 (3) を選んだ
         var (selector, sink) = Make(index: 1);
         sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
-        var lines = Probe.TsmfLines(true, selector).ToList();
+        var lines = Probe.TsmfLines(true, selector, Probe.CxdIsdbcUnlocked).ToList();
         await Assert.That(lines[0]).IsEqualTo("ISDB-C: ロックしました");
         await Assert.That(lines[1]).IsEqualTo("TSMF: ヘッダーあり (バージョン 0、フレームの種類 1)。有効な TS は 2 本");
         await Assert.That(lines[2]).IsEqualTo("  相対 TS 番号 1: 無効  TSID 0x1001 (4097)  ONID 0x0004  MPEG-2 TS  スロット 0");
@@ -582,21 +585,21 @@ public class TsmfTests
         // 指定した TS が無い
         var (missing, missingSink) = Make(index: 4);
         missingSink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
-        await Assert.That(Probe.TsmfLines(true, missing)).Contains("指定した 4 本目はありません (:0〜:1 を指定する)");
+        await Assert.That(Probe.TsmfLines(true, missing, Probe.CxdIsdbcUnlocked)).Contains("指定した 4 本目はありません (:0〜:1 を指定する)");
 
         // ヘッダーの無い搬送波
         var (plain, plainSink) = Make(index: 0);
         plainSink.Push(Enumerable.Range(0, TsmfSelector.NoHeaderPackets).Select(number => TsmfFake.Packet(0x100, number)));
-        await Assert.That(Probe.TsmfLines(true, plain).Last()).Contains("ヘッダーなし");
-        await Assert.That(Probe.TsmfLines(true, plain).Last()).Contains("そのまま出力します");
+        await Assert.That(Probe.TsmfLines(true, plain, Probe.CxdIsdbcUnlocked).Last()).Contains("ヘッダーなし");
+        await Assert.That(Probe.TsmfLines(true, plain, Probe.CxdIsdbcUnlocked).Last()).Contains("そのまま出力します");
         var (second, secondSink) = Make(index: 1);
         secondSink.Push(Enumerable.Range(0, TsmfSelector.NoHeaderPackets).Select(number => TsmfFake.Packet(0x100, number)));
-        await Assert.That(Probe.TsmfLines(true, second).Last()).Contains("指定した 1 本目はありません");
+        await Assert.That(Probe.TsmfLines(true, second, Probe.CxdIsdbcUnlocked).Last()).Contains("指定した 1 本目はありません");
 
         // ロックしたが、判定に要るパケットが届かなかった
         var (pending, pendingSink) = Make(index: 0, discard: TsmfSelector.DiscardPackets);
         pendingSink.Push(Enumerable.Range(0, 5).Select(number => TsmfFake.Packet(0x100, number)));
-        await Assert.That(Probe.TsmfLines(true, pending).Last()).Contains("判定できませんでした (ロックしたが、5 パケットしか届かなかった");
+        await Assert.That(Probe.TsmfLines(true, pending, Probe.CxdIsdbcUnlocked).Last()).Contains("判定できませんでした (ロックしたが、5 パケットしか届かなかった");
 
         // 受け終えたあと: 数と、PAT の TSID がヘッダーの TSID (推定の並び) と同じか
         var frame = TsmfFake.Frame(slots, 0).ToList();
