@@ -389,7 +389,7 @@ export const channelChanges = sqliteTable("channel_changes", {
 
 /**
  * B-CAS カードごとの有料放送契約・復号状態の控え。
- * 設定の「有料契約確認」に出し、手で予約したときの通知と選局の振り分けに使う (`contracts.reserveWarning`・`agent-cards.ts`)。
+ * 設定の「有料契約確認」に出し、自動予約で有料放送を録る局を決めるのに使う (`contracts.paidAllowed`)。
  */
 export const cardContracts = sqliteTable(
   "card_contracts",
@@ -410,7 +410,7 @@ export const cardContracts = sqliteTable(
     decode_ok: flag("decode_ok"),
     /**
      * 復号できたと確かめた時刻 (epoch ms)。**番組表に契約の情報が無い局は、これが新しいときだけ契約中とみる**
-     * (`contracts.confirmedSubscribed`。`DECODE_VALID_MS` より古ければ確かめ直すまで「確かめていない」)
+     * (`contracts.paidAllowed`。`DECODE_VALID_MS` より古ければ確かめ直すまで録らない)
      */
     decoded_at: integer("decoded_at"),
     /** 最後に確認した時刻 (epoch ms) */

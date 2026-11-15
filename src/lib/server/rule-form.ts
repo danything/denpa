@@ -193,6 +193,7 @@ export function draftRule(fields: Fields): Rule | null {
     id: 0,
     name: "",
     ...columns(conditions),
+    // 有料放送を録るかはルールに持たない。局の契約で決める (`contracts.paidAllowed`)
     enabled: true,
     /*
      * **打ち込んだ値をそのまま持ち回る。** 1 で埋めていた頃は、下見を見るたびに優先度が 1 に

@@ -1515,7 +1515,7 @@ async function runJob(jobId: number): Promise<void> {
       removeIfExists(target);
       // 中止で切ったときは失敗にしない。下の後始末で canceled として終える
       if (canceled.has(jobId)) return finishCanceled(jobId, target);
-      // 有料の番組が、カードは読めているのに掛かったまま。その局を未契約に下げる (`contracts.noteStillScrambled`)
+      // 有料の番組が、カードは読めているのに掛かったまま。その局は次の回から録らない (`contracts.noteStillScrambled`)
       if (result.stillScrambled === true && paidRecording(recording))
         noteStillScrambled(recording.service_id, result.cardId ?? null);
       fail(
