@@ -14,7 +14,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// ファイル (<see cref="Config.TmccPresetsFile"/>) に書き、再起動をまたぐ。書くのはロックして値が新しくなったときだけで、
+/// ファイル (<see cref="Config.TmccPresetsFile"/>) に書き、再起動をまたぐ。書くのはロックして値が新しくなったときと、合わなかった値を消したときだけで、
 /// 読めない・壊れているファイルは捨てて空から始める (選局し直しで覚え直すため)。既定の値は覚えた値ではないので書かない。
 /// </para>
 /// </summary>
@@ -97,7 +97,8 @@ public sealed class TmccPresets
     }
 
     /// <summary>
-    /// <paramref name="tmcc"/> を書いた選局がロックしなかった。その周波数の値なら消す (その間にほかの受信機が覚え直した値は消さない)。
+    /// <paramref name="tmcc"/> を書いた選局がロックしなかった。その周波数の値なら消して、ファイルにも書く (その間にほかの受信機が覚え直した値は消さない)。
+    /// 書かないと、再起動したあとに消した値を読み直し、その周波数の最初の選局がまた 1 回失敗する。
     /// 代わりの値 (ほかの周波数の値か既定の値) なら消さず、その周波数には次から代わりの値を渡さない
     /// </summary>
     public void Failed(uint khz, byte[] tmcc, TmccPresetSource source)
@@ -105,7 +106,11 @@ public sealed class TmccPresets
         lock (_gate)
         {
             if (source != TmccPresetSource.Own) _noFallback.Add(khz);
-            else if (_values.TryGetValue(khz, out var known) && ReferenceEquals(known.Tmcc, tmcc)) _values.Remove(khz);
+            else if (_values.TryGetValue(khz, out var known) && ReferenceEquals(known.Tmcc, tmcc))
+            {
+                _values.Remove(khz);
+                Save();
+            }
         }
     }
 

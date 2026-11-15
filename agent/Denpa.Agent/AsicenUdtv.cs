@@ -542,7 +542,7 @@ internal sealed class AsicenTuner : ITuneDevice
         lock (_gate)
         {
             var listed = _prepare();
-            UserlandReceiver.Check(listed?.Receivers, _receiver, tuning);
+            AsicenReceiver.Check(listed?.Receivers, _receiver, tuning);
             Finish();
             Power(listed, tuning);
             try

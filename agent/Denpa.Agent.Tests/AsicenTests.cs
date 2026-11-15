@@ -313,7 +313,7 @@ public class AsicenTests
             }
 
             var selection = AsicenDaemon.Hardware("1-2", firmware, true, () => [w3u3], Lend);
-            // 複製を作るのは起動する直前 (Userland.Start の中)。選んだだけでは作らない
+            // 複製を作るのは起動する直前 (AsicenUserland.Start の中)。選んだだけでは作らない
             await Assert.That(lent).IsEmpty();
             await Assert.That(selection.Args).IsEquivalentTo(new[] { "--firmware", firmware, "--allow-lnb-power" });
             using var inherit = selection.Lend!();

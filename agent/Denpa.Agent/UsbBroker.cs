@@ -591,3 +591,49 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
         public static partial int Unlink(string path);
     }
 }
+
+/// <summary>
+/// 子プロセスに継がせる fd (Android でアプリから受け取った USB の機材)。**close-on-exec の無い複製**で、
+/// <see cref="AsicenUserland.Start"/> が起動し終えたら閉じる。受け取った元の fd は <see cref="BrokerUsbHost"/> が持ち続ける。
+///
+/// <para>
+/// .NET 11 の <c>ProcessStartInfo.InheritedHandles</c> は使わない。ほかの fd を閉じるのに <c>close_range</c> (Linux 5.9 から) を使い、
+/// それより古いカーネルの端末では起動できない (ENOTSUP)
+/// </para>
+/// </summary>
+public sealed class InheritedFds : IDisposable
+{
+    private readonly int[] _fds;
+    private int _disposed;
+
+    private InheritedFds(int[] fds) => _fds = fds;
+
+    /// <summary>子プロセスの引数 (<c>--fd</c>) に書く番号。並びは複製した順</summary>
+    public IReadOnlyList<int> Numbers => _fds;
+
+    /// <summary>
+    /// fd を close-on-exec の無い形で複製する。どれかを複製できなければ、複製したものを閉じて <see cref="IOException"/>
+    /// </summary>
+    public static InheritedFds Duplicate(IReadOnlyList<(int Fd, string Port)> received)
+    {
+        var fds = new List<int>();
+        foreach (var (fd, port) in received)
+        {
+            var copy = Sys.DupInheritable(fd);
+            if (copy < 0)
+            {
+                var message = System.Runtime.InteropServices.Marshal.GetLastPInvokeErrorMessage();
+                foreach (var made in fds) Sys.Close(made);
+                throw new IOException($"USB のポート {port} の機材を子プロセスに渡せません ({message})");
+            }
+            fds.Add(copy);
+        }
+        return new InheritedFds([.. fds]);
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        foreach (var fd in _fds) Sys.Close(fd);
+    }
+}

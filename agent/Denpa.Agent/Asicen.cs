@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -78,7 +79,14 @@ public static class AsicenUserland
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
     /// <summary><c>asicen:1-2:1</c> を割る。形式が違えば null</summary>
-    public static (string Id, int Receiver)? Parse(string device) => Userland.Parse(device, Scheme, ValidId);
+    public static (string Id, int Receiver)? Parse(string device)
+    {
+        if (!device.StartsWith(Scheme, StringComparison.Ordinal)) return null;
+        var parts = device[Scheme.Length..].Split(':');
+        if (parts.Length != 2 || !ValidId(parts[0])) return null;
+        if (!int.TryParse(parts[1], out var receiver) || receiver < 0) return null;
+        return (parts[0], receiver);
+    }
 
     /// <summary>
     /// ポート (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形式で、asicend の <c>--instance</c> に
@@ -116,7 +124,7 @@ public static class AsicenUserland
     /// 受信機 1 つを方式の名前から組み立てる。<c>ISDB-T</c>・<c>ISDB-S</c> をコンマか <c>/</c> で並べたもの。
     /// 対応していない方式が混じっていれば理由を残して null
     /// </summary>
-    internal static UserlandReceiver? Receiver(int number, IEnumerable<string> systems, Action<string> warn)
+    internal static AsicenReceiver? Receiver(int number, IEnumerable<string> systems, Action<string> warn)
     {
         var names = systems.SelectMany(system => system.Split(',', '/')).Select(name => name.Trim()).Where(name => name.Length > 0).ToList();
         if (names.Count == 0 || names.Any(name => name is not ("ISDB-T" or "ISDB-S")))
@@ -124,14 +132,22 @@ public static class AsicenUserland
             warn($"受信機 {number} の方式 {string.Join(",", names)} には対応していません (asicen-userland が新しい?)。この受信機は使いません");
             return null;
         }
-        return new UserlandReceiver(number, names.Contains("ISDB-T"), names.Contains("ISDB-S"));
+        return new AsicenReceiver(number, names.Contains("ISDB-T"), names.Contains("ISDB-S"));
     }
 
+    /// <summary><c>key=value</c> を空白で並べた 1 行を割る (<c>asicenctl list</c> の受信機の行)。同じキーが 2 度あれば最初のもの</summary>
+    internal static Dictionary<string, string> Fields(string line) => line
+        .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+        .Select(field => field.Split('=', 2))
+        .Where(pair => pair.Length == 2)
+        .GroupBy(pair => pair[0], StringComparer.Ordinal)
+        .ToDictionary(group => group.Key, group => group.First()[1], StringComparer.Ordinal);
+
     /// <summary>筐体 1 台。<see cref="Ports"/> は USB 機能のポート (asicend の <c>--device usb:</c> に渡す)</summary>
-    public sealed record Enclosure(string Id, string Model, IReadOnlyList<string> Ports, IReadOnlyList<UserlandReceiver> Receivers);
+    public sealed record Enclosure(string Id, string Model, IReadOnlyList<string> Ports, IReadOnlyList<AsicenReceiver> Receivers);
 
     /// <summary>動いている asicend に問い合わせた機種と受信機 (<c>asicenctl list</c>)</summary>
-    public sealed record Listed(string Model, IReadOnlyList<UserlandReceiver> Receivers);
+    public sealed record Listed(string Model, IReadOnlyList<AsicenReceiver> Receivers);
 
     /// <summary>
     /// 筐体の名前。USB 機能が 2 つなら同じ内蔵ハブの <c>.1</c> と <c>.2</c> のはずで、そのハブのポート。1 つならそのポート。
@@ -207,7 +223,7 @@ public static class AsicenUserland
             var receivers = listed.Count > 0
                 ? listed.Select(receiver => receiver.Number is { } number ? Receiver(number, receiver.Systems, warn) : null)
                 : model.Systems.Select((systems, index) => Receiver(index, [systems], warn));
-            found.Add(new Enclosure(id, model.Name, ports, [.. receivers.OfType<UserlandReceiver>().OrderBy(receiver => receiver.Index)]));
+            found.Add(new Enclosure(id, model.Name, ports, [.. receivers.OfType<AsicenReceiver>().OrderBy(receiver => receiver.Index)]));
         }
 
         foreach (var device in (root["ungrouped_usb_devices"] as JsonArray ?? []).OfType<JsonObject>())
@@ -235,7 +251,7 @@ public static class AsicenUserland
     public static Listed? ParseList(string output, Action<string> warn)
     {
         string? model = null;
-        var receivers = new List<UserlandReceiver>();
+        var receivers = new List<AsicenReceiver>();
         foreach (var raw in output.Split('\n'))
         {
             var line = raw.Trim();
@@ -245,7 +261,7 @@ public static class AsicenUserland
                 model = line["model=".Length..];
                 continue;
             }
-            var fields = UserlandReceiver.Fields(line);
+            var fields = Fields(line);
             if (!fields.TryGetValue("receiver", out var index) || !fields.TryGetValue("system", out var system)) continue;
             if (int.TryParse(index, out var number) && model is not null && Receiver(number, [system], warn) is { } receiver) receivers.Add(receiver);
         }
@@ -369,8 +385,8 @@ public static class AsicenUserland
         return [.. found.OrderBy(enclosure => enclosure.Id, StringComparer.Ordinal)];
     }
 
-    private static List<UserlandReceiver> Receivers(Model model, Action<string> warn) =>
-        [.. model.Systems.Select((systems, index) => Receiver(index, [systems], warn)).OfType<UserlandReceiver>()];
+    private static List<AsicenReceiver> Receivers(Model model, Action<string> warn) =>
+        [.. model.Systems.Select((systems, index) => Receiver(index, [systems], warn)).OfType<AsicenReceiver>()];
 
     /// <summary>
     /// asicend のソケットのパスが <c>sun_path</c> に収まるか。**収まらなければ起動しない** (asicend が断る前に、理由を記録に出す)。
@@ -380,10 +396,56 @@ public static class AsicenUserland
     {
         var socket = UdtvControl.Endpoint(runtimeDir, id, "control.sock");
         var length = System.Text.Encoding.UTF8.GetByteCount(socket);
-        if (length > Userland.MaxSocketPath)
+        if (length > MaxSocketPath)
         {
-            throw new IOException($"asicend のソケットのパス {socket} が {length} バイトで、上限の {Userland.MaxSocketPath} バイトを超えるので起動しません"
+            throw new IOException($"asicend のソケットのパス {socket} が {length} バイトで、上限の {MaxSocketPath} バイトを超えるので起動しません"
                 + " (ASICEN_RUNTIME_DIR を短い置き場にしてください)");
+        }
+    }
+
+    /// <summary>
+    /// UNIX ドメインソケットのパスの上限 (Linux の <c>sun_path</c> は終わりの NUL を含めて 108 バイト)。
+    /// 超えるパスでは、asicend は起動のときに断る
+    /// </summary>
+    internal const int MaxSocketPath = 107;
+
+    /// <summary>
+    /// asicend のランタイムルートを作る。asicend は下の階層しか作らない決まりで、持ち主だけが使えるもの (0700) を求める
+    /// </summary>
+    internal static void CreateRuntimeDir(string runtimeDir)
+    {
+        Directory.CreateDirectory(runtimeDir);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(runtimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    /// <summary>
+    /// asicend を起動する。標準出力と標準エラーは受け取る。
+    /// fd を継がせて起動するときは、<paramref name="lend"/> で継がせる fd の複製を作り、その番号から <paramref name="args"/> で引数を組む。
+    /// 複製は起動し終えたところで閉じる (子プロセスは自分の写しを持つ)。起動できなかったときも閉じる。
+    ///
+    /// <para>
+    /// **複製を作ってから起動し終えるまでは、ほかの子プロセスを起動しない** (<see cref="Shell.SpawnGate"/>。複製を作るのもこのロックの中)。
+    /// 同じ時にほかの子プロセスを起動すると、その子も同じ fd を継ぐ (.NET の Process.Start は close-on-exec の無い fd を閉じない)。
+    /// asicend が別の筐体の fd を持ち続けると、その筐体の USB の確保が外れない。エージェントの子プロセスはどれも <see cref="Shell.Start"/> で起動し、同じロックを取る
+    /// </para>
+    /// </summary>
+    internal static Process Start(string program, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, Func<InheritedFds>? lend)
+    {
+        lock (Shell.SpawnGate)
+        {
+            using var inherit = lend?.Invoke();
+            var start = new ProcessStartInfo(program, args(inherit?.Numbers ?? []))
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                // 診断は UTF-8 (パスに日本語が入りうる)
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
+                UseShellExecute = false,
+            };
+            return Shell.Start(start);
         }
     }
 
@@ -466,8 +528,8 @@ public static class AsicenUserland
         try
         {
             CheckSocketPath(RuntimeDir, id);
-            Userland.CreateRuntimeDir(RuntimeDir);
-            using var process = Userland.Start(
+            CreateRuntimeDir(RuntimeDir);
+            using var process = Start(
                 Bin(Dir, "asicend"),
                 fds => [.. AsicenDaemon.FdArguments(fds, Firmware, allowLnb: false), "--runtime-dir", RuntimeDir, "--instance", id],
                 () => broker.Lend(ports));
@@ -494,17 +556,27 @@ public static class AsicenUserland
     /// <summary>挿さっている筐体の受信機を、設定に書くのと同じ形式で返す</summary>
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
+    /// <summary>筐体ごとの受信機を設定の形式に (受けられる方式の無い受信機は除く)</summary>
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
-        Userland.Specs(enclosures.Select(enclosure => (enclosure.Id, enclosure.Model, enclosure.Receivers)), Name, Device);
+    [
+        .. enclosures.SelectMany(enclosure => enclosure.Receivers
+            .Where(receiver => receiver.Types.Length > 0)
+            .Select(receiver => new TunerSpec(
+                Name(enclosure.Model, enclosure.Id, receiver.Index), receiver.Types, false, Device(enclosure.Id, receiver.Index)))),
+    ];
 
-    /// <summary>設定に出てくる筐体。asicend を起動する対象</summary>
-    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Userland.IdsIn(specs, Parse);
+    /// <summary>設定に出てくる筐体 (<c>device</c> が <c>asicen:</c> のもの)。asicend を起動する対象</summary>
+    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => specs
+        .Where(spec => !spec.Disabled && spec.Device is not null)
+        .Select(spec => Parse(spec.Device!)?.Id)
+        .OfType<string>()
+        .Distinct(StringComparer.Ordinal);
 
     private static volatile HashSet<string> _lnb = [];
 
     /// <summary>
     /// 設定を控える。**LNB 15V と書いた受信機がある筐体だけ、asicend に給電を許可して起動する** (<c>--allow-lnb-power</c>)。
-    /// asicend を起動する前 (<see cref="UserlandDaemon.Prepare{T}"/> の前) に呼ぶ
+    /// asicend を起動する前 (<see cref="AsicenDaemon.Prepare"/> の前) に呼ぶ
     /// </summary>
     public static void Configure(IEnumerable<TunerSpec> specs) => _lnb =
     [
@@ -528,7 +600,45 @@ public static class AsicenUserland
 }
 
 /// <summary>
-/// <c>asicend</c> 1 つ (<see cref="UserlandDaemon"/>)。
+/// 受信機 1 つ。**asicend に問い合わせたもの** (<see cref="AsicenUserland.ParseList"/>)。
+///
+/// <para>
+/// 受信機ごとに地上波か衛星かが決まっていて、1 つの受信機で両方を受けられる機種もある。
+/// その違いはここに入ってくるだけで、こちらは機種を見ない。
+/// </para>
+/// </summary>
+public sealed record AsicenReceiver(int Index, bool Terrestrial, bool Satellite)
+{
+    public string[] Types => [.. Terrestrial ? ["GR"] : Array.Empty<string>(), .. Satellite ? ["BS", "CS"] : Array.Empty<string>()];
+
+    public bool Accepts(ChannelTable.Tuning tuning) => tuning.Satellite ? Satellite : Terrestrial;
+
+    /// <summary>
+    /// 筐体に問い合わせた受信機と、要求された選局が合っているか。**合わなければ asicend に送る前に断る。**
+    /// 受信機を問い合わせられていなければ (<paramref name="receivers"/> が null) 見ずに通す (合わなければ asicend が断る)
+    /// </summary>
+    public static void Check(IReadOnlyList<AsicenReceiver>? receivers, int index, ChannelTable.Tuning tuning)
+    {
+        if (receivers is null) return;
+        var receiver = receivers.FirstOrDefault(r => r.Index == index)
+            ?? throw new IOException(
+                $"受信機 {index} はありません (この筐体にあるのは {string.Join(", ", receivers.Select(r => r.Index))})");
+        if (!receiver.Accepts(tuning))
+        {
+            throw new IOException(
+                $"受信機 {index} は {string.Join("/", receiver.Types)} 用です ({tuning.Type} は受けられません)");
+        }
+    }
+}
+
+/// <summary>
+/// <c>asicend</c> 1 つ。**筐体 1 台につき 1 つ、使う受信機がある間だけ動かす。**
+///
+/// <para>
+/// 起動するのは最初に要ったとき (起動時の <see cref="Prepare"/> か、初めての選局)。
+/// ファームウェアを流し込んでから ready になるので、数秒かかる。
+/// 終了していたら次に要ったときに起動し直す。受信機を全部使わない設定にしたら止める (<see cref="Prepare"/>)。
+/// </para>
 ///
 /// <para>
 /// 起動は <c>asicend --device usb:&lt;ポート&gt;[,&lt;ポート&gt;] --firmware &lt;ファイル&gt; [--allow-lnb-power] --runtime-dir … --instance &lt;筐体の名前&gt;</c>
@@ -542,8 +652,23 @@ public static class AsicenUserland
 /// </param>
 /// <param name="program">起動する実行ファイルの名前。テストは模擬 (<c>asicend-mock</c>)</param>
 public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<AsicenDaemon.Selection> select, string program = "asicend")
-    : UserlandDaemon("asicend", id)
 {
+    private static readonly Lock Registry = new();
+    private static readonly Dictionary<string, AsicenDaemon> All = new(StringComparer.Ordinal);
+
+    /// <summary>ready を待つ上限。ファームウェアの流し込みは数秒で済む</summary>
+    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>止めるときに後片付けを待つ上限。過ぎたら Kill</summary>
+    private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(10);
+
+    private string Id { get; } = id;
+    private readonly Lock _gate = new();
+    private Process? _process;
+    private volatile string _stderr = "";
+
+    public bool Running => _process is { HasExited: false };
+
     /// <summary>
     /// asicend に渡す、機材を選ぶ引数。<paramref name="Lend"/> があれば (Android)、起動する直前にそれで fd の複製を作って継がせ、
     /// その番号を <c>--fd</c> にして <paramref name="Args"/> の前に足す (<see cref="FdOptions"/>)
@@ -555,6 +680,69 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         () => Hardware(
             id, AsicenUserland.Firmware, AsicenUserland.WantsLnb(id), () => AsicenUserland.Enclosures(_ => { }),
             OperatingSystem.IsLinux() && UsbHost.Current is BrokerUsbHost broker ? broker.Lend : null)));
+
+    /// <summary>筐体の asicend。まだ無ければ <paramref name="create"/> で作って控える (テストは模擬の実行ファイルを渡す)</summary>
+    internal static AsicenDaemon For(string id, Func<AsicenDaemon> create)
+    {
+        lock (Registry)
+        {
+            if (!All.TryGetValue(id, out var daemon))
+            {
+                daemon = create();
+                All[id] = daemon;
+            }
+            return daemon;
+        }
+    }
+
+    /// <summary>
+    /// 挙げた筐体ぶん起動して ready まで待ち、**挙げなかった筐体の asicend は止める。**
+    /// 起動時と、チューナーの設定を書き換えたときと、機材を挿したとき。
+    ///
+    /// <para>
+    /// **起動できなくても止まらない。** 筐体が抜けている・ファームウェアが無い、は
+    /// その筐体だけの話で、他のチューナー (PT3 など) は変わらず使える。
+    /// 理由は記録に残し、選局のときにもう一度試す。
+    /// </para>
+    ///
+    /// <para>
+    /// **受信機を全部使わない設定にした筐体は、asicend を止めて USB を手放す。** 動いたままだと、ほかのソフトに
+    /// 機材を渡せない (docs/switch.md「並べて動かすとき」)。使う設定に戻せば、ここか次の選局で起動し直す。
+    /// 起動したときに使う受信機の無い筐体を起動しないのと同じ
+    /// </para>
+    /// </summary>
+    public static void Prepare(IReadOnlyCollection<string> ids, Func<string, AsicenDaemon> daemon)
+    {
+        List<AsicenDaemon> unused;
+        lock (Registry) unused = [.. All.Values.Where(target => target.Running && !ids.Contains(target.Id))];
+        foreach (var target in unused)
+        {
+            target.Write("使う受信機が無くなったので止めます");
+            target.Stop();
+        }
+
+        foreach (var id in ids)
+        {
+            var target = daemon(id);
+            try
+            {
+                target.Ensure();
+            }
+            catch (Exception error)
+            {
+                target.Write(error.Message);
+            }
+        }
+    }
+
+    public static void StopAll()
+    {
+        List<AsicenDaemon> daemons;
+        lock (Registry) daemons = [.. All.Values];
+        foreach (var daemon in daemons) daemon.Stop();
+    }
+
+    private void Write(string message) => Log.Write($"[asicend {Id}] {message}");
 
     /// <summary>動いている asicend に問い合わせた機種と受信機。ready になるまで、問い合わせられなかったときも null</summary>
     public AsicenUserland.Listed? Listed { get; private set; }
@@ -580,7 +768,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
     /// <summary>
     /// 本物の機材を使う引数。**ファームウェアが無ければ起動しない** (asicend が <c>--firmware</c> を必須にしている)。
     /// 給電を許可するのは、設定に LNB 15V があり、上流が給電に対応としている機種のときだけ。
-    /// <paramref name="lend"/> があれば (Android)、筐体の USB 機能の fd を継がせる (複製を作るのは起動する直前。<see cref="Userland"/> の Start)
+    /// <paramref name="lend"/> があれば (Android)、筐体の USB 機能の fd を継がせる (複製を作るのは起動する直前。<see cref="AsicenUserland.Start"/>)
     /// </summary>
     internal static Selection Hardware(
         string id, string firmware, bool wantsLnb, Func<IEnumerable<AsicenUserland.Enclosure>> enclosures,
@@ -597,7 +785,8 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         return new Selection(FdArguments([], firmware, allowLnb), () => lend(enclosure.Ports));
     }
 
-    public override void Ensure()
+    /// <summary>動いていなければ起動して ready まで待つ。駄目なら理由を添えて例外を送出する</summary>
+    public void Ensure()
     {
         if (Running)
         {
@@ -615,9 +804,8 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         // asicend は止まるときに給電を切る。前の給電の要求は消して、次の選局でオンにし直す
         AsicenLnb.Forget(Id);
         Listed = null;
-        Receivers = null;
         _allowsLnb = args.Contains("--allow-lnb-power");
-        Launch(asicend, fds => [.. FdOptions(fds), .. args, "--runtime-dir", runtimeDir, "--instance", Id], runtimeDir,
+        Launch(asicend, fds => [.. FdOptions(fds), .. args, "--runtime-dir", runtimeDir, "--instance", Id],
             () =>
             {
                 var (code, output) = Control("list", TimeSpan.FromSeconds(5));
@@ -632,11 +820,85 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
                     Write($"機種と受信機を問い合わせられません (asicenctl list: {listed})");
                     return;
                 }
-                Receivers = Listed.Receivers;
                 Write($"{Listed.Model} 受信機 {Listed.Receivers.Count} つ: "
                     + string.Join(", ", Listed.Receivers.Select(receiver => $"#{receiver.Index} {string.Join("/", receiver.Types)}")));
             },
-            Hint, lend);
+            lend);
+    }
+
+    /// <summary>
+    /// 起動して、<paramref name="ready"/> が通るまで待つ。ランタイムルートはここで作る (<see cref="AsicenUserland.CreateRuntimeDir"/>)
+    /// </summary>
+    /// <param name="args">引数を、継がせた fd の番号から組む (<see cref="AsicenUserland.Start"/>)</param>
+    /// <param name="lend">継がせる fd の複製を作る (Android)。起動する直前に呼ぶ</param>
+    private void Launch(
+        string asicend, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, Func<bool> ready, Action onReady, Func<InheritedFds>? lend)
+    {
+        lock (_gate)
+        {
+            if (Running) return;
+            _process?.Dispose();
+            _process = null;
+
+            AsicenUserland.CreateRuntimeDir(runtimeDir);
+            var process = AsicenUserland.Start(asicend, args, lend);
+            _process = process;
+            _stderr = "";
+            _ = Task.Run(async () =>
+            {
+                // 診断は全部 stderr に来る
+                using var reader = process.StandardError;
+                while (await reader.ReadLineAsync() is { } line)
+                {
+                    _stderr = line;
+                    Write(line);
+                }
+            });
+            _ = process.StandardOutput.ReadToEndAsync();
+
+            var deadline = DateTime.UtcNow + ReadyTimeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (process.HasExited)
+                {
+                    throw new IOException($"asicend が終了しました (exit {process.ExitCode}: {_stderr}){Hint(process.ExitCode)}");
+                }
+                if (ready())
+                {
+                    Write("ready");
+                    onReady();
+                    return;
+                }
+                Thread.Sleep(500);
+            }
+
+            Stop();
+            throw new IOException($"asicend が {ReadyTimeout.TotalSeconds} 秒以内に ready になりません ({_stderr})");
+        }
+    }
+
+    /// <summary>
+    /// 止める。**SIGTERM で。** asicend は合図を受けると
+    /// 後片付け (LNB を 0V に戻す・socket を消す) をしてから終わる。Kill だとそこが保証されない
+    /// </summary>
+    public void Stop()
+    {
+        lock (_gate)
+        {
+            var process = _process;
+            _process = null;
+            if (process is null) return;
+            if (!process.HasExited)
+            {
+                Interop.Terminate(process.Id);
+                if (!process.WaitForExit(StopGrace))
+                {
+                    Write($"{StopGrace.TotalSeconds:F0} 秒で終わらないので強制終了します");
+                    process.Kill();
+                }
+            }
+            process.Dispose();
+        }
     }
 
     /// <summary>asicend の終了コード (external-contract §3.7) に、どうすればいいかを添える</summary>

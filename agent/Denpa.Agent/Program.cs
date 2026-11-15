@@ -195,7 +195,7 @@ var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected =
 
 /*
  * **asicen-userland の筐体の asicend を起動する。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
- * 使う受信機が無くなった筐体の asicend は止める (UserlandDaemon.Prepare)。
+ * 使う受信機が無くなった筐体の asicend は止める (AsicenDaemon.Prepare)。
  * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
 var daemonsGate = new Lock();
@@ -208,7 +208,7 @@ void PrepareDaemons()
         if (daemonsStopped) return;
         // asicen-userland の筐体の asicend (Asicen.cs)。配布物が無ければ顔ぶれにも出ない。LNB 15V の設定は起動の引数に効くので先に控える
         AsicenUserland.Configure(pool.Tuners);
-        UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For);
+        AsicenDaemon.Prepare([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For);
     }
 }
 
@@ -821,7 +821,7 @@ app.Lifetime.ApplicationStopped.Register(() => StopSteps.Run(
     ("asicend を止める", () =>
     {
         lock (daemonsGate) daemonsStopped = true;
-        UserlandDaemon.StopAll();
+        AsicenDaemon.StopAll();
     })));
 
 /*

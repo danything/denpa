@@ -248,6 +248,23 @@ public class Cxd2856PresetTests
     }
 
     [Test]
+    public async Task 覚えた値を消したらファイルからも消し_再起動したあとに読み直さない()
+    {
+        const uint khz = 515143;
+        var path = Temp();
+        var (frontend, _, _, presets) = Make(demod => demod.Status = _ => 0x10, new TmccPresets(path));
+        presets.Locked(503143, Convert.FromHexString("00000000000000000000000001"));
+        presets.Locked(khz, Convert.FromHexString(Tmcc));
+        await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
+
+        // 再起動した (ファイルから読む)。消した周波数は覚えておらず、ほかの周波数の値はそのまま
+        var again = new TmccPresets(path);
+        await Assert.That(Own(again, khz)).IsNull();
+        await Assert.That(again.For(khz).Source).IsEqualTo(TmccPresetSource.Other);
+        await Assert.That(Own(again, 503143)).IsEqualTo("00000000000000000000000001");
+    }
+
+    [Test]
     public async Task 手順_8_のあとすぐ選局を終え_50_ms_たってからロックを確かめる読み出しの間に_88_と_87_を書く()
     {
         // 100 ms でロックする
