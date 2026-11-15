@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { statSync } from "node:fs";
 
 import { DRCS_REPLACE } from "@danything/arib/b24-tables";
@@ -51,10 +52,13 @@ const extracting = sharing<Made>();
 const MISSING = "字幕がありません";
 
 /**
- * 字幕を作る側のバージョン。JSON の形式 (`CAPTION_TEXT_VERSION`) と外字の置き換え表の件数。
- * 表に足したら、端末に控えてある古い JSON (置き換える前の画像) を 304 で使い続けさせない
+ * 字幕を作る側のバージョン。JSON の形式 (`CAPTION_TEXT_VERSION`) と、外字の置き換え表の中身の MD5 の先頭 8 桁。
+ * 表に足したり値を直したりしたら、端末に控えてある古い JSON (置き換える前の画像) を 304 で使い続けさせない
  */
-const CAPTION_TAG = `c${CAPTION_TEXT_VERSION}.${DRCS_REPLACE.size}`;
+const CAPTION_TAG = `c${CAPTION_TEXT_VERSION}.${createHash("md5")
+  .update(JSON.stringify([...DRCS_REPLACE]))
+  .digest("hex")
+  .slice(0, 8)}`;
 
 /**
  * 字幕を抜いてデコードし、JSON にする。字幕を持たない (抜けたものが空・画像の字幕) ならその理由。
