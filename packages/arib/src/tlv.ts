@@ -2,7 +2,7 @@
  * TLV パケット (ARIB STD-B32 第 3 部) を切り出す。4K の放送 (MMT/TLV) の土台で、TS の `PacketStream` と同じ役。
  *
  * TLV パケットは `0x7F`・種類 (1 バイト)・長さ (2 バイト) のヘッダーと、長さぶんの中身でできている。
- * 長さが毎回違うので、TS のように決まった間隔で同期のバイトを探すことはできない。
+ * 長さが毎回違うので、TS のように決まった間隔で同期のバイトを探せない。
  * エージェントはケーブルの分割 TLV を組み立て直した TLV のバイト列を流す
  * ([agent.md](https://github.com/danything/denpa/blob/main/docs/agent.md))。
  */

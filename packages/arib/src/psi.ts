@@ -8,8 +8,8 @@
  * - SDT (PID 0x0011) … その TS に入っているサービスの ID と種別。衛星はほかの TS のぶん
  *   (SDT[other]) も流れている (`SdtReader`)
  *
- * 局名も SDT から読む。ARIB の文字符号は独自だが、番組表を自分で集めるなら
- * どのみち要るので [aribtext.ts](aribtext.ts) に寄せてある。
+ * 局名も SDT から読む。ARIB の文字符号は独自だが、番組表を取得するにも要るので
+ * [aribtext.ts](aribtext.ts) に寄せてある。
  */
 
 import { decodeAribText } from "./aribtext.js";
@@ -110,7 +110,7 @@ export interface TransportInfo {
 
 export interface NetworkInfo {
   networkId: number;
-  /** 最初の TS のリモコン番号。地上波の NIT は自分の TS 1 つだけを載せる */
+  /** TS 情報記述子を最初に載せていた TS のリモコン番号。地上波の NIT は自分の TS 1 つだけを載せる */
   remoteControlKeyId: number | null;
   transportStreams: NetworkTransport[];
 }
@@ -145,7 +145,7 @@ export class SectionAssembler {
    * パケットを 1 つ渡す。組み上がったセクションを返す。
    *
    * 返りは**読むだけ**にすること。何も組み上がらないとき (ほとんどのパケット) は
-   * 使い回しの空配列を返す (関係ないパケットのたびに配列を作っていた)
+   * 使い回しの空配列を返す (関係ないパケットのたびに配列を作らないため)
    */
   feed(packet: Uint8Array): readonly Uint8Array[] {
     // トランスポートエラーが立っているものは信用しない
@@ -700,7 +700,7 @@ function parseNitSection(section: Uint8Array): NitSection | null {
 }
 
 /**
- * NIT からネットワーク ID とリモコン番号、他の TS の顔ぶれを読む。**セクション 1 つぶん。**
+ * NIT からネットワーク ID とリモコン番号、TS の一覧を読む。**セクション 1 つぶん。**
  * スキャンで「どのネットワークか」を知るにはこれで足りる。ネットワークの全部の TS が要るなら `NitReader`
  */
 function parseNit(section: Uint8Array): NetworkInfo | null {
@@ -950,7 +950,7 @@ export interface FoundService extends Service {
  * **ケーブル (`requireNit: false`) は SDT[actual] だけで揃ったとみなす。** 1 つのネットワークが
  * 地上波・BS の再送信と自主放送の TS をまとめて流していて、NIT は CATV のネットワークのもの
  * (局の元の放送とは別)。どの放送の局かは SDT の original_network_id で分かる。
- * NIT が先に来ていれば、その TS のリモコン番号だけを使う。
+ * NIT が先に来ていれば、その TS のリモコン番号と部分受信の局だけを使う。
  * PAT に局が 1 つも無い TS (データだけの TS) も揃ったとみなし、局は返さない (`empty`)
  */
 export class ServiceReader {
@@ -998,7 +998,7 @@ export class ServiceReader {
     return this.complete;
   }
 
-  /** 録るに値するサービスだけ。リモコン番号は NIT のものを配る */
+  /** 録画の対象になる種類の局だけ (`SERVICE_TYPES`)。リモコン番号と部分受信の局は NIT から付ける */
   services(): FoundService[] {
     const transport = this.transport;
     if (transport === null) return [];
@@ -1008,7 +1008,6 @@ export class ServiceReader {
         ts.transportStreamId === transportStreamId &&
         ts.originalNetworkId === originalNetworkId,
     );
-    // 部分受信の局 (ワンセグ)。地上波の NIT[actual] が自分の TS に載せる
     const partial = new Set(own?.partialReception ?? []);
     const found = (
       networkId: number,

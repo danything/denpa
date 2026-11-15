@@ -2,7 +2,7 @@
  * **局ロゴを自分で覚えて、どのコマに出ているかを当てる。** 以前は logoframe に任せていた。
  *
  * logoframe はロゴを「色と濃さ (α)」で覚えていた。濃さを測るには**ロゴの後ろが
- * のっぺりしたコマ**が要り、BSテレ東 のように後ろが明るいセットばかりの局では
+ * のっぺりしたコマ**が要り、BSテレ東のように後ろが明るいセットばかりの局では
  * `initial logo estimate contains too few active pixels` で止まっていた (`docs/cm.md`「logoframe から乗り換えた」)。
  *
  * こちらが覚えるのは**線の向き**だけ。ロゴは後ろが何であれ毎コマ同じ所に同じ向きの
@@ -289,7 +289,7 @@ export function score(t: Template, data: Uint8Array): number {
   return on - off / 4;
 }
 
-/** 型の画素の平均の明るさ (0〜255)。ロゴが溶けて見えない明るさを外すのに使う (`byLevel`) */
+/** 型に入れた画素の平均の明るさ (0〜255)。ロゴが溶けて見えない明るさを外すのに使う (`byLevel`) */
 export function level(t: Template, data: Uint8Array): number {
   let sum = 0;
   for (const at of t.points) sum += data[at]!;

@@ -17,9 +17,8 @@ import { reload } from "./reload.svelte";
  * 結果、**開き直しても通知が二度と来ない**状態になり、リロードするまで
  * 古い一覧を見せ続けていた。
  *
- * 見えるようになったら、閉じていようがいまいが開き直す。閉じていなければ
- * 何も起きない安い判定なので、迷わず毎回見る。読み直しそのものは土台側
- * (`+layout.svelte`) がやる。あちらは通知を使っていない画面 (番組表・
+ * 見えるようになったら、閉じていれば開き直す。閉じていなければ何もしない軽い判定なので、
+ * 毎回確かめる。読み直しそのものは `+layout.svelte` が受け持つ。通知を使っていない画面 (番組表・
  * ルール) も同じように古いままだった
  *
  * ## 取りこぼしは「繋ぎ直したら 1 回読み直す」で埋める
@@ -32,7 +31,7 @@ import { reload } from "./reload.svelte";
  * - **定期チェック** … サーバは 25 秒おきに `ping` を送ってくる (`api/events`)。
  *   60 秒何も届かなければ、開いたまま応答しなくなった接続 (遅い回線で TCP が
  *   何も返さずに切れる) とみなして作り直す
- * - **`error`** … EventSource が自分で諦めた (`CLOSED`)。プロキシが一瞬
+ * - **`error`** … EventSource が繋ぎ直すのをやめた (`CLOSED`)。プロキシが一瞬
  *   エラーを返したときなど。少し置いて作り直す
  * - **`online`** … 回線が戻った合図。待たずにすぐ作り直す
  *
@@ -61,7 +60,7 @@ export function liveUpdates(
       source = new EventSource(resolve("api/events"));
       source.addEventListener("open", () => {
         lastSeen = Date.now();
-        // 繋ぎ直しは、切れていた間のことを知らない。1 回読み直して追いつく。
+        // 切れていた間の通知は届いていない。繋ぎ直したら 1 回読み直して追いつく。
         // 最初の 1 回は要らない。画面を組んだばかりで、もう新しい
         if (everOpened) refresh();
         everOpened = true;
@@ -70,7 +69,7 @@ export function liveUpdates(
         lastSeen = Date.now();
       });
       source.addEventListener("error", () => {
-        // 途中の揺れは EventSource が自分で繋ぎ直す。諦めたときだけ引き取る
+        // 途中の揺れは EventSource が自分で繋ぎ直す。やめたとき (`CLOSED`) だけ、こちらで作り直す
         if (source?.readyState !== EventSource.CLOSED) return;
         if (retry !== null) clearTimeout(retry);
         retry = setTimeout(connect, 3000);
@@ -96,11 +95,11 @@ export function liveUpdates(
 
     // 定期チェック。ping (25 秒おき) が 2 回続けて見えなければ、応答しなくなった接続とみなす
     const watchdog = setInterval(() => {
-      if (document.visibilityState !== "visible") return; // 裏のタブで空騒ぎしない
+      if (document.visibilityState !== "visible") return; // 裏のタブでは作り直さない
       if (Date.now() - lastSeen > 60_000) connect();
     }, 15_000);
 
-    // 凍らされている間に切られた接続は、開き直しても黙ったまま (上の説明)
+    // 凍らされている間に切られた接続は、開き直しても通知が届かないまま (上の説明)
     const revive = () => {
       if (document.visibilityState !== "visible") return;
       if (source === null || source.readyState === EventSource.CLOSED)
@@ -144,8 +143,7 @@ interface Held<T> {
  * 消えては現れ、目に見えてちらついていた。
  *
  * 中身を持っておいて、新しいものが届いたときだけ差し替える。表の行は
- * キー付きで並べてあるので、同じ中身なら Svelte は何も描き直さない
- * (= 変わったところだけが変わる)。
+ * キー付きで並べてあるので、同じ中身なら Svelte は何も描き直さない。
  */
 export function held<T>(source: () => Promise<T>): Held<T> {
   let value = $state<T | undefined>(undefined);
@@ -158,8 +156,8 @@ export function held<T>(source: () => Promise<T>): Held<T> {
       (next) => {
         if (!stale) value = next;
       },
-      // 失敗しても前の中身をそのまま出しておく。握り潰さないと未処理の
-      // 拒否になって、画面と関係のないところで落ちる
+      // 失敗しても前の中身をそのまま出しておく。ここで受け取らないと未処理の
+      // 拒否になって、画面と関係のないところでエラーになる
       () => {},
     );
     return () => {

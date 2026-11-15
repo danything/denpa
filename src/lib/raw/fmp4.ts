@@ -9,7 +9,7 @@
  * 止めるが、canvas に描くものは止めない。放送のままの MPEG-2 (worker.ts) と同じ考えで、時計は画面が
  * 鳴らしている音 (`playout.ts`)、ここは番が来たコマを出すだけ。
  *
- * MPEG-2 の経路との違い:
+ * MPEG-2 の経路とは次の点が違う。
  *
  * - **デコードするのはブラウザ** (VideoDecoder)。たいてい GPU 経由で、デコードしたフレームは VideoFrame
  *   (GPU の上のフレーム) として出てくる。**描いたらすぐ閉じる**。閉じずに持つと、デコーダの
@@ -61,7 +61,7 @@ const FRAME = 1501;
  * `full` を返し、画面が手元の尽きる前に再生している位置からリクエストし直す (エンコードする経路の MSE の `BUDGET` と同じ量)
  */
 const FOLLOW_AHEAD_MOST = 120 * CLOCK;
-/** MPEG-2 の worker の録画 (`worker.ts`) も同じ量で切る */
+/** 追っかけ・録画で圧縮のまま持っておくバイト数の上限 (`FOLLOW_AHEAD_MOST` と組で使う)。MPEG-2 の worker (`worker.ts`) も同じ量で切る */
 export const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
 /** デコーダが失敗しても開き直す回数。**これより続けて失敗したら打ち切る** (1 コマでも描ければ数え直す) */
 const ERRORS_MOST = 3;
@@ -420,7 +420,7 @@ export class Fmp4Video {
     this.frames.splice(at, 0, frame);
   }
 
-  /** 刻むたびに: 番の近いものを渡し、番が来たコマを描く。`at` は時計 (90kHz。止まっていれば null) */
+  /** 刻むたびに呼ぶ。番の近いものを渡し、番が来たコマを描く。`at` は時計 (90kHz。止まっていれば null) */
   tick(at: number | null): void {
     const decoder = this.decoder;
     if (decoder === null || decoder.state !== "configured") return;

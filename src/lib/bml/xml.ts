@@ -6,7 +6,7 @@
  *   こちらも寛容に読む (閉じていない要素は親が閉じるときに閉じる、ほかの実体参照はそのまま)
  * - 単体テスト (bun) に DOM が無くても動く
  *
- * 名前は小文字にそろえる。`bml:` などの前置きは落とす (C プロファイルの名残)。
+ * 名前は小文字にそろえる。`bml:` などの接頭辞は落とす (C プロファイルの名残)。
  */
 
 import { replaceBlocks } from "./css";
@@ -199,7 +199,7 @@ export function parseXml(source: string): XmlElement | null {
     open.at(-1)!.children.push(element);
     // 中身を持たない要素 (閉じずに書かれても、後ろの要素を中に入れない)
     if (selfClosing || VOID.has(name)) continue;
-    // script と style の中身は文字のまま (中の < をタグと見ない)。閉じタグも前置き (`</bml:script>`) を許す
+    // script と style の中身は文字のまま (中の < をタグと見ない)。閉じタグも接頭辞 (`</bml:script>`) を許す
     if (name === "script" || name === "style") {
       const closer = new RegExp(`</(?:[\\w.-]+:)?${name}`, "ig");
       closer.lastIndex = at;

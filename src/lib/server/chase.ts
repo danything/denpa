@@ -265,7 +265,7 @@ const unreadable = new Map<string, number>();
 /** 読めなかったあと、読み直すまで控える長さ (ms) */
 const HEAD_RETRY = 5_000;
 
-/** 尺を測るのに先頭と末尾から読む量。映像と音声の最初の PES、最後の映像の PES が入る長さ (`playback.ts` の `probeTs` と同じ) */
+/** 尺を測るのに先頭と末尾から読む量。映像と音声の最初の PES、最後の映像 (映像の無い録画は音声) の PES が入る長さ (`playback.ts` の `probeTs` と同じ) */
 const SPAN_BYTES = 4 * 1024 * 1024;
 
 /** 測った尺の控え。同じファイル (大きさ・更新時刻) なら読み直さない */
@@ -282,7 +282,7 @@ function readRange(
 }
 
 /**
- * **録り終えた元の TS の尺 (秒)。** 先頭の PTS (`tsHead`) から最後の映像の PES まで。観る画面の物差し
+ * **録り終えた元の TS の尺 (秒)。** 先頭の PTS (`tsHead`) から最後の映像の PES まで (映像の無い録画は最後の音声の PES まで。`lastMediaPts`)。観る画面の物差し
  * (`playback.ts` の `probeTs`) と同じ測り方。読めない・PES が見つからなければ null。
  *
  * 追っかけと録画の字幕は、呼ばれたその場で読み始める位置を決めるので同期で読む (先頭と末尾の 4MB ずつ)。

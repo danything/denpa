@@ -405,7 +405,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 決めるのは `adapt.ts` の `RungAdapter` で、ここは測った値を渡し、決まった段でリクエストし直すだけ (`adapt`)。
    * 段を動かすのは**メニューで「自動」を選んでいるときだけ**。段 0 は自動で決まった形式 (家の中なら MPEG-2) で、
    * 段 1〜3 はサーバが選んだコーデックの変換、`audio` は音声だけ。互換モード (canvas に描くエンコードしたもの) でも同じに動かし、
-   * サーバには canvas に描けるコーデックだけを渡す (`playable`。H.265 は描かない)。デコードが間に合うかは `raw/budget.ts` が見て、
+   * サーバには canvas に描けるコーデックだけを渡す (`playable`。H.265 は描かない)。デコードが間に合うかは `raw/budget.ts` が決め、
    * 回線とは混ぜない
    */
   /** いま再生中の段 (`tuned` の答え)。メニューの「自動 (H.264 540p)」に出す */
@@ -421,7 +421,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 最後に回線が細いとして下げたとき (下げる前の段と時刻)。切れる直前なら取り消す (`UNDO_BEFORE_CLOSE`) */
   let lastDown: { from: Step; at: number } | null = null;
   /**
-   * いま開いているのが映像の無い局か録画か (`tuned` の `video` が false)。サーバは音声だけを送るので、段を動かさず (`adapt`)、
+   * いま開いているのが映像の無い局・録画か (`tuned` の `video` が false)。サーバは音声だけを送るので、段を動かさず (`adapt`)、
    * 音声だけになったことを段の切り替えにも数えない (`asked` は局を替えたときのために持ち越す)
    */
   let videoless = false;
@@ -1071,15 +1071,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 詰まっているか (`AdaptSample.waiting`)。canvas は詰まった次の刻み (`stuck`) と、描いたコマが `CANVAS_FROZEN` 増えないとき。`<video>` は `waiting` から `playing` までに
+   * 詰まっているか (`AdaptSample.waiting`)。canvas は詰まった次の刻み (`stuck`) と、描いたコマが `CANVAS_FROZEN` の間増えないとき。`<video>` は `waiting` から `playing` までに
    * 加えて、先を持たない状態が `STUCK_LEAST` 続いたとき。`waiting` は自分で飛んだあと 3 秒数えない (`quiet`) ので、
    * 止まっては飛ぶのを繰り返すと、それだけでは詰まりが見えない
    */
   function stuckNow(now: number): boolean {
     if (canvas) {
       /*
-       * canvas (MPEG-2・互換モード) は、描いたコマ数 (RawEngine の `frameAt`。1 秒ごとに届く) が `CANVAS_FROZEN` 増えなければ、
-       * 音は鳴っているのに映像だけ止まっていると見る。`<video>` の `requestVideoFrameCallback` の代わり
+       * canvas (MPEG-2・互換モード) は、描いたコマ数が `CANVAS_FROZEN` の間増えなければ (RawEngine の `frameAt` は増えた時刻。
+       * コマ数は 1 秒ごとに届く)、音は鳴っているのに映像だけ止まっていると見る。`<video>` の `requestVideoFrameCallback` の代わり
        */
       const at = engine?.frameAt ?? 0;
       const frozen = videoFrozen({
@@ -1217,8 +1217,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
     const { step } = decision;
     /*
-     * サーバの入れ替え (`restarting`) から繋ぎ直して落ち着くまでは、回線が細いとして下げない。届かないのは回線のせいではない。
-     * 断り書きは出さず、段もそのまま
+     * サーバの入れ替え (`restarting`) の前後と、切れた接続を繋ぎ直したあとしばらく (`holdsDown`) は、回線が細いとして下げない。
+     * 届かないのは回線のせいではない。断り書きは出さず、段もそのまま
      */
     if (holdsDown(decision.reason, now, restartingAt, holdDownUntil)) return;
     /*
@@ -1592,7 +1592,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       try {
         await video.play();
       } catch {
-        // それでも駄目。画面の再生ボタンを押してもらう
+        // 消音でも断られた。画面の再生ボタンを押してもらう
       }
     }
   }
@@ -2822,7 +2822,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         } else if (notice.type === "tuned") {
           if (startup !== null)
             startup.tuned ??= performance.now() - startup.at;
-          // 切れた接続を繋ぎ直した。ここからしばらくは回線が細いとして下げない (`HOLD_AFTER_RECONNECT`)
+          // 切れた接続を繋ぎ直した (入れ替えの通知 `restarting` のあとを含む)。ここからしばらくは回線が細いとして下げない (`HOLD_AFTER_RECONNECT`)
           if (
             rejoining ||
             (restartingAt !== null &&
@@ -3006,7 +3006,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         } catch {
           return; // 壊れた 1 枚。次が来る
         }
-        // 知らないバージョンは描かない (置き場所の読み方が違うかもしれない)
+        // ほかのバージョンは描かない (置き場所の読み方が違うかもしれない)
         if (page.v !== CAPTION_TEXT_VERSION) return;
         cues = insertCue(cues, { at, page });
       }
