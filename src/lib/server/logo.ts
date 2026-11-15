@@ -1485,7 +1485,7 @@ async function freeRelay(left: readonly StreamUse[]): Promise<Target | null> {
 
 /**
  * まだ当たり外れを確かめていないカルーセルの TS を受けられるチャンネル。
- * アンテナの BS → ケーブルの BS の再送信 → CS の順 (`relayRank`)
+ * アンテナの BS → ケーブルの BS の再送信 → アンテナの CS → ケーブルの CS の再送信の順 (`relayRank`)
  */
 function unprobedRelays(): Target[] {
   const known = notes();
