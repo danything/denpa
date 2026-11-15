@@ -336,6 +336,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private mainAudio: number | null = null;
   /** 主音声を音声の object で選んだか (`objectAudio`)。object が無くなったときに戻すのは、object で選んだときだけ */
   private audioByObject = false;
+  /** 最後に記録に出した音声の object の様子 (`objectAudio`。同じなら出さない) */
+  private loggedAudioObjects = "";
   private loading = false;
   private currentEvent: Value = null;
   private focusedElement: BmlElement | null = null;
@@ -1233,6 +1235,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const index = this.audios.indexOf(this.mainAudio);
     if (index <= 0) {
       this.mainAudio = null;
+      this.audioByObject = false;
       this.options.onMainAudio?.(null);
     } else if (index !== before) {
       this.options.onMainAudio?.(index);
@@ -1289,14 +1292,17 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       }
       return;
     }
-    this.log(
-      `音声の object (${why}): ${objects
-        .map(
-          (element) =>
-            `data=${element.attr("data") ?? ""} streamstatus=${element.attr("streamstatus") ?? "stop"}`,
-        )
-        .join(" / ")}`,
-    );
+    // 様子が前と同じなら記録に出さない (PMT は届くたびにここを通る)
+    const shape = objects
+      .map(
+        (element) =>
+          `data=${element.attr("data") ?? ""} streamstatus=${element.attr("streamstatus") ?? "stop"}`,
+      )
+      .join(" / ");
+    if (shape !== this.loggedAudioObjects) {
+      this.loggedAudioObjects = shape;
+      this.log(`音声の object (${why}): ${shape}`);
+    }
     if (this.options.onMainAudio === undefined) return;
     const tag = objects
       .filter(
