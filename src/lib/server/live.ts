@@ -5198,8 +5198,8 @@ function nowPlaying(
 /**
  * **いま同じ局を流しているセッションが読んだ PMT の音声** (`Session.pmtAudioTags`)。どれも読んでいなければ undefined。
  *
- * 流れているものだけを見る。畳んだセッションの PMT は番組が替わったあとも残るので、PMT に無くなった音声を
- * 選ばせると ffmpeg が音声を名指しできずに降りる。音声を選び直すと、選局し直す前のセッションがまだ流れているので、そちらの PMT が使える
+ * 流れているものだけを見る。止まったセッションの PMT は番組が替わったあとも残るので、PMT に無くなった音声を
+ * 選ばせると、ffmpeg は音声を指定できずに終了する。音声を選び直すと、選局し直す前のセッションがまだ流れているので、そちらの PMT が使える
  */
 function pmtSeen(serviceId: number): readonly (number | null)[] | undefined {
   for (const session of sessions.values()) {
@@ -5218,7 +5218,7 @@ export class PmtAudioWatch {
   private readonly pmt: PmtTracker;
   private now: (number | null)[] | null = null;
 
-  /** @param program 放送が名乗っている番号 */
+  /** @param program 放送の番号 (program_number。`NowPlaying.program`) */
   constructor(program: number) {
     this.pmt = new PmtTracker(program);
   }
