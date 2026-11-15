@@ -248,15 +248,6 @@ export function followFile(
   });
 }
 
-/** いまのファイルの大きさ。無ければ null (消された・まだ書き始めていない) */
-export function fileSize(path: string): number | null {
-  try {
-    return statSync(path).size;
-  } catch {
-    return null;
-  }
-}
-
 /** 読んだ先頭の控え。録画中も先頭は変わらないので、読めたものはパスごとに覚える (追っかけはシークのたびに聞く) */
 const heads = new Map<string, number>();
 /** 控えごとに覚えておく数 (`heads`・`unreadable`・`spans`)。追っかけと字幕で同時に読む録画はいくつもない */

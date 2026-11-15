@@ -7,7 +7,7 @@ const { config } = await import("./config");
 const root = mkdtempSync(join(tmpdir(), "denpa-fsx-"));
 config.encodedDir = join(root, "encoded");
 
-const { pruneEmptyDirs } = await import("./fsx");
+const { fileSize, pruneEmptyDirs } = await import("./fsx");
 
 test("空になったフォルダを消すのは置き場の中だけ。置き場そのものは残す", () => {
   const series = join(config.encodedDir, "シリーズ", "S1");
@@ -22,4 +22,8 @@ test("名前の先頭が置き場と同じだけの隣のフォルダには触�
   mkdirSync(beside, { recursive: true });
   pruneEmptyDirs(join(beside, "x.mkv"));
   expect(existsSync(beside)).toBe(true);
+});
+
+test("大きさを読めないファイルは null", () => {
+  expect(fileSize("/no/such/file.ts")).toBeNull();
 });

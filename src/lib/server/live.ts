@@ -34,13 +34,7 @@ import {
 import { PresentFollowing } from "@danything/arib/eit";
 import { MmtPresentFollowing } from "@danything/arib/mh-eit";
 import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
-import {
-  packetPid,
-  PacketStream,
-  PID_PAT,
-  PmtTracker,
-  TABLE_PMT,
-} from "@danything/arib/psi";
+import { PacketStream } from "@danything/arib/psi";
 import { ServiceFilter, StreamsWatch } from "@danything/arib/service-filter";
 import { and, eq, gt, lte } from "drizzle-orm";
 
@@ -135,6 +129,7 @@ import {
 import { MmtLive, type MmtOut } from "./live-mmt";
 import { tunerOf, yieldedTo } from "./live-yield";
 import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
+import { PmtWatch } from "./pmt-watch";
 import {
   broadcastDecided,
   learnBroadcast,
@@ -5144,10 +5139,10 @@ interface NowPlaying {
 }
 
 /**
- * いま流れている番組から、ffmpeg に渡す局の番号と音声を決める。**番組表から決める。**
+ * いま流れている番組から、ffmpeg に渡す局の番号と音声を決める。**番組表と、読んであれば PMT から決める。**
  *
  * - 局の番号 … ffmpeg に名指しさせる `program_number` (`NowPlaying.program`)
- * - 音声 … 番組表の `audios` から、選べるものを組み立てる (`arib.audioTracks`)。
+ * - 音声 … 番組表の `audios` から、選べるものを組み立てる (`arib.audioTracks`)。PMT を読んであれば、並びと本数は PMT に従う。
  *   **古い行には `audios` が入っていない**ので、そのときは `audio_type` だけで
  *   デュアルモノかどうかを見る。どちらも無ければ「そのまま出す」1 つ
  *
@@ -5210,35 +5205,11 @@ function pmtSeen(serviceId: number): readonly (number | null)[] | undefined {
   return undefined;
 }
 
-/**
- * PMT の音声の ES の部品タグを読む (`Session.audioWatch`)。PMT だけ読み、**並びが初めて決まったか変わったら true** を返す
- * (`databroadcast.ts` の `AutoStartWatch` と同じ作り)
- */
-export class PmtAudioWatch {
-  private readonly pmt: PmtTracker;
-  private now: (number | null)[] | null = null;
-
+/** PMT の音声の ES の部品タグを読む (`Session.audioWatch`)。**並びが初めて決まったか変わったら** `feedPacket` が true を返す */
+export class PmtAudioWatch extends PmtWatch<readonly (number | null)[]> {
   /** @param program 放送の番号 (program_number。`NowPlaying.program`) */
   constructor(program: number) {
-    this.pmt = new PmtTracker(program);
-  }
-
-  get value(): readonly (number | null)[] | null {
-    return this.now;
-  }
-
-  feedPacket(packet: Uint8Array): boolean {
-    const pid = packetPid(packet);
-    if (pid !== PID_PAT && pid !== this.pmt.pid) return false;
-    let changed = false;
-    for (const section of this.pmt.feed(packet, pid)) {
-      if (section[0] !== TABLE_PMT) continue;
-      const next = pmtAudios(section);
-      if (JSON.stringify(next) === JSON.stringify(this.now)) continue;
-      this.now = next;
-      changed = true;
-    }
-    return changed;
+    super(program, pmtAudios);
   }
 }
 

@@ -4,6 +4,7 @@ import {
   mkdirSync,
   renameSync,
   rmdirSync,
+  statSync,
   unlinkSync,
 } from "node:fs";
 import { dirname, isAbsolute, relative } from "node:path";
@@ -48,5 +49,14 @@ export function pruneEmptyDirs(path: string): void {
       return;
     }
     dir = dirname(dir);
+  }
+}
+
+/** いまのファイルの大きさ。無ければ null (消された・まだ書き始めていない) */
+export function fileSize(path: string): number | null {
+  try {
+    return statSync(path).size;
+  } catch {
+    return null;
   }
 }

@@ -20,7 +20,6 @@ import { capacityLabel } from "#lib/format.js";
 import { GROUPED_COOKIE, storedGrouped } from "#lib/grouping.js";
 import { parseId } from "#lib/id.js";
 import { agentCount } from "#lib/server/agents.js";
-import { fileSize } from "#lib/server/chase.js";
 import { clipCountsByRecording } from "#lib/server/clips.js";
 import { now, orm } from "#lib/server/db.js";
 import { capacity } from "#lib/server/disk.js";
@@ -35,6 +34,7 @@ import {
 import { listedServices, serviceCounts } from "#lib/server/epg.js";
 import { emit } from "#lib/server/events.js";
 import { reconcile, removeRecording } from "#lib/server/files.js";
+import { fileSize } from "#lib/server/fsx.js";
 import { seriesFolder } from "#lib/server/library.js";
 import { watchProgress } from "#lib/server/playback.js";
 import { recordingFromForm } from "#lib/server/recording.js";

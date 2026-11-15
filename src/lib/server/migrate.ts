@@ -48,6 +48,7 @@ import {
   parseSource,
 } from "./epgstation-api";
 import { emit } from "./events";
+import { fileSize } from "./fsx";
 import { type LibraryNameInput, libraryPath, recordedPath } from "./library";
 import { writeThumbnail } from "./metadata";
 import { reserve } from "./reservations";
@@ -328,14 +329,6 @@ function placement(
     dir,
     temporary: temporaryPath(dir, recorded.id, file.extension),
   };
-}
-
-function fileSize(path: string): number {
-  try {
-    return statSync(path).size;
-  } catch {
-    return 0;
-  }
 }
 
 /** EPGStation の局の名前 (`/channels`)。知らない局の名前を写すのに使う */
@@ -1025,7 +1018,7 @@ async function importRecordings(
     const file = chooseFile(item);
     if (file === null) continue;
     const { temporary } = placement(item, file, existing);
-    const partial = Math.min(fileSize(temporary), file.size);
+    const partial = Math.min(fileSize(temporary) ?? 0, file.size);
     pending.push({
       raw: file.raw,
       size: file.size,
