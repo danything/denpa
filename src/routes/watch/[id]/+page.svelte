@@ -2997,7 +2997,9 @@
             {#if deleting.armed !== null}
               <ControlButton
                 icon={CHECK}
-                label="削除を確定"
+                label={offline.entries[rec.id] === undefined
+                  ? "削除を確定"
+                  : "端末とサーバから削除"}
                 danger
                 submit
                 testid="watch-delete-confirm"

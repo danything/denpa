@@ -494,7 +494,11 @@
                     class="menu-item menu-danger"
                     data-testid="row-menu-delete-confirm"
                   >
-                    <Icon icon={Trash} size="size-4" />削除を確定
+                    <Icon icon={Trash} size="size-4" />{offline.entries[
+                      rec.id
+                    ] === undefined
+                      ? "削除を確定"
+                      : "端末とサーバから削除"}
                   </button>
                 {:else}
                   <button
@@ -560,6 +564,9 @@
               submit={afterDelete(rec)}
               testid="delete-button"
               confirmTestid="delete-confirm"
+              confirmLabel={offline.entries[rec.id] === undefined
+                ? "削除を確定"
+                : "端末とサーバから削除"}
               icon
             />
           </div>
