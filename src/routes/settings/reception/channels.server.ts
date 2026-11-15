@@ -3,8 +3,8 @@ import { asc, count, eq, or, sql } from "drizzle-orm";
 
 import { parseId } from "#lib/id.js";
 import {
-  serviceAgent,
-  serviceChannel,
+  servicePlaces,
+  strictPlaces,
   unreceivableService,
 } from "#lib/server/agent-channels.js";
 import {
@@ -46,7 +46,10 @@ import {
 interface Coverage {
   type: ChannelType;
   channel: string;
-  /** このチャンネルを控えに持つエージェント (`agent-channels.serviceAgent`)。受信の様子と測定はこのエージェントのもの */
+  /**
+   * このチャンネルで選局するエージェント (`agent-channels.servicePlaces` の先頭)。受信の様子と測定はこのエージェントのもの。
+   * 受信できるエージェントが 1 台でもあればそのうちの先頭で、全部で受信できないと決めたときだけ受信できないエージェントになる
+   */
   agent: number;
   /** このチャンネルの TS を受けられるエージェントの名前 (並びの順)。画面は 2 台以上のときだけ出す */
   agents: string[];
@@ -117,8 +120,7 @@ function coverage(): Coverage[] {
       id: services.id,
       name: services.name,
       type: services.type,
-      channel: serviceChannel(),
-      agent: serviceAgent(),
+      places: servicePlaces(),
       network_id: services.network_id,
       transport_stream_id: services.transport_stream_id,
       decodable: services.decodable,
@@ -137,9 +139,15 @@ function coverage(): Coverage[] {
   const receivers = receiversByTs();
   const channels = new Map<string, Coverage>();
   for (const row of rows) {
-    const { id, name, type, channel, agent, programs, until, decodable } = row;
+    const { id, name, type, programs, until, decodable } = row;
+    /*
+     * 選局するエージェントのチャンネルで出す。並びの先頭のエージェントで受信できなくても、ほかのエージェントで
+     * 受信できるなら、そちらのチャンネルの受信の様子を出す
+     */
+    const place = row.places === null ? undefined : strictPlaces(row.places)[0];
     // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は出さない
-    if (channel === null || agent === null) continue;
+    if (place === undefined) continue;
+    const { agent, channel } = place;
     const key = `${type}:${channel}`;
     const from = type === "CATV" ? origin(row.network_id) : null;
     const entry = channels.get(key) ?? {

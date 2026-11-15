@@ -36,6 +36,7 @@ const {
   byTransportStream,
   collectOnce,
   drain,
+  endedEarly,
   firstSweepDone,
   firstSweeps,
   laneTypes,
@@ -746,6 +747,66 @@ describe("番組表を読める局を集める", () => {
       expect(
         at.find((row) => row.id === serviceKey(ONID_4K, 171, "CATV"))?.epg_at,
       ).toBeNull();
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
+/**
+ * **揃う前にエラー無く閉じたストリームは、読み終えたことにしない** (`endedEarly`)。
+ * エージェントがきれいに閉じるのは引き継ぎ (`after`) の利用者だけで、番組表の取得は入らない
+ */
+describe("揃う前に閉じたストリーム (endedEarly)", () => {
+  const none = { opened: true, aborted: false, complete: false };
+
+  test("開けたあと、揃う前にこちらが閉じずに終わったら途中で切れたと数える", () => {
+    expect(endedEarly(none)).toBe(true);
+  });
+
+  test("揃った・こちらが閉じた (上限・止めた)・開けていない回は数えない", () => {
+    expect(endedEarly({ ...none, complete: true })).toBe(false);
+    expect(endedEarly({ ...none, aborted: true })).toBe(false);
+    expect(endedEarly({ ...none, opened: false })).toBe(false);
+  });
+
+  test("エージェントが揃う前にきれいに閉じたら、この周回で読み直す (上限まで)", async () => {
+    const { fakeAgentUrl, serveFakeAgent } = await import("./fake-agent");
+    const offered = [channel("T40", [0x0440])];
+    const tuner = {
+      index: 0,
+      name: "PX-MLT5PE",
+      types: ["GR"],
+      disabled: false,
+      rank: 0,
+      device: "it930x:1-1:0",
+      pin: "it930x:1-1:0",
+      lnb: null,
+      channel: null,
+      users: [],
+      error: null,
+      signal: null,
+    };
+    let tuned = 0;
+    const server = serveFakeAgent((request) => {
+      const url = new URL(request.url);
+      if (url.pathname === "/denpa/channels") return Response.json(offered);
+      if (url.pathname === "/denpa/tuners")
+        return Response.json({ tuners: [tuner], detected: false });
+      if (url.pathname === "/denpa/stream") {
+        tuned++;
+        // 番組表の無い TS を少し送って、例外を出さずに閉じる
+        return new Response(new Uint8Array(188 * 8), {
+          headers: { "Content-Type": "video/MP2T" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      await collectOnce();
+      // 最初の 1 回と、途中で切れた回の読み直し (`CUT_LIMIT` の 3 回)
+      expect(tuned).toBe(4);
     } finally {
       server.stop(true);
     }

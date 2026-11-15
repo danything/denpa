@@ -253,7 +253,8 @@ export function pickChannels(
  *
  * - `read`: 開けて読んだ。揃った・上限で切った・受信できなかった (`failed`) のどれも入る
  * - `busy`: チューナーに空きが無かった (409)。チューナーは使っていない
- * - `cut`: 開けたが、こちらが閉じる前にストリームが切れた (優先度の高い要求に譲った・エージェントが切断した)
+ * - `cut`: 開けたが、こちらが閉じる前にストリームが切れた (優先度の高い要求に譲った・エージェントが切断した)。
+ *   揃う前に例外無く終わった回も入る (`endedEarly`)
  * - `untuned`: エージェントが「選局できない」と返した (`TuneError`。同期しない・デバイスが無い)
  */
 export type Outcome = "read" | "busy" | "cut" | "untuned";
@@ -426,6 +427,15 @@ async function collectChannel(
       if (reader.feed(chunk) && reader.complete) break;
       if (Date.now() - flushedAt >= FLUSH_EVERY) flush();
     }
+    cut = endedEarly({
+      opened,
+      aborted: controller.signal.aborted,
+      complete: reader.complete,
+    });
+    if (cut)
+      console.warn(
+        `[epg] ${label}: 揃う前にエージェントがストリームを閉じました`,
+      );
   } catch (error) {
     // 使えなかった・途中で切れた。**読めたところまでは取り込む。**
     // 電波が弱い局で 1 件も入らないより、半分でも埋まっているほうがいい
@@ -549,6 +559,21 @@ async function collectChannel(
     failed,
     outcome: busy ? "busy" : cut ? "cut" : refused ? "untuned" : "read",
   };
+}
+
+/**
+ * 開けたストリームが、揃う前に例外を投げずに終わったとき、途中で切れた (`cut`) と数えるか。
+ * エージェントがストリームをきれいに閉じるのは、引き継ぎ (`after`) で正常に終わらせた利用者だけで
+ * (docs/agent.md「選ぶ順の約束」の 4)、番組表の取得は `after` に入らない。取り上げられたときは接続を壊すので例外になる。
+ * それでも例外無く終わったなら、間の経路が接続を閉じたなどで読み終えたのではないので、揃っていなければ
+ * 途中で切れた回と同じく列へ戻して読み直す (`drain`)。こちらが閉じた (上限・止めた) 回は数えない
+ */
+export function endedEarly(read: {
+  opened: boolean;
+  aborted: boolean;
+  complete: boolean;
+}): boolean {
+  return read.opened && !read.aborted && !read.complete;
 }
 
 /**

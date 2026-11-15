@@ -80,8 +80,8 @@ function sameTs(): SQL {
 }
 
 /**
- * **局のチャンネルの名前を 1 つ** (`services` から読む select に入れる列)。画面に出す名前に使う
- * (受信の様子を出すエージェントは同じ決め方の `serviceAgent`)。選局は、契約を確かめるものも含めて `servicePlaces` で振り分ける。
+ * **局のチャンネルの名前を 1 つ** (`services` から読む select に入れる列)。画面に出す名前に使う。
+ * 選局は、契約を確かめるものも含めて `servicePlaces` で振り分ける (設定の「受信」も、受信の様子は `servicePlaces` の先頭のもの)。
  *
  * 局の TS を受けられるエージェントのうち、並びの先頭のもの。
  * 同じエージェントで同じ TS を 2 つのチャンネルで受けられるときは、受信できないと決めていないほう、次に控えの後ろのほう
@@ -90,21 +90,11 @@ function sameTs(): SQL {
  * どのエージェントの控えにも無い (上げてから一度も取り込んでいない) 局は null
  */
 export function serviceChannel(): SQL<string | null> {
-  return sql<string | null>`(SELECT ac.channel ${chosen()})`;
-}
-
-/** `serviceChannel` のチャンネルを控えに持つエージェント (`agents.id`)。受信の様子を出すのに使う */
-export function serviceAgent(): SQL<number | null> {
-  return sql<number | null>`(SELECT ac.agent_id ${chosen()})`;
-}
-
-/** `serviceChannel` と `serviceAgent` が選ぶ 1 行 (SELECT の後ろ) */
-function chosen(): SQL {
-  return sql`FROM agent_channels ac
+  return sql<string | null>`(SELECT ac.channel FROM agent_channels ac
     JOIN agents a ON a.id = ac.agent_id
     LEFT JOIN channel_reception r ON r.agent_id = ac.agent_id AND r.type = ac.type AND r.channel = ac.channel
     WHERE ${sameTs()}
-    ORDER BY a.position, a.id, COALESCE(r.unreceivable, 0), ac.rowid DESC LIMIT 1`;
+    ORDER BY a.position, a.id, COALESCE(r.unreceivable, 0), ac.rowid DESC LIMIT 1)`;
 }
 
 /**

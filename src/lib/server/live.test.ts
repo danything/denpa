@@ -40,6 +40,7 @@ import {
   parsePlayable,
   pinnedNotTuned,
   rawEnding,
+  rawOpeningLine,
   rungCodec,
   rungPlan,
   rungSlot,
@@ -831,6 +832,14 @@ describe("開くまでの内訳", () => {
       "[live] GR:T27: 開くまで 選局 - / 最初のバイト - / ffmpeg 3ms / init 250ms / 最初の fMP4 260ms (av1)",
     );
   });
+
+  test("放送のままの経路は、ffmpeg の代わりに最初の送信を出す", () => {
+    expect(
+      rawOpeningLine("GR:T27", { tuned: 312.4, firstByte: 520.6, sent: 530 }),
+    ).toBe(
+      "[live] GR:T27: 開くまで 選局 312ms / 最初のバイト 521ms / 最初の送信 530ms (放送のまま)",
+    );
+  });
 });
 
 /** 画面から来た指示の読み方 (`parseCommand`)。追っかけを元の TS で受ける `raw` と、送るのを止める `hold` */
@@ -1043,6 +1052,14 @@ describe("エンコードが遅れたときの軽い組み合わせ", () => {
     keepLight("GR:T27:1", { half: true, gpu: false }, 1_000);
     expect(takeLight("GR:T27:1", 60_000)).toBeNull();
     expect(takeLight("GR:T16:1", 2_000)).toBeNull();
+  });
+
+  test("受け取られないまま期限を過ぎたものは、次に預けるときに捨てる", () => {
+    keepLight("GR:T20:1", { half: true, gpu: false }, 1_000);
+    // 期限 (30 秒) を過ぎてから別のセッションが預ける。前のものは捨てたので、期限を戻しても受け取れない
+    keepLight("GR:T21:1", { half: true, gpu: false }, 40_000);
+    expect(takeLight("GR:T20:1", 1_000)).toBeNull();
+    expect(takeLight("GR:T21:1", 40_000)).toEqual({ half: true, gpu: false });
   });
 });
 

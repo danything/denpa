@@ -22,6 +22,7 @@ import { join } from "node:path";
 import { RETURN_PATH } from "../niconico";
 import { config, userAgent } from "./config";
 import { now, orm } from "./db";
+import { pruneExpired } from "./expiring";
 import { randomToken } from "./oidc";
 import { niconicoLink } from "./schema";
 
@@ -55,15 +56,6 @@ function base64url(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
 }
 
-function prune(at: number): void {
-  for (const [id, flow] of flows) if (flow.expiresAt <= at) flows.delete(id);
-  while (flows.size >= MAX_FLOWS) {
-    const oldest = flows.keys().next().value;
-    if (oldest === undefined) break;
-    flows.delete(oldest);
-  }
-}
-
 /**
  * 連携を始める。`origin` は画面を開いているオリジン (`http://192.168.1.20:3000`)。
  * 返す `flow` は Cookie に入れて、戻ってきたときに同じブラウザかを見る。`url` へ画面ごと移る
@@ -72,7 +64,7 @@ export async function startLink(
   origin: string,
   at = now(),
 ): Promise<{ flow: string; url: string }> {
-  prune(at);
+  pruneExpired(flows, (flow) => flow.expiresAt, at, MAX_FLOWS);
   const pair = (await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
     false,
