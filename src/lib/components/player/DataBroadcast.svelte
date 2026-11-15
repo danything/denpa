@@ -298,7 +298,7 @@
   let loading = $state(false);
   /**
    * エンジンを読み込めなかったか (`data-load.ts` の `loadEngine`)。「データ取得中…」の代わりに読み込めなかったことを出す。
-   * 閉じて開き直すと読み込み直す (`close`・`opened`)
+   * 閉じて開き直したときも読み込み直す (`close`・`opened`。読めるとは限らないので、通知はページの再読み込みを案内する)
    */
   let failed = $state(false);
   /** BML の文書が見える状態か (`onVisible`)。BML は `invisible` で始まり、d を受けたアプリが自分で外して出てくる */
@@ -618,7 +618,7 @@
     const loadedEngine = await loadEngine(() => import("#lib/bml/engine.js"));
     // 待っている間に離されていたら、作らない
     if (mine !== generation) return;
-    // 読み込めなかった。「データ取得中…」を下ろし、読み込めなかったと出す (閉じて開き直すと読み込み直す)
+    // 読み込めなかった。「データ取得中…」を下ろし、読み込めなかったと出す (閉じて開き直したときも読み込み直す)
     if (loadedEngine === null) {
       loading = false;
       failed = true;
