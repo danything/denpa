@@ -130,6 +130,9 @@ if printf '%s\n' "$@" | grep -q silencedetect; then
     # 無音は ametadata の書き出し先 (`file=`) へ。本物と同じ形式 (cm-scan.parseSilences)
     silences="$(printf '%s\n' "$@" | grep -o 'ametadata=mode=print:file=[^,]*' | head -1)"
     silences="${silences#ametadata=mode=print:file=}"
+    # パスはフィルタの引数として '…' で囲んである (cm-scan.filterPath)。一時フォルダのパスに : や ' は無いので、囲みだけ外す
+    silences="${silences#\'}"
+    silences="${silences%\'}"
     if [ -n "$silences" ]; then
         printf 'frame:1 pts:1 pts_time:299.5\nlavfi.silence_start=299.5\nframe:2 pts:2 pts_time:300.5\nlavfi.silence_end=300.5\nlavfi.silence_duration=1\nframe:3 pts:3 pts_time:359.5\nlavfi.silence_start=359.5\nframe:4 pts:4 pts_time:360.5\nlavfi.silence_end=360.5\nlavfi.silence_duration=1\n' > "$silences"
     fi
