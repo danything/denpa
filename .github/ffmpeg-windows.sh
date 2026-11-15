@@ -91,7 +91,7 @@ fetch_tar() {
 
 # **Opus と SVT-AV1 は、それぞれ actions/cache に別々に置く** (.github/workflows/windows-server.yml)。キャッシュの鍵は
 # バージョンと、`# recipe:<名前>:begin` から `:end` までの組み方と、MSYS2 の gcc のパッケージのバージョン (SVT-AV1 は LTO で
-# 組まれ、ffmpeg を繋ぐ gcc が組んだ gcc とずれると壊れる)。ffmpeg の configure の引数だけを変えたときは、この 2 つを組み直さない。
+# 組まれ、ffmpeg を繋ぐ gcc が組んだ gcc とずれると壊れる)。ffmpeg の configure の引数だけを変えたときは、Opus と SVT-AV1 を組み直さない。
 # 入れ先に `.done` があれば組まない (キャッシュが当たった)。ライセンスの文書も入れ先に置き、最後に出力先へ写す
 
 # recipe:opus:begin
