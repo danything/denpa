@@ -284,7 +284,7 @@ public class It930xDeviceTests
         await Assert.That(log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}")).IsGreaterThan(configured + expected.Length);
         var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-40")).ToList();
         await Assert.That(lines.Any(text => text.Contains("開いたときに TS のバッファが溢れていました") && text.Contains("入力ごとの溢れ (0xDA57・0xDA8B〜) 0 0 1 0 0、受信機 2"))).IsTrue();
-        await Assert.That(lines.Any(text => text.Contains("リセットしても溢れたままです") && text.Contains("電源を抜いて"))).IsTrue();
+        await Assert.That(lines.Any(text => text.Contains("リセットしても溢れたままです") && text.Contains("次の選局で、ロックしたあとに TS が届くかを確かめます"))).IsTrue();
     }
 
     [Test]
@@ -319,31 +319,105 @@ public class It930xDeviceTests
     }
 
     /// <summary>
-    /// **全体の溢れが立ったままなら、受信機に触らずに選局を断る** (PX-MLT8PE。2026-11-12)。ロックしても TS が届かないので、30 秒待たせずにほかのチューナーへ回させる。
-    /// 機材は返して閉じる (次に取るときに開き直して溢れを読み直す)
+    /// **全体の溢れが立ったままで、ロックしても TS が届かなければ選局を断り、そのあとは受信機に触らずに断る** (PX-MLT8PE。2026-11-12)。
+    /// 30 秒待たせずにほかのチューナーへ回させる。断った受信機は閉じる。機材は、カードなどほかに使っている側がいる間は開いたままで、閉じるまで断り続ける
     /// </summary>
     [Test]
-    public async Task 全体の溢れが立ったままなら受信機に触らずに選局を断る()
+    public async Task 全体の溢れが立ったままでロックしても_TS_が届かなければ選局を断り_そのあとは受信機に触らずに断る()
     {
         var (usb, _, _) = Fake();
         usb.Registers[It930xBridge.SysBufOverflow] = 1;
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-50", new FakeClock()), () => It930xDevice.CloseIfIdle("9-50", TimeSpan.Zero));
+        var clock = new FakeClock();
+        // カードの代わりに機材を取っておく (選局が機材を返しても閉じない)
+        var card = Open(usb, "9-50", clock);
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-50", clock), () => It930xDevice.CloseIfIdle("9-50", TimeSpan.Zero)) { TsProbeMs = 50 };
+        var other = new It930xTuner("test 1", 1, () => Open(usb, "9-50", clock), () => It930xDevice.CloseIfIdle("9-50", TimeSpan.Zero)) { TsProbeMs = 50 };
         try
         {
             var error = Assert.Throws<TunerUnusableException>(() => tuner.Tune(ChannelTable.Parse("T27")!));
             await Assert.That(error.Message).Contains("全体の溢れ (0xDA39) 1");
             await Assert.That(error.Message).Contains("電源を抜いて入れ直してください");
             await Assert.That(tuner.Tuned).IsFalse();
-            // 受信機を開かないので、入力も開けない (OpenInputs)
-            await Assert.That(usb.Log).DoesNotContain("W DA4C=01");
-            // 機材は返して閉じた (電源を切る書き込みが最後)
-            await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+            await Assert.That(card.Jammed).IsNotNull();
             var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-50")).ToList();
-            await Assert.That(lines.Any(text => text.Contains("この機材の受信機では選局しません"))).IsTrue();
+            await Assert.That(lines.Any(text => text.Contains("次の選局で、ロックしたあとに TS が届くかを確かめます"))).IsTrue();
+            await Assert.That(lines.Any(text => text.Contains("TS が届きませんでした") && text.Contains("この機材の受信機では選局しません"))).IsTrue();
+
+            // 確かめたあとは、ほかの受信機も触らずに断る
+            int before;
+            lock (usb.Log) before = usb.Log.Count;
+            Assert.Throws<TunerUnusableException>(() => other.Tune(ChannelTable.Parse("T27")!));
+            List<string> after;
+            lock (usb.Log) after = [.. usb.Log.Skip(before)];
+            await Assert.That(after.Any(line => line.StartsWith("I2C", StringComparison.Ordinal))).IsFalse();
         }
         finally
         {
             tuner.Dispose();
+            other.Dispose();
+            card.Release();
+            It930xDevice.CloseIfIdle("9-50", TimeSpan.Zero);
+        }
+        // 最後は機材を閉じた (電源を切る書き込みが最後)
+        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+    }
+
+    /// <summary>
+    /// **全体の溢れが立ったままでも、ロックしたあとに TS が届けば、その機材を使い続ける** (PX-W3PE5。2026-11-15。開いたときに全体の溢れだけが立ち、入力ごとの溢れは 0 だった)。
+    /// 確かめるのは溢れが変わるまでの 1 回で、次の選局は待たずに流す
+    /// </summary>
+    [Test]
+    public async Task 全体の溢れが立ったままでも_TS_が届けば使い続ける()
+    {
+        var (usb, _, _) = Fake();
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        byte[] packet = [It930xBridge.SyncBytes[0], 0x01, 0x00, 0x10, .. new byte[184]];
+        usb.TsSource = () => packet;
+        var clock = new FakeClock();
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-53", clock), () => It930xDevice.CloseIfIdle("9-53", TimeSpan.Zero)) { TsProbeMs = 5000 };
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("T27")!);
+            await Assert.That(tuner.Tuned).IsTrue();
+            await Assert.That(tuner.Device!.Jammed).IsNull();
+            await Assert.That(tuner.Device!.Unconfirmed).IsNull();
+            var buffer = new byte[188];
+            var got = 0;
+            while (got < buffer.Length) got += tuner.Output.Read(buffer, got, buffer.Length - got);
+            await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
+
+            tuner.Tune(ChannelTable.Parse("T22")!);
+            await Assert.That(tuner.Tuned).IsTrue();
+            var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-53")).ToList();
+            await Assert.That(lines.Count(text => text.Contains("TS が届きました。この機材の受信機で選局を続けます"))).IsEqualTo(1);
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// **並べて選局した受信機のどれかに TS が届いていれば、同じ溢れのまま別の受信機で届かなくても、機材の選局は断らない** (その受信機だけの失敗にする)
+    /// </summary>
+    [Test]
+    public async Task ほかの受信機に_TS_が届いていれば_届かなかった受信機だけの失敗にする()
+    {
+        var (usb, _, _) = Fake();
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        var device = Open(usb, "9-54", new FakeClock());
+        try
+        {
+            var suspect = device.Unconfirmed!;
+            await Assert.That(device.Confirm(0, suspect, flowing: true, 10)).IsFalse();
+            await Assert.That(device.Confirm(1, suspect, flowing: false, 1000)).IsFalse();
+            await Assert.That(device.Jammed).IsNull();
+            await Assert.That(device.Unconfirmed).IsNull();
+        }
+        finally
+        {
+            device.Release();
+            It930xDevice.CloseIfIdle("9-54", TimeSpan.Zero);
         }
     }
 
@@ -356,7 +430,7 @@ public class It930xDeviceTests
     {
         var (usb, _, bus3) = Fake();
         var clock = new FakeClock();
-        var satellite = new It930xTuner("test 0", 0, () => Open(usb, "9-52", clock), () => It930xDevice.CloseIfIdle("9-52", TimeSpan.Zero), "15v");
+        var satellite = new It930xTuner("test 0", 0, () => Open(usb, "9-52", clock), () => It930xDevice.CloseIfIdle("9-52", TimeSpan.Zero), "15v") { TsProbeMs = 50 };
         var terrestrial = new It930xTuner("test 1", 1, () => Open(usb, "9-52", clock), () => It930xDevice.CloseIfIdle("9-52", TimeSpan.Zero));
         try
         {
@@ -365,7 +439,7 @@ public class It930xDeviceTests
             await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01" });
             var sleepsBefore = bus3.Log.Count(line => line == "65 X 28=13");
             var powerOffsBefore = usb.Log.Count(line => line == "W D8C3=01");
-            // 流している間に全体の溢れが立つ。次の選局で TS を止めるときに読む
+            // 流している間に全体の溢れが立つ。次の選局で TS を止めるときに読み、ロックしたあとに TS が届かないので断る
             usb.Registers[It930xBridge.SysBufOverflow] = 1;
             var error = Assert.Throws<TunerUnusableException>(() => satellite.Tune(ChannelTable.Parse("BS01:16400")!));
             await Assert.That(error.Message).Contains("全体の溢れ (0xDA39) 1");
