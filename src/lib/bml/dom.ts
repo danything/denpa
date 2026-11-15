@@ -38,6 +38,8 @@ export interface DomHost {
   setMainAudio(ref: string): boolean;
   /** 今の主音声 (`getMainAudioStream`。`/10` の形式) */
   mainAudioRef(): string;
+  /** object の `data` を書き換えた (音声の object なら主音声を決め直す) */
+  objectChanged(element: BmlElement): void;
 }
 
 interface Accessor {
@@ -354,7 +356,14 @@ export class Dom {
         attribute("href", "href");
         break;
       case "object":
-        attribute("data", "data");
+        object.define(
+          "data",
+          () => element.attr("data") ?? "",
+          (value) => {
+            element.setAttr("data", toStr(value));
+            host.objectChanged(element);
+          },
+        );
         object.define("type", () => element.attr("type") ?? "");
         object.define(
           "remain",
