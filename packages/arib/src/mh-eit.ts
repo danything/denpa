@@ -1,7 +1,7 @@
 /**
  * 4K の放送 (MMT/TLV) の番組表 MH-EIT (ARIB STD-B60) を、TS の番組表と同じ `EitEvent` に読む。
  *
- * 並びは TS の EIT と同じで、違うのは次の所 (実機のケーブルの BS4K で確かめた)。
+ * 並びは TS の EIT と同じで、違うのは次の所 (ケーブルで受けた実機の BS4K で確かめた)。
  *
  * - TS の transport_stream_id の位置に tlv_stream_id が入る。`EitEvent.transportStreamId` にはそれを入れる
  * - table_id は p/f が 0x8B、予定の基本が 0x8C から、詳細が 0x94 から。**TS の番号 (0x4E・0x50・0x58) に直して返す**
@@ -242,7 +242,7 @@ export function parseMhEit(section: Uint8Array): EitSection | null {
  * 流れてくる TLV のバイト列から番組表を溜める。**読み方のほかは TS の `EpgReader` と同じ**
  * (揃ったかの数え方、別の表で来るものの混ぜ方、p/f の「いま」)。
  *
- * MH-EIT は自分の TLV のストリームの局のぶんだけが来る (実機のケーブルの BS4K で確かめた)。
+ * MH-EIT は自分の TLV ストリームの局のぶんだけ来る (ケーブルで受けた実機の BS4K で確かめた)。
  * TS の `other` (ほかの TS の局の番組表) に当たるものは無い
  */
 export class MmtEpgReader extends EpgReader {

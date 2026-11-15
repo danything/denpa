@@ -13,7 +13,7 @@ import {
  *
  * 画面が刻むたびに測った値を渡し、動かすときだけ次の段と理由を受け取る。決めるだけで、
  * リクエストし直すのは画面の役目。DOM も時計も触らない (時刻は引数で受け取る) ので、ここだけ単体で確かめられる。
- * canvas に描くときに端末のデコードが間に合うかは `raw/budget.ts` が見る。回線とは混ぜない (`<video>` のデコードの遅れは `AdaptSample.behind` で受け取る)。
+ * canvas に描くときに端末のデコードが間に合うかは `raw/budget.ts` が決める。回線とは混ぜない (`<video>` のデコードの遅れは `AdaptSample.behind` で受け取る)。
  *
  * ## 下げる
  *
@@ -214,8 +214,8 @@ export const THIN = 10_000;
 /** エンコードの速さが `ENCODE_SLOW` 未満のままこれだけ続いたら `encode` を返す (ms)。`budget.ts` と同じく 1 回の遅れでは動かない */
 export const ENCODE_LAG = 3_000;
 /**
- * 段 0 のビットレートが分からないときに使う値 (kbit/s)。ふだんのエンコード (1080p60) のハードウェアの固定ビットレート
- * (`hwenc.ts` の `LARGEST`)
+ * 段 0 のビットレートが分からないときに使う値 (kbit/s)。ふだんのエンコード (1080p60) で GPU に渡すビットレート
+ * (`hwenc.ts` の `H264_KBPS` の 1080 の `smooth`。ライブは映像が来る前に決めるので `LARGEST` を使い、この値になる)
  */
 export const BASE_GUESS_KBPS = 10_500;
 

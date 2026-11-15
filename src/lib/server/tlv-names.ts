@@ -97,7 +97,7 @@ async function rename(
   return renamed;
 }
 
-/** その TLV のチャンネルに、仮の名前の局があるか。番組表の取得が MH-SDT[actual] を読むかを決める */
+/** そのチャンネルに仮の名前の局があるか。番組表の取得が、受信した MH-SDT[actual] か SDT[actual] で局名を書き換えるかを決める */
 export function hasUnnamed(channel: {
   services: readonly { serviceId: number; name: string }[];
 }): boolean {

@@ -496,7 +496,7 @@ export function buildArgs(
   // インタレ解除 (bwdif は yadif よりコーミング残りが少ない)。
   // なめらかさの指定でコマ数が変わる (videoArgs)
   args.push("-vf", video.filter);
-  // 映像のストリーム (? はラジオ相当の映像の無い録画でも失敗しないようにするため)
+  // 映像のストリーム。映像の無い録画 (ラジオ・データ放送の局) は runJob が先に断るので、ここには来ない
   args.push("-map", "0:v?", "-c:v", ...video.encoder);
 
   if (audioType === DUAL_MONO) {
@@ -1968,7 +1968,7 @@ async function runJob(jobId: number): Promise<void> {
   /**
    * 1 本目。CM を一緒に探し、エンコードし終えたら境目を決め、仕上げる。ほかのコーデックはこれが終わるのを待ってから
    * 仕上げる (境目が要る)。1 本目が落ちたら CM は分からないまま (ほかは CM 無しで置く。
-   * あとから「CM 検出をやり直す」でチャプターを入れられる)
+   * あとから「CM の再検出」でチャプターを入れられる)
    */
   const [lead, ...rest] = codecs as [HwCodec, ...HwCodec[]];
   const firstTask = (async (): Promise<Made | null> => {
@@ -2238,7 +2238,7 @@ async function runJob(jobId: number): Promise<void> {
 }
 
 /**
- * **CM 検出だけやり直す** (録画の詳細の「その他…」→「CM 検出をやり直す」)。再エンコードしない。
+ * **CM 検出だけやり直す** (録画の詳細の「その他…」→「CM の再検出」)。再エンコードしない。
  *
  * - 元の TS があれば元の TS から、無ければエンコードしたもの (mkv) から読む。どちらからでもロゴ・切れ目・無音は取れる
  *   (エンコードしたものは映像の大きさが違うので、ロゴは大きさごとに覚えたものを使う。`logo-own.modelFile`)
@@ -2466,8 +2466,7 @@ export const NO_CODEC =
   "映像コーデックが選ばれていません。設定で選んでください";
 
 /** 映像の無い録画 (ラジオ・データ放送の局) のエンコードを断る理由。元の TS のまま観られる (`recorder.finish`) */
-export const NO_VIDEO =
-  "映像の無い録画はエンコードしません。元の TS のまま観られます";
+const NO_VIDEO = "映像の無い録画はエンコードしません。元の TS のまま観られます";
 
 /** 映像の無い録画の CM 検出を断る理由 */
 const NO_VIDEO_CM = "映像の無い録画は CM を検出しません";

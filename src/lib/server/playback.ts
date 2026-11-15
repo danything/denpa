@@ -23,6 +23,7 @@
  * | TS で送る 4K の局の元の TS だけ | H.265 | 映像を写して音声を AAC にして流す (`stream`。エンコードしない) |
  * | TS で送る 4K の局の元の TS だけ | H.264 / AV1 | 縮めて SDR にして変換 (`stream`。ライブの `uhdVideoArgs` と同じ) |
  * | TS で送る 4K の局の元の TS | MPEG-2 | 出さない (映像が HEVC) |
+ * | 映像の無い録画 (ラジオ・データ放送の局) の元の TS | どれでも | 音声だけを AAC にして流す (`stream`)。音声も無ければ無音 |
  *
  * TS で送る 4K の局の録画は、拡張子では分からないので元の TS の PMT を読んで決める (`recorded-broadcast.ts`)。
  *
@@ -305,7 +306,7 @@ interface TsFile {
   size: number;
   /** 入れ物の始まり (90kHz。`ts/seek.ts` の `tsHead`) */
   head: number;
-  /** 先頭から最後の映像まで (秒)。読めなければ null */
+  /** 先頭から最後の映像 (映像が無ければ音声) の PES まで (秒)。読めなければ null */
   duration: number | null;
 }
 
@@ -369,7 +370,7 @@ function reader(path: string): ReadAt {
   return (offset, length) => readRecording(path, offset, length);
 }
 
-/** 尺を出すのに末尾から読む量。最後の映像の PES が入る長さ */
+/** 尺を出すのに末尾から読む量。最後の映像・音声の PES が入る長さ */
 const TAIL_BYTES = 4 * 1024 * 1024;
 
 /** 読んだ TS の控え。開くたびに聞くので、同じファイル (パス・大きさ・更新時刻) なら読み直さない */
@@ -885,8 +886,9 @@ export function mmtsTranscodeArgs(
 /**
  * **音声だけの引数** (`?codec=audio`。段 3 でも回線が足りないときの最後の手)。映像は出さず、音声を AAC の 96k
  * (段を下げたときと同じ。`live.audioArgs`) にして fMP4 で流す。飛び方と時刻の運び方は映像のあるときと同じなので、
- * 映像に戻すときも同じ物差しのまま続けられる。`source` はエンコード済み (`path` と入れ物の中の何本目か) か、
- * 元の TS (局と音声・`tsOffset`。TS は標準入力から)
+ * 映像に戻すときも同じ物差しのまま続けられる。`source` はエンコード済み (`path` と入れ物の中の何本目か)、
+ * 元の TS (局と音声・`tsOffset`。TS は標準入力から)、4K の局の元の録画を詰め替えた fMP4 (`fmp4`)、
+ * 映像も音声も無い録画の無音 (`silent` 秒。時刻は `offset` から) のどれか
  */
 export function audioOnlyArgs(
   source:
@@ -900,7 +902,7 @@ export function audioOnlyArgs(
       ? // 4K の局の元の録画を詰め替えた fMP4 (`mmtsTranscodeArgs` と同じ。時刻は物差しのまま)
         ["-copyts", "-f", "mp4", "-i", "pipe:0", "-map", "0:a:0?"]
       : "silent" in source
-        ? // 映像も音声も無い録画 (データ放送だけの局)。物差しの残り (`silent` 秒) の無音。時刻は `offset` から
+        ? // 映像も音声も無い録画 (データ放送だけの局)。物差しの残りの長さの無音
           [
             "-f",
             "lavfi",
@@ -1759,7 +1761,7 @@ export async function captionArgs(recording: Recording): Promise<{
  * **4K の局の録画の字幕の在り処** (`api/recordings/<id>/captions.json`)。TTML は ffmpeg では抜けないので (`captionArgs`)、
  * エンコード済みがあればその隣の文字の配置 (`….captions.json`。`encoder.writeCaptions`)、無ければ元の録画 (`.mmts`) を読む
  * (`mmts.mmtsCaptions`)。エンコード済みの隣に文字の配置が無いとき (TS の局の録画と、字幕の無い 4K の局の録画) と、
- * 元の録画が TS のときは null (TS の局の字幕は `captionArgs`)
+ * 元の録画が TS のときは null (TS の局の字幕は `captionArgs`)。元の録画 (`.mmts`) を録画中か、読めないときは `missing`
  */
 export async function uhdCaptionSource(
   recording: Recording,

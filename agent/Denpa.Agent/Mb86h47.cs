@@ -15,7 +15,7 @@ namespace Denpa.Agent;
  *
  * **I2C はコア 1 に任せ、指示は EP 0x02 の bulk の塊で送る (仕様書 5.4・5.5) 方式だけ。** 実機で 3 つの方式を比べた結果
  * (開く・選局からロック・メモリ要求の回数。ホストから直 (5.3) / コア 1 のメモリ要求のリング / コア 1 の bulk の命令):
- * 開く 385 / 167 / 182ms、ロック 3439 / 2730 / 2570ms、メモリ要求 24664 / 2360 / 1083 回。bulk の命令がいちばん速く、
+ * 開く 385 / 167 / 182 ms、ロック 3439 / 2730 / 2570 ms、メモリ要求 24664 / 2360 / 1083 回。bulk の命令がいちばん速く、
  * 要求もいちばん少ないので、ほかの 2 つはコードごと外した。コア 1 が起動しない・bulk に応答しないときは開くのを止める
  * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起動していて、代わりの方式を残す理由が無い)。
  */
@@ -382,7 +382,7 @@ public sealed class Mb86h47 : II2c
         Write32(Box(Mb86h47Programs.BoxBulkEnable), 0);
         Write32(Core1, CoreRun);
         var first = Read32(Box(Mb86h47Programs.BoxAlive));
-        // 仕様書 5.4: 1ms 空けて 2 回読む
+        // 仕様書 5.4: 1 ms 空けて 2 回読む
         Thread.Sleep(1);
         var second = Read32(Box(Mb86h47Programs.BoxAlive));
         if (first == second) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が動いていません");

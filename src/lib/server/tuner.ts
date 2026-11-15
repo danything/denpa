@@ -256,7 +256,7 @@ export async function getChannels(agent: Agent): Promise<AgentChannel[]> {
 /**
  * チャンネルスキャンの結果を預ける。
  *
- * **見つけたのは denpa** (総当たりの選局はエージェントに任せるが、NIT と SDT を
+ * **見つけたのは denpa** (選局はエージェントに任せるが、NIT と SDT を
  * 読むのはこちら)。それでも控えはエージェントが持つ。
  * アンテナに何が映るかは機材ごとに違い、エージェントを増やせば顔ぶれも変わるため。
  *

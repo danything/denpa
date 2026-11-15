@@ -396,7 +396,7 @@ PX-MLT5 系 (PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P)・PX-MLT8PE・DTV02A-4TS-P、P
 - 設定の `device` は `it930x:<USB のポート>:<受信機>` (`it930x:4-12.1:0`)。挿してあれば自動で見つけ、受信できる種別は受信機ごとに決まっています
 - PX-MLT5 系・PX-MLT8PE・DTV02A-4TS-P は、地上波と衛星に加えて、ケーブル (ISDB-C) とスカパー！プレミアムサービス光 (J.83B) も選局できます
 - LNB の給電は 15V だけです。内蔵カードリーダーも使えます
-- Linux の PX-MLT5PE と PX-Q3PE4 の実機で確かめました。PX-Q3PE4 は 8 つの受信機の同時受信まで確かめています。ほかの機種と、Windows・Mac では確かめていません
+- Linux の PX-MLT5PE と PX-Q3PE4 の実機で確かめました。PX-Q3PE4 は 8 つの受信機の同時受信まで、PX-MLT8PE は地上波の選局だけを確かめています。ほかの機種と、Windows・Mac では確かめていません
 
 機種ごとの USB の ID・受信機・設定・実機で確かめたこと・試すコマンドは [tuner-it930x.md](tuner-it930x.md) にあります。
 

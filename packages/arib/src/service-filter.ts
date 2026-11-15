@@ -169,10 +169,10 @@ export class ServiceFilter {
   /**
    * **中継の番号 (transport_stream_id)。** PAT を読むまでは null。
    *
-   * 絞るのに要るわけではない。**データ放送が受信機に訊いてくる**ので
-   * 覚えておく。テレ朝の TVer リンクは `browser.getProgramID(4)` で
-   * これを取り、TVer のサーバへそのまま送る。`null` のまま渡すと文字列の
-   * "null" が送られて、あちらが断り、画面には `DT-RE` とだけ出る
+   * 絞るのに要るわけではない。**データ放送が受信機の API で読む**ので
+   * 持っておく。テレ朝の TVer リンクは `browser.getProgramID(4)` で
+   * これを取得し、TVer のサーバへそのまま送る。`null` のまま渡すと文字列の
+   * "null" が送られて TVer のサーバがエラーを返し、画面には `DT-RE` とだけ出る
    * ([server/live.ts](https://github.com/danything/denpa/blob/main/src/lib/server/live.ts) の `programInfo`)
    */
   get transportStreamId(): number | null {

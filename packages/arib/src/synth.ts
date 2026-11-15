@@ -445,7 +445,7 @@ export function satelliteDeliveryDescriptor(
 
 /**
  * ケーブルの分配の記述子 (0x44)。周波数は Hz で渡す (111000000)。
- * 既定は TS が 1 つの搬送波 (多重フレーム型式番号 0xF)・RS(204,188)・64QAM・5.274 Msps・内符号なし
+ * 既定は TS が 1 つの搬送波 (多重フレーム型式番号 0xF)・RS(204,188)・64QAM・5.274 Msym/s・内符号なし
  */
 export function cableDeliveryDescriptor(
   frequency: number,
@@ -822,7 +822,7 @@ export function multipartModule(
   return new TextEncoder().encode(out);
 }
 
-/** PMT の ES に付ける application_signalling_descriptor (0x6F)。**AIT の在り処の印** */
+/** PMT の ES に付ける application_signalling_descriptor (0x6F)。**AIT の在りかの印** */
 export function aitSignallingDescriptor(
   applicationType = 0x0010,
   version = 1,

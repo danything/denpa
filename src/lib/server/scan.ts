@@ -142,12 +142,6 @@ export type ScanKind = (typeof SCAN_KINDS)[number];
 const PASSTHROUGH_RANGE = { min: 13, max: 63 };
 
 /**
- * ケーブル (ISDB-C) の総当たりで回すチャンネル。エージェントの選局表の `QC13`〜`QC63` (C13〜C63 の周波数)・`QU13`〜`QU62` (UHF)・
- * `QV1`〜`QV12` (VHF) (docs/agent.md「選局表」)。ケーブル局の NIT を読めたら、残りはその一覧に置き換える (`cable.ts`)
- */
-export { catvChannels };
-
-/**
  * TSMF (1 つの搬送波に複数の TS を束ねる) の搬送波で、0 番目のほかに選局する TS (`QC30:1`〜)。
  * `streams` は選局の答えの `X-Denpa-Tsmf-Streams` (`tuner.openChannel`)。0 番目は名前に番号を付けない。
  * 番号の付いたもの (2 つ目から) は束ね直さない
@@ -1498,7 +1492,7 @@ async function runScan(
 /**
  * 選んだ種別から、回すチャンネルを決める。知らない種別と重複は除く。
  * パススルー (`PASSTHROUGH`) は UHF も回すので、地上波と両方来ても UHF を 2 回回さない。
- * CATV は QC・QU・QV を (`catvChannels`)、SKY は H01〜H105 を総当たりする。
+ * CATV は QC・QU・QV を (`cable.catvChannels`。NIT を読めたら残りを一覧に置き換える)、SKY は H01〜H105 を総当たりする。
  * 衛星は総当たりしないので、チャンネルの一覧は持たない。進み具合では 1 つと数える
  * (放送の一覧を 1 回読む。CS はネットワークが 2 つなので 2 回選局するが、数は 1 のまま)
  */

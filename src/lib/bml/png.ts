@@ -52,7 +52,7 @@ export function applyClut(
   return { data: concatBytes(parts), width, height };
 }
 
-/** 濃さ (0〜255) の並びを、白の上の透明度の PNG にする (mask に使う) */
+/** 濃さ (0〜255) の並びを、白に透明度を付けた PNG にする (mask に使う) */
 export function alphaPng(
   width: number,
   height: number,

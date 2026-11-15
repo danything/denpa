@@ -1,5 +1,5 @@
 /**
- * AIT (Application Information Table) を読む。**Hybridcast の在り処。**
+ * AIT (Application Information Table) を読む。**Hybridcast の在りか。**
  *
  * データ放送 (BML) と違って、**Hybridcast のアプリは放送では送られていません**。
  * 送られているのはこの表だけで、中身は「どこにアプリがあるか」のアドレス (URL) です。
@@ -11,9 +11,9 @@
  *     └ simple_application_location_descriptor (その先のパス)  →  アプリの URL
  * ```
  *
- * ここは読んで在ることを言うだけです。開くのはデータ放送が起動を求めたときで
+ * ここはアプリの URL を読むだけです。開くのはデータ放送が起動を求めたときで
  * (画面の `HybridcastFrame`)、受信機の API は用意できる範囲だけ。放送局のサーバが
- * 認証された受信機を期待するものは、denpa 側の努力では越えられません
+ * 認証された受信機を求めるアプリは、denpa では動きません
  * ([docs/stream.md](https://github.com/danything/denpa/blob/main/docs/stream.md#hybridcast))。
  */
 
