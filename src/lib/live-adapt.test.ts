@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { stepOrder } from "./adapt";
 import type { Notice } from "./live";
 import {
+  dropsHeldFrame,
   holdsDown,
   LagMeter,
   LIGHT_NOTE,
@@ -67,6 +68,23 @@ describe("段の指示の組み立て", () => {
       raw: false,
     });
     expect(rungFields(0, ["h264"])).toEqual({});
+  });
+});
+
+/**
+ * **映像の無い局を開いたら、前の局のフレームをすぐ剥がす** (`dropsHeldFrame`)。次のコマが来ないので、待つと `HOLD_MOST` まで残る
+ */
+describe("前の局のフレームを剥がす", () => {
+  test("video: false なら剥がす", () => {
+    expect(dropsHeldFrame(tuned({ video: false }))).toBe(true);
+    // 変換した音声だけでも、放送のままでも同じ
+    expect(dropsHeldFrame(tuned({ video: false, codec: "audio" }))).toBe(true);
+    expect(dropsHeldFrame(tuned({ video: false, raw: true }))).toBe(true);
+  });
+
+  test("映像のある局 (video が無い) は、次の局の 1 枚目まで貼っておく", () => {
+    expect(dropsHeldFrame(tuned({}))).toBe(false);
+    expect(dropsHeldFrame(tuned({ raw: true }))).toBe(false);
   });
 });
 
@@ -294,5 +312,11 @@ describe("入れ替えの前後に下げない", () => {
   test("slow でなければ見送らない (上げる・デコードの遅れ)", () => {
     expect(holdsDown("restored", 1_000, 0, 5_000)).toBe(false);
     expect(holdsDown("decode", 1_000, 0, 5_000)).toBe(false);
+  });
+
+  test("上げた段が映らずに戻すとき (revert) は、slow でも見送らない (前の段へ戻す)", () => {
+    expect(holdsDown("slow", 1_000, 0, 5_000, true)).toBe(false);
+    expect(holdsDown("slow", 1_000, null, 5_000, true)).toBe(false);
+    expect(holdsDown("slow", 1_000, null, 5_000, false)).toBe(true);
   });
 });

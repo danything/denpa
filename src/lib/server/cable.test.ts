@@ -20,6 +20,7 @@ import {
   listedNetworks,
   parseStored,
   RAW_LIMIT,
+  restChannels,
   retryableChannel,
   toStored,
 } from "./cable";
@@ -389,5 +390,40 @@ describe("試し直して残す搬送波", () => {
     expect(retryableChannel("QC50", listed, before, networks)).toBe(false);
     // 前の控えにも NIT にも無い (総当たりで回したもの)
     expect(retryableChannel("QC60", listed, before, networks)).toBe(false);
+  });
+});
+
+/**
+ * NIT の一覧に無いチャンネルを総当たりの列に戻すか (`restChannels`)。再送信の TS が NIT に載っていれば、前の控えにあるものだけ戻す
+ */
+describe("一覧に無いチャンネルを総当たりに戻す", () => {
+  const previous = (channel: string): AgentChannel => ({
+    type: "CATV",
+    channel,
+    networkId: 0x000b,
+    transportStreamId: 1,
+    remoteControlKeyId: null,
+    services: [],
+  });
+  const pulled = ["QC26", "QC60", "QC61"];
+
+  test("再送信の TS が NIT に載っていなければ、列に入れていないものを全部戻す", () => {
+    expect(restChannels(pulled, new Set(["QC61"]), false, [])).toEqual([
+      "QC26",
+      "QC60",
+    ]);
+  });
+
+  test("再送信の TS が NIT に載っていれば、前の控えにあるものだけ戻す", () => {
+    // QC26 は BS4K の再送信の TLV で、NIT に載らない。前の控えにあるので戻す
+    expect(restChannels(pulled, new Set(), true, [previous("QC26")])).toEqual([
+      "QC26",
+    ]);
+    // 前の控えに無いものは戻さない
+    expect(restChannels(pulled, new Set(), true, [])).toEqual([]);
+    // 前の控えにあっても、一覧から列に入れたものは戻さない
+    expect(
+      restChannels(pulled, new Set(["QC26"]), true, [previous("QC26")]),
+    ).toEqual([]);
   });
 });

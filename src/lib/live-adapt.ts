@@ -45,6 +45,17 @@ export function servedStep(notice: Extract<Notice, { type: "tuned" }>): Step {
 }
 
 /**
+ * **`tuned` を受けたところで、貼っている前の局のフレームを剥がすか** (`live-player.svelte.ts`)。剥がすのは映像の無い局 (`video: false`)。
+ * 次のコマが来ないので、待つと剥がす上限 (`HOLD_MOST`) まで前の局のフレームが残る。canvas に描く経路 (互換モード・MPEG-2) は、
+ * canvas に残った前の局のフレームも隠す (`RawEngine.hide`)
+ */
+export function dropsHeldFrame(
+  notice: Extract<Notice, { type: "tuned" }>,
+): boolean {
+  return notice.video === false;
+}
+
+/**
  * `restarting` を受けてから、繋ぎ直さずにこれだけたったら、また下げてよい (ms)。サーバは知らせてから 0.2 秒で止まるので、
  * 長く続くのは入れ替えが取り止められたとき。いつまでも下げないままにしない
  */
@@ -53,15 +64,17 @@ export const RESTARTING_MOST = 60_000;
 /**
  * **回線が細いとして段を下げるのを、いま見送るか** (`live-player.svelte.ts` の `act`)。見送るのは `slow` だけで、
  * サーバが入れ替えで止まると知らせてきてから (`restartingAt`。`RESTARTING_MOST` まで) と、繋ぎ直したあとの `holdUntil` まで。
- * 上げることと、端末のデコードが追いつかずに下げること (`decode`) は見送らない
+ * 上げることと、端末のデコードが追いつかずに下げること (`decode`) は見送らない。
+ * 上げた段が映らずに戻すとき (`revert`) も見送らない。回線の細さで下げるのではない
  */
 export function holdsDown(
   reason: string,
   now: number,
   restartingAt: number | null,
   holdUntil: number,
+  revert = false,
 ): boolean {
-  if (reason !== "slow") return false;
+  if (revert || reason !== "slow") return false;
   if (restartingAt !== null && now - restartingAt < RESTARTING_MOST)
     return true;
   return now < holdUntil;

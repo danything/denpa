@@ -55,6 +55,7 @@ import {
   listedEntries,
   listedNetworks,
   parseStored,
+  restChannels,
   retryableChannel,
   type StoredCableLineup,
   toStored,
@@ -771,15 +772,12 @@ class Scanner {
     }
     const added = jobs.filter((job) => !cable.seen.has(job));
     for (const job of added) cable.seen.add(job);
-    /*
-     * 一覧に無いチャンネルは、再送信の TS が NIT に載っていなければ総当たりの残りとして後ろに戻す。載っていても、前の控えにある
-     * チャンネルは戻す。NIT に載らない搬送波 (BS4K の再送信の QC26 など) を回さずにいると、試し直しにも残すのにも入らず消える
-     * (`retryableChannel`・`keepUnlocked` は、回してロックしなかったチャンネルだけを見る)
-     */
-    const before = new Set(cable.previous.map((entry) => entry.channel));
-    const rest = pulled.filter(
-      (channel) =>
-        !cable.seen.has(channel) && (!lineup.others || before.has(channel)),
+    // 一覧に無いチャンネルのうち、総当たりの残りとして後ろに戻すもの (`restChannels`)
+    const rest = restChannels(
+      pulled,
+      cable.seen,
+      lineup.others,
+      cable.previous,
     );
     for (const channel of rest) cable.seen.add(channel);
     queue.unshift(
