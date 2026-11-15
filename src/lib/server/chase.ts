@@ -19,7 +19,7 @@ import { statSync } from "node:fs";
 import { PACKET } from "@danything/arib/psi";
 import { TlvStream } from "@danything/arib/tlv";
 
-import { lastVideoPts, readHead, sinceHead, tsHead } from "#lib/ts/seek.js";
+import { lastMediaPts, readHead, sinceHead, tsHead } from "#lib/ts/seek.js";
 
 import type { Recording } from "../types";
 import {
@@ -308,7 +308,7 @@ export function finishedTsSec(path: string): number | null {
       const last =
         head === null
           ? null
-          : lastVideoPts(
+          : lastMediaPts(
               readRange(file, Math.max(0, size - SPAN_BYTES), SPAN_BYTES),
             );
       const span = head === null || last === null ? 0 : sinceHead(last, head);

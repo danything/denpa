@@ -12,6 +12,15 @@ test.describe("設定のチューナーとチャンネル", () => {
     await request.post(`${stack.agentUrl}/__control/tuners?busy=0`);
   });
 
+  /*
+   * 偽エージェントはワーカーに 1 つで、spec をまたいで共有している。スキャンの控えには部分受信の印が付き、
+   * 偽の放送のデータ放送の局 (ＭＸデータ１) が入る。残すと後のファイルの局の数がずれるので、始めの控えに戻す
+   */
+  test.afterAll(async ({ request, stack }) => {
+    await request.post(`${stack.agentUrl}/__control/channels`);
+    await syncEpg(request);
+  });
+
   test("チャンネルスキャンを実行でき、進み具合と結果が出る", async ({
     page,
     request,

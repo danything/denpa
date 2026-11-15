@@ -35,6 +35,7 @@ describe("ケーブルの TS (NIT を待たない)", () => {
         networkId: 4,
         transportStreamId: 16400,
         remoteControlKeyId: null,
+        partialReception: false,
       },
     ]);
   });
@@ -65,6 +66,45 @@ describe("ケーブルの TS (NIT を待たない)", () => {
     );
     other.feed(packetize(0x0011, sdtSection(0x0500, 4, [[151, 0x01]])));
     expect(other.services()[0]?.remoteControlKeyId).toBeNull();
+  });
+
+  test("地上波の NIT の部分受信記述子 (0xFB) に載っている局をワンセグとする", () => {
+    const reader = new ServiceReader();
+    // 自分の TS の部分受信記述子にワンセグ (1408) だけが載る。データ放送 (1056) は載らない
+    reader.feed(
+      packetize(
+        0x0010,
+        nitSection(0x7fe0, 1, [
+          [
+            0x7fe0,
+            0x7fe0,
+            [
+              [1024, 0x01],
+              [1056, 0xc0],
+              [1408, 0xc0],
+            ],
+            [0xfb, 2, 1408 >> 8, 1408 & 0xff],
+          ],
+        ]),
+      ),
+    );
+    reader.feed(
+      packetize(
+        0x0011,
+        sdtSection(0x7fe0, 0x7fe0, [
+          [1024, 0x01, "でんぱテレビ"],
+          [1056, 0xc0, "でんぱデータ"],
+          [1408, 0xc0, "でんぱワンセグ"],
+        ]),
+      ),
+    );
+    expect(
+      reader.services().map((s) => [s.serviceId, s.partialReception]),
+    ).toEqual([
+      [1024, false],
+      [1056, false],
+      [1408, true],
+    ]);
   });
 
   test("PAT に局が 1 つも無い TS は、SDT を待たずに揃って局を返さない", () => {

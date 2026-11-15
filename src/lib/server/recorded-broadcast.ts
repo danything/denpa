@@ -6,6 +6,8 @@
  * - TS の録画 (`.m2ts`) は、先頭の PMT の映像が HEVC なら `hevc` (TS で送る 4K の局。docs/stream.md「TS で送る 4K の局」)、ほかは `mpeg2`。
  *   PMT をまだ読めない (録り始めたばかり)・ファイルを開けないときも `mpeg2`
  *
+ * 同じ PMT から、映像と音声があるかも決める (`recordedMedia`。ラジオ・データ放送の局の録画)。
+ *
  * 局の行にも録画の行にも覚えない。読んで決まった答えを、録画のパスごとにメモリに覚える。録り始めたばかりで決まらなかった録画は、
  * `UNDECIDED_WAIT` を過ぎてから開くときに読み直す。決まらないまま元の TS で開いた追っかけは、送る前にセッションが
  * 録画のストリームから PMT を読み (`live.Session` の `learnsBroadcast`)、読めた答えをここに覚える (`learnBroadcast`)
@@ -69,16 +71,44 @@ export function recordedBroadcast(
   const tried = undecided.get(path);
   if (tried !== undefined && now - tried < UNDECIDED_WAIT)
     return broadcastCodec(transport);
-  const video = headVideo(path, program);
+  const media = headMedia(path, program);
   // PMT をまだ読めない。今までどおり MPEG-2 の局として扱い、少し置いてから読み直す
-  if (video === undefined) {
+  if (media === undefined) {
     remember(undecided, path, now);
     return broadcastCodec(transport);
   }
   undecided.delete(path);
-  const broadcast: BroadcastCodec = video === "hevc" ? "hevc" : "mpeg2";
+  const broadcast: BroadcastCodec = media.video === "hevc" ? "hevc" : "mpeg2";
   remember(decided, path, broadcast);
+  remember(contents, path, {
+    video: media.video !== null,
+    audio: media.audio,
+  });
   return broadcast;
+}
+
+/** 録画に映像と音声があるか (`recordedMedia`) */
+export interface RecordedMedia {
+  video: boolean;
+  audio: boolean;
+}
+
+/** 読んで決まった映像と音声の有る無し (録画のパスごと)。`recordedBroadcast` と同じ PMT から */
+const contents = new Map<string, RecordedMedia>();
+
+/**
+ * **録画に映像と音声があるか。** TS の録画は先頭の PMT を読んで決める (`recordedBroadcast` と同じ読み方・覚え方)。
+ * 映像の無い録画 (ラジオ・データ放送の局) はエンコードせず元の TS を置き (`recorder.finish`)、観る画面は音声だけで流す
+ * (音声も無ければ無音。`playback.playbackPlan`)。
+ * 4K の局の録画 (`.mmts`) と、PMT を読めない録画は両方あるものとして扱う (今までどおり)
+ */
+export function recordedMedia(
+  path: string,
+  program: number,
+  now = Date.now(),
+): RecordedMedia {
+  if (recordedTransport(path) !== "tlv") recordedBroadcast(path, program, now);
+  return contents.get(path) ?? { video: true, audio: true };
 }
 
 /**
@@ -107,6 +137,18 @@ export function headVideo(
   program: number,
   limit = PMT_SEARCH,
 ): ServiceVideo | null | undefined {
+  return headMedia(path, program, limit)?.video;
+}
+
+/**
+ * **TS の録画の先頭 `limit` バイトから、その局の PMT の映像のコーデックと音声の有る無しを読む** (`captions.PmtPeek`)。
+ * PMT を読めなければ undefined
+ */
+function headMedia(
+  path: string,
+  program: number,
+  limit = PMT_SEARCH,
+): { video: ServiceVideo | null; audio: boolean } | undefined {
   if (program <= 0) return undefined;
   let handle: ReturnType<typeof openRecordingSync>;
   try {
@@ -121,7 +163,8 @@ export function headVideo(
       const chunk = new Uint8Array(Math.min(READ_CHUNK, limit - at));
       const read = handle.read(chunk, 0, chunk.length, at);
       if (read <= 0) return undefined;
-      if (peek.feed(chunk.subarray(0, read)) !== null) return peek.video;
+      if (peek.feed(chunk.subarray(0, read)) !== null)
+        return { video: peek.video, audio: peek.audio === true };
       at += read;
     }
     return undefined;

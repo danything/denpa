@@ -403,6 +403,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let served = $state<Step>(0);
   /** リクエストする段。局を変えても、追っかけのシークでも持ち越す */
   let asked: Step = 0;
+  /**
+   * いま開いているのが映像の無い局か録画か (`tuned` の `video` が false)。サーバは音声だけを送るので、段を動かさず (`adapt`)、
+   * 音声だけになったことを段の切り替えにも数えない (`asked` は局を替えたときのために持ち越す)
+   */
+  let videoless = false;
   const adapter = new RungAdapter();
   /** 受け取りの速さ (`AdaptSample.throughput`)。リクエストし直すたびに測り直す */
   const throughput = new Throughput();
@@ -990,6 +995,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * ただし上げた段が映り始めるまでの待ちは数える (`PROBE_START`)
    */
   function adapt(): void {
+    if (videoless) return;
     if (left || paused) {
       // 止めている間の先の無さを、再開したときの詰まりに数えない (`stuckNow`)
       starvedSince = null;
@@ -2784,6 +2790,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           audios = notice.audios;
           audio = notice.audio;
           awaiting = false;
+          // 映像の無い局・録画は音声だけ。段を動かさない (`adapt`)
+          videoless = notice.video === false;
           /*
            * **サーバが選局を受けた。** 待っていた別の局なら、ここでデータ放送を閉じる (`tunedCloses`)。
            * サーバは `tuned` を次の局のデータ放送より先に送るので、閉じる前に次の局の入口へ d は届かない。
@@ -2845,7 +2853,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           // 追っかけで音声だけを選んでいたときは、実際には段 3 をリクエストしている (`wantedCommand`)
           const requested =
             chase !== null && asked === "audio" ? LOWEST_RUNG : asked;
-          if (stepOrder(step) < stepOrder(requested)) {
+          // 映像の無い局の音声だけは、混んでいて下げられなかったのではない
+          if (!videoless && stepOrder(step) < stepOrder(requested)) {
             // サーバが混んでいて下げられなかった (理由は続く `notice`)。段の切り替えとして数えられないので、20 秒は同じ段を返させない
             adapter.refused(Date.now());
             asked = step;

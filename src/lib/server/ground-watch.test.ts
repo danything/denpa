@@ -45,13 +45,19 @@ function sdtOf(services: [number, number][]) {
 beforeEach(() => {
   orm().delete(channelReception).run();
   forgetGround([]);
-  compareGround(MX, sdtOf([[23608, 0x01]]));
+  compareGround(
+    MX,
+    sdtOf([
+      [23608, 0x01],
+      [23615, 0xc0],
+    ]),
+  );
 });
 
 describe("地上波のお知らせ", () => {
   test("局の顔ぶれがスキャンの結果と違えば知らせ、同じに戻れば消す", () => {
     expect(groundNotice()).toBeNull();
-    // MX2 (23610) が増えた。データ放送の違いは数えない
+    // MX2 (23610) が増えた
     compareGround(
       MX,
       sdtOf([

@@ -10,6 +10,7 @@ import { BROADCAST_HEVC, CHANNEL, codecsFor } from "#lib/live.js";
 
 import type { LiveHw } from "./hwenc";
 import {
+  AUDIO_FORM,
   audioArgs,
   blameLiveHw,
   CHASE_STREAM_HOLD,
@@ -564,6 +565,35 @@ describe("音声だけのエンコード方式 (外から使う API の ?audio=o
     expect(args).not.toContain("-filter_complex");
     expect(args.join(" ")).toContain("-c:a aac");
     expect(args.join(" ")).toContain("-f mp4");
+  });
+
+  test("映像も音声も無い局 (データ放送だけの局) は、TS を読まずに無音を実時間で出す", () => {
+    const args = encodeArgs(
+      1024,
+      stereo,
+      "audio",
+      null,
+      null,
+      0,
+      false,
+      "pipe:3",
+      "ts",
+      "mpeg2",
+      true,
+    );
+    expect(args).not.toContain("pipe:0");
+    expect(args).toContain("-re");
+    expect(args.join(" ")).toContain("-f lavfi -i sine=frequency=0");
+    expect(args.join(" ")).toContain("-c:a aac");
+    expect(args.at(-1)).toBe("pipe:1");
+  });
+
+  test("映像の無い局の形式は、どれをリクエストされても音声だけ (AUDIO_FORM)", () => {
+    expect(AUDIO_FORM).toEqual({
+      codec: "audio",
+      raw: false,
+      downgraded: false,
+    });
   });
 });
 

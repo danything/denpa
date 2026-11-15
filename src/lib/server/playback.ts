@@ -76,7 +76,7 @@ import {
 } from "#lib/ts/playback.js";
 import {
   inWrap,
-  lastVideoPts,
+  lastMediaPts,
   type ReadAt,
   readHead,
   seekTs,
@@ -99,6 +99,7 @@ import {
   parsePlayable,
   pickLiveHw,
   rungCodec,
+  SILENCE,
   softwareEncodes,
   uhdVideoArgs,
   videoArgs,
@@ -106,7 +107,7 @@ import {
 import { sidecarPaths } from "./metadata";
 import { LEAD, type MmtsFile, mmtsFmp4, mmtsOffset, probeMmts } from "./mmts";
 import { openPace, StreamPace } from "./pace";
-import { recordedBroadcast } from "./recorded-broadcast";
+import { recordedBroadcast, recordedMedia } from "./recorded-broadcast";
 import {
   readRecording,
   recordingInput,
@@ -327,7 +328,19 @@ interface PlaybackPlan {
    * (TS で送る 4K の局) は `hevc`。元の録画が無ければ `mpeg2`
    */
   broadcast: BroadcastCodec;
+  /**
+   * **映像も音声も無い録画 (データ放送だけの局) か。** 音声だけ (`?codec=audio`) の代わりに、物差しの長さの無音を流す
+   * (`audioResponse`)。映像の無い録画は `info.video` が false
+   */
+  silent: boolean;
 }
+
+/** 映像の無い録画 (`info.video` が false) の出せるもの。音声だけの fMP4 1 つ (`streamResponse` はどの形式でも音声だけを返す) */
+const VIDEOLESS_OFFER: PlayOffer = {
+  codec: "h264",
+  way: "stream",
+  codecs: "mp4a.40.2",
+};
 
 /** 中身の codecs (映像) からコーデックを読む */
 function codecOf(video: string | null): HwCodec | null {
@@ -381,7 +394,7 @@ async function probeTs(path: string): Promise<TsFile | null> {
   const head = await readHead(read);
   let ts: TsFile | null = null;
   if (head !== null) {
-    const last = lastVideoPts(
+    const last = lastMediaPts(
       await read(Math.max(0, size - TAIL_BYTES), TAIL_BYTES),
     );
     const duration = last === null ? null : sinceHead(last, head);
@@ -453,6 +466,11 @@ export async function playbackPlan(
     done && uhd && encoded.length === 0
       ? await probeMmtsFile(tsPath, program)
       : null;
+  // 映像の無い録画 (ラジオ・データ放送の局) はエンコードせずに置いてある (`recorder.finish`)。音声だけで出す
+  if (done && !uhd && encoded.length === 0) {
+    const media = recordedMedia(tsPath, program);
+    if (!media.video) return videolessPlan(recording, ts, media.audio, program);
+  }
   if (encoded.length === 0 && ts === null && mmts === null) return null;
   /*
    * TS で送る 4K の局の録画は、拡張子では分からないので PMT を読む。MPEG-2 の TS としては出さず (画面の MPEG-2 のデコーダは
@@ -577,6 +595,41 @@ export async function playbackPlan(
     tracks,
     program,
     broadcast,
+    silent: false,
+  };
+}
+
+/**
+ * **映像の無い録画 (ラジオ・データ放送の局) の決めたこと** (`playbackPlan`)。物差しは元の TS で、出せるのは音声だけの fMP4 1 つ
+ * (`VIDEOLESS_OFFER`)。画面は段を動かさない (`info.video` が false)。
+ * 音声のある録画は TS の音声で、尺は最後の音声の PES まで (`probeTs`)。読めなければ null。
+ * 音声も無い録画 (データ放送だけの局) は無音で (`silent`)、尺は録れた長さ (`recordedSec`)。データ放送の時刻は放送の時計で
+ * 録画の先頭から数えてある (`recorded-bml.ts`) ので、TS の PES が無くても合う
+ */
+function videolessPlan(
+  recording: Recording,
+  ts: TsFile | null,
+  audio: boolean,
+  program: number,
+): PlaybackPlan | null {
+  if (audio && ts === null) return null;
+  const tracks = audio ? audioTracks(parseAudios(recording)) : [];
+  return {
+    info: {
+      duration: (audio ? ts?.duration : null) ?? recordedSec(recording),
+      axis: "ts",
+      audios: tracks.map((track) => ({ id: track.id, label: track.label })),
+      offers: [VIDEOLESS_OFFER],
+      video: false,
+    },
+    encoded: [],
+    ts: audio ? ts : null,
+    mmts: null,
+    skip: 0,
+    tracks,
+    program,
+    broadcast: "mpeg2",
+    silent: !audio,
   };
 }
 
@@ -839,30 +892,43 @@ export function audioOnlyArgs(
   source:
     | { path: string; from: number; audio: number }
     | { program: number; audio: AudioTrack; offset: number }
-    | { fmp4: true },
+    | { fmp4: true }
+    | { silent: number; offset: number },
 ): string[] {
   const input =
     "fmp4" in source
       ? // 4K の局の元の録画を詰め替えた fMP4 (`mmtsTranscodeArgs` と同じ。時刻は物差しのまま)
         ["-copyts", "-f", "mp4", "-i", "pipe:0", "-map", "0:a:0?"]
-      : "path" in source
-        ? [
-            ...(source.from > 0 ? ["-ss", source.from.toFixed(3)] : []),
-            "-copyts",
-            ...recordingInput(source.path),
-            "-map",
-            `0:a:${source.audio}?`,
-          ]
-        : [
-            "-copyts",
+      : "silent" in source
+        ? // 映像も音声も無い録画 (データ放送だけの局)。物差しの残り (`silent` 秒) の無音。時刻は `offset` から
+          [
             "-f",
-            "mpegts",
+            "lavfi",
+            "-t",
+            source.silent.toFixed(3),
             "-i",
-            "pipe:0",
+            SILENCE,
             "-map",
-            `${programSpec(source.program)}:a:${source.audio.stream}?`,
-            ...panArgs(source.audio),
-          ];
+            "0:a",
+          ]
+        : "path" in source
+          ? [
+              ...(source.from > 0 ? ["-ss", source.from.toFixed(3)] : []),
+              "-copyts",
+              ...recordingInput(source.path),
+              "-map",
+              `0:a:${source.audio}?`,
+            ]
+          : [
+              "-copyts",
+              "-f",
+              "mpegts",
+              "-i",
+              "pipe:0",
+              "-map",
+              `${programSpec(source.program)}:a:${source.audio.stream}?`,
+              ...panArgs(source.audio),
+            ];
   return [
     ...QUIET,
     ...input,
@@ -1170,7 +1236,9 @@ export async function streamResponse(
   // 変換の元。エンコード済み (中身を読めたもの) があればそれ、無ければ元の TS
   const source = plan.encoded.find((file) => file.codec !== null);
   const label = `[stream] 録画 ${recording.id} (${codec})`;
-  if (codec === "audio") return audioResponse(plan, source, from, query, label);
+  // 映像の無い録画は、どの形式をリクエストされても音声だけ (`videolessPlan`)
+  if (codec === "audio" || plan.info.video === false)
+    return audioResponse(plan, source, from, query, label);
   if (codec === "mpeg2") {
     if (!plan.info.offers.some((o) => o.codec === "mpeg2"))
       error(404, "この形式では再生できません");
@@ -1330,7 +1398,14 @@ async function audioResponse(
   label: string,
 ): Promise<Response> {
   let attempt: Attempt | null = null;
-  if (source !== undefined) {
+  if (plan.silent) {
+    // 映像も音声も無い録画 (データ放送だけの局)。`from` から尺の終わりまでの無音
+    const left = plan.info.duration - from;
+    if (left > 0)
+      attempt = {
+        argv: [config.ffmpeg, ...audioOnlyArgs({ silent: left, offset: from })],
+      };
+  } else if (source !== undefined) {
     attempt = {
       argv: [
         config.ffmpeg,

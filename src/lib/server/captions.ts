@@ -221,14 +221,26 @@ export function pmtVideo(section: Uint8Array): ServiceVideo | null {
   return null;
 }
 
+/** 音声の stream_type (MPEG-1・MPEG-2 の音声、ADTS と LATM の AAC)。放送の音声は ADTS の AAC (0x0F) */
+const AUDIO_STREAMS: ReadonlySet<number> = new Set([0x03, 0x04, 0x0f, 0x11]);
+
+/** **PMT に音声があるか** (`AUDIO_STREAMS`)。データ放送だけの局は映像も音声も無い */
+export function pmtAudio(section: Uint8Array): boolean {
+  for (const [type] of pmtStreams(section))
+    if (AUDIO_STREAMS.has(type)) return true;
+  return false;
+}
+
 /**
- * TS を少しずつ渡して、その局の PMT から字幕の本数 (`captionStreams`) と映像のコーデック (`pmtVideo`) を読む
+ * TS を少しずつ渡して、その局の PMT から字幕の本数 (`captionStreams`)・映像のコーデック (`pmtVideo`)・音声があるか (`pmtAudio`) を読む
  */
 export class PmtPeek {
   private readonly packets = new PacketStream();
   private readonly pmt: PmtTracker;
   /** 読んだ PMT にある映像のコーデック。まだ読んでいないか、映像が無ければ null */
   video: ServiceVideo | null = null;
+  /** 読んだ PMT に音声があるか。まだ読んでいなければ null */
+  audio: boolean | null = null;
 
   /** @param program 放送が名乗っている番号 */
   constructor(program: number) {
@@ -243,6 +255,7 @@ export class PmtPeek {
       for (const section of this.pmt.feed(packet, pid))
         if (section[0] === TABLE_PMT) {
           this.video = pmtVideo(section);
+          this.audio = pmtAudio(section);
           return captionStreams(section);
         }
     }
@@ -282,6 +295,8 @@ export async function peekPmt(
   stream: AsyncGenerator<Uint8Array>;
   count: number | null;
   video: ServiceVideo | null;
+  /** PMT に音声があるか。読めなければ null */
+  audio: boolean | null;
 }> {
   const counter = new PmtPeek(program);
   const head: Uint8Array[] = [];
@@ -317,6 +332,7 @@ export async function peekPmt(
     stream: replay(head, pending, stream),
     count,
     video: counter.video,
+    audio: counter.audio,
   };
 }
 

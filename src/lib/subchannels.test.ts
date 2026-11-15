@@ -25,6 +25,7 @@ function station(
   channel: string,
   type = "GR",
   networkId = 0x7fe0,
+  serviceType = 1,
 ): Station {
   return {
     id,
@@ -32,6 +33,7 @@ function station(
     transport_stream_id: tsOf(channel),
     type,
     network_id: networkId,
+    service_type: serviceType,
   };
 }
 

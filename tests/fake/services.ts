@@ -86,8 +86,8 @@ const TEST_SERVICES: FakeService[] = [
     slotMs: 30 * 60_000,
     serviceType: 1,
   },
-  // データ放送。映像が入っていないので録画対象にしてはいけない。
-  // 実機ではこれを録ってしまい、中身の無いファイルで失敗していた
+  // データ放送の局。始めの控え (`broadcast.channels`) には部分受信の印が無いので取り込まれない (`schema.importedService`)。
+  // スキャンし直すと、偽の放送の NIT に部分受信記述子が無いので、データ放送の局として入る
   {
     id: 3239100700,
     serviceId: 700,

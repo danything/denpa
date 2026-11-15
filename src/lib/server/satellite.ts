@@ -26,7 +26,7 @@ import {
   type ServiceTable,
 } from "@danything/arib/psi";
 
-import { DIGITAL_TV } from "./schema";
+import { IMPORTED_SERVICE_TYPES } from "./schema";
 import { readUntil } from "./stream";
 import type { AgentChannel } from "./tuner";
 
@@ -157,6 +157,8 @@ export function lineupFrom(
               ) ??
               known.get(serviceKeyOf(network.networkId, service.serviceId)) ??
               `${type} ${service.serviceId}`,
+            // 衛星に部分受信 (ワンセグ) は無い
+            partialReception: false,
           }))
           .sort((a, b) => a.serviceId - b.serviceId),
       });
@@ -205,7 +207,7 @@ interface TableRead {
 }
 
 /**
- * 流れてくる TS から NIT と SDT を読む。**自分のネットワークの NIT がそろい、そこに載っているテレビの局の
+ * 流れてくる TS から NIT と SDT を読む。**自分のネットワークの NIT がそろい、そこに載っている取り込む種別の局 (テレビ・ラジオ・データ放送) の
  * 名前が SDT でそろったら打ち切る。** そろわなくても `timeout` で打ち切る (名前は欠けたまま返す)
  *
  * `other` を渡すと、それに当てはまる NIT[other] がそろうまでも待つ。CS はこれでもう片方のネットワークの
@@ -238,7 +240,7 @@ export async function readTables(
   return { nit, sdt, signal, error };
 }
 
-/** 自分のネットワークの NIT がそろい、テレビの局の名前が全部そろったか (`other` があれば、その NIT[other] も) */
+/** 自分のネットワークの NIT がそろい、取り込む種別の局 (テレビ・ラジオ・データ放送) の名前が全部そろったか (`other` があれば、その NIT[other] も) */
 function settled(
   nit: NitReader,
   sdt: SdtReader,
@@ -266,7 +268,7 @@ function settled(
   }
   return network.transportStreams.every((ts) =>
     ts.services
-      .filter((service) => service.serviceType === DIGITAL_TV)
+      .filter((service) => IMPORTED_SERVICE_TYPES.has(service.serviceType))
       .every((service) =>
         named.has(
           nameKey(

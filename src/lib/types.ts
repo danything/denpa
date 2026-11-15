@@ -79,6 +79,18 @@ export const BCAS_SYSTEM_ID = 0x0005;
  */
 export type Transport = "ts" | "tlv";
 
+/** テレビの局のサービス種別 (ARIB STD-B10 のデジタル TV。`services.service_type`)。**映像があるのはこの種別だけ** (`hasVideo`) */
+export const DIGITAL_TV = 1;
+
+/**
+ * **映像のある局か** (サービス種別から)。映像の無い局 (ラジオ・データ放送) は、ライブを音声だけで送り (`server/live.ts` の `AUDIO_FORM`)、
+ * ルールは局を名指ししたものだけが当て (`server/rules.missOf`)、サブチャンネルとして束ねない (`subchannels.mainOf`)。
+ * 録画に映像があるかは、局ではなく録画の PMT で決める (`server/recorded-broadcast.recordedMedia`)
+ */
+export function hasVideo(serviceType: number): boolean {
+  return serviceType === DIGITAL_TV;
+}
+
 /**
  * TS の局の映像のコーデック。局の PMT にある映像の stream_type から決める (`server/captions.ts` の `pmtVideo`)。
  * 覚えておかず、ライブと追っかけのセッションが開くたびに読む。

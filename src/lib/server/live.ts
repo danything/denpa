@@ -130,9 +130,10 @@ import {
   broadcastDecided,
   learnBroadcast,
   recordedBroadcast,
+  recordedMedia,
 } from "./recorded-broadcast";
 import { recordingSize } from "./recording-io";
-import { programs, recordings, services } from "./schema";
+import { hasVideo, programs, recordings, services } from "./schema";
 import { LastingScramble, mediaPids } from "./scramble";
 import { settings } from "./settings";
 import { chunks, endInput, lines, sideOutput } from "./stream";
@@ -296,6 +297,7 @@ type StreamCodec = LiveCodec | "audio";
  *   (字幕は denpa が TTML から作る)。映像は縮めて SDR にする (`uhdVideoArgs`)
  * @param video 放送の映像のコーデック (`#lib/live-choice.ts` の `BroadcastCodec`)。`hevc` の TS (TS に HEVC を入れて送る 4K の局) は、
  *   `hevc` なら映像を写し (`HEVC_COPY`)、ほかのコーデックなら 4K の局と同じく縮めて SDR にする (`uhdVideoArgs`)
+ * @param silent 映像も音声も無い局 (データ放送だけの局) か (`Session.silent`)。true なら TS を読まずに無音を流す (`silentArgs`)
  */
 export function encodeArgs(
   program: number,
@@ -308,7 +310,9 @@ export function encodeArgs(
   side = "pipe:3",
   transport: Transport = "ts",
   video: BroadcastCodec = transport === "tlv" ? "hevc" : "mpeg2",
+  silent = false,
 ): string[] {
+  if (silent) return silentArgs(rung);
   const uhd = transport === "tlv";
   const copy = copiesVideo(transport, video, codec);
   const picture =
@@ -393,6 +397,42 @@ export function encodeArgs(
     ...(caption === null || picture === null || uhd
       ? []
       : captionOutput(from, caption, side)),
+  ];
+}
+
+/**
+ * **無音の音声を作る lavfi の入力** (`silentArgs`・観る画面の `playback.audioOnlyArgs`)。周波数 0 の `sine` は 0 だけを出す。
+ * `anullsrc` を使わないのは、イメージの ffmpeg に組んでいないため (Dockerfile の `--enable-filter`。`sine` はイメージの確かめで使っている)
+ */
+export const SILENCE = "sine=frequency=0:sample_rate=48000";
+
+/**
+ * **映像も音声も無い局 (データ放送だけの局) のライブの ffmpeg** (`encodeArgs` の `silent`)。TS は読まず、無音の AAC を実時間で
+ * (`-re`) 音声だけの fMP4 にする。画面は音声だけの局と同じく受け取り (黒い画面のまま)、データ放送は TS から denpa が分けて送る (`Session.tap`)。
+ * 無音の時刻は放送の時刻と結び付かないが、データ放送は時刻を合わせずに描く (docs/stream.md)
+ */
+export function silentArgs(rung: Rung = 0): string[] {
+  return [
+    "-hide_banner",
+    "-y",
+    "-nostats",
+    "-re",
+    "-f",
+    "lavfi",
+    "-i",
+    SILENCE,
+    "-map",
+    "0:a",
+    ...audioArgs("audio", rung),
+    "-f",
+    "mp4",
+    "-movflags",
+    "+empty_moov+default_base_moof",
+    "-frag_duration",
+    "50000",
+    "-flush_packets",
+    "1",
+    "pipe:1",
   ];
 }
 
@@ -1160,6 +1200,10 @@ const AV1_GAVE_UP = "AV1 を GPU でエンコードできませんでした";
  * 画面は「。ほかの形式に切り替えました」を足して出し、H.265 を外してリクエストし直す
  */
 const UHD_RUNG_HEVC = "4K の録画は H.265 のまま画質を下げられません";
+
+/** 映像も音声も無い録画 (データ放送だけの局) の追っかけを断る文面 (`openChase`)。録り終えれば観る画面で観られる */
+const NO_MEDIA_CHASE =
+  "映像も音声も無い録画は追っかけ再生できません。録画が終わると観られます";
 /** H.265 をリクエストされたが出せないので H.264 にしたときの断り書き (`attend`) */
 const HEVC_TO_H264 =
   "H.265 を GPU でエンコードできないため、H.264 に切り替えました";
@@ -1617,6 +1661,18 @@ class Session {
   hevcVideo = false;
 
   /**
+   * 映像のある局 (と録画) か。false なら音声だけ (`AUDIO_FORM`) で送っていて、`tuned` に `video: false` を付ける
+   * (画面は段を動かさない)。作ったところ (`begin`・`openChase`) が決める
+   */
+  video = true;
+
+  /**
+   * **映像も音声も無い局 (データ放送だけの局) の無音を流しているか** (`encodeArgs` の `silent`)。映像の無い局の PMT に
+   * 音声が無ければ立てる (`runEncode`)。立っている間は TS を ffmpeg に渡さず、データ放送などへ分けるだけ (`pump`)
+   */
+  private silent = false;
+
+  /**
    * **追っかけを元の TS で送る前に、録画のストリームから PMT を読むか** (`readsVideo`)。読むときは、読めた放送のコーデックを受け取るもの。
    * 録り始めたばかりで開く前に録画の PMT を読めなかった追っかけだけ (`openChase`。`recorded-broadcast.broadcastDecided`)。
    * 映像が HEVC なら、4K の局の録画と同じく放送の HEVC を写したものに替える (`chaseRawServed`)
@@ -1938,6 +1994,7 @@ class Session {
       audio: this.audio.id,
       audios: this.audios,
       ...(this.hevcVideo ? { broadcast: "hevc" as const } : {}),
+      ...(this.video ? {} : { video: false as const }),
     };
   }
 
@@ -1979,9 +2036,14 @@ class Session {
        * TS で送る 4K の局 (`hevc`) は、`hevc` なら映像を写し、ほかは 4K の局と同じく縮めて SDR にする
        */
       let video = this.broadcast;
-      /** PMT を読むか (`peekPmt`)。4K の局 (`tlv`) の入力は TS ではなく、字幕も映像も別に読む */
+      /**
+       * PMT を読むか (`peekPmt`)。4K の局 (`tlv`) の入力は TS ではなく、字幕も映像も別に読む。
+       * 音声だけでも、映像の無い局は読む (音声も無ければ無音を流す。`silent`)
+       */
       const peeks =
-        this.program > 0 && this.transport === "ts" && this.codec !== "audio";
+        this.program > 0 &&
+        this.transport === "ts" &&
+        (this.codec !== "audio" || !this.video);
       // GPU でエンコードするか (`pickLiveHw`)。降りたらソフトウェアで再エンコードする (下)。
       // 4K の局はデコードを GPU に載せない (`uhdVideoArgs`) ので、降りたときに覚える経路もそれに合わせる。映像を写すなら GPU は使わない
       const pickHw = () =>
@@ -2044,6 +2106,13 @@ class Session {
           stream = head.stream;
           // 読んだぶんは返ってきたストリームの先頭にある。ライブは起こし直してもこちらを使う
           if (feed !== null) feed = head.stream;
+          // 映像の無い局の PMT に音声も無い (データ放送だけの局)。ffmpeg に TS を渡さず、無音を流す (`encodeArgs` の `silent`)
+          if (!this.video && head.audio === false) {
+            this.silent = true;
+            console.log(
+              `[live] ${this.id}: 映像も音声も無い局なので、無音を流します`,
+            );
+          }
           /*
            * 指定した本数目が無ければ指定しない。`captionless` には覚えない。毎回 PMT を読むので、
            * 番組が替わって字幕が付けばすぐ出せる
@@ -2149,6 +2218,7 @@ class Session {
               side?.url,
               this.transport,
               video,
+              this.silent,
             ),
           ],
           // 字幕は 4 本目の出力 (stream.sideOutput) へ出させる。**stdio の配列でしか増やせない**
@@ -2677,7 +2747,8 @@ class Session {
           this.restart(consumed);
           break;
         }
-        if (out.length === 0) continue;
+        // 無音を流しているときは、ffmpeg は TS を読まない (`encodeArgs` の `silent`)。データ放送などへ分けるだけ
+        if (out.length === 0 || this.silent) continue;
         // **書けたことを待つ** (上の説明)。待たないと、失敗したときに受け止める先がない
         await writer.write(out);
         await writer.flush();
@@ -3471,6 +3542,8 @@ interface Want {
   playable?: readonly LiveFormat[];
   /** 放送のままを元の TS のまま送るか (`Session.keepsTs`。HTTP の `codec=raw` で `?playable=` が無いもの) */
   keepsTs?: boolean;
+  /** 映像のある局か (`schema.hasVideo`)。false なら `codec` は `audio` (`AUDIO_FORM`)。省けば映像のある局 */
+  video?: boolean;
 }
 
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
@@ -3493,6 +3566,7 @@ function begin(want: Want): Session {
   );
   session.audios = want.now.audios;
   session.playable = want.playable ?? null;
+  session.video = want.video !== false;
   sessions.set(session.id, session);
   void session.run();
   return session;
@@ -3622,6 +3696,20 @@ function httpWant(
   const row = serviceOf(serviceId);
   // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は選局できない
   if (row === undefined || row.channel === null) return null;
+  // 映像の無い局は、どの形式をリクエストされても音声だけ (`AUDIO_FORM`)
+  if (!hasVideo(row.service_type))
+    return {
+      channelType: row.type,
+      channel: row.channel,
+      serviceId,
+      now: nowPlaying(serviceId, audio),
+      codec: AUDIO_FORM.codec,
+      track: 0,
+      raw: false,
+      pin: null,
+      rung: 0,
+      video: false,
+    };
   const raw = form === "raw";
   const whole = row.transport === "tlv" && form === "hevc";
   return {
@@ -3676,13 +3764,17 @@ export function chaseStream(
       recordingDone(rec.id),
     );
   }
-  // 4K の局の録画の H.265 は放送の HEVC を写す (`chaseForm`)。エンコードしないので枠を使わない
+  // 4K の局の録画の H.265 は放送の HEVC を写す (`chaseForm`)。エンコードしないので枠を使わない。映像の無い録画は音声だけで、これも使わない
+  const program = aribServiceId(source.rec.service_id);
   const { copy } = chaseForm(
     { codec, raw: false, rung, playable: [codec] },
     recordedTransport(source.path),
-    recordedBroadcast(source.path, aribServiceId(source.rec.service_id)),
+    recordedBroadcast(source.path, program),
   );
-  const release = copy ? () => undefined : holdTranscode();
+  const release =
+    copy || !recordedMedia(source.path, program).video
+      ? () => undefined
+      : holdTranscode();
   if (release === null) return "busy";
   return sessionStream((viewer, hold) =>
     openChase(
@@ -4085,6 +4177,18 @@ export function liveForm<C extends StreamCodec>(
 }
 
 /**
+ * **映像の無い局 (ラジオ・データ放送。`schema.hasVideo`) と映像の無い録画の追っかけで送る形式。** どの形式をリクエストされても音声だけ (AAC の fMP4)。
+ * 放送のままの TS は送らない (画面の MPEG-2 のデコーダに映像の無い TS を渡すことを確かめていない)。音声だけは枠を使わない。
+ * 音声も無い局 (データ放送だけの局) は無音を流す (`Session.silent`)。
+ * 答え (`tuned`) には `video: false` を付け、画面は回線に合わせて段を動かさない (`live-player.svelte.ts`)
+ */
+export const AUDIO_FORM = {
+  codec: "audio",
+  raw: false,
+  downgraded: false,
+} as const;
+
+/**
  * **追っかけで送る形式と段** (`openChase`・`chaseStream`)。`broadcast` は録画の放送のコーデック (`recorded-broadcast.ts`)。
  *
  * - MPEG-2 の局の録画の H.265 は段 0 では作らない (`#lib/live.ts` の `LiveCodec`) ので H.264 にする。元の TS (`raw`) はそのまま
@@ -4157,9 +4261,13 @@ export function warm(
   if (channelType === "" || channel === "" || !Number.isFinite(serviceId))
     return;
   // H.265 を出せなければ、選局の指示と同じく H.264 で温める。4K の局の放送のままは詰め替え (`liveForm`)
-  const transport = serviceOf(serviceId)?.transport ?? "ts";
-  const form = liveForm(broadcastCodec(transport), codec, raw);
-  codec = form.codec;
+  const row = serviceOf(serviceId);
+  const transport = row?.transport ?? "ts";
+  // 映像の無い局は、選局の指示と同じく音声だけで温める (`AUDIO_FORM`)
+  const video = row === undefined || hasVideo(row.service_type);
+  const form = video
+    ? liveForm(broadcastCodec(transport), codec, raw)
+    : AUDIO_FORM;
   raw = form.raw;
   /*
    * **誰かがもうこの局を観ていれば温めない。** 画面は番組が切り替わるたびに読み直す
@@ -4178,12 +4286,17 @@ export function warm(
     channelType,
     channel,
     serviceId,
-    now: nowPlaying(serviceId, audio, transport === "tlv" && codec === "hevc"),
-    codec,
+    now: nowPlaying(
+      serviceId,
+      audio,
+      transport === "tlv" && form.codec === "hevc",
+    ),
+    codec: form.codec,
     track: 0,
     raw,
     pin: null,
     rung: 0,
+    video,
   };
   // 既にエンコードしていれば何もしない。開き直すたびに増やさない
   if (sharedSession(want) !== undefined) return;
@@ -4421,14 +4534,18 @@ export function attend(connection: Connection): void {
      * コーデックで受け取るので、そのまま観られる。替えたことは断り書きで言う。
      * 4K の局の放送のままは、放送の HEVC の詰め替え (`liveForm`)
      */
-    const form = liveForm(broadcast, asked.codec, asked.raw);
+    // 映像の無い局は、どの形式をリクエストされても音声だけ (`AUDIO_FORM`)。段も下げない
+    const video = row === undefined || hasVideo(row.service_type);
+    const form = video
+      ? liveForm(broadcast, asked.codec, asked.raw)
+      : AUDIO_FORM;
     const { downgraded, raw } = form;
     const plain = form.codec;
     /*
      * 段を下げるなら、コーデックはサーバが選ぶ (`rungCodec`)。放送そのままでは下げない。
      * 音声だけは段で音声のビットレートだけを下げる (`audioArgs`)。映像をエンコードしないので枠は使わない
      */
-    let rung: Rung = raw ? 0 : asked.rung;
+    let rung: Rung = raw || !video ? 0 : asked.rung;
     let codec: StreamCodec =
       rung === 0 || plain === "audio"
         ? plain
@@ -4479,6 +4596,7 @@ export function attend(connection: Connection): void {
       raw,
       pin: tuner,
       rung,
+      video,
     });
     let release: (() => void) | null = () => undefined;
     let refused = false;
@@ -4542,6 +4660,7 @@ export function attend(connection: Connection): void {
             rung,
             audio: now.audio.id,
             audios: now.audios,
+            ...(video ? {} : { video: false as const }),
           };
     connection.send(CHANNEL.control, 0n, json(notice));
     if (downgraded && rung === 0 && codec === "h264")
@@ -4671,10 +4790,20 @@ function openChase(
   // ffmpeg に名指しさせる放送の番号。録画 TS は絞ってあるが、探させない理屈はライブと同じ
   const program = aribServiceId(rec.service_id);
   const broadcast = recordedBroadcast(path, program);
-  const { codec, raw, rung, copy } = chaseForm(asked, transport, broadcast);
-  // 段を下げた追っかけも使う枠は 1 つ (下げないときと同じ)。コーデックは呼ぶ側が選んである (`rungCodec`)
+  /*
+   * **映像の無い録画 (ラジオ・データ放送の局) は音声だけ** (`AUDIO_FORM`。ライブと同じ)。音声も無い録画は追っかけない
+   * (流すものが無い。録り終えれば観る画面で無音とデータ放送を流す)。PMT をまだ読めない録り始めは映像のある録画として開く
+   */
+  const media = recordedMedia(path, program);
+  if (!media.video && !media.audio) return refuseHeld(NO_MEDIA_CHASE);
+  const { codec, raw, rung, copy } = media.video
+    ? chaseForm(asked, transport, broadcast)
+    : { ...AUDIO_FORM, rung: 0 as Rung, copy: false };
+  // 段を下げた追っかけも使う枠は 1 つ (下げないときと同じ)。コーデックは呼ぶ側が選んである (`rungCodec`)。音声だけは枠を使わない
   const release =
-    raw || copy ? (held ?? (() => undefined)) : (held ?? holdTranscode());
+    raw || copy || codec === "audio"
+      ? (held ?? (() => undefined))
+      : (held ?? holdTranscode());
   if (release === null) return refuse(BUSY);
   /*
    * **畳んだら読むのをやめる** (`session.whenStopped` で立てる)。止めている間 (`hold`) に畳まれると、`followFile` は
@@ -4712,6 +4841,7 @@ function openChase(
     rung,
     audio: audio.id,
     audios: tracks,
+    ...(media.video ? {} : { video: false as const }),
   });
   const timeline: Extract<Notice, { type: "timeline" }> = {
     type: "timeline",
@@ -4761,6 +4891,7 @@ function openChase(
   session.whenStopped(() => {
     reading.stopped = true;
   });
+  session.video = media.video;
   /*
    * **録り始めたばかりで開く前に PMT を読めなかった録画を元の TS で送るときは、送る前に録画のストリームから PMT を読む**
    * (`Session.learnsBroadcast`)。TS で送る 4K の局の録画なら、画面の MPEG-2 のデコーダは HEVC をデコードできないので、
@@ -4922,6 +5053,7 @@ function serviceOf(serviceId: number) {
       network_id: services.network_id,
       decodable: services.decodable,
       transport: services.transport,
+      service_type: services.service_type,
     })
     .from(services)
     .where(eq(services.id, serviceId))

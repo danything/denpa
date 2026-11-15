@@ -1304,9 +1304,11 @@
 
   /**
    * いまの様子 (`watch-adapt.ts` の `sample`)。段を動かさない間は null。
-   * 端末に保存したもの・止めている間・断られて止まっている間。canvas に描いているときは `canvasSample`
+   * 端末に保存したもの・止めている間・断られて止まっている間。canvas に描いているときは `canvasSample`。
+   * 映像の無い録画 (`info.video` が false) は音声だけなので動かさない
    */
   function adaptSample() {
+    if (info?.video === false) return null;
     if (compat || canvas !== null) return canvasSample();
     const target = video;
     const plan = picked;
