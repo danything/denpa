@@ -163,8 +163,9 @@ const entry: LiveEntry = {
     },
     close(ws) {
       const connection = ws.data.connection;
-      if (connection !== null) opened.delete(connection);
-      connection?.finish();
+      if (connection === null) return;
+      opened.delete(connection);
+      connection.finish();
     },
   },
 };
