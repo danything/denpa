@@ -189,6 +189,106 @@ test("AV1 の ICQ が通れば CQP は試さない", async () => {
   expect(calls.some((argv) => argv.join(" ").includes("qsv"))).toBe(false);
 });
 
+/**
+ * ffmpeg 9 が `-v repeat+level+verbose` でエンコーダを開けずに落ちるときの標準エラー。`cause` は開けなかった理由の行。
+ * 最後の数行は原因を持たない行で埋まり、エンコードの側は理由にかかわらず `-22 (Invalid argument)` で終わる
+ */
+function openFailure(cause: string, errno: string): string {
+  return [
+    "[AVHWDeviceContext @ 0x5501] [verbose] VAAPI driver: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1.",
+    "[av1_vaapi @ 0x5502] [verbose] Input surface format is nv12.",
+    `[av1_vaapi @ 0x5502] [error] ${cause}`,
+    "[vost#0:0/av1_vaapi @ 0x5503] [error] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.",
+    `[vf#0:0 @ 0x5504] [error] Error while filtering: ${errno}`,
+    `[vf#0:0 @ 0x5504] [error] Task finished with error code: -38 (${errno})`,
+    `[vf#0:0 @ 0x5504] [error] Terminating thread with return code -38 (${errno})`,
+    "[vost#0:0/av1_vaapi @ 0x5503] [error] Could not open encoder before EOF",
+    "[vost#0:0/av1_vaapi @ 0x5503] [error] Task finished with error code: -22 (Invalid argument)",
+    "[vost#0:0/av1_vaapi @ 0x5503] [error] Terminating thread with return code -22 (Invalid argument)",
+    "[out#0/null @ 0x5505] [error] Nothing was written into output file, because at least one of its streams received no packets.",
+    "[info] Conversion failed!",
+  ].join("\n");
+}
+
+test("ドライバに AV1 のエンコードが無ければ、CQP は試さず、警告にせずに理由とドライバの名前を出す", async () => {
+  answer = (argv) => (argv.join(" ").includes("av1_vaapi") ? 1 : 0);
+  failText = openFailure(
+    "No usable encoding profile found.",
+    "Function not implemented",
+  );
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  calls.length = 0;
+  try {
+    const { devices } = await probe();
+    expect(devices[0]!.vaapi).toEqual(["hevc", "h264"]);
+    expect(devices[0]!.cqp).toEqual([]);
+    const lines = calls.map((argv) => argv.join(" "));
+    expect(lines.filter((l) => l.includes("av1_vaapi"))).toHaveLength(1);
+    // 試しのエンコードはエラーの段を読めるように、段の印を付けて起動する
+    expect(
+      lines
+        .filter((l) => l.includes("_vaapi"))
+        .every((l) => l.includes("-v repeat+level+verbose")),
+    ).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+    expect(log.mock.calls.map((args) => String(args[0]))).toContain(
+      `[hwenc] av1_vaapi (${join(dir, "renderD128")}) は使えません。ドライバにこのコーデックのエンコードがありません: [av1_vaapi @ 0x5502] No usable encoding profile found. (ドライバ: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1)`,
+    );
+  } finally {
+    warn.mockRestore();
+    log.mockRestore();
+    failText = "";
+  }
+});
+
+test("AV1 の ICQ がドライバに無ければ、警告にせずに CQP で試し、通ったことを出す", async () => {
+  answer = mesa;
+  failText = openFailure(
+    "Driver does not support ICQ RC mode (supported modes: CQP, CBR, VBR).",
+    "Invalid argument",
+  );
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const { devices } = await probe();
+    expect(devices[0]!.cqp).toEqual(["av1"]);
+    expect(warn).not.toHaveBeenCalled();
+    const logged = log.mock.calls.map((args) => String(args[0]));
+    const path = join(dir, "renderD128");
+    expect(logged).toContain(
+      `[hwenc] av1_vaapi (${path}) は使えません。ドライバにこのレート制御がありません: [av1_vaapi @ 0x5502] Driver does not support ICQ RC mode (supported modes: CQP, CBR, VBR). (ドライバ: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1)`,
+    );
+    expect(logged).toContain(
+      `[hwenc] av1_vaapi (${path}) は CQP でエンコードできました。CQP で使います`,
+    );
+  } finally {
+    warn.mockRestore();
+    log.mockRestore();
+    failText = "";
+  }
+});
+
+test("ほかの理由で落ちたら警告し、原因を持たない ffmpeg の行は外して出す", async () => {
+  answer = (argv) => (argv.join(" ").includes("av1_vaapi") ? 1 : 0);
+  failText = openFailure(
+    "Hardware does not support encoding at size 256x256 (constraints: width 320-8192 height 128-8192).",
+    "Invalid argument",
+  );
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    await probe();
+    const path = join(dir, "renderD128");
+    expect(warn.mock.calls.map((args) => String(args[0]))).toEqual([
+      `[hwenc] av1_vaapi (${path}) の試しのエンコードが落ちました (終了コード 1): [av1_vaapi @ 0x5502] Hardware does not support encoding at size 256x256 (constraints: width 320-8192 height 128-8192). / [vf#0:0 @ 0x5504] Error while filtering: Invalid argument (ドライバ: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1)`,
+      `[hwenc] av1_vaapi (${path}、CQP) の試しのエンコードが落ちました (終了コード 1): [av1_vaapi @ 0x5502] Hardware does not support encoding at size 256x256 (constraints: width 320-8192 height 128-8192). / [vf#0:0 @ 0x5504] Error while filtering: Invalid argument (ドライバ: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1)`,
+    ]);
+  } finally {
+    warn.mockRestore();
+    failText = "";
+  }
+});
+
 test("MPEG-2 を GPU でデコードできなければ、エンコードするところだけ GPU", async () => {
   answer = (argv) => {
     const line = argv.join(" ");
@@ -446,10 +546,10 @@ test("AMF は高画質の指定で落ちたら古い世代向けの指定で試�
     expect(amf0).toHaveLength(2);
     expect(amf0[0]).toContain("-usage high_quality -quality high_quality");
     expect(amf0[1]).toContain("-usage transcoding -quality quality");
-    // 落ちた理由は ffmpeg のエラーの最後の 3 行をログに出す
+    // 落ちた理由は ffmpeg のエラーの最後の 3 行をログに出す。原因を持たない行 (開けなかったという行と Conversion failed!) は外す
     const logged = warn.mock.calls.map((args) => String(args[0]));
     expect(logged).toContain(
-      "[hwenc] h264_amf (amf0) の試しのエンコードが落ちました (終了コード 1): [vost#0:0/h264_amf @ 0000021] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height. / Error while filtering: Generic error in an external library / Conversion failed!",
+      "[hwenc] h264_amf (amf0) の試しのエンコードが落ちました (終了コード 1): [h264_amf @ 0000020] encoder->Init() failed with error 9 / Error while filtering: Generic error in an external library",
     );
     // 警告のあとに、古い世代向けの指定で使えることも出す
     expect(log.mock.calls.map((args) => String(args[0]))).toContain(

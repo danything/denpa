@@ -107,6 +107,24 @@ av1_vaapi は `-qp` を黙って無視し、既定の値で 9〜12 Mbps も出�
 設定画面のコーデックの下の「詳しく」には「VA-API: AV1 (CQP) / H.264」のように出ます。
 CQP は場面に応じて量を変えないので、ICQ より動きの多い場面で大きく、静かな場面で小さくなるはずです (i965・Mesa の実機では測っていません)。
 
+**ドライバにそのコーデックのエンコードが無いときと、ICQ が無いときは、警告ではなく理由の 1 行をログに出します。**
+GPU の世代で決まっていて、起動のたびに同じ警告が出るだけになるためです。どちらも FFmpeg のエラーの文で見分けます (`hwenc.trial`)。
+
+- `No usable encoding profile found` (Arc より前の Intel・RDNA3 より前の AMD の AV1 など) … そのコーデックは使いません。AV1 の CQP も試しません。
+  ログは「av1_vaapi (/dev/dri/renderD128) は使えません。ドライバにこのコーデックのエンコードがありません: …」です
+- `Driver does not support ICQ RC mode (supported modes: …)` … ドライバが持つレート制御を添えて出し、AV1 は CQP で試します。
+  通れば「CQP でエンコードできました」と出します
+
+それ以外で落ちたら、今までどおり警告します。警告とこの 1 行には、VA-API のドライバの名前 (`VAAPI driver: …`) を添えます。
+名前は verbose の段の行にあるので、試しのエンコードは ffmpeg を `-v repeat+level+verbose` で起動し、行ごとの段の印からエラーの行を選びます。
+`repeat` は同じ行をまとめる `Last message repeated` (段の印が付かない) を出させないためです。
+
+**ffmpeg 9 がエンコーダを開けずに落ちると、最後の行はいつも `-22 (Invalid argument)` になります。** フィルタの側で開けずに落ちたあと、
+エンコードの側は開いていないまま終わりを受け取り、`Could not open encoder before EOF` で EINVAL を返すためです (fftools の ffmpeg_enc.c)。
+本当の理由は、その前のエンコーダの行と、ffmpeg の終了コード (エラーの番号の下 8 ビット。218 は −38 で ENOSYS) にあります。
+そのため警告には、原因を持たない行 (`Task finished with error code`・`Terminating thread`・`Nothing was written into output file`・
+`Could not open encoder before EOF`・`Error while opening encoder - maybe incorrect parameters`・`Conversion failed!`) を外したエラーの行を出します。
+
 **AV1 の CQP は、同じ画質で ICQ より 5 割ほど大きくなります。** FFmpeg の av1_vaapi は CQP のとき CDEF を使わず
 (vaapi_encode_av1.c が `enable_cdef` を立てるのは CQP でないときだけ)、ループフィルタの強さも渡しません
 (ICQ ではドライバのレート制御が決める)。A310 で CQP にすると、CDEF もループフィルタも全部のコマで 0 でした。
@@ -413,7 +431,7 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
   インタレ解除と縮小は元から CPU でするので、移す所が変わるだけです。指定 (`-preset`・ICQ) は替えません
 - NVENC は世代で指定を替えません。ドライバが FFmpeg の求める API のバージョンを持たなければ、どの指定でも開けません。
   QSV の `-preset` (target usage) はランタイムへの希望で、持たない段は近い段に寄せて受けます
-- **試しのエンコードが落ちたら、ffmpeg のエラーの最後の 3 行をログに出します** (`[hwenc] h264_amf (amf0) の試しのエンコードが落ちました …`)。
+- **試しのエンコードが落ちたら、ffmpeg のエラーの最後の 3 行をログに出します** (`[hwenc] h264_amf (amf0) の試しのエンコードが落ちました …`)。原因を持たない行は外します ([VA-API の節](#gpu-でエンコードする-va-api))。
   GPU があるのに使えないときは、ここで落ちた理由 (ドライバが無い・オプションを受け付けない・時間切れ) を読めます
 - **Linux で QSV を使わない理由 ([上](#qsv-を使わない理由)) は Windows に当てはまりません。** Windows の Intel の GPU で使えるのは QSV で、
   VA-API は無いためです。H.265・AV1 の QSV が Arc で落ちたのは Linux で、Windows のドライバでは確かめていません。

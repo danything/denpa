@@ -970,33 +970,139 @@ interface RungCap {
 }
 
 /**
+ * 試しのエンコードの結果。`missing` と `rate` は VA-API のドライバの返事から分かる、決まった理由で使えないもの。
+ *
+ * - `missing` … ドライバにそのコーデックのエンコードが無い (Arc より前の Intel の AV1 など)
+ * - `rate` … ドライバにそのレート制御が無い (i965・Mesa の ICQ)
+ * - `failed` … それ以外で落ちた
+ */
+type Trial = "ok" | "missing" | "rate" | "failed";
+
+/** 1 本だけ試しにエンコードして、通ったかを返す (`trial`) */
+async function tryEncode(args: string[], label: string): Promise<boolean> {
+  return (await trial(args, label)) === "ok";
+}
+
+/**
  * 1 本だけ試しにエンコードする。**時間で切る。** ドライバが固まって返ってこないとき
  * (実機で見たことはないが) に起動が止まらないように。
  *
- * **落ちたら ffmpeg のエラーの最後の数行をログに出す** (`label` はエンコーダとデバイス)。何が原因で
- * 落ちたか (ドライバが無い・オプションを受け付けない・時間切れ) を、報告のログから読めるように
+ * **落ちたら ffmpeg のエラーの行をログに出す** (`label` はエンコーダとデバイス)。何が原因で
+ * 落ちたか (ドライバが無い・オプションを受け付けない・時間切れ) を、報告のログから読めるように。
+ * ffmpeg は `-v repeat+level+verbose` で起動し、行ごとの段 (`[error]` など) からエラーの行を選ぶ (`readTrialLog`)。
+ * verbose にするのは、VA-API のドライバの名前 (`VAAPI driver: …`) を添えるため。`repeat` は、段の印の付かない
+ * `Last message repeated` を出させないため。
+ *
+ * **決まった理由で使えないもの (`missing`・`rate`) は警告にしない。** GPU の世代で決まっていて、
+ * 起動のたびに同じ警告が出るだけになるため
  */
-async function tryEncode(args: string[], label: string): Promise<boolean> {
+async function trial(args: string[], label: string): Promise<Trial> {
   const result = await run(
-    [config.ffmpeg, "-v", "error", "-nostdin", ...args, "-f", "null", "-"],
+    [
+      config.ffmpeg,
+      "-v",
+      "repeat+level+verbose",
+      "-nostdin",
+      ...args,
+      "-f",
+      "null",
+      "-",
+    ],
     { timeoutMs: config.hwProbeTimeout, stderr: true },
   );
-  if (result.code === 0) return true;
+  if (result.code === 0) return "ok";
+  const log = readTrialLog(result.stderr);
+  const driver = log.driver === null ? "" : ` (ドライバ: ${log.driver})`;
+  const missing = log.errors.find((line) => VAAPI_MISSING.test(line));
+  if (missing !== undefined) {
+    console.log(
+      `[hwenc] ${label} は使えません。ドライバにこのコーデックのエンコードがありません: ${missing}${driver}`,
+    );
+    return "missing";
+  }
+  const rate = log.errors.find((line) => VAAPI_RATE.test(line));
+  if (rate !== undefined) {
+    console.log(
+      `[hwenc] ${label} は使えません。ドライバにこのレート制御がありません: ${rate}${driver}`,
+    );
+    return "rate";
+  }
   console.warn(
-    `[hwenc] ${label} の試しのエンコードが落ちました (終了コード ${result.code}): ${errorTail(result.stderr)}`,
+    `[hwenc] ${label} の試しのエンコードが落ちました (終了コード ${result.code}): ${errorTail(log.errors)}${driver}`,
   );
-  return false;
+  return "failed";
+}
+
+/**
+ * VA-API のドライバにそのコーデックのエンコードが無いときの FFmpeg のエラー (vaapi_encode.c の
+ * `vaapi_encode_profile_entrypoint`。どちらも ENOSYS で開けない)
+ */
+const VAAPI_MISSING = /No usable encoding (profile|entrypoint) found/;
+
+/**
+ * VA-API のドライバに指定したレート制御が無いときの FFmpeg のエラー (vaapi_encode.c の
+ * `vaapi_encode_init_rate_control`。ドライバが持つものを `supported modes: …` に並べる)
+ */
+const VAAPI_RATE = /Driver does not support (\S+|any) RC mode/;
+
+/**
+ * 原因を持たない ffmpeg の行。エンコーダを開けないと ffmpeg 9 はこう並べ、最後の数行がこれで埋まる。
+ * フィルタの側で開けずに落ちたあと、エンコードの側は開いていないまま終わりを受け取って EINVAL で終わる
+ * (fftools の ffmpeg_enc.c の `Could not open encoder before EOF`)。そのため最後の行は、開けなかった本当の理由に
+ * かかわらず `-22 (Invalid argument)` になる
+ */
+const GENERIC_ERRORS = [
+  /Task finished with error code/,
+  /Terminating thread with return code/,
+  /Nothing was written into output file/,
+  /Could not open encoder before EOF/,
+  /Error while opening encoder - maybe incorrect parameters/,
+  /^Conversion failed!$/,
+];
+
+/** 試しのエンコードの標準エラーから読んだもの */
+interface TrialLog {
+  /** エラーの段の行 (段の印は外す)。段の印の無い行もエラーとして扱う */
+  errors: string[];
+  /** VA-API のドライバの名前 (`VAAPI driver: …` の行)。無ければ null */
+  driver: string | null;
+}
+
+/** `[ctx @ 0x…] [error] message` の段の印 */
+const LEVEL_TAG = /\[(trace|debug|verbose|info|warning|error|fatal|panic)\] /;
+
+/** 試しのエンコードの標準エラー (`-v repeat+level+verbose`) を読む */
+function readTrialLog(stderr: string): TrialLog {
+  const errors: string[] = [];
+  let driver: string | null = null;
+  for (const raw of stderr.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === "") continue;
+    const tag = LEVEL_TAG.exec(line);
+    const text =
+      tag === null
+        ? line
+        : `${line.slice(0, tag.index)}${line.slice(tag.index + tag[0].length)}`;
+    const named = /VAAPI driver: (.*?)\.?$/.exec(text);
+    if (named !== null) driver = named[1] ?? null;
+    if (tag === null || ["error", "fatal", "panic"].includes(tag[1] ?? ""))
+      errors.push(text);
+  }
+  return { errors, driver };
 }
 
 /** ログに出す ffmpeg のエラーの行数 */
 const ERROR_LINES = 3;
 
-/** ffmpeg のエラーの最後の数行を 1 行にまとめる。何も出していなければそう書く */
-function errorTail(stderr: string): string {
-  const lines = stderr
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line !== "");
+/**
+ * ffmpeg のエラーの最後の数行を 1 行にまとめる。原因を持たない行 (`GENERIC_ERRORS`) は外し、
+ * 外して何も残らなければ外さずに使う。何も出していなければそう書く
+ */
+function errorTail(errors: string[]): string {
+  const telling = errors.filter(
+    (line) => !GENERIC_ERRORS.some((generic) => generic.test(line)),
+  );
+  const lines = telling.length > 0 ? telling : errors;
   return lines.length === 0
     ? "(エラーの出力はありません)"
     : lines.slice(-ERROR_LINES).join(" / ");
@@ -1272,13 +1378,18 @@ async function probeLinux(): Promise<HwDevice[]> {
     const device = emptyDevice(path, labelOf(path));
     for (const codec of HW_CODECS) {
       // H.264・H.265 は初めから CQP で、AV1 は ICQ で試す (`hwArgs` の説明)
-      if (await tryWay({ device: path, kind: "vaapi" }, codec)) {
+      const first = await tryWayFor({ device: path, kind: "vaapi" }, codec);
+      if (first === "ok") {
         device.vaapi.push(codec);
-      } else if (
-        codec === "av1" &&
-        (await tryWay({ device: path, kind: "vaapi", cqp: true }, codec))
-      ) {
+        continue;
+      }
+      // ドライバに AV1 のエンコードが無ければ (Arc より前の Intel など)、CQP でも開けないので試さない
+      if (codec !== "av1" || first === "missing") continue;
+      if (await tryWay({ device: path, kind: "vaapi", cqp: true }, codec)) {
         // ICQ を持たないドライバ (i965・Mesa)。AV1 を CQP でエンコードする
+        console.log(
+          `[hwenc] av1_vaapi (${path}) は CQP でエンコードできました。CQP で使います`,
+        );
         device.vaapi.push(codec);
         device.cqp.push(codec);
       }
@@ -1318,10 +1429,15 @@ async function probeLinux(): Promise<HwDevice[]> {
   return devices;
 }
 
-/** 録画と同じ引数で 1 コマエンコードしてみる */
-function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
+/** 録画と同じ引数で 1 コマエンコードしてみて、通ったかを返す */
+async function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
+  return (await tryWayFor(way, codec)) === "ok";
+}
+
+/** 録画と同じ引数で 1 コマエンコードしてみる。落ちた理由も返す (`Trial`) */
+function tryWayFor(way: HwWay, codec: HwCodec): Promise<Trial> {
   const hw = hwArgs(way, codec);
-  return tryEncode(
+  return trial(
     [
       ...hw.device,
       ...SOURCE,
