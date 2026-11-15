@@ -1435,8 +1435,12 @@ type Opening = {
 };
 
 /** `Opening` の時刻を 1 項目にする。まだ来ていないものは `-` */
-const openingAt = (ms: number | undefined) =>
+const openingMs = (ms: number | undefined) =>
   ms === undefined ? "-" : `${Math.round(ms)}ms`;
+
+/** 開くまでの内訳の 1 行の、どの経路でも同じ前半 (選局と最初のバイト) */
+const openingHead = (label: string, marks: Opening) =>
+  `[live] ${label}: 開くまで 選局 ${openingMs(marks.tuned)} / 最初のバイト ${openingMs(marks.firstByte)} / `;
 
 /** 開くまでの内訳の 1 行。`way` はエンコード方式 (`h264` / `hevc` / `av1` / `audio`、GPU ならその種類) */
 export function openingLine(
@@ -1444,19 +1448,15 @@ export function openingLine(
   marks: Opening,
   way: string,
 ): string {
-  const at = openingAt;
   return (
-    `[live] ${label}: 開くまで 選局 ${at(marks.tuned)} / 最初のバイト ${at(marks.firstByte)} / ` +
-    `ffmpeg ${at(marks.spawned)} / init ${at(marks.init)} / 最初の fMP4 ${at(marks.media)} (${way})`
+    openingHead(label, marks) +
+    `ffmpeg ${openingMs(marks.spawned)} / init ${openingMs(marks.init)} / 最初の fMP4 ${openingMs(marks.media)} (${way})`
   );
 }
 
 /** 放送のままの経路の、開くまでの内訳の 1 行 (ffmpeg を起こさないので、映像の項目は最初の送信だけ) */
 export function rawOpeningLine(label: string, marks: Opening): string {
-  return (
-    `[live] ${label}: 開くまで 選局 ${openingAt(marks.tuned)} / 最初のバイト ${openingAt(marks.firstByte)} / ` +
-    `最初の送信 ${openingAt(marks.sent)} (放送のまま)`
-  );
+  return `${openingHead(label, marks)}最初の送信 ${openingMs(marks.sent)} (放送のまま)`;
 }
 
 /**
@@ -4854,8 +4854,7 @@ export function attend(connection: Connection): void {
 const chaseResumes = new Map<number, ChaseResume>();
 
 function rememberResume(recordingId: number, resume: ChaseResume): void {
-  for (const [id, held] of chaseResumes)
-    if (held.until < Date.now()) chaseResumes.delete(id);
+  pruneExpired(chaseResumes, (held) => held.until, Date.now());
   chaseResumes.set(recordingId, resume);
 }
 

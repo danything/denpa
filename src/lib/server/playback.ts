@@ -90,6 +90,7 @@ import { programSpec } from "./captions";
 import { chapterList } from "./cm";
 import { config } from "./config";
 import { aribServiceId, programSpan } from "./encoder";
+import { keepNewest } from "./expiring";
 import { type LiveHw, nvencBusy } from "./hwenc";
 import { type EncodedColumns, encodedFile, encodedFiles } from "./library";
 import {
@@ -252,9 +253,7 @@ const KEEP = 64;
 
 /** 控えに入れる。新しいものを後ろに置き、上限を超えたら古いもの (先頭) から捨てる */
 function keep<T>(memo: Map<string, T>, path: string, value: T): void {
-  memo.delete(path);
-  memo.set(path, value);
-  if (memo.size > KEEP) memo.delete(memo.keys().next().value as string);
+  keepNewest(memo, path, value, KEEP);
 }
 
 /** エンコードしたファイルの中身を読む (見出しだけ。一瞬で返る) */

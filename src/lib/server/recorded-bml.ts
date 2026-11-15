@@ -36,6 +36,7 @@ import {
 
 import type { Recording } from "../types";
 import { orm } from "./db";
+import { keepNewest } from "./expiring";
 import { fillTsHead } from "./recording";
 import { openRecording } from "./recording-io";
 import { programs, services } from "./schema";
@@ -217,12 +218,7 @@ export async function recordedAutoStart(sidecarPath: string): Promise<boolean> {
       ? held.on
       : await readAutoStart(sidecarPath);
   // 開いたものを新しい側 (後ろ) へ置き、上限を超えたら古いもの (先頭) から捨てる
-  autoStartHeld.delete(sidecarPath);
-  if (autoStartHeld.size >= AUTO_START_KEEP) {
-    const oldest = autoStartHeld.keys().next().value;
-    if (oldest !== undefined) autoStartHeld.delete(oldest);
-  }
-  autoStartHeld.set(sidecarPath, { size, mtime, on });
+  keepNewest(autoStartHeld, sidecarPath, { size, mtime, on }, AUTO_START_KEEP);
   return on;
 }
 

@@ -1,5 +1,7 @@
 import { statSync } from "node:fs";
 
+import { keepNewest } from "./expiring";
+
 /**
  * **作っている最中に同じものを求められたら、同じ結果を待たせる。** 終われば忘れる (覚えておくのは `fileMemo`)。
  * 失敗も同じものを返す
@@ -50,16 +52,12 @@ export function fileMemo<T>(limit: number): FileMemo<T> {
       const kept = held.get(path);
       if (kept?.key === key) {
         // 使ったものを後ろへ (古いものから捨てる)
-        held.delete(path);
-        held.set(path, kept);
+        keepNewest(held, path, kept, limit);
         return kept.value;
       }
       return share(`${path}\n${key}`, () =>
         make().then((value) => {
-          held.delete(path);
-          held.set(path, { key, value });
-          if (held.size > limit)
-            held.delete(held.keys().next().value as string);
+          keepNewest(held, path, { key, value }, limit);
           return value;
         }),
       );

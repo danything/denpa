@@ -15,13 +15,14 @@
 
 import { TICKET_LIFETIME } from "#lib/live.js";
 
+import { pruneExpired } from "./expiring";
+
+/** 配ったチケット → 期限の時刻 */
 const issued = new Map<string, number>();
 
 /** 期限切れを片付ける。**配るときと使うときに掃く** (別に走らせるほどの量ではない) */
 function sweep(at: number): void {
-  for (const [token, until] of issued) {
-    if (until <= at) issued.delete(token);
-  }
+  pruneExpired(issued, (until) => until, at);
 }
 
 /** 1 枚配る */

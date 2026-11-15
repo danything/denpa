@@ -8,6 +8,8 @@
  * 数えるのはこのプロセスのメモリの中だけ。denpa は 1 つのプロセスで動かす前提なので、それで足りる
  */
 
+import { keepNewest } from "./expiring";
+
 /** 同じ利用者が次の試しのデータを取れるまでの間 (ms) */
 export const PROBE_GAP = 10_000;
 /** 覚えておく利用者の数の上限。超えたら古いものから忘れる (送り元を変えて増やされても、覚える量は増えない) */
@@ -20,13 +22,7 @@ export class ProbeGate {
   allow(key: string, now: number): number {
     const at = this.last.get(key);
     if (at !== undefined && now - at < PROBE_GAP) return PROBE_GAP - (now - at);
-    this.last.delete(key);
-    this.last.set(key, now);
-    while (this.last.size > KEEP_MOST) {
-      const oldest = this.last.keys().next().value;
-      if (oldest === undefined) break;
-      this.last.delete(oldest);
-    }
+    keepNewest(this.last, key, now, KEEP_MOST);
     return 0;
   }
 }
