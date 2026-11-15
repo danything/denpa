@@ -61,7 +61,7 @@ public static class ChannelTable
     /// </param>
     /// <param name="ShiftedFrequency">
     /// J.83B と ISDB-C で、ずらして送られることがあるチャンネルの、ずらした周波数 (Hz)。ほかは null。
-    /// どちらで送られているかは選局するまで分からないので、受ける側が両方を試す (<see cref="It930xTuner"/>)
+    /// どちらで送られているかは選局するまで分からないので、受ける側が両方を試す (<see cref="It930xTuner"/>・<see cref="DvbTuner"/>)
     /// </param>
     /// <param name="TsmfIndex">
     /// ISDB-C で受ける TS。TSMF のフレームにある有効な TS を、相対 TS 番号の小さい順に並べたときの何本目か (0〜14。CXD2856 の仕様書 8.7)。
@@ -89,6 +89,7 @@ public static class ChannelTable
     /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (ケーブルテレビのパススルー。種別は GR) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c> /
     /// <c>H01</c>–<c>H105</c> (スカパー！プレミアムサービス光。J.83B) /
     /// <c>QC13</c>–<c>QC63</c>・<c>QU13</c>–<c>QU62</c>・<c>QV1</c>–<c>QV12</c> (ISDB-C。種別 <c>CATV</c>。CATV・UHF・VHF の帯域)。
+    /// <c>QF90000</c>–<c>QF770000</c> は ISDB-C の中心周波数を kHz で直に指す。
     /// ISDB-C は <c>:k</c> を付けて TSMF の TS を指す (<c>QC30:2</c>。有効な TS の 0〜14 本目)。付けなければ 0 本目。
     /// 衛星は <c>:TSID</c> を付けて TS を指す (<c>BS15:16625</c>)。付けなければ中継器の先頭の TS。
     /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない。**
@@ -108,8 +109,8 @@ public static class ChannelTable
         {
             /*
              * CATV の周波数変換パススルー。地デジの電波をそのまま CATV のチャンネルの周波数に移して送るので、
-             * 選局は地上波と同じで周波数だけが違う。ミッドバンド C13-C22 (108-170MHz。C22 だけは 2 MHz 上の 164-170MHz) と
-             * スーパーハイバンド C23-C63 (222-468MHz)。真ん中から 1/7 MHz ずれるのも地上波と同じ
+             * 選局は地上波と同じで周波数だけが違う。ミッドバンド C13〜C22 (108〜170 MHz。C22 だけは 2 MHz 上の 164〜170 MHz) と
+             * スーパーハイバンド C23〜C63 (222〜468 MHz)。真ん中から 1/7 MHz ずれるのも地上波と同じ
              */
             if (!Number(name[1..], out var channel) || channel is < 13 or > 63) return null;
             var center = channel switch
@@ -146,7 +147,7 @@ public static class ChannelTable
              * ISDB-C (ケーブルテレビのトランスモジュレーション方式)。中心周波数で、地上波や CATV のパススルー (C13〜C63) と違って 1/7 MHz は足さない (CXD2856 の仕様書 8.2)。
              * QC は CATV の帯域 (C13〜C63)、QU は UHF 13〜62、QV は VHF 1〜12。C22 と VHF 4〜7 は 6 MHz おきの並びから 2 MHz ずれている。
              * C24〜C27 は、2 MHz ずらした周波数を載せた資料もあるので (どちらで送られているかは未確認)、ずらした周波数も持つ (CXD2856 の仕様書 8.2 の推定の使い方)。
-             * QF<kHz> は中心周波数を直に指す (QF246500)。ケーブル局の NIT に、この並びに乗らない周波数が載っていたときに denpa が使う
+             * QF<kHz> は中心周波数を直に指す (QF246500)。ケーブル局の NIT に、この並びに無い周波数が載っていたときに denpa が使う
              */
             if (name.Length < 3) return null;
             var body = name[2..];

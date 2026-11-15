@@ -83,7 +83,7 @@ public static class Siano
     /// <summary>そのポートの機種。扱う機種でなければ null。**開かない**</summary>
     public static SianoModel? Identify(string port) => UsbHost.Identify(UsbHost.Current, Models, Id, port);
 
-    /// <summary>設定に書いたのと同じ形式で (<c>siano:&lt;USB のポート&gt;</c>)。種別は地上波だけ</summary>
+    /// <summary>挿さっている機材を、設定に書くのと同じ形式 (<c>siano:&lt;USB のポート&gt;</c>) で返す。種別は地上波だけ</summary>
     public static List<TunerSpec> Detect() => Specs(Found(Log.Write));
 
     internal static List<TunerSpec> Specs(IEnumerable<(string Port, SianoModel Model)> found) =>

@@ -4,7 +4,7 @@ using System.IO.Pipelines;
 namespace Denpa.Agent.Tests;
 
 /*
- * 実機で確かめる小道具 (--tune・--dt295-probe) のうち、偽物で確かめられるところ。
+ * 実機で確かめるコマンド (--tune・--dt295-probe) のうち、偽物で確かめられるところ。
  *
  * **戻らなくなったら時間切れで失敗にする。** 各テストは最初に `await Task.Yield()` する
  */

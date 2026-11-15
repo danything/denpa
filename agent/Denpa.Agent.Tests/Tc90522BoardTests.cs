@@ -417,7 +417,7 @@ public class Tc90522BoardTests
         await Assert.That(cable.Message).Contains("スカパー！プレミアムを受けられません");
         // ISDB-C を受けられるのは CXD2856ER の受信機だけ (受けられる種別には入れていないので、選局で断る)
         var isdbc = Assert.Throws<IOException>(() => ground.Tune(ChannelTable.Parse("QC51")!));
-        await Assert.That(isdbc.Message).IsEqualTo("地上波の受信機 (PLEX PX-Q3PE4 の受信機 2) は ISDB-C (ケーブルテレビ) を受けられません (受けられるのは地上波)");
+        await Assert.That(isdbc.Message).IsEqualTo("地上波の受信機 (PLEX PX-Q3PE4 の受信機 2) はケーブルを受けられません (受けられるのは地上波)");
         await Assert.That(It930x.Find(0x0511, 0x024E)!.Receivers[0].Takes(ChannelTable.Parse("QC51")!)).IsTrue();
         await Assert.That(It930x.Find(0x0511, 0x0854)!.Receivers[0].Takes(ChannelTable.Parse("QC51")!)).IsFalse();
         var dish = new It930xTuner("衛星の受信機", 1, () => throw new InvalidOperationException("開かない"), identify: () => Q3);

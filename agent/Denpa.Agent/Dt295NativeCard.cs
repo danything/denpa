@@ -94,7 +94,7 @@ public sealed class Dt295NativeCard : ICardLink
     }
 
     /// <summary>
-    /// 電源を入れる (仕様書 10 章の投入の 17 段)。0xFEA004 の 4 つの値は設定確認で決まる:
+    /// 電源を入れる (仕様書 10 章の投入の 17 段)。0xFEA004 の 4 つの値は設定確認で決まる。
     /// 段 1 = いまの 0xFEA004 の bit2 を落とした値、段 5 = (0xF00223 が 0) を bit3 にした値、段 7 = 段 5 | 2、段 16 = 段 5 | 6
     /// </summary>
     private void PowerOn()

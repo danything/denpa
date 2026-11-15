@@ -3,7 +3,7 @@ using System.Buffers;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 実機で選局を確かめる小道具。**サーバを立てずに 1 本だけ試す。**
+/// 実機で選局を確かめるコマンド。**サーバを立てずに 1 本だけ試す。**
 ///
 /// <para>
 /// デバイスを確保したままの選局は、値が 1 つ違っても「ioctl は通るが同期しない」という
@@ -430,7 +430,7 @@ public static class Probe
                 {
                     if (!elapsedShown) output.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
                     if (failed.CableFrequency is { } tried) output.WriteLine($"    ロックした周波数 {tried} Hz");
-                    // ロックしなかった周波数ごとに、待つ間に立ったビットと、復調器とチューナーの状態 (常駐の記録と同じ 1 行。CxdIsdbcLockFailure)
+                    // ロックしなかった周波数ごとに、待つ間に立ったビットと、復調器の状態 (常駐の記録と同じ 1 行。CxdIsdbcLockFailure)
                     foreach (var unlocked in failed.IsdbcLockFailures) output.WriteLine($"    {unlocked.Describe()}");
                     foreach (var line in TsmfLines(failed.IsdbcLocked, failed.Tsmf)) output.WriteLine($"    {line}");
                     if (failed.IsdbcFailedSignal is { } last)

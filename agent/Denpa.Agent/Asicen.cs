@@ -491,7 +491,7 @@ public static class AsicenUserland
         }
     }
 
-    /// <summary>挿さっている筐体の受信機を、設定に書いたのと同じ形式で</summary>
+    /// <summary>挿さっている筐体の受信機を、設定に書くのと同じ形式で返す</summary>
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>

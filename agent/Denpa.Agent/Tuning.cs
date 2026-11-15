@@ -757,7 +757,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private readonly uint _caps;
     /// <summary>ISDB-C で前にロックした変調 (選局表の周波数ごと)</summary>
     private readonly Dictionary<uint, uint> _lockedModulation = [];
-    /// <summary>このフロントエンドが電波の印 (<c>FE_HAS_SIGNAL</c>) を立てると分かったか (ロックしたときに立っていた)。分かるまでは変調を全部試す (<see cref="TriesOtherModulations"/>)</summary>
+    /// <summary>このフロントエンドが <c>FE_HAS_SIGNAL</c> を立てると分かったか (ロックしたときに立っていた)。分かるまでは変調を全部試す (<see cref="TriesOtherModulations"/>)</summary>
     private bool _reportsSignal;
     /// <summary>直前の <see cref="WaitForLock"/> の間に読んだ status を全部 OR したもの</summary>
     private uint _seenStatus;
@@ -933,9 +933,9 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     /// <summary>
     /// ISDB-C でロックしなかった変調のあとに、同じ周波数でほかの変調を試すか。
-    /// QAM_AUTO の無い復調器は 64QAM と 256QAM を順に試すので、放送の無いチャンネルではロックを 2 回待っていた。
-    /// 待つ間に電波の印 (<c>FE_HAS_SIGNAL</c>) を一度も読まなければ、その周波数に電波は来ていないので試さない。搬送波の印 (<c>FE_HAS_CARRIER</c>) は、変調が違うと立たない復調器があるので見ない。
-    /// 印を立てないドライバもあるので、立てると分かる (一度ロックして印が立っていた) までは全部試す
+    /// QAM_AUTO の無い復調器は 64QAM と 256QAM を順に試すので、放送の無いチャンネルでは時間切れを 2 回待つことになる。
+    /// 待つ間に <c>FE_HAS_SIGNAL</c> を一度も読まなければ、その周波数に電波は来ていないとみて試さない。<c>FE_HAS_CARRIER</c> は、変調が違うと立たない復調器があるので見ない。
+    /// <c>FE_HAS_SIGNAL</c> を立てないドライバもあるので、立てると分かる (一度ロックして立っていた) までは全部試す
     /// </summary>
     internal static bool TriesOtherModulations(bool reportsSignal, uint seenStatus) =>
         !reportsSignal || (seenStatus & FeHasSignal) != 0;
