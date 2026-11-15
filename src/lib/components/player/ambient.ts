@@ -527,9 +527,14 @@ function gamma(value: number): number {
   return Math.round(Math.min(1, Math.max(0, c)) * 255);
 }
 
+/** 線形の 3 色から相対輝度を出す */
+function weigh(lin: readonly number[]): number {
+  return 0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!;
+}
+
 /** 相対輝度 (WCAG) */
 export function luminance([r, g, b]: Rgb): number {
-  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+  return weigh([linear(r), linear(g), linear(b)]);
 }
 
 /**
@@ -545,7 +550,7 @@ export function washTone(
   // 明るいテーマは白へ寄せると色が抜けるので、先に強く濃くしておく (`TONE`)
   vivid(pixel, theme);
   let lin = [linear(pixel[0]!), linear(pixel[1]!), linear(pixel[2]!)];
-  const now = 0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!;
+  const now = weigh(lin);
   if (theme === "dark") {
     if (now > limit.dark) lin = lin.map((v) => (v * limit.dark) / now);
   } else if (now < limit.light) {

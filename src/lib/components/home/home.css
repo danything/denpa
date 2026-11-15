@@ -16,11 +16,8 @@
 .board .row-actions {
   position: relative;
   z-index: 2;
-  display: flex;
   flex-shrink: 0;
   flex-wrap: wrap;
-  align-items: center;
-  gap: var(--dp-space-1);
 }
 .board .row-name {
   font-weight: var(--dp-weight);
@@ -594,12 +591,9 @@
 /*
  * ---- 指で押す端末 (`pointer: coarse`) ----
  * タブレットでは低い行は押したつもりの隣が開いた。行は 72px、行の操作 (詳細・削除・取消・「⋯」) は
- * ほかの一覧と同じ 44px 四方 (`app.css` の `.row-actions`) で間を空ける。チップと「⋯」の中の項目も指の大きさに。マウスの画面 (`pointer: fine`) の詰め具合は変えない
+ * ほかの一覧と同じ 44px 四方で、間も空ける (`app.css` の `.row-actions`)。チップと「⋯」の中の項目も指の大きさに。マウスの画面 (`pointer: fine`) の詰め具合は変えない
  */
 @media (pointer: coarse) {
-  .board .t-row .row-actions {
-    gap: var(--dp-space-2);
-  }
   .board .menu-item.view-item {
     min-height: 3rem;
   }
