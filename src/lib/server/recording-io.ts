@@ -26,7 +26,7 @@
  *   このファイルだけを持ち込んで動かすので、`recordingInput` を使わずに `-i` を直に書いている
  * - エージェントが直に読み書きする所 … スクランブルの復号 (`scramble.descramble`)。パスだけ渡し、元の TS を
  *   エージェントが読んで復号したものを書く
- * - ファイルそのものを扱う所 … 移動・削除 (`fsx.ts`・`files.ts`)、移行 (`migrate.ts`)、残量の勘定 (`chase.fileSize`・
+ * - ファイルそのものを扱う所 … 移動・削除 (`fsx.ts`・`files.ts`)、移行 (`migrate.ts`)、残量の勘定 (`fsx.fileSize`・
  *   `disk.ts`)、変わったかの見分け (大きさと更新時刻。`playback.probeTs`・`chase.finishedTsSec`・`file-memo.ts`・
  *   `serve.fileEtag`)、エンコードの進み具合 (`/proc` で ffmpeg が読んだ位置を見る。`encoder.ts` の `inputBytes`)。
  *   暗号化すると大きさが中身とずれるので、中身の位置に使っている所 (`probeTs`・`finishedTsSec` の末尾を読む位置) は

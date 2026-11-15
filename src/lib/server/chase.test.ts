@@ -15,7 +15,6 @@ import { packetizePes, pes } from "@danything/arib/synth-av";
 import {
   chasePlan,
   chaseReadHeld,
-  fileSize,
   finishedTsSec,
   followFile,
   recordedSec,
@@ -177,12 +176,6 @@ describe("伸びるファイルの追い読み (followFile)", () => {
     dir = mkdtempSync(join(tmpdir(), "chase-"));
     const stream = followFile(join(dir, "missing.ts"), 0, 1e9, () => true);
     expect(readAll(stream)).rejects.toThrow();
-  });
-});
-
-describe("fileSize", () => {
-  test("無ければ null", () => {
-    expect(fileSize("/no/such/file.ts")).toBeNull();
   });
 });
 

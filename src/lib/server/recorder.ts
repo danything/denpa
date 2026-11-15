@@ -19,13 +19,12 @@ import {
 } from "../types";
 import { NO_CHANNEL, placesOfService } from "./agent-channels";
 import type { Place } from "./agent-order";
-import { fileSize } from "./chase";
 import { config } from "./config";
 import { now, orm } from "./db";
 import { aribServiceId, encodeInput, enqueue } from "./encoder";
 import { savePrograms } from "./epg";
 import { emit } from "./events";
-import { moveFile, removeIfExists } from "./fsx";
+import { fileSize, moveFile, removeIfExists } from "./fsx";
 import { libraryPath, recordedPath } from "./library";
 import { refreshLineup } from "./lineup-follow";
 import { sidecarPaths, writeThumbnail } from "./metadata";

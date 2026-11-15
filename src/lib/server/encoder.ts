@@ -34,7 +34,6 @@ import {
   type Recording,
   undecodableReason,
 } from "../types";
-import { fileSize } from "./chase";
 import {
   chapterArgs,
   chapterMetadata,
@@ -67,7 +66,7 @@ import {
   UNMEASURED,
   windowLabel,
 } from "./fps";
-import { pruneEmptyDirs, removeIfExists } from "./fsx";
+import { fileSize, pruneEmptyDirs, removeIfExists } from "./fsx";
 import { hwArgs, hwChain, hwReady, type HwWay } from "./hwenc";
 import {
   encodedFiles,
