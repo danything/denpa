@@ -16,9 +16,9 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 
 <table>
   <tr>
-    <td align="center"><a href="docs/screens.md#録画"><img src="docs/images/dashboard.webp" alt="録画" width="380"></a><br><sub><b>録画</b> — 予約と録画を 1 本の一覧に。サムネ付きで、押せばその場で観る</sub></td>
-    <td align="center"><a href="docs/screens.md#ライブ"><img src="docs/images/live.webp" alt="ライブ" width="380"></a><br><sub><b>ライブ</b> — 字幕もデータ放送も。止めれば追っかけ</sub></td>
-    <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b> — 放送どおりの字幕、CM は自動で飛ばす</sub></td>
+    <td align="center"><a href="docs/screens.md#録画"><img src="docs/images/dashboard.webp" alt="録画" width="380"></a><br><sub><b>録画</b><br>予約と録画を 1 本の一覧に。サムネ付きで、押せばその場で観る</sub></td>
+    <td align="center"><a href="docs/screens.md#ライブ"><img src="docs/images/live.webp" alt="ライブ" width="380"></a><br><sub><b>ライブ</b><br>字幕もデータ放送も。止めれば追っかけ</sub></td>
+    <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b><br>放送どおりの字幕、CM は自動で飛ばす</sub></td>
   </tr>
 </table>
 
@@ -39,15 +39,15 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 
 ## できること
 
-- **予約** — 番組表から押すか、検索から作るルールで自動で。同じ回は最初の放送だけ録る
-- **録画** — CM を見つけてチャプターにし、AV1 / H.264 の mkv にエンコードする (GPU があれば H.265 も)。字幕は放送の ARIB 字幕のまま入れる。GPU (Intel・AMD・NVIDIA・Rockchip) があれば使う
-- **ライブ** — 放送から 1 秒ほどで。止めれば追っかけ、二カ国語・解説放送も選べる ([docs/watch.md](docs/watch.md#ライブ))
-- **データ放送** — テレビと同じ BML がブラウザで動く (d ボタン)。ライブでも録画でも
-- **観る** — 行を押せばその場で再生。CM は 1 コマも見せずに飛ばし、続きから・倍速 (×1〜×2)・切り抜き (字幕・コメントごとサーバに保存)
-- **字幕と放送の字** — 字幕は放送どおりの位置に描き、番組名・局名も含めて Denpa Font で外字まで崩さない
-- **端末に保存して観る** — 電波の無いところでも ([docs/offline.md](docs/offline.md))
-- **EPGStation・EDCB から引き継ぐ** — ルール・予約・録画 (EDCB は録画の履歴) ([docs/migrate.md](docs/migrate.md))
-- **別の機械へ移す** — ルール・予約・録画の一覧・設定を書き出して、新しい機械の denpa に取り込む ([docs/migrate.md](docs/migrate.md#別の機械へ移す))
+- 番組表から押すか、検索から作るルールで自動で予約する。同じ回は最初の放送だけ録る
+- 録画は CM を見つけてチャプターにし、AV1 / H.264 の mkv にエンコードする (GPU があれば H.265 も)。字幕は放送の ARIB 字幕のまま入れる。GPU (Intel・AMD・NVIDIA・Rockchip) があれば使う
+- ライブは放送から 1 秒ほどで観られる。止めれば追っかけになり、二カ国語・解説放送も選べる ([docs/watch.md](docs/watch.md#ライブ))
+- データ放送は、テレビと同じ BML がブラウザで動く (d ボタン)。ライブでも録画でも使える
+- 録画は行を押せばその場で再生する。CM は 1 コマも見せずに飛ばし、続きからの再生・倍速 (×1〜×2)・切り抜き (字幕・コメントごとサーバに保存) もできる
+- 字幕は放送どおりの位置に描く。番組名・局名も含めて Denpa Font で描き、外字まで崩さない
+- 録画を端末に保存すれば、電波の無いところでも観られる ([docs/offline.md](docs/offline.md))
+- EPGStation からはルール・予約・録画を、EDCB からはルール・予約・録画の履歴を引き継げる ([docs/migrate.md](docs/migrate.md))
+- ルール・予約・録画の一覧・設定を書き出して、新しい機械の denpa に取り込める ([docs/migrate.md](docs/migrate.md#別の機械へ移す))
 
 部品はチューナーで選局して素の TS を流す **チューナーエージェント** と、それ以外の全部 (番組表・予約・録画・
 エンコード・配信) をやる **denpa** の 2 つだけです ([docs/architecture.md](docs/architecture.md))。

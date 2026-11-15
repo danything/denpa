@@ -410,7 +410,10 @@ describe("再生できなかった理由の 1 行 (failureText・pickedText・of
       "サーバが出せる形式がありません",
     );
     expect(offersText(tsOnly)).toBe(
-      "サーバが出せる形式: H.264 stream (avc1.640029,mp4a.40.2)、AV1 stream (av01.0.08M.08,Opus)、MPEG-2 raw",
+      "サーバが出せる形式: H.264 の変換 (avc1.640029,mp4a.40.2)、AV1 の変換 (av01.0.08M.08,Opus)、MPEG-2 (元の TS)",
+    );
+    expect(offersText(h264Only)).toBe(
+      "サーバが出せる形式: H.264 のファイル (avc1.640028,opus)、H.264 の詰め替え (avc1.640028,mp4a.40.2)、AV1 の変換 (av01.0.08M.08,Opus)",
     );
   });
 });
