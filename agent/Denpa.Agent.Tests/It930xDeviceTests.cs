@@ -398,6 +398,30 @@ public class It930xDeviceTests
     }
 
     /// <summary>
+    /// **並べて選局した受信機のどれかに TS が届いていれば、同じ溢れのまま別の受信機で届かなくても、機材の選局は断らない** (その受信機だけの失敗にする)
+    /// </summary>
+    [Test]
+    public async Task ほかの受信機に_TS_が届いていれば_届かなかった受信機だけの失敗にする()
+    {
+        var (usb, _, _) = Fake();
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        var device = Open(usb, "9-54", new FakeClock());
+        try
+        {
+            var suspect = device.Unconfirmed!;
+            await Assert.That(device.Confirm(0, suspect, flowing: true, 10)).IsFalse();
+            await Assert.That(device.Confirm(1, suspect, flowing: false, 1000)).IsFalse();
+            await Assert.That(device.Jammed).IsNull();
+            await Assert.That(device.Unconfirmed).IsNull();
+        }
+        finally
+        {
+            device.Release();
+            It930xDevice.CloseIfIdle("9-54", TimeSpan.Zero);
+        }
+    }
+
+    /// <summary>
     /// **流している間に全体の溢れが立ち、次の選局を断るときは、前の選局で開いた受信機を閉じて LNB の給電を切ってから機材を返す** (捨てるときと同じ手順)。
     /// ほかの受信機が流していて機材が開いたままでも、断った受信機のために給電を入れたままにしない
     /// </summary>

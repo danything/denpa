@@ -663,18 +663,22 @@ public sealed class It930xDevice
     /// 全体の溢れが立ったままの機材で、受信機 <paramref name="receiver"/> がロックしたあとに TS が届いたか (<paramref name="flowing"/>) を記録に出し、覚える。
     /// 届かなければ、閉じるまでどの受信機の選局も断る (<see cref="Jammed"/>)
     /// </summary>
-    internal void Confirm(int receiver, It930xOverflow overflow, bool flowing, long waitedMs)
+    /// <returns>この機材の選局を断るようにしたか。同じ溢れのまま、並べて選局したほかの受信機で TS が届いたと確かめてあれば、断らずに false を返す</returns>
+    internal bool Confirm(int receiver, It930xOverflow overflow, bool flowing, long waitedMs)
     {
         if (flowing)
         {
             _flowing = overflow;
             Log.Write($"[{Label}] 全体の溢れは立ったままですが ({overflow})、受信機 {receiver} の TS が届きました。この機材の受信機で選局を続けます");
-            return;
+            return false;
         }
+        // ほかの受信機に TS が届いたなら、ブリッジからは TS が出ている。この受信機だけの失敗にする
+        if (overflow.SameAs(_flowing)) return false;
         _blocked = overflow;
         Log.Write(
             $"[{Label}] 全体の溢れが立ったままで ({overflow})、受信機 {receiver} がロックしてから {waitedMs} ms 待っても TS が届きませんでした。"
             + "機材の電源を抜いて入れ直すまで、この機材の受信機では選局しません (REBOOT や受信機の電源の入れ直しでは戻りません)");
+        return true;
     }
 
     /// <summary>
@@ -1610,7 +1614,8 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>
     /// 全体の溢れが立ったままの機材で、ロックした受信機の TS が EP 0x84 から届くかを確かめる (流し始めたあと)。
     /// <paramref name="before"/> (流し始める前に数えた、この受信機の入力のパケット) から増えれば、印は立ったままでも TS は届くので、この機材を使い続ける。
-    /// <see cref="TsProbeMs"/> 待っても増えなければ、閉じるまでこの機材の選局を断り (<see cref="It930xDevice.Jammed"/>)、この選局も断る
+    /// <see cref="TsProbeMs"/> 待っても増えなければ、閉じるまでこの機材の選局を断り (<see cref="It930xDevice.Jammed"/>)、この選局も断る。
+    /// 同じ溢れのまま、並べて選局したほかの受信機に TS が届いていれば、この選局だけを <see cref="TsMissing"/> で失敗にする
     /// </summary>
     private void Probe(It930xDevice device, It930xOverflow suspect, long before)
     {
@@ -1619,9 +1624,10 @@ public sealed class It930xTuner : ITuneDevice
         {
             if (waited.ElapsedMilliseconds >= TsProbeMs)
             {
-                device.Confirm(_receiver, suspect, flowing: false, waited.ElapsedMilliseconds);
+                var blocked = device.Confirm(_receiver, suspect, flowing: false, waited.ElapsedMilliseconds);
                 StopOutput();
-                Refuse(suspect);
+                if (blocked) Refuse(suspect);
+                throw new IOException(TsMissing);
             }
             Thread.Sleep(5);
         }
