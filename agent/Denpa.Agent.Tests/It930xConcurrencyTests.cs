@@ -438,6 +438,49 @@ public partial class It930xConcurrencyTests
     }
 
     [Test]
+    public async Task 受信をやり直すときに読み出しのスレッドが止まらなければ_機材を使えないものにして入力を閉じる()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        using var stuck = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var entered = new ManualResetEventSlim();
+        // 読み出しのスレッドが EP 0x84 の読み出しから戻らない偽物 (2 秒の Join を越える)
+        usb.TsSource = () =>
+        {
+            if (stuck.IsSet)
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }
+            return null;
+        };
+        var device = It930xDevice.Acquire("11-16", () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
+        try
+        {
+            device.Frontend(0);
+            int from;
+            lock (usb.Log) from = usb.Log.Count;
+            stuck.Set();
+            await Assert.That(entered.Wait(TimeSpan.FromSeconds(10))).IsTrue();
+            var error = Assert.Throws<IOException>(() => device.RestartStream("テスト"));
+            await Assert.That(error.Message).Contains("止められませんでした");
+            await Assert.That(device.Faulted).IsTrue();
+            List<string> log;
+            lock (usb.Log) log = [.. usb.Log.Skip(from)];
+            // 転送要求は出し直さず、入力を全部閉じた。次のやり直しもしない
+            await Assert.That(log).DoesNotContain($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}");
+            await Assert.That(log.Where(It930xDeviceTests.TsRouteWrite)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+            await Assert.That(device.RestartStream("テスト")).IsFalse();
+        }
+        finally
+        {
+            release.Set();
+            device.Release();
+        }
+    }
+
+    [Test]
     public async Task 閉じた機材では受信をやり直さず_閉じた入力を開け直さない()
     {
         await Task.Yield();

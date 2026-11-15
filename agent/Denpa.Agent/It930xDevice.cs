@@ -691,11 +691,17 @@ public sealed class It930xDevice
             }
             catch (Exception error) when (error is IOException or ObjectDisposedException)
             {
-                // 読み出しのスレッドがいなければ、入力を開けたままにしない (読み出しのスレッドが失敗したときは、そちらが閉じている)
-                if (_reader is not { IsAlive: true } && !_faulted)
+                /*
+                 * やり直せなかったら、機材を使えないものにして入力を閉じる。読み出しのスレッドが止まらなかった・転送要求を出し終えるのを待ちきれなかったときも、
+                 * 止める印を立てて終わらせる (残ったスレッドが転送要求を出し続けていても、読む側として当てにしない)。次に取る側が開き直す。
+                 * 読み出しのスレッドが失敗して先に閉じていても、もう一度閉じるだけ
+                 */
+                _stopping = true;
+                var faulted = _faulted;
+                _faulted = true;
+                if (error is not UsbGoneException) CloseInputs();
+                if (!faulted)
                 {
-                    _faulted = true;
-                    if (error is not UsbGoneException) CloseInputs();
                     for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete(error.Message);
                 }
                 throw;
