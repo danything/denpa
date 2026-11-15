@@ -67,7 +67,7 @@ public static class DeviceProbe
         [.. TypesFor(delivery), .. CableSystem(delivery) is null ? Array.Empty<string>() : [ChannelTable.Catv]];
 
     /// <summary>
-    /// ISDB-C (64QAM・5.274 Mbaud) を選局するときに DVB の機材へ渡す方式。<c>SYS_DVBC_ANNEX_C</c> があればそれ、
+    /// ISDB-C (64QAM か 256QAM、5.274 Mbaud) を選局するときに DVB の機材へ渡す方式。<c>SYS_DVBC_ANNEX_C</c> があればそれ、
     /// 無く <c>SYS_DVBC_ANNEX_A</c> があればそれ、どちらも無ければ null。
     /// Annex A はロールオフが 0.15 で、ISDB-C (Annex C) の 0.13 と違うので、受けられるかは機材による
     /// </summary>
@@ -165,7 +165,7 @@ public static class DeviceProbe
     }
 
     /// <summary>
-    /// 見つけた DVB のフロントエンドを、設定に書いたのと同じ形式にする。受けられる種別が無ければ null。
+    /// 見つけた DVB のフロントエンドを、設定に書くのと同じ形式にする。受けられる種別が無ければ null。
     /// **ケーブル (<c>CATV</c>) しか受けられないものは、<c>CATV</c> を選んで「使う」をオフにして並べる。**
     /// <see cref="ReceivableFor"/> と同じく、使うかはケーブルテレビの回線を繋いだ人が設定で決める (種別は空にできないので <c>CATV</c> を選んでおく)
     /// </summary>
@@ -175,7 +175,7 @@ public static class DeviceProbe
         : null;
 
     /// <summary>
-    /// 見つかった機材を、設定に書いたのと同じ形式にして返す。
+    /// 見つかった機材を、設定に書くのと同じ形式にして返す。
     ///
     /// <para>
     /// 分かるのは**デバイスと受けられる方式**だけ。LNB を足したい・1 台だけ
@@ -221,7 +221,7 @@ public static class DeviceProbe
         found.AddRange(Dt295.Detect());
 
         /*
-         * IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) も並べるだけで開かない (開くとファームウェアを起動して電源を入れる) (It930x.cs)
+         * IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) も並べるだけで開かない (開くとファームウェアを起動して電源を入れる。It930x.cs)
          */
         found.AddRange(It930x.Detect());
 

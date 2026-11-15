@@ -8,7 +8,7 @@
  *     bml.destroy();
  *
  * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、置くのは呼ぶ側
- * - 文書は自前の XML パーサ → 中身の木 → Shadow DOM の中の絶対配置の div ([render.ts](render.ts))
+ * - 文書は自前の XML パーサ → 中身の木 → Shadow DOM に置いた絶対配置の div ([render.ts](render.ts))
  * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かす
  * - **ページを占めるのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
  *   スクリプト・描き直し・Promise の続きは全部その下で動かし、休みなく回り続ける文書は止める
@@ -123,7 +123,7 @@ export interface BmlOptions {
   onTune?: (service: Service) => boolean;
   /**
    * 文書が主音声を替えた (映像の object の `setMainAudioStream`。STD-B24 第二編)。**替えるのは呼ぶ側。**
-   * 渡すのは PMT の音声の ES のうち何本目か (0 から。ライブの音声の `N:both` の N)。null はふだんの音声に戻す。
+   * 渡すのは、PMT にある音声の ES の何本目か (0 から。ライブの音声 `N:es` の N)。null はふだんの音声に戻す。
    * 番組が替わって選んだ ES が無くなったときも null
    */
   onMainAudio?: (index: number | null) => void;
@@ -332,7 +332,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private running = false;
   private scheduled = false;
   private destroyed = false;
-  /** PMT の音声の ES の部品タグ (PMT の順。`audioComponents`) */
+  /** PMT にある音声の ES の部品タグ (PMT の順。`audioComponents`) */
   private audios: number[] = [];
   /** 文書が選んだ主音声の部品タグ。ふだんの音声 (PMT の 1 本目) なら null (`setMainAudio`) */
   private mainAudio: number | null = null;
@@ -396,7 +396,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   feed(message: ResponseMessage): void {
     if (this.destroyed) return;
     if (message.type === "pmt") this.audioComponents(message.components);
-    // 届いたものを処理するのもエンジンの仕事に数える (ライブは止まらずに流れ込み続ける。
+    // 届いたものを処理するのもエンジンの仕事に数える (ライブは止まらずに届き続ける。
     // モジュールをデコードする・ハンドラを探すのを数えないと、「10 秒のうち 4 割を超えて動いたら止める」
     // 決まり (budget.ts) の勘定から漏れる)
     this.work(() => {
@@ -745,7 +745,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   /**
-   * 文書を読んで出す。`name` は文書の中の書き方のまま (今の文書から見た相対でもよい)。
+   * 文書を読んで出す。`name` は文書に書かれたまま (今の文書から見た相対でもよい)。
    * 読めなければ入口から出直す (入口が読めなければ止める)
    */
   private async load(name: string, entry = false): Promise<void> {
@@ -761,7 +761,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         : await this.resources.fetch(ref);
     if (token !== this.token || this.destroyed) return;
     // 問い合わせ (`next.bml?tsid=…`) は、ファイルを引くのには使わず文書の名前に残す。移った先の文書は
-    // getActiveDocument で読む (テレ朝。STD-B24 に放送の文書の問い合わせの決まりは無く、名前の一部として扱う)
+    // getActiveDocument で読む (テレ朝。STD-B24 には放送の文書に付ける問い合わせの決まりが無いので、名前の一部として扱う)
     // 通信の文書は問い合わせごと URL (`refToPath`) に入っている
     const query =
       ref?.url !== undefined ? "" : (/\?[^#]*/.exec(name)?.[0] ?? "");
@@ -1214,7 +1214,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   /**
-   * PMT の音声の ES の部品タグを、PMT の順に覚える。選んでいた ES が無くなったか、1 本目 (ふだんの音声) になったら戻す。
+   * PMT にある音声の ES の部品タグを、PMT の順に覚える。選んでいた ES が無くなったか、1 本目 (ふだんの音声) になったら戻す。
    * 順番が入れ替わって何本目かが変わったら、新しい何本目かを渡し直す (画面は何本目かで選んでいる)
    */
   private audioComponents(components: readonly ComponentPMT[]): void {

@@ -6,7 +6,7 @@
  * 開いても CDT は 1 つも来なかった (地上波は 12 中継で 29/29 揃う)。
  *
  * 衛星は**データカルーセル (DSM-CC)** で送る (ARIB STD-B21 / TR-B15)。
- * Mirakurun も同じ切り分けで、ネットワーク 4 は DSM-CC を読みに行く
+ * Mirakurun も同じ切り分けで、ネットワーク 4 では DSM-CC を読む
  * (`TSFilter.ts` の `_enableParseDSMCC`)。
  *
  * 手順が長い。

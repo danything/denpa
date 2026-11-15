@@ -234,14 +234,14 @@ public class ChannelTableTests
     [Test]
     public async Task ISDB_C_は_QF_と_kHz_で周波数を直に指せる()
     {
-        // ケーブル局の NIT に、選局表の並びに乗らない周波数が載っていたときに denpa が使う
+        // ケーブル局の NIT に、選局表の並びに無い周波数が載っていたときに denpa が使う
         var direct = ChannelTable.Parse("QF246500")!;
         await Assert.That(direct.Frequency).IsEqualTo(246_500_000u);
         await Assert.That(direct.IsdbC).IsTrue();
         await Assert.That(direct.Type).IsEqualTo(ChannelTable.Catv);
         await Assert.That(direct.ShiftedFrequency).IsNull();
         await Assert.That(ChannelTable.Parse("QF246500:1")!.TsmfIndex).IsEqualTo(1);
-        // 並びの上と同じ周波数でも、名前が違えば別のもの (ずらした周波数は持たない)
+        // 並びにある周波数と同じでも、名前が違えば別のもの (ずらした周波数は持たない)
         await Assert.That(ChannelTable.Parse("QF243000")!.Frequency).IsEqualTo(ChannelTable.Parse("QC26")!.Frequency);
         await Assert.That(ChannelTable.Parse("QF90000")!.Frequency).IsEqualTo(90_000_000u);
         await Assert.That(ChannelTable.Parse("QF770000")!.Frequency).IsEqualTo(770_000_000u);
@@ -255,7 +255,7 @@ public class ChannelTableTests
     [Arguments("QC25", 237_000_000u, 239_000_000u)]
     [Arguments("QC26", 243_000_000u, 245_000_000u)]
     [Arguments("QC27", 249_000_000u, 251_000_000u)]
-    public async Task ISDB_C_の_C24_から_C27_は_2_MHz_ずらした周波数も持つ(string name, uint frequency, uint shifted)
+    public async Task ISDB_C_の_QC24_から_QC27_は_2_MHz_ずらした周波数も持つ(string name, uint frequency, uint shifted)
     {
         // どちらで送られているかは確かめられていない (CXD2856 の仕様書 8.2)。表の周波数を先に試す
         var tuning = ChannelTable.Parse(name)!;

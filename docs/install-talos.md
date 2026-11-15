@@ -27,7 +27,7 @@ alpha.1 にもドライバは入っていますが、復調とチューナーの
 ## 用意するもの
 
 - **入れる機械**: amd64 で、PT3 と USB のカードリーダーを挿したもの ([tuners.md](tuners.md#要るもの))。
-  ディスクは 1 台で 128GB 以上 (OS とイメージに 64GiB、録画と DB に 50GiB 以上。[下記](#machine-config-の中身))。**中身は消えます**
+  ディスクは 1 台で 128 GB 以上 (OS とイメージに 64 GiB、録画と DB に 50 GiB 以上。[下記](#machine-config-の中身))。**中身は消えます**
 - **操作する機械**: Linux か Mac で、`curl` と [`helm`](https://helm.sh/docs/intro/install/) が入っているもの。
   `talosctl` は install.sh が合うバージョンを取ってきます
 - 同じ LAN に置き、入れる機械に IP が DHCP で振られること
@@ -96,7 +96,7 @@ Talos 1.15 の machine config は種類ごとのドキュメントの束で、v1
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `KernelModuleConfig` (`earth-pt3`)                    | PT3 のドライバを読む。復調とチューナーのモジュールは earth-pt3 が求めたときに Talos が読む                                                                                           |
 | `KubeNodeConfig`                                      | control-plane の NoSchedule を外して、1 台に denpa を載せる (taints はパッチで消せないので、ドキュメントごと消して labels だけ書き戻す)                                              |
-| `VolumeConfig` (`EPHEMERAL`)                          | OS の領域 (`/var`。イメージやログ) を 64GiB で止める。既定ではディスクを全部取ってしまう                                                                                             |
+| `VolumeConfig` (`EPHEMERAL`)                          | OS の領域 (`/var`。イメージやログ) を 64 GiB で止める。既定ではディスクを全部取ってしまう                                                                                            |
 | `UserVolumeConfig` (`local-path-provisioner`)         | 残りを録画と DB の置き場に (`/var/mnt/local-path-provisioner`)。別のディスクに置くなら `diskSelector` を変える                                                                       |
 | `KubeInlineManifestConfig` (`local-path-provisioner`) | Talos には PVC を作るものが無いので、[local-path-provisioner](https://github.com/rancher/local-path-provisioner) を入れる。既定の StorageClass で、PVC を消しても中身は残す (Retain) |
 | `KubeInlineManifestConfig` (`denpa-namespace`)        | `denpa` の namespace を Pod Security Admission の privileged で作る。Talos の既定は baseline で、tuner-agent の privileged と hostPath (`/dev/dvb`・`/dev/bus`) が通らない           |

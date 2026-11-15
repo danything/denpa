@@ -9,7 +9,7 @@
  *   記述子のタグは 2 バイトで、**タグが 0xF000 未満なら長さは 1 バイト、0xF000 以上なら 2 バイト**
  *
  * 局名や番組名の文字は UTF-8 (TS の ARIB の 8 単位符号ではない)。
- * 実機のケーブルの BS4K では、PLT・MPT・MH-SDT[other]・MH-EIT・TLV-NIT を読めた。どれもスクランブルされていない。
+ * ケーブルで受けた実機の BS4K では、PLT・MPT・MH-SDT[other]・MH-EIT・TLV-NIT を読めた。どれもスクランブルされていない。
  */
 
 import { ascii, u16 } from "./bytes.js";
@@ -324,7 +324,7 @@ export interface MhService extends Service {
 }
 
 export interface MhSdt {
-  /** MH-SDT[other] (ほかの TLV のストリームのもの) なら true */
+  /** MH-SDT[other] (ほかの TLV ストリームのもの) なら true */
   other: boolean;
   tlvStreamId: number;
   originalNetworkId: number;
@@ -378,7 +378,7 @@ export function parseMhSdt(section: Uint8Array): MhSdt | null {
   };
 }
 
-/** TLV-NIT の TLV のストリームの 1 件 */
+/** TLV-NIT にある TLV ストリームの 1 件 */
 export interface TlvNetworkStream {
   tlvStreamId: number;
   originalNetworkId: number;
@@ -512,15 +512,15 @@ export class MmtTableStream {
  * TLV にはリモコン番号が無い (TLV-NIT に見当たらない) ので null。
  *
  * 局ごとの CA_system_id は、PLT から package (= service_id) の MPT を引き、そのアクセス制御記述子から読む (`caSystemIdsOf`)。
- * free_CA_mode は使わない。実機の BS4K は 0 なのに、映像と音声はスクランブルされていた。
+ * free_CA_mode は使わない (`MhService.isFree`)。
  *
  * MH-SDT[actual] が来なくても、自分の TLV ストリームは TLV-NIT と PLT で分かる (`ownStream`)。
- * 実機のケーブルの BS4K (QC26) の 0.9 秒には、MH-SDT[other] はあったが MH-SDT[actual] は無かった。何秒おきに来るかは確かめていない
+ * ケーブルで受けた実機の BS4K (QC26) を 0.9 秒読んだときは、MH-SDT[other] は来たが MH-SDT[actual] は来なかった。何秒おきに来るかは確かめていない
  */
 export class TlvServiceReader {
   private readonly tables = new MmtTableStream();
   private plt: Plt | null = null;
-  /** TLV-NIT[actual] の全部のセクションにあった TLV ストリーム (tlv_stream_id → ストリーム) */
+  /** これまでに来た TLV-NIT[actual] のセクションにあった TLV ストリーム (tlv_stream_id → ストリーム) */
   private readonly streams = new Map<number, TlvNetworkStream>();
   /** package_id (= service_id) → MPT */
   private readonly mpts = new Map<number, Mpt>();
@@ -561,9 +561,9 @@ export class TlvServiceReader {
   }
 
   /**
-   * 自分の TLV ストリーム。TLV-NIT[actual] のストリームのうち、PLT にある package (= service_id) をサービスリスト記述子に持つ最初の 1 つ
-   * (実機では 1 つに決まる。同じ service_id を持つストリームが 2 つあれば、TLV-NIT で先に来たほう)。
-   * TLV-NIT と PLT のどちらかが来ていない・当てはまるストリームが無ければ null
+   * 自分の TLV ストリーム。TLV-NIT[actual] のストリームのうち、PLT にある package (= service_id) をサービスリスト記述子に持つ最初の 1 つ。
+   * 実機では 1 つに決まる。同じ service_id を持つストリームが 2 つあれば、TLV-NIT で先に来たほうを返す。
+   * TLV-NIT と PLT のどちらかが来ていないか、当てはまるストリームが無ければ null
    */
   get ownStream(): TlvNetworkStream | null {
     const packages = new Set(

@@ -23,7 +23,7 @@ import { ADDITIONAL } from "@danything/arib/b24-tables";
 
 /** 85 区 1 点の置き場所 */
 export const PUA_ADDITIONAL = 0xe000;
-/** 字の無い 1〜84 区の点の置き場所。詰めて順に置く (千点ほど。U+F8FF までに収まる) */
+/** 1〜84 区のうち字の無い点を置く場所。詰めて順に置く (千点ほど。U+F8FF までに収まる) */
 const PUA_EMPTY = 0xe400;
 /** 85〜94 区で 940 点 */
 const ADDITIONAL_POINTS = 10 * 94;
@@ -120,7 +120,7 @@ export function decodeEuc(data: Uint8Array): string {
   return parts.join("");
 }
 
-/** 中の字 1 単位の EUC-JP の符号 (`charCodeAt`)。読めない字は 〓 */
+/** 中の字 1 単位を EUC-JP の符号にする (`charCodeAt`)。読めない字は 〓 */
 export function eucCode(unit: number): number {
   if (unit < 0x80) return unit;
   if (unit >= PUA_ADDITIONAL && unit < PUA_ADDITIONAL + ADDITIONAL_POINTS) {

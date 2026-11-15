@@ -96,7 +96,7 @@ type AutoPick =
 
 /**
  * MPEG-2 をそのまま流すときの応答ヘッダ。**物差しの 0 にあたる PTS** (90kHz、0〜2^33-1)。
- * 元の TS の先頭の PTS に、エンコードしたときに先頭で捨てた長さ (`encode_skip`) を足したもの。
+ * 元の TS が始まる PTS (`ts/seek.ts` の `tsHead`) に、エンコードしたときに先頭で捨てた長さ (`encode_skip`) を足したもの。
  * 画面の時刻 = (PTS − これ) を一周の中で取って 90000 で割ったもの (`ts/seek.ts` の `sinceHead`)
  */
 export const ORIGIN_HEADER = "X-Denpa-Origin";
@@ -521,7 +521,7 @@ export function canvasTranscodes(
 
 /**
  * 選んだもので観るとき、サーバがその場でエンコードするか (枠を使う。混んでいると断られる)。
- * 4K の局の元の録画の H.265 (`broadcast` が `hevc`) は放送の HEVC の詰め替えで、エンコードしない
+ * 4K の局の元の録画にある H.265 (`broadcast` が `hevc`) は放送の HEVC の詰め替えで、エンコードしない
  */
 export function transcodes(info: PlaybackInfo, picked: Picked): boolean {
   if (picked.way !== "stream" || hasFile(info, picked.codec)) return false;

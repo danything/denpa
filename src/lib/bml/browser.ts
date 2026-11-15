@@ -211,7 +211,7 @@ function browserSupport(
 }
 
 /**
- * startAITControlledApp の引数から XML の AIT の URL を取り出す。**http(s) の絶対 URL だけ。** 数 (organisation_id など) と
+ * startAITControlledApp の引数から、XML の AIT を指す URL を取り出す。**http(s) の絶対 URL だけ。** 数 (organisation_id など) と
  * 相対の名前は手がかりにしない (相対は何に対してかが決まっていない)
  */
 function aitUri(args: Value[]): string | null {

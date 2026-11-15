@@ -403,7 +403,7 @@ export function encodeArgs(
 
 /**
  * **無音の音声を作る lavfi の入力** (`silentArgs`・観る画面の `playback.audioOnlyArgs`)。周波数 0 の `sine` は 0 だけを出す。
- * `anullsrc` を使わないのは、イメージの ffmpeg に組んでいないため (Dockerfile の `--enable-filter`。`sine` はイメージの確かめで使っている)
+ * `anullsrc` はイメージの ffmpeg に組んでいないので、組んである `sine` を使う (Dockerfile の `--enable-filter`)
  */
 export const SILENCE = "sine=frequency=0:sample_rate=48000";
 
@@ -412,7 +412,7 @@ export const SILENCE = "sine=frequency=0:sample_rate=48000";
  * (`-re`) 音声だけの fMP4 にする。画面は音声だけの局と同じく受け取り (黒い画面のまま)、データ放送は TS から denpa が分けて送る (`Session.tap`)。
  * 無音の時刻は放送の時刻と結び付かないが、データ放送は時刻を合わせずに描く (docs/stream.md)
  */
-export function silentArgs(rung: Rung = 0): string[] {
+function silentArgs(rung: Rung = 0): string[] {
   return [
     "-hide_banner",
     "-y",
@@ -462,7 +462,7 @@ const HEVC_COPY: { input: string[]; filter: string; encoder: string[] } = {
 
 /**
  * 映像を写すときの `-probesize` (バイト)。ffmpeg の既定と同じ 5MB。
- * 写すときは、mp4 のマルチプレクサが映像の大きさと VPS・SPS・PPS (`hvcC`) を知ってから書き始める必要がある。
+ * 写すときは、mp4 のマルチプレクサが映像の大きさと VPS・SPS・PPS (`hvcC`) を読んでから書き始める必要がある。
  * 4K の HEVC は 1 局で約 33Mbit/s あり、エンコードするときの 100KB では 30ms ぶんにも足りず、頭出しできるコマを見ないまま
  * 読み終える (推定。実際の放送では測っていない)。5MB は 1 秒ぶんほどで、ffmpeg は映像の大きさが分かったところで読むのをやめる。
  * 読み切れなかったときのために、moov は最初の映像のパケットを見てから書く (`delay_moov`)
@@ -1739,7 +1739,7 @@ class Session {
    *
    * ffmpeg が降りると畳まれて一覧からも消えるが、**繋いでいる側は同じものを
    * 指したまま**になる。同じ局を選び直しても「もう見ている」と見なされて
-   * 何も起きず、**「やり直す」を押しても直らない**
+   * 何も起きず、**「再試行」を押しても直らない**
    */
   get alive(): boolean {
     return !this.stopped;
@@ -2111,7 +2111,7 @@ class Session {
           if (feed !== null) feed = head.stream;
           /*
            * 映像の無い局の PMT に音声も無い (データ放送だけの局)。ffmpeg に TS を渡さず、無音を流す (`encodeArgs` の `silent`)。
-           * PMT を読むたびに決め直す (音声が付けば下ろす)。読めなかった (`null`) なら音声があるものとして渡す
+           * PMT が変われば作り直す (`restart`) ので、音声が付けば次のセッションで下ろす。読めなかった (`null`) なら音声があるものとして渡す
            */
           const silent = !this.video && head.audio === false;
           if (silent && !this.silent)
@@ -3057,7 +3057,7 @@ class Session {
         for (const viewer of wanting) this.tellData(viewer, program);
       }
     }
-    // **組み立てるのは 1 回だけ。** 人数ぶん JSON にすると、人が増えたぶんだけ無駄に働く
+    // **JSON にするのは 1 回だけ。** 人数ぶん JSON にすると、人が増えたぶんだけ同じ変換を繰り返す
     const data = json(message);
     for (const viewer of wanting)
       viewer.connection.send(CHANNEL.data, 0n, data);
@@ -4440,7 +4440,7 @@ export function parseCommand(message: Record<string, unknown>): Asked | null {
       const at = Number(message["at"]);
       /*
        * 追っかけは段 0 では H.265 にエンコードしない (`#lib/live.ts` の `LiveCodec`)。段を下げるときは `playable` から選ぶ。
-       * 4K の局の録画の H.265 は放送の HEVC の詰め替えなので通す (`openChase` が TS の録画では H.264 に読み替える)
+       * 4K の局の録画の H.265 は放送の HEVC の詰め替えなので通す (MPEG-2 の局の録画では `chaseForm` が H.264 に読み替える)
        */
       return {
         type: "chase",
@@ -4604,7 +4604,7 @@ export function attend(connection: Connection): void {
      * **同じものをエンコードしているなら、再エンコードしない。**
      *
      * ただし**畳まれていないことを確かめる**。ffmpeg が降りたセッションを
-     * 指したままだと「もう見ている」と見なされ、選び直しても「やり直す」を
+     * 指したままだと「もう見ている」と見なされ、選び直しても「再試行」を
      * 押しても新しく起こさない。画面は待ち続けるだけになる。
      * `form` を省くと、段とコーデックは見ずに局・音声・字幕だけを比べる (下の枠の話)
      */
@@ -4794,7 +4794,8 @@ function rememberResume(recordingId: number, resume: ChaseResume): void {
  * シークの当たりの付け方は `chasePlan` (chase.ts の冒頭)。
  *
  * **その場の変換の枠を 1 つ使う** (`transcode.ts`)。埋まっていれば断る。畳んだら返す。
- * HTTP のエンドポイント (`chaseStream`) は先に取って `held` で渡す (断るのを 503 にするため)
+ * HTTP のエンドポイント (`chaseStream`) は先に取って `held` で渡す (断るのを 503 にするため)。
+ * 放送の HEVC を写すもの (`chaseForm` の `copy`) と、映像の無い録画の音声だけは枠を使わない
  *
  * **元の TS で送るとき (`raw`) は枠を使わない。** ffmpeg は字幕を写すものだけ (`Session.runRaw`。ライブの MPEG-2 と同じ)。
  * 倍速の送り込みはそのままで、捨てずに読むほうを止める。止めるのは画面に止めてと言われたとき (`Viewer.held`) と、

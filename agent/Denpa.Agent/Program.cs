@@ -429,7 +429,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
         await foreach (var chunk in sink.Reader.ReadAllAsync(http.RequestAborted))
         {
             /*
-             * **Content-Type と ISDB-C の TSMF の有効な TS の数は、最初の塊を書く前にヘッダーに入れる** (docs/agent.md「/denpa/stream」)。
+             * **Content-Type と ISDB-C の TSMF の有効な TS の数は、最初の塊を書く前にヘッダーに入れる** (docs/agent.md「通信は HTTPS」)。
              * レスポンスヘッダーは最初に書いたときに送られ、塊が届くのは選局と TSMF の判定が終わってから。
              * 選局の途中で共有に入った利用者は Open から先に戻るので、戻った時点ではまだ値が無いことがある。
              * TSMF から選んだ TS が分割 TLV なら、組み立てた TLV のバイト列を application/x-arib-tlv で流す (Sink.Format)

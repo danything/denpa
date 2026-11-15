@@ -187,11 +187,11 @@ export function skipTarget(
   lead = 0,
 ): number | null {
   /*
-   * **`lead` のぶん先を見ます。** 入ってから飛ぶと、気付くまでのコマが必ず
-   * 見えます (画面は飛ぶまで今の映像を出し続けるため)。**跨ぐ直前に飛べば、
-   * 最後に映っているのは本編の 1 コマ**で、CM のコマは 1 枚も出ません。
-   * 早く飛んだぶん本編の末尾が欠けますが、境目は場面の切れ目なので
-   * 1 コマぶんなら分かりません
+   * **`lead` のぶん先を見る。** CM に入ってから飛ぶと、飛ぶまでのコマが必ず
+   * 見える (画面は飛ぶまで今の映像を出し続けるため)。**跨ぐ直前に飛べば、
+   * 最後に映っているのは本編の 1 コマ**で、CM のコマは 1 枚も出ない。
+   * 早く飛んだぶん本編の末尾が欠けるが、境目は場面の切れ目なので
+   * 1 コマぶんなら分からない
    */
   const now = chapterAt(chapters, at + lead);
   if (now === null || !isCm(now.title)) return null;
@@ -300,7 +300,7 @@ function keptOf(ruler: Ruler): { start: number; end: number }[] {
   return (ruler.kept ?? []).filter((range) => range.end > range.start);
 }
 
-/** 元の TS の物差しの位置 (秒) を、`ruler` の物差しへ。**切った CM の中は、その後の本編の先頭へ寄せる** */
+/** 元の TS の物差しで測った位置 (秒) を、`ruler` の物差しへ。**切った CM の中は、その後の本編の先頭へ寄せる** */
 export function fromTsTime(at: number, ruler: Ruler | null): number {
   if (ruler === null) return at;
   const kept = keptOf(ruler);
@@ -314,7 +314,7 @@ export function fromTsTime(at: number, ruler: Ruler | null): number {
   return sum;
 }
 
-/** `ruler` の物差しの位置 (秒) を、元の TS の物差しへ (`fromTsTime` の逆) */
+/** `ruler` の物差しで測った位置 (秒) を、元の TS の物差しへ (`fromTsTime` の逆) */
 export function toTsTime(at: number, ruler: Ruler | null): number {
   if (ruler === null) return at;
   const kept = keptOf(ruler);
@@ -329,7 +329,7 @@ export function toTsTime(at: number, ruler: Ruler | null): number {
 }
 
 /**
- * 元の TS の物差しの位置 (秒) が、`ruler` の物差しのどこで観られるか (コメントの一覧の時刻)。
+ * 元の TS の物差しで測った位置 (秒) が、`ruler` の物差しのどこで観られるか (コメントの一覧の時刻)。
  * `fromTsTime` と違って寄せない: 観られる所より前は `"before"`、切った CM の中 (と残した区間の後) は `"cut"`
  */
 export function playbackAt(

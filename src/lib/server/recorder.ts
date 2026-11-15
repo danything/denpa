@@ -810,11 +810,9 @@ function finish(recordingId: number, size: number): void {
 
   /*
    * **エンコードするのは、予約と録り終えたときの設定のどちらもエンコードするときだけ。** 予約したあとに
-   * 設定を「エンコードしない」に変えたら、前からある予約も元の TS をそのまま置く (`encoder.runJob` と同じ決まり)
-   */
-  /*
+   * 設定を「エンコードしない」に変えたら、前からある予約も元の TS をそのまま置く (`encoder.runJob` と同じ決まり)。
    * **映像の無い録画 (ラジオ・データ放送の局) はエンコードしない** (`recorded-broadcast.recordedMedia`)。
-   * 映像のエンコードはできないので、エンコードする設定でも「エンコードしない」と同じく元の TS をそのまま置く
+   * 映像をエンコードできないので、エンコードする設定でも元の TS をそのまま置く
    */
   const program = aribServiceId(recording.service_id);
   const { video } = recordedMedia(recording.ts_path!, program);
@@ -823,7 +821,7 @@ function finish(recordingId: number, size: number): void {
     return;
   }
 
-  // エンコードしない設定なら元の TS をそのまま保存先へ移す。拡張子 (伝送の形式) はそのまま (`.m2ts`・`.mmts`)
+  // エンコードしないなら元の TS をそのまま保存先へ移す。拡張子 (伝送の形式) はそのまま (`.m2ts`・`.mmts`)
   const dest = libraryPath(recording, extname(recording.ts_path!));
   moveFile(recording.ts_path!, dest);
   /*

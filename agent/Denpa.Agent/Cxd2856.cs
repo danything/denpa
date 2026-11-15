@@ -93,7 +93,7 @@ public sealed record CxdPreviousTune(string Mode, uint Khz, bool Locked, long Be
 /// チューナーの PLL のロックを読むレジスタは仕様書に無いので読まない。チューナーの AGC (仕様書 9.7) は、読むとチューナーの状態を動かすので読まない
 /// </summary>
 /// <param name="Khz">選局した中心周波数 (kHz)</param>
-/// <param name="Retuned">ISDB-C のまま選局し直したか。false なら起動から選局した (仕様書 8.4 の手順 2)</param>
+/// <param name="Retuned">ISDB-C のまま選局し直したか (仕様書 8.4 の手順 2)。false なら起動から選局した</param>
 /// <param name="WaitMs">ロックを確かめ始めてから、最後に読むまで (ms)</param>
 /// <param name="DemodLockMs">復調のロック (<c>88</c> の bit0) が初めて立った時刻 (ロックを確かめ始めてから ms)。立たなければ -1</param>
 /// <param name="TsLockMs">TS のロック (<c>10</c> の bit5) が初めて立った時刻。立たなければ -1</param>
@@ -1103,7 +1103,7 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// 衛星の入力のレベル (dB。仕様書 9.7 の衛星): 利得 (dB × 100) = <c>v × (-1400) / 403 + 9700</c> (四捨五入)、レベル = -利得 / 100
+    /// 衛星の入力のレベル (dB。仕様書 9.7 の衛星)。利得 (dB × 100) = <c>v × (-1400) / 403 + 9700</c> (四捨五入)、レベル = -利得 / 100
     /// </summary>
     public static double IsdbsLevelDb(int agc)
     {
@@ -1676,7 +1676,7 @@ public sealed class Cxd2856Frontend
     /// <summary>
     /// ISDB-C のロックを待つ (仕様書 8.6)。J.83B と同じレジスタを 10 ms ごとに読み、復調のロック (バンク <c>40</c> の <c>88</c> の bit0) と TS のロック (<c>10</c> の bit5) がどちらも立てばロック、1 秒で時間切れ。
     /// ロックのあとの待ちは無い (仕様書 8.6)。読む間隔と時間切れは <see cref="WaitLock"/> と同じ。
-    /// ロックしなければ、待つ間に立ったビットの時刻と、復調器とチューナーの状態を <see cref="IsdbcLockFailure"/> に入れる (<see cref="ReadIsdbcLockFailure"/>)
+    /// ロックしなければ、待つ間に立ったビットの時刻と復調器の状態を <see cref="IsdbcLockFailure"/> に入れる (<see cref="ReadIsdbcLockFailure"/>)
     /// </summary>
     private bool WaitIsdbc()
     {

@@ -357,7 +357,7 @@ const AUDIO_CHANNELS: Record<number, number> = { 1: 1, 3: 2, 9: 6 };
 
 /**
  * エンコードしたものに入れる音声の名前 (番組表と同じ言い方。入れないとプレイヤーに「Audio 1」としか出ない)。
- * 数と並びはエンコードしたものに合わせる: デュアルモノは左右に割った 2 本 (`encoder.ts` の `channelsplit`)、
+ * 数と並びはエンコードしたものに合わせる。デュアルモノは左右に割った 2 本 (`encoder.ts` の `channelsplit`)、
  * それ以外は放送の順。多すぎても ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
  */
 export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
@@ -389,7 +389,7 @@ export function parseAudios(
 }
 
 /**
- * 指定されたものを選ぶ。**知らないものを指定されたら主音声。**
+ * 指定されたものを選ぶ。**一覧に無いものを指定されたら主音声。**
  *
  * 番組が変われば音声の構成も変わる (二カ国語の映画が終わればステレオに戻る)。
  * 前の番組の ID が残っていても、無いものは選べない。

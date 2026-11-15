@@ -218,7 +218,8 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// **同期しなければ、同じ組の空いている別のチューナーで選局し直してから答える** (<see cref="SyncTries"/>。docs/agent.md「同期しなかったら別のチューナーで選局し直す」)。
-    /// どれでも同期しなければ、試したチューナーの名前を「・」で並べ、1 台のときと同じ文言の <see cref="IOException"/> を送出する
+    /// どれでも同期しなければ、試したチューナーの名前を「・」で並べ、1 台のときと同じ文言の <see cref="IOException"/> を送出する。
+    /// 電源を入れ直すまで使えないチューナーで終わったときは <see cref="TunerUnusableException"/> を送出する
     /// </para>
     /// </summary>
     public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null, int? service = null) =>
@@ -383,7 +384,7 @@ public sealed class TunerPool(
                         }
                         catch (IOException) when (held.Device is It930xTuner { IsdbcLockFailures.Count: > 0 } failed)
                         {
-                            // ISDB-C がロックしなかったときだけ、周波数ごとに復調器とチューナーの状態を 1 行ずつ出す (ロックが不安定な理由を探すため。CxdIsdbcLockFailure)
+                            // ISDB-C がロックしなかったときだけ、周波数ごとにロックを待った時間と復調器の状態を 1 行ずつ出す (ロックが不安定な理由を探すため。CxdIsdbcLockFailure)
                             foreach (var failure in failed.IsdbcLockFailures) Log.Write($"[{spec.Name}] {channel}: {failure.Describe()}");
                             throw;
                         }
@@ -730,7 +731,7 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// 組の中では、同じチャンネルの選局 → もうそのチャンネルに合っているもの (<see cref="Held.Channel"/>。
-    /// 実測 0.6〜0.8 秒の選局し直しが 10ms になる) → ほかの余韻 (1 人の視聴で 2 台塞がない) → 空いているもの →
+    /// 実測 0.6〜0.8 秒の選局し直しが 10 ms になる) → ほかの余韻 (1 人の視聴で 2 台塞がない) → 空いているもの →
     /// いちばん優先度の低い相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)。
     /// どの段でも、このチャンネルで同期しなかったチューナー (<see cref="UnsyncedFor"/> の間) は組の後ろに回す。
     /// 電源を入れ直すまで使えないと答えたチューナー (<see cref="Unusable"/>) は、ほかに選べるチューナーが無いときだけ選ぶ
@@ -1216,7 +1217,7 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
     private long _queued;
 
     /// <summary>
-    /// 読み出しとデスクランブラの間に溜められる量。**64MB** は地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほどで、
+    /// 読み出しとデスクランブラの間に溜められる量。**64 MB** は地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほどで、
     /// カードや配る側を待つ上限 (CCID 5 秒・配る側 10 秒・繋ぎ直しの見送り 10 秒) を丸ごと呑める。
     /// **数ではなくバイトで測る。** 読み出し側は溜まっているぶんだけ返すので、1 回の読み出しは小さいこともある
     /// </summary>
@@ -1304,12 +1305,12 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
 
                 if (Interlocked.Add(ref _queued, read) > QueueLimit)
                 {
-                    // デスクランブラが止まったまま埋まった。空くまで読むのを待つ (まれなので、10ms ごとに確かめる形で足りる)
+                    // デスクランブラが止まったまま埋まった。空くまで読むのを待つ (まれなので、10 ms ごとに確かめる形で足りる)
                     if (!waited) Log.Write($"[{Name}] {Channel}: 復号が追いつかずキューが埋まったので、読むのを待ちます");
                     waited = true;
                     while (Volatile.Read(ref _queued) > QueueLimit && !_stopped && !_drained) Thread.Sleep(10);
                 }
-                // 写す先は ArrayPool から借りる。デスクランブラが復号し終えたら返す (1 回が 192KB なので、毎回確保すると大きな塊の置き場を汚す)
+                // 写す先は ArrayPool から借りる。デスクランブラが復号し終えたら返す (1 回が 192 KB なので、毎回確保すると大きな塊の置き場を汚す)
                 var rented = ArrayPool<byte>.Shared.Rent(read);
                 buffer.AsSpan(0, read).CopyTo(rented);
                 if (!queue.TryWrite((rented, read))) ArrayPool<byte>.Shared.Return(rented);
@@ -1523,7 +1524,7 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
      *
      * <para>
      * 確保したままのデバイスは閉じない。チューナーごとに開いたままで、次の選局が
-     * 同じものを使う。ここでやるのは合図だけ。読み出し側は 200ms ごとに
+     * 同じものを使う。ここでやるのは合図だけ。読み出し側は 200 ms ごとに
      * この印を確かめるので (<c>DeviceStream.Read</c>)、電波が来ていなくても止まる。
      * </para>
      */
@@ -1548,6 +1549,6 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
         if (_pump?.Wait(StopWait) == false) Log.Write($"[{Name}] {Channel}: 読み出しが {StopWait.TotalSeconds} 秒で止まりませんでした");
     }
 
-    /// <summary>止まるのを待つ上限。読み出し側は 200ms ごとに印を確かめるので、十分に長い</summary>
+    /// <summary>止まるのを待つ上限。読み出し側は 200 ms ごとに印を確かめるので、十分に長い</summary>
     private static readonly TimeSpan StopWait = TimeSpan.FromSeconds(2);
 }

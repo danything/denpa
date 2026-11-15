@@ -60,7 +60,7 @@ public static class Dt295
     public static string? Parse(string device) => UsbSysfs.PortOf(device, Scheme);
 
     /// <summary>
-    /// 設定に書いたのと同じ形式で。**開かない** (開くと機材に設定を書く)。
+    /// 挿さっている機材を、設定に書くのと同じ形式で返す。**開かない** (開くと機材に設定を書く)。
     /// 受けられる種別は地上波・BS・CS (TS を出すのは 1 つずつ)
     /// </summary>
     public static List<TunerSpec> Detect() =>

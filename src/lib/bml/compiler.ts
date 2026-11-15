@@ -92,7 +92,7 @@ export interface Code {
   hoisted: [number, number, string][];
   /** 大域のコードで宣言した var (入ったときに無ければ undefined を置く) */
   globals: string[];
-  /** オブジェクトのリテラルの名前の並び (OBJECT の引数が指す) */
+  /** オブジェクトリテラルが持つ名前の並び (OBJECT の引数が指す) */
   shapes: string[][];
 }
 

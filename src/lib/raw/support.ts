@@ -1,8 +1,8 @@
 /**
  * **この端末で元の TS をデコードできるか** (docs/stream.md#放送そのままmpeg-2を送る)。デコードできなければ理由を返す。
  *
- * 要るのは 5 つ: WebAssembly (MPEG-2 と AAC のデコーダ)、worker、worker へ渡す OffscreenCanvas と、その中の WebGL2 (描く)、
- * AudioContext (鳴らす)。AAC も WASM でデコードするので、WebCodecs (AudioDecoder) は要らない。
+ * 要るのは WebAssembly (MPEG-2 と AAC のデコーダ)、worker、worker へ渡す OffscreenCanvas と、その中の WebGL2 (描く)、
+ * AudioContext (鳴らす) の 5 つ。AAC も WASM でデコードするので、WebCodecs (AudioDecoder) は要らない。
  * http で開いた LAN や、AudioDecoder の無い iPhone の Safari (iOS 26 まで) でも変換せずに送れる。
  *
  * 1 つでも欠けていれば、MPEG-2 を選んでも画面はエンコードしたものをリクエストする。
