@@ -45,17 +45,6 @@ export function servedStep(notice: Extract<Notice, { type: "tuned" }>): Step {
 }
 
 /**
- * **`tuned` を受けたところで、貼っている前の局のフレームを剥がすか** (`live-player.svelte.ts`)。剥がすのは映像の無い局 (`video: false`)。
- * 次のコマが来ないので、待つと剥がす上限 (`HOLD_MOST`) まで前の局のフレームが残る。canvas に描く経路 (互換モード・MPEG-2) は、
- * canvas に残った前の局のフレームも隠す (`RawEngine.hide`)
- */
-export function dropsHeldFrame(
-  notice: Extract<Notice, { type: "tuned" }>,
-): boolean {
-  return notice.video === false;
-}
-
-/**
  * `restarting` を受けてから、繋ぎ直さずにこれだけたったら、また下げてよい (ms)。サーバは知らせてから 0.2 秒で止まるので、
  * 長く続くのは入れ替えが取り止められたとき。いつまでも下げないままにしない
  */

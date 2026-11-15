@@ -17,6 +17,7 @@ import {
   PID_PAT,
   pmtStreams,
   PmtTracker,
+  STREAM_AAC,
 } from "./psi.js";
 
 /** PTS・PCR の刻み (90kHz)。denpa の取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */
@@ -24,9 +25,8 @@ export const CLOCK = 90_000;
 /** PTS の一周 (33 ビット)。26.5 時間 */
 export const WRAP = 2 ** 33;
 
-/** PMT の stream_type。**放送の映像は MPEG-2、音声は ADTS の AAC** (ARIB STD-B32) */
+/** PMT の stream_type。**放送の映像は MPEG-2、音声は ADTS の AAC** (ARIB STD-B32。AAC は psi.ts の `STREAM_AAC`) */
 const STREAM_MPEG2 = 0x02;
-const STREAM_AAC = 0x0f;
 
 export interface Pes {
   pid: number;

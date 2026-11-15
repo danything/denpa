@@ -22,6 +22,7 @@ import type {
   ResponseMessage,
 } from "@danything/arib/bml-protocol";
 import { ascii, u16 } from "@danything/arib/bytes";
+import { STREAM_AAC } from "@danything/arib/psi";
 
 import { autoStarts } from "#lib/ts/data-auto-start.js";
 
@@ -90,13 +91,6 @@ export interface Service {
   transportStreamId: number | null;
   serviceId: number;
 }
-
-/**
- * 主音声に選べる ES の stream_type。AAC (ADTS) だけ。変換しない再生も音声をこの順で、部品タグに関係なく数える
- * (`@danything/arib/pes` の `readPmt`)。日本の放送の音声は AAC なので、変換して送る再生の `0:a:<n>` とも数がそろう。
- * PMT の通知の `audios` (`@danything/arib/bml` の `pmtAudios`) も同じ stream_type で数える
- */
-const STREAM_AAC = 0x0f;
 
 export interface BmlOptions {
   /** 描く場所。中に Shadow DOM を張る */
@@ -305,6 +299,15 @@ function callee(code: string): string | null {
   return (
     /^([A-Za-z_$][\w$]*)\s*\(\s*\)(?:\s*;)?$/.exec(code.trim())?.[1] ?? null
   );
+}
+
+/**
+ * 部品を指す書き方 (`/70`、いまの局を明示した `/-1/70`) から部品タグを読む。読めなければ null。
+ * `setMainAudioStream` と音声の object の `data` で同じ読み方にする
+ */
+function componentTag(ref: string): number | null {
+  const match = /^\/(?:-1\/)?([0-9a-f]{1,2})$/i.exec(ref.trim());
+  return match === null ? null : Number.parseInt(match[1]!, 16);
 }
 
 /** 入口のモジュール */
@@ -1260,8 +1263,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
    * ふだんの音声 (PMT の 1 本目) を指せば戻す
    */
   setMainAudio(ref: string): boolean {
-    const match = /^\/([0-9a-f]{1,2})$/i.exec(ref.trim());
-    const tag = match === null ? null : Number.parseInt(match[1]!, 16);
+    const tag = componentTag(ref);
     const index = tag === null ? -1 : this.audios.indexOf(tag);
     this.log(
       `setMainAudioStream(${ref})${
@@ -1303,11 +1305,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     if (this.doc === null) return;
     const objects = this.doc
       .elements("object")
-      .filter(
-        (element) =>
-          (element.attr("type") ?? "").toLowerCase() ===
-          "audio/x-arib-mpeg2-aac",
-      );
+      .filter((element) => element.type === "audio/x-arib-mpeg2-aac");
     if (objects.length === 0) {
       if (this.audioByObject) {
         this.audioByObject = false;
@@ -1332,13 +1330,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         (element) =>
           (element.attr("streamstatus") ?? "stop").toLowerCase() === "play",
       )
-      .map((element) =>
-        /^\/(?:-1\/)?([0-9a-f]{1,2})$/i.exec(
-          (element.attr("data") ?? "").trim(),
-        ),
-      )
-      .map((match) => (match === null ? -1 : Number.parseInt(match[1]!, 16)))
-      .find((found) => this.audios.includes(found));
+      .map((element) => componentTag(element.attr("data") ?? ""))
+      .find((found) => found !== null && this.audios.includes(found));
     if (tag !== undefined) {
       this.chooseAudio(tag);
       this.audioByObject = true;
@@ -1350,7 +1343,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   /** object の `data` を書き換えた (`Dom`)。音声の object なら主音声を決め直す */
   objectChanged(element: BmlElement): void {
-    if ((element.attr("type") ?? "").toLowerCase() === "audio/x-arib-mpeg2-aac")
+    if (element.type === "audio/x-arib-mpeg2-aac")
       this.objectAudio("data を書き換えた");
   }
 
@@ -1361,7 +1354,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   stream(element: BmlElement, status: string): void {
-    const type = (element.attr("type") ?? "").toLowerCase();
+    const type = element.type;
     if (type !== "audio/x-arib-aiff") {
       // MNG は止めるとコマの位置が 0 に戻る (付属 2 4.8.5.3 表 4-27)
       if (type === "image/x-arib-mng" && status.toLowerCase() === "stop")
@@ -1374,7 +1367,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.playing.get(element)?.();
     this.playing.delete(element);
     element.setAttr("streamstatus", "stop");
-    if (status !== "play") return;
+    if (status.toLowerCase() !== "play") return;
     const ref = this.resources.resolve(
       element.attr("data") ?? "",
       this.current,

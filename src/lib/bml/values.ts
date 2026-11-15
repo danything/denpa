@@ -111,7 +111,6 @@ export class JSArray extends JSObject {
     if (index >= MAX_ARRAY)
       throw new ScriptError(`配列が大きすぎます (${index})`);
     // 間は空き (`new Array(3)` や `a[5] = 1` と同じ。for-in に出ない)
-    if (this.items.length < index) this.items.length = index;
     this.items[index] = value;
   }
 
@@ -287,7 +286,7 @@ export function formatDate(time: number, utc = false): string {
 
 /** `==` (ES1 の抽象的な等しさ) */
 export function looseEquals(a: Value, b: Value): boolean {
-  if (a === b) return !(typeof a === "number" && Number.isNaN(a));
+  if (a === b) return true;
   if (a == null && b == null) return true;
   if (a == null || b == null) return false;
   if (typeof a === "number" && typeof b === "string") return a === toNumber(b);
@@ -302,7 +301,7 @@ export function looseEquals(a: Value, b: Value): boolean {
 }
 
 export function strictEquals(a: Value, b: Value): boolean {
-  return a === b && !(typeof a === "number" && Number.isNaN(a));
+  return a === b;
 }
 
 /** `<` の結果。比べられない (NaN) ときは undefined */

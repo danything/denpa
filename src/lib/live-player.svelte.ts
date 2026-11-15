@@ -57,7 +57,6 @@ import { writeCookie } from "#lib/cookie.js";
 import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
-  dropsHeldFrame,
   holdsDown,
   LagMeter,
   PROBE_GIVE_UP,
@@ -2538,7 +2537,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       broadcastHevc = await probeBroadcastHevc();
     }
     await prepareCompat();
-    if (superseded(mine) || !pickFormat()) return;
+    // 繋ぎ直す印 (`freshSocket`) は、後から来た選局が使うので残す。流せる形式が無くて止めるなら下ろす
+    if (superseded(mine)) return;
+    if (!pickFormat()) {
+      freshSocket = false;
+      return;
+    }
     // 数え直す。再エンコードでも MediaSource から作り直しになるので、前の数は続きではない
     stalls = 0;
     /*
@@ -2944,10 +2948,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
               notice.codec === "audio" ? "h264" : notice.codec,
             );
           /*
-           * **映像の無い局は、前の局のフレームをすぐ剥がす** (`dropsHeldFrame`)。次のコマが来ないので、待つと `HOLD_MOST` まで残る。
+           * **映像の無い局 (`videoless`) は、前の局のフレームをすぐ剥がす。** 次のコマが来ないので、待つと `HOLD_MOST` まで残る。
            * canvas に描く経路は canvas に前の局のフレームが残っているので、それも隠す (次の局の 1 枚目で出し直す)
            */
-          if (dropsHeldFrame(notice)) {
+          if (videoless) {
             thaw();
             if (canvas) engine?.hide();
           }

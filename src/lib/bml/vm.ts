@@ -569,10 +569,9 @@ export class Vm {
             throw new ScriptError("instanceof の右が関数ではありません");
           const prototype = fn.get("prototype");
           let found = false;
-          if (isObject(value)) {
-            for (let o = value.proto; o !== null; o = o.proto)
-              if (o === prototype) found = true;
-          }
+          if (isObject(value))
+            for (let o = value.proto; o !== null && !found; o = o.proto)
+              found = o === prototype;
           stack.push(found);
           break;
         }

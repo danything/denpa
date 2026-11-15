@@ -79,7 +79,7 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
  * デコードできたフレームを待たせる上限。**これ以上は先にデコードしない** (1 枚 3MB)。
  * 実測 (`tests/bench`。docs/stream.md#デコードしたフレームを持つ数) では、1 回に 1 枚ずつデコードするので
  * 待たせるのは多くて 3〜5 枚で、8 にも届かない。2 だと追いつかずに毎秒 30 フィールド前後まで落ちた。
- * WASM のメモリは最初の 64MB のまま増えないので、上げても下げても使う量は変わらない。
+ * WASM のメモリは伸ばせる (Dockerfile の `ALLOW_MEMORY_GROWTH`) が、測った範囲ではどの値でも最初の 64MB から増えなかった。
  * fMP4 の `DECODED_MOST` (fmp4.ts) と同じ数だが、数えているもの (あちらは GPU の VideoFrame) も決め手も違う
  */
 const DECODED_MOST = 8;

@@ -337,7 +337,10 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         }
         const asked = performance.now();
         const { done, value } = await reader.read();
-        if (mine !== run) return;
+        if (mine !== run) {
+          void reader.cancel().catch(() => undefined);
+          return;
+        }
         if (done) break;
         meter.add(value.byteLength, asked, performance.now());
         fed += value.length;

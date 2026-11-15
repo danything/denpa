@@ -101,10 +101,7 @@ const VIDEO_TYPES = new Set([
 ]);
 
 function isVideo(element: BmlElement): boolean {
-  return (
-    element.tag === "object" &&
-    VIDEO_TYPES.has((element.attr("type") ?? "").toLowerCase())
-  );
+  return element.tag === "object" && VIDEO_TYPES.has(element.type);
 }
 
 /** 映像の object と、その場所 (画面の座標。祖先の位置と枠と、はみ出しの切り取りを足したもの) */
@@ -479,7 +476,7 @@ export class Renderer {
   }
 
   private objectImage(element: BmlElement, view: View): void {
-    const type = (element.attr("type") ?? "").toLowerCase();
+    const type = element.type;
     const data = element.attr("data") ?? "";
     if (type === "image/x-arib-mng") {
       this.mng(element, view, data);

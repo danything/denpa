@@ -305,8 +305,8 @@ export class RungAdapter {
   private slowSince: number | null = null;
   /** 観る画面で、測った速さがいまの段に足りなくなった時刻 */
   private thinSince: number | null = null;
-  /** ライブで、足りていたときに測った段ごとの受け取りの速さ (bit/s)。段 0 へ上げてよいかを見るのに使う */
-  private readonly rates = new Map<Step, number>();
+  /** ライブで、段 0 で足りていたときに測った受け取りの速さ (bit/s)。段 0 へ上げてよいかを見るのに使う */
+  private baseRate: number | null = null;
   /** ライブで、上げる前に測りたい回線の速さ (bit/s。`wantProbe`)。要らなければ null */
   private wanted: number | null = null;
   /**
@@ -394,8 +394,8 @@ export class RungAdapter {
         return this.lowShare(now) ? { step: "audio", reason: "slow" } : null;
       return { step: this.lower(s), reason: "slow" };
     }
-    if (s.route === "live" && s.throughput !== null && s.current !== "audio")
-      this.rates.set(s.current, s.throughput);
+    if (s.route === "live" && s.throughput !== null && s.current === 0)
+      this.baseRate = s.throughput;
 
     const up = upper(s.current);
     if (up === null) return null;
@@ -440,7 +440,7 @@ export class RungAdapter {
 
   /** ライブの段の映像と音声を合わせたビットレート (bit/s)。段 0 は足りていたときに測った値 (無ければ `stepBps`) */
   private liveBps(step: Step, baseKbps: number | null): number {
-    if (step === 0) return this.rates.get(0) ?? stepBps(0, baseKbps);
+    if (step === 0) return this.baseRate ?? stepBps(0, baseKbps);
     return stepBps(step, baseKbps);
   }
 

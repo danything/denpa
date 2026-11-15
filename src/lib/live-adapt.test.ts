@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import { stepOrder } from "./adapt";
 import type { Notice } from "./live";
 import {
-  dropsHeldFrame,
   holdsDown,
   LagMeter,
   LIGHT_NOTE,
@@ -68,23 +67,6 @@ describe("段の指示の組み立て", () => {
       raw: false,
     });
     expect(rungFields(0, ["h264"])).toEqual({});
-  });
-});
-
-/**
- * **映像の無い局を開いたら、前の局のフレームをすぐ剥がす** (`dropsHeldFrame`)。次のコマが来ないので、待つと `HOLD_MOST` まで残る
- */
-describe("前の局のフレームを剥がす", () => {
-  test("video: false なら剥がす", () => {
-    expect(dropsHeldFrame(tuned({ video: false }))).toBe(true);
-    // 変換した音声だけでも、放送のままでも同じ
-    expect(dropsHeldFrame(tuned({ video: false, codec: "audio" }))).toBe(true);
-    expect(dropsHeldFrame(tuned({ video: false, raw: true }))).toBe(true);
-  });
-
-  test("映像のある局 (video が無い) は、次の局の 1 枚目まで貼っておく", () => {
-    expect(dropsHeldFrame(tuned({}))).toBe(false);
-    expect(dropsHeldFrame(tuned({ raw: true }))).toBe(false);
   });
 });
 

@@ -420,7 +420,7 @@ MSE を作り直した直後はデコーダが立ち上がっておらず、重�
 切り替えの間は前の映像を貼る。MSE を作り直すと `<video>` は何も映さないので、捨てる前に 1 枚だけ canvas へ
 写して重ね、次の映像が実際に出た時点で剥がす（`requestVideoFrameCallback`。`play()` が返っただけではまだ
 映っていない）。貼りっぱなしを避ける上限は 6 秒（`live-player.svelte.ts` の `HOLD_MOST`）。映像の無い局は次の映像が来ないので、
-`tuned` で分かった時点で剥がす。canvas に描く経路は canvas に前の局のフレームが残るので、それも隠す（`live-adapt.dropsHeldFrame`）。**壊れているのに
+`tuned` で分かった時点で剥がす。canvas に描く経路は canvas に前の局のフレームが残るので、それも隠す（`live-player.svelte.ts` の `videoless`）。**壊れているのに
 動いて見えるのがいちばん悪い**ので、ffmpeg が降りたらその場で「映像を出せませんでした」を出す。
 
 - **終わりを ffmpeg の終了で見る。** 流し込みは書き込み先が閉じても終わらないことがある

@@ -362,6 +362,12 @@ export function* descriptors(
 export const DESC_DIGITAL_COPY_CONTROL = 0xc1;
 
 /**
+ * 音声の ES の stream_type (AAC。日本の放送の音声)。主音声の何本目かは、どこでもこの stream_type だけを PMT の順に数える
+ * (pes.ts の `readPmt`・bml.ts の `pmtAudios`・データ放送の主音声)。ffmpeg の `0:a:<n>` ともそろう
+ */
+export const STREAM_AAC = 0x0f;
+
+/**
  * デジタルコピー制御記述子の中身 (タグと長さを除いたもの) から、**コピー禁止か**を読む。
  *
  * 先頭 2 ビットの digital_recording_control_data が 11 なら禁止
