@@ -37,6 +37,10 @@ kind: ReplicationSource
 metadata:
   name: denpa-encoded
   namespace: denpa
+  annotations:
+    # gitops の月次の復元チェック (deploy/backup/restore-check.yaml) で取り出さず、restic check の 1% だけにする。
+    # 録画は大きく、中身は ffmpeg の出力で開いて見るものが無い
+    backup.doany.io/restore-check: check-only
 spec:
   sourcePVC: denpa-encoded
   trigger:
