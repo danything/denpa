@@ -57,6 +57,7 @@ import { writeCookie } from "#lib/cookie.js";
 import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
+  holdsDown,
   LagMeter,
   PROBE_GIVE_UP,
   probeBytes,
@@ -410,8 +411,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let served = $state<Step>(0);
   /** リクエストする段。局を変えても、追っかけのシークでも持ち越す */
   let asked: Step = 0;
-  /** サーバが入れ替えで止まると知らせてきた (`restarting`)。繋ぎ直すまで、回線が細いとして下げない */
-  let restarting = false;
+  /** サーバが入れ替えで止まると知らせてきた時刻 (`restarting`)。繋ぎ直すまで、回線が細いとして下げない (`live-adapt.holdsDown`)。来ていなければ null */
+  let restartingAt: number | null = null;
   /** 切れた接続を繋ぎ直している。次の `tuned` から `HOLD_AFTER_RECONNECT` の間は下げない */
   let rejoining = false;
   /** この時刻 (ms) までは、回線が細いとして下げない (`HOLD_AFTER_RECONNECT`) */
@@ -1212,9 +1213,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * サーバの入れ替え (`restarting`) から繋ぎ直して落ち着くまでは、回線が細いとして下げない。届かないのは回線のせいではない。
      * 断り書きは出さず、段もそのまま
      */
-    if (decision.reason === "slow" && (restarting || now < holdDownUntil))
-      return;
-    if (decision.reason === "slow") lastDown = { from: served, at: now };
+    if (holdsDown(decision.reason, now, restartingAt, holdDownUntil)) return;
     /*
      * 追っかけには音声だけが無い。段 3 のまま流す。互換モードも同じ (映像の無い fMP4 を canvas に流す経路を
      * 確かめていない)
@@ -1225,6 +1224,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     upAsk = decision.reason === "restored" ? { from: served, at: now } : null;
     // 足りなくて下げるなら、溜まった前の段の映像の後ろに並ばないように繋ぎ直す (`tune`)
     freshSocket = decision.reason === "slow" && chase === null;
+    // 実際に下げたときだけ覚える。切れる直前なら取り消す (`UNDO_BEFORE_CLOSE`)
+    if (decision.reason === "slow") lastDown = { from: served, at: now };
     asked = step;
     // 段を動かした断り書きは、観る画面と同じく少しで引っ込める (`ADAPT_NOTE`)
     note(text, ADAPT_NOTE);
@@ -2730,7 +2731,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           reconnect();
         } else if (notice.type === "restarting") {
           // サーバが入れ替えで止まる。このあと切れて繋ぎ直すまで、届かないのを回線の細さに数えない (`act`)
-          restarting = true;
+          restartingAt = Date.now();
         } else if (notice.type === "restart") {
           /*
            * 番組が替わって音声・字幕の構成が変わった。同じ局をすぐリクエストし直す (前のフレームは貼ったまま)。
@@ -2815,10 +2816,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           if (startup !== null)
             startup.tuned ??= performance.now() - startup.at;
           // 切れた接続を繋ぎ直した。ここからしばらくは回線が細いとして下げない (`HOLD_AFTER_RECONNECT`)
-          if (rejoining || restarting) {
+          if (rejoining || restartingAt !== null) {
             holdDownUntil = Date.now() + HOLD_AFTER_RECONNECT;
             rejoining = false;
-            restarting = false;
+            restartingAt = null;
           }
           // 選べる音声はここで初めて分かる (いま流れている番組次第)
           audios = notice.audios;

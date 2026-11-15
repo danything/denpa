@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { stepOrder } from "./adapt";
 import type { Notice } from "./live";
 import {
+  holdsDown,
   LagMeter,
   LIGHT_NOTE,
   PROBE_LEAST,
@@ -13,6 +14,7 @@ import {
   RATE_LEAST,
   RATE_WINDOW,
   replacesWarning,
+  RESTARTING_MOST,
   retryAfterMs,
   rungFields,
   servedStep,
@@ -275,5 +277,22 @@ describe("映像だけの詰まり", () => {
     expect(videoFrozen({ ...base, playing: false })).toBe(false);
     expect(videoFrozen({ ...base, audioOnly: true })).toBe(false);
     expect(videoFrozen({ ...base, hidden: true })).toBe(false);
+  });
+});
+
+/**
+ * サーバの入れ替え (`restarting`) と繋ぎ直しの前後は、回線が細いとして下げない (`holdsDown`)。上げることとデコードの遅れは止めない
+ */
+describe("入れ替えの前後に下げない", () => {
+  test("restarting を受けてから RESTARTING_MOST の間と、holdUntil までは slow を見送る", () => {
+    expect(holdsDown("slow", 1_000, 0, 0)).toBe(true);
+    expect(holdsDown("slow", RESTARTING_MOST, 0, 0)).toBe(false);
+    expect(holdsDown("slow", 1_000, null, 2_000)).toBe(true);
+    expect(holdsDown("slow", 2_000, null, 2_000)).toBe(false);
+  });
+
+  test("slow でなければ見送らない (上げる・デコードの遅れ)", () => {
+    expect(holdsDown("restored", 1_000, 0, 5_000)).toBe(false);
+    expect(holdsDown("decode", 1_000, 0, 5_000)).toBe(false);
   });
 });

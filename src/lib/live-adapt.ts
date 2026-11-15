@@ -44,6 +44,29 @@ export function servedStep(notice: Extract<Notice, { type: "tuned" }>): Step {
   return notice.raw ? 0 : notice.rung;
 }
 
+/**
+ * `restarting` を受けてから、繋ぎ直さずにこれだけたったら、また下げてよい (ms)。サーバは知らせてから 0.2 秒で止まるので、
+ * 長く続くのは入れ替えが取り止められたとき。いつまでも下げないままにしない
+ */
+export const RESTARTING_MOST = 60_000;
+
+/**
+ * **回線が細いとして段を下げるのを、いま見送るか** (`live-player.svelte.ts` の `act`)。見送るのは `slow` だけで、
+ * サーバが入れ替えで止まると知らせてきてから (`restartingAt`。`RESTARTING_MOST` まで) と、繋ぎ直したあとの `holdUntil` まで。
+ * 上げることと、端末のデコードが追いつかずに下げること (`decode`) は見送らない
+ */
+export function holdsDown(
+  reason: string,
+  now: number,
+  restartingAt: number | null,
+  holdUntil: number,
+): boolean {
+  if (reason !== "slow") return false;
+  if (restartingAt !== null && now - restartingAt < RESTARTING_MOST)
+    return true;
+  return now < holdUntil;
+}
+
 /** 受け取りの速さを測る窓 (ms) */
 export const RATE_WINDOW = 5_000;
 /** これより短い間しか測れていなければ、速さは分からないことにする (ms) */

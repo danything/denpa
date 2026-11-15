@@ -561,6 +561,12 @@ const DRAIN_CHECK = 5000;
 const DRAIN_REPORT = 60_000;
 
 /**
+ * 止まる前に画面へ送った通知 (`live.announceRestart`) が送り出されるまで待つ時間 (ms)。
+ * `process.exit` は送り待ちの塊を捨てるので、待たないと通知が届かないことがある。短い待ちで足りると見ている (推定)
+ */
+const RESTART_NOTICE_FLUSH = 200;
+
+/**
  * 何があっても降りる。**降り損ねを「ぶら下がったまま」にしない。**
  *
  * 実機で、消しはじめられた Pod が **40 分たっても降りてこない**ことがあった
@@ -573,12 +579,6 @@ const DRAIN_REPORT = 60_000;
  * `SHUTDOWN_WAIT` を過ぎたら降りる。原因が分からなくても、
  * 「入れ替えが 6 時間止まる」だけは起こさない
  */
-/**
- * 止まる前に画面へ送った通知 (`live.announceRestart`) が送り出されるまで待つ時間 (ms)。
- * `process.exit` は送り待ちの塊を捨てるので、待たないと通知が届かないことがある。短い待ちで足りると見ている (推定)
- */
-const RESTART_NOTICE_FLUSH = 200;
-
 function forceExitAfter(ms: number, why: string): void {
   const timer = setTimeout(() => {
     console.warn(`[boot] ${why}。これ以上待たずに停止します`);
