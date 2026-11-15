@@ -197,7 +197,38 @@ export function lineupJobs(lineup: CableLineup): string[] {
 }
 
 /**
- * **一覧に載っているのにロックしなかった TS を、NIT の局の一覧からチャンネルにする。** スキャンで局が見つかったチャンネル (`found`) は作らない。
+ * 読めたケーブル局の NIT に TS が載っているネットワーク (`original_network_id`)。
+ * このネットワークの TS で NIT に載っていないものは、無くなった搬送波とみなす (`retryableChannel`)
+ */
+export function listedNetworks(lineups: readonly CableLineup[]): Set<number> {
+  return new Set(
+    lineups.flatMap((lineup) =>
+      lineup.carriers.flatMap((carrier) =>
+        carrier.streams.map((stream) => stream.originalNetworkId),
+      ),
+    ),
+  );
+}
+
+/**
+ * **ロックしなかったチャンネルを、試し直して残す搬送波として扱うか。** NIT に載っているチャンネル (`listed`) と、
+ * 前の控えにあるチャンネルのうち、NIT に TS が載っていないネットワークのもの。
+ * BS4K の再送信の TLV (QC26。ONID 0x000B) は J:COM の NIT に載っておらず、NIT に載っているネットワークでないので、無くなったとはみなさない
+ */
+export function retryableChannel(
+  channel: string,
+  listed: ReadonlySet<string>,
+  previous: readonly AgentChannel[],
+  networks: ReadonlySet<number>,
+): boolean {
+  if (listed.has(channel)) return true;
+  return previous.some(
+    (entry) => entry.channel === channel && !networks.has(entry.networkId),
+  );
+}
+
+/**
+ * **NIT に載っているのにロックしなかった TS を、NIT の service_list_descriptor からチャンネルにする。** スキャンで局が見つかったチャンネル (`found`) は作らない。
  * 局は service_list_descriptor の service_id と種別で、残す種別は `keep` (`psi.SERVICE_TYPES`)。局名は NIT に無いので、
  * 前の控えの名前 (`known`。`${original_network_id}:${service_id}`) か、無ければ仮の名前 (`unnamed`)。
  * 番組表の取得がその TS の SDT[actual] を受信したら、仮の名前を放送の局名にする (`tlv-names.ts`)。局が 1 つも無い TS は作らない

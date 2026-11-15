@@ -53,7 +53,9 @@ import {
   lineupChanges,
   lineupJobs,
   listedEntries,
+  listedNetworks,
   parseStored,
+  retryableChannel,
   type StoredCableLineup,
   toStored,
 } from "./cable";
@@ -793,36 +795,18 @@ class Scanner {
     });
   }
 
-  /**
-   * ケーブル局の NIT が全部を言い切っているネットワーク (`original_network_id`)。読めた NIT に載っている TS のネットワーク。
-   * ここに無いネットワークの TS (BS4K の再送信の TLV など。J:COM の NIT に載っていなかった) は、NIT に無くても無くなったとは決めない
-   */
-  private coveredNetworks(cable: CableScan): Set<number> {
-    return new Set(
-      cable.lineups.flatMap((lineup) =>
-        lineup.carriers.flatMap((carrier) =>
-          carrier.streams.map((stream) => stream.originalNetworkId),
-        ),
-      ),
-    );
-  }
-
-  /**
-   * 試し直す搬送波か。NIT に載っているものと、前の控えにあって NIT が言い切っていないネットワークのもの
-   * (一度局が入った搬送波。4K の局の QC26 は NIT に無く、総当たりの 1 回だけではロックしない回に当たっていた)
-   */
-  private retryable(cable: CableScan, channel: string): boolean {
-    if (cable.listed.has(channel)) return true;
-    const covered = this.coveredNetworks(cable);
-    return cable.previous.some(
-      (entry) => entry.channel === channel && !covered.has(entry.networkId),
-    );
+  /** 試し直して残す搬送波か (`cable.retryableChannel`)。NIT に TS が載っているネットワーク (`listedNetworks`) は、呼ぶたびに読めた NIT から数え直す */
+  private retryable(cable: CableScan): (channel: string) => boolean {
+    const networks = listedNetworks(cable.lineups);
+    return (channel) =>
+      retryableChannel(channel, cable.listed, cable.previous, networks);
   }
 
   /**
    * **ケーブル局の NIT に載っているのにロックしなかったチャンネルを、間をあけて試し直す** (`CABLE_RETRY`)。
-   * 前の控えにある搬送波で、NIT が言い切っていないネットワークのものも同じく試し直す (`retryable`)。
-   * そのあと、総当たりでロックしなかった残りのチャンネルも、最後に 1 回だけ試し直す。ロックは回によってできたりできなかったりするため。
+   * 前の控えにある搬送波のうち、NIT に TS が載っていないネットワークのものも同じく試し直す (`cable.retryableChannel`)。
+   * NIT を読めた回は、そのあと総当たりでロックしなかった残りのチャンネルも、最後に 1 回だけ試し直す。ロックは回によってできたりできなかったりするため。
+   * NIT を読めなかった回は、残りが 100 本前後になってスキャンが長く延びるので試し直さない。
    * チューナーは選局のたびにエージェントが選ぶので、ほかのチューナーで開くこともある
    */
   private async retryCable(workers: AgentTuner[]): Promise<void> {
@@ -833,11 +817,11 @@ class Scanner {
       if (this.unusable.has("CATV")) return;
       if (this.aborted) return;
       const jobs = [...cable.unlocked]
-        .filter((channel) => this.retryable(cable, channel))
+        .filter(this.retryable(cable))
         .map((channel) => ({ type: "CATV" as const, channel }));
       if (jobs.length === 0) break;
       this.onProgress({
-        line: `CATV: 放送の一覧か前のスキャンにあるのにロックしなかった ${jobs.length} チャンネルを、${wait / 1000} 秒後にもう一度試します`,
+        line: `CATV: NIT か前のスキャンにあるのにロックしなかった ${jobs.length} チャンネルを、${wait / 1000} 秒後にもう一度試します`,
       });
       await pause(wait, this.aborter.signal);
       if (this.aborted) return;
@@ -847,8 +831,10 @@ class Scanner {
       this.dropUnusable(workers, jobs);
     }
     if (this.unusable.has("CATV") || this.aborted) return;
+    if (cable.lineups.length === 0) return;
+    const retryable = this.retryable(cable);
     const rest = [...cable.unlocked]
-      .filter((channel) => !this.retryable(cable, channel))
+      .filter((channel) => !retryable(channel))
       .map((channel) => ({ type: "CATV" as const, channel }));
     if (rest.length === 0) return;
     this.onProgress({
@@ -862,19 +848,18 @@ class Scanner {
 
   /**
    * **ロックしなかった CATV のチャンネルは、前の控えにあれば残す。** ロックが不安定な回線で、1 回のスキャンで
-   * 搬送波が消えないようにする。ケーブル局の NIT を読めた回は、一覧に載っているチャンネルと、NIT が言い切っていないネットワークの
-   * チャンネルを残す (NIT が言い切っているネットワークで載っていないものは無くなった搬送波)。
-   * 前の控えにも無い一覧のチャンネルは、NIT の局の一覧から入れる (`addListed`)
+   * 搬送波が消えないようにする。ケーブル局の NIT を読めた回は、NIT に載っているチャンネルと、NIT に TS が載っていないネットワークの
+   * チャンネルを残す。NIT に TS が載っているネットワークで、NIT に無いものは無くなった搬送波とみなす (`cable.retryableChannel`)。
+   * 前の控えにも無い NIT のチャンネルは、NIT の service_list_descriptor から入れる (`addListed`)
    */
   private keepUnlocked(): void {
     const cable = this.cable;
     if (cable === undefined || this.aborted) return;
+    const retryable = this.retryable(cable);
     for (const entry of cable.previous) {
       const key = `CATV:${entry.channel}`;
       if (this.found.has(key) || !cable.unlocked.has(entry.channel)) continue;
-      // NIT が言い切っているネットワークの TS で、NIT に載っていないものは無くなった搬送波 (`retryable`)
-      if (cable.lineups.length > 0 && !this.retryable(cable, entry.channel))
-        continue;
+      if (cable.lineups.length > 0 && !retryable(entry.channel)) continue;
       this.found.set(key, entry);
       this.onProgress({
         line: `${entry.channel}: ロックしなかったため、前のチャンネルを残します`,
@@ -883,7 +868,7 @@ class Scanner {
   }
 
   /**
-   * **ケーブル局の NIT に載っているのにロックせず、前の控えにも無い TS は、NIT の局の一覧から入れる** (`cable.listedEntries`)。
+   * **ケーブル局の NIT に載っているのにロックせず、前の控えにも無い TS は、NIT の service_list_descriptor から入れる** (`cable.listedEntries`)。
    * 局名は前の控えか仮の名前で、番組表の取得が SDT[actual] を受信したら放送の局名にする (`tlv-names.ts`)。
    * 番組表とライブにも出し、選局できなければ、ほかのチャンネルと同じく受信できないチャンネルになる
    */
@@ -901,7 +886,7 @@ class Scanner {
     for (const entry of entries) {
       this.found.set(`CATV:${entry.channel}`, entry);
       this.onProgress({
-        line: `${entry.channel}: ロックしなかったため、放送の一覧 (NIT) の ${entry.services.length} 局を入れます`,
+        line: `${entry.channel}: ロックしなかったため、NIT に載っている ${entry.services.length} 局を入れます`,
       });
     }
   }
