@@ -388,6 +388,16 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
         await Respond.Error(http, error.Message, 409);
         return;
     }
+    catch (TunerUnusableException error)
+    {
+        /*
+         * 選んだチューナーが、電源を入れ直すまで使えない (IT930x のブリッジの溢れ)。**503 で返す。**
+         * スキャンはこれでそのチューナーを外し、同じ機材のエラーでチャンネルを 1 つずつ落とさない (denpa の scan.ts)
+         */
+        Log.Write($"{type} {channel} ({use}): {error.Message}");
+        await Respond.Error(http, error.Message, 503);
+        return;
+    }
     catch (Exception error)
     {
         /*

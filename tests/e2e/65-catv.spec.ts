@@ -215,6 +215,41 @@ test.describe("ケーブル", () => {
     ).toContainText("CA 記述子なし");
   });
 
+  test("CATV を受けられるチューナーが電源を入れ直すまで使えなければ、残りを回さず、エージェントの理由を出してチャンネルを残す", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await request.post(`${stack.agentUrl}/__control/unusable?type=CATV`);
+    try {
+      await goto(page, "/settings/reception");
+      const card = page.getByTestId("channel-section");
+      await card.getByLabel("スキャンする種別").selectOption("CATV");
+      await card.getByTestId("scan-start").click();
+      await expect(card.getByTestId("scan-state")).toHaveText("失敗", {
+        timeout: 30_000,
+      });
+      // 113 チャンネルを 1 つずつ落とさず、エージェントの理由をそのまま出す (アンテナを疑わせない)
+      await expect(card.locator(".notice.error")).toContainText(
+        "ブリッジの TS のバッファが溢れたままで、TS が届きません。機材の電源を抜いて入れ直してください",
+      );
+      await expect(card.locator(".notice.error")).not.toContainText(
+        "アンテナ",
+      );
+      await expect(card.getByTestId("scan-log")).toContainText(
+        "CATV: 選局できるチューナーがありません。",
+      );
+
+      // 前のスキャンのチャンネルは消さない
+      await goto(page, "/settings/reception");
+      await expect(
+        card.locator(`[data-testid="channel-row"][data-channel="QC20"]`),
+      ).toContainText(CATV_BS.name);
+    } finally {
+      await request.post(`${stack.agentUrl}/__control/unusable`);
+    }
+  });
+
   test("復号できる局は番組表の「ケーブル」とライブに出て観られ、復号できない局は出ず、ライブでは断る", async ({
     page,
     request,

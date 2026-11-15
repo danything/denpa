@@ -529,6 +529,12 @@ export class TuneError extends Error {
   }
 }
 
+/**
+ * **エージェントが「選んだチューナーは電源を入れ直すまで使えない」と返した** (503。IT930x のブリッジの溢れ。docs/agent.md)。
+ * チャンネルではなく機材の問題なので、スキャンはこのチャンネルを落とさず、そのチューナーぶんの並びを止める (`scan.ts`)
+ */
+export class TunerUnusableError extends TuneError {}
+
 /** エージェントの失敗の本文 (`{ "error": "…" }`) から理由を読む。形が違えば null */
 function agentReason(detail: string): string | null {
   try {
@@ -675,7 +681,8 @@ export async function openChannel(
         `チューナーに空きがありません ${detail}`,
         reason,
       );
-    throw new TuneError(
+    const Failure = res.status === 503 ? TunerUnusableError : TuneError;
+    throw new Failure(
       `選局できません (${res.status}) ${detail}`,
       reason,
       place,

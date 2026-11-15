@@ -41,6 +41,10 @@ const knobs: Knobs = {
 /** チューナーが塞がっている状態。取り合いの見え方を確かめる */
 let busyTuners = false;
 /**
+ * 電源を入れ直すまで使えないと答える種別 (`/__control/unusable`)。本物の IT930x のブリッジの溢れのように、チューナーを取ってから 503 で断る
+ */
+let unusableTypes = new Set<string>();
+/**
  * 塞がっているチューナーの受信の状態と C/N と強度 (`GET /denpa/tuners` の `signal`。`POST /__control/signal` で変える)。
  * 本物は C/N が変わっても通知 (`tuners`) を出さないので、変えても出さない。画面は 5 秒ごとに読み直して追う
  */
@@ -524,6 +528,16 @@ function openStream(url: URL, signal: AbortSignal): Response {
     if (picked === null)
       return json({ error: `${type} のチューナーに空きがありません` }, 409);
     index = picked.index;
+    if (unusableTypes.has(type)) {
+      emit("tuners");
+      const name = TUNERS[index]?.name ?? `adapter${index}`;
+      return json(
+        {
+          error: `${name}: ブリッジの TS のバッファが溢れたままで、TS が届きません。機材の電源を抜いて入れ直してください`,
+        },
+        503,
+      );
+    }
     /*
      * **放送の無いチャンネルは、チューナーを取ってから選局に落ちる** (本物と同じ順)。1 バイトも送る前なので、
      * 理由を付けて 500 で返す (docs/agent.md「選局は、利用者が切るまで終わらない」)。
@@ -593,6 +607,10 @@ const options: Bun.ServeOptions = {
       const mode = url.searchParams.get("mode");
       aboutMode = mode === "off" || mode === "mac" ? mode : "normal";
       return json({ mode: aboutMode });
+    }
+    if (url.pathname === "/__control/unusable" && request.method === "POST") {
+      unusableTypes = new Set(url.searchParams.getAll("type"));
+      return json({ types: [...unusableTypes] });
     }
     if (url.pathname === "/__control/tuners" && request.method === "POST") {
       busyTuners = url.searchParams.get("busy") === "1";
