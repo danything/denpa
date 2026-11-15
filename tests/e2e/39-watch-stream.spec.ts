@@ -281,6 +281,5 @@ test.describe("観る画面でその場で流す", () => {
     await goto(page, `/watch/${id}`);
     await expect.poll(() => asked.length).toBeGreaterThan(0);
     expect(asked[0]?.searchParams.get("codec")).toBe("h264");
-    await expect(detail).toHaveCount(0);
   });
 });

@@ -761,7 +761,7 @@
     };
   });
 
-  /** `playback` を聞けなかった理由 (`HTTP 500` など)。観られないときの幕に添える */
+  /** `playback` を取得できなかった理由 (`HTTP 500` など)。観られないときの幕に添える */
   let playbackMiss = "";
 
   /** 何で観られるか (`api/recordings/<id>/playback`)。聞けなければ null */
@@ -777,7 +777,7 @@
     }
   }
 
-  /** 開いたときに観られるものが無かった理由。サーバが出せるもの (`offersText`) と、聞けなかった理由 */
+  /** 開いたときに観られるものが無かった理由。サーバが出せるもの (`offersText`) と、取得できなかった理由 */
   function nothingToPlay(): string {
     const offers = offersText(info);
     return info === null && playbackMiss !== ""

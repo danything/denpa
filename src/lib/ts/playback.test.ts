@@ -373,7 +373,7 @@ describe("ファイルを読めなかったときの行き先 (pickStream)", () 
 });
 
 describe("再生できなかった理由の 1 行 (failureText・pickedText・offersText)", () => {
-  test("MediaError は定数名とブラウザの文言、無ければ投げられたもの", () => {
+  test("MediaError は定数名とブラウザの文言、無ければ受け取った例外", () => {
     expect(failureText({ code: 4, message: "Unsupported" })).toBe(
       "MEDIA_ERR_SRC_NOT_SUPPORTED (Unsupported)",
     );

@@ -428,7 +428,7 @@ const MEDIA_ERRORS: Record<number, string> = {
 
 /**
  * **再生できなかった理由を 1 行にする** (観る画面の幕に添える・コンソールに出力する)。`<video>` の `MediaError` があれば
- * その定数名とブラウザの文言、無ければ投げられたもの (`SourceBuffer` が断った、など)
+ * その定数名とブラウザの文言、無ければ受け取った例外 (`SourceBuffer` が追加を拒否した、など)
  */
 export function failureText(
   media: { code: number; message?: string } | null,
