@@ -472,7 +472,7 @@ export class Fmp4Video {
       this.decode(this.take());
     }
     /*
-     * 末尾まで渡しきった。**B フレームを並べ替えるデコーダは、最後の数枚を次のコマが来るまで持っている**
+     * 末尾まで渡しきった。B フレームを並べ替えるデコーダは、最後の数枚を次のコマが来るまで持っている
      * (H.264)。もう次は来ないので、`flush` で出させる。呼ばないと録画の最後の数コマが描かれない
      */
     if (this.ending && !this.flushed && this.pending.length === 0) {
