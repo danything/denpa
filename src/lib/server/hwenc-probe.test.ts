@@ -190,7 +190,7 @@ test("AV1 の ICQ が通れば CQP は試さない", async () => {
 });
 
 /**
- * ffmpeg 9 が `-v level+verbose` でエンコーダを開けずに落ちるときの標準エラー。`cause` は開けなかった理由の行。
+ * ffmpeg 9 が `-v repeat+level+verbose` でエンコーダを開けずに落ちるときの標準エラー。`cause` は開けなかった理由の行。
  * 最後の数行は原因を持たない行で埋まり、エンコードの側は理由にかかわらず `-22 (Invalid argument)` で終わる
  */
 function openFailure(cause: string, errno: string): string {
@@ -229,7 +229,7 @@ test("ドライバに AV1 のエンコードが無ければ、CQP は試さず�
     expect(
       lines
         .filter((l) => l.includes("_vaapi"))
-        .every((l) => l.includes("-v level+verbose")),
+        .every((l) => l.includes("-v repeat+level+verbose")),
     ).toBe(true);
     expect(warn).not.toHaveBeenCalled();
     expect(log.mock.calls.map((args) => String(args[0]))).toContain(

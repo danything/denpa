@@ -989,8 +989,9 @@ async function tryEncode(args: string[], label: string): Promise<boolean> {
  *
  * **落ちたら ffmpeg のエラーの行をログに出す** (`label` はエンコーダとデバイス)。何が原因で
  * 落ちたか (ドライバが無い・オプションを受け付けない・時間切れ) を、報告のログから読めるように。
- * ffmpeg は `-v level+verbose` で起動し、行ごとの段 (`[error]` など) からエラーの行を選ぶ (`readTrialLog`)。
- * verbose にするのは、VA-API のドライバの名前 (`VAAPI driver: …`) を添えるため。
+ * ffmpeg は `-v repeat+level+verbose` で起動し、行ごとの段 (`[error]` など) からエラーの行を選ぶ (`readTrialLog`)。
+ * verbose にするのは、VA-API のドライバの名前 (`VAAPI driver: …`) を添えるため。`repeat` は、段の印の付かない
+ * `Last message repeated` を出させないため。
  *
  * **決まった理由で使えないもの (`missing`・`rate`) は警告にしない。** GPU の世代で決まっていて、
  * 起動のたびに同じ警告が出るだけになるため
@@ -1000,7 +1001,7 @@ async function trial(args: string[], label: string): Promise<Trial> {
     [
       config.ffmpeg,
       "-v",
-      "level+verbose",
+      "repeat+level+verbose",
       "-nostdin",
       ...args,
       "-f",
@@ -1070,7 +1071,7 @@ interface TrialLog {
 /** `[ctx @ 0x…] [error] message` の段の印 */
 const LEVEL_TAG = /\[(trace|debug|verbose|info|warning|error|fatal|panic)\] /;
 
-/** 試しのエンコードの標準エラー (`-v level+verbose`) を読む */
+/** 試しのエンコードの標準エラー (`-v repeat+level+verbose`) を読む */
 function readTrialLog(stderr: string): TrialLog {
   const errors: string[] = [];
   let driver: string | null = null;
