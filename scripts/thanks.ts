@@ -108,23 +108,54 @@ function people(items: Item[], kinds: Kind[]): Person[] {
     .sort((a, b) => a.numbers[0]! - b.numbers[0]!);
 }
 
-/** 印の間に入れる Markdown。誰もいない段は見出しごと出さない */
+/** その人がマージされた PR の一覧 (GitHub の検索) */
+const prsOf = (login: string) =>
+  `https://github.com/danything/denpa/pulls?q=is%3Apr+is%3Amerged+author%3A${login}`;
+
+/** その人が立てた Issue の一覧 (GitHub の検索)。Discussion はこの検索に出ない (`discussionsOf`) */
+const issuesOf = (login: string) =>
+  `https://github.com/danything/denpa/issues?q=author%3A${login}`;
+
+/** その人が立てた Discussion の一覧 (GitHub の検索)。Issue を 1 つも立てていない人のリンク先 */
+const discussionsOf = (login: string) =>
+  `https://github.com/danything/denpa/discussions?discussions_q=author%3A${login}`;
+
+/**
+ * 1 人ぶん。GitHub のアイコン (`<login>.png`。表示は 24px、取るのは 2 倍の 48px) と名前を改行しない空白 (`&nbsp;`) でつなぎ、その人の PR・Issue・Discussion の一覧へのリンクにする。
+ * README は GitHub が HTML の `<a>` と `<img>` を通すので、Markdown の画像ではなく HTML で大きさを決める
+ */
+const person = (login: string, link: string) =>
+  `<a href="${link}"><img src="https://github.com/${login}.png?size=48" width="24" height="24" alt="">&nbsp;@${login}</a>`;
+
+/**
+ * 印の間に入れる Markdown。1 人ぶん (`person`) を、人どうしの間を半角の空白にして 1 つの段落に並べる。
+ * 番号は並べず、名前からその人の PR の一覧へ飛ぶ。報告や提案は、Issue を立てた人は Issue の一覧、Discussion だけの人は Discussion の一覧へ飛ぶ。
+ * 誰もいない段は見出しごと出さない
+ */
 export function render(items: Item[]): string {
-  const block = (title: string, list: Person[]) =>
+  const issuers = new Set(
+    items.filter((item) => item.kind === "issue").map((item) => item.login),
+  );
+  const block = (
+    title: string,
+    list: Person[],
+    link: (login: string) => string,
+  ) =>
     list.length === 0
       ? []
       : [
           `**${title}** (ありがとうございます):`,
           "",
-          ...list.map(
-            (p) =>
-              `- [@${p.login}](https://github.com/${p.login}) (${p.numbers.map((n) => `[#${n}](https://github.com/danything/denpa/issues/${n})`).join(" ")})`,
-          ),
+          list.map((p) => person(p.login, link(p.login))).join(" "),
           "",
         ];
   return [
-    ...block("手を入れてくれた人", people(items, ["pr"])),
-    ...block("報告や提案をくれた人", people(items, ["issue", "discussion"])),
+    ...block("手を入れてくれた人", people(items, ["pr"]), prsOf),
+    ...block(
+      "報告や提案をくれた人",
+      people(items, ["issue", "discussion"]),
+      (login) => (issuers.has(login) ? issuesOf(login) : discussionsOf(login)),
+    ),
   ]
     .join("\n")
     .trim();
