@@ -98,6 +98,11 @@ export class BmlElement implements Cascade {
     return this.attrs.get("id") ?? "";
   }
 
+  /** `type` 属性を小文字にしたもの (object の種類は大文字小文字を区別しない)。無ければ "" */
+  get type(): string {
+    return (this.attrs.get("type") ?? "").toLowerCase();
+  }
+
   get classes(): string[] {
     return (this.attrs.get("class") ?? "")
       .split(/\s+/)

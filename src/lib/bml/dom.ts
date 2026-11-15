@@ -455,7 +455,7 @@ export class Dom {
 
 /** 止まった状態から始まる object (付属 2 4.8.5.2 注 2) */
 function isStoppable(element: BmlElement): boolean {
-  const type = (element.attr("type") ?? "").toLowerCase();
+  const type = element.type;
   return [
     "audio/x-arib-mpeg2-aac",
     "audio/x-arib-aiff",

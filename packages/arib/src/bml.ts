@@ -48,6 +48,7 @@ import {
   pmtStreams,
   PmtTracker,
   SectionAssembler,
+  STREAM_AAC,
 } from "./psi.js";
 
 const DESC_STREAM_IDENTIFIER = 0x52;
@@ -169,9 +170,6 @@ export function parsePmt(section: Uint8Array): ComponentPMT[] {
   }
   return components;
 }
-
-/** 音声の ES の stream_type (AAC。日本の放送の音声) */
-const STREAM_AAC = 0x0f;
 
 /**
  * PMT にある音声 (AAC) の ES の部品タグを、PMT の順に並べる (`PMTMessage.audios`)。**部品タグの無い ES は null で数に入れる。**

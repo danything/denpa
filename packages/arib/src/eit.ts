@@ -124,7 +124,7 @@ export interface EitEvent {
   /** 尺 (ms)。未定なら null。番組表に入れられるのは決まっているものだけ */
   duration: number | null;
   isFree: boolean;
-  /** 1=まもなく 2=停止中 3=一時停止 4=放送中。p/f の「いま」を見分けるのに使う */
+  /** 0=未定義 1=非実行中 2=数秒以内に開始 3=停止中 4=放送中 (STD-B10)。p/f の「いま」を見分けるのに使う */
   runningStatus: number;
   name: string;
   description: string;
@@ -812,7 +812,7 @@ export class EpgReader {
    *
    * そこで 0 のときは**セクションの番号で決める**。p/f は仕様で
    * **section 0 が現在・section 1 が次**と決まっていて、こちらは局の都合で
-   * 変わらない。1 (まもなく) や 2 (停止中) は今までどおり入れない。
+   * 変わらない。1〜3 (非実行中・数秒以内に開始・停止中) は今までどおり入れない。
    */
   private onAir(section: EitSection, event: EitEvent): boolean {
     if (event.runningStatus === 4) return true;
