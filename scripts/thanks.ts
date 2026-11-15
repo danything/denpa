@@ -117,14 +117,14 @@ const issuesOf = (login: string) =>
   `https://github.com/danything/denpa/issues?q=author%3A${login}`;
 
 /**
- * 1 人ぶん。GitHub のアイコン (`<login>.png`。表示は 24px、取るのは 2 倍の 48px) と名前を、その人の PR・Issue の一覧へのリンクにする。
+ * 1 人ぶん。GitHub のアイコン (`<login>.png`。表示は 24px、取るのは 2 倍の 48px) と名前を、改行しない空白 (`&nbsp;`) でつなぎ、、その人の PR・Issue の一覧へのリンクにする。
  * README は GitHub が HTML の `<a>` と `<img>` を通すので、Markdown の画像ではなく HTML で大きさを決める
  */
 const person = (login: string, link: string) =>
-  `<a href="${link}"><img src="https://github.com/${login}.png?size=48" width="24" height="24" alt=""> @${login}</a>`;
+  `<a href="${link}"><img src="https://github.com/${login}.png?size=48" width="24" height="24" alt="">&nbsp;@${login}</a>`;
 
 /**
- * 印の間に入れる Markdown。**アイコンと名前を「、」でつないだ段落にする** (人が増えて、1 人 1 行の箇条書きでは長くなった)。
+ * 印の間に入れる Markdown。**アイコンと名前を空白で並べた段落にする** (人が増えて、1 人 1 行の箇条書きでは長くなった)。
  * 番号は並べず、名前からその人の PR・Issue の一覧へ飛ぶ。誰もいない段は見出しごと出さない
  */
 export function render(items: Item[]): string {
@@ -138,7 +138,7 @@ export function render(items: Item[]): string {
       : [
           `**${title}** (ありがとうございます):`,
           "",
-          list.map((p) => person(p.login, link(p.login))).join("、"),
+          list.map((p) => person(p.login, link(p.login))).join(" "),
           "",
         ];
   return [
