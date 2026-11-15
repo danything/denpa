@@ -233,9 +233,7 @@ test.describe("ケーブル", () => {
       await expect(card.locator(".notice.error")).toContainText(
         "ブリッジの TS のバッファが溢れたままで、TS が届きません。機材の電源を抜いて入れ直してください",
       );
-      await expect(card.locator(".notice.error")).not.toContainText(
-        "アンテナ",
-      );
+      await expect(card.locator(".notice.error")).not.toContainText("アンテナ");
       await expect(card.getByTestId("scan-log")).toContainText(
         "CATV: 選局できるチューナーがありません。",
       );
