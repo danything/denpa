@@ -593,12 +593,18 @@
 
 /*
  * ---- 指で押す端末 (`pointer: coarse`) ----
- * タブレットでは低い行は押したつもりの隣が開いた。行は 72px、行の操作 (詳細・削除・取消・「⋯」) はほかの一覧と同じ 40px
- * (`app.css` の `.row-actions`) で、間を空ける。「⋯」の中の項目も指の大きさに。マウスの画面 (`pointer: fine`) の詰め具合は変えない
+ * タブレットでは低い行は押したつもりの隣が開いた。行は 72px、行の操作 (詳細・削除・取消・「⋯」) は 44px 四方以上で
+ * 間を空ける。チップと「⋯」の中の項目も指の大きさに。マウスの画面 (`pointer: fine`) の詰め具合は変えない
  */
 @media (pointer: coarse) {
   .board .t-row .row-actions {
+    --dp-btn-h: 2.75rem;
+    --dp-btn-h-sm: 2.75rem;
     gap: var(--dp-space-2);
+  }
+  .board .t-row .row-actions :is(button, a.button) {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
   }
   .board .menu-item.view-item {
     min-height: 3rem;
