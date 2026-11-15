@@ -3,14 +3,11 @@ import { describe, expect, test } from "bun:test";
 
 import type { Program, Rule } from "../types";
 import {
-  ANY_PAID,
   compile,
   coveringRule,
   globPatterns,
   matches,
   missOf,
-  NO_PAID,
-  type PaidAllowed,
   prefillFrom,
 } from "./rules";
 
@@ -396,9 +393,8 @@ describe("当たらない理由", () => {
     fields: Partial<Rule>,
     p: Program & { arib_service_type?: number },
     type = "GR",
-    paidOk: PaidAllowed = NO_PAID,
   ) =>
-    missOf(compile(rule(fields)), p, type, paidOk, (f) =>
+    missOf(compile(rule(fields)), p, type, (f) =>
       f.includes("name") ? p.name : "",
     );
   const anime = program({
@@ -427,24 +423,10 @@ describe("当たらない理由", () => {
     ).toBeNull();
     expect(miss({ keyword: "テストアニメ" }, anime)).toBeNull();
   });
-  test("有料放送は、契約中と確かめた局だけ当てる", () => {
+  test("有料放送も無料放送と同じく当てる", () => {
     const paid = { ...anime, is_free: false };
-    // 契約を何も確かめていなければ当てない
-    expect(miss({ keyword: "テストアニメ" }, paid)).toBe("paid");
-    // 契約中の局だけ。ほかの局の有料放送は当てない
-    const only =
-      (id: number): PaidAllowed =>
-      (serviceId) =>
-        serviceId === id;
-    expect(
-      miss({ keyword: "テストアニメ" }, paid, "GR", only(paid.service_id)),
-    ).toBeNull();
-    expect(
-      miss({ keyword: "テストアニメ" }, paid, "GR", only(paid.service_id + 1)),
-    ).toBe("paid");
-    // 無料の番組は契約に関わらず当てる
-    expect(miss({ keyword: "テストアニメ" }, anime)).toBeNull();
-    expect(miss({ keyword: "テストアニメ" }, paid, "GR", ANY_PAID)).toBeNull();
+    expect(miss({ keyword: "テストアニメ" }, paid)).toBeNull();
+    expect(miss({ keyword: "ニュース" }, paid)).toBe("keyword");
   });
   test("局・種別", () => {
     expect(miss({ keyword: "テストアニメ", service_ids: [8] }, anime)).toBe(
@@ -483,7 +465,6 @@ describe("時間帯と曜日", () => {
       compile(rule({ keyword: "テストニュース", ...fields })),
       p,
       "GR",
-      NO_PAID,
       (f) => (f.includes("name") ? p.name : ""),
     );
   const evening = { time_from: 19 * 60, time_to: 20 * 60 };
@@ -542,7 +523,7 @@ describe("時間帯と曜日", () => {
 
   test("時間帯や曜日だけでは条件にならない (その時間の全局に当たるので当てない)", () => {
     const bare = (fields: Partial<Rule>, p: Program) =>
-      missOf(compile(rule(fields)), p, "GR", NO_PAID, () => p.name);
+      missOf(compile(rule(fields)), p, "GR", () => p.name);
     expect(bare({ weekdays: [5] }, at(friday(12)))).toBe("empty");
     expect(bare(evening, at(friday(19)))).toBe("empty");
     expect(bare(evening, at(friday(12)))).toBe("empty");

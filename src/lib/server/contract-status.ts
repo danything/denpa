@@ -24,7 +24,7 @@ export function freshDecode(
 /**
  * **ダイアログに出す契約の状態。** `ContractState` に、まだ確かめていない (`unverified`) を足したもの。
  * 行が無い局と、カードが答えておらず (`code` が無い)、新しい復号の結果も無い局が `unverified`。
- * `subscribed` は、`contracts.paidAllowed` が録ってよいとする局と同じ
+ * `subscribed` は、`contracts.confirmedSubscribed` が契約中とする局と同じ
  */
 export type ContractStatus = ContractState | "unverified";
 

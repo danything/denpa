@@ -7,7 +7,7 @@ import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
 import { trustFakeAgent } from "./fake-agent-trust";
 
 /*
- * 自動予約は、有料の番組を契約中と確かめた局のものだけ録る (contracts.paidAllowed・rules.PaidAllowed)。
+ * 自動予約は、有料の番組も契約を問わず録る (`rules.missOf` は契約を見ない)。
  * 衛星のチューナーが 1 台だけのエージェントで、ルールを当てて立った予約を見る
  */
 const agent = Bun.serve({
@@ -61,7 +61,7 @@ beforeEach(() => {
   orm().delete(ruleTable).run();
 });
 
-/** CS の局と、そこで 1 時間後から流れる有料の番組 (「有料ドラマ #1」) */
+/** CS の局と、そこで 1 時間後から流れる有料の番組 (「有料ドラマ #<局>」。局ごとに別の番組) */
 function paidAiring(serviceId: number): void {
   orm()
     .insert(services)
@@ -83,7 +83,7 @@ function paidAiring(serviceId: number): void {
       event_id: 1,
       start_at: Date.now() + 3_600_000,
       end_at: Date.now() + 5_400_000,
-      name: "有料ドラマ #1",
+      name: `有料ドラマ #${serviceId}`,
       description: "",
       is_free: false,
       updated_at: 0,
@@ -132,7 +132,7 @@ const reserved = () =>
     .sort((a, b) => a - b);
 
 describe("自動予約と有料放送の契約", () => {
-  test("契約中と確かめた局の有料番組だけ録る。未契約・期限切れ・確かめていない局は録らない", () => {
+  test("有料の番組は契約を問わず録る。契約中・期限切れ・未契約・確かめていない局のどれも", () => {
     paidAiring(301);
     paidAiring(302);
     paidAiring(303);
@@ -143,15 +143,12 @@ describe("自動予約と有料放送の契約", () => {
     rule();
 
     applyRules();
-    expect(reserved()).toEqual([301]);
+    expect(reserved()).toEqual([301, 302, 303, 304]);
   });
 
-  test("確かめていない局も、契約中と確かめたら次に当て直したときに録る", () => {
+  test("契約を確かめていない局の有料の番組も、最初の当てはめで録る", () => {
     paidAiring(311);
     rule();
-    expect(applyRules().created).toBe(0);
-
-    contract(311, { code: 0x0800 });
     expect(applyRules().created).toBe(1);
     expect(reserved()).toEqual([311]);
   });
