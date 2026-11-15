@@ -26,6 +26,7 @@ import {
   refusalMessage,
   relayed,
 } from "./bml-network";
+import { pruneExpired } from "./expiring";
 
 /** トークンの寿命 (ms)。番組 1 本を見終えるくらい */
 const TTL = 6 * 60 * 60 * 1000;
@@ -44,13 +45,7 @@ export const TOKEN = new RegExp(`^${HC_TOKEN}$`);
 
 /** `origin` (`http(s)://host[:port]`) へ中継するトークンを出す */
 export function grant(origin: string, now = Date.now()): string {
-  for (const [token, entry] of grants)
-    if (entry.until <= now) grants.delete(token);
-  while (grants.size >= MOST) {
-    const oldest = grants.keys().next().value;
-    if (oldest === undefined) break;
-    grants.delete(oldest);
-  }
+  pruneExpired(grants, (entry) => entry.until, now, MOST);
   const token = randomBytes(16).toString("hex");
   grants.set(token, { origin, until: now + TTL });
   return token;

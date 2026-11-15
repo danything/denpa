@@ -42,13 +42,13 @@ export function parseAgentUrl(raw: string): AgentTarget {
       "TUNER_AGENT_URL は https:// で書きます (エージェントとは TLS で繋ぎます。docs/agent.md)",
     );
   }
-  if (!URL.canParse(base) || new URL(base).hostname === "") {
+  const url = URL.parse(base);
+  if (url === null || url.hostname === "") {
     throw new Error(
       `TUNER_AGENT_URL のホストが読めません (${base})。https://ホスト:ポート の形で書きます (docs/agent.md)`,
     );
   }
   // 大文字と小文字だけが違うホスト名を別の行にしない (`https://Host` と `https://host`)
-  const url = new URL(base);
   const origin = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
   const pair = new URLSearchParams(fragment).get("pair");
   return { origin, pair: pair && pair.length > 0 ? pair : null };

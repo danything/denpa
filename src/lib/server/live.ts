@@ -116,6 +116,7 @@ import { orm } from "./db";
 import { aribServiceId, deinterlace } from "./encoder";
 import { followOnAir } from "./epg";
 import { emit, type Yielded } from "./events";
+import { pruneExpired } from "./expiring";
 import {
   type HwDevice,
   hwEncode,
@@ -1083,11 +1084,15 @@ type LightStep = keyof Light;
 export const LIGHT_LAG = 5_000;
 /** 軽くしたものを、作り直した次のセッションへ受け継ぐ期限 (ms)。画面がリクエストし直すまでの間 */
 const LIGHT_CARRY = 30_000;
-/** セッションの目印 (`key`) → 軽くしたもの。次のセッションが作られたら消す */
+/**
+ * セッションの目印 (`key`) → 軽くしたもの。次のセッションが作られたら消す。
+ * 受け取られないまま期限を過ぎたもの (作り直す前に観る人がいなくなった) は、次に預けるときに捨てる
+ */
 const lightened = new Map<string, { light: Light; at: number }>();
 
 /** 作り直す前のセッションが、軽くしたものを次のセッションへ預ける */
 export function keepLight(id: string, light: Light, now = Date.now()): void {
+  pruneExpired(lightened, (held) => held.at + LIGHT_CARRY, now);
   lightened.set(id, { light, at: now });
 }
 
@@ -1410,6 +1415,7 @@ function spawnCaptioner(
 
 /**
  * **開くまでの内訳** (セッションを作ってからのミリ秒)。最初の fMP4 が出たときに 1 行残す (`openingLine`)。
+ * 放送のままの経路は、最初の TS を画面へ送ったときに残す (`rawOpeningLine`)。
  * エージェントの「送り出し」の行と合わせると、選局からブラウザに渡すまでを本番の記録で割れる
  * (docs/stream.md「開いてから映像が出るまでの内訳」)
  */
@@ -1424,7 +1430,13 @@ type Opening = {
   init?: number;
   /** その ffmpeg が最初の moof+mdat を出した */
   media?: number;
+  /** 放送のままの経路で、局に絞った TS を最初に画面へ送った (`runRaw`) */
+  sent?: number;
 };
+
+/** `Opening` の時刻を 1 項目にする。まだ来ていないものは `-` */
+const openingAt = (ms: number | undefined) =>
+  ms === undefined ? "-" : `${Math.round(ms)}ms`;
 
 /** 開くまでの内訳の 1 行。`way` はエンコード方式 (`h264` / `hevc` / `av1` / `audio`、GPU ならその種類) */
 export function openingLine(
@@ -1432,11 +1444,18 @@ export function openingLine(
   marks: Opening,
   way: string,
 ): string {
-  const at = (ms: number | undefined) =>
-    ms === undefined ? "-" : `${Math.round(ms)}ms`;
+  const at = openingAt;
   return (
     `[live] ${label}: 開くまで 選局 ${at(marks.tuned)} / 最初のバイト ${at(marks.firstByte)} / ` +
     `ffmpeg ${at(marks.spawned)} / init ${at(marks.init)} / 最初の fMP4 ${at(marks.media)} (${way})`
+  );
+}
+
+/** 放送のままの経路の、開くまでの内訳の 1 行 (ffmpeg を起こさないので、映像の項目は最初の送信だけ) */
+export function rawOpeningLine(label: string, marks: Opening): string {
+  return (
+    `[live] ${label}: 開くまで 選局 ${openingAt(marks.tuned)} / 最初のバイト ${openingAt(marks.firstByte)} / ` +
+    `最初の送信 ${openingAt(marks.sent)} (放送のまま)`
   );
 }
 
@@ -3332,6 +3351,7 @@ class Session {
     const chase = this.source !== undefined;
     try {
       const tuned = this.source?.() ?? (await this.tune());
+      if (!chase) this.opening.tuned = this.since();
       // 4K の局は 1 局に絞った TLV をそのまま流す (HTTP の `codec=raw` だけ。画面の「放送のまま」は詰め替えの `runMmt`)
       if (this.transport === "tlv") return await this.relayTlv(label, tuned);
       let input = chunks(tuned);
@@ -3374,6 +3394,7 @@ class Session {
         for await (const chunk of input) {
           if (this.stopped) break;
           this.fed = true;
+          if (!chase) this.opening.firstByte ??= this.since();
           const out = this.tap(filter, chunk);
           /*
            * **番組が替わって並びが変わったら、字幕の ffmpeg だけ起こし直す** (`StreamsWatch`)。
@@ -3394,6 +3415,15 @@ class Session {
             captioner = this.captions();
           }
           if (out.length === 0) continue;
+          if (this.opening.sent === undefined) {
+            this.opening.sent = this.since();
+            console.log(
+              rawOpeningLine(
+                `${this.channelType}:${this.channel}`,
+                this.opening,
+              ),
+            );
+          }
           // ライブは詰まったら捨てる。追っかけは捨てずに読むほうを止める (`hand` の説明)
           for (const viewer of this.viewers)
             this.hand(viewer, CHANNEL.rawTs, out);

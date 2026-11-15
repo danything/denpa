@@ -9,6 +9,7 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 
+import { parsePlaces } from "./agent-order";
 import { type Agent, listAgents } from "./agents";
 import { contractStatus } from "./contract-status";
 import { orm } from "./db";
@@ -242,15 +243,10 @@ export function narrowPlaces(
   statusOf: (card: string) => ReturnType<typeof contractStatus> | null,
 ): string {
   const lines = places.split("\n");
-  const agentOf = (line: string): number | null => {
-    const tab = line.indexOf("\t");
-    return tab < 0 ? null : Number(line.slice(0, tab));
-  };
+  // `parsePlaces` は行ごとに 1 つ返すので、`lines` と同じ添え字で引ける
+  const parsed = parsePlaces(places);
   const ids = new Set(
-    lines.flatMap((line) => {
-      const agent = agentOf(line);
-      return agent === null ? [] : [agent];
-    }),
+    parsed.flatMap((place) => (place.agent === null ? [] : [place.agent])),
   );
   if (ids.size <= 1) return places;
   const mine = [...ids].flatMap((id) => {
@@ -262,8 +258,8 @@ export function narrowPlaces(
   const rank = (id: number) => ranks.get(id) ?? 3;
   const best = Math.min(...[...ids].map(rank));
   return lines
-    .filter((line) => {
-      const agent = agentOf(line);
+    .filter((_line, i) => {
+      const agent = parsed[i]?.agent ?? null;
       return agent === null || rank(agent) === best;
     })
     .join("\n");
