@@ -25,6 +25,11 @@
     resuming?: boolean;
     /** 失敗の文言。あれば busy より先にこちらを出す */
     error?: string;
+    /**
+     * 失敗の詳しいところ (観る画面の、何を再生しようとして何で止まったか)。文言の下に小さく出す。
+     * 報告の画面写真だけで、どの形式で止まったかを読み分けるため。空なら出さない
+     */
+    detail?: string;
     /** エラーの下のボタン (ライブ・追っかけの「再試行」、観る画面の「… で観る」)。押せるようにするのは幕の側 */
     actions?: Snippet | undefined;
     /** busy でも error でもないときの文言 (ライブの「局を選んでください」)。空なら何も出さない */
@@ -36,6 +41,7 @@
     busy,
     resuming = false,
     error = "",
+    detail = "",
     actions,
     idle = "",
     testid,
@@ -51,6 +57,9 @@
   {#if error !== ""}
     <div class="error">
       <div class="message">{error}</div>
+      {#if detail !== ""}<div class="detail" data-testid="{testid}-detail">
+          {detail}
+        </div>{/if}
       {#if actions}<div class="actions">{@render actions()}</div>{/if}
     </div>
   {:else if busy}
@@ -88,6 +97,12 @@
   }
   .message {
     font-weight: var(--dp-weight);
+  }
+  .detail {
+    margin-top: var(--dp-space-2);
+    font-size: var(--dp-text-sm);
+    color: var(--dp-on-video-muted);
+    overflow-wrap: anywhere;
   }
   .actions {
     margin-top: var(--dp-space-3);

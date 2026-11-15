@@ -8,9 +8,13 @@ import {
   canvasTranscodes,
   codecChoices,
   covers,
+  failureText,
   type MediaAbility,
+  offersText,
   pickCanvas,
+  pickedText,
   pickOffer,
+  pickStream,
   playableAbility,
   type PlaybackInfo,
   STREAM_RETRIES,
@@ -321,6 +325,93 @@ describe("どれで観るか (pickOffer)", () => {
       source: "encoded",
     });
     expect(pickOffer(tsOnly, browser([], []))).toBeNull();
+  });
+});
+
+describe("ファイルを読めなかったときの行き先 (pickStream)", () => {
+  /** canPlayType は WebM の H.264 を読めると答えたが、`<video>` は入れ物を読めなかった端末 */
+  const fooled = browser(
+    ['video/webm; codecs="avc1.640028,opus"'],
+    [H264_MP4, H264_LIVE],
+  );
+
+  test("ファイルを外し、詰め替えを変換より先に選ぶ", () => {
+    expect(pickOffer(h264Only, fooled)).toEqual({
+      way: "file",
+      codec: "h264",
+      source: "encoded",
+    });
+    expect(pickStream(h264Only, fooled)).toEqual({
+      way: "stream",
+      codec: "h264",
+      type: H264_MP4,
+    });
+  });
+
+  test("詰め替えを受け取れなければ変換", () => {
+    expect(
+      pickStream(av1Only, browser([], [H264_LIVE, AV1_MP4]), true),
+    ).toEqual({ way: "stream", codec: "av1", type: AV1_MP4 });
+    expect(pickStream(av1Only, iphone, true)).toEqual({
+      way: "stream",
+      codec: "h264",
+      type: H264_LIVE,
+    });
+  });
+
+  test("ストリームを受け取れなければ元の TS、それも無ければ null", () => {
+    const kept: PlaybackInfo = {
+      ...h264Only,
+      offers: [...h264Only.offers, { codec: "mpeg2", way: "raw" }],
+    };
+    expect(pickStream(kept, { ...browser([], []), mpeg2: true })).toEqual({
+      way: "raw",
+      codec: "mpeg2",
+    });
+    expect(pickStream(kept, browser([], []))).toBeNull();
+  });
+});
+
+describe("再生できなかった理由の 1 行 (failureText・pickedText・offersText)", () => {
+  test("MediaError は定数名とブラウザの文言、無ければ投げられたもの", () => {
+    expect(failureText({ code: 4, message: "Unsupported" })).toBe(
+      "MEDIA_ERR_SRC_NOT_SUPPORTED (Unsupported)",
+    );
+    expect(failureText({ code: 3, message: "" })).toBe("MEDIA_ERR_DECODE");
+    expect(failureText(null, new Error("SourceBuffer error"))).toBe(
+      "SourceBuffer error",
+    );
+    expect(
+      failureText(null, new DOMException("not supported", "NotSupportedError")),
+    ).toBe("NotSupportedError: not supported");
+  });
+
+  test("何を再生しようとしたかを、コーデック・出し方・codecs で書く", () => {
+    expect(
+      pickedText(h264Only, { way: "file", codec: "h264", source: "encoded" }),
+    ).toBe("H.264 のファイル (avc1.640028,opus)");
+    expect(
+      pickedText(null, { way: "file", codec: "h264", source: "encoded" }, true),
+    ).toBe("端末に保存した H.264 のファイル");
+    expect(
+      pickedText(h264Only, { way: "stream", codec: "h264", type: H264_MP4 }),
+    ).toBe(`H.264 の詰め替え (${H264_MP4})`);
+    expect(
+      pickedText(av1Only, { way: "stream", codec: "h264", type: H264_LIVE }),
+    ).toBe(`H.264 の変換 (${H264_LIVE})`);
+    expect(pickedText(tsOnly, { way: "raw", codec: "mpeg2" })).toBe(
+      "MPEG-2 (元の TS)",
+    );
+  });
+
+  test("サーバが出せるものを並べる", () => {
+    expect(offersText(null)).toBe("再生の情報を取得できませんでした");
+    expect(offersText({ ...tsOnly, offers: [] })).toBe(
+      "サーバが出せる形式がありません",
+    );
+    expect(offersText(tsOnly)).toBe(
+      "サーバが出せる形式: H.264 stream (avc1.640029,mp4a.40.2)、AV1 stream (av01.0.08M.08,Opus)、MPEG-2 raw",
+    );
   });
 });
 

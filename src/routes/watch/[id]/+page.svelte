@@ -159,11 +159,15 @@
     type CodecChoice,
     codecChoices,
     ENCODED_ORDER,
+    failureText,
     type MediaAbility,
     MENU_ORDER,
+    offersText,
     pickCanvas,
     type Picked,
+    pickedText,
     pickOffer,
+    pickStream,
     type PlaybackInfo,
     type PlayCodec,
     retryWait,
@@ -527,8 +531,9 @@
    * H.264 / AV1 を打ち切ったら MPEG-2 へ、MPEG-2 を打ち切ったら描ける H.264 / AV1 へ。端末に保存した録画なら
    * サーバから流すものへ。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
    *
-   * 互換モードでないのに描いているのは MPEG-2 を選んだときだけ (`pickOffer` の `raw`)。打ち切ったらこの画面を開いている間は
-   * MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で `<video>` に戻す。
+   * 互換モードでないのに描いているのは、MPEG-2 を選んだとき (`pickOffer` の `raw`) と、端末に保存した Matroska を `<video>` が
+   * 読めなかったとき (`recover`)。MPEG-2 を打ち切ったらこの画面を開いている間は MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で
+   * `<video>` に戻す。ファイルを読めなかったあとはストリームから選ぶ (`pickStream`)。
    *
    * 間に合わずに打ち切ったとき (`slow` がある) は、掛かった条件をコンソールに出力する
    */
@@ -544,9 +549,15 @@
     stepCodec = null;
     stepFrom = null;
     if (!compat) {
-      rawGaveUp = true;
+      // 端末に保存したものを描いていた (`<video>` が読めなかったあと。`recover`)。MPEG-2 は外さない
+      if (wasLocal) localMkv = null;
+      else rawGaveUp = true;
       const fresh =
-        info === null ? null : pickOffer(info, ability(), "auto", data.indoor);
+        info === null
+          ? null
+          : fileFailed
+            ? pickStream(info, ability(), data.indoor)
+            : pickOffer(info, ability(), "auto", data.indoor);
       note(
         fresh === null
           ? reason
@@ -554,7 +565,10 @@
       );
       replay(fresh, position);
       // 替える先が無い。断り書きが消えたあとも黒いままにせず、観られないことを幕に出す (開いたときの `picked === null` と同じ)
-      if (fresh === null) broken = true;
+      if (fresh === null)
+        giveUp(
+          `${wasLocal ? "端末に保存した " : ""}${codecLabel(failed ?? "mpeg2")}: ${reason}`,
+        );
       return;
     }
     let next: CanvasCodec | null = null;
@@ -736,7 +750,7 @@
       }
       // 元の TS は互換モードと同じく canvas に描く (`startCanvas`)
       if (picked?.way === "raw") canvasCodec = "mpeg2";
-      if (ready && picked === null) broken = true;
+      if (ready && picked === null) giveUp(nothingToPlay());
       localChecked = true;
     })();
     return () => {
@@ -747,14 +761,28 @@
     };
   });
 
+  /** `playback` を聞けなかった理由 (`HTTP 500` など)。観られないときの幕に添える */
+  let playbackMiss = "";
+
   /** 何で観られるか (`api/recordings/<id>/playback`)。聞けなければ null */
   async function loadPlayback(): Promise<PlaybackInfo | null> {
     try {
       const res = await fetch(resolve(`api/recordings/${rec.id}/playback`));
-      return res.ok ? ((await res.json()) as PlaybackInfo) : null;
-    } catch {
+      if (res.ok) return (await res.json()) as PlaybackInfo;
+      playbackMiss = `HTTP ${res.status}`;
+      return null;
+    } catch (error) {
+      playbackMiss = failureText(null, error);
       return null;
     }
+  }
+
+  /** 開いたときに観られるものが無かった理由。サーバが出せるもの (`offersText`) と、聞けなかった理由 */
+  function nothingToPlay(): string {
+    const offers = offersText(info);
+    return info === null && playbackMiss !== ""
+      ? `${offers} (${playbackMiss})`
+      : offers;
   }
 
   const src = $derived(
@@ -835,7 +863,7 @@
   });
 
   /** その場で流しているプレイヤーの様子を受ける (`remux-player.ts` の `state`) */
-  function streamState(state: StreamState): void {
+  function streamState(state: StreamState, reason?: string): void {
     // 段を下げようとして作り直したが、混んでいて断られた。ファイルの直再生に戻して続ける
     if (state === "busy" && step !== 0 && fileZero !== null) {
       backToFile(busyNote(true));
@@ -843,7 +871,26 @@
     }
     resuming = state === "retrying";
     busy = state === "busy";
-    if (state === "failed") broken = true;
+    if (state === "failed")
+      giveUp(
+        failedWith(
+          reason ?? `${STREAM_RETRIES} 回繋ぎ直しても繋がりませんでした`,
+        ),
+      );
+  }
+
+  /** 観られない。幕に出し (`broken`)、何を再生しようとして何で止まったかを添えてコンソールにも出力する */
+  function giveUp(why: string): void {
+    broken = true;
+    brokenWhy = why;
+    console.warn(`[watch] 再生できませんでした: ${why}`);
+  }
+
+  /** いま再生しようとしているもの (`pickedText`) と、止まった理由をつなぐ */
+  function failedWith(reason: string): string {
+    const plan = picked;
+    if (plan === null) return reason;
+    return `${pickedText(info, plan, localSrc !== null)}: ${reason}`;
   }
 
   /** その場で流しているストリームのヘッダを受ける (サーバが選んだコーデックと、送り出しの具合を読む id) */
@@ -1045,8 +1092,8 @@
           start: target,
           audio: streamAudio(audioIndex),
           // 入れ替えたあとは、いつものプレイヤーと同じに受ける
-          state: (state) => {
-            if (done) streamState(state);
+          state: (state, reason) => {
+            if (done) streamState(state, reason);
             else if (state === "busy") refuse(true);
             else if (state === "failed") refuse(false);
           },
@@ -1122,6 +1169,7 @@
     remux = player;
     busy = false;
     broken = false;
+    brokenWhy = "";
     retryAt = 0;
     switchAt = null;
     keepPlaying = false;
@@ -1436,6 +1484,7 @@
     }
     busy = false;
     broken = false;
+    brokenWhy = "";
     // ファイルなら尺が分かったところで戻す (`resume`)。その場で流すならプレイヤーの開始位置
     retryAt = position;
     switchAt = position;
@@ -1809,6 +1858,13 @@
   const unslip = unslipper();
   /** 読めなかったとき。黙って黒いままにしない */
   let broken = $state(false);
+  /**
+   * 観られなかったわけの詳しいところ (`giveUp`)。何を再生しようとして (コーデック・出し方・codecs)、何で止まったか
+   * (`MediaError` の定数名など)。幕の文言の下に小さく出す。報告の画面写真だけで、どの形式で止まったかを読み分けるため
+   */
+  let brokenWhy = $state("");
+  /** ファイルをそのまま読めなかった (`recover`)。このあとはストリームから選ぶ (`pickStream`) */
+  let fileFailed = false;
   /**
    * 読み込み待ちで止まっているか (「読み込み中」を出す)。出すまでの間は幕の側が持つ (`PlayerVeil`。ライブ・追っかけと同じ 1.5 秒)。
    * コマ落ち程度の詰まりで毎回出すと点滅するだけになる
@@ -2244,20 +2300,35 @@
 
   /**
    * 配信が切れたら (サーバの入れ替えなど) 同じ所から読み直し、切れた瞬間の位置へ戻す。
-   * 繋ぎ直すのは接続が切れたときだけ。読めない形式・壊れたファイルは何度やっても同じなので `broken`
+   * 繋ぎ直すのは接続が切れたときだけ。読めない形式・壊れたファイルは何度やっても同じなので `broken`。
+   *
+   * **ファイルをそのまま読めなかったら、1 度だけほかの出し方に移る** (`fallBackFromFile`)。`canPlayType` が読めると
+   * 答えても、`<video>` が入れ物を読めないことがある (iPhone の Safari は Matroska を WebM としてしか読まない)
    */
   function recover(): void {
     if (video === null) return;
     // 映像は出せていない。字幕のボタンは出せるように取る
     askCaptions();
     const code = video.error?.code ?? 0;
+    const why = failedWith(failureText(video.error));
+    if (
+      remux === null &&
+      picked?.way === "file" &&
+      code !== MediaError.MEDIA_ERR_NETWORK &&
+      !fileFailed
+    ) {
+      fileFailed = true;
+      resuming = false;
+      fallBackFromFile(why);
+      return;
+    }
     // その場で流しているときの切れ目は `remux-player.ts` が繋ぎ直す。ここに来るのは読めない中身
     if (
       remux !== null ||
       code !== MediaError.MEDIA_ERR_NETWORK ||
       retries >= STREAM_RETRIES
     ) {
-      broken = true;
+      giveUp(why);
       resuming = false;
       return;
     }
@@ -2271,6 +2342,69 @@
       // 同じ src を読み直す。位置を戻すのは尺が分かってから (`resume`)
       video?.load();
     }, wait);
+  }
+
+  /**
+   * **ファイルをそのまま読めなかった。** サーバに繋がっていれば、MSE が受け取れるストリーム (詰め替えを先に) か元の TS へ移る
+   * (`pickStream`)。繋がっていない (オフライン) か移る先が無く、端末に保存したものを読んでいたなら、その Matroska を canvas に
+   * 描く (互換モードと同じ。`mkv-source.ts`)。どれも無理なら観られないと出す
+   */
+  function fallBackFromFile(why: string): void {
+    console.warn(`[watch] ファイルのままでは再生できませんでした: ${why}`);
+    const position = video?.currentTime ?? 0;
+    const fresh =
+      info === null ? null : pickStream(info, ability(), data.indoor);
+    if (fresh !== null) {
+      note(
+        `ファイルのままでは再生できないため、${codecLabel(fresh.codec)} に切り替えました`,
+      );
+      stopVideo();
+      replay(fresh, position);
+      return;
+    }
+    if (localSrc !== null) {
+      void drawLocal(why, position);
+      return;
+    }
+    giveUp(`${why}。${nothingToPlay()}`);
+  }
+
+  /** `<video>` を止めて空にする (src を外しただけでは読み込んだぶんを鳴らし続ける) */
+  function stopVideo(): void {
+    if (video === null) return;
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+  }
+
+  /** 端末に保存した Matroska を canvas に描く (`<video>` が読めなかったとき。`fallBackFromFile`)。描けなければ観られないと出す */
+  async function drawLocal(why: string, position: number): Promise<void> {
+    const blob = localCopy?.video;
+    if (blob === undefined) {
+      giveUp(why);
+      return;
+    }
+    const [support, source] = await Promise.all([
+      canvasSupport(),
+      openMkv(blob).catch(() => null),
+    ]);
+    const can: CanvasAbility = { ...support, mpeg2: false };
+    if (source?.codec == null || !can[source.codec]) {
+      giveUp(
+        source?.codec == null
+          ? `${why}。保存したファイルを読めませんでした`
+          : `${why}。${codecLabel(source.codec)} を canvas に描けません`,
+      );
+      return;
+    }
+    stopVideo();
+    if (localSrc !== null) URL.revokeObjectURL(localSrc);
+    localSrc = null;
+    // `<video>` には渡さない (`src` を外す)。canvas のプレイヤーは `canvasCodec` が決まったら作る
+    picked = null;
+    localMkv = source;
+    if (position > 0) switchAt = position;
+    canvasCodec = source.codec;
   }
 
   /** 早送りの速さを変える。音は残す (ブラウザは倍速でも音程を保つ)。canvas に描いているときは等速だけ */
@@ -2950,6 +3084,7 @@
             busy
             {resuming}
             error={problem}
+            detail={broken && !busy && canvasProblem === null ? brokenWhy : ""}
             actions={lighter.length > 0 ? lighterChoices : undefined}
             testid="watch-status"
           />

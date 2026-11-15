@@ -133,6 +133,8 @@ DB 名 `denpa-offline`、ストア 4 つ (実体は [offline-db.ts](../src/lib/o
   src を差し替えるだけなので操作
   (チャプター・CM 飛ばし・速度・字幕・データ放送) はそのままで、付属のデータも端末のものを読む。
   互換モードでは保存した Matroska をそのまま canvas に描く (`mkv-source.ts`。[stream.md](stream.md#録画の観る画面も-canvas-に描く))。
+  `<video>` が保存したものを読めなければ (iPhone の Safari の H.264 の Matroska)、サーバに繋がっていればストリームへ移り、
+  繋がっていなければ互換モードと同じく canvas に描く ([library.md](library.md#ファイルを読めなかったら))。
 - **オフラインの `/offline`** は素の `<video controls>` で、動画だけを流す
   (字幕・チャプター・データ放送は保存してあっても使わない)。位置は 5 秒ごとに `resume` ストアへ。
   **`<video>` が `error` を返したら canvas に描く** (観る画面の互換モードと同じエンジン。`canvas-player.ts`・`mkv-source.ts`)。

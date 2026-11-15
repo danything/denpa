@@ -213,4 +213,69 @@ test.describe("観る画面でその場で流す", () => {
       `/api/recordings/${id}/file?source=encoded`,
     );
   });
+
+  /**
+   * **`canPlayType` が読めると答えたファイルを `<video>` が読めなかったら、ストリームへ移る** (`fallBackFromFile`。#2884)。
+   * iPhone の Safari は Matroska を WebM としてしか読まない。移る先が無ければ、何を再生しようとして何で止まったかを幕に添える
+   */
+  test("ファイルを読めなければストリームへ移り、移る先が無ければ止まった理由を出す", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { id } = await recordOne(page, request);
+    await page.addInitScript(() => {
+      const real = HTMLMediaElement.prototype.canPlayType;
+      HTMLMediaElement.prototype.canPlayType = function (type: string) {
+        return type.includes("avc1") ? "probably" : real.call(this, type);
+      };
+    });
+    const file = {
+      codec: "h264",
+      way: "file",
+      source: "encoded",
+      codecs: "avc1.640028,opus",
+    };
+    let offers: object[] = [file];
+    await page.route(`**/api/recordings/${id}/playback`, (route) =>
+      route.fulfill({
+        json: {
+          duration: 1800,
+          axis: "encoded",
+          audios: [{ id: "0", label: "主音声" }],
+          offers,
+        },
+      }),
+    );
+    // 読めない中身 (`<video>` は MEDIA_ERR_SRC_NOT_SUPPORTED を返す)
+    await page.route(`**/api/recordings/${id}/file?**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "video/x-matroska",
+        body: "not a video",
+      }),
+    );
+    await page.route(`**/api/recordings/${id}/stream?**`, (route) =>
+      route.fulfill({ status: 200, contentType: "video/mp4", body: "" }),
+    );
+
+    // 移る先が無い。幕の文言の下に、何を再生しようとして何で止まったかを出す
+    await goto(page, `/watch/${id}`);
+    const detail = page.getByTestId("watch-status-detail");
+    await expect(detail).toContainText(
+      "H.264 のファイル (avc1.640028,opus): MEDIA_ERR_SRC_NOT_SUPPORTED",
+    );
+
+    // ストリームがあれば、そちらへ移る (Playwright の Chromium の MSE は H.264 を受け取れないので AV1 の変換)
+    offers = [
+      file,
+      { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
+      { codec: "av1", way: "stream", codecs: "av01.0.08M.08,opus" },
+    ];
+    const asked = streamRequests(page);
+    await goto(page, `/watch/${id}`);
+    await expect.poll(() => asked.length).toBeGreaterThan(0);
+    expect(asked[0]?.searchParams.get("codec")).toBe("av1");
+    await expect(detail).toHaveCount(0);
+  });
 });

@@ -376,20 +376,120 @@ export function pickOffer(
   }
   const order = [
     ...files.filter((offer) => playsFile(offer, can)),
-    ...byOrder(
-      streams.filter(
-        (offer) => playsStream(offer, can) && hasFile(info, offer.codec),
-      ),
-      ENCODED_ORDER,
-    ),
-    ...byOrder(
-      streams.filter((offer) => playsStream(offer, can)),
-      asCodecs(autoOrder({ indoor, compat: false })),
-    ),
+    ...streamOrder(info, can, indoor),
     ...files,
   ];
   const first = order[0];
   return first === undefined ? null : asPicked(first);
+}
+
+/**
+ * MSE が受け取れるストリームを選ぶ順。**詰め替え** (エンコード済みと同じコーデック。AV1 → H.265 → H.264) を先に、
+ * そのあと**変換** (ライブ・追っかけと同じ「その場でエンコード」の順)
+ */
+function streamOrder(
+  info: PlaybackInfo,
+  can: MediaAbility,
+  indoor: boolean,
+): PlayOffer[] {
+  const streams = info.offers.filter((offer) => playsStream(offer, can));
+  return [
+    ...byOrder(
+      streams.filter((offer) => hasFile(info, offer.codec)),
+      ENCODED_ORDER,
+    ),
+    ...byOrder(streams, asCodecs(autoOrder({ indoor, compat: false }))),
+  ];
+}
+
+/**
+ * **ファイルをそのまま読めなかったときの行き先** (観る画面の `recover`)。`canPlayType` が読めると答えても、
+ * `<video>` が入れ物を読めないことがある (iPhone の Safari は Matroska を WebM としてしか読まない)。
+ * 中身が分からないファイル (`pickOffer` の最後の手) も同じ。MSE が受け取れるストリームを `pickOffer` と同じ順で選び、
+ * 無ければ元の TS (この端末でデコードできるとき)。どれも無ければ null
+ */
+export function pickStream(
+  info: PlaybackInfo,
+  can: MediaAbility,
+  indoor = false,
+): Picked | null {
+  const first = streamOrder(info, can, indoor)[0];
+  if (first !== undefined) return asPicked(first);
+  return playsRaw(info, can) ? RAW : null;
+}
+
+/** `MediaError` の `code` の名前 (HTML の仕様の定数名) */
+const MEDIA_ERRORS: Record<number, string> = {
+  1: "MEDIA_ERR_ABORTED",
+  2: "MEDIA_ERR_NETWORK",
+  3: "MEDIA_ERR_DECODE",
+  4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
+};
+
+/**
+ * **再生できなかった理由を 1 行にする** (観る画面の幕に添える・コンソールに出力する)。`<video>` の `MediaError` があれば
+ * その定数名とブラウザの文言、無ければ投げられたもの (`SourceBuffer` が断った、など)
+ */
+export function failureText(
+  media: { code: number; message?: string } | null,
+  error?: unknown,
+): string {
+  if (media !== null) {
+    const name = MEDIA_ERRORS[media.code] ?? `MediaError ${media.code}`;
+    return media.message ? `${name} (${media.message})` : name;
+  }
+  if (error instanceof Error)
+    return error.name === "Error"
+      ? error.message
+      : `${error.name}: ${error.message}`;
+  return error === undefined ? "" : String(error);
+}
+
+const WAY_LABEL: Record<PlayCodec, string> = {
+  av1: "AV1",
+  hevc: "H.265",
+  h264: "H.264",
+  mpeg2: "MPEG-2",
+};
+
+/**
+ * **何を再生しようとしたか** (幕に添える 1 行の前半)。コーデック・出し方・中身の codecs。報告の画面写真だけで、
+ * どの形式で止まったかを読み分けられるようにする。
+ *
+ * - `file` … `H.264 のファイル (avc1.640028,opus)`。端末に保存したものは `端末に保存した H.264 のファイル`
+ * - `stream` … `H.264 の詰め替え (video/mp4; codecs="…")`。サーバがその場でエンコードするものは「変換」
+ * - `raw` … `MPEG-2 (元の TS)`
+ */
+export function pickedText(
+  info: PlaybackInfo | null,
+  picked: Picked,
+  local = false,
+): string {
+  const codec = WAY_LABEL[picked.codec];
+  if (picked.way === "raw") return `${codec} (元の TS)`;
+  if (picked.way === "stream") {
+    const how = info !== null && transcodes(info, picked) ? "変換" : "詰め替え";
+    return `${codec} の${how} (${picked.type})`;
+  }
+  const codecs = info?.offers.find(
+    (offer) => offer.way === "file" && offer.source === picked.source,
+  )?.codecs;
+  const head = local
+    ? `端末に保存した ${codec} のファイル`
+    : `${codec} のファイル`;
+  return codecs === undefined ? head : `${head} (${codecs})`;
+}
+
+/** サーバが出せるもの (`offers`) を 1 行に。観られるものが無かったときに幕に添える */
+export function offersText(info: PlaybackInfo | null): string {
+  if (info === null) return "再生の情報を取得できませんでした";
+  if (info.offers.length === 0) return "サーバが出せる形式がありません";
+  return `サーバが出せる形式: ${info.offers
+    .map(
+      (offer) =>
+        `${WAY_LABEL[offer.codec]} ${offer.way}${offer.codecs === undefined ? "" : ` (${offer.codecs})`}`,
+    )
+    .join("、")}`;
 }
 
 /** codecs の文字列 (`av01.0.08M.08,opus`) の映像のコーデック。読めなければ null */
