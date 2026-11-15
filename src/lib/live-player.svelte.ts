@@ -63,6 +63,7 @@ import {
   probeBytes,
   probeRate,
   replacesWarning,
+  RESTARTING_MOST,
   retryAfterMs,
   rungFields,
   servedStep,
@@ -2816,7 +2817,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           if (startup !== null)
             startup.tuned ??= performance.now() - startup.at;
           // 切れた接続を繋ぎ直した。ここからしばらくは回線が細いとして下げない (`HOLD_AFTER_RECONNECT`)
-          if (rejoining || restartingAt !== null) {
+          if (
+            rejoining ||
+            (restartingAt !== null &&
+              Date.now() - restartingAt < RESTARTING_MOST)
+          ) {
             holdDownUntil = Date.now() + HOLD_AFTER_RECONNECT;
             rejoining = false;
             restartingAt = null;
