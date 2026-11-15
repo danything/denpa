@@ -58,6 +58,12 @@ public interface IIt930xFrontend
     /// </summary>
     CxdIsdbcDetail? IsdbcDetail => null;
 
+    /// <summary>
+    /// 最後の選局で、ISDB-C がロックしなかった周波数ごとの状態 (<see cref="CxdIsdbcLockFailure"/>。CXD2856ER だけ)。ずらした周波数も試したときは試した順に 2 つ。
+    /// 常駐の記録 (<see cref="TunerPool"/>) と <c>--tune</c> が出す
+    /// </summary>
+    IReadOnlyList<CxdIsdbcLockFailure> IsdbcLockFailures => [];
+
     /// <summary><c>--tune</c> だけに出す、チップごとの読み値 (1 行ずつ)。機材から読むので、受け終えたあとに呼ぶ</summary>
     IReadOnlyList<string> Notes() => [];
 
@@ -115,9 +121,14 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
 
     public CxdIsdbcDetail? IsdbcDetail => frontend.IsdbcDetail;
 
+    private readonly List<CxdIsdbcLockFailure> _isdbcLockFailures = [];
+
+    public IReadOnlyList<CxdIsdbcLockFailure> IsdbcLockFailures => [.. _isdbcLockFailures];
+
     public bool Tune(ChannelTable.Tuning tuning)
     {
         CableFrequency = null;
+        _isdbcLockFailures.Clear();
         // 衛星は選局表の周波数が IF の kHz (CXD2856 の仕様書 6.1)
         if (tuning.Satellite) return frontend.TuneIsdbs(tuning.Frequency, CxdStream.From(tuning.StreamId));
         if (tuning.Cable)
@@ -149,7 +160,12 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
             : [tuning.Frequency];
         foreach (var hertz in tries)
         {
-            if (!tune(It930xTuner.Khz(hertz))) continue;
+            if (!tune(It930xTuner.Khz(hertz)))
+            {
+                // ISDB-C がロックしなかったときの状態 (J.83B では null)
+                if (frontend.IsdbcLockFailure is { } failure) _isdbcLockFailures.Add(failure);
+                continue;
+            }
             if (tuning.ShiftedFrequency is not null) CableLocked[tuning.Frequency] = hertz;
             CableFrequency = hertz;
             return true;
@@ -1433,6 +1449,7 @@ public sealed class It930xTuner : ITuneDevice
             Tsmf = null;
             Tlv = null;
             IsdbcFailedSignal = null;
+            IsdbcLockFailures = [];
             // 抜けた・TS を読めなくなった・止めるときに閉じた機材は返して、開き直す (止めたあとは開かずに断る)
             if (_device is { Faulted: true } or { Closed: true }) Drop();
             try
@@ -1460,6 +1477,8 @@ public sealed class It930xTuner : ITuneDevice
                 _attempted = true;
                 var locked = _frontend.Tune(tuning);
                 if (tuning.IsdbC) IsdbcLocked = locked;
+                // ずらした周波数でロックしたときは、表の周波数の失敗を残さない (選局は成功したので記録に出さない)
+                if (tuning.IsdbC && !locked) IsdbcLockFailures = _frontend.IsdbcLockFailures;
                 if (!locked) throw new IOException(ITuneDevice.SyncFailed);
                 // 選局 (起動・RT710・ロック) のあいだに溢れが立ったかを、流し始める前に記録で絞る (PX-Q3PE4 の衛星。2026-11-11)
                 _device.WatchOverflow($"受信機 {_receiver} を選局したあと");
@@ -1539,6 +1558,12 @@ public sealed class It930xTuner : ITuneDevice
 
     /// <summary>ISDB-C でロックしたあと TSMF の判定で失敗したときに、TS を止める前に読んだ信号品質 (<c>--tune</c> が出す)。読めなければ null</summary>
     public TunerSignal? IsdbcFailedSignal { get; private set; }
+
+    /// <summary>
+    /// 最後の ISDB-C の選局がロックしなかったときに、周波数ごとに読んだ復調器とチューナーの状態 (<see cref="CxdIsdbcLockFailure"/>)。
+    /// 常駐の記録 (<see cref="TunerPool"/>) と <c>--tune</c> が 1 つ 1 行で出す。ロックしたか、ISDB-C でなければ空
+    /// </summary>
+    public IReadOnlyList<CxdIsdbcLockFailure> IsdbcLockFailures { get; private set; } = [];
 
     /// <summary>最後の ISDB-C の選局で、ほかに読めた値 (CXD2856 の仕様書 9.5。<see cref="Signal"/> を読んだあと)。<c>--tune</c> だけが出す</summary>
     public CxdIsdbcDetail? IsdbcDetail => _frontend?.IsdbcDetail;

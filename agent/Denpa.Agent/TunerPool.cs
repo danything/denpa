@@ -377,7 +377,16 @@ public sealed class TunerPool(
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す
                         held.Channel = null;
                         lease.TuneStartMs = lease.Clock.ElapsedMilliseconds;
-                        held.Device.Tune(tuning);
+                        try
+                        {
+                            held.Device.Tune(tuning);
+                        }
+                        catch (IOException) when (held.Device is It930xTuner { IsdbcLockFailures.Count: > 0 } failed)
+                        {
+                            // ISDB-C がロックしなかったときだけ、周波数ごとに復調器とチューナーの状態を 1 行ずつ出す (ロックが不安定な理由を探すため。CxdIsdbcLockFailure)
+                            foreach (var failure in failed.IsdbcLockFailures) Log.Write($"[{spec.Name}] {channel}: {failure.Describe()}");
+                            throw;
+                        }
                         held.Channel = channel;
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                         lease.LockMs = (held.Device as It930xTuner)?.LockMs ?? -1;
