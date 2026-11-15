@@ -2859,10 +2859,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             onAir = tuned;
             /*
              * **映像の無い局 (ラジオ・データ放送だけの局) は、データ放送を開く。** 観る中身はデータ放送で、開くまではリモコンを出さない
-             * (`DataBroadcast` の `press`) ので、自動で受信して文書が見えても操作できなかった。閉じれば閉じたまま (局を替えるまで)
+             * (`DataBroadcast` の `press`) ので、開いていないと、自動で受信した文書を操作できない。閉じれば閉じたまま (局を替えるまで)
              */
-            if (videoless && !showData && !openedVideoless) {
-              showData = true;
+            if (videoless && !openedVideoless) {
+              // 人が先に開いていても、開いたものとして覚える (閉じたあとに開き直さない)
+              if (!showData) showData = true;
               openedVideoless = true;
             }
             syncData();
