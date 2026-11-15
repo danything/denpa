@@ -402,6 +402,24 @@ public sealed class It930xDevice
     public long TsReads => Interlocked.Read(ref _tsReads);
 
     /// <summary>
+    /// 前に溢れを記録に出してから、読み出しのスレッドが EP 0x84 の Read の外にいた時間のいちばん長いもの (ms)。
+    /// 転送要求は Read の中でしか出し直さないので、これが長いと、出してある転送要求 (<see cref="It930xBridge.TsDepth"/> 個) が全部埋まり、
+    /// ブリッジのバッファが溢れる。溢れの記録に添え、読み出しが止まったのか、ブリッジの中で溢れたのかを分ける (#2805)
+    /// </summary>
+    private long _longestAway;
+
+    private void RecordAway(long ms)
+    {
+        var seen = Interlocked.Read(ref _longestAway);
+        while (ms > seen)
+        {
+            var was = Interlocked.CompareExchange(ref _longestAway, ms, seen);
+            if (was == seen) return;
+            seen = was;
+        }
+    }
+
+    /// <summary>
     /// EP 0x84 の読み出しの数え (<c>--tune</c> が出す)。EP 0x84 からバイトが届いているのに入力ごとのパケットが増えなければ、ブリッジは流しているが分け方で揃っていない。
     /// バイトが増えなければ、ブリッジから先で止まっている
     /// </summary>
@@ -615,8 +633,10 @@ public sealed class It930xDevice
         var cause = before is { System: true }
             ? "全体の溢れが前から立っていて EP 0x84 から TS が出ないため、入力にも溜まったと推定します"
             : "EP 0x84 の読み出しが追いつかなかったと推定します";
+        // 前に記録に出してから、読み出しのスレッドが Read の外にいたいちばん長い時間。出したら数え直す
+        var away = Interlocked.Exchange(ref _longestAway, 0);
         Log.Write(overflow.Any
-            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}"
+            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause} (読み出しのスレッドが EP 0x84 の読み出しを離れていたのは、いちばん長くて {away} ms)"
             : $"[{Label}] {when}に TS のバッファの溢れが下りていました");
         return overflow;
     }
@@ -674,9 +694,13 @@ public sealed class It930xDevice
             _readerRunning = true;
             _readerOpened.Set();
             var buffer = new byte[It930xBridge.TsTransferSize];
+            var returned = 0L;
             while (!_stopping)
             {
+                // 転送要求を出し直すのは Read の中だけ。Read の外にいた時間 (受信機ごとに分ける処理・スレッドが止められていた間) を測る
+                if (returned != 0) RecordAway(Environment.TickCount64 - returned);
                 var got = input.Read(buffer, TsReadTimeoutMs);
+                returned = Environment.TickCount64;
                 if (got <= 0) continue;
                 Interlocked.Add(ref _tsBytes, got);
                 Interlocked.Increment(ref _tsReads);
