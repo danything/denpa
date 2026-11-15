@@ -453,11 +453,32 @@ const PLAY_CODEC_LABEL: Record<PlayCodec, string> = {
 };
 
 /**
- * **何を再生しようとしたか** (幕に添える 1 行の前半)。コーデック・出し方・中身の codecs。報告の画面写真だけで、
+ * **形式の名前** (幕に添える 1 行の中の 1 つ)。`pickedText` と `offersText` は、コーデックと出し方をこの言葉で書く。
+ *
+ * - `file` … `H.264 のファイル`。端末に保存したものは `端末に保存した H.264 のファイル`
+ * - `stream` … `H.264 の詰め替え`。サーバがその場でエンコードするものは「変換」
+ * - `raw` … `MPEG-2 (元の TS)`
+ */
+function formatText(
+  info: PlaybackInfo | null,
+  format: Picked | PlayOffer,
+  local = false,
+): string {
+  const codec = PLAY_CODEC_LABEL[format.codec];
+  if (format.way === "raw") return `${codec} (元の TS)`;
+  if (format.way === "stream") {
+    const how = info !== null && transcodes(info, format) ? "変換" : "詰め替え";
+    return `${codec} の${how}`;
+  }
+  return local ? `端末に保存した ${codec} のファイル` : `${codec} のファイル`;
+}
+
+/**
+ * **何を再生しようとしたか** (幕に添える 1 行の前半)。形式の名前 (`formatText`) と中身の codecs。報告の画面写真だけで、
  * どの形式で止まったかを読み分けられるようにする。
  *
- * - `file` … `H.264 のファイル (avc1.640028,opus)`。端末に保存したものは `端末に保存した H.264 のファイル`
- * - `stream` … `H.264 の詰め替え (video/mp4; codecs="…")`。サーバがその場でエンコードするものは「変換」
+ * - `file` … `H.264 のファイル (avc1.640028,opus)`
+ * - `stream` … `H.264 の詰め替え (video/mp4; codecs="…")`
  * - `raw` … `MPEG-2 (元の TS)`
  */
 export function pickedText(
@@ -465,30 +486,27 @@ export function pickedText(
   picked: Picked,
   local = false,
 ): string {
-  const codec = PLAY_CODEC_LABEL[picked.codec];
-  if (picked.way === "raw") return `${codec} (元の TS)`;
-  if (picked.way === "stream") {
-    const how = info !== null && transcodes(info, picked) ? "変換" : "詰め替え";
-    return `${codec} の${how} (${picked.type})`;
-  }
+  const head = formatText(info, picked, local);
+  if (picked.way === "raw") return head;
+  if (picked.way === "stream") return `${head} (${picked.type})`;
   const codecs = info?.offers.find(
     (offer) => offer.way === "file" && offer.source === picked.source,
   )?.codecs;
-  const head = local
-    ? `端末に保存した ${codec} のファイル`
-    : `${codec} のファイル`;
   return codecs === undefined ? head : `${head} (${codecs})`;
 }
 
-/** サーバが出せるもの (`offers`) を 1 行に。観られるものが無かったときに幕に添える */
+/**
+ * サーバが出せるもの (`offers`) を 1 行に。観られるものが無かったときに幕に添える。
+ * 形式の名前は `pickedText` と同じ (`formatText`)
+ */
 export function offersText(info: PlaybackInfo | null): string {
   if (info === null) return "再生の情報を取得できませんでした";
   if (info.offers.length === 0) return "サーバが出せる形式がありません";
   return `サーバが出せる形式: ${info.offers
-    .map(
-      (offer) =>
-        `${PLAY_CODEC_LABEL[offer.codec]} ${offer.way}${offer.codecs === undefined ? "" : ` (${offer.codecs})`}`,
-    )
+    .map((offer) => {
+      const head = formatText(info, offer);
+      return offer.codecs === undefined ? head : `${head} (${offer.codecs})`;
+    })
     .join("、")}`;
 }
 
@@ -667,7 +685,10 @@ export function canvasTranscodes(
  * 選んだもので観るとき、サーバがその場でエンコードするか (枠を使う。混んでいると断られる)。
  * 4K の局の元の録画にある H.265 (`broadcast` が `hevc`) は放送の HEVC の詰め替えで、エンコードしない
  */
-export function transcodes(info: PlaybackInfo, picked: Picked): boolean {
+export function transcodes(
+  info: PlaybackInfo,
+  picked: Picked | PlayOffer,
+): boolean {
   if (picked.way !== "stream" || hasFile(info, picked.codec)) return false;
   return !(picked.codec === "hevc" && info.broadcast === "hevc");
 }

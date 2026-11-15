@@ -1618,7 +1618,7 @@ public sealed class It930xTuner : ITuneDevice
     /// 全体の溢れが立ったままの機材で、ロックした受信機の TS が EP 0x84 から届くかを確かめる (流し始めたあと)。
     /// <paramref name="before"/> (流し始める前に数えた、この受信機の入力のパケット) から増えれば、印は立ったままでも TS は届くので、この機材を使い続ける。
     /// <see cref="TsProbeMs"/> 待っても増えなければ、閉じるまでこの機材の選局を断り (<see cref="It930xDevice.Jammed"/>)、この選局も断る。
-    /// 同じ溢れのまま、並べて選局したほかの受信機に TS が届いていれば、この選局だけを <see cref="TsMissing"/> で失敗にする
+    /// 同じ溢れのまま、並べて選局したほかの受信機に TS が届いていれば、この選局だけを <see cref="TsMissing"/> で失敗にする (<see cref="TunerStalledException"/>。プールはほかのチューナーで選局し直す)
     /// </summary>
     private void Probe(It930xDevice device, It930xOverflow suspect, long before)
     {
@@ -1630,7 +1630,7 @@ public sealed class It930xTuner : ITuneDevice
                 var blocked = device.Confirm(_receiver, suspect, flowing: false, waited.ElapsedMilliseconds);
                 StopOutput();
                 if (blocked) Refuse(suspect);
-                throw new IOException(TsMissing);
+                throw new TunerStalledException(TsMissing);
             }
             Thread.Sleep(5);
         }

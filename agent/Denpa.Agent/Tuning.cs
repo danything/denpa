@@ -84,6 +84,12 @@ public interface ITuneDevice : IDisposable
 /// </summary>
 public sealed class TunerUnusableException(string message) : IOException(message);
 
+/// <summary>
+/// **ロックしたのに、この受信機だけ TS が届かなかったときの失敗** (IT930x のブリッジの全体の溢れが立ったままで、並べて選局したほかの受信機には TS が届いている。<see cref="It930xTuner.TsMissing"/>)。
+/// 機材は使い続ける。<see cref="TunerPool"/> は、このチューナーをそのチャンネルで組の後ろに回し、同じ組の空いているチューナーで選局し直す
+/// </summary>
+public sealed class TunerStalledException(string message) : IOException(message);
+
 /// <summary>チューナーが流すバイト列の形式 (<see cref="ITuneDevice.Format"/>。<c>/denpa/stream</c> の Content-Type)</summary>
 public enum StreamFormat
 {
