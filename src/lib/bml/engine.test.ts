@@ -1355,6 +1355,42 @@ describe("主音声の切り替え (setMainAudioStream)", () => {
     expect(host.mainAudioRef()).toBe("/10");
     expect(chosen).toEqual([2, null, 3, 1, null]);
   });
+
+  test("部品タグの無い音声の ES も数に入れる (画面の再生と ffmpeg の 0:a:<n> と同じ数え方)", () => {
+    const chosen: (number | null)[] = [];
+    const { bml } = open({ onMainAudio: (index) => chosen.push(index) });
+    const host = bml as unknown as {
+      setMainAudio(ref: string): boolean;
+      mainAudioRef(): string;
+    };
+    // PMT の 1 本目の AAC に部品タグが無い。components には出ず、audios に null で並ぶ
+    bml.feed({
+      type: "pmt",
+      components: [
+        { pid: 0x1010, componentId: 0x10, streamType: 0x0f },
+        { pid: 0x1070, componentId: 0x70, streamType: 0x0f },
+        { pid: 0x140, componentId: 0x40, streamType: 0x0d },
+      ],
+      audios: [null, 0x10, 0x70],
+    });
+    // 1 本目は部品タグが分からないので /10
+    expect(host.mainAudioRef()).toBe("/10");
+    expect(host.setMainAudio("/70")).toBe(true);
+    expect(host.setMainAudio("/10")).toBe(true);
+    expect(chosen).toEqual([2, 1]);
+  });
+
+  test("引数を読めないときは、読めないと記録に出す (PMT の音声に無いとは出さない)", () => {
+    const { bml, logs } = open({ onMainAudio: () => {} });
+    const host = bml as unknown as { setMainAudio(ref: string): boolean };
+    bml.feed(pmt([0x10, 0x70]));
+    expect(host.setMainAudio("70")).toBe(false);
+    expect(host.setMainAudio("/71")).toBe(false);
+    expect(logs).toEqual([
+      "setMainAudioStream(70) は部品を指す書き方 (/70 の形) ではありません",
+      "setMainAudioStream(/71) は PMT の音声にありません",
+    ]);
+  });
 });
 
 describe("音声の object で主音声を替える", () => {
@@ -1363,9 +1399,91 @@ describe("音声の object で主音声を替える", () => {
     components: [
       { pid: 0x1010, componentId: 0x10, streamType: 0x0f },
       { pid: 0x1070, componentId: 0x70, streamType: 0x0f },
+      { pid: 0x1071, componentId: 0x71, streamType: 0x0f },
       { pid: 0x140, componentId: 0x40, streamType: 0x0d },
     ],
   };
+  const RADIO =
+    '<object id="radio" type="audio/X-arib-mpeg2-aac" data="/70" streamstatus="play"/>';
+  /** 移った先の文書。音声の object は無い。読み込んだら Ureg[1] に印を付ける */
+  const NEXT = bmlFile(
+    "next.bml",
+    "",
+    'function start() { browser.Ureg[1] = "next"; }',
+  );
+
+  test("音声の object の data を書き換えたら、その ES を主音声にする (objectChanged)", async () => {
+    const chosen: (number | null)[] = [];
+    const { bml } = open({ onMainAudio: (index) => chosen.push(index) });
+    const [, ...rest] = carousel([
+      startup(
+        RADIO,
+        'function start() { document.getElementById("radio").data = "/71"; }',
+      ),
+    ]);
+    feedAll(bml, [withAudio, ...rest]);
+    const { done } = await watch(() => chosen.length >= 2);
+    expect(done).toBe(true);
+    expect(chosen).toEqual([1, 2]);
+  });
+
+  test("PMT が文書より後に届いても、音声の object が指す ES が PMT に入ったらその音声にする", async () => {
+    const chosen: (number | null)[] = [];
+    const { bml, logs } = open({ onMainAudio: (index) => chosen.push(index) });
+    // 先に届く PMT にはデータ放送の部品しか無い
+    feedAll(
+      bml,
+      carousel([
+        startup(RADIO, 'function start() { browser.Ureg[1] = "on"; }'),
+      ]),
+    );
+    const { done } = await watch(() => inside(bml).ureg[1] === "on");
+    expect(done).toBe(true);
+    expect(chosen).toEqual([]);
+    expect(logs.some((line) => line.includes("音声の object"))).toBe(true);
+    bml.feed(withAudio);
+    expect(chosen).toEqual([1]);
+  });
+
+  test("setMainAudioStream で選んだ音声は、音声の object が止まっても無くなっても戻さない", async () => {
+    const chosen: (number | null)[] = [];
+    const { bml } = open({ onMainAudio: (index) => chosen.push(index) });
+    const [, ...rest] = carousel([
+      startup(
+        `${RADIO}<object id="tv" type="video/X-arib-mpeg2" data="/00"/>`,
+        `function start() {
+          document.getElementById("tv").setMainAudioStream("/71");
+          document.getElementById("radio").streamStatus = "stop";
+          browser.launchDocument("next.bml", "cut");
+        }`,
+      ),
+      NEXT,
+    ]);
+    feedAll(bml, [withAudio, ...rest]);
+    const { done } = await watch(() => inside(bml).ureg[1] === "next");
+    expect(done).toBe(true);
+    // object で /70 (1 本目)、setMainAudioStream で /71 (2 本目)。止めても移っても渡し直さない
+    expect(chosen).toEqual([1, 2]);
+    expect((bml as unknown as { mainAudioRef(): string }).mainAudioRef()).toBe(
+      "/71",
+    );
+  });
+
+  test("音声の object で選んだ音声は、object の無い文書へ移ったら戻す", async () => {
+    const chosen: (number | null)[] = [];
+    const { bml } = open({ onMainAudio: (index) => chosen.push(index) });
+    const [, ...rest] = carousel([
+      startup(
+        RADIO,
+        'function start() { browser.launchDocument("next.bml", "cut"); }',
+      ),
+      NEXT,
+    ]);
+    feedAll(bml, [withAudio, ...rest]);
+    const { done } = await watch(() => inside(bml).ureg[1] === "next");
+    expect(done).toBe(true);
+    expect(chosen).toEqual([1, null]);
+  });
 
   test("再生の音声の object の ES を主音声にし、止めたらふだんの音声に戻す。様子は記録に出す", async () => {
     const chosen: (number | null)[] = [];

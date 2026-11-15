@@ -170,6 +170,26 @@ export function parsePmt(section: Uint8Array): ComponentPMT[] {
   return components;
 }
 
+/** 音声の ES の stream_type (AAC。日本の放送の音声) */
+const STREAM_AAC = 0x0f;
+
+/**
+ * PMT にある音声 (AAC) の ES の部品タグを、PMT の順に並べる (`PMTMessage.audios`)。**部品タグの無い ES は null で数に入れる。**
+ * `parsePmt` と違って落とさないので、何本目の音声かが画面の再生 (pes.ts の `readPmt`) と ffmpeg の `0:a:<n>` にそろう
+ */
+export function pmtAudios(section: Uint8Array): (number | null)[] {
+  const audios: (number | null)[] = [];
+  for (const [streamType, , info] of pmtStreams(section)) {
+    if (streamType !== STREAM_AAC) continue;
+    let componentId: number | null = null;
+    for (const [tag, descriptor] of descriptors(info))
+      if (tag === DESC_STREAM_IDENTIFIER && descriptor.length >= 1)
+        componentId = descriptor[0]!;
+    audios.push(componentId);
+  }
+  return audios;
+}
+
 /** `at` の下位 1 ビットと続く 4 バイトで 33 ビット (STC・NPT) */
 const u33 = (data: Uint8Array, at: number) =>
   (data[at]! & 1) * 0x100000000 + u32(data, at + 1);
@@ -319,15 +339,16 @@ export class BmlDecoder {
   private onPmt(section: Uint8Array): void {
     const components = parsePmt(section);
     if (components.length === 0) return;
+    const audios = pmtAudios(section);
 
     /*
      * 放送は同じ表を何度も送る。**変わったときだけ配る。** 受け側は
      * PMT が来るたびに画面を組み直すので、そのまま通すと出っ放しになる
      */
-    const shape = JSON.stringify(components);
+    const shape = JSON.stringify([components, audios]);
     if (this.sent !== shape) {
       this.sent = shape;
-      this.send({ type: "pmt", components });
+      this.send({ type: "pmt", components, audios });
     }
 
     for (const component of components) {

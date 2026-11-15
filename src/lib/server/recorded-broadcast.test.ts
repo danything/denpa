@@ -117,6 +117,28 @@ describe("録画に映像と音声があるか (recordedMedia)", () => {
     expect(recordedMedia(path, SERVICE)).toEqual({ video: false, audio: true });
   });
 
+  test("先頭の PMT に映像が無くても、番組の途中で PMT に映像が付けば映像のある録画 (コーデックもその PMT から)", () => {
+    const radioHead = stream(
+      packetize(0x0000, patSection([[SERVICE, PMT_PID]])),
+      packetize(PMT_PID, programMap(SERVICE, 0x110, [[0x0f, 0x110]])),
+    );
+    const mpeg2 = recording(stream(radioHead, filler(1000), head(0x02)));
+    expect(recordedMedia(mpeg2, SERVICE)).toEqual({ video: true, audio: true });
+    const hevc = recording(stream(radioHead, filler(1000), head(0x24)));
+    expect(recordedBroadcast(hevc, SERVICE)).toBe("hevc");
+    expect(recordedMedia(hevc, SERVICE)).toEqual({ video: true, audio: true });
+  });
+
+  test("映像の無い答えは、録っている間に録画が伸びたら読み直す (あとで映像が付いた録画)", () => {
+    const path = only([[0x0f, 0x110]]);
+    // 録っている最中に追っかけが読んだ
+    expect(recordedMedia(path, SERVICE)).toEqual({ video: false, audio: true });
+    expect(recordedBroadcast(path, SERVICE)).toBe("mpeg2");
+    appendFileSync(path, stream(filler(1000), head(0x24)));
+    expect(recordedMedia(path, SERVICE)).toEqual({ video: true, audio: true });
+    expect(recordedBroadcast(path, SERVICE)).toBe("hevc");
+  });
+
   test("追っかけが放送のコーデックだけを覚えた録画も、PMT を読んで決める", () => {
     const path = only([[0x0f, 0x110]]);
     learnBroadcast(path, "mpeg2");

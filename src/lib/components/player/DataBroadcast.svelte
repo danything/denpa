@@ -46,6 +46,7 @@
   import { read, readAll, write } from "#lib/keep.js";
   import type { HybridcastLink } from "#lib/live.js";
 
+  import { dataNote, loadEngine } from "./data-load";
   import HybridcastFrame from "./HybridcastFrame.svelte";
 
   type Place = Extract<FrameMessage, { type: "video" }>["place"];
@@ -76,7 +77,7 @@
      */
     pressD?: (() => boolean) | null;
     /**
-     * 映像の上に出す短い通知 (bind で受け取る。無ければ空)。「データ取得中…」と Hybridcast のアプリの読み込み。
+     * 映像の上に出す短い通知 (bind で受け取る。無ければ空)。「データ取得中…」、エンジンを読み込めなかったこと、Hybridcast のアプリの読み込み (`data-load.ts` の `dataNote`)。
      * 出すのは使う画面で、舞台の通知の列 (`PlayerStage` の `notes`) に積む。右上の隅に置くと、右端の縦の列と重なっていた
      */
     note?: string;
@@ -295,6 +296,11 @@
   let audioChosen = false;
   /** 読み込み中か。**押してすぐは何も出ないので、「データ取得中」を出す** */
   let loading = $state(false);
+  /**
+   * エンジンを読み込めなかったか (`data-load.ts` の `loadEngine`)。「データ取得中…」の代わりに読み込めなかったことを出す。
+   * 閉じて開き直すと読み込み直す (`close`・`opened`)
+   */
+  let failed = $state(false);
   /** BML の文書が見える状態か (`onVisible`)。BML は `invisible` で始まり、d を受けたアプリが自分で外して出てくる */
   let showing = $state(false);
   /** いま実際に映しているか (`place` が決める)。`showing` との違いは `settled` を見よ */
@@ -314,13 +320,13 @@
   let receiving = $state(false);
   // テレビと同じ「データ取得中」。押されてから読み取り始めるので、テレビより待つ (実測で 8 秒)
   $effect(() => {
-    note = !on
-      ? ""
-      : running !== null
-        ? appNote
-        : loading || receiving
-          ? "データ取得中…"
-          : "";
+    note = dataNote({
+      on,
+      app: running !== null ? appNote : null,
+      failed,
+      loading,
+      receiving,
+    });
   });
   /**
    * 一度でも出し切ったか。最初の 1 枚が揃うまでは映像のままにする。入口の文書はほぼ白紙のまま自分で
@@ -607,13 +613,21 @@
     if (host === null || media === null) return;
     const mine = ++generation;
     loading = true;
+    failed = false;
     // 押されてから取得する (上の説明)
-    const { createBml, aribKey, visibleFrom } =
-      await import("#lib/bml/engine.js");
+    const loadedEngine = await loadEngine(() => import("#lib/bml/engine.js"));
+    // 待っている間に離されていたら、作らない
+    if (mine !== generation) return;
+    // 読み込めなかった。「データ取得中…」を下ろし、読み込めなかったと出す (閉じて開き直すと読み込み直す)
+    if (loadedEngine === null) {
+      loading = false;
+      failed = true;
+      return;
+    }
+    const { createBml, aribKey, visibleFrom } = loadedEngine;
     toAribKey = aribKey;
     nvramVisible = visibleFrom;
-    // 待っている間に離されていたら、作らない
-    if (mine !== generation || host === null || media === null) return;
+    if (host === null || media === null) return;
     const into = makeMount(host);
     // 出す操作は文書にとっての d の 1 押し。受け付ける文書が出てきたら届ける (`knock`)。受信しているだけなら届けない
     dueD = on;
@@ -711,6 +725,11 @@
    * リモコンを渡す。自動起動でない入口はここで始まる (`Bml.open`)
    */
   function opened(): void {
+    // 受信していたが、エンジンを読み込めなかった。開いたら読み込み直す (閉じたときの `close` と同じく、開き直しで再試行する)
+    if (engine === null && failed && shown !== null) {
+      void open();
+      return;
+    }
     if (engine === null) return;
     dueD = true;
     taps = 0;
@@ -754,6 +773,7 @@
     press = null;
     pressD = null;
     loading = false;
+    failed = false;
     handed = 0;
     showing = false;
     receiving = false;
@@ -848,7 +868,13 @@
   hidden={!on && !receive}
   data-testid="live-data"
   data-open={on}
-  data-state={engine !== null ? "ready" : loading ? "loading" : "off"}
+  data-state={engine !== null
+    ? "ready"
+    : loading
+      ? "loading"
+      : failed
+        ? "failed"
+        : "off"}
   data-showing={visible}
   data-receiving={receiving}
   data-for={shown ?? ""}
