@@ -2505,9 +2505,14 @@ class Session {
    * 待たずに選局を進め、分かったら知らせる。途中から来た人には `add` で渡す
    */
   private learnCard(agent: number): void {
+    // 別のエージェントで選局し直したら、前のカードの番号は渡さない (取れなければ渡さないまま)
+    this.cardId = null;
+    // 双方向がオフなら知らせない。データ放送に渡すのは双方向がオンのときだけ (`DataBroadcast` の `cardId`)
+    if (!settings().bmlNetwork) return;
     void cardIdOf(agent)
       .then((id) => {
-        if (id === null || id === this.cardId) return;
+        // 応答を待つ間に別のエージェントで選局し直していたら、古いほうは捨てる
+        if (id === null || this.agent !== agent || id === this.cardId) return;
         this.cardId = id;
         this.tell({ type: "card", id });
       })

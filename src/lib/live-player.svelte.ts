@@ -425,7 +425,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 音声だけになったことを段の切り替えにも数えない (`asked` は局を替えたときのために持ち越す)
    */
   let videoless = false;
-  /** 選局したエージェントのカードの番号 (`card`)。データ放送の `getIRDID` に渡す。局を替えたら下ろす */
+  /** 選局したエージェントのカードの番号 (`card`)。データ放送の `getIRDID` に渡す。局を替えたら null に戻す */
   let cardId = $state<string | null>(null);
   const adapter = new RungAdapter();
   /** 受け取りの速さ (`AdaptSample.throughput`)。リクエストし直すたびに測り直す */
@@ -3597,10 +3597,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return speed;
     },
     setSpeed,
-    /** データ放送を出しているか */
+    /** 選局したエージェントのカードの番号 (データ放送の `getIRDID` に渡す) */
     get cardId() {
       return cardId;
     },
+    /** データ放送を出しているか */
     get showData() {
       return showData;
     },
