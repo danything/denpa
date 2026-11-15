@@ -674,6 +674,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     internal const uint FeGetProperty = 0x80106f53;  // _IOR('o', 83, struct dtv_properties)
     private const uint FeReadStatus = 0x80046f45;    // _IOR('o', 69, fe_status_t)
     private const uint FeSetVoltage = 0x6f43;        // _IO('o', 67)。電圧は引数にそのまま渡す
+    private const uint FeHasSignal = 0x01;
     private const uint FeHasLock = 0x10;
 
     // ドライバが電圧を変えられないときの errno。カーネルの中の ENOTSUPP (524) がそのまま返る。
@@ -756,6 +757,10 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private readonly uint _caps;
     /// <summary>ISDB-C で前にロックした変調 (選局表の周波数ごと)</summary>
     private readonly Dictionary<uint, uint> _lockedModulation = [];
+    /// <summary>このフロントエンドが電波の印 (<c>FE_HAS_SIGNAL</c>) を立てると分かったか (ロックしたときに立っていた)。分かるまでは変調を全部試す (<see cref="TriesOtherModulations"/>)</summary>
+    private bool _reportsSignal;
+    /// <summary>直前の <see cref="WaitForLock"/> の間に読んだ status を全部 OR したもの</summary>
+    private uint _seenStatus;
     /// <summary>ISDB-C を受けている間の、dvr から TSMF の TS を選んで流す処理。ほかの方式では null</summary>
     private DvbCable? _cable;
 
@@ -912,7 +917,12 @@ public sealed unsafe class DvbTuner : ITuneDevice
             foreach (var modulation in modulations)
             {
                 SetProperties(CableProperties(system, hertz, modulation));
-                if (!WaitForLock()) continue;
+                if (!WaitForLock())
+                {
+                    // 電波が無ければ、ほかの変調でもロックしない。待つのを 1 回で済ませ、次の周波数へ
+                    if (!TriesOtherModulations(_reportsSignal, _seenStatus)) break;
+                    continue;
+                }
                 CableFrequency = hertz;
                 _lockedModulation[tuning.Frequency] = modulation;
                 return;
@@ -920,6 +930,15 @@ public sealed unsafe class DvbTuner : ITuneDevice
         }
         throw new IOException(ITuneDevice.SyncFailed);
     }
+
+    /// <summary>
+    /// ISDB-C でロックしなかった変調のあとに、同じ周波数でほかの変調を試すか。
+    /// QAM_AUTO の無い復調器は 64QAM と 256QAM を順に試すので、放送の無いチャンネルではロックを 2 回待っていた。
+    /// 待つ間に電波の印 (<c>FE_HAS_SIGNAL</c>) を一度も読まなければ、その周波数に電波は来ていないので試さない。搬送波の印 (<c>FE_HAS_CARRIER</c>) は、変調が違うと立たない復調器があるので見ない。
+    /// 印を立てないドライバもあるので、立てると分かる (一度ロックして印が立っていた) までは全部試す
+    /// </summary>
+    internal static bool TriesOtherModulations(bool reportsSignal, uint seenStatus) =>
+        !reportsSignal || (seenStatus & FeHasSignal) != 0;
 
     /// <summary>
     /// ISDB-C で、dvr から読んだ TS を TSMF の処理に通して流し始め (<see cref="DvbCable"/>)、判定を待つ。
@@ -1092,6 +1111,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private bool WaitForLock()
     {
         uint status = 0;
+        _seenStatus = 0;
         var deadline = DateTime.UtcNow + LockTimeout;
         while (DateTime.UtcNow < deadline)
         {
@@ -1099,7 +1119,13 @@ public sealed unsafe class DvbTuner : ITuneDevice
             // その半分が待つだけの時間になる (カーネルは選局のたびに
             // status を 0 に戻すので、前のチャンネルの同期を読み取ることはない)
             Thread.Sleep(10);
-            if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeReadStatus, (nint)(&status)) >= 0 && (status & FeHasLock) != 0) return true;
+            if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeReadStatus, (nint)(&status)) >= 0)
+            {
+                _seenStatus |= status;
+                if ((status & FeHasLock) == 0) continue;
+                if ((status & FeHasSignal) != 0) _reportsSignal = true;
+                return true;
+            }
         }
         return false;
     }
