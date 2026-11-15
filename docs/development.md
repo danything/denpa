@@ -158,6 +158,8 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
   前は PR ごとに SDK と NuGet を合わせて 840MB 置いていて、リポジトリの上限 (10GB) を超えるたびに、ffmpeg や Playwright のキャッシュが古いものから消されていました
 - csproj を変えた PR は main の前の NuGet を戻し、足りないぶんだけを取ります (`restore-keys`)
 - ffmpeg (Windows・Mac) の鍵は、Dockerfile の ffmpeg 段と組むスクリプトから作ります。そこを変えた PR と、それが main に入った直後の 1 回は組み直します (Windows で 15 分ほど)
+- Windows で別に置く Opus と SVT-AV1 の組み上がりは、MSYS2 の gcc のパッケージのバージョンも鍵に入れます。SVT-AV1 の静的ライブラリは LTO の中間表現で、
+  組んだ gcc と ffmpeg を繋ぐ gcc がずれると壊れるためです (16.2.0-6 で組んだものを 16.2.0-7 で繋いだら、SVT-AV1 のスレッドが Segmentation fault で落ちた)
 - wdi-simple の鍵は、組むスクリプトとランナーのイメージのバージョンです。イメージが上がるたびに組み直し、新しい MSVC で組めるかを見ます。置くのは main だけです
 
 ## DB の列を足す

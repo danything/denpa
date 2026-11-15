@@ -90,7 +90,8 @@ fetch_tar() {
 }
 
 # **Opus と SVT-AV1 は、それぞれ actions/cache に別々に置く** (.github/workflows/windows-server.yml)。キャッシュの鍵は
-# バージョンと、`# recipe:<名前>:begin` から `:end` までの組み方。ffmpeg の configure の引数だけを変えたときは、この 2 つを組み直さない。
+# バージョンと、`# recipe:<名前>:begin` から `:end` までの組み方と、MSYS2 の gcc のパッケージのバージョン (SVT-AV1 は LTO で
+# 組まれ、ffmpeg を繋ぐ gcc が組んだ gcc とずれると壊れる)。ffmpeg の configure の引数だけを変えたときは、この 2 つを組み直さない。
 # 入れ先に `.done` があれば組まない (キャッシュが当たった)。ライセンスの文書も入れ先に置き、最後に出力先へ写す
 
 # recipe:opus:begin
@@ -283,22 +284,6 @@ for file in "${from_msys[@]}"; do
 done
 sort -u -o "$out/licenses/msys2-packages.txt" "$out/licenses/msys2-packages.txt"
 printf 'ffmpeg %s\nSVT-AV1 %s\nOpus %s\n' "$FFMPEG_VERSION" "$SVT_AV1_VERSION" "$OPUS_VERSION" > "$out/licenses/versions.txt"
-
-# DIAG (temporary)
-(
-  cd "$work/build-ffmpeg"
-  echo "=== DIAG PE"
-  objdump -p ffmpeg_g.exe | grep -iE "SizeOfStack|SizeOfHeap|LinkerVersion|DllCharacteristics"
-  echo "=== DIAG prologue (linked)"
-  objdump -d --no-show-raw-insn ffmpeg_g.exe --disassemble=produce_temporally_filtered_pic.isra.0 | head -40
-  echo "=== DIAG symbols"
-  nm ffmpeg_g.exe | grep -iE "chkstk|_tls_used|__emutls|_tls_index" | head
-  args=(-hide_banner -loglevel error -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v libsvtav1 -preset 12 -f null -)
-  echo "=== DIAG crash"
-  gdb -q -batch -ex run -ex 'info registers rsp rip' -ex 'p/x $_tlb' -ex 'x/4gx $_tlb' --args ./ffmpeg_g.exe "${args[@]}" 2>&1 | grep -v "New Thread" | tail -30
-  echo "=== DIAG entry"
-  gdb -q -batch -ex 'break produce_temporally_filtered_pic.isra.0' -ex run -ex 'info registers rsp' -ex 'x/4gx $_tlb' -ex bt --args ./ffmpeg_g.exe "${args[@]}" 2>&1 | grep -v "New Thread" | tail -40
-) || true
 
 # 置いたものだけで動くか (MSYS2 の DLL の置き場を PATH から外す)。エンコーダは試しに 1 秒ずつ流す
 cd "$out"
