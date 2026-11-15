@@ -11,8 +11,8 @@
  *   `currentTime` で引いているので、そのまま合う
  * - 溜めるのは先 `AHEAD` 秒まで、後ろは `BEHIND` 秒まで。iPhone は溜められる量が小さい
  * - `ManagedMediaSource` (iPhone) は**送り込んでよい間をブラウザが知らせる** (`startstreaming`・`endstreaming`)。止められている間は読まない
- * - 切れたら観ていた位置からリクエストし直す (1 秒→2 秒→…10 秒で頭打ち、続けて 8 回で打ち切る)。
- *   観る画面の繋ぎ直し (`recover`) と同じ数
+ * - 切れたら、溜まっているぶんの続きからリクエストし直す (1 秒→2 秒→…10 秒で頭打ち、続けて 8 回で打ち切る)。
+ *   観る画面の繋ぎ直し (`recover`) と同じ数。溜まっているぶんは捨てずに再生し続け、継ぎ方は段の切り替え (`switchTo`) と同じ
  * - **サーバが混んでいて断られたら (503) リクエストし直さない** (`busy`)。その場の変換の枠が埋まっている
  *   (`server/transcode.ts`)。待っても空くとは限らないので、画面がほかの形式を勧める
  * - **受け取りの速さを測る** (`ts/meter.ts`)。読んでいる間だけ数える。先が埋まったままだと測れないので、
@@ -368,17 +368,26 @@ export function remuxPlayer(
       options.state("failed", reason);
       return;
     }
-    // 倍々に待って、観ていた位置からリクエストし直す
-    retry.schedule(() => void load(video.currentTime));
+    /*
+     * 倍々に待って、溜まっているぶんの続きからリクエストし直す。溜まっているぶんは捨てずに再生し続け、
+     * 使い切るまでは「繋ぎ直しています」を出さない (`onWaiting`)。継ぎ方は段の切り替え (`switchTo`) と同じ
+     */
+    retry.schedule(
+      () => void load(switchPoint(buffered(), video.currentTime), true),
+      aheadOf(buffered(), video.currentTime) > 0,
+    );
   }
 
-  /** `from` 秒からリクエストし直す。溜まっていたものは捨てる */
-  async function load(from: number): Promise<void> {
+  /**
+   * `from` 秒からリクエストし直す。溜まっていたものは捨てる。`keep` なら `from` より前に溜まっているものは残す
+   * (切れたあとに続きをリクエストするとき)
+   */
+  async function load(from: number, keep = false): Promise<void> {
     pendingSwitch?.abort();
     const abort = new AbortController();
     const mine = begin(from, abort);
     try {
-      await cut(0, mine);
+      await cut(keep ? from : 0, mine);
       if (mine !== run) return;
       const response = await fetch(url(from, audio), {
         signal: abort.signal,
@@ -462,6 +471,8 @@ export function remuxPlayer(
    */
   const onWaiting = (): void => {
     nudge();
+    // 続きを待ちながら溜まっているぶんを再生していて、使い切った。ここから「繋ぎ直しています」を出す
+    retry.starved();
     if (buffer === null || retry.waiting || loadingFrom !== null) return;
     if (aheadOf(buffered(), video.currentTime) === 0)
       void load(video.currentTime);

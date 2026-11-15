@@ -25,6 +25,7 @@ import { eq } from "drizzle-orm";
 
 import {
   CODEC_HEADER,
+  OFFSET_HEADER,
   ORIGIN_HEADER,
   PACE_HEADER,
   RUNG_HEADER,
@@ -82,6 +83,7 @@ const {
   mmtsTranscodeArgs,
   playbackPlan,
   presented,
+  rawOffset,
   rulerOf,
   streamResponse,
   transcodeBody,
@@ -586,6 +588,58 @@ describe("流す (streamResponse)", () => {
       (head[17]! >> 1);
     expect(head[7]).toBe(0xe0);
     expect(sinceHead(pts, origin)).toBeCloseTo(19, 1);
+  });
+
+  test("MPEG-2: 流し始めたバイト位置を返し、offset ならその位置からちょうど続きを流す (パケットの途中でも)", async () => {
+    const rec = seed({ library_path: h264, ts_path: ts, encode_skip: 0.5 });
+    const first = await streamResponse(
+      rec,
+      new URLSearchParams({ codec: "mpeg2", from: "20" }),
+    );
+    const start = Number(first.headers.get(OFFSET_HEADER));
+    expect(start % PACKET).toBe(0);
+    const whole = new Uint8Array(await first.arrayBuffer());
+    // 1000 バイト受け取ったところで切れた (パケットの切れ目ではない)
+    const cut = 1000;
+    const next = await streamResponse(
+      rec,
+      // `from` は効かない
+      new URLSearchParams({
+        codec: "mpeg2",
+        from: "3",
+        offset: String(start + cut),
+      }),
+    );
+    expect(next.headers.get(OFFSET_HEADER)).toBe(String(start + cut));
+    expect(next.headers.get(ORIGIN_HEADER)).toBe(
+      first.headers.get(ORIGIN_HEADER),
+    );
+    const rest = new Uint8Array(await next.arrayBuffer());
+    expect(concatBytes([whole.subarray(0, cut), rest])).toEqual(whole);
+  });
+
+  test("MPEG-2: offset が末尾なら空、整数でない・末尾より先なら 400", async () => {
+    const rec = seed({ library_path: h264, ts_path: ts, encode_skip: 0.5 });
+    const size = Bun.file(ts).size;
+    const end = await streamResponse(
+      rec,
+      new URLSearchParams({ codec: "mpeg2", offset: String(size) }),
+    );
+    expect((await end.arrayBuffer()).byteLength).toBe(0);
+    for (const offset of [String(size + 1), "-1", "1.5", "x", ""])
+      await expect(
+        streamResponse(rec, new URLSearchParams({ codec: "mpeg2", offset })),
+      ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("rawOffset は 0 から大きさまでの整数だけを読む", () => {
+    expect(rawOffset("0", 10)).toBe(0);
+    expect(rawOffset("10", 10)).toBe(10);
+    expect(rawOffset("11", 10)).toBeUndefined();
+    expect(rawOffset("1e3", 10_000)).toBeUndefined();
+    expect(rawOffset("99999999999999999999", Number.MAX_SAFE_INTEGER)).toBe(
+      undefined,
+    );
   });
 
   test("出せない形式は 404", async () => {
