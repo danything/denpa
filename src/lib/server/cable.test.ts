@@ -16,8 +16,11 @@ import {
   entranceOrder,
   lineupChanges,
   lineupJobs,
+  listedEntries,
+  listedNetworks,
   parseStored,
   RAW_LIMIT,
+  retryableChannel,
   toStored,
 } from "./cable";
 import type { AgentChannel } from "./tuner";
@@ -276,5 +279,94 @@ describe("控え", () => {
       "CATV: 前のスキャンから搬送波が無くなりました: QU34",
     ]);
     expect(lineupChanges(null, after)).toEqual([]);
+  });
+});
+
+/**
+ * NIT に載っているのにロックしなかった TS は、NIT の局の一覧からチャンネルにする (`listedEntries`)。
+ * 局名は前の控えか仮の名前。残す種別だけを入れ、局が 1 つも残らない TS は作らない
+ */
+describe("ロックしなかった TS を NIT から入れる", () => {
+  test("ロックしたチャンネルは作らず、TSMF の 2 つ目からは番号を付け、局名は前の控えか仮の名前", () => {
+    const lineup = cableLineupFrom(
+      network(
+        jcomNit([
+          [
+            0x0039,
+            0xfffe,
+            [[0x0400, 0xa4]],
+            cableDeliveryDescriptor(357_000_000),
+          ],
+        ]),
+      ),
+    )!;
+    const entries = listedEntries(
+      [lineup],
+      // QC39 はロックした (局が見つかった、または局が無かった) チャンネル
+      (channel) => channel !== "QC39",
+      new Map([["65534:650", "前の名前"]]),
+      new Set([0x01, 0xc0]),
+      (serviceId) => `仮 ${serviceId}`,
+    );
+    expect(entries).toEqual([
+      {
+        type: "CATV",
+        channel: "QC26",
+        networkId: 0xfffe,
+        transportStreamId: 0x0021,
+        remoteControlKeyId: null,
+        services: [{ serviceId: 0x028a, serviceType: 1, name: "前の名前" }],
+      },
+      {
+        type: "CATV",
+        channel: "QC26:1",
+        networkId: 0xfffe,
+        transportStreamId: 0x0022,
+        remoteControlKeyId: null,
+        services: [{ serviceId: 0x028b, serviceType: 1, name: "仮 651" }],
+      },
+      {
+        type: "CATV",
+        channel: "QU34",
+        networkId: 0xfffe,
+        transportStreamId: 0x0002,
+        remoteControlKeyId: null,
+        services: [{ serviceId: 0x0300, serviceType: 1, name: "仮 768" }],
+      },
+    ]);
+  });
+});
+
+/**
+ * ロックしなかったチャンネルを試し直して残すか (`retryableChannel`)。NIT に載っているものと、前の控えにあるもののうち
+ * NIT に TS が載っていないネットワークのもの (J:COM の NIT に BS4K の再送信の TLV は載っていない)
+ */
+describe("試し直して残す搬送波", () => {
+  const lineup = cableLineupFrom(network(jcomNit()))!;
+  const previous = (channel: string, networkId: number): AgentChannel => ({
+    type: "CATV",
+    channel,
+    networkId,
+    transportStreamId: 1,
+    remoteControlKeyId: null,
+    services: [],
+  });
+
+  test("NIT に TS が載っているネットワークは、読めた NIT から数える", () => {
+    expect([...listedNetworks([lineup])]).toEqual([0xfffe]);
+    expect(listedNetworks([]).size).toBe(0);
+  });
+
+  test("NIT に載っているもの、前の控えにあって NIT に TS が載っていないネットワークのものは試し直す", () => {
+    const listed = new Set(lineupJobs(lineup));
+    const networks = listedNetworks([lineup]);
+    const before = [previous("QC26", 0x000b), previous("QC50", 0xfffe)];
+    expect(retryableChannel("QC39", listed, before, networks)).toBe(true);
+    // BS4K の再送信の TLV。J:COM の NIT に ONID 0x000B の TS は無い
+    expect(retryableChannel("QC26", new Set(), before, networks)).toBe(true);
+    // 自主放送のネットワークで NIT に無い。無くなった搬送波
+    expect(retryableChannel("QC50", listed, before, networks)).toBe(false);
+    // 前の控えにも NIT にも無い (総当たりで回したもの)
+    expect(retryableChannel("QC60", listed, before, networks)).toBe(false);
   });
 });

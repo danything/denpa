@@ -91,6 +91,8 @@ export interface CableStream {
   originalNetworkId: number;
   /** service_list_descriptor に載っていた局の数 */
   services: number;
+  /** service_list_descriptor に載っていた局 (service_id と種別)。ロックしなかった搬送波の局を入れるのに使う (`listedEntries`) */
+  serviceList: { serviceId: number; serviceType: number }[];
 }
 
 /** 1 つの搬送波。同じ周波数に TS がいくつも載っていれば TSMF で束ねている */
@@ -161,6 +163,10 @@ export function cableLineupFrom(network: Network): CableLineup | null {
       transportStreamId: ts.transportStreamId,
       originalNetworkId: ts.originalNetworkId,
       services: ts.services.length,
+      serviceList: ts.services.map((service) => ({
+        serviceId: service.serviceId,
+        serviceType: service.serviceType,
+      })),
     });
     carriers.set(channel, carrier);
   }
@@ -188,6 +194,82 @@ export function lineupJobs(lineup: CableLineup): string[] {
       (_, i) => `${carrier.channel}:${i + 1}`,
     ),
   ]);
+}
+
+/**
+ * 読めたケーブル局の NIT に TS が載っているネットワーク (`original_network_id`)。
+ * このネットワークの TS で NIT に載っていないものは、無くなった搬送波とみなす (`retryableChannel`)
+ */
+export function listedNetworks(lineups: readonly CableLineup[]): Set<number> {
+  return new Set(
+    lineups.flatMap((lineup) =>
+      lineup.carriers.flatMap((carrier) =>
+        carrier.streams.map((stream) => stream.originalNetworkId),
+      ),
+    ),
+  );
+}
+
+/**
+ * **ロックしなかったチャンネルを、試し直して残す搬送波として扱うか。** NIT に載っているチャンネル (`listed`) と、
+ * 前の控えにあるチャンネルのうち、NIT に TS が載っていないネットワークのもの。
+ * BS4K の再送信の TLV (QC26。ONID 0x000B) は J:COM の NIT に載っておらず、NIT に載っているネットワークでないので、無くなったとはみなさない
+ */
+export function retryableChannel(
+  channel: string,
+  listed: ReadonlySet<string>,
+  previous: readonly AgentChannel[],
+  networks: ReadonlySet<number>,
+): boolean {
+  if (listed.has(channel)) return true;
+  return previous.some(
+    (entry) => entry.channel === channel && !networks.has(entry.networkId),
+  );
+}
+
+/**
+ * **NIT に載っているのにロックしなかった TS を、NIT の service_list_descriptor からチャンネルにする。** 作るのは `unlocked` (ロックしなかった、かつ局が見つかっていないチャンネル) だけ。ロックしたのに局が無かったチャンネルは作らない。
+ * 局は service_list_descriptor の service_id と種別で、残す種別は `keep` (`psi.SERVICE_TYPES`)。局名は NIT に無いので、
+ * 前の控えの名前 (`known`。`${original_network_id}:${service_id}`) か、無ければ仮の名前 (`unnamed`)。
+ * 番組表の取得がその TS の SDT[actual] を受信したら、仮の名前を放送の局名にする (`tlv-names.ts`)。局が 1 つも無い TS は作らない
+ */
+export function listedEntries(
+  lineups: readonly CableLineup[],
+  unlocked: (channel: string) => boolean,
+  known: ReadonlyMap<string, string>,
+  keep: ReadonlySet<number>,
+  unnamed: (serviceId: number) => string,
+): AgentChannel[] {
+  const entries: AgentChannel[] = [];
+  for (const lineup of lineups) {
+    for (const carrier of lineup.carriers) {
+      carrier.streams.forEach((stream, index) => {
+        const channel =
+          index === 0 ? carrier.channel : `${carrier.channel}:${index}`;
+        if (!unlocked(channel)) return;
+        const services = stream.serviceList
+          .filter((service) => keep.has(service.serviceType))
+          .map((service) => ({
+            serviceId: service.serviceId,
+            serviceType: service.serviceType,
+            name:
+              known.get(`${stream.originalNetworkId}:${service.serviceId}`) ??
+              unnamed(service.serviceId),
+          }))
+          .sort((a, b) => a.serviceId - b.serviceId);
+        if (services.length === 0) return;
+        entries.push({
+          type: "CATV",
+          channel,
+          networkId: stream.originalNetworkId,
+          transportStreamId: stream.transportStreamId,
+          remoteControlKeyId: null,
+          services,
+        });
+      });
+    }
+  }
+  return entries;
 }
 
 /** 記録に出す NIT のバイト列の上限 (バイト)。セクションは 1 つ 1024 バイトまでで、これを超えるぶんは省く */

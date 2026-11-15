@@ -15,7 +15,7 @@
 import { EpgReader } from "@danything/arib/eit";
 import { MmtEpgReader } from "@danything/arib/mh-eit";
 import { type MhSdt, TlvServiceReader } from "@danything/arib/mmt-si";
-import { ServiceReader } from "@danything/arib/psi";
+import { ServiceReader, type TransportInfo } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
 import { isSatellite } from "../types";
@@ -327,6 +327,8 @@ async function collectChannel(
   let sentTo: Place | null = null;
   /** 仮の名前の局がある TLV のチャンネルで受信した MH-SDT[actual] (`tlv-names.ts`) */
   let named: MhSdt | null = null;
+  /** 仮の名前の局がある TS のチャンネルで受信した SDT[actual] (`tlv-names.ts`) */
+  let sdtNamed: TransportInfo | null = null;
   /*
    * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
    * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
@@ -406,6 +408,8 @@ async function collectChannel(
         if (sdt.transport === null && sdtBytes > SDT_LIMIT) {
           sdt = null;
         } else if (sdt.transport !== null) {
+          // 仮の名前の局があるチャンネル (ロックしなかった TS を NIT から入れた) なら、あとで局名を書き換える (`tlv-names.ts`)
+          if (hasUnnamed(channel)) sdtNamed = sdt.transport;
           try {
             widenServices(
               sdt.transport.originalNetworkId,
@@ -454,6 +458,28 @@ async function collectChannel(
       if (renamed > 0)
         console.log(
           `[epg] ${label}: MH-SDT で ${renamed} 局の局名を受信したので、仮の名前から書き換えました`,
+        );
+    } catch (error) {
+      console.warn(`[epg] ${label} の局名を書けませんでした: ${error}`);
+    }
+  }
+
+  // ロックしなかった TS を NIT から入れたチャンネルの SDT[actual] なら、仮の局名を放送の局名にする (`tlv-names.ts`)
+  if (
+    sdtNamed !== null &&
+    sdtNamed.originalNetworkId === channel.networkId &&
+    sdtNamed.transportStreamId === channel.transportStreamId
+  ) {
+    try {
+      const renamed = await nameTlvServices(
+        sdtNamed.originalNetworkId,
+        sdtNamed.transportStreamId,
+        sdtNamed.services,
+        "ts",
+      );
+      if (renamed > 0)
+        console.log(
+          `[epg] ${label}: SDT で ${renamed} 局の局名を受信したので、仮の名前から書き換えました`,
         );
     } catch (error) {
       console.warn(`[epg] ${label} の局名を書けませんでした: ${error}`);

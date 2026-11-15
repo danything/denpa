@@ -58,7 +58,7 @@ config.agentUrl = fakeAgentUrl(server.port!);
 trustFakeAgent();
 
 const { channelEntry, readTlvServices } = await import("./scan");
-const { nameTlvServices } = await import("./tlv-names");
+const { nameTlvServices, unnamedService } = await import("./tlv-names");
 
 const ONID = 0x000b;
 const TLV_STREAM = 0xb111;
@@ -179,5 +179,47 @@ describe("MH-SDT[actual] を受信できなかった 4K の局 (QC26 の録り)"
       ]),
     ).toBe(0);
     expect(puts).toHaveLength(1);
+  });
+});
+
+describe("ロックしなかった TS を NIT から入れたケーブルのチャンネル", () => {
+  test("番組表の取得が SDT[actual] を受信したら、TS のチャンネルの仮の局名を放送の局名にする。同じ TSID の TLV は変えない", async () => {
+    const listed: AgentChannel = {
+      type: "CATV",
+      channel: "QU42",
+      networkId: 0xfffe,
+      transportStreamId: 0x0011,
+      remoteControlKeyId: null,
+      services: [
+        { serviceId: 1101, serviceType: 1, name: unnamedService(1101) },
+        { serviceId: 1102, serviceType: 0xc0, name: unnamedService(1102) },
+      ],
+    };
+    const tlv: AgentChannel = {
+      ...listed,
+      channel: "QC26",
+      transport: "tlv",
+      services: [
+        { serviceId: 1101, serviceType: 1, name: unnamedService(1101) },
+      ],
+    };
+    saved = [listed, tlv];
+    puts.length = 0;
+    expect(
+      await nameTlvServices(
+        0xfffe,
+        0x0011,
+        [
+          { serviceId: 1101, name: "Ｊ：ＣＯＭでんぱ" },
+          { serviceId: 1102, name: "" },
+        ],
+        "ts",
+      ),
+    ).toBe(1);
+    expect(saved.find((c) => c.channel === "QU42")!.services).toEqual([
+      { serviceId: 1101, serviceType: 1, name: "Ｊ：ＣＯＭでんぱ" },
+      { serviceId: 1102, serviceType: 0xc0, name: unnamedService(1102) },
+    ]);
+    expect(saved.find((c) => c.channel === "QC26")).toEqual(tlv);
   });
 });
