@@ -17,6 +17,7 @@
  */
 
 import type {
+  ComponentPMT,
   ProgramInfoMessage,
   ResponseMessage,
 } from "@danything/arib/bml-protocol";
@@ -90,6 +91,12 @@ export interface Service {
   serviceId: number;
 }
 
+/**
+ * 主音声に選べる ES の stream_type。AAC (ADTS) だけ。変換しない再生も音声をこの順で数える
+ * (`@danything/arib/pes` の `readPmt`)。日本の放送の音声は AAC なので、変換して送る再生の `0:a:<n>` とも数がそろう
+ */
+const AUDIO_STREAM_TYPES = new Set([0x0f]);
+
 export interface BmlOptions {
   /** 描く場所。中に Shadow DOM を張る */
   root: HTMLElement;
@@ -114,6 +121,12 @@ export interface BmlOptions {
    * `transportStreamId` は分からなければ null (録画など)
    */
   onTune?: (service: Service) => boolean;
+  /**
+   * 文書が主音声を替えた (映像の object の `setMainAudioStream`。STD-B24 第二編)。**替えるのは呼ぶ側。**
+   * 渡すのは PMT の音声の ES のうち何本目か (0 から。ライブの音声の `N:both` の N)。null はふだんの音声に戻す。
+   * 番組が替わって選んだ ES が無くなったときも null
+   */
+  onMainAudio?: (index: number | null) => void;
   /**
    * Hybridcast (startAITControlledApp)。**開くのは呼ぶ側。** `ready` は開けるか (双方向がオンで、
    * AIT にアプリがある)、`start` は開く (開けたら true)。`hint` は文書が渡した数 (どのアプリかの
@@ -317,6 +330,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private running = false;
   private scheduled = false;
   private destroyed = false;
+  /** PMT の音声の ES の部品タグ (PMT の順。`audioComponents`) */
+  private audios: number[] = [];
+  /** 文書が選んだ主音声の部品タグ。ふだんの音声 (PMT の 1 本目) なら null (`setMainAudio`) */
+  private mainAudio: number | null = null;
   private loading = false;
   private currentEvent: Value = null;
   private focusedElement: BmlElement | null = null;
@@ -376,6 +393,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   feed(message: ResponseMessage): void {
     if (this.destroyed) return;
+    if (message.type === "pmt") this.audioComponents(message.components);
     // 届いたものを処理するのもエンジンの仕事に数える (ライブは止まらずに流れ込み続ける。
     // モジュールをデコードする・ハンドラを探すのを数えないと、「10 秒のうち 4 割を超えて動いたら止める」
     // 決まり (budget.ts) の勘定から漏れる)
@@ -1191,6 +1209,54 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     element.setState("normal");
     this.focusedElement = null;
     this.handle(element, "onblur", { type: "blur" });
+  }
+
+  /**
+   * PMT の音声の ES の部品タグを、PMT の順に覚える。選んでいた ES が無くなったか、1 本目 (ふだんの音声) になったら戻す。
+   * 順番が入れ替わって何本目かが変わったら、新しい何本目かを渡し直す (画面は何本目かで選んでいる)
+   */
+  private audioComponents(components: readonly ComponentPMT[]): void {
+    const before =
+      this.mainAudio === null ? -1 : this.audios.indexOf(this.mainAudio);
+    this.audios = components
+      .filter((component) => AUDIO_STREAM_TYPES.has(component.streamType))
+      .map((component) => component.componentId);
+    if (this.mainAudio === null) return;
+    const index = this.audios.indexOf(this.mainAudio);
+    if (index <= 0) {
+      this.mainAudio = null;
+      this.options.onMainAudio?.(null);
+    } else if (index !== before) {
+      this.options.onMainAudio?.(index);
+    }
+  }
+
+  /**
+   * 主音声を替える (`setMainAudioStream`)。`ref` は部品を指す書き方 (`/70`)。PMT に無い部品と、音声でない部品は false。
+   * ふだんの音声 (PMT の 1 本目) を指せば戻す
+   */
+  setMainAudio(ref: string): boolean {
+    const match = /^\/([0-9a-f]{1,2})$/i.exec(ref.trim());
+    const tag = match === null ? null : Number.parseInt(match[1]!, 16);
+    const index = tag === null ? -1 : this.audios.indexOf(tag);
+    this.log(
+      `setMainAudioStream(${ref})${index === -1 ? " は PMT の音声にありません" : ""}`,
+    );
+    // 替える側がいない (録画の再生) なら、替えられないと答える
+    if (tag === null || index === -1 || this.options.onMainAudio === undefined)
+      return false;
+    const chosen = index === 0 ? null : tag;
+    if (chosen !== this.mainAudio) {
+      this.mainAudio = chosen;
+      this.options.onMainAudio?.(chosen === null ? null : index);
+    }
+    return true;
+  }
+
+  /** 今の主音声 (`getMainAudioStream`)。替えていなければ PMT の 1 本目 (分からなければ `/10`) */
+  mainAudioRef(): string {
+    const tag = this.mainAudio ?? this.audios[0] ?? 0x10;
+    return `/${tag.toString(16).padStart(2, "0")}`;
   }
 
   stream(element: BmlElement, status: string): void {

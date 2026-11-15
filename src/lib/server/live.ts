@@ -41,6 +41,7 @@ import {
   type Audio,
   type AudioTrack,
   audioTracks,
+  broadcastTrack,
   parseAudios,
   pickTrack,
 } from "#lib/arib.js";
@@ -369,9 +370,10 @@ export function encodeArgs(
           ...picture.encoder,
         ]
       : []),
-    // 何本目の音声か。複数入っている放送では 0 が主とは限らない
+    // 何本目の音声か。複数入っている放送では 0 が主とは限らない。データ放送が選んだ音声 (`N:es`) は PMT を見ずに受けるので、
+    // 無い ES なら音声無しで続ける (`?`。番組が替わって ES が減った直後など。ffmpeg を落とさない)
     "-map",
-    `${from}:a:${audio.stream}`,
+    `${from}:a:${audio.stream}${broadcastTrack(audio.id) === undefined ? "" : "?"}`,
     ...panArgs(audio),
     ...audioArgs(codec, rung),
     "-f",
@@ -4882,10 +4884,12 @@ function nowPlaying(
           ? audioTracks([])
           : all.filter((track) => track.stream === 0)
         : all;
+    const audio = pickTrack(tracks, wanted);
     return {
       program,
-      audios: tracks,
-      audio: pickTrack(tracks, wanted),
+      // データ放送が選んだ音声 (`arib.broadcastTrack`) は番組表の一覧に無いので、選んでいる間は足して画面の「音声」に出す
+      audios: tracks.includes(audio) ? tracks : [...tracks, audio],
+      audio,
       transport,
     };
   };

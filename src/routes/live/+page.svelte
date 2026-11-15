@@ -3,6 +3,7 @@
   import { MediaQuery } from "svelte/reactivity";
 
   import { submitting } from "#lib/actions.js";
+  import { broadcastTrack } from "#lib/arib.js";
   import type { Service } from "#lib/bml/engine.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import { centerTap } from "#lib/components/player/center-tap.js";
@@ -259,6 +260,23 @@
         : { broadcast: channel.broadcast }),
     });
     return true;
+  }
+
+  /**
+   * データ放送が主音声を替えた (`setMainAudioStream`。J:COM テレビのラジオ選局など)。PMT の音声の何本目か (`N:es`) を選ぶ。
+   * 戻すとき (null) は、まだデータ放送の音声のままならふだんの音声へ。見ている人が「音声」で選び直していれば、そちらを残す
+   */
+  function mainAudioFromData(index: number | null): void {
+    if (index !== null) {
+      player.setAudio(`${index}:es`);
+      return;
+    }
+    if (broadcastTrack(player.audio) === undefined) return;
+    const listed = player.audios.filter(
+      (track) => broadcastTrack(track.id) === undefined,
+    );
+    const main = listed.find((track) => track.main) ?? listed[0];
+    if (main !== undefined) player.setAudio(main.id);
   }
 
   /**
@@ -567,6 +585,7 @@
         prefecture={data.prefecture}
         network={data.bmlNetwork}
         tune={tuneFromData}
+        mainAudio={mainAudioFromData}
         apps={player.hybridcast}
         serviceName={current?.name ?? ""}
         captions={player.captions}

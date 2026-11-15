@@ -18,6 +18,7 @@ const BML = `<?xml version="1.0" encoding="EUC-JP"?>
 <div id="box" style="left:10px;top:20px;width:100px;height:50px;background-color-index:3">
   <p id="msg" style="left:0px;top:0px;width:100px;height:24px;nav-index:0">はじめ</p>
 </div>
+<object id="tv" type="video/X-arib-mpeg2" data="/00" style="left:0px;top:100px;width:320px;height:180px"/>
 </body></bml>`;
 
 interface Setup {
@@ -33,6 +34,7 @@ function setup(): Setup {
   doc.applyRules([]);
   const realm = createRealm({ now: () => Date.UTC(2026, 9, 12, 3) });
   const vm = new Vm(realm);
+  const mainAudio: string[] = [];
   const subscribed: BmlElement[] = [];
   let invisible = true;
   let focused: BmlElement | null = null;
@@ -53,6 +55,11 @@ function setup(): Setup {
     },
     subscribed: (element) => subscribed.push(element),
     stream: () => {},
+    setMainAudio: (ref) => {
+      mainAudio.push(ref);
+      return ref === "/70";
+    },
+    mainAudioRef: () => mainAudio.at(-1) ?? "/10",
   };
   const dom = new Dom(host);
   realm.global.put("document", dom.document);
@@ -110,6 +117,18 @@ describe("BML の DOM", () => {
         `);
     expect(s.subscribed.map((e) => e.id)).toEqual(["bi"]);
     expect(s.doc.getElementById("bi")!.attr("subscribe")).toBe("subscribe");
+  });
+
+  test("映像の object の setMainAudioStream で主音声を替え、getMainAudioStream で今の主音声を読める", async () => {
+    const s = setup();
+    const result = await s.run(`
+            var tv = document.getElementById("tv");
+            var before = tv.getMainAudioStream();
+            var missing = tv.setMainAudioStream("/71");
+            var ok = tv.setMainAudioStream("/70");
+            var result = [before, missing, ok, tv.getMainAudioStream()];
+        `);
+    expect(items(result)).toEqual(["/10", false, true, "/70"]);
   });
 
   test("focus() でフォーカスが移る", async () => {

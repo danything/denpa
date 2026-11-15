@@ -1316,3 +1316,43 @@ describe("ライブのように流し続けても、持つものと占める時�
     ).toBe(1);
   });
 });
+
+describe("主音声の切り替え (setMainAudioStream)", () => {
+  const pmt = (audios: number[]): ResponseMessage => ({
+    type: "pmt",
+    components: [
+      { pid: 0x100, componentId: 0x00, streamType: 0x02 },
+      ...audios.map((tag) => ({
+        pid: 0x1000 + tag,
+        componentId: tag,
+        streamType: 0x0f,
+      })),
+      { pid: 0x140, componentId: 0x40, streamType: 0x0d },
+    ],
+  });
+
+  test("PMT の音声の何本目かを呼ぶ側に渡し、1 本目と、番組が替わって ES が無くなったときはふだんの音声に戻す", () => {
+    const chosen: (number | null)[] = [];
+    const { bml } = open({ onMainAudio: (index) => chosen.push(index) });
+    const host = bml as unknown as {
+      setMainAudio(ref: string): boolean;
+      mainAudioRef(): string;
+    };
+    bml.feed(pmt([0x10, 0x70, 0x71, 0x72]));
+    expect(host.mainAudioRef()).toBe("/10");
+    // 音声でない部品・PMT に無い部品は替えない
+    expect(host.setMainAudio("/40")).toBe(false);
+    expect(host.setMainAudio("/73")).toBe(false);
+    expect(host.setMainAudio("/71")).toBe(true);
+    expect(host.mainAudioRef()).toBe("/71");
+    expect(host.setMainAudio("/10")).toBe(true);
+    expect(host.setMainAudio("/72")).toBe(true);
+    // 同じ PMT が届き直しても渡し直さない。順番が替わって何本目かが変わったら渡し直す
+    bml.feed(pmt([0x10, 0x70, 0x71, 0x72]));
+    bml.feed(pmt([0x10, 0x72, 0x70]));
+    expect(host.mainAudioRef()).toBe("/72");
+    bml.feed(pmt([0x10]));
+    expect(host.mainAudioRef()).toBe("/10");
+    expect(chosen).toEqual([2, null, 3, 1, null]);
+  });
+});
