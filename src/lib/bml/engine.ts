@@ -92,10 +92,11 @@ export interface Service {
 }
 
 /**
- * 主音声に選べる ES の stream_type。AAC (ADTS) だけ。変換しない再生も音声をこの順で数える
- * (`@danything/arib/pes` の `readPmt`)。日本の放送の音声は AAC なので、変換して送る再生の `0:a:<n>` とも数がそろう
+ * 主音声に選べる ES の stream_type。AAC (ADTS) だけ。変換しない再生も音声をこの順で、部品タグに関係なく数える
+ * (`@danything/arib/pes` の `readPmt`)。日本の放送の音声は AAC なので、変換して送る再生の `0:a:<n>` とも数がそろう。
+ * PMT の通知の `audios` (`@danything/arib/bml` の `pmtAudios`) も同じ stream_type で数える
  */
-const AUDIO_STREAM_TYPES = new Set([0x0f]);
+const STREAM_AAC = 0x0f;
 
 export interface BmlOptions {
   /** 描く場所。中に Shadow DOM を張る */
@@ -332,8 +333,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private running = false;
   private scheduled = false;
   private destroyed = false;
-  /** PMT にある音声の ES の部品タグ (PMT の順。`audioComponents`) */
-  private audios: number[] = [];
+  /** PMT にある音声の ES の部品タグ (PMT の順。部品タグの無い ES は null。`audioComponents`) */
+  private audios: (number | null)[] = [];
   /** 文書が選んだ主音声の部品タグ。ふだんの音声 (PMT の 1 本目) なら null (`setMainAudio`) */
   private mainAudio: number | null = null;
   /** 主音声を音声の object で選んだか (`objectAudio`)。object が無くなったときに戻すのは、object で選んだときだけ */
@@ -399,7 +400,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   feed(message: ResponseMessage): void {
     if (this.destroyed) return;
-    if (message.type === "pmt") this.audioComponents(message.components);
+    if (message.type === "pmt")
+      this.audioComponents(message.components, message.audios);
     // 届いたものを処理するのもエンジンの仕事に数える (ライブは止まらずに届き続ける。
     // モジュールをデコードする・ハンドラを探すのを数えないと、「10 秒のうち 4 割を超えて動いたら止める」
     // 決まり (budget.ts) の勘定から漏れる)
@@ -1221,14 +1223,23 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   /**
    * PMT にある音声の ES の部品タグを、PMT の順に覚える。選んでいた ES が無くなったか、1 本目 (ふだんの音声) になったら戻す。
-   * 順番が入れ替わって何本目かが変わったら、新しい何本目かを渡し直す (画面は何本目かで選んでいる)
+   * 順番が入れ替わって何本目かが変わったら、新しい何本目かを渡し直す (画面は何本目かで選んでいる)。
+   *
+   * **部品タグの無い音声の ES も数に入れる** (`audios`。部品タグの無い ES は null)。画面の再生と ffmpeg の `0:a:<n>` は
+   * 部品タグに関係なく数えるので、落とすと部品タグの無い ES より後ろの音声が 1 本ずれる。
+   * `audios` の無い PMT (これを足す前に録った `.bml.jsonl`) は、部品タグのある ES (`components`) だけで数える
    */
-  private audioComponents(components: readonly ComponentPMT[]): void {
+  private audioComponents(
+    components: readonly ComponentPMT[],
+    audios: readonly (number | null)[] | undefined,
+  ): void {
     const before =
       this.mainAudio === null ? -1 : this.audios.indexOf(this.mainAudio);
-    this.audios = components
-      .filter((component) => AUDIO_STREAM_TYPES.has(component.streamType))
-      .map((component) => component.componentId);
+    this.audios =
+      audios?.slice() ??
+      components
+        .filter((component) => component.streamType === STREAM_AAC)
+        .map((component) => component.componentId);
     // 文書の音声の object が指す ES が PMT に入ってきたなら、その音声にする (`objectAudio`)
     if (this.mainAudio === null) {
       this.objectAudio("PMT を読んだ");
@@ -1253,7 +1264,13 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const tag = match === null ? null : Number.parseInt(match[1]!, 16);
     const index = tag === null ? -1 : this.audios.indexOf(tag);
     this.log(
-      `setMainAudioStream(${ref})${index === -1 ? " は PMT の音声にありません" : ""}`,
+      `setMainAudioStream(${ref})${
+        tag === null
+          ? " は部品を指す書き方 (/70 の形) ではありません"
+          : index === -1
+            ? " は PMT の音声にありません"
+            : ""
+      }`,
     );
     // 替える側がいない (録画の再生) なら、替えられないと答える
     if (tag === null || index === -1 || this.options.onMainAudio === undefined)
@@ -1337,7 +1354,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       this.objectAudio("data を書き換えた");
   }
 
-  /** 今の主音声 (`getMainAudioStream`)。替えていなければ PMT の 1 本目 (分からなければ `/10`) */
+  /** 今の主音声 (`getMainAudioStream`)。替えていなければ PMT の 1 本目 (分からない・1 本目に部品タグが無ければ `/10`) */
   mainAudioRef(): string {
     const tag = this.mainAudio ?? this.audios[0] ?? 0x10;
     return `/${tag.toString(16).padStart(2, "0")}`;

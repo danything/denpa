@@ -77,6 +77,13 @@ export interface ModuleFile {
 export interface PMTMessage {
   type: "pmt";
   components: ComponentPMT[];
+  /**
+   * PMT にある音声 (stream_type 0x0f の AAC) の ES の部品タグを、PMT の順に並べたもの。**部品タグの無い ES は null で並ぶ**
+   * (bml.ts の `pmtAudios`)。`components` は部品タグの無い ES を落とすので、何本目の音声かはこちらで数える。
+   * 画面の再生 (pes.ts の `readPmt`) と ffmpeg の `0:a:<n>` も、部品タグに関係なく PMT の順に数える。
+   * これを足す前に録った `.bml.jsonl` の PMT には無い
+   */
+  audios?: (number | null)[];
 }
 
 export interface ModuleDownloadedMessage {

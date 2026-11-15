@@ -214,6 +214,28 @@ describe("BmlDecoder", () => {
     ).toBeUndefined();
   });
 
+  test("PMT の音声は、部品タグの無い ES も PMT の順に null で並べる (audios。components には出ない)", () => {
+    const pmt = programMap(SERVICE, VIDEO_PID, [
+      [0x02, VIDEO_PID, [0x52, 0x01, 0x00]],
+      // 部品タグの無い AAC が先に並ぶ
+      [0x0f, 0x111],
+      [0x0f, 0x112, [0x52, 0x01, 0x10]],
+      [0x0d, BML_PID, [0x52, 0x01, COMPONENT_TAG, ...bxmlDescriptor()]],
+    ]);
+    const out = decode(
+      packetize(0x0000, patSection([[SERVICE, PMT_PID]])),
+      packetize(PMT_PID, pmt),
+    );
+    const message = out.find((item) => item.type === "pmt");
+    if (message?.type !== "pmt") throw new Error("pmt が出ていない");
+    expect(message.audios).toEqual([null, 0x10]);
+    expect(
+      message.components
+        .filter((component) => component.streamType === 0x0f)
+        .map((component) => component.pid),
+    ).toEqual([0x112]);
+  });
+
   /** 放送は同じ表を何度も送る。そのまま通すと受け側が画面を組み直し続ける */
   test("PMT は変わったときだけ配る", () => {
     const out = decode(

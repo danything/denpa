@@ -525,6 +525,10 @@ export class TlvServiceReader {
   /** package_id (= service_id) → MPT */
   private readonly mpts = new Map<number, Mpt>();
 
+  /**
+   * TLV-NIT[actual]。番号・名前・セクションの番号は最初に来たセクションのもので、`streams` はこれまでに来た全部のセクションの
+   * TLV ストリーム (tlv_stream_id ごとに 1 つ。同じ tlv_stream_id は後に来たもので置き換える)
+   */
   network: TlvNetwork | null = null;
   transport: MhSdt | null = null;
 
@@ -540,20 +544,29 @@ export class TlvServiceReader {
     );
   }
 
-  /** 任意の長さのバイト列を渡す。揃ったら true */
+  /**
+   * 任意の長さのバイト列を渡す。揃ったら true。
+   *
+   * 読んだ表は渡されたチャンクの一部を指すことがあり、呼ぶ側はチャンクのバッファを使い回す。**記述子の並び (`descriptors`) と
+   * asset_id を持ち続ける MPT と TLV-NIT は、写してから読む**
+   */
   feed(chunk: Uint8Array): boolean {
     for (const { table } of this.tables.feed(chunk)) {
       const tableId = table[0];
       if (tableId === TABLE_PLT) this.plt = parsePlt(table) ?? this.plt;
       else if (tableId === TABLE_MPT) {
-        const mpt = parseMpt(table);
+        const mpt = parseMpt(table.slice());
         if (mpt !== null) this.mpts.set(mpt.packageId, mpt);
       } else if (tableId === TABLE_TLV_NIT_ACTUAL) {
-        const network = parseTlvNit(table);
+        const network = parseTlvNit(table.slice());
         if (network === null) continue;
-        this.network ??= network;
         for (const stream of network.streams)
           this.streams.set(stream.tlvStreamId, stream);
+        // ネットワークの番号と名前は最初に来たセクションのもの。ストリームは来たセクションの全部
+        this.network = {
+          ...(this.network ?? network),
+          streams: [...this.streams.values()],
+        };
       } else if (tableId === TABLE_MH_SDT_ACTUAL && this.transport === null)
         this.transport = parseMhSdt(table);
     }

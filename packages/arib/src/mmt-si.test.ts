@@ -12,6 +12,7 @@ import {
   TlvServiceReader,
   tlvSiSections,
 } from "./mmt-si.js";
+import { withCrc } from "./psi.js";
 import {
   compressedIp,
   ipv6Udp,
@@ -314,5 +315,60 @@ describe("TlvServiceReader", () => {
       { serviceId: SERVICE, serviceType: 1 },
     ]);
     expect(reader.complete).toBe(false);
+  });
+
+  test("TLV-NIT が複数のセクションに分かれていれば、network のストリームは全部のセクションのもの", () => {
+    /** セクションの番号を付け直す (section_number・last_section_number) */
+    const numbered = (section: Uint8Array, number: number, last: number) => {
+      const body = [...section.subarray(0, -4)];
+      body[6] = number;
+      body[7] = last;
+      return withCrc(body);
+    };
+    const reader = new TlvServiceReader();
+    reader.feed(
+      concatBytes([
+        tlvSi(
+          numbered(
+            tlvNitSection(ONID, "高度ＢＳデジタル放送", [
+              [0xb070, ONID, [[0x97, 1]]],
+            ]),
+            0,
+            1,
+          ),
+          numbered(
+            tlvNitSection(ONID, "高度ＢＳデジタル放送", [
+              [TLV_STREAM, ONID, [[SERVICE, 1]]],
+            ]),
+            1,
+            1,
+          ),
+        ),
+        NULL,
+      ]),
+    );
+    expect(reader.network?.name).toBe("高度ＢＳデジタル放送");
+    expect(reader.network?.sectionNumber).toBe(0);
+    expect(reader.network?.streams.map((stream) => stream.tlvStreamId)).toEqual(
+      [0xb070, TLV_STREAM],
+    );
+  });
+
+  test("持っている記述子の並びは写したもの。渡したチャンクを使い回して上書きしても変わらない", () => {
+    const reader = new TlvServiceReader();
+    const chunk = concatBytes([
+      nit,
+      ...plt([[SERVICE, 0xff01]]),
+      ...mpt(0xff01, 0x0005),
+      NULL,
+    ]);
+    reader.feed(chunk);
+    const descriptors = [...reader.ownStream!.descriptors];
+    expect(descriptors[0]).toBe(0x41);
+    // 呼ぶ側がバッファを次の読み取りに使い回した
+    chunk.fill(0);
+    expect([...reader.ownStream!.descriptors]).toEqual(descriptors);
+    expect([...reader.network!.streams[0]!.descriptors]).toEqual(descriptors);
+    expect(reader.caSystemIdsOf(SERVICE)).toEqual([0x0005]);
   });
 });
