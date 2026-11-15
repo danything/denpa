@@ -578,6 +578,7 @@
         network={data.bmlNetwork}
         tune={tuneFromData}
         mainAudio={mainAudioFromData}
+        cardId={player.cardId}
         apps={player.hybridcast}
         serviceName={current?.name ?? ""}
         captions={player.captions}

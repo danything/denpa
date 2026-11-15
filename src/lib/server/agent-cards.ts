@@ -268,3 +268,15 @@ export function narrowPlaces(
     })
     .join("\n");
 }
+
+/** カードを訊いて待つ上限 (ms。`cardIdOf`)。データ放送の `getIRDID` に渡すだけなので、選局を待たせない */
+const CARD_ID_WAIT = 3_000;
+
+/**
+ * **エージェント `agent` が復号に使うカードの番号** (10 進 16 桁。`cardOf`)。ライブがデータ放送の `getIRDID` に渡す (`live.ts` の `Session`)。
+ * 振り分けの控え (`CARD_KEEP`) を使い、無ければ訊く。カードが無い・読めない・繋がらなければ null
+ */
+export async function cardIdOf(agent: number): Promise<string | null> {
+  const cards = await routeCards([agent], CARD_ID_WAIT);
+  return cards.get(agent)?.card ?? null;
+}

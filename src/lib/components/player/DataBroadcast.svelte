@@ -33,6 +33,7 @@
   import { onDestroy, untrack } from "svelte";
 
   import type { Bml, BmlIp, Rect, Service } from "#lib/bml/engine.js";
+  import { irdIdOf } from "#lib/bml/ird.js";
   import { type Plane, planeArea } from "#lib/bml/plane.js";
   import { fetchRelayed } from "#lib/bml/relay.js";
   import {
@@ -98,6 +99,11 @@
      */
     mainAudio?: ((index: number | null) => void) | null;
     /**
+     * 選局したエージェントのカードの番号 (10 進 16 桁。ライブの `card`)。データ放送の `getIRDID` に渡す。
+     * 双方向 (`network`) がオフなら渡さない。録画の再生では渡さない (いまのカードと録ったときのカードが違うことがある)
+     */
+    cardId?: string | null;
+    /**
      * この番組に載っている Hybridcast (AIT)。文書が起動を求めたら (startAITControlledApp) 映像の上に開く
      * (`HybridcastFrame`)。双方向がオフ (`network`) なら開かない。文書の問い合わせにも「無い」と答える
      */
@@ -124,6 +130,7 @@
     clock = null,
     tune = null,
     mainAudio = null,
+    cardId = null,
     apps = [],
     serviceName = "",
     captions = false,
@@ -653,6 +660,8 @@
       },
       // 選局は画面に任せる (エンジンは選局先を渡すだけ)。開くまでは断る (勝手に局を替えない)
       onTune: (service) => on && (tune?.(service) ?? false),
+      // 受信機の番号。双方向がオフなら渡さない (外へ送られうる経路と同じ扱い。`bml/ird.ts` の `irdIdOf`)
+      irdId: (type) => (network ? irdIdOf(type, cardId) : null),
       onMainAudio: (index) => {
         audioChosen = index !== null;
         mainAudio?.(index);

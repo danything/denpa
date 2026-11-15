@@ -298,6 +298,14 @@ export type Notice =
       type: "restarting";
     }
   | {
+      /**
+       * **この局を選局したエージェントが復号に使うカードの番号** (10 進 16 桁。`server/agent-cards.ts` の `cardIdOf`)。
+       * 画面はデータ放送の `getIRDID` に渡す (双方向がオンのときだけ。`DataBroadcast` の `cardId`)。カードが無ければ来ない
+       */
+      type: "card";
+      id: string;
+    }
+  | {
       type: "error";
       message: string;
       /**

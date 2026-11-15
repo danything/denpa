@@ -127,6 +127,8 @@ export interface BmlOptions {
    * 番組が替わって選んだ ES が無くなったときも null
    */
   onMainAudio?: (index: number | null) => void;
+  /** `getIRDID(type)` の答え (`browser.ts` の `BrowserHost.irdId`)。無ければいつも null */
+  irdId?: (type: number) => string | null;
   /**
    * Hybridcast (startAITControlledApp)。**開くのは呼ぶ側。** `ready` は開けるか (双方向がオンで、
    * AIT にアプリがある)、`start` は開く (開けたら true)。`hint` は文書が渡した数 (どのアプリかの
@@ -1251,6 +1253,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       this.options.onMainAudio?.(chosen === null ? null : index);
     }
     return true;
+  }
+
+  irdId(type: number): string | null {
+    return this.options.irdId?.(type) ?? null;
   }
 
   /** 今の主音声 (`getMainAudioStream`)。替えていなければ PMT の 1 本目 (分からなければ `/10`) */
