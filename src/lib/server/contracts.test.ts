@@ -30,6 +30,7 @@ const { cardContracts, programs, services } = await import("./schema");
 const {
   checkContracts,
   confirmCardContract,
+  confirmedSubscribed,
   groupByChannel,
   testDecodeUnverified,
   fromMjd,
@@ -37,7 +38,6 @@ const {
   isCodeSubscribed,
   noteDecoded,
   noteStillScrambled,
-  paidAllowed,
   reserveWarning,
   scrambledLiveMessage,
   testDecode,
@@ -470,7 +470,7 @@ describe("testDecode", () => {
       const row = getContractRows("0000111122223333")[0];
       expect(row?.state).toBe("expired");
       expect(row?.decodeOk).toBe(true);
-      expect(paidAllowed()(107)).toBe(false);
+      expect(confirmedSubscribed(107)).toBe(false);
     } finally {
       server.stop();
     }
@@ -990,7 +990,7 @@ describe("checkContracts エッジケース・異常系", () => {
   });
 });
 
-describe("有料放送を録ってよい局 (paidAllowed)", () => {
+describe("契約中と確かめた局 (confirmedSubscribed)", () => {
   const card = "0000111122223333";
   const row = (
     serviceId: number,
@@ -1007,7 +1007,7 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
       })
       .run();
 
-  test("カードが答えた契約は日数に関わらず録る。復号テストで確かめた契約は 31 日まで", () => {
+  test("カードが答えた契約は日数に関わらず契約中。復号テストで確かめた契約は 31 日まで", () => {
     const now = Date.now();
     row(1, { code: 0x0800 });
     row(2, {
@@ -1021,7 +1021,7 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
       decoded_at: now - DECODE_VALID_MS - 60_000,
     });
     row(4, { state: "unsubscribed", code: 0 });
-    const ok = paidAllowed(now);
+    const ok = (id: number) => confirmedSubscribed(id, now);
     expect([1, 2, 3, 4, 5].map(ok)).toEqual([true, true, false, false, false]);
   });
 
@@ -1046,7 +1046,7 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
     expect(rows.get(1)?.state).toBe("subscribed");
     expect(rows.get(2)?.state).toBe("unsubscribed");
     expect(rows.get(2)?.decodeOk).toBe(false);
-    expect(paidAllowed()(2)).toBe(false);
+    expect(confirmedSubscribed(2)).toBe(false);
   });
 
   test("下げるのは復号に使ったカードの行だけ。ほかのカードで確かめた契約は残す", () => {
@@ -1076,10 +1076,10 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
     noteStillScrambled(1, "9999");
     expect(getContractRows(card)[0]?.state).toBe("subscribed");
     expect(getContractRows("9999")[0]?.state).toBe("unsubscribed");
-    expect(paidAllowed()(1)).toBe(true);
+    expect(confirmedSubscribed(1)).toBe(true);
   });
 
-  test("手で予約した有料の番組が録ってよい局でなければ、理由を付けて知らせる", () => {
+  test("手で予約した有料の番組が契約中と確かめた局でなければ、理由を付けて知らせる", () => {
     // 局 n の番組は n * 1000 + 1 (`airing`)。7 だけ無料の番組
     for (const id of [1, 2, 3, 4, 5, 6, 7]) airing(id, id === 7);
     row(1, { code: 0x0800 });
@@ -1142,7 +1142,11 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
     expect(rows.get(1)?.decodeOk).toBe(true);
     expect(rows.get(2)?.state).toBe("subscribed");
     expect(rows.get(3)?.state).toBe("expired");
-    expect([1, 2, 3].map(paidAllowed())).toEqual([true, true, false]);
+    expect([1, 2, 3].map((id) => confirmedSubscribed(id))).toEqual([
+      true,
+      true,
+      false,
+    ]);
   });
 
   test("カードが読めないときは、復号できた録画があっても書かない", async () => {

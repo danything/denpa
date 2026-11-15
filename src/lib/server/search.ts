@@ -15,7 +15,7 @@ import { alias, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { globTerms, likePieces } from "../fold";
 import type { ReservationState, Rule } from "../types";
 import { now, orm } from "./db";
-import { ANY_PAID, compile, haystack, matchesCompiled } from "./rules";
+import { compile, haystack, matchesCompiled } from "./rules";
 import {
   activeEncodeJobId,
   HELD_STATES,
@@ -165,8 +165,7 @@ const counted = (row: { n: number } | undefined): number => Number(row?.n ?? 0);
 
 /**
  * **これからの放送** (番組表)。番組名と概要に当てる。判定はルールと同じもの
- * (`rules.matchesCompiled`)。終わっていない番組 (いま放送中も含む) だけ、始まる順。
- * 有料放送も出す。探しているのは人で、録るかどうかはその人が決める
+ * (`rules.matchesCompiled`)。終わっていない番組 (いま放送中も含む) だけ、始まる順
  */
 export function searchPrograms(q: string, options: SearchOptions) {
   const words = searchWords(q);
@@ -233,12 +232,8 @@ export function searchPrograms(q: string, options: SearchOptions) {
     options,
     page,
     (program) =>
-      matchesCompiled(
-        compiled,
-        program,
-        program.service_type,
-        ANY_PAID,
-        (fields) => haystack({ ...program, extended: null }, fields),
+      matchesCompiled(compiled, program, program.service_type, (fields) =>
+        haystack({ ...program, extended: null }, fields),
       ),
     () =>
       counted(

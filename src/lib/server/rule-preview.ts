@@ -14,7 +14,6 @@ import type { Program, Rule } from "../types";
 import { shareKey } from "./agent-channels";
 import { config } from "./config";
 import { contentions, type Occupant, settled } from "./conflict";
-import { paidAllowed } from "./contracts";
 import { now, orm } from "./db";
 import {
   canceledBroadcasts,
@@ -193,8 +192,6 @@ async function countPreview(
   conditions: Rule,
   { editing, ids = [] }: PreviewOptions,
 ): Promise<Omit<Preview, "failed">> {
-  // 有料放送は、契約中と確かめた局だけ当てる (`contracts.paidAllowed`。予約を立てるときと同じ)
-  const paidOk = paidAllowed();
   const at = now();
   /*
    * チューナーの台数。**スケジューラと同じところから取る。**
@@ -282,9 +279,9 @@ async function countPreview(
     .where(and(gt(programs.start_at, at), ...narrowed))
     .orderBy(programs.start_at)
     .all();
-  // 判定が読むのは局・ジャンル・無料かどうか・始まる時刻・検索範囲の文字だけ (`Matchable`。読まない列は上で外した)
+  // 判定が読むのは局・ジャンル・始まる時刻・検索範囲の文字だけ (`Matchable`。読まない列は上で外した)
   const missFor = (program: (typeof all)[number]) =>
-    missOf(compiled, program, program.service_type, paidOk, (fields) =>
+    missOf(compiled, program, program.service_type, (fields) =>
       haystack(program, fields),
     );
   const hits = all.filter((program) => missFor(program) === null);

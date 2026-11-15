@@ -275,8 +275,8 @@ export const recheckContracts = oneAtATime(async () => {
 export async function tick(): Promise<void> {
   const at = now();
 
-  // 有料放送の契約を確かめ直す (12 時間ごと)。自動予約は契約中と確かめた局しか録らないので、確かめ直さないと
-  // 契約を足しても切れても予約に効かない
+  // 有料放送の契約を確かめ直す (12 時間ごと)。有料の局を契約のあるカードのエージェントに振り分けるので、確かめ直さないと
+  // 契約を足しても切れても選局に効かない
   if (!recheckContracts.running && at - lastContractScan >= CONTRACT_SCAN_MS) {
     void recheckContracts();
   }
