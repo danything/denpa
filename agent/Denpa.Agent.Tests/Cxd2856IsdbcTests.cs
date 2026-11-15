@@ -205,8 +205,10 @@ public class Cxd2856IsdbcTests
     public async Task ロックしなかったときの前の選局はほかの方式も入れ_ロックしたかも残す()
     {
         var (frontend, bus, clock) = Make();
+        // 初期化の待ちで時計は進んでいる
+        var start = clock.Now;
         await Assert.That(frontend.TuneIsdbt(557143)).IsTrue();
-        var before = clock.Now;
+        var before = clock.Now - start;
         bus[Demod].CableStatus = _ => 0x00;
         await Assert.That(frontend.TuneIsdbc(C51)).IsFalse();
         var failure = frontend.IsdbcLockFailure!;
