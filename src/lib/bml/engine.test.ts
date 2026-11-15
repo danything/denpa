@@ -1347,8 +1347,12 @@ describe("主音声の切り替え (setMainAudioStream)", () => {
     expect(host.mainAudioRef()).toBe("/71");
     expect(host.setMainAudio("/10")).toBe(true);
     expect(host.setMainAudio("/72")).toBe(true);
+    // 同じ PMT が届き直しても渡し直さない。順番が替わって何本目かが変わったら渡し直す
+    bml.feed(pmt([0x10, 0x70, 0x71, 0x72]));
+    bml.feed(pmt([0x10, 0x72, 0x70]));
+    expect(host.mainAudioRef()).toBe("/72");
     bml.feed(pmt([0x10]));
     expect(host.mainAudioRef()).toBe("/10");
-    expect(chosen).toEqual([2, null, 3, null]);
+    expect(chosen).toEqual([2, null, 3, 1, null]);
   });
 });

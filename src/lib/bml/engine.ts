@@ -1211,14 +1211,23 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.handle(element, "onblur", { type: "blur" });
   }
 
-  /** PMT の音声の ES の部品タグを、PMT の順に覚える。選んでいた ES が無くなったら、ふだんの音声に戻す */
+  /**
+   * PMT の音声の ES の部品タグを、PMT の順に覚える。選んでいた ES が無くなったか、1 本目 (ふだんの音声) になったら戻す。
+   * 順番が入れ替わって何本目かが変わったら、新しい何本目かを渡し直す (画面は何本目かで選んでいる)
+   */
   private audioComponents(components: readonly ComponentPMT[]): void {
+    const before =
+      this.mainAudio === null ? -1 : this.audios.indexOf(this.mainAudio);
     this.audios = components
       .filter((component) => AUDIO_STREAM_TYPES.has(component.streamType))
       .map((component) => component.componentId);
-    if (this.mainAudio !== null && !this.audios.includes(this.mainAudio)) {
+    if (this.mainAudio === null) return;
+    const index = this.audios.indexOf(this.mainAudio);
+    if (index <= 0) {
       this.mainAudio = null;
       this.options.onMainAudio?.(null);
+    } else if (index !== before) {
+      this.options.onMainAudio?.(index);
     }
   }
 
