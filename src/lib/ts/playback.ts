@@ -223,10 +223,16 @@ export class StreamRetry {
     this.state("retrying");
   }
 
-  /** 待っているリクエストし直しをやめる (別の位置からリクエストした・閉じた)。数はそのまま */
+  /**
+   * 待っているリクエストし直しをやめる (別の位置からリクエストした・閉じた)。数はそのまま。
+   * 待っていたものをやめたら `quiet` も戻す (飛んだ先で手元が尽きても、繋ぎ直しの最中ではない)。
+   * 待ち終えて呼んだ `again` の中から呼ばれたとき (`remux-player.ts` の `load`) は、繋ぎ直しの最中なので戻さない
+   */
   cancel(): void {
-    if (this.timer !== null) clearTimeout(this.timer);
+    if (this.timer === null) return;
+    clearTimeout(this.timer);
     this.timer = null;
+    this.quiet = false;
   }
 }
 

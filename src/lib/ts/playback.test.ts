@@ -115,6 +115,25 @@ describe("StreamRetry", () => {
     }
   });
 
+  test("待っている間に cancel したら quiet を戻す。待ち終えて呼んだものの中の cancel では戻さない", () => {
+    const { retry, states, fire, restore } = fake();
+    const saved = globalThis.clearTimeout;
+    globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+    try {
+      retry.schedule(() => {}, true);
+      retry.cancel();
+      retry.starved();
+      expect(states).toEqual([]);
+      retry.schedule(() => retry.cancel(), true);
+      fire();
+      retry.starved();
+      expect(states).toEqual(["retrying"]);
+    } finally {
+      globalThis.clearTimeout = saved;
+      restore();
+    }
+  });
+
   test("quiet でも数は数え、上限を超えたら failed にする", () => {
     const { retry, states, fire, restore } = fake();
     try {
