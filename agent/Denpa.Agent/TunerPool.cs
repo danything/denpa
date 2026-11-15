@@ -663,21 +663,21 @@ public sealed class TunerPool(
         }, Linger);
     }
 
-    /**
-     * 選局を畳む。**利用者に理由を伝えてから、読むのをやめさせる。**
-     *
-     * <para>
-     * **`Sinks` はそのロックの下で触る。** 利用者に配る側 (<c>StartNative</c>) は
-     * `lock (Sinks)` して回しているので、こちらが素で書き換えると回している
-     * 最中の一覧を壊すことになる。
-     * </para>
-     *
-     * <para>
-     * **止まるのを待つのは呼んだ側** (<see cref="Lease.Await"/> は最長 2 秒待つ)。
-     * ここで待つと、取り合いのロック (<see cref="_gate"/>) を握ったまま 2 秒止まり、
-     * その間どのチューナーも開けなくなる。
-     * </para>
-     */
+    /// <summary>
+    /// 選局を畳む。**利用者に理由を伝えてから、読むのをやめさせる。**
+    ///
+    /// <para>
+    /// **`Sinks` はそのロックの下で触る。** 利用者に配る側 (<c>StartNative</c>) は
+    /// `lock (Sinks)` して回しているので、こちらが素で書き換えると回している
+    /// 最中の一覧を壊すことになる。
+    /// </para>
+    ///
+    /// <para>
+    /// **止まるのを待つのは呼んだ側** (<see cref="Lease.Await"/> は最長 2 秒待つ)。
+    /// ここで待つと、取り合いのロック (<see cref="_gate"/>) を握ったまま 2 秒止まり、
+    /// その間どのチューナーも開けなくなる。
+    /// </para>
+    /// </summary>
     private void Release(Lease lease, string? reason)
     {
         lease.CancelLinger();
@@ -1519,15 +1519,15 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
         _linger = null;
     }
 
-    /**
-     * **読むのをやめる印を立てる。待たない。**
-     *
-     * <para>
-     * 確保したままのデバイスは閉じない。チューナーごとに開いたままで、次の選局が
-     * 同じものを使う。ここでやるのは合図だけ。読み出し側は 200 ms ごとに
-     * この印を確かめるので (<c>DeviceStream.Read</c>)、電波が来ていなくても止まる。
-     * </para>
-     */
+    /// <summary>
+    /// **読むのをやめる印を立てる。待たない。**
+    ///
+    /// <para>
+    /// 確保したままのデバイスは閉じない。チューナーごとに開いたままで、次の選局が
+    /// 同じものを使う。ここでやるのは合図だけ。読み出し側は 200 ms ごとに
+    /// この印を確かめるので (<c>DeviceStream.Read</c>)、電波が来ていなくても止まる。
+    /// </para>
+    /// </summary>
     public void Stop()
     {
         _stopped = true;
@@ -1538,12 +1538,12 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
         Interop.KillGroup(child.Id);
     }
 
-    /**
-     * **止まりきるまで待つ。呼ぶのはロックの外で。** 次の選局はこれが返ってから始める (<see cref="TunerPool.Open"/>)。
-     * 待つのは読み出しだけ。デスクランブラはデバイスに触らず、配り先も畳むときに空になっている。
-     * それでも止まらないときは記録に残す (記録を残さずに進むと、取り合いの窓が開いていたのか確かめようが無い)。
-     * **何度呼んでも、どれも止まるまで待つ** (取り上げた側とデバイスを閉じる側が同時に待つことがある)
-     */
+    /// <summary>
+    /// **止まりきるまで待つ。呼ぶのはロックの外で。** 次の選局はこれが返ってから始める (<see cref="TunerPool.Open"/>)。
+    /// 待つのは読み出しだけ。デスクランブラはデバイスに触らず、配り先も畳むときに空になっている。
+    /// それでも止まらないときは記録に残す (記録を残さずに進むと、取り合いの窓が開いていたのか確かめようが無い)。
+    /// **何度呼んでも、どれも止まるまで待つ** (取り上げた側とデバイスを閉じる側が同時に待つことがある)
+    /// </summary>
     public void Await()
     {
         if (_pump?.Wait(StopWait) == false) Log.Write($"[{Name}] {Channel}: 読み出しが {StopWait.TotalSeconds} 秒で止まりませんでした");

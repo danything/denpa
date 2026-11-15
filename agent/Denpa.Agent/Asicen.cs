@@ -525,13 +525,6 @@ public static class AsicenUserland
             return daemon.Listed;
         },
         name);
-
-    /// <summary>
-    /// 内蔵カードリーダー。**挙げない。** カードの操作 (CARD_CONNECT・CARD_TRANSMIT など) は形式が契約の文書に無く、
-    /// 模擬のデーモンもカードに対応していない (<c>asicenctl card-status</c> が UNSUPPORTED で返る) ので、観察でも形式を起こせなかった。
-    /// B-CAS カードは USB のカードリーダーで使う (docs/tuners.md)
-    /// </summary>
-    public static IReadOnlyList<CardLinkCandidate> Cards() => [];
 }
 
 /// <summary>

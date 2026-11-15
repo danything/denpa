@@ -701,7 +701,7 @@ app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
     var date = body?["date"] is JsonValue value && value.TryGetValue<int>(out var mjd) ? mjd : -1;
     if (verification is not { Length: >= 1 and <= CardWire.MaxVerification } || date is < 0 or > 65535)
     {
-        await Respond.Error(http, "verification (Base64 で 1〜253 バイト) と date (MJD) が必要です", 400);
+        await Respond.Error(http, $"verification (Base64 で 1〜{CardWire.MaxVerification} バイト) と date (MJD) が必要です", 400);
         return;
     }
     try

@@ -287,8 +287,8 @@ internal sealed class Dt295NativeStream
         }
     }
 
-    /// <summary>書いたぶんを渡す (<see cref="Zd1jTuner.Flush"/>)。読む側がいないと判定したら終わる</summary>
-    private bool Flush(PipeWriter writer) => Zd1jTuner.Flush(writer, () => _stopped, () =>
+    /// <summary>書いたぶんを渡す (<see cref="TsBuffer.Flush(PipeWriter, Func{bool}, Action)"/>)。読む側がいないと判定したら終わる</summary>
+    private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped, () =>
     {
         _ended = true;
         _stalled();

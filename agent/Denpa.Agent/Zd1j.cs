@@ -341,21 +341,12 @@ public sealed record Zd1jTimings(long OpenMs, long LockMs, long FirstTsMs);
 /// CECH-ZD1 J のチューナー (地上波だけ)。**選局し直しは周波数まわりだけ。** ボードは流している間だけ取る。
 ///
 /// <para>
-/// 前面の LED は流している間ずっと赤、止めたら緑 (点滅なし)。読む側がいないまま <see cref="StallLimit"/> 経ったら
+/// 前面の LED は流している間ずっと赤、止めたら緑 (点滅なし)。読む側がいないまま <see cref="TsBuffer.StallLimit"/> 経ったら
 /// 流すのをやめて LED を緑にし、ボードを返す (TunerPool はデバイスを開きっぱなしにするので、ここで打ち切る)。
 /// </para>
 /// </summary>
 public sealed class Zd1jTuner : ITuneDevice
 {
-    /// <summary>
-    /// 読む側がいないまま、バッファが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を畳むまでの間
-    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く打ち切ると、TunerPool が畳む前に TS が途切れる)
-    /// </summary>
-    internal static TimeSpan StallLimit => TunerPool.Linger;
-
-    /// <summary>書いたぶんを渡す (<see cref="TsBuffer.Flush"/>)。CECH-ZD1 J・PIX-DT295・Siano の機材から受けた TS を渡すときに使う。読む側がいないまま <see cref="StallLimit"/> 経ったら <paramref name="stalled"/></summary>
-    internal static bool Flush(PipeWriter writer, Func<bool> stopped, Action stalled) => TsBuffer.Flush(writer, stopped, StallLimit, stalled);
-
     private readonly string _name;
     private readonly Func<Zd1jBoard> _acquire;
     private readonly Lock _gate = new();
@@ -599,8 +590,8 @@ internal sealed class Zd1jStream
         }
     }
 
-    /// <summary>書いたぶんを渡す (<see cref="Zd1jTuner.Flush"/>)。読む側がいないと判定したら終わる</summary>
-    private bool Flush(PipeWriter writer) => Zd1jTuner.Flush(writer, () => _stopped, () =>
+    /// <summary>書いたぶんを渡す (<see cref="TsBuffer.Flush(PipeWriter, Func{bool}, Action)"/>)。読む側がいないと判定したら終わる</summary>
+    private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped, () =>
     {
         _ended = true;
         _stalled();

@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO.Pipelines;
 
 namespace Denpa.Agent;
@@ -277,7 +276,7 @@ internal sealed class SianoStream
     /// <summary>キューに入りきらずに捨てた TS のバイト数</summary>
     public long Dropped => Interlocked.Read(ref _dropped);
 
-    /// <param name="stalled">読む側がいないまま <see cref="Zd1jTuner.StallLimit"/> 経ったときに呼ぶ</param>
+    /// <param name="stalled">読む側がいないまま <see cref="TsBuffer.StallLimit"/> 経ったときに呼ぶ</param>
     public SianoStream(string name, Action stalled)
     {
         _name = name;
@@ -320,7 +319,7 @@ internal sealed class SianoStream
                 ArrayPool<byte>.Shared.Return(chunk.Buffer);
                 ReportDropped();
                 if (_aligner.Packets == before) continue;
-                if (!Zd1jTuner.Flush(writer, () => _stopped || _ended, () =>
+                if (!TsBuffer.Flush(writer, () => _stopped || _ended, () =>
                     {
                         _ended = true;
                         _stalled();

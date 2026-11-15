@@ -986,9 +986,9 @@ internal sealed class AsicenStream
         }
     }
 
-    /// <summary>読み出し側がいないまま <see cref="Zd1jTuner.StallLimit"/> 経ったら、TS のストリームを閉じる (USB を直に持つ機材から受ける TS と同じ上限)</summary>
-    private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped || _draining, Zd1jTuner.StallLimit,
-        () => End($"読み出し側がいないまま {Zd1jTuner.StallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました"),
+    /// <summary>読み出し側がいないまま <see cref="TsBuffer.StallLimit"/> 経ったら、TS のストリームを閉じる (USB を直に持つ機材から受ける TS と同じ上限)</summary>
+    private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped || _draining, TsBuffer.StallLimit,
+        () => End($"読み出し側がいないまま {TsBuffer.StallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました"),
         () => End("TS を渡せません (読み出し側が閉じました)"));
 
     private void End(string reason)

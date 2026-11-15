@@ -336,7 +336,7 @@ public sealed class AgentTls
 }
 
 /// <summary>
-/// 組んだ denpa の指紋 (<c>tls/clients</c>。1 行に 1 つ)。読むのは起動したときだけで、足すたびに丸ごと書き直す
+/// 組んだ denpa の指紋 (<c>tls/clients</c>。1 行に 1 つ)。読むのは起動したときだけで、足す・消すたびに丸ごと書き直す
 /// </summary>
 public sealed class PairedClients
 {
@@ -371,7 +371,7 @@ public sealed class PairedClients
         lock (_gate)
         {
             if (!_known.Remove(fingerprint)) return false;
-            AgentTls.WritePrivate(_file, string.Concat(_known.Order().Select(line => line + "\n")));
+            Save();
             return true;
         }
     }
@@ -382,8 +382,11 @@ public sealed class PairedClients
         lock (_gate)
         {
             if (!_known.Add(fingerprint)) return false;
-            AgentTls.WritePrivate(_file, string.Concat(_known.Order().Select(line => line + "\n")));
+            Save();
             return true;
         }
     }
+
+    /// <summary>丸ごと書き直す。<see cref="_gate"/> の中で呼ぶ</summary>
+    private void Save() => AgentTls.WritePrivate(_file, string.Concat(_known.Order().Select(line => line + "\n")));
 }
