@@ -111,6 +111,14 @@ interface Route {
 
 const routes = new Map<string, Route>();
 
+/** 開いている接続。止まる前に全部へ知らせる (`live.announceRestart`) */
+const opened = new Set<Connection>();
+
+/** 開いている接続の全部 */
+export function openConnections(): ReadonlySet<Connection> {
+  return opened;
+}
+
 /** このパスに来た接続を受け持つ。ライブ視聴が `/api/live/socket` で登録する */
 export function serve(pathname: string, route: Route): void {
   routes.set(pathname, route);
@@ -147,13 +155,16 @@ const entry: LiveEntry = {
       }
       const connection = new Connection(ws);
       ws.data.connection = connection;
+      opened.add(connection);
       route.open(connection);
     },
     message(ws, message) {
       ws.data.connection?.receive(message);
     },
     close(ws) {
-      ws.data.connection?.finish();
+      const connection = ws.data.connection;
+      if (connection !== null) opened.delete(connection);
+      connection?.finish();
     },
   },
 };

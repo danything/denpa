@@ -18,7 +18,7 @@ import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
 import { pruneHistory, reconcile } from "./files";
 import { probe } from "./hwenc";
-import { attend } from "./live";
+import { announceRestart, attend } from "./live";
 import { reconcile as logoReconcile, ride, sweep } from "./logo";
 import { checkPower, forgetWake } from "./power";
 import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
@@ -435,6 +435,8 @@ function listenToAgent(agent: Agent): () => void {
 }
 
 function stop(): void {
+  // 観ている画面に、このあと途切れるのは入れ替えのためだと知らせる (画面は段を下げない。`live.announceRestart`)
+  announceRestart();
   for (const timer of timers) clearInterval(timer);
   timers.length = 0;
   for (const off of unlisten.values()) off();
@@ -559,6 +561,12 @@ const DRAIN_CHECK = 5000;
 const DRAIN_REPORT = 60_000;
 
 /**
+ * 止まる前に画面へ送った通知 (`live.announceRestart`) が送り出されるまで待つ時間 (ms)。
+ * `process.exit` は送り待ちの塊を捨てるので、待たないと通知が届かないことがある。短い待ちで足りると見ている (推定)
+ */
+const RESTART_NOTICE_FLUSH = 200;
+
+/**
  * 何があっても降りる。**降り損ねを「ぶら下がったまま」にしない。**
  *
  * 実機で、消しはじめられた Pod が **40 分たっても降りてこない**ことがあった
@@ -579,7 +587,7 @@ function forceExitAfter(ms: number, why: string): void {
     } catch (error) {
       console.warn(`[boot] 後始末に失敗しました: ${error}`);
     }
-    process.exit(0);
+    setTimeout(() => process.exit(0), RESTART_NOTICE_FLUSH);
   }, ms);
   // 目覚ましそのものがプロセスを生かし続けないように
   timer.unref?.();
@@ -596,6 +604,7 @@ async function drain(signal: string): Promise<void> {
 
   if (config.shutdownWait <= 0 || recordings === 0) {
     stop();
+    await Bun.sleep(RESTART_NOTICE_FLUSH);
     process.exit(0);
   }
 
@@ -627,5 +636,6 @@ async function drain(signal: string): Promise<void> {
     console.log("[boot] 録画が終わったので停止します");
   }
   stop();
+  await Bun.sleep(RESTART_NOTICE_FLUSH);
   process.exit(0);
 }

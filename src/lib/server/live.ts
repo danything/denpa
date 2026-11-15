@@ -148,7 +148,7 @@ import {
   tunersOf,
 } from "./tuner";
 import { HLG_TO_SDR, UHD_HEIGHT } from "./uhd";
-import type { Connection } from "./ws";
+import { type Connection, openConnections } from "./ws";
 
 /**
  * セッションのエンコード方式。画面が選ぶのは LiveCodec だけで、`audio` は外から使う API
@@ -3523,6 +3523,21 @@ const sessions = new Map<string, Session>();
  */
 export function hasLiveViewers(): boolean {
   return sessions.size > 0;
+}
+
+/**
+ * **入れ替えで止まることを、開いている全部の接続 (ライブ・追っかけ) に知らせる** (`Notice` の `restarting`)。
+ * 止まる直前 (録画を待ち終えたあと。`runtime.ts` の `stop`) に呼ぶ。画面はこのあとの途切れを回線の細さに数えない
+ */
+export function announceRestart(): void {
+  const notice: Notice = { type: "restarting" };
+  for (const connection of openConnections()) {
+    try {
+      connection.send(CHANNEL.control, 0n, json(notice));
+    } catch {
+      // 閉じかけの接続。知らせられなくても、画面は切れたことで同じく扱う
+    }
+  }
 }
 
 /** ライブで観るもの (`begin`・`sharedSession`・`watch`)。目印 (`key`) が同じなら同じセッションを共有する */

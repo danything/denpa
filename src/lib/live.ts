@@ -290,6 +290,14 @@ export type Notice =
       type: "restart";
     }
   | {
+      /**
+       * **サーバが入れ替えで止まる** (`server/live.ts` の `announceRestart`。止まる合図を受けて、録画を待ち終えてから)。
+       * このあと接続が切れ、届かない間ができる。回線が細いのではないので、画面は繋ぎ直して映り始めてしばらくは段を下げない
+       * (`live-player.svelte.ts` の `HOLD_AFTER_RECONNECT`)
+       */
+      type: "restarting";
+    }
+  | {
       type: "error";
       message: string;
       /**
