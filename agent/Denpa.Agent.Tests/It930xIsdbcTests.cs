@@ -221,12 +221,19 @@ public class It930xIsdbcTests
                 // 231000 kHz = 0x38658、233000 kHz = 0x38E28
                 "65 U 68=0084000221001A1C588603FF01D90F2487", "65 U 68=0084000221001A1C288E03FF01D90F2487",
             });
+            // ロックしなかった周波数ごとに、試した順に状態を残す (常駐の記録と --tune が 1 行ずつ出す)。2 つ目の前の選局は 1 つ目
+            await Assert.That(tuner.IsdbcLockFailures.Select(failure => failure.Khz)).IsEquivalentTo(new uint[] { 231000, 233000 }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+            await Assert.That(tuner.IsdbcLockFailures[1].Previous!.Khz).IsEqualTo(231000u);
+            await Assert.That(tuner.IsdbcLockFailures[1].Previous!.Locked).IsFalse();
+            await Assert.That(tuner.IsdbcLockFailures[1].Retuned).IsTrue();
 
             // ずらした周波数でだけロックする
             demod.CableStatus = _ => TunedKhz(demod) == 233000 ? (byte)0x01 : (byte)0x00;
             tuner.Tune(ChannelTable.Parse("QC24")!);
             await Assert.That(tuner.CableFrequency).IsEqualTo(233_000_000u);
             await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Passthrough);
+            // ずらした周波数でロックすれば、表の周波数がロックしなかったことは残さない (記録に出さない)
+            await Assert.That(tuner.IsdbcLockFailures).IsEmpty();
         }
         finally
         {
