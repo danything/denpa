@@ -141,7 +141,7 @@ export function load(locals: { token?: number }, all: Agent[], lists: Lists) {
       const answer = lists.get(agent.id) ?? tunerList(agent);
       const card = cardStatus(agent).then((status) => ({
         ...status,
-        // 配る側が登録したエージェントなら、その名前で「<名前> から鍵を貰っています」と出す
+        // 配る側が登録したエージェントなら、その名前で「<名前> から鍵を受け取っています」と出す
         remoteName: remoteName(status.remote, all),
       }));
       return {

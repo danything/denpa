@@ -1356,3 +1356,37 @@ describe("主音声の切り替え (setMainAudioStream)", () => {
     expect(chosen).toEqual([2, null, 3, 1, null]);
   });
 });
+
+describe("音声の object で主音声を替える", () => {
+  const withAudio: ResponseMessage = {
+    type: "pmt",
+    components: [
+      { pid: 0x1010, componentId: 0x10, streamType: 0x0f },
+      { pid: 0x1070, componentId: 0x70, streamType: 0x0f },
+      { pid: 0x140, componentId: 0x40, streamType: 0x0d },
+    ],
+  };
+
+  test("再生の音声の object の ES を主音声にし、止めたらふだんの音声に戻す。様子は記録に出す", async () => {
+    const chosen: (number | null)[] = [];
+    const { bml, logs } = open({ onMainAudio: (index) => chosen.push(index) });
+    const [, ...rest] = carousel([
+      startup(
+        '<object id="radio" type="audio/X-arib-mpeg2-aac" data="/70" streamstatus="play"/>',
+        `function start() {}`,
+      ),
+    ]);
+    feedAll(bml, [withAudio, ...rest]);
+    const { done } = await watch(() => chosen.length > 0);
+    expect(done).toBe(true);
+    expect(chosen).toEqual([1]);
+    expect(logs.some((line) => line.includes("音声の object"))).toBe(true);
+
+    const host = bml as unknown as {
+      stream(element: unknown, status: string): void;
+      doc: { getElementById(id: string): unknown } | null;
+    };
+    host.stream(host.doc!.getElementById("radio"), "stop");
+    expect(chosen).toEqual([1, null]);
+  });
+});

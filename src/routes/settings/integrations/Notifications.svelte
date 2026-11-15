@@ -69,7 +69,7 @@
 
     {#if data.webhooks.length > 0}
       <!--
-                1 件を URL・送る通知・直近の結果・ボタン の順に縦に積む。幅がいくらでも横には出ない
+                1 件を URL・送る通知・直近の結果・ボタンの順に縦に積む。幅がいくらでも横には出ない
                 (URL だけは `text-overflow: ellipsis` で止める)
             -->
       <div class="item-list">

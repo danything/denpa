@@ -441,7 +441,7 @@ export function pictureInPicture(options: Options): Pip {
     if (standard()) await video.requestPictureInPicture();
     else if (webkit(video)) {
       /*
-       * Safari の API は断っても何も言わない。切り替わったかを見て言う。
+       * Safari の API は断っても例外を出さないので、切り替わったかを見て通知を出す。
        * **一度でも切り替わったかで見る**。1 秒の間に閉じられた・画面を離れたものまで
        * 「切り替わらなかった」と言っていた
        */
@@ -464,7 +464,7 @@ export function pictureInPicture(options: Options): Pip {
     }
   }
 
-  /** 出せなかった理由を言う。**コンソールにも残す** (端末によってはトーストより読みやすい) */
+  /** 出せなかった理由を通知に出す。**コンソールにも残す** (端末によってはトーストより読みやすい) */
   function refuse(error: unknown): void {
     console.warn("[pip]", error);
     refused = {

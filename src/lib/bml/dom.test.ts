@@ -60,6 +60,7 @@ function setup(): Setup {
       return ref === "/70";
     },
     mainAudioRef: () => mainAudio.at(-1) ?? "/10",
+    objectChanged: () => {},
   };
   const dom = new Dom(host);
   realm.global.put("document", dom.document);
