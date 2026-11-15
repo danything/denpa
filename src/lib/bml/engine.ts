@@ -336,6 +336,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private audios: number[] = [];
   /** 文書が選んだ主音声の部品タグ。ふだんの音声 (PMT の 1 本目) なら null (`setMainAudio`) */
   private mainAudio: number | null = null;
+  /** 主音声を音声の object で選んだか (`objectAudio`)。object が無くなったときに戻すのは、object で選んだときだけ */
+  private audioByObject = false;
+  /** 最後に記録に出した音声の object の様子 (`objectAudio`。同じなら出さない) */
+  private loggedAudioObjects = "";
   private loading = false;
   private currentEvent: Value = null;
   private focusedElement: BmlElement | null = null;
@@ -916,6 +920,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       this.options.onVideoRect?.(rect, this.size),
     );
     this.options.onLoad?.(this.size);
+    // 文書に初めから再生の音声の object があれば、その音声にする (無くなったら戻す)
+    this.objectAudio("文書を読み込んだ");
     this.setHidden(body?.attr("invisible") === "invisible");
     this.screenLocked = false;
     this.renderer.draw(true);
@@ -1223,10 +1229,15 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.audios = components
       .filter((component) => AUDIO_STREAM_TYPES.has(component.streamType))
       .map((component) => component.componentId);
-    if (this.mainAudio === null) return;
+    // 文書の音声の object が指す ES が PMT に入ってきたなら、その音声にする (`objectAudio`)
+    if (this.mainAudio === null) {
+      this.objectAudio("PMT を読んだ");
+      return;
+    }
     const index = this.audios.indexOf(this.mainAudio);
     if (index <= 0) {
       this.mainAudio = null;
+      this.audioByObject = false;
       this.options.onMainAudio?.(null);
     } else if (index !== before) {
       this.options.onMainAudio?.(index);
@@ -1247,16 +1258,83 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     // 替える側がいない (録画の再生) なら、替えられないと答える
     if (tag === null || index === -1 || this.options.onMainAudio === undefined)
       return false;
-    const chosen = index === 0 ? null : tag;
-    if (chosen !== this.mainAudio) {
-      this.mainAudio = chosen;
-      this.options.onMainAudio?.(chosen === null ? null : index);
-    }
+    this.chooseAudio(tag);
+    this.audioByObject = false;
     return true;
   }
 
   irdId(type: number): string | null {
     return this.options.irdId?.(type) ?? null;
+  }
+
+  /** 主音声を部品タグ `tag` の ES にする (PMT の 1 本目ならふだんの音声に戻す)。替わったら画面に渡す (`onMainAudio`) */
+  private chooseAudio(tag: number | null): void {
+    const index = tag === null ? 0 : this.audios.indexOf(tag);
+    const chosen = index <= 0 ? null : tag;
+    if (chosen === this.mainAudio) return;
+    this.mainAudio = chosen;
+    this.options.onMainAudio?.(chosen === null ? null : index);
+  }
+
+  /**
+   * **再生にした音声の object (`audio/X-arib-mpeg2-aac`) の ES を主音声にする** (STD-B24 第二編。`data` が部品を指す `/70`)。
+   * 文書を読み込んだとき・object の `streamStatus` や `data` を書き換えたときに決め直す。再生の object が無くなれば、
+   * object で選んでいた音声だけをふだんの音声に戻す (`setMainAudioStream` で選んだものは戻さない)。
+   * どの書き方で切り替える文書かを見分けるため、音声の object の様子は記録に出す
+   */
+  private objectAudio(why: string): void {
+    if (this.doc === null) return;
+    const objects = this.doc
+      .elements("object")
+      .filter(
+        (element) =>
+          (element.attr("type") ?? "").toLowerCase() ===
+          "audio/x-arib-mpeg2-aac",
+      );
+    if (objects.length === 0) {
+      if (this.audioByObject) {
+        this.audioByObject = false;
+        this.chooseAudio(null);
+      }
+      return;
+    }
+    // 様子が前と同じなら記録に出さない (PMT は届くたびにここを通る)
+    const shape = objects
+      .map(
+        (element) =>
+          `data=${element.attr("data") ?? ""} streamstatus=${element.attr("streamstatus") ?? "stop"}`,
+      )
+      .join(" / ");
+    if (shape !== this.loggedAudioObjects) {
+      this.loggedAudioObjects = shape;
+      this.log(`音声の object (${why}): ${shape}`);
+    }
+    if (this.options.onMainAudio === undefined) return;
+    const tag = objects
+      .filter(
+        (element) =>
+          (element.attr("streamstatus") ?? "stop").toLowerCase() === "play",
+      )
+      .map((element) =>
+        /^\/(?:-1\/)?([0-9a-f]{1,2})$/i.exec(
+          (element.attr("data") ?? "").trim(),
+        ),
+      )
+      .map((match) => (match === null ? -1 : Number.parseInt(match[1]!, 16)))
+      .find((found) => this.audios.includes(found));
+    if (tag !== undefined) {
+      this.chooseAudio(tag);
+      this.audioByObject = true;
+    } else if (this.audioByObject) {
+      this.audioByObject = false;
+      this.chooseAudio(null);
+    }
+  }
+
+  /** object の `data` を書き換えた (`Dom`)。音声の object なら主音声を決め直す */
+  objectChanged(element: BmlElement): void {
+    if ((element.attr("type") ?? "").toLowerCase() === "audio/x-arib-mpeg2-aac")
+      this.objectAudio("data を書き換えた");
   }
 
   /** 今の主音声 (`getMainAudioStream`)。替えていなければ PMT の 1 本目 (分からなければ `/10`) */
@@ -1272,6 +1350,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       if (type === "image/x-arib-mng" && status.toLowerCase() === "stop")
         element.setAttr("streamposition", "0");
       element.setAttr("streamstatus", status);
+      if (type === "audio/x-arib-mpeg2-aac")
+        this.objectAudio(`streamStatus を ${status} にした`);
       return;
     }
     this.playing.get(element)?.();

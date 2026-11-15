@@ -12,7 +12,7 @@ import { saveSettings, settings } from "#lib/server/settings.js";
 import * as diagnostics from "./diagnostics.server";
 
 /**
- * その他。この端末だけの設定 (画面で読み書きするのでサーバは何もしない)・ログイン・バージョンと環境・ログ。
+ * その他。この端末だけの設定 (画面で読み書きする。ロゴの取得の記録だけは世帯の設定でサーバに置く)・ログイン・バージョンと環境・ログ。
  * バージョンと環境・ログ (前の「診断」) の読み込みは `diagnostics.server.ts` が持ち、ここでまとめる。
  *
  * **ログアウトはログインの控え (Cookie) で入っているときだけ出す。** 素通し (LAN) には控えが無く、
@@ -35,7 +35,7 @@ export function load({ cookies, url }) {
 }
 
 export const actions = {
-  /** **ロゴの取得を記録するか** (開発者向け。`logo-record.ts`)。世帯の設定で、オンの間だけ当たりの中継で待つたびに記録する */
+  /** **ロゴの取得を記録するか** (開発者向け。`logo-record.ts`)。世帯の設定で、オンの間だけ、衛星のロゴを流す中継で待つたびに記録する */
   recordLogo: async ({ request }) => {
     const form = await request.formData();
     saveSettings({ recordLogo: form.get("recordLogo") === "on" });

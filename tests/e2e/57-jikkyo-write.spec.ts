@@ -102,7 +102,7 @@ test.describe("ライブで実況に書き込む", () => {
       await input.fill("続けて");
       await input.press("Enter");
       await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(
-        "3 秒待ってください",
+        "続けて送るには 3 秒あけてください",
       );
       await expect(input).toHaveValue("続けて");
       expect(nx.posts).toHaveLength(1);

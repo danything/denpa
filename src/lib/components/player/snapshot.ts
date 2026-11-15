@@ -158,7 +158,7 @@ interface ShownComment {
   text: string;
   /** いま見えている箱 (CSS px。`getBoundingClientRect`。流れている途中の位置) */
   box: Box;
-  /** 字の書体 (canvas の `font` の形) と色 */
+  /** 字の書体 (canvas の `font` の形式) と色 */
   font: string;
   color: string;
 }
@@ -474,9 +474,9 @@ export function clipParams(
 
 /**
  * **端末に保存する** (サーバに置けなかったとき)。PNG にして `keepOnDevice` に渡す。
- * 共有シートを閉じられたら何も残らないので、そう言う。
+ * 共有シートを閉じられたら何も残らないので、その旨を通知に出す。
  *
- * 返り値は通知 (トースト)。サーバに置けなかったことは必ず言う (言わないと、一覧に無い理由が分からない)
+ * 返り値は通知 (トースト)。サーバに置けなかったことは必ず通知する (出さないと、一覧に無い理由が分からない)
  */
 export async function saveOnDevice(
   canvas: HTMLCanvasElement,

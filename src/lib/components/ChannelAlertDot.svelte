@@ -9,7 +9,7 @@
   import Icon from "#lib/components/player/Icon.svelte";
 
   /**
-   * スマホの形の設定の入口に付ける、チャンネルのお知らせの小さな印 (`app.css` の `.alert-dot`)。
+   * スマホの形の設定の入口と、設定の左の一覧の「受信」に付ける、チャンネルのお知らせの小さな印 (`app.css` の `.alert-dot`)。
    * ヘッダーの印 (`ChannelAlert.svelte`) と同じアイコンを小さくしたもの。置き場は使う側で決める
    */
   let { kind }: { kind: ChannelAlertKind } = $props();

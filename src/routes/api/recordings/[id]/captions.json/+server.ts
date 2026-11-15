@@ -22,7 +22,7 @@ import { run } from "#lib/server/stream.js";
  * 画像の字幕 (PGS) は読まずに 404 を返す (扱いは docs/encode.md「字幕は放送の ARIB 字幕をそのまま」)。
  *
  * **まだエンコードできていない録画は元の TS から抜く** (`playback.captionArgs`)。時刻は観る画面の物差し
- * (TS の先頭を 0) に揃える。TS は丸ごと舐めるのでエンコードしたものより時間がかかる (1 時間の BS で 7GB)。
+ * (TS の先頭を 0) に揃える。TS は先頭から末尾まで読むのでエンコードしたものより時間がかかる (1 時間の BS で 7GB)。
  * エンコードが終わると物差しが変わるので、こちらは覚えない (同時に来たリクエストだけ、1 回の取り出しを共有する)
  *
  * **4K の局の録画 (TTML) は ffmpeg を通さない** (`playback.uhdCaptionSource`)。エンコード済みがあれば、その隣に置いた
@@ -50,7 +50,7 @@ const MISSING = "字幕がありません";
 
 /**
  * 字幕を抜いてデコードし、JSON にする。字幕を持たない (抜けたものが空・画像の字幕) ならその理由。
- * **ffmpeg が降りた・上限で切れたときは覚えない** (404 を投げる)。時間切れや、ffmpeg を起こせなかっただけかもしれないため
+ * **ffmpeg が失敗で終わった・上限で切れたときは覚えない** (404 を投げる)。時間切れや、ffmpeg を起こせなかっただけかもしれないため
  */
 async function build(argv: string[], ts: boolean): Promise<Made> {
   const parts: Uint8Array[] = [];
@@ -67,7 +67,7 @@ async function build(argv: string[], ts: boolean): Promise<Made> {
       size += chunk.length;
     },
   });
-  // 字幕を持たない番組のほうが多い (ffmpeg は「そのストリームは無い」で、動画を読む前に降りる)
+  // 字幕を持たない番組のほうが多い (ffmpeg は「そのストリームは無い」で、動画を読む前に終わる)
   if (code !== 0) error(404, MISSING);
   // 上限で切れた。壊れたファイルの途中までを覚えて返し続けない
   if (over) error(404, MISSING);
