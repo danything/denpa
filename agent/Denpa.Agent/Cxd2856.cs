@@ -88,9 +88,9 @@ public sealed record CxdIsdbcDetail(bool? Inverted, double? CarrierOffsetKhz, do
 public sealed record CxdPreviousTune(string Mode, uint Khz, bool Locked, long BeforeMs);
 
 /// <summary>
-/// ISDB-C の選局がロックしなかったときに読んだ状態 (仕様書 8.6・9.5・9.7)。ロックが不安定な理由を探すため、常駐の記録と <c>--tune</c> に 1 行で出す。
+/// ISDB-C の選局がロックしなかったときに読んだ状態 (仕様書 8.6・9.5)。ロックが不安定な理由を探すため、常駐の記録と <c>--tune</c> に 1 行で出す。
 /// ロックの段は、仕様書にあるビット (バンク <c>40</c> の <c>88</c> の bit0 と <c>10</c> の bit5) だけを見る。AGC や搬送波の段を示すビットと、
-/// チューナーの PLL のロックを読むレジスタは仕様書に無いので読まない
+/// チューナーの PLL のロックを読むレジスタは仕様書に無いので読まない。チューナーの AGC (仕様書 9.7) は、読むとチューナーの状態を動かすので読まない
 /// </summary>
 /// <param name="Khz">選局した中心周波数 (kHz)</param>
 /// <param name="Retuned">ISDB-C のまま選局し直したか。false なら起動から選局した (仕様書 8.4 の手順 2)</param>
@@ -101,15 +101,12 @@ public sealed record CxdPreviousTune(string Mode, uint Khz, bool Locked, long Be
 /// <param name="TsLocked">最後に読んだ <c>10</c> の bit5</param>
 /// <param name="IfAgc">復調器の IF の AGC の出力 (<c>49</c>〜<c>4A</c> の 12 ビット。仕様書 9.5)。読めなければ null</param>
 /// <param name="CarrierOffsetKhz">搬送波のずれ (kHz。仕様書 9.5)。自動の探索がロックしていなければ null</param>
-/// <param name="TunerIfAgc">チューナーの IF の AGC の値 a (仕様書 9.7)。読めなければ null</param>
-/// <param name="TunerRfAgc">チューナーの RF の AGC の値 b (仕様書 9.7)。読めなければ null</param>
-/// <param name="StrengthDbm">a と b から求めた入力のレベル (dBm。仕様書 9.7。目安)。読めなければ null</param>
 /// <param name="SinceInitMs">受信機を初期化してから、この選局を始めるまで (ms)</param>
 /// <param name="TunesSinceInit">初期化してから何回目の選局か (1 から数える。どの方式も数える)</param>
 /// <param name="Previous">この受信機の前の選局。受信機を作ってから初めての選局なら null</param>
 public sealed record CxdIsdbcLockFailure(
     uint Khz, bool Retuned, long WaitMs, long DemodLockMs, long TsLockMs, bool DemodLocked, bool TsLocked,
-    int? IfAgc, double? CarrierOffsetKhz, byte? TunerIfAgc, byte? TunerRfAgc, double? StrengthDbm,
+    int? IfAgc, double? CarrierOffsetKhz,
     long SinceInitMs, int TunesSinceInit, CxdPreviousTune? Previous)
 {
     /// <summary>記録と <c>--tune</c> に出す 1 行</summary>
@@ -125,8 +122,6 @@ public sealed record CxdIsdbcLockFailure(
             + $"最後に読んだ値 bit0={Bit(DemodLocked)} bit5={Bit(TsLocked)}  "
             + $"復調器の IF の AGC {(IfAgc is { } agc ? $"{agc}" : "-")}  "
             + $"搬送波のずれ {(CarrierOffsetKhz is { } offset ? $"{offset:F1} kHz" : "-")}  "
-            + $"チューナーの AGC a={(TunerIfAgc is { } a ? $"{a}" : "-")} b={(TunerRfAgc is { } b ? $"{b}" : "-")}  "
-            + $"強度 {(StrengthDbm is { } dbm ? $"{dbm:F1} dBm (目安)" : "-")}  "
             + $"初期化から {SinceInitMs} ms・{TunesSinceInit} 回目の選局  前の選局 {previous}";
     }
 }
@@ -1712,30 +1707,24 @@ public sealed class Cxd2856Frontend
     }
 
     /// <summary>
-    /// ISDB-C がロックしなかったときに、復調器の IF の AGC と搬送波のずれ (仕様書 9.5) と、チューナーの AGC と入力のレベル (仕様書 9.7) を読む。
-    /// 読み方は <see cref="Signal"/> と同じ。読めなければ (I2C の失敗) その値を null にして、ロックしなかった結果を返す (この読み出しで選局の結果を変えない。
-    /// I2C が壊れていれば次の操作が失敗する)
+    /// ISDB-C がロックしなかったときに、復調器の IF の AGC と搬送波のずれ (仕様書 9.5) を読む (読み方は <see cref="Signal"/> と同じ)。
+    /// チューナーは読まない。チューナーの AGC を読むにはチューナーの CPU を起こして待機に戻すことになり、ロックしない選局のたびにチューナーの状態を動かすため。
+    /// 読めなければ (I2C の失敗) その値を null にして、ロックしなかった結果を返す (この読み出しで選局の結果を変えない。I2C が壊れていれば次の操作が失敗する)
     /// </summary>
     private CxdIsdbcLockFailure ReadIsdbcLockFailure(long waited, long demodLock, long tsLock, bool demod, bool ts)
     {
         CxdIsdbcDetail? detail = null;
-        (byte IfAgc, byte RfAgc, int Gain)? agc = null;
         try
         {
-            lock (_busLock)
-            {
-                detail = Cxd2856.IsdbcDetail(_demod.ReadIsdbcSignal());
-                Relay(() => agc = _tuner.ReadAgc());
-            }
+            lock (_busLock) detail = Cxd2856.IsdbcDetail(_demod.ReadIsdbcSignal());
         }
         catch (IOException)
         {
-            // 読めた値だけを出す
+            // 読めなかった値は出さない
         }
-        double? strength = agc is { } read ? Cxd2858.InputLevel(read.IfAgc, read.RfAgc, read.Gain, _khz, J83bLevelCorrection) / 100.0 : null;
         return new CxdIsdbcLockFailure(
             _khz, _retuned, waited, demodLock, tsLock, demod, ts,
-            detail?.IfAgc, detail?.CarrierOffsetKhz, agc?.IfAgc, agc?.RfAgc, strength,
+            detail?.IfAgc, detail?.CarrierOffsetKhz,
             (_current?.At ?? _nowMs()) - _initAt, _tunes, _previous);
     }
 

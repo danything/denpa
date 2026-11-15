@@ -145,7 +145,7 @@ public class Cxd2856IsdbcTests
     }
 
     [Test]
-    public async Task ロックしなければ待つ間に立ったビットの時刻と復調器とチューナーの状態を残す()
+    public async Task ロックしなければ待つ間に立ったビットの時刻と復調器の状態を残し_チューナーは読まない()
     {
         // 300 ms で復調のロック (88 の bit0) だけが立ち、TS のロック (10 の bit5) は立たない (仕様書 8.6)
         var (frontend, bus, _) = Make(demod =>
@@ -157,17 +157,16 @@ public class Cxd2856IsdbcTests
             demod.T[(0x40, 0x16)] = 0xF0;
             demod.T[(0x40, 0x49)] = 0xF1;
             demod.T[(0x40, 0x4A)] = 0x23;
-            // チューナーの AGC (仕様書 9.7 の 5B。偽物は a と b に同じ値を返す)
-            demod.Tuner[0x5B] = 0x40;
         });
         await Assert.That(frontend.TuneIsdbc(C51)).IsFalse();
-        // 時間切れのあとに、信号品質 (仕様書 9.4・9.5) とチューナーの AGC (仕様書 9.7) を Signal と同じ順に読む
-        await Assert.That(bus.Log.TakeLast(26)).IsEquivalentTo(new[]
+        // 時間切れのあとに、復調器の信号品質 (仕様書 9.4・9.5) を Signal と同じ順に読む。
+        // チューナーの AGC (仕様書 9.7) は、読むとチューナーの CPU を起こして待機に戻すので読まない (中継は選局の 1 回だけ開ける)
+        await Assert.That(bus.Log.TakeLast(15)).IsEquivalentTo(new[]
         {
             "T 01=01", "T 00=40", "T 88?", "T 10?", "T 19?", "T 4C?", "T 15?", "T 1A?", "T 9B?", "T 01=00",
             "T 5C?", "T 60?", "T 62?", "T EA?", "T 49?",
-            "X 08=01", "U 87=C441", "U 59=0501", "U 5B?", "U 59=0301", "U 5B?", "U 59=04", "U 88=00", "U 87=C0", "U 69?", "X 08=00",
-        });
+        }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(bus.Log.Count(line => line == "X 08=01")).IsEqualTo(1);
         var failure = frontend.IsdbcLockFailure!;
         await Assert.That(failure.Khz).IsEqualTo(C51);
         await Assert.That(failure.Retuned).IsFalse();
@@ -178,10 +177,6 @@ public class Cxd2856IsdbcTests
         await Assert.That(failure.TsLocked).IsFalse();
         await Assert.That(failure.IfAgc).IsEqualTo(0x123);
         await Assert.That(failure.CarrierOffsetKhz).IsEqualTo(-16 * 48000.0 / 16384);
-        await Assert.That(failure.TunerIfAgc).IsEqualTo((byte)0x40);
-        await Assert.That(failure.TunerRfAgc).IsEqualTo((byte)0x40);
-        // ISDB-C の補正は -1.5 dB。IF の帯域通過フィルタの利得の番号は、選局で書いた 69 の下位 4 ビット (4)
-        await Assert.That(failure.StrengthDbm).IsEqualTo(Cxd2858.InputLevel(0x40, 0x40, 4, C51, -150) / 100.0);
         await Assert.That(failure.SinceInitMs).IsEqualTo(0);
         await Assert.That(failure.TunesSinceInit).IsEqualTo(1);
         await Assert.That(failure.Previous).IsNull();
@@ -238,25 +233,22 @@ public class Cxd2856IsdbcTests
         var failure = frontend.IsdbcLockFailure!;
         await Assert.That(failure.WaitMs).IsEqualTo(Cxd2856Frontend.IsdbcLockTimeoutMs);
         await Assert.That(failure.IfAgc).IsNull();
-        await Assert.That(failure.TunerIfAgc).IsNull();
-        await Assert.That(failure.StrengthDbm).IsNull();
-        // 中継は開けていない
-        await Assert.That(bus.Log).DoesNotContain("U 87=C441");
+        await Assert.That(failure.CarrierOffsetKhz).IsNull();
     }
 
     [Test]
     public async Task ロックしなかったときの_1_行は記録と_tune_に出す値を並べる()
     {
         var line = new CxdIsdbcLockFailure(
-            393000, true, 1000, 300, -1, true, false, 0x123, -46.875, 0x40, 0x41, -44.7, 61234, 12,
+            393000, true, 1000, 300, -1, true, false, 0x123, -46.875, 61234, 12,
             new CxdPreviousTune("ISDB-C", 387000, true, 2400)).Describe();
         await Assert.That(line).IsEqualTo(
             "ISDB-C がロックしませんでした (393000 kHz、選局し直し)  待ち 1000 ms  復調のロック (88 の bit0) 300 ms  TS のロック (10 の bit5) 立たなかった  "
-            + "最後に読んだ値 bit0=1 bit5=0  復調器の IF の AGC 291  搬送波のずれ -46.9 kHz  チューナーの AGC a=64 b=65  強度 -44.7 dBm (目安)  "
+            + "最後に読んだ値 bit0=1 bit5=0  復調器の IF の AGC 291  搬送波のずれ -46.9 kHz  "
             + "初期化から 61234 ms・12 回目の選局  前の選局 ISDB-C 387000 kHz (ロックした、2400 ms 前に開始)");
-        var empty = new CxdIsdbcLockFailure(393000, false, 1000, -1, -1, false, false, null, null, null, null, null, 0, 1, null).Describe();
+        var empty = new CxdIsdbcLockFailure(393000, false, 1000, -1, -1, false, false, null, null, 0, 1, null).Describe();
         await Assert.That(empty).Contains("(393000 kHz、起動して選局)");
-        await Assert.That(empty).Contains("復調器の IF の AGC -  搬送波のずれ -  チューナーの AGC a=- b=-  強度 -");
+        await Assert.That(empty).Contains("復調器の IF の AGC -  搬送波のずれ -  初期化から 0 ms");
         await Assert.That(empty).EndsWith("前の選局 なし");
     }
 
