@@ -173,12 +173,21 @@ internal static unsafe partial class Sys
 
 /// <summary>
 /// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。asicend (<see cref="AsicenStream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
-/// PIX-DT295 (<see cref="Dt295NativeStream"/>)、IT930x (<see cref="It930xTsOutput"/>) の TS のストリームが使う。OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った)
+/// PIX-DT295 (<see cref="Dt295NativeStream"/>)、Siano (<see cref="SianoStream"/>)、IT930x (<see cref="It930xTsOutput"/>) の TS のストリームが使う。OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った)
 /// </summary>
 internal static class TsBuffer
 {
     /// <summary>深さ。地上波で 3.5 秒ぶん。これを超えたら書く側が待つ</summary>
     internal const int Depth = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// 読む側がいないまま、バッファが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を畳むまでの間
+    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く打ち切ると、TunerPool が畳む前に TS が途切れる)
+    /// </summary>
+    internal static TimeSpan StallLimit => TunerPool.Linger;
+
+    /// <summary><see cref="Flush(PipeWriter, Func{bool}, TimeSpan, Action, Action)"/> を <see cref="StallLimit"/> で。CECH-ZD1 J・PIX-DT295・Siano の機材から受けた TS を渡すときに使う</summary>
+    public static bool Flush(PipeWriter writer, Func<bool> stopped, Action stalled) => Flush(writer, stopped, StallLimit, stalled);
 
     /// <summary>
     /// 待ちの続きは Inline で呼ぶ (スレッドプールに回さない。書く側は専用のスレッドで、読む側も 200 ms ごとに自分で確かめる)

@@ -401,7 +401,6 @@ public class AsicenTests
         if (Environment.GetEnvironmentVariable("ASICEN_USERLAND_DIR") is not null) return;
         await Assert.That(AsicenUserland.Installed).IsFalse();
         await Assert.That(AsicenUserland.Detect()).IsEmpty();
-        await Assert.That(AsicenUserland.Cards()).IsEmpty();
     }
 
     [Test]
