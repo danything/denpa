@@ -3,9 +3,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { ResponseMessage } from "@danything/arib/bml-protocol";
 
 import {
+  aribKey,
   type Bml,
   type BmlOptions,
   createBml,
+  keyGroup,
+  MAX_IMAGES,
   MAX_QUEUE,
   MAX_TIMERS,
   type Service,
@@ -1507,5 +1510,108 @@ describe("音声の object で主音声を替える", () => {
     };
     host.stream(host.doc!.getElementById("radio"), "stop");
     expect(chosen).toEqual([1, null]);
+  });
+});
+
+/*
+ * **キーの組** (TR-B14 第二分冊 5.3.1 表 5-5。web-bml の `keyCodeToKeyGroup` と同じ表)。
+ * データ 1・2 (25・26) はどの組にも無いので、used-key-list に何を書いても文書に届かない
+ */
+describe("キーの組 (used-key-list)", () => {
+  test("十字・決定・戻るは basic、色は data-button、数字 (0〜12) は numeric-tuning", () => {
+    for (const code of [1, 2, 3, 4, 18, 19])
+      expect(keyGroup(code)).toBe("basic");
+    for (const code of [21, 22, 23, 24])
+      expect(keyGroup(code)).toBe("data-button");
+    for (let code = 5; code <= 17; code++)
+      expect(keyGroup(code)).toBe("numeric-tuning");
+  });
+
+  test("d (20) とデータ 1・2 (25・26) はどの組にも入らない", () => {
+    for (const code of [20, 25, 26]) expect(keyGroup(code)).toBeNull();
+  });
+
+  test("キーボードの e・f は割り当てない (f はプレイヤーの全画面に残す)。d・色・数字は割り当てる", () => {
+    expect(aribKey("e")).toBe(-1);
+    expect(aribKey("f")).toBe(-1);
+    expect(aribKey("F")).toBe(-1);
+    expect(aribKey("d")).toBe(20);
+    expect(aribKey("B")).toBe(21);
+    expect(aribKey("7")).toBe(12);
+  });
+
+  test("d は used-key-list を見ずに DataButtonPressed を起こす", async () => {
+    const { bml } = open();
+    feedAll(
+      bml,
+      carousel([
+        bmlFile(
+          "startup.bml",
+          '<bevent><beitem id="d" type="DataButtonPressed" subscribe="subscribe" onoccur="pressed();"/></bevent>',
+          'function start() { browser.Ureg[1] = "ready"; } function pressed() { browser.Ureg[2] = "d"; }',
+          "resolution:960x540;used-key-list:none",
+        ),
+      ]),
+    );
+    expect((await watch(() => inside(bml).ureg[1] === "ready")).done).toBe(
+      true,
+    );
+    bml.key(20, true);
+    bml.key(20, false);
+    expect((await watch(() => inside(bml).ureg[2] === "d")).done).toBe(true);
+  });
+});
+
+/** 取得を待っている画像と「無い」と決めた画像は、名前が増え続けても `MAX_IMAGES` までしか持たない */
+describe("画像の待ちと「無い」の上限", () => {
+  const images = (bml: Bml) =>
+    bml as unknown as {
+      waitingImages: Set<string>;
+      missingImages: Set<string>;
+    };
+
+  async function ready(): Promise<Bml> {
+    const { bml } = open();
+    feedAll(
+      bml,
+      carousel([
+        startup("", 'function start() { browser.Ureg[1] = "ready"; }'),
+      ]),
+    );
+    expect((await watch(() => inside(bml).ureg[1] === "ready")).done).toBe(
+      true,
+    );
+    return bml;
+  }
+
+  test("返らない取得は上限より多く始めない", async () => {
+    const bml = await ready();
+    let fetches = 0;
+    inside(bml).resources.fetch = () => {
+      fetches++;
+      return new Promise(() => {});
+    };
+    for (let i = 0; i < MAX_IMAGES + 50; i++)
+      inside(bml).image(`/40/0002/a${i}.jpg`, "image/jpeg");
+    expect(images(bml).waitingImages.size).toBe(MAX_IMAGES);
+    expect(fetches).toBe(MAX_IMAGES);
+  });
+
+  test("「無い」は古いものから消して、上限を超えない", async () => {
+    const bml = await ready();
+    inside(bml).resources.fetch = async () => undefined;
+    const count = MAX_IMAGES + 50;
+    for (let i = 0; i < count; i++) {
+      inside(bml).image(`/40/0002/a${i}.jpg`, "image/jpeg");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    const missing = images(bml).missingImages;
+    expect(missing.size).toBe(MAX_IMAGES);
+    expect(images(bml).waitingImages.size).toBe(0);
+    // 新しいものは残り、最初のものは消えている
+    expect([...missing].some((key) => key.endsWith(`/a${count - 1}.jpg`))).toBe(
+      true,
+    );
+    expect([...missing].some((key) => key.endsWith("/a0.jpg"))).toBe(false);
   });
 });

@@ -13,14 +13,16 @@
  * シリーズの記述子は来ていないので読まない (`series` を付けない。「この表は言っていない」)
  */
 
-import { ascii, joinBytes, u16 } from "./bytes.js";
+import { u16 } from "./bytes.js";
 import {
   type EitEvent,
   type EitSection,
   EpgReader,
-  parseBcdDuration,
-  parseMjdTime,
+  ExtendedItems,
+  languageCode as lang,
   PresentFollowing,
+  readEitSection,
+  SAMPLING_RATE,
 } from "./eit.js";
 import { mmtDescriptors, MmtTableStream, mmtText } from "./mmt-si.js";
 import { isCopyNever } from "./psi.js";
@@ -31,8 +33,6 @@ const MH_SCHEDULE_MAX = 0x9b;
 /** TS の EIT の番号 (p/f 0x4E、予定 0x50〜0x5F) */
 const TS_PF_ACTUAL = 0x4e;
 const TS_SCHEDULE_MIN = 0x50;
-/** TS の詳細の表の始まり。これより後ろの表は基本の記述子 (コピー制御など) を載せない */
-const TS_SCHEDULE_EXTENDED = 0x58;
 
 const DESC_SHORT_EVENT = 0xf001;
 const DESC_EXTENDED_EVENT = 0xf002;
@@ -60,26 +60,13 @@ const LINES: Record<number, number> = {
   7: 4320,
 };
 
-/** sampling_rate (3 ビット)。TS の音声コンポーネント記述子と同じ符号 */
-const SAMPLING_RATE: Record<number, number> = {
-  1: 16000,
-  2: 22050,
-  3: 24000,
-  5: 32000,
-  6: 44100,
-  7: 48000,
-};
-
-const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
-
 /**
  * 番組の記述子を読んで埋める。**拡張形式イベントは項目ごとに、バイトのまま繋いでから文字にする。**
  * UTF-8 の 1 文字が記述子の切れ目をまたぐことがあり、部分ごとに文字にすると、またいだ字が U+FFFD になる。
- * 見出しが空の項目は直前の項目の続き (TS の `eit.ts` と同じ決まり)
+ * 見出しが空の項目は直前の項目の続き (TS の `eit.ts` と同じ `ExtendedItems`)
  */
 function readDescriptors(event: EitEvent, body: Uint8Array): void {
-  const pending = new Map<string, Uint8Array[][]>();
-  let lastHeading = "";
+  const extended = new ExtendedItems();
 
   for (const [tag, data] of mmtDescriptors(body)) {
     switch (tag) {
@@ -104,17 +91,8 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
           if (headingEnd + 2 > itemsEnd) break;
           const heading = mmtText(data.subarray(at + 1, headingEnd));
           const textEnd = headingEnd + 2 + u16(data, headingEnd);
-          const text = data.subarray(headingEnd + 2, textEnd);
+          extended.add(heading, data.subarray(headingEnd + 2, textEnd));
           at = textEnd;
-          if (heading === "") {
-            if (lastHeading === "") continue;
-            pending.get(lastHeading)!.at(-1)!.push(text);
-            continue;
-          }
-          const items = pending.get(heading);
-          if (items === undefined) pending.set(heading, [[text]]);
-          else items.push([text]);
-          lastHeading = heading;
         }
         break;
       }
@@ -176,10 +154,7 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
     }
   }
 
-  for (const [heading, items] of pending)
-    event.extended[heading] = items
-      .map((parts) => mmtText(joinBytes(parts)))
-      .join("");
+  event.extended = extended.decode(mmtText);
 }
 
 /**
@@ -190,52 +165,14 @@ export function parseMhEit(section: Uint8Array): EitSection | null {
   if (section.length < 18) return null;
   const tableId = tsTableId(section[0]!);
   if (tableId === null) return null;
-  const extended = tableId >= TS_SCHEDULE_EXTENDED;
-  const lastTableId = tsTableId(section[13]!) ?? tableId;
-
-  const result: EitSection = {
+  return readEitSection(
+    section,
     tableId,
-    serviceId: u16(section, 3),
-    version: (section[5]! >> 1) & 0x1f,
-    sectionNumber: section[6]!,
-    lastSectionNumber: section[7]!,
-    transportStreamId: u16(section, 8),
-    originalNetworkId: u16(section, 10),
-    segmentLastSectionNumber: section[12]!,
-    lastTableId,
-    events: [],
-  };
-
-  let at = 14;
-  const end = section.length - 4;
-  while (at + 12 <= end) {
-    const descriptorsLength = u16(section, at + 10) & 0x0fff;
-    const body = section.subarray(at + 12, at + 12 + descriptorsLength);
-    const event: EitEvent = {
-      serviceId: result.serviceId,
-      transportStreamId: result.transportStreamId,
-      originalNetworkId: result.originalNetworkId,
-      eventId: u16(section, at),
-      startAt: parseMjdTime(section, at + 2),
-      duration: parseBcdDuration(section, at + 7),
-      runningStatus: (section[at + 10]! >> 5) & 0x07,
-      isFree: (section[at + 10]! & 0x10) === 0,
-      name: "",
-      description: "",
-      extended: {},
-      genres: [],
-      audios: [],
-      video: null,
-      copyNever: extended ? null : false,
-      // B-CAS の契約確認は使わない
-      ...(extended ? {} : { contractVerification: null }),
-    };
-    at += 12 + descriptorsLength;
-    if (body.length < descriptorsLength) break;
-    readDescriptors(event, body);
-    result.events.push(event);
-  }
-  return result;
+    tsTableId(section[13]!) ?? tableId,
+    // B-CAS の契約確認は使わない
+    { contractVerification: null },
+    readDescriptors,
+  );
 }
 
 /**

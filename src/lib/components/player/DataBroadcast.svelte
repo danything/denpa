@@ -824,7 +824,7 @@
 
   /**
    * リモコンの代わり。**十字・決定・戻る・数字・色・d** をそのまま渡す
-   * (エンジンの `aribKey`)。キーの d は文書へそのまま届く。入れ物の出し入れは
+   * (エンジンの `aribKey`)。キーの d は文書の DataButtonPressed になる。データ放送の表示と非表示の切り替えは
    * 画面の d ボタンの側 (`pressD`)
    */
   function key(event: KeyboardEvent, down: boolean): void {

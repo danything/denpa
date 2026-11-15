@@ -32,9 +32,8 @@ import {
   PACE_HEADER,
   type Ranges,
   retryable,
-  retryWait,
   RUNG_HEADER,
-  STREAM_RETRIES,
+  StreamRetry,
   type StreamState,
   switchPoint,
   typeOfCodec,
@@ -140,8 +139,7 @@ export function remuxPlayer(
   /** 読んでいるストリームのリクエストした位置。読んでいなければ null */
   let loadingFrom: number | null = null;
   let audio = options.audio;
-  let retries = 0;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  const retry = new StreamRetry((state) => options.state(state));
   let closed = false;
   /** MediaSource が開いたか (`sourceopen`)。開く前の位置の変更は、開いてから始める位置に入る */
   let opened = false;
@@ -283,8 +281,7 @@ export function remuxPlayer(
     controller?.abort();
     controller = abort;
     nudge();
-    if (retryTimer !== null) clearTimeout(retryTimer);
-    retryTimer = null;
+    retry.cancel();
     loadingFrom = from;
     meter.pause();
     return mine;
@@ -343,10 +340,7 @@ export function remuxPlayer(
       if (done) break;
       meter.add(value.byteLength, asked, performance.now());
       await append(value, mine);
-      if (retries > 0) {
-        retries = 0;
-        options.state("flowing");
-      }
+      retry.flowing();
       // 後ろを捨てるのは足したついでに。捨てる長さが溜まってから (毎回は削らない)
       if (
         video.currentTime - (buffered()[0]?.[0] ?? video.currentTime) >
@@ -372,7 +366,8 @@ export function remuxPlayer(
       options.state("failed");
       return;
     }
-    retry();
+    // 倍々に待って、観ていた位置からリクエストし直す
+    retry.schedule(() => void load(video.currentTime));
   }
 
   /** `from` 秒からリクエストし直す。溜まっていたものは捨てる */
@@ -452,25 +447,10 @@ export function remuxPlayer(
     return "switched";
   }
 
-  /** 切れた。倍々に待って、観ていた位置からリクエストし直す */
-  function retry(): void {
-    if (retries >= STREAM_RETRIES) {
-      options.state("failed");
-      return;
-    }
-    const wait = retryWait(retries);
-    retries++;
-    options.state("retrying");
-    retryTimer = setTimeout(() => {
-      retryTimer = null;
-      void load(video.currentTime);
-    }, wait);
-  }
-
   /** 飛んだ先が溜まっておらず、待っても届かないなら、そこからリクエストし直す */
   const onSeeking = (): void => {
     nudge();
-    if (!opened || retryTimer !== null) return;
+    if (!opened || retry.waiting) return;
     if (!covers(buffered(), video.currentTime, loadingFrom, SLACK))
       void load(video.currentTime);
   };
@@ -480,7 +460,7 @@ export function remuxPlayer(
    */
   const onWaiting = (): void => {
     nudge();
-    if (buffer === null || retryTimer !== null || loadingFrom !== null) return;
+    if (buffer === null || retry.waiting || loadingFrom !== null) return;
     if (aheadOf(buffered(), video.currentTime) === 0)
       void load(video.currentTime);
   };
@@ -534,7 +514,7 @@ export function remuxPlayer(
       controller?.abort();
       pendingSwitch?.abort();
       nudge();
-      if (retryTimer !== null) clearTimeout(retryTimer);
+      retry.cancel();
       video.removeEventListener("seeking", onSeeking);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("timeupdate", nudge);

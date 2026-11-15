@@ -4,7 +4,7 @@ import { DEFAULT_CLUT } from "./clut";
 import { parseStylesheet } from "./css";
 import { BmlDocument } from "./document";
 import { PUA_ADDITIONAL } from "./euc";
-import { Renderer, type RenderHost } from "./render";
+import { jpegSize, Renderer, type RenderHost } from "./render";
 import { parseXml } from "./xml";
 
 /** Renderer が使うだけの小さな DOM (テストに本物のブラウザは無い) */
@@ -95,5 +95,70 @@ describe("外字", () => {
     doc.touch();
     renderer.draw();
     expect(masked()).toBe(true);
+  });
+});
+
+/*
+ * **JPEG を描く大きさは、背景と object で同じ決まり** (`jpegSize`)。960x540 の面では半分にし、
+ * 描く箱も画像も 960x540 のときだけそのまま
+ */
+describe("JPEG の大きさ", () => {
+  test("960x540 の面では半分。箱と画像がどちらも 960x540 のときだけそのまま", () => {
+    const full = { width: 960, height: 540 };
+    expect(jpegSize(960, full, [960, 540])).toEqual([960, 540]);
+    expect(jpegSize(960, { width: 100, height: 50 }, [960, 540])).toEqual([
+      480, 270,
+    ]);
+    expect(jpegSize(960, full, [201, 101])).toEqual([100, 50]);
+  });
+
+  test("720x480 の面はそのまま", () => {
+    expect(jpegSize(720, { width: 100, height: 50 }, [200, 100])).toEqual([
+      200, 100,
+    ]);
+  });
+
+  /** 960x540 の画像を、100x50 の div の背景と、100x50 の object に描く */
+  function drawBoth(): { background: string; object: FakeNode } {
+    const xml = parseXml(
+      `<bml><body><div id="d" style="left:0px;top:0px;width:100px;height:50px;background-image:url(a.jpg)"></div><object type="image/jpeg" data="a.jpg" style="left:0px;top:60px;width:100px;height:50px"/></body></bml>`,
+    );
+    if (xml === null) throw new Error("読めない");
+    const doc = new BmlDocument(xml);
+    doc.applyRules(parseStylesheet(""));
+    const host: RenderHost = {
+      fonts: { round: "r", boldRound: "b", square: "s" },
+      clut: () => DEFAULT_CLUT,
+      resolution: () => ({ width: 960, height: 540 }),
+      image: () => ({ url: "blob:a", width: 960, height: 540 }),
+      drcs: () => null,
+      finished: () => {},
+    };
+    const container = new FakeDocument().createElement("div");
+    new Renderer(
+      container as unknown as HTMLElement,
+      doc,
+      host,
+      () => {},
+    ).draw();
+    const all = (node: FakeNode): FakeNode[] => [
+      node,
+      ...node.children.flatMap(all),
+    ];
+    const nodes = all(container);
+    const background =
+      nodes
+        .map((n) => n.style.cssText)
+        .find((css) => css.includes("background-image")) ?? "";
+    const object = nodes.find((n) => n.tag === "img");
+    if (object === undefined) throw new Error("img がありません");
+    return { background, object };
+  }
+
+  test("背景と object で同じ大きさに描く (960x540 の画像でも箱が小さければ半分)", () => {
+    const { background, object } = drawBoth();
+    expect(background).toContain("background-size:480px 270px");
+    const style = object.style as unknown as { width: string; height: string };
+    expect([style.width, style.height]).toEqual(["480px", "270px"]);
   });
 });

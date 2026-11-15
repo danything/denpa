@@ -181,6 +181,10 @@ export class Fmp4Video {
    */
   private floor: number | null = null;
   private lastPts: number | null = null;
+  /** もう届かない (`finish`)。待たせている圧縮を渡しきったら、デコーダに残ったフレームを出させる */
+  private ending = false;
+  /** 末尾で `flush` を呼んだ (開き直したら、また呼ぶ) */
+  private flushed = false;
   /** いま出しているコマの時刻 (90kHz) */
   current: number | null = null;
   frameTicks = FRAME;
@@ -280,6 +284,7 @@ export class Fmp4Video {
     this.dropFrames();
     this.started.clear();
     this.needKey = true;
+    this.flushed = false;
     const config = this.config;
     if (config === null) return;
     if (this.decoder === null || this.decoder.state === "closed") {
@@ -466,6 +471,14 @@ export class Fmp4Video {
     ) {
       this.decode(this.take());
     }
+    /*
+     * 末尾まで渡しきった。**B フレームを並べ替えるデコーダは、最後の数枚を次のコマが来るまで持っている**
+     * (H.264)。もう次は来ないので、`flush` で出させる。呼ばないと録画の最後の数コマが描かれない
+     */
+    if (this.ending && !this.flushed && this.pending.length === 0) {
+      this.flushed = true;
+      decoder.flush().catch(() => undefined);
+    }
 
     const now = micros(at);
     // 次のフレームがもう表示時刻を迎えているなら、手前のフレームは描かずに捨てる
@@ -512,6 +525,11 @@ export class Fmp4Video {
     this.host.drew(first);
   }
 
+  /** もう届かない (録画の末尾まで読んだ。`messages.ts` の `end`)。待たせている圧縮を渡しきったら `flush` する (`tick`) */
+  finish(): void {
+    this.ending = true;
+  }
+
   /** いま出しているコマ (切り抜き)。2D は描いたものが残るので、そのまま写す。`size` があれば縮めて (`messages.ts` の `grab`) */
   async grab(size?: GrabSize): Promise<ImageBitmap | null> {
     if (this.current === null) return null;
@@ -528,6 +546,8 @@ export class Fmp4Video {
     this.floor = from === null ? null : micros(from);
     this.keep([]);
     this.overflowed = false;
+    this.ending = false;
+    this.flushed = false;
     this.dropFrames();
     this.started.clear();
     this.tracks = [];

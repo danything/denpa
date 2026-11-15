@@ -929,10 +929,19 @@ async function init(
   for (const bytes of held) feed(bytes);
   if (earlyEnd) {
     earlyEnd = false;
-    mkv?.finish();
+    finish();
   }
   post({ type: "ready" });
   schedule();
+}
+
+/**
+ * 末尾まで読んだ。Matroska は待たせているコマを出しきり (`mkv.ts`)、fMP4 と Matroska の映像はデコーダに
+ * 残ったフレームを出させる (`fmp4.ts` の `finish`)
+ */
+function finish(): void {
+  mkv?.finish();
+  fmp4?.finish();
 }
 
 /** 届いたものを読む (fMP4 はボックスごと、Matroska は要素ごと、TS は PES に組んで) */
@@ -1000,7 +1009,7 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
     case "end":
       // 末尾まで読んだ。デコーダを読み終えるまでは溜めたぶんの後ろで (`early`)
       if (early !== null) earlyEnd = true;
-      else mkv?.finish();
+      else finish();
       break;
     case "audio":
       // エンコードしたものには選んだ音声 1 本しか入っていない (選び直すとサーバが再エンコードする)

@@ -13,11 +13,99 @@ import {
   pickOffer,
   playableAbility,
   type PlaybackInfo,
+  STREAM_RETRIES,
   streamForAudio,
+  StreamRetry,
+  type StreamState,
   switchPoint,
   transcodes,
   typeOfCodec,
 } from "./playback";
+
+/** 切れたときのリクエストし直し (`StreamRetry`)。待つ時間は偽のタイマーで飛ばす */
+describe("StreamRetry", () => {
+  function fake() {
+    const states: StreamState[] = [];
+    const waits: number[] = [];
+    let pending: (() => void) | null = null;
+    const saved = globalThis.setTimeout;
+    globalThis.setTimeout = ((run: () => void, wait: number) => {
+      waits.push(wait);
+      pending = run;
+      return 1;
+    }) as unknown as typeof setTimeout;
+    const retry = new StreamRetry((state) => states.push(state));
+    const fire = () => {
+      const run = pending;
+      pending = null;
+      run?.();
+    };
+    return {
+      retry,
+      states,
+      waits,
+      fire,
+      restore: () => (globalThis.setTimeout = saved),
+    };
+  }
+
+  test("倍々に待って呼び、上限を超えたら呼ばずに failed にする", () => {
+    const { retry, states, waits, fire, restore } = fake();
+    try {
+      let calls = 0;
+      for (let i = 0; i <= STREAM_RETRIES; i++) {
+        retry.schedule(() => calls++);
+        expect(retry.waiting).toBe(i < STREAM_RETRIES);
+        fire();
+      }
+      expect(calls).toBe(STREAM_RETRIES);
+      expect(waits.slice(0, 4)).toEqual([1000, 2000, 4000, 8000]);
+      expect(Math.max(...waits)).toBe(10_000);
+      expect(states.at(-1)).toBe("failed");
+      expect(states.filter((s) => s === "retrying")).toHaveLength(
+        STREAM_RETRIES,
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  test("届き始めたら数を戻して flowing にする。リクエストし直していなければ何も言わない", () => {
+    const { retry, states, waits, fire, restore } = fake();
+    try {
+      retry.flowing();
+      expect(states).toEqual([]);
+      retry.schedule(() => {});
+      fire();
+      retry.schedule(() => {});
+      fire();
+      retry.flowing();
+      expect(states).toEqual(["retrying", "retrying", "flowing"]);
+      retry.schedule(() => {});
+      expect(waits.at(-1)).toBe(1000);
+    } finally {
+      restore();
+    }
+  });
+
+  test("cancel すると待っていたものは呼ばない", () => {
+    const { retry, restore } = fake();
+    const saved = globalThis.clearTimeout;
+    let cleared = 0;
+    globalThis.clearTimeout = (() => {
+      cleared++;
+    }) as typeof clearTimeout;
+    try {
+      retry.schedule(() => {});
+      retry.cancel();
+      expect(retry.waiting).toBe(false);
+      expect(cleared).toBe(1);
+    } finally {
+      globalThis.clearTimeout = saved;
+      restore();
+    }
+  });
+});
 
 /** 答えを表で持つブラウザ。載っていない形式は読めない */
 function browser(play: string[], mse: string[]): MediaAbility {
