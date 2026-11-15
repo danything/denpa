@@ -1574,7 +1574,10 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>ISDB-C で「指定した TS が無い」ときの失敗の文の先頭 (CXD2856 の仕様書 8.7。ロックしないときの <see cref="ITuneDevice.SyncFailed"/> とは別の失敗)</summary>
     public const string TsmfMissing = "指定した TS がありません";
 
-    /// <summary>ISDB-C でロックしたのに、TSMF の判定の時間切れまで TS が 1 パケットも届かなかったときの失敗の文 (IT930x の仕様書 6.3)</summary>
+    /// <summary>
+    /// ロックしたのに TS が 1 パケットも届かなかったときの失敗の文 (IT930x の仕様書 6.3)。ISDB-C で TSMF の判定の時間切れまで届かなかったときと、
+    /// 全体の溢れが立ったままの機材で <see cref="TsProbeMs"/> 待っても届かなかったとき (<see cref="Probe"/>) に使う
+    /// </summary>
     public const string TsMissing = "ロックしましたが、TS が 1 パケットも届きません (ブリッジから先で TS が止まっています)";
 
     /// <summary>TSMF の判定の時間切れ (ms。CXD2856 の仕様書 8.7・11 の 3 秒)。変えるのはテストのため</summary>

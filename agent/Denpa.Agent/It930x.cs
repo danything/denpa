@@ -238,7 +238,7 @@ public static class It930x
     /// PX-MLT5U と DTV02A-5TS-P は実機で確かめていない。DTV02A-5TS-P は PX-MLT5PE と同じ割り当てとして扱う (CXD2856 の仕様書 1.2 も未確認としている)</item>
     /// <item>Q3・W3 系 (TC90522 + R850 + RT710): PX-Q3PE4 は Linux の実機で、8 つの受信機の同時受信と内蔵カードリーダーを確かめた。
     /// ほかの機種は実機で確かめていない (#1578)</item>
-    /// <item>PX-MLT8PE・DTV02A-4TS-P (MLT5 系と同じチップで、割り当てだけが違う): 実機で確かめていない</item>
+    /// <item>PX-MLT8PE・DTV02A-4TS-P (MLT5 系と同じチップで、割り当てだけが違う): PX-MLT8PE は Linux の実機で、受信機 0 と 2 の地上波を確かめた。DTV02A-4TS-P は実機で確かめていない</item>
     /// <item>受信機が 1 つの機種 (ISDB2056・ISDB2056N・PX-M1UR・PX-S1UR・DTV03A-1TU): 実機で確かめていない。
     /// 電源は GPIOH3 で、LNB には給電できない (IT930x の仕様書 7.3・8)</item>
     /// </list>
