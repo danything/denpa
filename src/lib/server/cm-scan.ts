@@ -152,7 +152,7 @@ export function scanOutputs(
      */
     const filters = [
       "scdet=threshold=100",
-      `metadata=mode=print:key=lavfi.scd.score:file=${files.cuts}`,
+      `metadata=mode=print:key=lavfi.scd.score:file=${filterPath(files.cuts)}`,
     ];
     if (want.logo) filters.push(want.logo.filter, "format=gray");
     args.push(
@@ -174,13 +174,25 @@ export function scanOutputs(
       "-map",
       "0:a:0",
       "-af",
-      `silencedetect=noise=${SILENCE_NOISE}:d=${SILENCE_MIN},ametadata=mode=print:file=${files.silences}`,
+      `silencedetect=noise=${SILENCE_NOISE}:d=${SILENCE_MIN},ametadata=mode=print:file=${filterPath(files.silences)}`,
       "-f",
       "null",
       "-",
     );
   }
   return args;
+}
+
+/**
+ * パスを ffmpeg のフィルタの引数に入れる形にする (ffmpeg-filters の「Notes on filtergraph escaping」)。
+ * Windows の一時フォルダ (`C:\Windows\Temp\denpa-scan-…`) は、`:` が引数の区切りに、`\` がエスケープに読まれて崩れていた (#2816)。
+ * `\` は `/` に替え (Windows の ffmpeg も読める)、引数の中の `'` と `:` を `\` でエスケープしてから、フィルタの並びの側で `'…'` で囲む。
+ * `'…'` の中の `'` は、いったん閉じて `\'` を挟んで開き直す
+ */
+export function filterPath(path: string): string {
+  // `\` は `/` に替えたあとなので残らないが、エスケープの対象には入れておく (引数の中の `\` はエスケープの印)
+  const value = path.replaceAll("\\", "/").replace(/[\\':]/g, "\\$&");
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 /** ffmpeg の出力を読んで材料にする。エンコードと一緒に読むときも、自分で読むときも同じもの */
