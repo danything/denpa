@@ -41,20 +41,23 @@ async function fakeRenderer(page: Page, name: string): Promise<void> {
   }, name);
 }
 
-/** 録画中の点と骨組みを置き、それぞれの動きの名前を読む */
+/** 録画中の点・骨組み・値の無い進み具合のバーを置き、それぞれの動きの名前を読む */
 function animations(page: Page) {
   return page.evaluate(() => {
     const dot = document.createElement("span");
     dot.className = "rec-dot";
     const skeleton = document.createElement("div");
     skeleton.className = "skeleton";
-    document.body.append(dot, skeleton);
+    const bar = document.createElement("progress");
+    document.body.append(dot, skeleton, bar);
     const result = {
       dot: getComputedStyle(dot).animationName,
       skeleton: getComputedStyle(skeleton, "::after").animationName,
+      bar: getComputedStyle(bar).animationName,
     };
     dot.remove();
     skeleton.remove();
+    bar.remove();
     return result;
   });
 }
@@ -63,7 +66,7 @@ function lite(page: Page) {
   return page.evaluate(() => document.documentElement.dataset["lite"] ?? null);
 }
 
-test("ソフトウェアのレンダラなら data-lite を付け、録画中の点と骨組みの光を止める", async ({
+test("ソフトウェアのレンダラなら data-lite を付け、録画中の点・骨組みの光・値の無いバーを止める", async ({
   page,
 }) => {
   await fakeRenderer(
@@ -72,7 +75,11 @@ test("ソフトウェアのレンダラなら data-lite を付け、録画中の
   );
   await goto(page, "/settings");
   await expect.poll(() => lite(page)).toBe("");
-  expect(await animations(page)).toEqual({ dot: "none", skeleton: "none" });
+  expect(await animations(page)).toEqual({
+    dot: "none",
+    skeleton: "none",
+    bar: "none",
+  });
 });
 
 test("GPU のレンダラなら data-lite を付けず、回し続ける", async ({ page }) => {
@@ -86,5 +93,6 @@ test("GPU のレンダラなら data-lite を付けず、回し続ける", async
   expect(await animations(page)).toEqual({
     dot: "rec-pulse",
     skeleton: "skeleton-sweep",
+    bar: "progress-wait",
   });
 });

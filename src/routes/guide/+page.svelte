@@ -10,7 +10,10 @@
 
   import { dragScroll } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
-  import ChannelNotice from "#lib/components/ChannelNotice.svelte";
+  import {
+    CHANNEL_NOTICE_ACTION,
+    CHANNEL_NOTICE_SECTION,
+  } from "#lib/channel-notice.js";
   import {
     guideNavigation,
     rememberGuideTabs,
@@ -961,14 +964,19 @@
   </div>
 
   {#if services.length === 0}
-    <div class="empty-state" data-testid="empty-grid">
+    <!-- まだ何も無いので見せる画面にする (`.glow`。docs/design.md 8 章)。読み込めなかったとき (下) は平らのまま -->
+    <div class="empty-state glow" data-testid="empty-grid">
       {#if data.typeEmpty}
-        <!-- 局がまだ無い。上の案内と同じ文とボタンを、表の場所の真ん中に (上の案内はこのとき出さない) -->
-        <ChannelNotice
-          kind="all"
-          variant="center"
-          text={`${typeWord}のチャンネルがありません。チャンネルスキャンをしてください`}
-        />
+        <!-- 局がまだ無い。上の案内と同じことを、ほかの空の状態と同じ並びで表の場所の真ん中に (上の案内はこのとき出さない) -->
+        <p class="bold">{typeWord}のチャンネルがありません</p>
+        <p class="small muted">チャンネルスキャンをしてください</p>
+        <div class="actions">
+          <a
+            class="button small"
+            href={`${resolve("settings/reception")}#${CHANNEL_NOTICE_SECTION.all}`}
+            >{CHANNEL_NOTICE_ACTION.all}</a
+          >
+        </div>
       {:else}
         <!-- 局はあるが、いま流している番組が無い (番組表を集めている途中など) -->
         <p class="bold">{typeWord}の番組表はまだありません</p>
