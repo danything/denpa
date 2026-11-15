@@ -19,6 +19,7 @@ import { recordedTransport } from "#lib/source.js";
 import type { ServiceVideo } from "#lib/types.js";
 
 import { PmtPeek } from "./captions";
+import { keepNewest } from "./expiring";
 import {
   openRecordingSync,
   recordingSize,
@@ -51,12 +52,7 @@ const undecided = new Map<string, number>();
 
 /** 覚えるものを足す。`KEEP` を超えたら古いものから捨てる */
 function remember<T>(map: Map<string, T>, path: string, value: T): void {
-  map.delete(path);
-  if (map.size >= KEEP) {
-    const oldest = map.keys().next().value;
-    if (oldest !== undefined) map.delete(oldest);
-  }
-  map.set(path, value);
+  keepNewest(map, path, value, KEEP);
 }
 
 /**

@@ -217,13 +217,13 @@ export const webhooks = sqliteTable("webhooks", {
 export { DIGITAL_TV, hasVideo };
 
 /** ラジオの局のサービス種別 (ARIB STD-B10 のデジタル音声)。映像が無く、音声 (と、あればデータ放送) を流す */
-export const DIGITAL_AUDIO = 2;
+const DIGITAL_AUDIO = 2;
 
 /**
  * データ放送の局のサービス種別 (ARIB STD-B10 のデータ/ワンセグ)。データ放送だけの局 (NHKデータ1) と、
  * 部分受信の局 (ワンセグ。tvkワンセグ1) のどちらもこの種別。映像が無く、音声も無いことがある
  */
-export const DIGITAL_DATA = 0xc0;
+const DIGITAL_DATA = 0xc0;
 
 /** **取り込むサービス種別** (`importedService`)。テレビ・ラジオ・データ放送。エンジニアリング (0xA4) などは取り込まない */
 export const IMPORTED_SERVICE_TYPES: ReadonlySet<number> = new Set([

@@ -22,6 +22,7 @@ import { TlvStream } from "@danything/arib/tlv";
 import { lastMediaPts, readHead, sinceHead, tsHead } from "#lib/ts/seek.js";
 
 import type { Recording } from "../types";
+import { keepNewest } from "./expiring";
 import {
   openRecording,
   openRecordingSync,
@@ -319,8 +320,7 @@ export function finishedTsSec(path: string): number | null {
   } catch {
     seconds = null;
   }
-  if (spans.size >= HEADS_MOST) spans.delete(spans.keys().next().value!);
-  spans.set(path, { key, seconds });
+  keepNewest(spans, path, { key, seconds }, HEADS_MOST);
   return seconds;
 }
 
@@ -380,14 +380,11 @@ export async function tsFileHead(
     head = null;
   }
   if (head === null) {
-    if (unreadable.size >= HEADS_MOST)
-      unreadable.delete(unreadable.keys().next().value!);
-    unreadable.set(path, now + HEAD_RETRY);
+    keepNewest(unreadable, path, now + HEAD_RETRY, HEADS_MOST);
     return null;
   }
   unreadable.delete(path);
-  if (heads.size >= HEADS_MOST) heads.delete(heads.keys().next().value!);
-  heads.set(path, head);
+  keepNewest(heads, path, head, HEADS_MOST);
   return head;
 }
 

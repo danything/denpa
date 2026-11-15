@@ -29,7 +29,7 @@ export interface AgentCard {
 }
 
 /** `/denpa/card` の答えから。カードを読めていない (`ok` が false) なら、番号が見えていても復号には使えない */
-export function cardOf(agent: number, status: CardStatus): AgentCard {
+function cardOf(agent: number, status: CardStatus): AgentCard {
   return {
     agent,
     card: status.ok ? getActiveCardId(status) : null,

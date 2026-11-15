@@ -8,7 +8,7 @@ export type ContractState = "subscribed" | "unsubscribed" | "expired";
 
 /**
  * **復号テストで確かめた契約を信じる長さ (31 日)。** 番組表に契約の情報 (0xCB) が無い局はカードに聞けないので、
- * 復号できたことだけが手がかりになる。CS の月額は月ごとに切れるので、確かめてから 1 か月を過ぎたら確かめ直すまで録らない。
+ * 復号できたことだけが手がかりになる。CS の月額は月ごとに切れるので、確かめてから 1 か月を過ぎたら、確かめ直すまで「確かめていない」に戻す。
  * 有料の番組を復号できて録れたら、確かめた日を新しくする (`contracts.noteDecoded`)。録画が復号できずに終わったときは、31 日を待たずに下げる (`contracts.noteStillScrambled`)
  */
 export const DECODE_VALID_MS = 31 * 86_400_000;
