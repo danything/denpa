@@ -120,15 +120,27 @@ const issuesOf = (login: string) =>
 const discussionsOf = (login: string) =>
   `https://github.com/danything/denpa/discussions?discussions_q=author%3A${login}`;
 
-/**
- * 1 人ぶん。GitHub のアイコン (`<login>.png`。表示は 24px、取るのは 2 倍の 48px) と名前を改行しない空白 (`&nbsp;`) でつなぎ、その人の PR・Issue・Discussion の一覧へのリンクにする。
- * README は GitHub が HTML の `<a>` と `<img>` を通すので、Markdown の画像ではなく HTML で大きさを決める
- */
-const person = (login: string, link: string) =>
-  `<a href="${link}"><img src="https://github.com/${login}.png?size=48" width="24" height="24" alt="">&nbsp;@${login}</a>`;
+/** 表の 1 行に並べる人数 */
+const PER_ROW = 7;
 
 /**
- * 印の間に入れる Markdown。1 人ぶん (`person`) を、人どうしの間を半角の空白にして 1 つの段落に並べる。
+ * 1 人ぶんの表のマス。GitHub のアイコン (`<login>.png`。表示は 48px、取るのは 2 倍の 96px) の下に名前を置き、その人の
+ * PR・Issue・Discussion の一覧へのリンクにする。README は GitHub が HTML の `<table>`・`<a>`・`<img>` を通すが `style` は消すので、
+ * アイコンと名前を離さないために表のマスに入れる (段落に並べると、`&nbsp;` を挟んでもアイコンのあとで折り返した)
+ */
+const person = (login: string, link: string) =>
+  `<td align="center"><a href="${link}"><img src="https://github.com/${login}.png?size=96" width="48" height="48" alt=""><br><sub>@${login}</sub></a></td>`;
+
+/** 1 人ぶんのマスを `PER_ROW` 人ずつの行にした表 */
+const table = (cells: string[]) => {
+  const rows: string[] = [];
+  for (let at = 0; at < cells.length; at += PER_ROW)
+    rows.push(`<tr>${cells.slice(at, at + PER_ROW).join("")}</tr>`);
+  return ["<table>", ...rows, "</table>"].join("\n");
+};
+
+/**
+ * 印の間に入れる Markdown。1 人ぶん (`person`) を、`PER_ROW` 人ずつの表に並べる。
  * 番号は並べず、名前からその人の PR の一覧へ飛ぶ。報告や提案は、Issue を立てた人は Issue の一覧、Discussion だけの人は Discussion の一覧へ飛ぶ。
  * 誰もいない段は見出しごと出さない
  */
@@ -146,7 +158,7 @@ export function render(items: Item[]): string {
       : [
           `**${title}** (ありがとうございます):`,
           "",
-          list.map((p) => person(p.login, link(p.login))).join(" "),
+          table(list.map((p) => person(p.login, link(p.login)))),
           "",
         ];
   return [
