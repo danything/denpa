@@ -81,7 +81,7 @@ export function orphanedRules(): Orphan[] {
     for (const id of ids) {
       if (current.has(id)) continue;
       const gone = byId.get(id);
-      // 局の行が無い (映像の無い局として消した) ものは、名前も候補も出せない
+      // 局の行が無い (ワンセグなどの取り込まない局として消した) ものは、名前も候補も出せない
       if (gone === undefined) continue;
       if (blocked.has(gone.id)) continue;
       const name = toHalfWidth(gone.name);
