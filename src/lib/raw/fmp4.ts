@@ -181,7 +181,7 @@ export class Fmp4Video {
    */
   private floor: number | null = null;
   private lastPts: number | null = null;
-  /** もう届かない (`finish`)。待たせている圧縮を渡しきったら、デコーダに残ったフレームを出させる */
+  /** もう届かない (`finish`)。デコーダに渡す前のチャンクをすべて渡したら、デコーダに残ったフレームを出させる */
   private ending = false;
   /** 末尾で `flush` を呼んだ (開き直したら、また呼ぶ) */
   private flushed = false;
@@ -525,7 +525,7 @@ export class Fmp4Video {
     this.host.drew(first);
   }
 
-  /** もう届かない (録画の末尾まで読んだ。`messages.ts` の `end`)。待たせている圧縮を渡しきったら `flush` する (`tick`) */
+  /** もう届かない (録画の末尾まで読んだ。`messages.ts` の `end`)。デコーダに渡す前のチャンクをすべて渡したら `flush` する (`tick`) */
   finish(): void {
     this.ending = true;
   }

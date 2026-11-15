@@ -1568,6 +1568,7 @@ describe("画像の待ちと「無い」の上限", () => {
     bml as unknown as {
       waitingImages: Set<string>;
       missingImages: Set<string>;
+      imagesDeferred: boolean;
     };
 
   async function ready(): Promise<Bml> {
@@ -1584,17 +1585,24 @@ describe("画像の待ちと「無い」の上限", () => {
     return bml;
   }
 
-  test("返らない取得は上限より多く始めない", async () => {
+  test("返らない取得は上限より多く始めない。待ちが 1 つ終わったら描き直す", async () => {
     const bml = await ready();
-    let fetches = 0;
-    inside(bml).resources.fetch = () => {
-      fetches++;
-      return new Promise(() => {});
-    };
+    const resolvers: (() => void)[] = [];
+    inside(bml).resources.fetch = () =>
+      new Promise<void>((resolve) => resolvers.push(resolve));
     for (let i = 0; i < MAX_IMAGES + 50; i++)
       inside(bml).image(`/40/0002/a${i}.jpg`, "image/jpeg");
     expect(images(bml).waitingImages.size).toBe(MAX_IMAGES);
-    expect(fetches).toBe(MAX_IMAGES);
+    expect(resolvers).toHaveLength(MAX_IMAGES);
+    expect(images(bml).imagesDeferred).toBe(true);
+
+    // 1 つが「無い」で終わっても、始めなかった画像のために描き直す
+    resolvers[0]!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(images(bml).imagesDeferred).toBe(false);
+    expect(images(bml).waitingImages.size).toBe(MAX_IMAGES - 1);
+    inside(bml).image(`/40/0002/a${MAX_IMAGES}.jpg`, "image/jpeg");
+    expect(resolvers).toHaveLength(MAX_IMAGES + 1);
   });
 
   test("「無い」は古いものから消して、上限を超えない", async () => {

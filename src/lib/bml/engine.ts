@@ -219,10 +219,10 @@ export const MAX_TIMERS = 64;
 /** 「1 回だけ知らせる」ために覚えておく数 */
 const MAX_REPORTED = 256;
 /**
- * 取得を待っている画像と、「無い」と決めた画像を持つ数 (それぞれ)。名前はモジュールとファイルの組で、
- * 文書を移るたびに別の名前が増えうる。1 つの文書が描く画像の数より十分大きくする。
- * 待ちが上限なら新しい取得を始めず、次に描き直すときに取得する。「無い」は古いものから消す (消した画像は
- * 次に描くときに 1 回取得し直し、すぐ「無い」に戻る)
+ * 取得を待っている画像と、「無い」と決めた画像を持つ数 (それぞれ)。画像のキーはモジュールとファイルの組なので、
+ * 文書を移るたびに別のキーが増えうる。1 つの文書が描く画像の数より十分大きくする。
+ * 待ちが上限なら新しい取得を始めず、待ちが 1 つ終わったら描き直して取得する。「無い」は古いものから消す
+ * (消した画像は次に描くときに 1 回取得し直し、すぐ「無い」に戻る)
  */
 export const MAX_IMAGES = 256;
 
@@ -380,6 +380,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private depth = 0;
   /** 取得して「無い」と決まった画像。モジュールが届き直すまで取得しない */
   private readonly missingImages = new Set<string>();
+  /** 待ちが上限 (`MAX_IMAGES`) で取得を始めなかった画像がある。待ちが 1 つ終わったら描き直す */
+  private imagesDeferred = false;
   private receiver: ReceiverInfo = { zipcode: "", prefecture: 255 };
   /** 扱えない名前だと知らせたもの (同じものを何度も知らせない) */
   private readonly reported = new Set<string>();
@@ -1850,29 +1852,32 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const file = this.resources.file(ref);
     if (file === null) {
       const key = refToPath(ref);
-      if (
-        !this.waitingImages.has(key) &&
-        !this.missingImages.has(key) &&
-        this.waitingImages.size < MAX_IMAGES
-      ) {
-        this.waitingImages.add(key);
-        void this.resources.fetch(ref).then(() => {
-          this.waitingImages.delete(key);
-          // 描けるようにならなかった (来ないと決まった・押さえた古いバージョンに無い) なら描き直さない。
-          // 描き直すとまたここへ来て、すぐ「無い」と返るのをくり返す (2026-10-12 本番で
-          // タブが固まった)。モジュールが届き直したら探し直す
-          if (this.resources.file(ref) === null) {
-            if (this.missingImages.size >= MAX_IMAGES) {
-              const oldest = this.missingImages.values().next();
-              if (oldest.done !== true) this.missingImages.delete(oldest.value);
-            }
-            this.missingImages.add(key);
-            return;
-          }
-          this.doc?.touch();
-          this.drawSoon();
-        });
+      if (this.waitingImages.has(key) || this.missingImages.has(key))
+        return null;
+      if (this.waitingImages.size >= MAX_IMAGES) {
+        this.imagesDeferred = true;
+        return null;
       }
+      this.waitingImages.add(key);
+      void this.resources.fetch(ref).then(() => {
+        this.waitingImages.delete(key);
+        // 上限で取得を始めなかった画像がある。空いたので、描き直して取得させる
+        const deferred = this.imagesDeferred;
+        this.imagesDeferred = false;
+        // 描けるようにならなかった (来ないと決まった・押さえた古いバージョンに無い) なら描き直さない。
+        // 描き直すとまたここへ来て、すぐ「無い」と返るのをくり返す (2026-10-12 本番で
+        // タブが固まった)。モジュールが届き直したら探し直す
+        if (this.resources.file(ref) === null) {
+          if (this.missingImages.size >= MAX_IMAGES) {
+            const oldest = this.missingImages.values().next();
+            if (oldest.done !== true) this.missingImages.delete(oldest.value);
+          }
+          this.missingImages.add(key);
+          if (!deferred) return;
+        }
+        this.doc?.touch();
+        this.drawSoon();
+      });
       return null;
     }
     const png = type === "image/x-arib-png";
