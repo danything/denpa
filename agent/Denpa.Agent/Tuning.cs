@@ -989,7 +989,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         if (modulation != QamAuto) return ModulationName(modulation);
         return reported is { } value && value != QamAuto
             ? $"{ModulationName(value)} (QAM_AUTO でロックし、ドライバが報告した変調)"
-            : "変調は自動 (QAM_AUTO。ドライバから変調を読めなかった)";
+            : "変調は自動 (QAM_AUTO。ドライバが変調を報告しなかった)";
     }
 
     /// <summary>
