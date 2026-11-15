@@ -18,7 +18,7 @@ import {
   sweepNow,
   sweepState,
 } from "#lib/server/logo.js";
-import { DIGITAL_TV, services } from "#lib/server/schema.js";
+import { hasVideo, services } from "#lib/server/schema.js";
 import type { ChannelType } from "#lib/types.js";
 
 /**
@@ -64,7 +64,7 @@ function stationLogos() {
    * サブチャンネルの枠は束ねて 1 局にする (覚えたものは写し合うので、束ねないと同じ画像が 2 つ並ぶ)
    */
   const cmShown = new Set(
-    stations(rows.filter((row) => row.service_type === DIGITAL_TV)).map(
+    stations(rows.filter((row) => hasVideo(row.service_type))).map(
       (row) => row.id,
     ),
   );

@@ -589,6 +589,8 @@ export class TlvServiceReader {
         networkId: transport.originalNetworkId,
         transportStreamId: transport.tlvStreamId,
         remoteControlKeyId: null,
+        // 4K の放送に部分受信 (ワンセグ) は無い
+        partialReception: false,
       }));
   }
 

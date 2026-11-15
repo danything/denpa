@@ -260,6 +260,7 @@ describe("TlvServiceReader", () => {
         networkId: ONID,
         transportStreamId: TLV_STREAM,
         remoteControlKeyId: null,
+        partialReception: false,
       },
     ]);
   });

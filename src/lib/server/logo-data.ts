@@ -283,7 +283,7 @@ export function stats(): { have: number; total: number } {
         type: services.type,
       })
       .from(services)
-      // 復号できない局は録れないので、CM のロゴを覚えることも無い (`services.decodable`)
+      // 復号できない局は録れないので、CM のロゴを覚えることも無い (`services.decodable`)。映像の無い局 (ラジオ・データ放送) は CM を検出しない (`hasVideo`)
       .where(
         and(
           currentServices(),

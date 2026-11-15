@@ -430,6 +430,24 @@ export function broadcastTrack(
 }
 
 /**
+ * **データ放送が主音声を替えたとき、ライブで選ぶ音声の ID** (`setMainAudioStream`。`routes/live` の `mainAudioFromData`)。
+ * 替えた (`index` が数) なら `N:es`。戻した (`index` が null) なら、まだデータ放送の音声のままのときだけ、番組表の音声の
+ * 主音声 (無ければ先頭) を返す。見ている人が「音声」で選び直していれば、そちらを残して null (選び直さない)
+ */
+export function dataAudio(
+  index: number | null,
+  current: string,
+  tracks: readonly AudioTrack[],
+): string | null {
+  if (index !== null) return `${index}:es`;
+  if (broadcastTrack(current) === undefined) return null;
+  const listed = tracks.filter(
+    (track) => broadcastTrack(track.id) === undefined,
+  );
+  return (listed.find((track) => track.main) ?? listed[0])?.id ?? null;
+}
+
+/**
  * 外から指定された音声の ID (`AudioTrack.id`) を読む。**形式が違えば指定されなかったことにする。**
  *
  * HTTP API (`?audio=0:sub`。docs/api.md) から来るもの。形式が合っていても無いもの

@@ -15,11 +15,13 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import type { Audio } from "../arib";
-import type {
-  ChannelType,
-  ReservationState,
-  Transport,
-  VideoLoss,
+import {
+  type ChannelType,
+  DIGITAL_TV,
+  hasVideo,
+  type ReservationState,
+  type Transport,
+  type VideoLoss,
 } from "../types";
 import type { Range } from "./cm";
 import { config } from "./config";
@@ -211,15 +213,43 @@ export const webhooks = sqliteTable("webhooks", {
   created_at: integer("created_at").notNull(),
 });
 
+// テレビの局の種別と映像のある局の決まりは、画面 (サブチャンネルの束ね方) も使うので `types.ts` に置く
+export { DIGITAL_TV, hasVideo };
+
+/** ラジオの局のサービス種別 (ARIB STD-B10 のデジタル音声)。映像が無く、音声 (と、あればデータ放送) を流す */
+export const DIGITAL_AUDIO = 2;
+
 /**
- * テレビの局のサービス種別 (ARIB STD-B10 のデジタル TV)。録画できるのはこの種別だけ。
- *
- * スキャンはデータ放送 (NHKデータ1、Gガイド) もワンセグ (tvkワンセグ1) も
- * ラジオも同じ一覧に入れる。これらを録っても映像は入っておらず、
- * データ放送は番組表上「24 時間ぶんの 1 番組」になっていたりする。
- * ルールが引っかけて録画が失敗するので、取り込む時点で落とす (`epg.syncServices`)
+ * データ放送の局のサービス種別 (ARIB STD-B10 のデータ/ワンセグ)。データ放送だけの局 (NHKデータ1) と、
+ * 部分受信の局 (ワンセグ。tvkワンセグ1) のどちらもこの種別。映像が無く、音声も無いことがある
  */
-export const DIGITAL_TV = 1;
+export const DIGITAL_DATA = 0xc0;
+
+/** **取り込むサービス種別** (`importedService`)。テレビ・ラジオ・データ放送。エンジニアリング (0xA4) などは取り込まない */
+export const IMPORTED_SERVICE_TYPES: ReadonlySet<number> = new Set([
+  DIGITAL_TV,
+  DIGITAL_AUDIO,
+  DIGITAL_DATA,
+]);
+
+/**
+ * **控えの局を取り込むか** (`epg.syncServices`)。取り込む種別 (`IMPORTED_SERVICE_TYPES`) のうち、部分受信の局 (ワンセグ) を除いたもの。
+ *
+ * ワンセグは本放送と同じ番組を流すので、取り込むと地上波の番組表に同じ番組の列が増える。部分受信かはスキャンが
+ * NIT の部分受信記述子 (0xFB) から控えに書く (`AgentChannel` の `partialReception`)。記述子の無いネットワークでは
+ * どの局も部分受信でないと書く (ケーブルの NIT に記述子が残るかは確かめていない)。
+ * **書く前の控え (`partialReception` が無い) のデータ放送の局は、ワンセグかもしれないので落とす。** スキャンし直すと入る
+ */
+export function importedService(service: {
+  serviceType: number;
+  partialReception?: boolean | undefined;
+}): boolean {
+  if (!IMPORTED_SERVICE_TYPES.has(service.serviceType)) return false;
+  if (service.partialReception === true) return false;
+  return (
+    service.serviceType !== DIGITAL_DATA || service.partialReception === false
+  );
+}
 
 export const services = sqliteTable("services", {
   /** 局の内部 ID (tuner.ts の serviceKey) */
@@ -230,7 +260,7 @@ export const services = sqliteTable("services", {
   type: text("type").$type<ChannelType>().notNull(),
   /**
    * ARIB のサービス種別 (STD-B10)。1 = デジタル TV、2 = デジタル音声、
-   * 192 = データ/ワンセグ、164 = エンジニアリング。録るのは 1 だけ
+   * 192 = データ/ワンセグ、164 = エンジニアリング。取り込むのは 1・2・192 で、192 のうちワンセグは落とす (`importedService`)
    */
   service_type: integer("service_type").notNull().default(DIGITAL_TV),
   /**

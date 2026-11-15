@@ -255,6 +255,8 @@ export function listedEntries(
             name:
               known.get(`${stream.originalNetworkId}:${service.serviceId}`) ??
               unnamed(service.serviceId),
+            // ケーブルの NIT に部分受信記述子が残るかは確かめていない。スキャンで読んだ局と同じく、部分受信でないと書く (`schema.importedService`)
+            partialReception: false,
           }))
           .sort((a, b) => a.serviceId - b.serviceId);
         if (services.length === 0) return;

@@ -38,8 +38,8 @@ import { pruneReception, unreceivableChannels } from "./reception";
 import { applyRules } from "./rules";
 import { resolveConflicts } from "./scheduler";
 import {
-  DIGITAL_TV,
   HELD_STATES,
+  importedService,
   programs,
   recordings,
   reservations,
@@ -219,6 +219,7 @@ export function watchableServices(at: number): number[] {
         network_id: services.network_id,
         transport_stream_id: services.transport_stream_id,
         type: services.type,
+        service_type: services.service_type,
       })
       .from(services)
       // 復号できない局とチャンネルの分からない局はライブに出さない
@@ -293,8 +294,8 @@ export function syncServices(read: readonly AgentChannels[]): number {
             service.serviceId,
             channel.type,
           );
-          // 映像の入っていないサービスは録っても仕方がない
-          if (service.serviceType !== DIGITAL_TV) {
+          // 取り込むのはテレビ・ラジオ・データ放送。ワンセグは落とす (`importedService`)
+          if (!importedService(service)) {
             dropped.push(id);
             continue;
           }
@@ -356,14 +357,17 @@ export function syncServices(read: readonly AgentChannels[]): number {
     for (const id of retainedServices(answered.map((r) => r.agent)))
       seen.add(id);
     /*
-     * 以前の取り込みで入ってしまったデータ放送やワンセグを片付ける。
-     * 残っていると番組表に並び続け、ルールが引っかけて録画が失敗する。
+     * 以前の取り込みで入ってしまったワンセグなどを片付ける。
+     * 残っていると番組表に並び続け、ワンセグは本放送と同じ番組の列になる。
      *
      * **ここだけは局の行ごと消す。** 選局できなくなった局 (`forgetMissing`)
-     * とは違って、そもそも映像が無く**録画も予約も 1 つも紐付いていない**ので、
-     * 辿れなくなるものが無い
+     * とは違って、取り込まない局には**録画も予約も 1 つも紐付いていない**ので、
+     * 辿れなくなるものが無い。
+     * **ほかのエージェントの控えで取り込んだ局は消さない** (`seen`)。部分受信の印を書く前の控え (`importedService`) を
+     * 持つエージェントが、スキャンし直したエージェントの入れたデータ放送の局を、予約ごと消してしまわないため
      */
     for (const id of dropped) {
+      if (seen.has(id)) continue;
       clearBelongings(at, id);
       tx.delete(services).where(eq(services.id, id)).run();
     }

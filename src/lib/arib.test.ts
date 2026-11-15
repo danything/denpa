@@ -6,6 +6,8 @@ import {
   audioLabel,
   audioTitles,
   audioTracks,
+  broadcastTrack,
+  dataAudio,
   genreLabel,
   genreName,
   parseAudios,
@@ -415,5 +417,30 @@ describe("audioChannels", () => {
     expect(audioChannels(9)).toBe(6);
     expect(audioChannels(2)).toBeUndefined();
     expect(audioChannels(7)).toBeUndefined();
+  });
+});
+
+/**
+ * データ放送が主音声を替えたときにライブで選ぶ音声 (`dataAudio`)。戻したときは、見ている人が選び直していればそちらを残す
+ */
+describe("dataAudio", () => {
+  const tracks = [
+    ...audioTracks([
+      { componentType: 3, main: false },
+      { componentType: 3, main: true },
+    ]),
+    broadcastTrack("2:es")!,
+  ];
+
+  test("替えたら N:es を選ぶ", () => {
+    expect(dataAudio(2, "1:both", tracks)).toBe("2:es");
+  });
+
+  test("戻したら、データ放送の音声のままなら番組表の主音声に戻す", () => {
+    expect(dataAudio(null, "2:es", tracks)).toBe("1:both");
+  });
+
+  test("戻したとき、見ている人が選び直していればそのまま (null)", () => {
+    expect(dataAudio(null, "0:both", tracks)).toBeNull();
   });
 });

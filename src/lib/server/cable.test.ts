@@ -315,7 +315,14 @@ describe("ロックしなかった TS を NIT から入れる", () => {
         networkId: 0xfffe,
         transportStreamId: 0x0021,
         remoteControlKeyId: null,
-        services: [{ serviceId: 0x028a, serviceType: 1, name: "前の名前" }],
+        services: [
+          {
+            serviceId: 0x028a,
+            serviceType: 1,
+            name: "前の名前",
+            partialReception: false,
+          },
+        ],
       },
       {
         type: "CATV",
@@ -323,7 +330,14 @@ describe("ロックしなかった TS を NIT から入れる", () => {
         networkId: 0xfffe,
         transportStreamId: 0x0022,
         remoteControlKeyId: null,
-        services: [{ serviceId: 0x028b, serviceType: 1, name: "仮 651" }],
+        services: [
+          {
+            serviceId: 0x028b,
+            serviceType: 1,
+            name: "仮 651",
+            partialReception: false,
+          },
+        ],
       },
       {
         type: "CATV",
@@ -331,7 +345,14 @@ describe("ロックしなかった TS を NIT から入れる", () => {
         networkId: 0xfffe,
         transportStreamId: 0x0002,
         remoteControlKeyId: null,
-        services: [{ serviceId: 0x0300, serviceType: 1, name: "仮 768" }],
+        services: [
+          {
+            serviceId: 0x0300,
+            serviceType: 1,
+            name: "仮 768",
+            partialReception: false,
+          },
+        ],
       },
     ]);
   });

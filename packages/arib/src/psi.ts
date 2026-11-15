@@ -42,11 +42,12 @@ const DESC_CABLE_DELIVERY = 0x44;
 const DESC_TERRESTRIAL_DELIVERY = 0xfa;
 const DESC_SERVICE = 0x48;
 const DESC_TS_INFORMATION = 0xcd;
+const DESC_PARTIAL_RECEPTION = 0xfb;
 
 /**
  * スキャンで残すサービス種別。Mirakurun のスキャンが通しているものと同じで、
- * ラジオ (0x02) とデータ (0xc0) も入る。映像の無いものを番組表に並べないのは
- * 取り込むほう (denpa の epg.ts の DIGITAL_TV)
+ * ラジオ (0x02) とデータ (0xc0) も入る。どの種別を番組表に並べるかは
+ * 取り込むほうが決める (denpa の schema.ts の `IMPORTED_SERVICE_TYPES`)
  */
 export const SERVICE_TYPES = new Set([
   0x01, 0x02, 0xa1, 0xa4, 0xa5, 0xad, 0xc0,
@@ -536,6 +537,11 @@ export interface NetworkTransport extends TransportInfo {
   delivery: Delivery | null;
   /** その TS のリモコン番号 (TS 情報記述子)。載せていなければ null */
   remoteControlKeyId: number | null;
+  /**
+   * 部分受信の局 (ワンセグ) の service_id (部分受信記述子 0xFB)。地上波の NIT[actual] が自分の TS に載せる。
+   * 載せていなければ空
+   */
+  partialReception: number[];
 }
 
 /** BCD の桁を左から `digits` 桁ぶん読んで、10 進の整数にする */
@@ -646,10 +652,14 @@ function parseNitSection(section: Uint8Array): NitSection | null {
     const services: Service[] = [];
     let delivery: Delivery | null = null;
     let remote: number | null = null;
+    const partialReception: number[] = [];
     for (const [tag, descriptor] of descriptors(body)) {
       if (tag === DESC_TS_INFORMATION && descriptor.length > 0) {
         remote ??= descriptor[0]!;
         remoteControlKeyId ??= remote;
+      } else if (tag === DESC_PARTIAL_RECEPTION) {
+        for (let i = 0; i + 2 <= descriptor.length; i += 2)
+          partialReception.push(u16(descriptor, i));
       } else if (tag === DESC_SERVICE_LIST) {
         for (let i = 0; i + 3 <= descriptor.length; i += 3) {
           services.push({
@@ -672,6 +682,7 @@ function parseNitSection(section: Uint8Array): NitSection | null {
       services,
       delivery,
       remoteControlKeyId: remote,
+      partialReception,
     });
   }
 
@@ -922,6 +933,11 @@ export interface FoundService extends Service {
   networkId: number;
   transportStreamId: number;
   remoteControlKeyId: number | null;
+  /**
+   * 部分受信の局 (ワンセグ) か。NIT の自分の TS に部分受信記述子 (0xFB) があり、そこに載っていれば true。
+   * 記述子の無いネットワーク (BS・CS と、確かめていないケーブル) と NIT を読まなかったときは false
+   */
+  partialReception: boolean;
 }
 
 /**
@@ -987,6 +1003,13 @@ export class ServiceReader {
     const transport = this.transport;
     if (transport === null) return [];
     const { transportStreamId, originalNetworkId } = transport;
+    const own = this.network?.transportStreams.find(
+      (ts) =>
+        ts.transportStreamId === transportStreamId &&
+        ts.originalNetworkId === originalNetworkId,
+    );
+    // 部分受信の局 (ワンセグ)。地上波の NIT[actual] が自分の TS に載せる
+    const partial = new Set(own?.partialReception ?? []);
     const found = (
       networkId: number,
       remoteControlKeyId: number | null,
@@ -998,16 +1021,12 @@ export class ServiceReader {
           networkId,
           transportStreamId,
           remoteControlKeyId,
+          partialReception: partial.has(service.serviceId),
         }));
     if (this.requireNit) {
       if (this.network === null) return [];
       return found(this.network.networkId, this.network.remoteControlKeyId);
     }
-    const own = this.network?.transportStreams.find(
-      (ts) =>
-        ts.transportStreamId === transportStreamId &&
-        ts.originalNetworkId === originalNetworkId,
-    );
     return found(originalNetworkId, own?.remoteControlKeyId ?? null);
   }
 }

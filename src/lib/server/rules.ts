@@ -33,6 +33,7 @@ import {
   type Taken,
 } from "./episode";
 import {
+  hasVideo,
   HELD_STATES,
   programs as programTable,
   recordedHistory,
@@ -75,7 +76,13 @@ export function haystack(
 type Matchable = Pick<
   Program,
   "service_id" | "is_free" | "genres" | "genre_detail" | "start_at"
->;
+> & {
+  /**
+   * 局の ARIB のサービス種別 (`services.service_type`)。映像の無い局 (`schema.hasVideo`) は、局を名指ししたルールだけが当てる。
+   * 省けば見ない (検索の「これからの放送」は録るかどうかを決めないので、映像の無い局の番組も出す)
+   */
+  arib_service_type?: number;
+};
 
 /**
  * 番組のジャンル。中分類まで持っている genre_detail を使い、
@@ -173,6 +180,7 @@ export const ANY_PAID: PaidAllowed = () => true;
  *
  * - `paid` 契約を確かめていない有料放送 (`PaidAllowed`)
  * - `service` 局の条件から外れる
+ * - `videoless` 映像の無い局 (ラジオ・データ放送) の番組で、ルールがその局を名指ししていない
  * - `genre` ジャンルの条件から外れる
  * - `time` 始まる時刻が時間帯の外
  * - `weekday` 始まる時刻の曜日が条件の外
@@ -183,6 +191,7 @@ export const ANY_PAID: PaidAllowed = () => true;
 export type Miss =
   | "paid"
   | "service"
+  | "videoless"
   | "genre"
   | "time"
   | "weekday"
@@ -220,6 +229,17 @@ export function missOf(
       serviceType !== undefined && (types?.includes(serviceType) ?? false);
     if (!byService && !byType) return "service";
   }
+
+  /*
+   * **映像の無い局 (ラジオ・データ放送) の番組は、その局を名指ししたルールだけが当てる。** 種別 (「地上波全部」) や
+   * キーワードだけのルールは当てない。取り込んでいなかった頃からあるルールが、映像の無い局を急に録り始めないため。データ放送の局は 1 日 1 番組のことがあり、キーワードで当たると丸 1 日録る
+   */
+  if (
+    program.arib_service_type !== undefined &&
+    !hasVideo(program.arib_service_type) &&
+    !(services?.includes(program.service_id) ?? false)
+  )
+    return "videoless";
 
   // ジャンルは "7" (大分類だけ) と "7-0" (中分類まで) の 2 通りで持つ。
   // 昔のルールは数値の配列だが、読み出し時に文字列へ揃えてある (schema.ts の strings)
@@ -900,6 +920,8 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     .select({
       ...getTableColumns(programTable),
       service_type: services.type,
+      // 映像の無い局は、局を名指ししたルールだけが当てる (`missOf`)
+      arib_service_type: services.service_type,
       channel: shareKey(),
       decodable: services.decodable,
     })

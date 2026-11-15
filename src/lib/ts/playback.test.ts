@@ -554,3 +554,33 @@ describe("サーバが選ぶ観方 (autoPick。playback?playable=)", () => {
     expect(autoPick(unknown, ["h264"], false)).toBeNull();
   });
 });
+
+describe("映像の無い録画 (ラジオ・データ放送の局)", () => {
+  /** サーバの `videolessPlan` が返す形式。音声だけの fMP4 1 つ */
+  const radio: PlaybackInfo = {
+    duration: 3600,
+    axis: "ts",
+    audios: [{ id: "0", label: "" }],
+    offers: [{ codec: "h264", way: "stream", codecs: "mp4a.40.2" }],
+    video: false,
+  };
+
+  test("端末に聞かずに音声だけの fMP4 を選ぶ (MSE の型は AUDIO_TYPE)", () => {
+    expect(pickOffer(radio, browser([], []))).toEqual({
+      way: "stream",
+      codec: "h264",
+      type: AUDIO_TYPE,
+    });
+  });
+
+  test("コーデックのメニューには何も並べない", () => {
+    expect(codecChoices(radio, browser([H264_MP4], [H264_MP4]))).toEqual([]);
+  });
+
+  test("テレビのアプリが映像のコーデックしか言わなくても選ぶ", () => {
+    expect(autoPick(radio, ["av1"], false)).toEqual({
+      way: "stream",
+      codec: "h264",
+    });
+  });
+});
