@@ -72,6 +72,7 @@ function setup(
     stream: () => {},
     setMainAudio: () => false,
     mainAudioRef: () => "/10",
+    objectChanged: () => {},
   };
   const dom = new Dom(host);
   const kept = new Map<string, string>();

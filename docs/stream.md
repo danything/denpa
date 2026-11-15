@@ -1740,6 +1740,9 @@ Hybridcast の起動は画面に任せる ([Hybridcast](#hybridcast))。選局 (
 録画では再生位置から放送の時刻を出して渡す (`clock`)。
 
 **文書が主音声を替えたら、ライブはその音声を出す** (映像の object の `setMainAudioStream`。J:COM テレビのラジオ選局は、同じ局にある別の音声の ES を出す)。
+音声の object (`audio/X-arib-mpeg2-aac`) を再生にして、`data` で同じ局の音声の ES (`/70`) を指す書き方でも替える (`engine.objectAudio`)。
+文書を読み込んだとき・PMT を読んだとき・`streamStatus` か `data` を書き換えたときに決め直し、再生の object が無くなれば、object で選んだ音声だけを戻す。
+音声の object の様子 (`data` と `streamstatus`) は、変わったときに `[bml]` の記録に出す。
 エンジンは PMT の音声の ES (AAC) を PMT の順に数え、何本目かを画面に渡す (`onMainAudio`)。画面は `<N>:es` の音声を選ぶ。変換しない MPEG-2 ではデコードする ES を替え、
 変換して送るものはその ES でエンコードし直す ([api.md](api.md))。ふだんの音声 (1 本目) に戻されたとき、局が替わったとき、データ放送を閉じたときは、
 まだデータ放送の音声のままならふだんの音声に戻す。見ている人が「音声」で選び直していれば、そちらを残す。この音声は次に開くときのために覚えない。
