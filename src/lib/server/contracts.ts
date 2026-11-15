@@ -658,7 +658,7 @@ function saveDecode(
         decode_ok: decodeOk,
         decoded_at: decodeOk ? now : null,
         // **カードが答えた行 (code がある) は状態を変えない。** カードが期限切れと答えた局を、
-        // 復号できたことで契約中に戻すと、定期の確認まで契約中と扱う (振り分けと手で予約したときの通知。カードの答えを信じる)
+        // 復号できたことで契約中に戻すと、定期の確認まで契約中と扱う (有料の番組の自動予約・振り分け・手で予約したときの通知。カードの答えを信じる)
         state: sql`CASE WHEN ${cardContracts.code} IS NULL THEN ${state} ELSE ${cardContracts.state} END`,
         checked_at: now,
       },
@@ -685,36 +685,34 @@ export async function noteDecoded(
 }
 
 /**
- * **どれかのカードで契約中と確かめた局か** (手で予約したときの通知 `reserveWarning`)。
+ * **有料放送を自動予約してよい局** (`rules.PaidAllowed`)。どれかのカードで契約中と確かめた局だけ。
  *
  * 未契約・期限切れの局と、まだ確かめていない局 (確かめる前・カードが無い・番組表に 0xCB が無く
- * 復号も試していない) は false。カードに聞けない局 (番組表に 0xCB が無い) は、復号テストか
- * 有料の番組を復号できた録画から 31 日のあいだだけ true (`DECODE_VALID_MS`)。
- * 自動予約はこれを見ない。有料の番組も無料の番組と同じく録り、スクランブルのまま残った録画は後から復号できる
+ * 復号も試していない) は録らない。録ってもスクランブルのままで観られないため。
+ * 設定の「無料放送だけ録る」はこれに置き換えた。カードを持たない人は、今までの既定 (無料だけ) と同じになる。
+ * カードに聞けない局 (番組表に 0xCB が無い) は、復号テストか有料の番組を復号できた録画から 31 日のあいだだけ (`DECODE_VALID_MS`)。
+ * 1 回の当てはめで 1 回だけ読む (呼ぶ側が関数を使い回す)
  */
-export function confirmedSubscribed(
-  serviceId: number,
-  now = Date.now(),
-): boolean {
-  return orm()
-    .select({
-      code: cardContracts.code,
-      decodedAt: cardContracts.decoded_at,
-    })
-    .from(cardContracts)
-    .where(
-      and(
-        eq(cardContracts.service_id, serviceId),
-        eq(cardContracts.state, "subscribed"),
-      ),
-    )
-    .all()
-    .some((row) => row.code !== null || freshDecode(row.decodedAt, now));
+export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
+  const subscribed = new Set(
+    orm()
+      .select({
+        serviceId: cardContracts.service_id,
+        code: cardContracts.code,
+        decodedAt: cardContracts.decoded_at,
+      })
+      .from(cardContracts)
+      .where(eq(cardContracts.state, "subscribed"))
+      .all()
+      .filter((row) => row.code !== null || freshDecode(row.decodedAt, now))
+      .map((row) => row.serviceId),
+  );
+  return (serviceId) => subscribed.has(serviceId);
 }
 
 /**
  * **手で予約した有料の番組が、スクランブルのまま録れるかもしれないときの通知の文** (番組表・検索の「予約」)。
- * 予約は断らない (手で録ると決めたのは人なので)。契約中と確かめた局 (`confirmedSubscribed`) でなければ、理由を付けた文を返す。
+ * 予約は断らない (手で録ると決めたのは人なので)。録ってよい局 (`paidAllowed`) でなければ、理由を付けた文を返す。
  * 無料の番組と、番組表に無い番組は null
  */
 export function reserveWarning(
@@ -727,7 +725,7 @@ export function reserveWarning(
     .where(eq(programs.id, programId))
     .get();
   if (program === undefined || program.isFree) return null;
-  if (confirmedSubscribed(program.serviceId, now)) return null;
+  if (paidAllowed(now)(program.serviceId)) return null;
   // カードが複数あれば、期限切れ → 未契約 → 確かめていない の順に強いほうを出す
   const statuses = serviceContracts(program.serviceId, null, now);
   const tail = "録画がスクランブルのまま残ることがあります";
@@ -806,11 +804,11 @@ export async function scrambledLiveNotice(
 
 /**
  * **有料の番組の録画が、復号し直しても掛かったまま終わった。** 復号テストで契約中としていた局を未契約に下げる
- * (`encoder.ts`)。契約が切れたあとも 31 日待たずに未契約と扱う (手で予約したときの通知・選局の振り分け)。
+ * (`encoder.ts`)。契約が切れたあとも 31 日待たずに、次の回から録らなくなる。
  *
  * 下げるのは、カードに聞けない局 (`code` が無い行) だけ。カードが契約中と答えた局は、掛かったままの理由が
  * ほかにある (ECM が流れていない など) ので、カードの答えを信じる (次の定期の確認で確かめ直す)。
- * 下げるのは復号に使ったカード (`cardId`) の行だけ。ほかのカードで確かめた契約は下げない。
+ * 下げるのは復号に使ったカード (`cardId`) の行だけ。ほかのカードで契約を確かめた局まで録らなくならないように。
  * カードが分からなければ全部のカードの行
  */
 export function noteStillScrambled(
