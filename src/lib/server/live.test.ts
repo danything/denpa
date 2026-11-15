@@ -4,6 +4,7 @@ import {
   askedTrack,
   type AudioSide,
   audioTracks,
+  broadcastTrack,
   pickTrack,
 } from "#lib/arib.js";
 import { BROADCAST_HEVC, CHANNEL, codecsFor } from "#lib/live.js";
@@ -1601,5 +1602,19 @@ describe("TS で送る 4K の局のライブ", () => {
     expect(parseCommand({ ...tune, broadcast: "av1" })).toMatchObject({
       broadcast: "mpeg2",
     });
+  });
+});
+
+/**
+ * **データ放送が選んだ音声 (`N:es`) は、PMT の音声の N 本目をエンコードする** (`arib.broadcastTrack`。J:COM テレビのラジオ選局)。
+ * PMT を見ずに受けるので、無い ES なら音声無しで続ける (`-map` の `?`)。番組表の音声 (`N:both`) はそのまま (`?` を付けない)
+ */
+describe("データ放送が選んだ音声のエンコード", () => {
+  test("N:es は a:N? で、番組表の音声は ? を付けない", () => {
+    const es = encodeArgs(1, broadcastTrack("2:es")!, "h264");
+    expect(es.join(" ")).toContain("-map 0:p:1:a:2?");
+    const main = encodeArgs(1, stereo, "h264");
+    expect(main.join(" ")).toContain("-map 0:p:1:a:0 ");
+    expect(main.join(" ")).not.toContain("a:0?");
   });
 });

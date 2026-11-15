@@ -3,7 +3,7 @@
   import { MediaQuery } from "svelte/reactivity";
 
   import { submitting } from "#lib/actions.js";
-  import { broadcastTrack } from "#lib/arib.js";
+  import { dataAudio } from "#lib/arib.js";
   import type { Service } from "#lib/bml/engine.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import { centerTap } from "#lib/components/player/center-tap.js";
@@ -267,16 +267,8 @@
    * 戻すとき (null) は、まだデータ放送の音声のままならふだんの音声へ。見ている人が「音声」で選び直していれば、そちらを残す
    */
   function mainAudioFromData(index: number | null): void {
-    if (index !== null) {
-      player.setAudio(`${index}:es`);
-      return;
-    }
-    if (broadcastTrack(player.audio) === undefined) return;
-    const listed = player.audios.filter(
-      (track) => broadcastTrack(track.id) === undefined,
-    );
-    const main = listed.find((track) => track.main) ?? listed[0];
-    if (main !== undefined) player.setAudio(main.id);
+    const next = dataAudio(index, player.audio, player.audios);
+    if (next !== null) player.setAudio(next);
   }
 
   /**
