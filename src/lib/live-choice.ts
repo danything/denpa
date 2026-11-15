@@ -86,7 +86,7 @@ export function formatLabel(
 }
 
 /**
- * 覚えていた選択を読む。**知らない値・前の形式の cookie (`codec`・`raw` だけで `choice` が無い) は自動。**
+ * 覚えていた選択を読む。**どの選択でもない値・前の形式の cookie (`codec`・`raw` だけで `choice` が無い) は自動。**
  * H.265・H.264 もそのまま読む。いまメニューに並んでいないものを自動として扱うのは `keptChoice`
  */
 export function readChoice(value: unknown): LiveChoice {

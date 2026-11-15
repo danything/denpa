@@ -1,7 +1,7 @@
 /**
  * 画面 (`engine.ts`) と worker (`worker.ts`) の取り決め。**両側から読む。**
  *
- * 分け方: TS をデコードする・映像をデコードして描く・音をデコードするのは worker、**音を鳴らすのと時計は画面**
+ * TS をデコードする・映像をデコードして描く・音をデコードするのは worker で、**音を鳴らすのと時計は画面**
  * (Web Audio は worker から触れない)。時計は画面から worker へ流す (`clock`)。
  */
 
@@ -66,7 +66,7 @@ export type ToWorker =
   /** 何本目の音声をデコードするか (`AudioTrack.stream`) */
   | { type: "audio"; index: number }
   /**
-   * いま出しているコマを 1 枚ください (切り抜き)。**映像は worker の canvas にあって、
+   * いま出しているコマを 1 枚返させる (切り抜き)。**映像は worker の canvas にあって、
    * 画面の側からは画素を読めない** (`transferControlToOffscreen` で渡したので)。
    * `id` は返事 (`frame`) と組にするため。
    *

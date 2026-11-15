@@ -108,7 +108,7 @@ export function replaceBlocks(
   return out + text.slice(at);
 }
 
-/** スタイルシートを読む。`order` は `start` から振る (文書の中の複数の style の通し番号) */
+/** スタイルシートを読む。`order` は `start` から振る (文書にある複数の style を通した番号) */
 export function parseStylesheet(text: string, start = 0): Rule[] {
   const rules: Rule[] = [];
   const source = stripComments(text);

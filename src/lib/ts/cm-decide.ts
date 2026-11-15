@@ -173,12 +173,12 @@ function points(candidates: Boundary[]): number[] {
   return out;
 }
 
-/** 番組の尺の窓の端を、どれだけ離れた無音まで寄せるか (秒) */
+/** 番組の尺で置いた窓の端を、どれだけ離れた無音まで寄せるか (秒) */
 const SNAP = 5;
 /** 切れ目の無い無音を、どれだけ遠いとみなすか (秒) */
 const STILL_PENALTY = 1.5;
 
-/** `at` にいちばん近い無音の、いちばん強い切れ目。`SNAP` 秒より遠ければ `at` のまま (番組の尺の窓の端) */
+/** `at` にいちばん近い無音の、いちばん強い切れ目。`SNAP` 秒より遠ければ `at` のまま (番組の尺で置いた窓の端) */
 function snap(at: number, candidates: Boundary[]): number {
   let best = at;
   let distance = SNAP;
@@ -352,7 +352,7 @@ const SPOT_FIT = 0.5;
 /** 告知の尺とみなす誤差 (秒)。実機の BS-TBS で 5.47 秒の告知があった */
 const SPOT_TOLERANCE = 0.6;
 /**
- * CM に挟まれた短い所 (`ISLAND_MAX` 秒以内のロゴの出ている所) の先頭の告知の点。局の 5 秒の告知はロゴを出したまま流れ、
+ * CM に挟まれた短い所 (`ISLAND_MAX` 秒以内のロゴの出ている所) で、先頭にある告知に付ける点。局の 5 秒の告知はロゴを出したまま流れ、
  * 次回予告との間に無音が無いことがある (実機で 5 秒の告知 → 次回予告 → 提供)。ロゴの減点はせず、番組にしたときと同じ点にこれを足す
  */
 const SPOT_ISLAND = 4;
@@ -402,7 +402,7 @@ const EDGE_CAP = 30;
  */
 const HEAD_GRACE = 3;
 /**
- * 番組表どおりの先頭の近くで、無音が無くても録画の先頭の CM の終わりにしてよい切れ目の強さ (ふつうの CM の継ぎ目と同じ)。
+ * 番組表どおりの先頭に近い所で、無音が無くても録画の先頭にある CM の終わりにしてよい切れ目の強さ (ふつうの CM の継ぎ目と同じ)。
  *
  * **局が番組表より遅れて番組を始めると、番組表どおりの先頭は CM の途中に来る。** 局の切り替わりは無音を挟まないことがあり、
  * 先頭の近くに無音が無いと、録画の先頭の CM を番組表どおりの先頭までで終えられず、その先の CM まで番組になっていた
@@ -436,10 +436,10 @@ interface Candidate {
  * 無音 1 つにつき強いほうから `PER_SILENCE` 個まで。切れ目が無ければ無音の真ん中。ほかに、
  *
  * - 録画の先頭と末尾
- * - 無音の候補からちょうど 5・10 秒の、無音の外の強い切れ目 (`bare`)。CM に挟まれた短い所の先頭の告知の終わりにだけ使う
+ * - 無音の候補からちょうど 5・10 秒の、無音の外の強い切れ目 (`bare`)。CM に挟まれた短い所で、先頭にある告知の終わりにだけ使う
  * - 最初のロゴの出始めと最後の消え際 (`logo`)。録画の先頭と末尾の CM の端にだけ使う (前後の番組との境目は無音を挟まないことがある)
  * - 番組表どおりの先頭から前後 `HEAD_GRACE` 秒の、無音の外の強い切れ目 (`start`)。録画の先頭からそこまでに無音の候補が
- *   1 つも無いときだけ。録画の先頭の CM の終わりと、そこから続く 15 秒の倍数の CM の先頭にだけ使う (`START_CUT`)
+ *   1 つも無いときだけ。録画の先頭にある CM の終わりと、そこから続く 15 秒の倍数の CM の先頭にだけ使う (`START_CUT`)
  */
 function candidates(
   input: CmInput,
@@ -635,7 +635,7 @@ function logoIndex(input: CmInput, spans: Range[]) {
   const hidden = intersect(merged, missing);
   /**
    * 0 から `t` までのロゴの区間の秒 / そのうち見えないまま持ち越された秒 (欠けた所は除く) /
-   * 映像の欠けた秒 / そのうちロゴの区間の中の秒
+   * 映像の欠けた秒 / そのうちロゴの区間に入る秒
    */
   const coveredTo = measure(merged);
   const unseenTo = measure(subtract(tails, missing));
@@ -880,7 +880,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
 
       // CM へ。無音の外の切れ目とロゴの出入りからは始めない。告知が無音の外で終わったら次は番組
       if (s === State.Bare || a.kind === "bare") continue;
-      // 番組表どおりの先頭の近くの切れ目からは、録画の先頭の CM の続き (15 秒の倍数) だけ
+      // 番組表どおりの先頭に近い切れ目からは、録画の先頭にある CM の続き (15 秒の倍数) だけ
       if (a.kind === "start" && s !== State.Head) continue;
       const entering = s === State.Program || isCredit(s);
       let base = here;
@@ -914,7 +914,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
         // ロゴの出入りそのものは、録画の先頭と末尾の CM の端にだけ
         if ((a.kind === "logo" && !tail) || (b.kind === "logo" && !head))
           continue;
-        // 番組表どおりの先頭の近くの切れ目は、録画の先頭の CM の終わりにだけ
+        // 番組表どおりの先頭に近い切れ目は、録画の先頭にある CM の終わりにだけ
         if (b.kind === "start" && !head) continue;
         if (head || tail) {
           if (b.kind === "bare") continue;

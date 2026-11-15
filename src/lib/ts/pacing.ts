@@ -166,7 +166,7 @@ interface Pacing {
 /**
  * 次にどうするかを決める。
  *
- * **頭出しは自分で合わせる。** チャンネルを変えると MediaSource を作り直すので、再生位置が
+ * **頭出しは自分で合わせる。** 局を変えると MediaSource を作り直すので、再生位置が
  * 新しい範囲の外に取り残される。何もしないとそのままで、1 コマも出ない。
  *
  * ## 追っかけ中は飛ばない
@@ -191,7 +191,7 @@ export function pacing({
   rate,
   steering,
 }: Buffered): Pacing {
-  // 範囲の外にいる。チャンネルを変えた直後もここを通る
+  // 範囲の外にいる。局を変えた直後もここを通る
   if (at < start || at > end)
     return { seek: start, play: false, rate: 1, caught: false };
 

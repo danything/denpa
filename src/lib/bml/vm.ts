@@ -7,7 +7,7 @@
  * - `launchDocument` で今の実行を**打ち切れる** (`Abort`)
  * - 時間で区切る: `run(deadline)` は締め切りが来たら `yield` を返す。呼ぶ側が次の
  *   隙間で `run` し直す (ページを固めない)
- * - 上限: 呼び出しの深さ・1 回の実行の命令の数 (終わらないループ)・配列と文字列の大きさ
+ * - 上限は呼び出しの深さ、1 回の実行で動かす命令の数 (終わらないループ)、配列と文字列の大きさ
  */
 
 import { type Code, OP } from "./compiler";
@@ -85,7 +85,7 @@ class Enumeration extends JSObject {
 interface VmLimits {
   /** 呼び出しの深さ (規格は 16 段。余裕を持たせる) */
   depth: number;
-  /** 1 回の実行の命令の数 */
+  /** 1 回の実行で動かす命令の数 */
   steps: number;
 }
 

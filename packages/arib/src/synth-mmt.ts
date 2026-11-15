@@ -495,7 +495,7 @@ export function mptTable(mpt: SynthMpt): Uint8Array {
   return Uint8Array.from([0x20, mpt.version ?? 0, ...be(body.length), ...body]);
 }
 
-/** MMT の表のセクションの頭 (table_id・長さ・拡張・バージョン・セクション番号)。長さは `withCrc` が埋める */
+/** MMT の表のセクションの先頭 (table_id・長さ・拡張・バージョン・セクション番号)。長さは `withCrc` が埋める */
 function head(tableId: number, extension: number, version = 0): number[] {
   return [tableId, 0x00, 0x00, ...be(extension), 0xc1 | (version << 1), 0, 0];
 }

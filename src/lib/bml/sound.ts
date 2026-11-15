@@ -1,10 +1,10 @@
 /**
  * 音。**内蔵音は WebAudio で合成し、出所の分からない音のファイルは持たない。**
  *
- * - 内蔵音 (`browser.playRomSound("romsound://N")`、TR-B14 第二分冊 第三編 第 2 部 3.3.5):
- *   0〜4 速報チャイム・5〜12 ボタン操作音・13 アラート音。規格は音色を決めていないので、
+ * - 内蔵音 (`browser.playRomSound("romsound://N")`、TR-B14 第二分冊 第三編 第 2 部 3.3.5) は
+ *   0〜4 が速報チャイム、5〜12 がボタン操作音、13 がアラート音。規格は音色を決めていないので、
  *   役目が分かる短い音にする (ボタンは短く高い 1 音、チャイムは 2〜4 音、アラートは 2 音の繰り返し)
- * - 文書の音 (`object type="audio/X-arib-aiff"`): AIFF-C の非圧縮 PCM (12 kHz・1 ch・16 ビット) を読む
+ * - 文書の音 (`object type="audio/X-arib-aiff"`) は、AIFF-C の非圧縮 PCM (12 kHz・1 ch・16 ビット) を読む
  */
 
 import { ascii } from "@danything/arib/bytes";
