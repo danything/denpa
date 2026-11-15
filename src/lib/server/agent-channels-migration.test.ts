@@ -148,7 +148,7 @@ describe("0039_agent-channels", () => {
 
     // 最初の取り込みで、局から上げる前と同じチャンネルが引け、局の一覧も変わらない
     const { syncServices, currentServices } = await import("./epg");
-    const { channelOfService } = await import("./agent-channels");
+    const { serviceChannel } = await import("./agent-channels");
     const { services } = await import("./schema");
     syncServices([
       {
@@ -176,7 +176,14 @@ describe("0039_agent-channels", () => {
         ],
       },
     ]);
-    for (const s of SERVICES) expect(channelOfService(s.id)).toBe(s.channel);
+    const channels = new Map(
+      orm()
+        .select({ id: services.id, channel: serviceChannel() })
+        .from(services)
+        .all()
+        .map((row) => [row.id, row.channel]),
+    );
+    for (const s of SERVICES) expect(channels.get(s.id)).toBe(s.channel);
     expect(
       orm()
         .select({ id: services.id })

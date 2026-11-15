@@ -173,17 +173,6 @@ export function unreceivableService(): SQL {
       WHERE ${sameTs()} AND COALESCE(r.unreceivable, 0) = 0))`;
 }
 
-/** 局のチャンネルの名前 (`serviceChannel`)。局が無いか、どの控えにも無ければ null */
-export function channelOfService(serviceId: number): string | null {
-  return (
-    orm()
-      .select({ channel: serviceChannel() })
-      .from(services)
-      .where(eq(services.id, serviceId))
-      .get()?.channel ?? null
-  );
-}
-
 /** 局のチャンネルが分からないとき (`serviceChannel` が null) の理由 */
 export const NO_CHANNEL =
   "局のチャンネルがエージェントの控えにありません。局の取り込みを待つか、チャンネルスキャンをやり直してください";
