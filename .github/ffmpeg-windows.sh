@@ -287,15 +287,17 @@ printf 'ffmpeg %s\nSVT-AV1 %s\nOpus %s\n' "$FFMPEG_VERSION" "$SVT_AV1_VERSION" "
 # DIAG (temporary)
 (
   cd "$work/build-ffmpeg"
-  t() { echo "=== DIAG: $*"; if ./ffmpeg_g.exe -hide_banner -loglevel error "$@" -f null -; then echo "=== OK"; else echo "=== FAIL $?"; gdb -q -batch -ex run -ex bt -ex 'info registers rsp rip' -ex 'x/8i $pc-16' --args ./ffmpeg_g.exe -hide_banner -loglevel error "$@" -f null - 2>&1 | tail -60; fi; }
-  t -f lavfi -i testsrc2=s=320x240:r=30:d=1
-  t -f lavfi -i sine=d=1
-  t -f lavfi -i sine=d=1 -c:a libopus
-  t -f lavfi -i sine=d=1 -c:a aac
-  t -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v libsvtav1 -preset 12
-  t -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v libx264
-  t -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v mpeg2video
-  t -f lavfi -i testsrc2=s=320x240:r=30:d=1 -vf scale=160:120
+  echo "=== DIAG PE"
+  objdump -p ffmpeg_g.exe | grep -iE "SizeOfStack|SizeOfHeap|LinkerVersion|DllCharacteristics"
+  echo "=== DIAG prologue (linked)"
+  objdump -d --no-show-raw-insn ffmpeg_g.exe --disassemble=produce_temporally_filtered_pic.isra.0 | head -40
+  echo "=== DIAG symbols"
+  nm ffmpeg_g.exe | grep -iE "chkstk|_tls_used|__emutls|_tls_index" | head
+  args=(-hide_banner -loglevel error -f lavfi -i testsrc2=s=320x240:r=30:d=1 -c:v libsvtav1 -preset 12 -f null -)
+  echo "=== DIAG crash"
+  gdb -q -batch -ex run -ex 'info registers rsp rip' -ex 'p/x $_tlb' -ex 'x/4gx $_tlb' --args ./ffmpeg_g.exe "${args[@]}" 2>&1 | grep -v "New Thread" | tail -30
+  echo "=== DIAG entry"
+  gdb -q -batch -ex 'break produce_temporally_filtered_pic.isra.0' -ex run -ex 'info registers rsp' -ex 'x/4gx $_tlb' -ex bt --args ./ffmpeg_g.exe "${args[@]}" 2>&1 | grep -v "New Thread" | tail -40
 ) || true
 
 # 置いたものだけで動くか (MSYS2 の DLL の置き場を PATH から外す)。エンコーダは試しに 1 秒ずつ流す
