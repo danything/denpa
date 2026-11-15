@@ -425,6 +425,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 音声だけになったことを段の切り替えにも数えない (`asked` は局を替えたときのために持ち越す)
    */
   let videoless = false;
+  /** 映像の無い局でデータ放送を自動で開いたか。閉じたあとに開き直さない。局を替えたら (`tune` の `keepList` が false) 下ろす */
+  let openedVideoless = false;
   const adapter = new RungAdapter();
   /** 受け取りの速さ (`AdaptSample.throughput`)。リクエストし直すたびに測り直す */
   const throughput = new Throughput();
@@ -2292,6 +2294,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   ): Promise<void> {
     chase = null;
     chaseTimeline = null;
+    if (!keepList) openedVideoless = false;
     /*
      * 別の局へ移るなら、サーバが選局を受けたら (`tuned`) データ放送を閉じる (`closingOnTune`)。それまでは前の局の
      * データ放送を出したままで、受信のリクエストは `begin` の `syncData` で選局の指示より先にやめる。
@@ -2854,6 +2857,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             }
             closing = null;
             onAir = tuned;
+            /*
+             * **映像の無い局 (ラジオ・データ放送だけの局) は、データ放送を開く。** 観る中身はデータ放送で、開くまではリモコンを出さない
+             * (`DataBroadcast` の `press`) ので、開いていないと、自動で受信した文書を操作できない。閉じれば閉じたまま (局を替えるまで)
+             */
+            if (videoless && !openedVideoless) {
+              // 人が先に開いていても、開いたものとして覚える (閉じたあとに開き直さない)
+              if (!showData) showData = true;
+              openedVideoless = true;
+            }
             syncData();
           }
           /*
