@@ -241,14 +241,15 @@ public class Cxd2856IsdbcTests
     {
         var line = new CxdIsdbcLockFailure(
             393000, true, 1000, 300, -1, true, false, 0x123, -46.875, 61234, 12,
-            new CxdPreviousTune("ISDB-C", 387000, true, 2400)).Describe();
+            new CxdPreviousTune("ISDB-C", 387000, true, 2400), "64QAM", 31.24, 5.2740, 1.5e-3, 12).Describe();
         await Assert.That(line).IsEqualTo(
             "ISDB-C がロックしませんでした (393000 kHz、選局し直し)  待ち 1000 ms  復調のロック (88 の bit0) 300 ms  TS のロック (10 の bit5) 立たなかった  "
             + "最後に読んだ値 bit0=1 bit5=0  復調器の IF の AGC 291  搬送波のずれ -46.9 kHz  "
+            + "変調 64QAM  C/N 31.2 dB  シンボルレート 5.2740 Msps  誤り訂正の前の BER 1.50E-003  訂正できなかったパケット 12  "
             + "初期化から 61234 ms・12 回目の選局  前の選局 ISDB-C 387000 kHz (ロックした、2400 ms 前に開始)");
         var empty = new CxdIsdbcLockFailure(393000, false, 1000, -1, -1, false, false, null, null, 0, 1, null).Describe();
         await Assert.That(empty).Contains("(393000 kHz、起動して選局)");
-        await Assert.That(empty).Contains("復調器の IF の AGC -  搬送波のずれ -  初期化から 0 ms");
+        await Assert.That(empty).Contains("復調器の IF の AGC -  搬送波のずれ -  変調 -  C/N -  シンボルレート -  誤り訂正の前の BER -  訂正できなかったパケット -  初期化から 0 ms");
         await Assert.That(empty).EndsWith("前の選局 なし");
     }
 
