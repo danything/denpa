@@ -181,7 +181,7 @@ public sealed class AgentTls
 
     /// <summary>
     /// <c>POST /denpa/pair</c> の本文の上限 (バイト)。中身は指紋 (64 字) と proof (43 字) だけで 130 バイトほど。
-    /// **組む前の相手からも受ける**ので、Kestrel の既定 (30MB) のままにせず、要る大きさに余裕を足したところで切る
+    /// **組む前の相手からも受ける**ので、Kestrel の既定 (30 MB) のままにせず、要る大きさに余裕を足したところで切る
     /// </summary>
     public const int PairBodyLimit = 1024;
 

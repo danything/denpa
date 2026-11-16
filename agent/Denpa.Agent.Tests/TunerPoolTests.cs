@@ -239,7 +239,7 @@ public class TunerPoolTests
             var clock = System.Diagnostics.Stopwatch.StartNew();
             rig.Pool.Status();
             await Assert.That(replacing.IsCompleted).IsFalse().Because("選局が終わるまで閉じずに待つ");
-            await Assert.That(clock.ElapsedMilliseconds < 300).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
+            await Assert.That(clock.ElapsedMilliseconds < 300).IsTrue().Because($"{clock.ElapsedMilliseconds} ms 掛かった");
 
             await replacing.WaitAsync(TimeSpan.FromSeconds(10), cancel);
             var sink = await opening.WaitAsync(TimeSpan.FromSeconds(10), cancel);

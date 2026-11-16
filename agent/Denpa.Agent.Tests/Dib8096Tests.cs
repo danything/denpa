@@ -77,7 +77,7 @@ public class Dib8096Tests
     {
         var (dib, i2c, _, time) = Make();
         dib.Initialize();
-        // GPIO 0 を Low (起動)、GPIO 5 を Low → High (リセット)。間は 10ms ずつ (6.8)
+        // GPIO 0 を Low (起動)、GPIO 5 を Low → High (リセット)。間は 10 ms ずつ (6.8)
         await InOrder(i2c.Log,
             "D1029&FFFE|0000", "D1030&FFFE|0000",
             "D1029&FFDF|0000", "D1030&FFDF|0000",
@@ -237,7 +237,7 @@ public class Dib8096Tests
         dib.Initialize();
         time.Sleeps.Clear();
         dib.Tune(557_142_857);
-        // 30ms はダイバーシティの切り替え (バージョン 0x8002)。選局ごとに 3 回
+        // 30 ms はダイバーシティの切り替え (バージョン 0x8002)。選局ごとに 3 回
         await Assert.That(time.Sleeps.Count(ms => ms == 30)).IsEqualTo(3);
         await Assert.That(time.Sleeps.Count(ms => ms >= 10)).IsGreaterThan(5);
     }
@@ -245,7 +245,7 @@ public class Dib8096Tests
     [Test]
     public async Task 待ちの丸め上げ()
     {
-        // 参考の実装と同じく、0.1ms 単位の t を floor(10 × (t + 99) / 100) ms。t = 0 でも 9ms
+        // 参考の実装と同じく、0.1 ms 単位の t を floor(10 × (t + 99) / 100) ms。t = 0 でも 9 ms
         var (dib, _, _, time) = Make();
         dib.Initialize();
         time.Sleeps.Clear();
