@@ -34,6 +34,8 @@ import {
   type Ranges,
   retryable,
   RUNG_HEADER,
+  type StreamCause,
+  streamOrigin,
   StreamRetry,
   type StreamState,
   switchPoint,
@@ -98,6 +100,8 @@ export interface RemuxPlayer {
    * **映像の有無は替えられない** (MSE は SourceBuffer の中のトラックの数を変えられない)。音声だけとの行き来は作り直す
    */
   switchTo(codecs: string | null, url: StreamUrl): Promise<SwitchResult>;
+  /** 最後にリクエストしたきっかけと位置、いまの再生位置 (幕に添える 1 文。`ts/playback.ts` の `streamOrigin`) */
+  origin(): string;
   /** 受け取りの速さ (bit/s。`ts/meter.ts`)。まだ測れていなければ null */
   throughput(): number | null;
   /** 閉じる。読んでいるストリームを切る (サーバの ffmpeg も止まる) */
@@ -139,6 +143,9 @@ export function remuxPlayer(
   let pendingSwitch: AbortController | null = null;
   /** 読んでいるストリームのリクエストした位置。読んでいなければ null */
   let loadingFrom: number | null = null;
+  /** 最後にリクエストしたきっかけと位置 (`origin`) */
+  let cause: StreamCause = "open";
+  let causeFrom = options.start;
   let audio = options.audio;
   const retry = new StreamRetry((state) => options.state(state));
   let closed = false;
@@ -277,15 +284,26 @@ export function remuxPlayer(
   }
 
   /** 新しいストリームを読み始める。前のストリームを止めて、`from` から読んでいることにする */
-  function begin(from: number, abort: AbortController): number {
+  function begin(
+    from: number,
+    abort: AbortController,
+    why: StreamCause,
+  ): number {
     const mine = ++run;
     controller?.abort();
     controller = abort;
     nudge();
     retry.cancel();
     loadingFrom = from;
+    cause = why;
+    causeFrom = from;
     meter.pause();
     return mine;
+  }
+
+  /** 最後にリクエストしたきっかけと位置、いまの再生位置 (`RemuxPlayer.origin`) */
+  function origin(): string {
+    return streamOrigin(cause, causeFrom, video.currentTime);
   }
 
   /** 前のストリームの読みかけを落とし、`from` 秒から先を捨てる (0 なら全部) */
@@ -363,7 +381,7 @@ export function remuxPlayer(
     // 切れた (繋がらない・途中で落ちた・サーバの 5xx) ならリクエストし直す。読めない中身
     // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面が観られる先の案内を出す
     if (video.error !== null || !retryable(error)) {
-      const reason = failureText(video.error, error);
+      const reason = `${failureText(video.error, error)}。${origin()}`;
       console.warn(`[remux] 流せませんでした: ${reason}`, error);
       options.state("failed", reason);
       return;
@@ -373,7 +391,8 @@ export function remuxPlayer(
      * 使い切るまでは「繋ぎ直しています」を出さない (`onWaiting`)。継ぎ方は段の切り替え (`switchTo`) と同じ
      */
     retry.schedule(
-      () => void load(switchPoint(buffered(), video.currentTime), true),
+      () =>
+        void load(switchPoint(buffered(), video.currentTime), "retry", true),
       aheadOf(buffered(), video.currentTime) > 0,
     );
   }
@@ -382,10 +401,14 @@ export function remuxPlayer(
    * `from` 秒からリクエストし直す。溜まっていたものは捨てる。`keep` なら `from` より前に溜まっているものは残す
    * (切れたあとに続きをリクエストするとき)
    */
-  async function load(from: number, keep = false): Promise<void> {
+  async function load(
+    from: number,
+    why: StreamCause,
+    keep = false,
+  ): Promise<void> {
     pendingSwitch?.abort();
     const abort = new AbortController();
-    const mine = begin(from, abort);
+    const mine = begin(from, abort, why);
     try {
       await cut(keep ? from : 0, mine);
       if (mine !== run) return;
@@ -441,7 +464,7 @@ export function remuxPlayer(
       return "failed";
     }
     // 切り替える。前のストリームを止めて、`at` から先を新しいストリームで埋める
-    const mine = begin(at, asking);
+    const mine = begin(at, asking, "switch");
     url = next;
     wanted = codecs;
     void (async () => {
@@ -463,7 +486,7 @@ export function remuxPlayer(
     nudge();
     if (!opened || retry.waiting) return;
     if (!covers(buffered(), video.currentTime, loadingFrom, SLACK))
-      void load(video.currentTime);
+      void load(video.currentTime, "seek");
   };
   /**
    * 詰まった。読み終えたあとに戻った・ブラウザが捨てた (`ManagedMediaSource`) で
@@ -475,7 +498,7 @@ export function remuxPlayer(
     retry.starved();
     if (buffer === null || retry.waiting || loadingFrom !== null) return;
     if (aheadOf(buffered(), video.currentTime) === 0)
-      void load(video.currentTime);
+      void load(video.currentTime, "stall");
   };
 
   video.addEventListener("seeking", onSeeking);
@@ -508,7 +531,7 @@ export function remuxPlayer(
         Math.max(0, options.duration - 1),
       );
       if (start > 0) video.currentTime = start;
-      void load(start);
+      void load(start, "open");
     },
     { once: true },
   );
@@ -517,9 +540,10 @@ export function remuxPlayer(
     setAudio(id: string): void {
       if (id === audio) return;
       audio = id;
-      void load(video.currentTime);
+      void load(video.currentTime, "audio");
     },
     switchTo,
+    origin,
     throughput: () => meter.bps(),
     destroy(): void {
       closed = true;

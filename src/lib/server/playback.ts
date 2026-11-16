@@ -88,6 +88,7 @@ import { fromTsTime, type Ruler } from "#lib/ts/watch.js";
 import type { Recording } from "#lib/types.js";
 
 import { programSpec } from "./captions";
+import { cleanFrom } from "./clean-start";
 import { chapterList } from "./cm";
 import { config } from "./config";
 import { aribServiceId, programSpan } from "./encoder";
@@ -659,7 +660,8 @@ const FMP4_OUT = [
  *
  * ## 位置はファイルの時刻のまま出す
  *
- * - `-ss` を `-i` の前に置く。映像は写すので、`from` の手前のキーフレームから始まる
+ * - `-ss` を `-i` の前に置く。映像は写すので、`from` の手前のキーフレームから始まる。
+ *   そのキーフレームが IDR でなければ、呼ぶ側が `from` を手前の IDR に寄せてから渡す (`clean-start.ts` の `cleanFrom`)
  * - `-copyts` で入力の時刻を出力まで運ぶ
  * - mp4 の muxer は既定で先頭を 0 に詰め直す。`frag_discont` で塊の時刻 (tfdt) を
  *   そのまま書かせ、`negative_cts_offsets` で B フレームのぶんを編集リストに逃がさせない
@@ -1295,7 +1297,7 @@ export async function streamResponse(
               config.ffmpeg,
               ...copyArgs(
                 same.path,
-                from,
+                await cleanFrom(same.path, from),
                 audioIndex(query.get("audio")),
                 codec,
               ),

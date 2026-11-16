@@ -524,6 +524,9 @@ denpa が渡すオプション (`profile`・`prio_speed`・`realtime`) を持つ
 - B フレームは使いません。FFmpeg は `-strict experimental` を付けないと MediaCodec の B フレームを断ります (出したパケットに DTS が無いため)
 - 低遅延の指定 (MediaCodec の `latency`・`priority`) は FFmpeg が渡さないので、ライブも録画と同じエンコーダの既定です
 - `-g` は FFmpeg が秒に直して MediaCodec の `i-frame-interval` に渡します (`-g 250` で 30 コマなら 8 秒、ライブの `-g 60` は 1 秒)
+- キーフレームの印は、端末のエンコーダが同期フレームと返したコマにそのまま付きます (FFmpeg の mediacodecenc.c。IDR を指定する手段はありません)。
+  VA-API などは IDR にだけ印を付けるので、MediaCodec の録画だけは IDR でないコマに印が付いていることがありえます。
+  観る画面の詰め替えは、印の付いたコマが IDR でなければ手前の IDR から始めます ([api.md](api.md#録画を流す-get-apirecordingsidstream))
 
 **CI** (android.yml の `emulator`) は、エミュレータ (API 29・35) の中で `tests/native-smoke.ts` を bun で流し、次のことを確かめます。
 

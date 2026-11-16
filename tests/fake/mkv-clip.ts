@@ -76,12 +76,14 @@ interface Frame {
 }
 
 /**
- * `file` (作り置きの fMP4) を `length` 秒ぶん並べて、Matroska にする。映像はトラック 1、音はトラック 2 (名前は `audioName`)
+ * `file` (作り置きの fMP4) を `length` 秒ぶん並べて、Matroska にする。映像はトラック 1、音はトラック 2 (名前は `audioName`)。
+ * `rewrite` を渡すと、映像のコマの中身をそれで書き換える (キーフレームの印はそのまま。IDR でないキーフレームを作る)
  */
 export function mkvFromClip(
   file: Uint8Array,
   length: number,
   audioName = "主音声",
+  rewrite?: (data: Uint8Array, at: number) => Uint8Array,
 ): Uint8Array {
   const clip = readClip(file);
   const data = clipFrom(clip, 0, length);
@@ -96,11 +98,15 @@ export function mkvFromClip(
   const head = clip.head.length;
   for (const sample of readFragment(data.subarray(head), tracks)) {
     const track = tracks.find((t) => t.id === sample.track)!;
+    const at = Math.round((sample.pts * 1000) / track.timescale);
     frames.push({
       track: track === video ? 1 : 2,
-      at: Math.round((sample.pts * 1000) / track.timescale),
+      at,
       key: track === video ? sample.key : true,
-      data: sample.data,
+      data:
+        track === video && rewrite !== undefined
+          ? rewrite(sample.data, at)
+          : sample.data,
     });
   }
   frames.sort((a, b) => a.at - b.at || a.track - b.track);
