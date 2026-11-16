@@ -253,8 +253,11 @@
   let stepFrom: Step | null = null;
   /** canvas のプレイヤーがバッファを使い切って止まっているか (`waiting`)。段を決めるのに渡す */
   let canvasStuck = false;
-  /** 段 0 のビットレート (kbit/s)。ファイルの大きさと尺から。分からなければ null */
-  let baseKbps: number | null = null;
+  /**
+   * 段 0 のビットレート (kbit/s) と、どのファイル (`?source=`。元の TS は `ts`) のものか。ファイルの大きさと尺から。
+   * 読めていなければ null
+   */
+  let base: { source: string; kbps: number } | null = null;
   /** 段を切り替えている最中か (応答を待っている間は刻まない) */
   let switching = false;
   /** これより前 (ms) は段を動かさない。混んでいて断られたあと、続けてリクエストしない */
@@ -379,6 +382,12 @@
     const fresh = switchAt === null;
     const scene = sceneAt !== null;
     const from = startFrom(duration);
+    /*
+     * 元の TS のビットレートを読んでおく (`adapt.ts` が測った速さと比べる)。読めなければ目安 (10.5 Mbit/s) と比べるので、
+     * MPEG-2 (13〜24 Mbit/s) に足りない回線でも足りていると見て、詰まっても下げなくなる
+     */
+    if (codec === "mpeg2" && local === null && baseOf("ts") === null)
+      void readBaseKbps("ts", duration);
     let made: CanvasPlayer;
     try {
       made = canvasPlayer({
@@ -640,6 +649,8 @@
     if (holding) holdAt = Math.min(holdAt, to);
     if (canvas !== null) {
       canvas.seek(to);
+      // `<video>` の `seeking` と同じく、飛んだあとは測り直す。段は持ち越す
+      adapt.reset();
       at = to;
       paint();
       feedData();
@@ -1213,8 +1224,13 @@
     if (note !== null) noteAdapt(note);
   }
 
+  /** ビットレートを読みにいったファイル (`?source=`)。読めなくても同じファイルはリクエストし直さない (シーク・作り直しのたびに増やさない) */
+  const baseAsked = new Set<string>();
+
   /** ファイルの大きさから段 0 のビットレートを読む (`HEAD`)。読めなければ null のまま */
   async function readBaseKbps(source: string, duration: number): Promise<void> {
+    if (baseAsked.has(source)) return;
+    baseAsked.add(source);
     try {
       const res = await fetch(
         resolve(`api/recordings/${rec.id}/file?source=${source}`),
@@ -1222,10 +1238,21 @@
       );
       const bytes = Number(res.headers.get("Content-Length"));
       if (res.ok && bytes > 0 && duration > 0)
-        baseKbps = (bytes * 8) / duration / 1000;
+        base = { source, kbps: (bytes * 8) / duration / 1000 };
     } catch {
       // 分からなければ `adapt.ts` の目安を使う
     }
+  }
+
+  /** `source` のファイルのビットレート (kbit/s)。読めていなければ null */
+  function baseOf(source: string | null): number | null {
+    return source !== null && base?.source === source ? base.kbps : null;
+  }
+
+  /** 段 0 で観るファイルの `?source=`。MPEG-2 は元の TS、その場で流すもの (段 0 が変換) は null */
+  function zeroSource(plan: Picked): string | null {
+    if (plan.way === "file") return plan.source;
+    return plan.way === "raw" ? "ts" : null;
   }
 
   /** `adapt.ts` が決めたことを受ける。段を動かせたら断り書きを出す */
@@ -1287,7 +1314,8 @@
       if (next === 0) return false;
       const fresh = streamForAudio(plan, ability(), now.codec);
       if (fresh === null) return false;
-      if (baseKbps === null) void readBaseKbps(now.source, plan.duration);
+      if (baseOf(now.source) === null)
+        void readBaseKbps(now.source, plan.duration);
       return prepareStep(fresh, next, now, () => {
         fileZero = now;
         step = next;
@@ -1391,7 +1419,7 @@
         !target.seeking,
       paceId: plan.way === "stream" ? paceId : null,
       // 段 0 が変換 (エンコード済みが無い録画) なら分からない
-      baseKbps: fileZero !== null || plan.way === "file" ? baseKbps : null,
+      baseKbps: baseOf(zeroSource(fileZero ?? plan)),
     };
   }
 
@@ -1422,7 +1450,8 @@
       ahead: player.lead,
       waiting: canvasStuck,
       paceId,
-      baseKbps: null,
+      // 段 0 が MPEG-2 なら元の TS のビットレート (`startCanvas` で読む)。互換モードの変換は分からない
+      baseKbps: canvasCodec === "mpeg2" ? baseOf("ts") : null,
     };
   }
 

@@ -19,7 +19,7 @@ import {
  *
  * 次のどれかで「足りない」と見る。
  *
- * - 詰まった (`waiting`)
+ * - 詰まった (`waiting`)。観る画面では、先のバッファが 2 秒を切っているときだけ
  * - 先のバッファが 2 秒を切って、減り続けている
  * - サーバの `backlog` が 3 秒続けて伸びた、または映像の塊を捨てた
  * - ライブで、放送に対する遅れ (`lag`) が 4 秒で 0.6 秒以上伸びた。届く速さが流している段の 85% ほどを切ると伸びる。
@@ -54,6 +54,10 @@ import {
  * - サーバのエンコードが実時間に追いつかない (`Pace.speed` が 0 より大きく `ENCODE_SLOW` (0.95) 未満。0 は測れていないと読む) 間は、詰まっても回線のせいにしない。
  *   3 秒続いたら段は下げずに `encode` を返す (画面は断り書きを出すだけ。ライブはサーバが自分で軽い組み合わせに作り直す。
  *   `server/live.ts` の `Session.lighten`)
+ * - 観る画面で、先のバッファが 2 秒以上あるのに詰まったときは、回線のせいにしない (`<video>` のデコードが一瞬遅れた・飛んだ直後)
+ * - 観る画面で、測った速さ × 0.7 がいまの段に足りている間は、詰まりとバッファの減りを回線のせいにしない。
+ *   接続が切れて繋ぎ直している・サーバがファイルを読むのが遅れた、のように下げても直らない詰まりで、
+ *   ローカルネットでも「回線が細い」と出ていた。速さは読んでいる間に測るので、回線が細くなれば 5 秒の窓のうちに下がる
  * - 形式を手で選んでいる間は段を動かさず、足りないときに `pinned` だけを返す
  */
 
@@ -102,7 +106,7 @@ export interface AdaptSample {
   throughput: number | null;
   /** 先に溜まっている長さ (秒) */
   ahead: number;
-  /** 詰まって止まっているか */
+  /** 詰まって止まっているか。観る画面では、先 (`ahead`) が 2 秒以上あれば回線のせいにしない */
   waiting: boolean;
   /**
    * サーバから届いた最後の `pace`。無い経路は null。**届くたびに新しいオブジェクトを渡す**
@@ -559,20 +563,28 @@ export class RungAdapter {
         this.grow !== null && this.grow.lastAt - this.grow.from >= BACKLOG_GROW;
       dropped = pace !== this.lastPace && pace.dropped > 0;
     }
+    const watch = s.route === "watch";
+    // 観る画面で測った速さが、いまの段に足りているか。測れていなければ null
+    const enough =
+      watch && s.throughput !== null
+        ? s.current === "audio" ||
+          s.throughput * HEADROOM >= stepBps(s.current, s.baseKbps)
+        : null;
     // 先が埋まっている間の速さは高めに出やすい。外れても下げ遅れるほうなので、そのまま比べる
-    if (
-      s.route === "watch" &&
-      s.throughput !== null &&
-      s.current !== "audio" &&
-      s.throughput * HEADROOM < stepBps(s.current, s.baseKbps)
-    )
-      this.thinSince ??= now;
+    if (enough === false) this.thinSince ??= now;
     else this.thinSince = null;
     const thin = this.thinSince !== null && now - this.thinSince >= THIN;
     // 放送に対する遅れが伸びている。バッファが外に隠れていても、届く速さが足りなければこれが伸びる
     const lagging = s.route === "live" && (s.lag ?? 0) >= LAG_GROW;
+    /*
+     * 観る画面で、先にバッファがあるのに詰まったのは回線ではない (`<video>` のデコードが一瞬遅れた・飛んだ直後)。
+     * 測った速さが段に足りている間の詰まりとバッファの減りも、回線のせいにしない (接続が切れて繋ぎ直している・
+     * サーバがファイルを読むのが遅れた)。下げても直らず、ローカルネットで「回線が細い」と出ていた
+     */
+    const stalled = s.waiting && (!watch || s.ahead < LOW);
+    const starving = (stalled || falling) && enough !== true;
 
-    return s.waiting || falling || growing || dropped || thin || lagging;
+    return starving || growing || dropped || thin || lagging;
   }
 
   /** 下げ先。速さが分かれば収まるいちばん高い段、分からなければ 2 段下 (段 0 からは段 1) */
