@@ -179,7 +179,7 @@ export class LogoCollector {
   /** 衛星ぶん。地上波の TS では何も出てこないので、開いていても害は無い */
   private readonly dsmcc: DsmccLogoCollector;
 
-  /** logo_id ごとの、いま持っている一番大きいロゴ */
+  /** logo_id ごとの、いま持っているロゴ (種類は `replacesLogo` の順に進める) */
   private readonly logos = new Map<number, LogoData>();
   /** service_id → logo_id */
   private readonly links = new Map<number, number>();

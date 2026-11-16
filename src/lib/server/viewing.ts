@@ -263,7 +263,7 @@ export function warmFormat(
     autoCodec({
       indoor,
       rawOk: true,
-      // どれも受け取れるとみるので、家の中は放送のまま、外は AV1 が先に当たる (H.265・H.264 まで下りない)
+      // どれも受け取れるとみるので、家の中は放送のまま、外は AV1 が先に当たる (H.265・H.264 には進まない)
       av1: true,
       hevc: true,
       h264: true,

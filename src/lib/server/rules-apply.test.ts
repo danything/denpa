@@ -348,7 +348,7 @@ describe("ルールを当て直す", () => {
       { program_id: 10, rule_id: 1, state: "scheduled" },
     ]);
 
-    // 1 を消した。2 がまだ当たるので、予約は生き続ける
+    // 1 を消した。2 がまだ当たるので、予約は残る
     orm().delete(ruleTable).where(eq(ruleTable.id, 1)).run();
 
     expect(applyRules()).toMatchObject({ dropped: 0, moved: 1 });
@@ -469,7 +469,7 @@ describe("同じ放送は 1 本だけ", () => {
 
   /*
    * 延長は枝番ごとに別々のタイミングで届く (EIT p/f は局ごと)。終了時刻まで
-   * キーに入れていた頃は、片方だけ動いた回が「別の放送」に見えて両方立った
+   * キーに入れると、片方だけ動いた回が「別の放送」に見えて両方立つ
    */
   test("終了時刻だけ違う枝番の組は 1 本だけ", () => {
     reset();
@@ -643,7 +643,7 @@ describe("同じ回は最初の放送だけ録る", () => {
     expect(reservations().map((r) => r.program_id)).toEqual([10, 12]);
   });
 
-  test("入れていないルール (列を足す前のもの) は今までどおり全部録る", () => {
+  test("入れていないルール (列を足す前のもの) は全部録る", () => {
     withBs();
     rule(1, "テストアニメ");
     program(10, "テストアニメ #1");

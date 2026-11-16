@@ -127,8 +127,8 @@ describe("MJD 計算とビットフラグ判定", () => {
     expect(toMjd(new Date(dateMs))).toBe(originalMjd);
   });
 
-  test("isCodeSubscribed は月額TierまたはPPVのビットを判定する", () => {
-    expect(isCodeSubscribed(0x0800)).toBe(true); // 月額Tier
+  test("isCodeSubscribed は月額 Tier または PPV のビットを判定する", () => {
+    expect(isCodeSubscribed(0x0800)).toBe(true); // 月額 Tier
     expect(isCodeSubscribed(0x0400)).toBe(true); // 前払いPPV
     expect(isCodeSubscribed(0x0200)).toBe(true); // 後払いPPV
     expect(isCodeSubscribed(0x0800 | 0x0001)).toBe(true);
@@ -536,7 +536,7 @@ describe("testDecode", () => {
     }
   });
 
-  test("受信パケットが50未満のときはエラーを返す", async () => {
+  test("受信パケットが 50 未満のときはエラーを返す", async () => {
     // その局のパケットが 50 個に届かない (PAT・PMT を足しても)
     const buf = channelStream(105, 10, "clear");
 
@@ -860,7 +860,7 @@ describe("まとめて確かめるときの失敗と重なり", () => {
 });
 
 describe("checkContracts エッジケース・異常系", () => {
-  test("有料番組が0件のときは空配列を返す", async () => {
+  test("有料番組が 0 件のときは空配列を返す", async () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
@@ -878,7 +878,7 @@ describe("checkContracts エッジケース・異常系", () => {
     }
   });
 
-  test("過去30日前に有効だった局は expired と判定され期限日が求まる", async () => {
+  test("30 日前に有効だった局は expired と判定され期限日が求まる", async () => {
     const nowMjd = toMjd();
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
@@ -934,7 +934,7 @@ describe("checkContracts エッジケース・異常系", () => {
     }
   });
 
-  test("エージェントが500エラーを返した際に未契約に上書きせず例外を投げる", async () => {
+  test("エージェントが 500 エラーを返した際に未契約に上書きせず例外を投げる", async () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {

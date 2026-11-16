@@ -60,8 +60,8 @@ export function closesData(previous: number | null, next: number): boolean {
 
 /**
  * 選局をリクエストしたとき、答えを待ってから閉じる局 (`closesData` が閉じると言う次の局)。閉じないなら null。
- * **閉じるのはサーバが選局を受けたとき** (`tunedCloses`)。リクエストした時点で閉じていた頃は、サーバが選局を
- * 断ると (復号できない局の `error`) 前の局を受信したまま、データ放送だけが閉じていた。
+ * **閉じるのはサーバが選局を受けたとき** (`tunedCloses`)。リクエストした時点で閉じると、サーバが選局を
+ * 断ったとき (復号できない局の `error`) 前の局を受信したまま、データ放送だけが閉じる。
  * `onAir` はサーバが選局の答え (`tuned`) で受けたと知らせた局 (`Tuned.serviceId`)。追っかけの間も前の局のまま覚えておく
  */
 export function closingOnTune(

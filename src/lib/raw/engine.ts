@@ -268,7 +268,7 @@ export class RawEngine {
     return this.context.state !== "running";
   }
 
-  /** 届いたものを `offset` から渡す (`messages.ts` の `data`)。**写さずに worker へ移す** (1 局 15Mbit/s ぶんを毎秒写さない) */
+  /** 届いたものを `offset` から渡す (`messages.ts` の `data`)。**写さずに worker へ移す** (1 局 15 Mbit/s ぶんを毎秒写さない) */
   feed(buffer: ArrayBuffer, offset: number): void {
     this.send({ type: "data", buffer, offset }, [buffer]);
   }
@@ -276,7 +276,7 @@ export class RawEngine {
   /**
    * 選局し直した・録画で飛んだ。**前の局の音も映像の待ちも捨てる** (いま出ているフレームは、次が出るまで残る)。
    *
-   * `from` (90kHz。届くものの PTS の物差し。元の TS なら一周の中) を渡すと、そこから鳴らし・描き始める
+   * `from` (90 kHz。届くものの PTS の物差し。元の TS なら一周の中) を渡すと、そこから鳴らし・描き始める
    * (録画。`canvas-player.ts`)。サーバは飛び先の少し手前から流すので、手前のコマは描かずに捨て、
    * 音もそこから鳴らす。一周をまたぐかもしれないので、届いた最初のコマの近くに伸ばしてから決める
    */
@@ -374,7 +374,7 @@ export class RawEngine {
     return this.playout.playing;
   }
 
-  /** 放送の PTS (90kHz、一周の中) を、いま出しているものの近くへ伸ばす。**字幕と時計の通知用** */
+  /** 放送の PTS (90 kHz、一周の中) を、いま出しているものの近くへ伸ばす。**字幕と時計の通知用** */
   unwrap(pts: number): number {
     return this.near === null ? pts : unwrap(pts, this.near);
   }
@@ -511,7 +511,7 @@ export class RawEngine {
         this.decodeMs = message.p95;
         this.thinned = message.thinned;
         /*
-         * **外から読める形で出しておく。** 映像は worker の canvas にあって、画面の側からは
+         * **外から読めるように出しておく。** 映像は worker の canvas にあって、画面の側からは
          * 画素を読めない。描いたコマ数とデコードできた音のコマ数が進んでいれば、変換しない経路は動いている
          * (E2E が見る。手元で切り分けるときも DevTools で読める)
          */

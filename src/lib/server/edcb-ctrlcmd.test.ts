@@ -104,7 +104,7 @@ describe("宛先", () => {
     });
   });
 
-  test("読めないものは理由を投げる", () => {
+  test("読めないものは理由を付けた例外にする", () => {
     expect(() => parseTarget("tcp://192.168.1.10:4510")).toThrow("host:port");
     expect(() => parseTarget("::1")).toThrow("host:port");
     expect(() => parseTarget("edcb:0")).toThrow("1〜65535");

@@ -1,7 +1,7 @@
 /**
  * **録画の TS の中で、時刻からバイトの位置を引く** (`/api/recordings/<id>/stream` で元の TS を流す経路)。
  *
- * TS には索引が無い。位置を当てるには中を読むしかないが、先頭から読むと 1 時間の BS で 7GB になる。
+ * TS には索引が無い。位置を当てるには中を読むしかないが、先頭から読むと 1 時間の BS で 7 GB になる。
  * そこで**決まった位置の PES の PTS を見て二分探索する** (1 回に読むのは数百 KB、30 回ほどで当たる)。
  * 追っかけの当て方 (`server/chase.ts` の `chasePlan`。バイト比例) より正確で、録り終えた録画なら末尾まで使える。
  *
@@ -35,7 +35,7 @@ const BEFORE_HEAD = 600;
 interface PesMark {
   /** stream_id */
   id: number;
-  /** 90kHz。一周の中 */
+  /** 90 kHz。一周の中 */
   pts: number;
   /** その PES が始まる TS パケットの位置 (渡したバイト列の先頭から) */
   at: number;
@@ -72,17 +72,17 @@ export function* pesMarks(bytes: Uint8Array): Generator<PesMark> {
   }
 }
 
-/** 0〜一周の手前に置き直す (90kHz) */
+/** 0〜一周の手前に置き直す (90 kHz) */
 export const inWrap = (value: number) => ((value % WRAP) + WRAP) % WRAP;
 
-/** 一周の中の差 `a - b` を、-半周〜+半周に置き直す (90kHz) */
+/** 一周の中の差 `a - b` を、-半周〜+半周に置き直す (90 kHz) */
 function delta(a: number, b: number): number {
   const d = inWrap(a - b);
   return d >= WRAP / 2 ? d - WRAP : d;
 }
 
 /**
- * **入れ物の始まり (90kHz)。** 録画の先頭のバイト列から。読めなければ null。
+ * **入れ物の始まり (90 kHz)。** 録画の先頭のバイト列から。読めなければ null。
  *
  * ffmpeg の `start_time` と同じ決め方にする (libavformat の `update_stream_timings`)。
  * 映像と音声の最初の PTS のうち早いほう。字幕などの PTS は、それより 1 秒以内に早いときだけ使う
@@ -137,7 +137,7 @@ export async function readHead(read: ReadAt): Promise<number | null> {
   return tsHead(await read(0, HEAD_BYTES));
 }
 
-/** 1 回に読む量。放送の 1 秒ぶん (地上波 17Mbps ≒ 2MB) より短い間に映像の PES は何度も来る */
+/** 1 回に読む量。放送の 1 秒ぶん (地上波 17 Mbps ≒ 2 MB) より短い間に映像の PES は何度も来る */
 const WINDOW = 256 * 1024;
 /** PES を探して読み進める上限。これだけ読んで無ければ、その位置には無いことにする */
 const SEARCH = 4 * 1024 * 1024;

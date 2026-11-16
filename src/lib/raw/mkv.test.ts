@@ -64,8 +64,8 @@ describe("MkvInput", () => {
    *     ffmpeg -f lavfi -i testsrc2=size=160x90:rate=30000/1001 -t 3 \
    *       -c:v libx264 -preset medium -crf 30 -pix_fmt yuv420p -an -f matroska x264-bframes.mkv
    *
-   * 先の数枚の最小をそのまま dts にしていた頃は、dts が止まったり飛んだりして受け取る側が「時刻が飛んだ」と
-   * 見なし (`jumped`)、90 コマ中 86 コマをキーフレームまで捨てていた (iPhone で真っ黒のまま音だけ進んだ)
+   * 先の数枚の最小をそのまま dts にすると、dts が止まったり飛んだりして受け取る側が「時刻が飛んだ」と
+   * 見なし (`jumped`)、90 コマ中 86 コマをキーフレームまで捨てる (iPhone で真っ黒のまま音だけ進んだ)
    */
   test("B フレームがあっても dts は 1 コマずつ進み、受け取る側に捨てられない", () => {
     const mkv = new Uint8Array(
@@ -86,7 +86,7 @@ describe("MkvInput", () => {
     expect(video.length).toBe(90);
     // 見せる順と違う (B フレームがある) ことを先に確かめる。無ければこの試験は何も見ていない
     expect(video.some((s, i) => i > 0 && s.pts < video[i - 1]!.pts)).toBe(true);
-    // 時刻の刻みは 1ms。90kHz に直してから比べる (`Fmp4Video.push`)
+    // 時刻の刻みは 1 ms。90 kHz に直してから比べる (`Fmp4Video.push`)
     const ticks = (ms: number) => Math.round(ms * 90);
     for (const [i, sample] of video.entries()) {
       expect(sample.dts).toBeLessThanOrEqual(sample.pts);

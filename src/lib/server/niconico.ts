@@ -73,7 +73,7 @@ export async function startLink(
   const publicKey = new Uint8Array(
     await crypto.subtle.exportKey("raw", pair.publicKey),
   );
-  // hub は組み直した形 (スキーム・ホスト・既定でないポート・パス) を AAD に使うので、同じ形で渡す
+  // hub は組み直した URL (スキーム・ホスト・既定でないポート・パス) を AAD に使うので、同じ形式で渡す
   const returnUrl = `${new URL(origin).origin}${RETURN_PATH}`;
   const flow = randomToken();
   flows.set(flow, {
@@ -89,7 +89,7 @@ export async function startLink(
   return { flow, url: `${config.hubUrl}/niconico/authorize?${query}` };
 }
 
-/** hub の結果 (`base64url(使い捨ての公開鍵 65 ‖ nonce 12 ‖ 暗号文 ‖ tag 16)`) を開く。開けなければ投げる */
+/** hub の結果 (`base64url(使い捨ての公開鍵 65 ‖ nonce 12 ‖ 暗号文 ‖ tag 16)`) を開く。開けなければ例外を送出する */
 async function open(flow: Flow, sealed: string): Promise<Uint8Array> {
   const data = new Uint8Array(Buffer.from(sealed, "base64url"));
   if (data.length < 65 + 12 + 16) throw new Error("結果が短すぎます");
@@ -142,7 +142,7 @@ interface Tokens {
 
 /**
  * トークンの応答 (RFC 6749 5.1) を読む。hub は手を加えずに渡すので、読むものだけ読む。
- * `access_token` が無ければ投げる。期限が無い・数でないときは短めに見て、`warn` を呼ぶ
+ * `access_token` が無ければ例外を送出する。期限が無い・数でないときは短めに見て、`warn` を呼ぶ
  */
 export function readTokens(
   body: unknown,
@@ -333,7 +333,7 @@ let refreshing: Promise<string | null> | null = null;
 
 /**
  * **使えるアクセストークン。** 連携していない・切れたなら null。期限が `REFRESH_BEFORE` を切っていれば更新してから返す。
- * hub に届かないときは投げる (連携はそのまま。次に使うときにまた試す)
+ * hub に届かないときは例外を送出する (連携はそのまま。次に使うときにまた試す)
  */
 export async function accessToken(): Promise<string | null> {
   const link = row();
@@ -409,7 +409,7 @@ async function refresh(): Promise<string | null> {
     .update(niconicoLink)
     .set({
       access_token: seal(tokens.access, "access_token"),
-      // 新しいものが来なかったら前のものを使い続ける (来るのが決まりだが、形が変わっても止めない)
+      // 新しいものが来なかったら前のものを使い続ける (来るのが決まりだが、形式が変わっても止めない)
       ...(tokens.refresh === null
         ? {}
         : { refresh_token: seal(tokens.refresh, "refresh_token") }),

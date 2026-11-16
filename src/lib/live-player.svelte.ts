@@ -359,7 +359,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let live = $state(true);
   /**
    * 追っかけ再生か (わざと遅れて見ている)。止めたときと、シークバーを後ろへ戻したときに立つ。
-   * 立っている間は放送の今を追いかけず、選ばれた速さで進む。追いついたら自分で下りる
+   * 立っている間は放送の今を追いかけず、選ばれた速さで進む。追いついたら自分で外れる
    */
   let chasing = $state(false);
   /** 追っかけ中の速さ。ライブに戻れば 1 に戻す */
@@ -2294,7 +2294,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 選局する。**繋がっていれば繋ぎ直さない。**
    *
    * @param keepList 選べる字幕の一覧を残すか。**同じ局の中での選び直しだけ
-   *   true** (`forget` の説明)。待たせている字幕はどの道いつも捨てる
+   *   true** (`forget` の説明)。待たせている字幕はいつも捨てる
    */
   async function tune(
     video: HTMLVideoElement,

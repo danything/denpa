@@ -90,7 +90,7 @@ describe("繋いでよいアドレスか", () => {
 describe("取得してよい URL か", () => {
   /*
    * **http も通す。** 放送がそう作られている (NHK は
-   * `http://beacon.nhk.jp/` へ投げてくる)。https だけにすると、
+   * `http://beacon.nhk.jp/` へ送ってくる)。https だけにすると、
    * 双方向を入れても「接続されていません」のままになる
    */
   test("http と https は通す", async () => {

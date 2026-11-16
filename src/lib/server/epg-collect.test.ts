@@ -16,14 +16,13 @@ import type { Last, Outcome } from "./epg-collect";
 import type { AgentChannel } from "./tuner";
 
 /**
- * どのチャンネルを集めに行くか。
+ * どのチャンネルの番組表を取得するか。
  *
- * **ここが実機で止まらなくなった。** 番組表が 7 日先まで埋まっているのに、30 分ごとの
- * 周回で毎回ほぼ全チャンネルが選ばれ、1 本ぶんの上限まで開きっぱなしに
- * なっていた ([config.ts](config.ts) の epgChannelTimeout)。
+ * 選び方を誤ると、番組表が 7 日先まで埋まっているのに 30 分ごとの周回で毎回ほぼ全チャンネルが選ばれ、
+ * 1 チャンネルぶんの上限 ([config.ts](config.ts) の epgChannelTimeout) まで開きっぱなしになる。
  */
 const { config } = await import("./config");
-// 番組表を集める回 (`collectOnce`) は DB に書く。置き場は一時ディレクトリに (`./fake-agent` の証明書もここ)
+// 番組表を取得する回 (`collectOnce`) は DB に書く。置き場は一時ディレクトリに (`./fake-agent` の証明書もここ)
 const testDir = mkdtempSync(join(tmpdir(), "denpa-epg-collect-"));
 const realAgent = config.agentUrl;
 config.dataDir = testDir;
@@ -82,9 +81,9 @@ describe("どこまで埋まっているか", () => {
 
   /*
    * エージェントは TS にある全部の局を返すが、denpa は映像の入っていない局を
-   * 落とす (`epg.syncServices`)。数に入れていた頃は「0 まで埋まっている =
+   * 落とす (`epg.syncServices`)。数に入れると「0 まで埋まっている =
    * いちばん薄い」と読んで、データ放送を積んでいる地上波が丸ごと毎周回の
-   * 対象になっていた
+   * 対象になる
    */
   test("番組表に出てこない局は数えない", () => {
     const reach = new Map([[serviceKey(NETWORK, 23608, "GR"), WEEK]]);
@@ -129,9 +128,9 @@ describe("pickChannels", () => {
   });
 
   /*
-   * **実機に受信できない CS が 24 局残っていた。** 開いても EIT が 1 件も来ない
-   * ので永久に薄いままで、「薄いから行く」だけで選んでいた頃は周回のたびに
-   * 選ばれ、上限まで開きっぱなしになっていた
+   * 受信できない局 (実機の CS 24 局) は、開いても EIT が 1 件も来ない
+   * ので永久に薄いまま。「薄いから行く」だけで選ぶと周回のたびに
+   * 選ばれ、上限まで開きっぱなしになる
    */
   test("薄くても、行った直後は行き直さない", () => {
     const justNow = NOW - config.epgChannelRetry + 1;
@@ -163,13 +162,12 @@ describe("pickChannels", () => {
 });
 
 /*
- * **最後に集めた時刻は局から引く。**
+ * **最後に取得した時刻は局から引く。**
  *
- * 局に物理チャンネルを 1 つだけ持っていた頃 (`services.channel`) は「最後に取り込んだときの枠の名前」しか入らず、
- * 同じ TS を指す枠が 2 つあると片方が必ず「一度も集めていない」ことになっていた。
- * 実機の BS がまさにそれで、9 枠が永久にまっさらに見えて周回のたびに開かれていた。
+ * 同じ TS を指す枠が 2 つあっても (実機の BS)、どちらも同じ時刻になり、片方だけ
+ * 「一度も取得していない」に見えて周回のたびに開かれることがない。
  */
-describe("最後に集めた時刻", () => {
+describe("最後に取得した時刻", () => {
   const AT = Date.UTC(2026, 7, 4, 3, 0, 0);
 
   test("入っている局のうち、いちばん新しいものを採る", () => {
@@ -311,7 +309,7 @@ describe("初回は BS をネットワークごとに 1 中継で埋める", () 
 
 /*
  * 初回の全局読みが揃わずに切れると、同じ中継を自分の中継ぶんだけ読み直す (`whole: null` で列へ戻す)。
- * その読み直しも数えていた頃は、ほかの全局読みが終わる前に「詳細はあとで足す」が消えていた
+ * その読み直しも数えると、ほかの全局読みが終わる前に「詳細はあとで足す」が消える
  */
 describe("初回の全局読みを数える (firstSweepDone)", () => {
   const bs = (name: string) =>
@@ -342,8 +340,8 @@ describe("初回の全局読みを数える (firstSweepDone)", () => {
 });
 
 /**
- * **並べる数をチューナーの空きに合わせる。** 実機で、ライブを見ながら「番組表をいますぐ集める」を押すと、
- * 溢れた処理が 409 で断られるたびにすぐ次のチャンネルを取って落とし、50 チャンネルのうち 4 つしか読めなかった
+ * **並べる数をチューナーの空きに合わせる。** ライブや録画が使っているチューナーまで数えると、
+ * 溢れた処理が 409 で断られ続ける (実機で、ライブを見ながら「番組表をいますぐ集める」を押すと 50 チャンネルのうち 4 つしか読めなかった)
  */
 describe("並べる数 (laneTypes)", () => {
   const tuner = (types: string[], users: number[] = [], disabled = false) => ({
@@ -591,10 +589,10 @@ describe("受信できなかったと数える回 (receptionFailed)", () => {
 });
 
 /**
- * **番組表を読めるが復号できない局も集める** (`tuner.epgReadableChannel`)。ケーブルの 4K の局 (TLV) は MH-EIT を読む (`MmtEpgReader`)。
+ * **番組表を読めるが復号できない局も取得する** (`tuner.epgReadableChannel`)。ケーブルの 4K の局 (TLV) は MH-EIT を読む (`MmtEpgReader`)。
  * 選局の答えの形式が控えと違えば読まない (`tuner.expectTransport`)
  */
-describe("番組表を読める局を集める", () => {
+describe("番組表を読める局を取得する", () => {
   const ONID_4K = 0x000b;
   const START = Math.floor((Date.now() + 60 * 60_000) / 60_000) * 60_000;
   const offered: AgentChannel[] = [
@@ -634,7 +632,7 @@ describe("番組表を読める局を集める", () => {
         },
       ],
     },
-    // B-CAS 以外の方式でスクランブルされ、番組表もスクランブルされている局。集めに行かない
+    // B-CAS 以外の方式でスクランブルされ、番組表もスクランブルされている局。取得しない
     {
       type: "CATV",
       channel: "QC40",
@@ -736,7 +734,7 @@ describe("番組表を読める局を集める", () => {
           video_resolution: "2160p",
         },
       ]);
-      // 番組表を書いた局には、集めた時刻が付く (次に行くかをこれで決める)
+      // 番組表を書いた局には、取得した時刻が付く (次に行くかをこれで決める)
       const at = orm()
         .select({ id: services.id, epg_at: services.epg_at })
         .from(services)

@@ -177,8 +177,8 @@ export function learned(serviceId: number): boolean {
  * テレビ朝日  1064 / 1065 / 1066     BS-TBS       161 / 162 / 163
  * ```
  *
- * のように並んでいた。**同じ映像なのでロゴは 1 つ覚えれば足りる。** 束ねずに
- * 並べていた頃は、画面に「TOKYO MX1」が 2 つ並んでいた。
+ * のように並んでいた。**同じ映像なのでロゴは 1 つ覚えれば足りる。** 束ねないと、
+ * 画面に「TOKYO MX1」が 2 つ並ぶ。
  *
  * 代表は**もう覚えている局を優先**する。無ければ先頭 (呼ぶ側の並び順)。
  *
@@ -270,8 +270,8 @@ export function copyModel(
 /**
  * 画面に出す数。覚えている局と、まだの局。
  *
- * **束ねて数える** (`stations`)。サブチャンネルの枠まで別に数えていた頃は、
- * 下に並ぶ一覧 (こちらも束ねてある) と数が合わなかった
+ * **束ねて数える** (`stations`)。サブチャンネルの枠まで別に数えると、
+ * 下に並ぶ一覧 (こちらも束ねてある) と数が合わない
  */
 export function stats(): { have: number; total: number } {
   const current = stations(
@@ -283,7 +283,7 @@ export function stats(): { have: number; total: number } {
         type: services.type,
       })
       .from(services)
-      // 復号できない局は録れないので、CM のロゴを覚えることも無い (`services.decodable`)。映像の無い局 (ラジオ・データ放送) は CM を検出しない (`hasVideo`)
+      // 復号できない局は録れないので、CM のロゴを覚えることも無い (`services.decodable`)。映像の無い局 (ラジオ・データ放送) は CM を検出しないので、テレビの局 (`DIGITAL_TV`) だけ
       .where(
         and(
           currentServices(),

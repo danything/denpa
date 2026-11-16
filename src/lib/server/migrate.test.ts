@@ -304,7 +304,7 @@ describe("EPGStation の URL", () => {
     });
   });
 
-  test("読めない URL・http でないものは理由を投げる", () => {
+  test("読めない URL・http でないものは理由を付けた例外にする", () => {
     expect(() => parseSource("epgstation")).toThrow("読めません");
     expect(() => parseSource("ftp://user:secret@epgstation")).toThrow(
       "http://",

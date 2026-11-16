@@ -59,10 +59,10 @@ export function shotName(title: string, at: Date, extension = "png"): string {
 }
 
 /**
- * **指の端末では共有に渡す。** スマホで `<a download>` に落とすと「ファイル」の奥に
+ * **指の端末では共有に渡す。** スマホで `<a download>` からダウンロードすると「ファイル」の奥に
  * 入るだけで、写真には並ばない (iOS)。共有シートなら「画像を保存」で写真へ、そのまま
  * LINE などへも送れる。PC にも共有の API を持つブラウザがある (Chrome・Safari) が、
- * あちらは落とすほうが早いので使わない
+ * あちらはダウンロードするほうが早いので使わない
  */
 function prefersShare(file: File): boolean {
   if (
@@ -78,7 +78,7 @@ function prefersShare(file: File): boolean {
   }
 }
 
-/** 落とす。**URL はすぐには捨てない**。Safari と Firefox は押した直後に捨てると落とし損ねる */
+/** ダウンロードする。**URL はすぐには捨てない**。Safari と Firefox は押した直後に捨てるとダウンロードし損ねる */
 function download(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -497,8 +497,8 @@ export async function saveOnDevice(
 }
 
 /**
- * 画像を端末に渡す。**指の端末は共有シート** (写真へ保存・そのまま送る)、PC はファイルに落とす。
- * 共有を断られたら (押した直後でなくなった・共有できない形式) 落とすほうに倒す。閉じられたら `canceled`
+ * 画像を端末に渡す。**指の端末は共有シート** (写真へ保存・そのまま送る)、PC はダウンロードする。
+ * 共有を断られたら (押した直後でなくなった・共有できない形式) ダウンロードに切り替える。閉じられたら `canceled`
  */
 export async function keepOnDevice(
   blob: Blob,
@@ -513,7 +513,7 @@ export async function keepOnDevice(
       // 閉じた (やめた) なら何も残っていない
       if (error instanceof DOMException && error.name === "AbortError")
         return "canceled";
-      // それ以外は落とす
+      // それ以外はダウンロードする
     }
   }
   download(blob, name);

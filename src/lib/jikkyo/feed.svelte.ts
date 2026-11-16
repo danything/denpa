@@ -36,7 +36,7 @@ export class JikkyoFeed {
 
   /** NG ワードを含むか (世帯の設定)。控えには残し、出すときに外す (語を変えたらすぐ効く。取り直さない) */
   private ng: (text: string) => boolean = () => false;
-  /** 1 件ずつの NG の判定の控え。一覧は 0.25 秒ごとに同じものを読み直すので、そのたびに字をそろえ直さない */
+  /** コメントごとに NG かを控える。一覧は 0.25 秒ごとに同じものを読み直すので、そのたびに字をそろえ直さない */
   private ngSeen = new WeakMap<Comment, boolean>();
   private readonly cursor = new Cursor();
   private nx: NxJikkyo | null = null;

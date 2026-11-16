@@ -35,11 +35,11 @@ export async function handle({ event, resolve }) {
 
   /*
    * **アクセストークン** (`Authorization: Bearer denpa_…`、device-auth.ts)。ペアリングで渡したもの。
-   * 生きていればログインした人と同じに通す (どこから来ても。家の外の OIDC 越しでも使えるように)。
+   * 有効ならログインした人と同じに通す (どこから来ても。家の外の OIDC 越しでも使えるように)。
    *
    * **出されたアクセストークンが駄目なら、ほかの認証方法へ回さずに 401。** 信頼するネットワークの中でも同じ。
    * 取り消されたアクセストークンで黙って通すと、アプリは取り消されたことに気付けず、外へ出た途端に
-   * 使えなくなる。401 ならアプリは「ペアリングし直し」と分かる。
+   * 使えなくなる。401 ならアプリはペアリングし直す必要があると分かる。
    * `denpa_` で始まらない Bearer (前段の SSO などが付けるもの) は見ずに、いつもの認証へ回す
    */
   const bearer = bearerToken(event.request.headers.get("authorization"));
@@ -60,11 +60,11 @@ export async function handle({ event, resolve }) {
   }
 
   /*
-   * **何も聞かずに通す相手。** アドレスが `TRUSTED_NETWORKS` に当たり、名前も知っているものの
+   * **何も聞かずに通す相手。** アドレスが `TRUSTED_NETWORKS` に当たり、Host の名前も既知の
    * ときだけ。LAN のテレビのアプリ (denpa-tv) に資格情報を入れずに使わせるためで、ここに当たると
    * OIDC も掛からない。
    *
-   * **名前も見るのは DNS リバインディングを防ぐため** (`auth.knownHost`)。知らない名前なら
+   * **名前も見るのは DNS リバインディングを防ぐため** (`auth.knownHost`)。既知でない名前なら
    * 信頼するネットワークの外と同じに扱う (OIDC があればログインを求め、無ければ断る)
    */
   const address = clientAddress(event);
@@ -141,7 +141,7 @@ function finish(response: Response): Response {
    *
    * `no-cache` は「持っていてよいが、出す前に必ず聞く」。画面の HTML には
    * CSP の nonce (毎回変わる。vite.config.ts の `csp`) が入るので指紋も毎回変わり、
-   * 304 にはならず中身が流れ直す。HTML は小さく、重いもの (`_app/immutable/`) は
+   * 304 にはならず中身を送り直す。HTML は小さく、重いもの (`_app/immutable/`) は
    * 下のとおり永く持たせたままなので、遅くはならない。
    *
    * 触るのは画面だけ (`x-sveltekit-page`)。`__data.json` は SvelteKit が

@@ -14,7 +14,7 @@ let noise: Uint8Array<ArrayBuffer> | null = null;
 function filled(): Uint8Array<ArrayBuffer> {
   if (noise !== null) return noise;
   const made = new Uint8Array(PROBE_MOST);
-  // getRandomValues は 1 回に 64KB まで
+  // getRandomValues は 1 回に 64 KB まで
   for (let at = 0; at < made.length; at += 65_536)
     crypto.getRandomValues(made.subarray(at, at + 65_536));
   noise = made;

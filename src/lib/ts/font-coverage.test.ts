@@ -5,10 +5,10 @@
  * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めているバージョンのリリースの woff2 の 2 つ (基本の字と JIS X 0213 で足された漢字) の cmap と突き合わせる。
  * 表に字を足したのにフォントに無いと、その字だけ端末の字で出て見た目が揃わない。
  *
- * 落ちたら: danything/denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) リリースを出し、
+ * 失敗したら、danything/denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) リリースを出し、
  * ここの Dockerfile の `DENPA_FONT_VERSION` を上げる (docs/licenses.md)。
  *
- * フォントはイメージに入れたものと同じリリースのファイルをここで取ってくる (同じリリースの SHA256SUMS で照らす)。
+ * フォントはイメージに入れたものと同じリリースのファイルをここで取ってくる (同じリリースの SHA256SUMS と照合する)。
  * CI では必ず確かめ、手元で取れないとき (オフライン) は飛ばす。
  */
 
@@ -173,7 +173,7 @@ const FILES = [
   "denpa-font-jisx0213.txt",
 ] as const;
 
-/** リリースのファイルを取り、同じリリースの SHA256SUMS で照らす。手元で取れなければ null */
+/** リリースのファイルを取り、同じリリースの SHA256SUMS と照合する。手元で取れなければ null */
 async function fetchFiles(): Promise<Uint8Array[] | null> {
   let sums: string;
   let files: Uint8Array[];

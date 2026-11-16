@@ -4,13 +4,13 @@
  *
  * 写しているもの
  *
- * - 画面の切り替わり: `rate` 回/秒。rAF の時刻は ±0.3ms 揺れ、2% は来ない。届くのは 1〜3ms 後
- * - worker の刻み: 始めた時刻から 4〜5ms 後 (前の回が延びればその後)。届いた rAF の時刻はその前に `Vsync` へ渡す
+ * - 画面の切り替わり: `rate` 回/秒。rAF の時刻は ±0.3 ms 揺れ、2% は来ない。届くのは 1〜3 ms 後
+ * - worker の刻み: 始めた時刻から 4〜5 ms 後 (前の回が延びればその後)。届いた rAF の時刻はその前に `Vsync` へ渡す
  * - 刻みの中身: 先に出す (`present`)。描かなかった回だけ、`Gate` が許せば 1 枚デコードする (遅れていれば 3 枚まで)。
  *   デコードできたものが無ければ `Gate` を見ない。デコードしたあとにもう一度出す
  * - デコード: 29.97 コマ、GOP 15 (I・B・B・P…)。1 枚 `decodeMs` × (1 ± `spread`。既定は 0.25)、I は ×1.3、B は ×0.9。
  *   先にデコードしておけるのは 8 枚、番の 0.3 秒前まで。デコードはその間ほかの仕事を止める
- * - 描いたもの: その回の終わりに画面へ渡り、1ms 後より後の切り替わりから出る
+ * - 描いたもの: その回の終わりに画面へ渡り、1 ms 後より後の切り替わりから出る
  * - 時計: 本当の PTS をそのまま使う (時計の揺れは `cadence.test.ts` で見る)。出すフィールドは
  *   次の切り替わりの時点の PTS で選ぶ
  *
@@ -21,6 +21,7 @@ import { CLOCK } from "@danything/arib/pes";
 
 import { DecodeBudget } from "./budget";
 import { COST_SAMPLES, mayDecode, type Shown, Vsync } from "./cadence";
+import { AHEAD } from "./fmp4";
 
 /** デコードを始めてよいか。先にデコードしたものがあるときだけ聞く */
 export type Gate = (state: GateState) => boolean;
@@ -32,7 +33,7 @@ export interface GateState {
   /** 次の切り替わりの時点の PTS */
   at: number;
   shown: Shown | null;
-  /** 1 コマの長さ (90kHz) */
+  /** 1 コマの長さ (90 kHz) */
   frame: number;
   /** 直近にデコードした時間 (ms。`COST_SAMPLES` 枚まで)。新しいものが後ろ */
   recent: number[];
@@ -72,7 +73,7 @@ export interface SimOptions {
 export interface SimResult {
   /** 出たフィールドが、その切り替わりで出すはずのフィールドと違った切り替わり */
   off: number;
-  /** 同じフィールドを出した回数が想定 (120Hz なら 2 回) と違ったフィールドと、1 回も出なかったフィールド */
+  /** 同じフィールドを出した回数が想定 (120 Hz なら 2 回) と違ったフィールドと、1 回も出なかったフィールド */
   uneven: number;
   /** 描いたのが、狙った切り替わりより後に出た回 */
   late: number;
@@ -100,7 +101,6 @@ function random(seed: number): () => number {
 const FRAME = 3003;
 const FIELD = FRAME / 2;
 const DECODED_MOST = 8;
-const AHEAD = 0.3 * CLOCK;
 const WARMUP = 2_000;
 
 export function simulate(gate: Gate, options: SimOptions): SimResult {
@@ -256,7 +256,7 @@ export function simulate(gate: Gate, options: SimOptions): SimResult {
   const last = indexOf(end) - 1;
   for (let k = 0; k <= last; k++) {
     const v = vsyncAt(k);
-    // 1ms 前までに渡したものが出る
+    // 1 ms 前までに渡したものが出る
     while (c < commits.length && commits[c]!.at < v - 1) {
       const commit = commits[c]!;
       if (k >= first && commit.target < k) late++;
@@ -273,7 +273,7 @@ export function simulate(gate: Gate, options: SimOptions): SimResult {
     }
     previous = current;
   }
-  // 1 フィールドを何回出すか。60Hz と 120Hz はそれぞれ 1 回・2 回、90Hz は 1 回と 2 回、144Hz は 2 回と 3 回
+  // 1 フィールドを何回出すか。60 Hz と 120 Hz はそれぞれ 1 回・2 回、90 Hz は 1 回と 2 回、144 Hz は 2 回と 3 回
   const ratio = rate / (CLOCK / FIELD);
   const allowed =
     Math.abs(ratio - Math.round(ratio)) < 0.05

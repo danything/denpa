@@ -80,7 +80,7 @@ describe("接続を保つ", () => {
 });
 
 describe("書き込む", () => {
-  test("いまの局と本文と装飾を送り、結果を返す。知らない結果は分からない扱い", async () => {
+  test("いまの局と本文と装飾を送り、結果を返す。想定外の結果は unknown", async () => {
     let result: unknown = "sent";
     const h = harness(() => ({ result }));
     expect(await h.writer.post("わこつ", DEFAULT_POST_STYLE)).toBe("sent");

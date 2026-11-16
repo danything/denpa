@@ -141,7 +141,7 @@ export class RankingRelay {
     private readonly clock: () => number = Date.now,
   ) {}
 
-  /** 今の勢い。読めなければ投げる */
+  /** 今の勢い。読めなければ例外を送出する */
   async get(): Promise<{ at: number; forces: Forces }> {
     const cached = this.cached;
     if (cached !== null && this.clock() - cached.at < RANKING_TTL)

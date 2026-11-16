@@ -349,8 +349,7 @@ export class RungAdapter {
       this.slowSince ??= now;
     else this.slowSince = null;
     if (this.slowSince !== null) {
-      // バッファが減るのも詰まるのもエンコードが遅いせい。回線のぶんとして数えない
-      // この間にサーバが捨てた塊 (`dropped`) も数えない (回線のせいではない)
+      // バッファの減り・詰まり・サーバが捨てた塊 (`dropped`) はエンコードが遅いせい。回線のぶんとして数えない
       this.clearStreaks();
       this.clearLow();
       this.remember(s);
@@ -576,11 +575,7 @@ export class RungAdapter {
     const thin = this.thinSince !== null && now - this.thinSince >= THIN;
     // 放送に対する遅れが伸びている。バッファが外に隠れていても、届く速さが足りなければこれが伸びる
     const lagging = s.route === "live" && (s.lag ?? 0) >= LAG_GROW;
-    /*
-     * 観る画面で、先にバッファがあるのに詰まったのは回線ではない (`<video>` のデコードが一瞬遅れた・飛んだ直後)。
-     * 測った速さが段に足りている間の詰まりとバッファの減りも、回線のせいにしない (接続が切れて繋ぎ直している・
-     * サーバがファイルを読むのが遅れた)。下げても直らず、ローカルネットで「回線が細い」と出ていた
-     */
+    // 観る画面で、先にバッファがあるのに詰まったときと、測った速さが段に足りている間は回線のせいにしない (冒頭の「下げないとき」)
     const stalled = s.waiting && (!watch || s.ahead < LOW);
     const starving = (stalled || falling) && enough !== true;
 

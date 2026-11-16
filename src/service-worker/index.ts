@@ -47,7 +47,7 @@ const OFFLINE_PAGE = resolve("offline");
 /**
  * /offline の画面が始まるときに読むデータ (共通の枠の `+layout.server.ts`。ログイン情報など)。
  * /offline は SSR を切った殻なので、開くたびにこれをサーバへ取得する。
- * キャッシュしていなかった頃は、電波が無いとここでエラーになり、真っ白な画面になっていた。
+ * キャッシュしないと、電波が無いときにここでエラーになり、真っ白な画面になる。
  * /offline と一緒にキャッシュし、繋がらないときだけ返す
  */
 const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
@@ -55,7 +55,7 @@ const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
  * 音 (と MPEG-2) をデコードする WebAssembly (`routes/api/live/mpeg2`。`raw/worker.ts` が読む)。
  * /offline で保存した録画を canvas に描くときに要る。iPhone の Safari は保存した Matroska を `<video>` で
  * 読めないので、/offline は観る画面の互換モードと同じエンジンで描く (`offline/+page.svelte`)。
- * `/api/` は素通しなので、キャッシュしていなかった頃は電波が無いと「音声を再生できません」で止まっていた。
+ * `/api/` は素通しなので、キャッシュしないと電波が無いときに「音声を再生できません」で止まる。
  * 中身はイメージごとに変わる (URL は同じ) ので、/offline と同じく install のたびに取り直し、サーバ優先で返す
  */
 const DECODER = ["decoder.mjs", "decoder.wasm"].map(
@@ -67,7 +67,7 @@ const DECODER = ["decoder.mjs", "decoder.wasm"].map(
  * 返事が無ければ見切る (`#lib/reach.ts`)。
  *
  * iPhone の Safari は機内モードで、取得したものが失敗せずに返事待ちのまま止まることがあり、
- * /offline へ移れずにいつまでも読み込み中になっていた。見切るのは、端末が繋がっていないと言うとき
+ * /offline へ移れずにいつまでも読み込み中になる。見切るのは、端末が繋がっていないと言うとき
  * (すぐ)、または応答のヘッダが 10 秒届かないときだけ。後者で見切ったあとの 5 秒は取得しない
  * (開いた画面、/offline、/offline のデータと続けて取得するので、毎回 10 秒待たせないため)。
  * サーバが遅いだけのときにほかの画面まで開けなくならないよう、短くしてある。
@@ -85,10 +85,10 @@ worker.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE).then(async (cache) => {
       await cache.addAll(SHELL);
-      // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
+      // 入口は無くても殻は使える。デプロイした直後などで取れなければ入れずに進める
       await cache.add(OFFLINE_PAGE).catch(() => {});
       await cache.add(OFFLINE_DATA).catch(() => {});
-      // 組んでいない denpa もある (無ければ 404)。/offline で描けないだけなので諦める
+      // 組んでいない denpa もある (無ければ 404)。/offline で描けないだけなので入れずに進める
       await Promise.all(DECODER.map((url) => cache.add(url).catch(() => {})));
     }),
   );
@@ -144,7 +144,7 @@ worker.addEventListener("fetch", (event) => {
         if (page === undefined) return Response.error();
         /*
          * /offline へ移す (その場で /offline の HTML を返さない)。殻は開いた URL の画面として
-         * 始まるので、`/` のまま返すと一覧の画面を組もうとしてデータを取得し、エラーになっていた
+         * 始まるので、`/` のまま返すと一覧の画面を組もうとしてデータを取得し、エラーになる
          */
         if (url.pathname !== OFFLINE_PAGE)
           return Response.redirect(new URL(OFFLINE_PAGE, location.origin));
@@ -222,7 +222,7 @@ worker.addEventListener("backgroundfetchsuccess", (event) => {
           if (response === null || !response.ok) continue;
           await storeResponse(held, record.request.url, response);
         } catch {
-          // その 1 つを諦める
+          // その 1 つは保存しない
         }
       }
 
@@ -241,7 +241,7 @@ worker.addEventListener("backgroundfetchsuccess", (event) => {
  * 失敗と取り消しは同じ扱い。途中まで運んだものは使えない。
  * **控えは消さずに「失敗」として残す。** ネットが遅くて途中で切れたとき、
  * 消してしまうと開き直したときに何も残らず「無かったことになった」ように
- * 見えていた。残った行から、そのままやり直せる
+ * 見える。残った行から、そのままやり直せる
  */
 function drop(event: BackgroundFetchEvent): void {
   event.waitUntil(

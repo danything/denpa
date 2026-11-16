@@ -57,7 +57,7 @@ function decodePart(value: string): string {
 
 /**
  * 入力欄の URL を読む。`http://user:pass@host:8888/sub` の資格情報は `Authorization` に移す。
- * 読めなければ理由を投げる (資格情報は言わない)
+ * 読めなければ理由を付けた例外にする (資格情報はメッセージに入れない)
  */
 export function parseSource(input: string): EpgstationSource {
   let url: URL;
@@ -389,7 +389,7 @@ const LOCAL_FAILURES = new Set([
 ]);
 
 /**
- * 取り直すか。向こうが ok 以外を返した (`HttpError`)・こちらのディスクの失敗は取り直さない。
+ * 取り直すか。向こうが ok と 5xx 以外を返した (`HttpError`)・長さが合わない (`LengthMismatch`)・こちらのディスクの失敗は取り直さない。
  * 繋がらない・切れた・止まったは取り直す (fetch の失敗は実装ごとに型が違うので、ほかは全部)
  */
 function retriable(reason: unknown): boolean {
@@ -440,13 +440,14 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * EPGStation のファイル (`/api/videos/<id>`) を `temporary` へ取る。**書きかけがあれば続きから。**
  *
  * - 書きかけの長さ `n` で `Range: bytes=n-` を送る。`206` で始まりが `n`、全体が `size` なら足す。
- *   `200` (プロキシが Range を落とした) なら先頭から書き直す。全体が `size` と違えば書きかけを消して投げる
+ *   合わなければ書きかけを消して先頭から取り直す。
+ *   `200` (プロキシが Range を落とした) なら先頭から書き直す。全体が `size` と違えば書きかけを消して例外にする
  *   (一覧の大きさが古いので、次の実行で取り直す)
  * - `n == size` なら取得しない
  * - 止まったら (ヘッダまで {@link timing.header}、データが {@link timing.idle} 来ない)・切れたら・5xx なら、
  *   間隔を伸ばして {@link timing.retries} 回まで取り直す。続きから
- * - 終わったら長さを確かめる: 最後の長さ == `size` == 応答の全体の長さ。違えば書きかけを消して投げる
- * - `signal` で止めたら書きかけを残して投げる (次の実行で続きから)
+ * - 終わったら長さを確かめる: 最後の長さ == `size` == 応答の全体の長さ。違えば書きかけを消して例外にする
+ * - `signal` で止めたら書きかけを残して例外にする (次の実行で続きから)
  *
  * `onBytes` には書いたぶん (続きからなら、すでにあったぶんも最初に 1 回) を渡す
  */
@@ -464,7 +465,7 @@ export async function downloadVideo(
     have = 0;
   }
   if (have > 0) onBytes(have);
-  /** 応答が言った全体の長さ。取得しなかったなら null */
+  /** 応答が示した全体の長さ。取得しなかったなら null */
   let announced: number | null = null;
   let failures = 0;
 

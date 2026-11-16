@@ -197,7 +197,7 @@ export function skyChannels(): string[] {
  * 地上波で選局する物理チャンネルの一覧。エージェントが受け付ける書き方で返す。
  *
  * **範囲は決め打ち。** 放送で使う物理チャンネルは決まっていて、狭めても
- * 総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
+ * 総当たりの時間が少し減るだけ。狭めた結果、見つからない局が出るほうが困る
  */
 export function channelsFor(type: "GR" | "PASSTHROUGH"): string[] {
   const uhf = Array.from(
@@ -609,7 +609,7 @@ class Scanner {
   /** 中断の合図。押されたら選局を切り、残りのチャンネルには行かない */
   private readonly aborter = new AbortController();
   private readonly found = new Map<string, AgentChannel>();
-  /** 電波が来た(TS が 1 バイトでも出た)チャンネル数。種別ごと */
+  /** 電波が来た (TS が 1 バイトでも出た) チャンネル数。種別ごと */
   private readonly tuned = new Map<ChannelType, number>();
   /** 電波は来たのに局情報が揃わなかったチャンネル。1 周したあとで回し直す */
   private retry: Job[] = [];
@@ -1071,7 +1071,7 @@ class Scanner {
 
   /**
    * **受けられる並びが全部止まった種別は、残りのチャンネルを回さない。** 列から外して飛ばした数に入れ、エージェントが返した理由を 1 行出す。
-   * 前は同じ機材のエラーでチャンネルを 1 つずつ落とし、最後に「チューナーとアンテナを確認してください」とだけ出していた
+   * 同じ機材のエラーでチャンネルを 1 つずつ落とさないため
    */
   private dropUnusable(workers: AgentTuner[], queue: Job[]): void {
     for (const [type, reason] of this.pending) {
@@ -1457,10 +1457,10 @@ async function runScan(
     );
 
     /*
-     * 局が入れ替わった。**取り込み直して、番組表を集め直す。**
+     * 局が入れ替わった。**取り込み直して、番組表を取得し直す。**
      *
      * 番組表を持っているのは denpa なので、**待つ相手がいない**。
-     * 見つかった局をその場で取り込んで、そのまま集めに行く
+     * 見つかった局をその場で取り込んで、そのまま取得する
      */
     await sync().catch(() => undefined);
     // 局が入ったので、スキャン中に取得した番組表を書ける
@@ -1472,7 +1472,7 @@ async function runScan(
           saved += savePrograms(events, { type });
       if (saved > 0) {
         settle();
-        // 立った予約の取り合いを裁き直す (`settle` は裁かない。ほかの呼び手と同じ)
+        // 立った予約の取り合いを裁き直す (`settle` は裁かない。ほかの呼び出し元と同じ)
         await resolveConflicts();
       }
     } catch (error) {

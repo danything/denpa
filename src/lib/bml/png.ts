@@ -41,7 +41,7 @@ export function applyClut(
     // パレット (色の型 3) 以外は運用されない。来たら手を入れない
     if (name === "IHDR" && png[at + 8 + 9] !== 3)
       return { data: concatBytes([png]), width, height };
-    // PLTE・tRNS は最初の IDAT の前に (gAMA などの後ろでよい。PNG の塊の順)
+    // PLTE・tRNS は最初の IDAT の前に (gAMA などの後ろでよい。PNG のチャンクの順)
     if (name === "IDAT" && !placed) {
       parts.push(pngChunk("PLTE", plte), pngChunk("tRNS", trns));
       placed = true;
@@ -58,7 +58,7 @@ export function alphaPng(
   height: number,
   alpha: Uint8Array,
 ): Uint8Array<ArrayBuffer> {
-  // 1 行 = フィルタ 1 バイト + (灰 1・透明度 1) × 幅
+  // 1 行 = フィルタ 1 バイト + (グレー 1・透明度 1) × 幅
   const raw = new Uint8Array(height * (1 + width * 2));
   for (let y = 0; y < height; y++) {
     const row = y * (1 + width * 2);
@@ -72,7 +72,7 @@ export function alphaPng(
   view.setUint32(0, width);
   view.setUint32(4, height);
   ihdr[8] = 8; // 8 ビット
-  ihdr[9] = 4; // 灰 + 透明度
+  ihdr[9] = 4; // グレー + 透明度
   return concatBytes([
     PNG_SIGNATURE,
     pngChunk("IHDR", ihdr),

@@ -64,7 +64,7 @@ export function catvChannels(): string[] {
 
 /**
  * 周波数 (Hz) から、選局するチャンネルの名前を決める。
- * 格子に乗れば今の名前 (`QC27`・`QV9`・`QU20`)、`QC24`〜`QC27` を 2 MHz ずらしたものもその名前、
+ * 格子に合えば今の名前 (`QC27`・`QV9`・`QU20`)、`QC24`〜`QC27` を 2 MHz ずらしたものもその名前、
  * どちらでもなければ周波数を直に指す `QF<kHz>`。選局できる範囲の外なら null
  */
 export function cableChannelOf(hertz: number): string | null {
@@ -117,7 +117,7 @@ export interface CableLineup {
   carriers: CableCarrier[];
   /** 一覧に入れなかった TS と理由 (記録に出す) */
   skipped: { transportStreamId: number; why: string }[];
-  /** 自分のネットワークのほかの ONID (再送信の BS・地上波) の TS も載っていたか。載っていれば総当たりで残りを探さない */
+  /** 自分のネットワーク以外の ONID (再送信の BS・地上波) の TS も載っていたか。載っていれば総当たりで残りを探さない */
   others: boolean;
   /** NIT のセクションのバイト列。記録に出す */
   sections: Uint8Array[];
@@ -377,7 +377,7 @@ export interface StoredCableLineup {
   }[];
 }
 
-/** 控えに書く形にする */
+/** 控えに書く形式にする */
 export function toStored(
   entrance: string,
   lineups: readonly CableLineup[],
@@ -395,7 +395,7 @@ export function toStored(
   };
 }
 
-/** 控えを読む。形が違えば null */
+/** 控えを読む。形式が違えば null */
 export function parseStored(raw: string | undefined): StoredCableLineup | null {
   if (raw === undefined || raw === "") return null;
   try {

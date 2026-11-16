@@ -55,7 +55,7 @@ export function deleteRecordingFiles(
   // いくつものコーデックでエンコードしていれば最大 3 本ある。どれもサイドカーごと消す
   for (const path of encodedPaths(recording)) {
     removeIfExists(path);
-    // サイドカー (ポスター・データ放送) も一緒に。取り残すと片付かないゴミになる
+    // サイドカー (サムネイル・データ放送・字幕) も一緒に。取り残すと片付かないゴミになる
     removeSidecars(path);
     pruneEmptyDirs(path);
   }
@@ -124,7 +124,7 @@ export function usedByOther(path: string, recordingId: number): boolean {
  *
  * - **行はあるが実体が無い。** ファイルマネージャなど外から録画を消すと、DB には
  *   実体の無い行だけが残る。削除済みに倒して一覧から外す
- * - **実体はあるが行が無い。** 動画のサイドカー (作業ファイル・サムネイル・データ放送) は
+ * - **実体はあるが行が無い。** 動画のサイドカー (作業ファイル・サムネイル・データ放送・字幕) は
  *   動画と同じ名前で隣に置くので、動画が消えたあとに取り残されることがある
  *
  * **動画そのものには触らない。** 行の無い動画は、手で置いたものかもしれない。
@@ -256,7 +256,7 @@ function settling(path: string, at: number): boolean {
  * サイドカーは**動画と同じ名前で隣に置く**決まりなので、名前から元の動画が分かる。
  *
  * - `<動画>.…` … 作業ファイル (`.chapters.txt` など)
- * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送
+ * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` / `.captions.json` … サムネイル・録画のデータ放送・4K の局の字幕 (`SIDECAR_SUFFIXES`)
  *
  * 元の TS を残さない設定だと、TS が消えたあともサイドカーだけが残り、録るたびに積もる。
  */
@@ -360,7 +360,7 @@ function orphan(
   if (working?.[1] !== undefined) return !running.has(Number(working[1]));
   const trailing = TRAILING.exec(path);
   if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
-  // ポスター・データ放送。動画の拡張子を取り替えた名前 (metadata.ts の SIDECAR_SUFFIXES)
+  // サムネイル・データ放送・字幕。動画の拡張子を取り替えた名前 (metadata.ts の SIDECAR_SUFFIXES)
   const base = SIDECAR_ORPHAN.exec(path);
   if (base === null) return false;
   // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る

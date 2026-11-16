@@ -58,7 +58,7 @@ describe("trimCues", () => {
   });
 
   test("溜めの中で戻れるいちばん前を渡せば、戻った先で出す字幕も残る", () => {
-    // 再生位置は 35 秒、溜めは 15 秒から (`live-player` は小さいほうを渡す)。15 秒へ戻ると 10 秒の字幕を出す
+    // 再生位置は 35 秒、バッファは 15 秒から (`live-player` は小さいほうを渡す)。15 秒へ戻ると 10 秒の字幕を出す
     const kept = trimCues([cue(10), cue(20), cue(30)], 15);
     expect(currentCue(kept, 15)?.at).toBe(10);
   });

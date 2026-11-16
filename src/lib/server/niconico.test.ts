@@ -228,7 +228,7 @@ describe("更新", () => {
     expect(refreshCalls.length).toBe(1);
   });
 
-  test("hub に届かないときは投げ、連携はそのまま (次にまた試す)", async () => {
+  test("hub に届かないときは例外を送出し、連携はそのまま (次にまた試す)", async () => {
     await linkExpiring();
     reply = () => json({ error: "temporarily_unavailable" }, 502);
     await expect(accessToken()).rejects.toThrow("HTTP 502");
@@ -302,7 +302,7 @@ describe("応答を読む", () => {
     expect(logged).toEqual(["[niconico] 一つ目", "[niconico] 二つ目"]);
   });
 
-  test("アクセストークンが無ければ投げる", () => {
+  test("アクセストークンが無ければ例外を送出する", () => {
     expect(() => readTokens({ refresh_token: "r" })).toThrow();
     expect(() => readTokens(null)).toThrow();
   });

@@ -42,7 +42,7 @@ describe("外から来た JSON の形式", () => {
     expect(tuner.channel?.type).toBeUndefined();
   });
 
-  test("知らない鍵は捨て、無い optional は鍵ごと付けない", () => {
+  test("`fields` に無いキーは捨て、無い optional はキーごと付けない", () => {
     const tuner = read(
       TUNER,
       { index: 0, name: "PT3", types: [], channel: null, extra: 1 },
@@ -115,7 +115,7 @@ describe("外から来た JSON の形式", () => {
     expect(() => read(aud, 1, "x")).toThrow(/文字列のはずが number 1/);
   });
 
-  test("record は鍵を決めず、値の形式だけ見る", () => {
+  test("record はキーを決めず、値の形式だけ見る", () => {
     expect(read(record(boolean), { a: true, b: false }, "x")).toEqual({
       a: true,
       b: false,

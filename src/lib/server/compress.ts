@@ -2,7 +2,7 @@
  * **画面の HTML とデータ (JSON) を縮めて返す。** 入口の `server.js` が adapter の応答に掛ける。
  *
  * 静的ファイル (`_app/immutable/*`) は組むときに br / gz を作ってある (`precompress`) が、
- * SvelteKit が組み立てる応答 (HTML・`__data.json`・`/api/*` の JSON) は素のまま出ていた。
+ * SvelteKit が組み立てる応答 (HTML・`__data.json`・`/api/*` の JSON) は縮めずに出る。
  * 番組表の `__data.json` は 1 日・1 放送波で 300〜400KB あり、遠い回線ではそのまま待ち時間になる。
  * 前段 (リバースプロキシ) が縮める構成もあるが、直に繋ぐ構成 (`http://<IP>:3000`) もあるので
  * アプリで縮める (前段が縮め直すことは無い。もう `Content-Encoding` が付いている)。
@@ -12,7 +12,7 @@
  * ある程度溜まるまで出さないので、流したはずの続きが最後までまとめて届く。
  * 受け取った塊ごとに出し切る (`Z_SYNC_FLUSH` / `BROTLI_OPERATION_FLUSH`)。
  *
- * 縮めないもの:
+ * 次のものは縮めない。
  *
  * - 縮める意味の無い型 (映像・画像・フォント…) と、`text/event-stream` (通知。1 件ずつ届くことが大事)
  * - 小さいもの (`MIN_SIZE` 未満と分かっているもの)
@@ -36,7 +36,7 @@ export const MIN_SIZE = 1024;
 
 type Encoding = "br" | "gzip";
 
-/** 相手が受け取れる縮め方。br を先に選ぶ (同じ速さで gzip より小さい)。`q=0` は断り */
+/** 相手が受け取れる縮め方。br を先に選ぶ (同じ速さで gzip より小さい)。`q=0` の縮め方は受け取らない */
 export function encodingFor(accept: string | null): Encoding | null {
   const allowed = new Set<string>();
   for (const part of (accept ?? "").split(",")) {
@@ -50,7 +50,7 @@ export function encodingFor(accept: string | null): Encoding | null {
   return null;
 }
 
-/** 縮めて返す応答。縮めないものはそのまま返す (上の「縮めないもの」) */
+/** 縮めて返す応答。縮めないもの (ファイルの冒頭の説明) はそのまま返す */
 export function compress(request: Request, response: Response): Response {
   if (
     request.method === "HEAD" ||

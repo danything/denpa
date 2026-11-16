@@ -40,7 +40,7 @@ export function snapshotter(controls: PlayerControls) {
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
   /**
    * 撮っている最中か。**続けて押しても 1 枚ずつ**。共有シートが開いている間に
-   * もう一度押すと、2 枚目の共有が「もう開いている」で断られて落ちてくる
+   * もう一度押すと、2 枚目の共有が「もう開いている」で断られて失敗する
    */
   let busy = false;
 

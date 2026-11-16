@@ -72,7 +72,7 @@ export function clipVersionQuery(clip: Pick<Clip, "layers">): string {
 
 /**
  * `PATCH /api/clips/<id>` の本文を読む。`{ "captions": false }` のように、変えたいものだけ真偽で。
- * 知らない名前・真偽でない値・空なら null
+ * `CLIP_LAYERS` に無い名前・真偽でない値・空なら null
  */
 export function parseLayerPatch(body: unknown): ClipLayers | null {
   if (typeof body !== "object" || body === null || Array.isArray(body))

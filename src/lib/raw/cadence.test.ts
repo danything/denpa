@@ -53,7 +53,7 @@ describe("SmoothClock", () => {
     const clock = new SmoothClock();
     clock.set(90_000, 1000);
     expect(clock.at(1010)).toBe(90_900);
-    // 2ms ぶん (180) 先を言ってきた。1 割だけ寄せる
+    // 2 ms ぶん (180) 先を言ってきた。1 割だけ寄せる
     clock.set(90_000 + 1800 + 180, 1020);
     expect(clock.at(1020)).toBeCloseTo(90_000 + 1800 + 18, 6);
     // 1 秒飛んだ (シークした・貯め直した)
@@ -86,9 +86,9 @@ describe("fieldAt", () => {
 });
 
 /**
- * 59.94i (1 秒に 59.94 フィールド) を 60Hz の画面で 20 秒出したときの、画面の切り替わりごとに
- * 出たフィールドの並び。刻みは 4ms ごとで、デコード (1 コマに 1 回、8〜20ms) の回は延びる。時計の組は
- * 20ms ごとに ±3ms 揺れて届く。
+ * 59.94i (1 秒に 59.94 フィールド) を 60 Hz の画面で 20 秒出したときの、画面の切り替わりごとに
+ * 出たフィールドの並び。刻みは 4 ms ごとで、デコード (1 コマに 1 回、8〜20 ms) の回は延びる。時計の組は
+ * 20 ms ごとに ±3 ms 揺れて届く。
  *
  * - `aligned` … 次の画面の切り替わりの時点の PTS (`VsyncClock`) で選び、描いた回はデコードせず、
  *   デコードは描くものが次に変わる切り替わりまでに終えられるときだけ始める (いまの作り。`mayDecode`)
@@ -133,7 +133,7 @@ function simulate(
       smooth.set(truth(at), stamp);
       nextClock += 20;
     } else {
-      // デコードは 1 コマ (2 フィールド) に 1 回、8〜20ms。先に 8 コマまでデコードしておける
+      // デコードは 1 コマ (2 フィールド) に 1 回、8〜20 ms。先に 8 コマまでデコードしておける
       const due = Math.floor((at * 90) / 3003);
       const wanted = decoded < due + 8;
       const urgent = decoded <= due + 1;
@@ -212,9 +212,9 @@ function simulate(
   return { repeats, skips };
 }
 
-describe("59.94i を 60Hz の画面に出す", () => {
+describe("59.94i を 60 Hz の画面に出す", () => {
   test.each([1, 2, 3, 4, 5])(
-    "フィールドを飛ばさず、同じフィールドを2回出すのは周波数の差のぶんだけ (乱数 %d)",
+    "フィールドを飛ばさず、同じフィールドを 2 回出すのは周波数の差のぶんだけ (乱数 %d)",
     (seed) => {
       const { repeats, skips } = simulate(true, seed);
       expect(skips).toBe(0);
@@ -241,7 +241,7 @@ describe("Vsync (裏から戻ったとき)", () => {
 
 describe("Vsync (覚えた間隔がずれたとき)", () => {
   /**
-   * `period` ms ごとの画面の切り替わりを `frames` 回ぶん進め、rAF の時刻を流す。時刻は ±0.3ms 揺れ、
+   * `period` ms ごとの画面の切り替わりを `frames` 回ぶん進め、rAF の時刻を流す。時刻は ±0.3 ms 揺れ、
    * `drop` の割合で 1〜2 回ぶん来ない。最後の切り替わりの時刻を返す
    */
   function play(
@@ -268,7 +268,7 @@ describe("Vsync (覚えた間隔がずれたとき)", () => {
     const rand = random(1);
     const vsync = new Vsync();
     let at = play(vsync, 0, 1000 / 60, 20, rand);
-    // 混んで 8〜11ms の間が続いた
+    // 混んで 8〜11 ms の間が続いた
     for (let i = 0; i < 15; i++) {
       at += 8 + rand() * 3;
       vsync.feed(at);
@@ -278,14 +278,14 @@ describe("Vsync (覚えた間隔がずれたとき)", () => {
     near(vsync, 1000 / 60);
   });
 
-  test("60Hz で、ときどき落とす (2〜3 回ぶん空く) 回があっても 16.67ms を覚える", () => {
+  test("60 Hz で、ときどき落とす (2〜3 回ぶん空く) 回があっても 16.67 ms を覚える", () => {
     const rand = random(2);
     const vsync = new Vsync();
     play(vsync, 0, 1000 / 60, 600, rand, 0.15);
     near(vsync, 1000 / 60);
   });
 
-  test("120Hz と 50Hz の画面も、落とす回があっても間隔を覚える", () => {
+  test("120 Hz と 50 Hz の画面も、落とす回があっても間隔を覚える", () => {
     for (const period of [1000 / 120, 1000 / 50]) {
       const rand = random(3);
       const vsync = new Vsync();
@@ -294,7 +294,7 @@ describe("Vsync (覚えた間隔がずれたとき)", () => {
     }
   });
 
-  test("画面の速さが変わったら (60Hz→120Hz、120Hz→60Hz) 60 回のうちに追いつく", () => {
+  test("画面の速さが変わったら (60 Hz→120 Hz、120 Hz→60 Hz) 60 回のうちに追いつく", () => {
     const rand = random(4);
     const vsync = new Vsync();
     let at = play(vsync, 0, 1000 / 60, 120, rand);
@@ -304,7 +304,7 @@ describe("Vsync (覚えた間隔がずれたとき)", () => {
     near(vsync, 1000 / 60);
   });
 
-  test("rAF の 4 割が来ない間が続いても、来るようになれば 16.67ms に戻る", () => {
+  test("rAF の 4 割が来ない間が続いても、来るようになれば 16.67 ms に戻る", () => {
     const rand = random(5);
     const vsync = new Vsync();
     let at = play(vsync, 0, 1000 / 60, 60, rand);
@@ -316,7 +316,7 @@ describe("Vsync (覚えた間隔がずれたとき)", () => {
 
 describe("untilChange", () => {
   const period = 1000 / 120;
-  /** 0ms から 120Hz で切り替わる画面。最後の切り替わりは 100 * period */
+  /** 0 ms から 120 Hz で切り替わる画面。最後の切り替わりは 100 * period */
   function screen(): Vsync {
     const vsync = new Vsync();
     for (let i = 0; i <= 100; i++) vsync.feed(i * period);
@@ -366,15 +366,15 @@ describe("mayDecode", () => {
   const shown = { pts: 0, interlaced: true, topFirst: true };
 
   test("描くものが変わるまでにデコードを終えられるときだけ始める", () => {
-    // 次のフィールドを出すまで 4 回ぶん - 1ms = 32.3ms。待っているのが 1 枚なら、見積もりは 13 * 1.15 + 2 = 16.95ms
+    // 次のフィールドを出すまで 4 回ぶん - 1 ms = 32.3 ms。待っているのが 1 枚なら、見積もりは 13 * 1.15 + 2 = 16.95 ms
     const wall = last + 1;
     expect(mayDecode(vsync, wall, 0, shown, 3003, [12, 14], 1)).toBe(true);
-    // 次の切り替わりの PTS が 850 なら、2 枚目のフィールドはその次に出る。残りは 2 回ぶん - 1ms = 15.67ms
+    // 次の切り替わりの PTS が 850 なら、2 枚目のフィールドはその次に出る。残りは 2 回ぶん - 1 ms = 15.67 ms
     expect(mayDecode(vsync, wall, 850, shown, 3003, [12, 14], 1)).toBe(false);
   });
 
   test("待っているコマが多いうちは、余裕のある間だけで始める", () => {
-    // 次のフィールドを出すまで 3 回ぶん - 1ms = 24ms。見積もりは 1 枚なら 12 * 1.15 + 2 = 15.8ms、8 枚なら 12 * 2 + 2 = 26ms
+    // 次のフィールドを出すまで 3 回ぶん - 1 ms = 24 ms。見積もりは 1 枚なら 12 * 1.15 + 2 = 15.8 ms、8 枚なら 12 * 2 + 2 = 26 ms
     const wall = last + 1;
     expect(mayDecode(vsync, wall, 1600, shown, 3003, [12, 12], 1)).toBe(true);
     expect(mayDecode(vsync, wall, 1600, shown, 3003, [12, 12], 8)).toBe(false);

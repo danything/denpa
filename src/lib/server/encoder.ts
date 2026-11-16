@@ -271,7 +271,7 @@ function videoArgs(
    * 実測は docs/encode.md「10bit では出しません」
    *
    * **H.265 はソフトウェアでエンコードしない** (libx265 を組んでいない。GPU が全部落ちたら、その 1 本は失敗にする。
-   * `runJob` の `encodeWays`)。ここに来るのは呼ぶ側の誤りなので、黙って別のコーデックにせず投げる
+   * `runJob` の `encodeWays`)。ここに来るのは呼ぶ側の誤りなので、別のコーデックにせず例外にする
    */
   if (codec === "hevc")
     throw new Error("H.265 はソフトウェアではエンコードしません");
@@ -486,7 +486,7 @@ export function buildArgs(
    * チャプター (CM の位置) はここでは入れない。境目はエンコードし終えてから決まるので、どのコーデックも
    * エンコードしたあとに `-c copy` で書き足す (`cm.chapterArgs`)
    */
-  // map で解決できない (型が不明な) ストリームは黙ってスキップする。エンコード自体を止めないため
+  // map で解決できない (型が不明な) ストリームは読み飛ばす。エンコード自体を止めないため
   args.push("-ignore_unknown");
   // 入れ物の title に番組名を入れる (プレイヤーの履歴・通知用)
   if (options.mediaTitle !== undefined && options.mediaTitle !== "") {
@@ -536,8 +536,8 @@ export function buildArgs(
    * **音声にも名前を付ける** (`arib.audioTitles`)。番組表と同じ言い方にするので、
    * 「主音声」「解説」がそのままプレイヤーの切り替えに出る。
    *
-   * **多すぎても困らない。** 番組表が言っている本数と実際に入っている本数は
-   * 食い違いうるが、ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
+   * **多すぎても困らない。** 番組表の本数と実際に入っている本数は
+   * 食い違いうるが、ffmpeg は無いトラックへの指定をエラーにせず読み飛ばす
    * (実機で確認)。言語はデュアルモノのところで別に付けてある
    */
   (options.audioTitles ?? []).forEach((title, index) => {
@@ -1292,7 +1292,7 @@ function markFailed(jobId: number, reason: string): void {
  * エンコードの失敗を記録して知らせる。
  *
  * **録画の行には何も書かない。** 落ちたのは再エンコードのほうで、元の録画は無事なので、
- * 録画そのものを「失敗」にすると観られるはずのものが観られなくなる (実際にそうなっていた)。
+ * 録画そのものを「失敗」にすると観られるはずのものが観られなくなる。
  * 理由はジョブが持ち、一覧は最新のジョブを見て出す
  */
 function fail(
@@ -1800,8 +1800,8 @@ async function runJob(jobId: number): Promise<void> {
         /*
          * ffmpeg の起こし直しは `encode_jobs.attempts` に数えない。あれはジョブを取り出した回数で、上限 (`encodeMaxAttempts`)
          * はジョブのやり直しにだけ当てる。1 回の実行の中の起こし直しは `encodeAttempts` の並び (方式ごとに 2 回) で尽きるので、上限は要らない。
-         * 数えていた頃は、コーデックをいくつも選んで GPU からソフトウェアへ倒れた 1 回の実行だけで上限の 5 に届き、
-         * その実行の途中でポッドが止まると、起動したときに 1 度もやり直さず失敗にしていた
+         * 数えると、コーデックをいくつも選んで GPU からソフトウェアへ切り替えた 1 回の実行だけで上限に届き、
+         * その実行の途中でポッドが止まると、起動したときに 1 度もやり直さずに失敗にしてしまう
          */
         const before = attempts[i - 1]!.hardware;
         if (attempt.hardware !== before) {
@@ -1815,7 +1815,7 @@ async function runJob(jobId: number): Promise<void> {
       // ロゴの点は読むたびに一から数える (落ちた回の途中までを持ち越さない)
       const want = extra.analysis ? reading?.want() : undefined;
       const reader = want === undefined ? undefined : scanReader(want);
-      // 起動できずに投げたときも、書き出しの一時フォルダは片付ける
+      // 起動できずに例外になったときも、書き出しの一時フォルダは片付ける
       const pending = runFfmpeg(
         jobId,
         report,
@@ -2007,7 +2007,7 @@ async function runJob(jobId: number): Promise<void> {
       outTimeUs: done.result.outTimeUs,
     });
   });
-  // 1 本が投げても、ほかが終わるまで待ってから後始末する (動いている ffmpeg と作業ファイルを残さない)
+  // 1 本が例外になっても、ほかが終わるまで待ってから後始末する (動いている ffmpeg と作業ファイルを残さない)
   const settledTasks = await Promise.allSettled([firstTask, ...otherTasks]);
   const thrown = settledTasks.find((task) => task.status === "rejected");
   if (thrown !== undefined) {
@@ -2446,7 +2446,7 @@ async function detectCm(
     }
     for (const [i, file] of files.entries()) renameSync(outputs[i]!, file);
   } finally {
-    // 投げたときも書きかけ (`.post`) を残さない。片付け (`files.orphan`) も消すが、消すのは書いてから 1 時間経ったあと (`files.SETTLE`)
+    // 例外のときも書きかけ (`.post`) を残さない。片付け (`files.orphan`) も消すが、消すのは書いてから 1 時間経ったあと (`files.SETTLE`)
     discard();
     removeIfExists(chapters);
   }
@@ -2524,7 +2524,7 @@ export function pump(): void {
       .get();
     if (next === undefined) return;
 
-    // **試し過ぎたジョブは失敗にする。** プロセスごと落とす毒ジョブは running→queued
+    // **試し過ぎたジョブは失敗にする。** プロセスごと落とすジョブは running→queued
     // へ戻り続け、id 順なので毎回ここで先頭に来る。上限を超えたら failed に
     // して後ろを進める。failed の確定は runJob を呼ぶ前なので、直後にまた落ちても
     // 同じジョブを取り直すことはない
@@ -2569,7 +2569,7 @@ export function pump(): void {
     // 待機中が動き出したことも伝える。押した直後に何も変わらないと止まって見える
     emit("recordings");
     void (next.kind === "cm" ? runCmJob(jobId) : runJob(jobId))
-      // 中止したあとに投げたものは失敗にしない (中止として終える)
+      // 中止したあとの例外は失敗にしない (中止として終える)
       .catch((error) =>
         canceled.has(jobId)
           ? finishCanceled(jobId, null)

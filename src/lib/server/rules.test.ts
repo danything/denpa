@@ -421,7 +421,7 @@ describe("当たらない理由", () => {
       miss({ keyword: "テストアニメ", service_ids: [7] }, radio),
     ).toBeNull();
     expect(miss({ service_types: ["BS"], service_ids: [7] }, data)).toBeNull();
-    // テレビの局と、種別を読まない呼び出し (検索の「これからの放送」) は今までどおり
+    // テレビの局と、種別を読まない呼び出し (検索の「これからの放送」) はそのまま当たる
     expect(
       miss({ keyword: "テストアニメ" }, { ...anime, arib_service_type: 1 }),
     ).toBeNull();

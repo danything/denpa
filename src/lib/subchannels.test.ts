@@ -407,7 +407,7 @@ describe("マスを組む", () => {
     ]);
   });
 
-  test("マスの鍵は重ならない", () => {
+  test("マスのキーは重ならない", () => {
     const keys = layout([
       program(TX.id, 4, 8),
       program(TX2.id, 5, 6, "野球"),

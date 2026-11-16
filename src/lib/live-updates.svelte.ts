@@ -5,7 +5,7 @@ import { reload } from "./reload.svelte";
 /**
  * サーバからの通知を受けて画面を読み直す。
  *
- * 短時間に何度も来ることがある(録画開始とエンコード投入など)ので、
+ * 短時間に何度も来ることがある (録画開始とエンコード投入など)ので、
  * 少しまとめてから 1 回だけ読み直す。
  *
  * ## 戻ってきたら繋ぎ直す
@@ -56,7 +56,7 @@ export function liveUpdates(
 
     const connect = () => {
       source?.close();
-      lastSeen = Date.now(); // 新しい接続に 60 秒の猶予をやる
+      lastSeen = Date.now(); // 新しい接続にも 60 秒待つ
       source = new EventSource(resolve("api/events"));
       source.addEventListener("open", () => {
         lastSeen = Date.now();

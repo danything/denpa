@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { chunks, lowerPriority, readUntil, run } from "./stream";
 
 /**
- * 外の道具を起こして読み切るところ (`run`)。
+ * 外部のプログラムを起こして読み切るところ (`run`)。
  *
  * ここで見るのは**読み切った中身の形式**。`stdout` は `Uint8Array` だと
  * 名乗っているので、**大きさによらずそうであること**を確かめる。
@@ -39,7 +39,7 @@ describe("run の標準出力", () => {
     expect(String(stdout.length)).toBe(String(size));
   });
 
-  test("起こせない道具は投げずに 127 で返る", async () => {
+  test("起こせないプログラムは例外にせず 127 で返る", async () => {
     const { code } = await run(["denpa-such-command-does-not-exist"], {
       stdout: true,
     });
@@ -47,9 +47,9 @@ describe("run の標準出力", () => {
   });
 
   /**
-   * **押された後の合図でも起こさない。** `abort` の聞き耳は押された瞬間にしか
-   * 鳴らないので、押された後に起こした道具は最後まで走っていた (中止を押した
-   * あとの無音検出・字幕づくり)。殺されたときと同じ 143 で、すぐ返る
+   * **押された後の合図でも起こさない。** `abort` のリスナーは押された瞬間にしか
+   * 呼ばれないので、押された後に起こしたプロセスは最後まで走っていた (中止を押した
+   * あとの無音検出・字幕づくり)。止めたときと同じ 143 で、すぐ返る
    */
   test("もう押されている中止の合図なら、起こさずに 143 で返る", async () => {
     const controller = new AbortController();
@@ -78,8 +78,8 @@ describe("run の標準出力を流して受ける (onStdout)", () => {
     expect(stdout.length).toBe(0);
   });
 
-  /** 読む側が投げたら道具を止める。止めないと誰も読まない管が詰まり、時間切れまで居座る */
-  test("読む側が投げたら、道具を止めて投げ直す", async () => {
+  /** 読む側が例外を出したらプロセスを止める。止めないと誰も読まないパイプが詰まり、時間切れまで残る */
+  test("読む側が例外を出したら、プロセスを止めて例外を出し直す", async () => {
     const started = Date.now();
     const failing = run(["cat", "/dev/zero"], {
       onStdout: () => {
@@ -119,13 +119,13 @@ describe("優先度を下げる", () => {
     expect(calls).toEqual([[4242, 19]]);
   });
 
-  test("下げられなくても投げない (いつもの優先度で続ける)", () => {
+  test("下げられなくても例外にしない (いつもの優先度で続ける)", () => {
     expect(() =>
       lowerPriority(4242, () => {
         throw new Error("EACCES");
       }),
     ).not.toThrow();
-    // もう終わっていた (ESRCH) ときも投げない
+    // もう終わっていた (ESRCH) ときも例外にしない
     expect(() =>
       lowerPriority(4242, () => {
         throw Object.assign(new Error("ESRCH"), { code: "ESRCH" });
@@ -170,7 +170,7 @@ describe("chunks", () => {
     expect(seen.canceled).toBe(true);
   });
 
-  test("中で投げて抜けても cancel する", async () => {
+  test("中で例外を出して抜けても cancel する", async () => {
     const { stream, seen } = endless();
     const read = async () => {
       for await (const _ of chunks(stream)) throw new Error("読む側の失敗");
@@ -198,7 +198,7 @@ describe("chunks", () => {
     expect(canceled).toBe(false);
   });
 
-  test("読み元の失敗はそのまま投げる", async () => {
+  test("読み元の失敗はそのまま例外にする", async () => {
     const stream = new ReadableStream<Uint8Array>({
       pull(controller) {
         controller.error(new Error("切れた"));
@@ -215,7 +215,7 @@ describe("chunks", () => {
 
 /** 局や表を読み終えるまで読む所 (`readUntil`。チャンネルスキャンと衛星の一覧が使う) */
 describe("readUntil", () => {
-  /** 塊を順に流し、閉じないストリーム。読み手が止めたかは `cancelled` に残る */
+  /** 塊を順に流し、閉じないストリーム。読む側が止めたかは `cancelled` に残る */
   function source(parts: Uint8Array[]) {
     const state = { cancelled: false };
     const stream = new ReadableStream<Uint8Array>({

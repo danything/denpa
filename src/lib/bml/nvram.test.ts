@@ -240,7 +240,7 @@ describe("AIFF の不正な中身", () => {
     const form = (body: number[]) =>
       Uint8Array.from([...Buffer.from("FORM"), 0, 0, 0, body.length, ...body]);
     expect(decodeAiff(Uint8Array.of(1, 2, 3))).toBeNull();
-    // 大きさが巨大な塊
+    // 大きさが巨大なチャンク
     expect(
       decodeAiff(
         form([

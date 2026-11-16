@@ -11,7 +11,7 @@
  * API があっても `fullscreenEnabled` が偽なら使えない (iframe の許可が無いなど) ので、
  * そのときも次へ回す
  */
-export type FullscreenMode = "standard" | "webkit" | "pseudo";
+type FullscreenMode = "standard" | "webkit" | "pseudo";
 
 /** ベンダープレフィックス付きの API (古い iPadOS の Safari)。型に無いので自分で書く */
 interface WebkitElement {

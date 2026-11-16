@@ -30,14 +30,8 @@ import { config } from "./config";
  * **テーブルの定義はここにしか無い** (drizzle)。
  *
  * - 行の型はここから導く (`types.ts` の `Recording` など)
- * - DB を作る SQL もここから出す: 変えたら `bun run db:generate` で `drizzle/` に
+ * - DB を作る SQL もここから出す。変えたら `bun run db:generate` で `drizzle/` に
  *   マイグレーションが出るので、一緒にコミットする。当てるのは起動時 (`db.ts`)
- *
- * 前は SQL の文字列 (`CREATE TABLE IF NOT EXISTS` + 後から足した列の一覧) と
- * TS の interface を別々に書いていた。列を足すときに 3 箇所を直すことになり、
- * 片方だけ直しても TS は何も言わなかった (`queryOne<Recording>` はキャスト)。
- * 実際に本番が 500 を返したこともある (列を SQL に書いただけで、動いている DB には
- * 足されていなかった)。
  *
  * 真偽を 0/1 で持つ列 (`enabled` / `manual` / `encode` / `has_logo` / `is_free` など)
  * は `{ mode: 'boolean' }` で読み書きする。DB の中は今までどおり 0/1 で、既定値も
@@ -53,7 +47,7 @@ const flag = (name: string) => integer(name, { mode: "boolean" });
 /**
  * JSON を文字列で持つ列。読むときにデコードし、書くときにエンコードする。**読み取り関数は列ごとに書く。**
  *
- * drizzle の `{ mode: 'json' }` は使わない。あれは読めない行で例外を投げるが、
+ * drizzle の `{ mode: 'json' }` は使わない。あれは読めない行で例外を出すが、
  * ここに入っているのは放送から取得したものや、取り込みの時期によって形式が違うもの
  * (古い行は `''`、EPGStation から来たジャンルは数の並び) で、1 行が読めないせいで
  * 一覧ごと出なくなるのは困る。読めない行はその列を「持っていない」ことにして、
@@ -68,7 +62,7 @@ function json<T>(name: string, read: (value: unknown) => T) {
       try {
         value = JSON.parse(raw);
       } catch {
-        // 壊れた行。read が「持っていない」の形に落とす
+        // 壊れた行。read が「持っていない」ときの値にする
       }
       return read(value);
     },
@@ -394,17 +388,17 @@ export const channelChanges = sqliteTable("channel_changes", {
 export const cardContracts = sqliteTable(
   "card_contracts",
   {
-    /** カード番号 (16桁の文字列) */
+    /** カード番号 (16 桁の文字列) */
     card_id: text("card_id").notNull(),
     /** 局の内部 ID (services.id) */
     service_id: integer("service_id").notNull(),
-    /** 契約状態: subscribed(契約中) / unsubscribed(未契約) / expired(期限切れ) */
+    /** 契約状態: subscribed (契約中) / unsubscribed (未契約) / expired (期限切れ) */
     state: text("state")
       .$type<"subscribed" | "unsubscribed" | "expired">()
       .notNull(),
     /** B-CAS 契約確認コマンド (0x90 0x3C) の返り値コード (0x0800 等) */
     code: integer("code"),
-    /** 契約の有効期限（epoch ms）。判定できた場合 */
+    /** 契約の有効期限 (epoch ms)。判定できた場合 */
     valid_until: integer("valid_until"),
     /** 実ストリームでの復号可否 (true: 成功, false: スクランブル残存, null: 未確認) */
     decode_ok: flag("decode_ok"),
@@ -455,7 +449,7 @@ export const programs = sqliteTable(
     copy_never: flag("copy_never")
       .notNull()
       .default(sql`0`),
-    /** CA契約情報記述子 (0xCB) の verificationData (Base64)。有料放送の契約確認・復号判定に使う */
+    /** CA 契約情報記述子 (0xCB) の verificationData (Base64)。有料放送の契約確認・復号判定に使う */
     contract_verification: text("contract_verification"),
     /*
      * **シリーズ** (EIT のシリーズ記述子)。載せる局のぶんだけ入り、載っていない番組は全部 NULL。
@@ -677,7 +671,7 @@ export const recordings = sqliteTable(
     series: text("series").notNull().default(""),
     subtitle: text("subtitle").notNull().default(""),
     description: text("description").notNull().default(""),
-    /** 詳細(拡張形式)。JSON {見出し:本文}。番組詳細の画面に概要と続けて出す */
+    /** 詳細 (拡張形式)。JSON {見出し:本文}。番組詳細の画面に概要と続けて出す */
     extended: json("extended", record),
     start_at: integer("start_at").notNull(),
     end_at: integer("end_at").notNull(),
@@ -830,7 +824,7 @@ const ENCODE_STATES = [
 export const ENCODE_PHASES = ["descramble", "remux", "cm", "encode"] as const;
 
 /**
- * ジョブの種類。`encode` はエンコードする (CM 検出も一緒に行う)、`cm` は**CM 検出だけやり直す**
+ * ジョブの種類。`encode` はエンコードする (CM 検出も一緒にする)、`cm` は**CM 検出だけやり直す**
  * (エンコードしたものにはチャプターを書き直すだけ。`encoder.runCmJob`)。同じ待ち行列に並べ、同時に走る本数も一緒に数える
  */
 export const ENCODE_KINDS = ["encode", "cm"] as const;
@@ -844,10 +838,10 @@ export const encodeJobs = sqliteTable(
     state: text("state", { enum: ENCODE_STATES }).notNull().default("queued"),
     phase: text("phase", { enum: ENCODE_PHASES }).notNull().default("encode"),
     percent: real("percent").notNull().default(0),
-    /** 残り時間の見込み(ms)。ffmpeg の speed から出す。分からない間は NULL */
+    /** 残り時間の見込み (ms)。ffmpeg の speed から出す。分からない間は NULL */
     eta_ms: integer("eta_ms"),
     log: text("log").notNull().default(""),
-    /** ジョブを取り出した回数 (`encoder.pump`)。1 回の実行の中の ffmpeg の起こし直しは数えない (`config.encodeMaxAttempts`) */
+    /** ジョブを取り出した回数 (`encoder.pump`)。1 回の実行の中で ffmpeg を起動し直したぶんは数えない (`config.encodeMaxAttempts`) */
     attempts: integer("attempts").notNull().default(0),
     error: text("error"),
     created_at: integer("created_at").notNull(),

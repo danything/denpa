@@ -97,7 +97,7 @@ describe("最初にデコードできたコマ", () => {
   });
 
   test("他の行が混ざっていても読み取れる", () => {
-    // ffprobe はデコードできないコマについて警告を吐くことがある
+    // ffprobe はデコードできないコマについて警告を出力することがある
     expect(
       firstFrameTime(`[mpeg2video] Invalid frame dimensions 0x0.\n${output}`),
     ).toBeCloseTo(6116.439489, 6);

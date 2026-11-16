@@ -388,7 +388,7 @@ describe("fMP4 の中身を読む", () => {
 
 describe("ADTS のヘッダを組む", () => {
   /*
-   * 放送の ADTS と同じものになること。48kHz・2ch・LC で中身 371 バイトの 1 コマは、
+   * 放送の ADTS と同じものになること。48 kHz・2ch・LC で中身 371 バイトの 1 コマは、
    * ヘッダ込みで 378 バイト (ffmpeg が `-f adts` で書いたものと同じ 7 バイト)
    */
   test("AudioSpecificConfig から 7 バイトのヘッダを起こす", () => {

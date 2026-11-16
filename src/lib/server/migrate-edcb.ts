@@ -394,7 +394,7 @@ interface EdcbLists {
   notes: string[];
 }
 
-/** 3 つの一覧を読む。どれも数秒で返る。繋がらない・切られた・断られたら理由を投げる (`EdcbError`) */
+/** 3 つの一覧を読む。どれも数秒で返る。繋がらない・切られた・断られたら理由を付けた例外 (`EdcbError`) にする */
 async function fetchEdcb(input: string): Promise<EdcbLists> {
   const target = parseTarget(input);
   const notes: string[] = [];

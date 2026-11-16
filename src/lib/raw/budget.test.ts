@@ -72,7 +72,7 @@ describe("DecodeBudget", () => {
       }
       return budget.why().split(" / ")[0];
     };
-    // 1 枚 40ms は 1 コマ (33.4ms) の 8 割を超えるが、2 倍までなら間に合っている
+    // 1 枚 40 ms は 1 コマ (33.4 ms) の 8 割を超えるが、2 倍までなら間に合っている
     expect(window(2)).toBe("映像の遅れ 0.30 秒 (目安 0.25 秒)");
     expect(window(1)).toBe(
       "デコード 40.0 ms (目安 26.7 ms)、映像の遅れ 0.30 秒 (目安 0.25 秒)",
@@ -189,7 +189,7 @@ describe("DecodeBudget (WebCodecs の経路)", () => {
     return result;
   }
 
-  test("1 コマの時間が長くても (GPU 経由の溜め) 詰まっていなければ打ち切らない", () => {
+  test("1 コマの時間が長くても (GPU 経由で数コマ溜める) 詰まっていなければ打ち切らない", () => {
     const budget = new DecodeBudget(false);
     budget.tick(0, 16.7, 0, 0);
     for (let s = 1; s <= 10; s++)
