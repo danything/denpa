@@ -484,7 +484,7 @@ const STREAM_CAUSE: Record<StreamCause, string> = {
   stall: "詰まって読み直したとき",
   retry: "繋ぎ直したとき",
   audio: "音声を切り替えたとき",
-  switch: "段を切り替えたとき",
+  switch: "画質を切り替えたとき",
 };
 
 /**
