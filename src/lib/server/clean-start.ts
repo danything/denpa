@@ -11,7 +11,7 @@
  *   ffmpeg は `-ss` の手前のキーフレームを選ぶので、その IDR から出す
  * - たどるのは `LOOKBACK` 秒まで。見つからない・Cues が無い・読めない・AV1 なら、`from` をそのまま返す (前と同じ)
  *
- * すでにエンコードした録画にも効く。読むのは先頭と Cues と、たどったキーフレームの Cluster の頭だけ
+ * すでにエンコードした録画にも効く。読むのは先頭と Cues と、たどったキーフレームの Cluster の先頭だけ
  */
 
 import {
@@ -60,6 +60,8 @@ interface Index {
   track: number;
   /** Segment の中身の先頭 (ファイルの先頭から)。Cues の位置はここから数える */
   segment: number;
+  /** 時刻の刻み (ナノ秒) */
+  scale: number;
   cues: MkvCue[];
 }
 
@@ -89,23 +91,33 @@ async function readIndex(path: string): Promise<Index | null> {
     lengthSize,
     track: video.number,
     segment: head.segment,
+    scale: head.scale,
     cues,
   };
 }
 
-/** `at` (ファイルの先頭から) の Cluster の、最初の映像のコマと次の映像のコマ。読めなければ null */
+/**
+ * `cue` の指すキーフレームと、デコードの順で次の映像のコマ。読めなければ null。
+ * Cue は Cluster の先頭を指すが、キーフレームが Cluster の途中にあることもある (ffmpeg は Cluster を大きさと長さでも区切る) ので、
+ * Cluster の先頭から読んで、時刻が Cue と同じ映像のコマを探す
+ */
 async function keyAndNext(
   path: string,
-  at: number,
-  track: number,
+  index: Index,
+  cue: MkvCue,
 ): Promise<{ key: Uint8Array; next: Uint8Array | null } | null> {
   const demuxer = new MkvDemuxer();
+  const at = index.segment + cue.position;
   const frames: Uint8Array[] = [];
   for (let read = 0; read < CLUSTER_MOST; read += CLUSTER_STEP) {
     const chunk = await readRecording(path, at + read, CLUSTER_STEP);
     if (chunk.length === 0) break;
-    for (const block of demuxer.feed(chunk).blocks)
-      if (block.track === track) frames.push(block.data);
+    for (const block of demuxer.feed(chunk).blocks) {
+      if (block.track !== index.track) continue;
+      const time = (block.at * index.scale) / 1e9;
+      if (frames.length > 0 || Math.abs(time - cue.time) < 1e-6)
+        frames.push(block.data);
+    }
     if (frames.length >= 2) break;
   }
   const [key, next = null] = frames;
@@ -123,11 +135,7 @@ export async function cleanFrom(path: string, from: number): Promise<number> {
     for (let i = last; i >= 0; i--) {
       const cue = cues[i]!;
       if (cue.time < from - LOOKBACK) break;
-      const frames = await keyAndNext(
-        path,
-        index.segment + cue.position,
-        index.track,
-      );
+      const frames = await keyAndNext(path, index, cue);
       if (frames === null) return from;
       if (!cleanStart(index.codec, index.lengthSize, frames.key, frames.next))
         continue;
@@ -135,7 +143,7 @@ export async function cleanFrom(path: string, from: number): Promise<number> {
       const start =
         Math.ceil((cue.time + Math.min(AIM, (next - cue.time) / 2)) * 1000) /
         1000;
-      if (i === last) return Math.max(from, start);
+      if (i === last) return from;
       console.log(
         `詰め替えを ${from.toFixed(3)} 秒の手前の IDR (${cue.time.toFixed(3)} 秒) から始めます`,
       );

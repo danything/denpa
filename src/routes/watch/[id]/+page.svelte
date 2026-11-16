@@ -2375,9 +2375,10 @@
     askCaptions();
     const code = video.error?.code ?? 0;
     // その場で流しているなら、開いた直後か飛んだ・切り替えたあとかと、何秒の位置かを添える
-    const reason = failureText(video.error);
     const why = failedWith(
-      remux === null ? reason : `${reason}。${remux.origin()}`,
+      [failureText(video.error), remux?.origin() ?? ""]
+        .filter((part) => part !== "")
+        .join("。"),
     );
     if (
       remux === null &&

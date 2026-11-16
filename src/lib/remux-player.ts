@@ -381,7 +381,9 @@ export function remuxPlayer(
     // 切れた (繋がらない・途中で落ちた・サーバの 5xx) ならリクエストし直す。読めない中身
     // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面が観られる先の案内を出す
     if (video.error !== null || !retryable(error)) {
-      const reason = `${failureText(video.error, error)}。${origin()}`;
+      const reason = [failureText(video.error, error), origin()]
+        .filter((part) => part !== "")
+        .join("。");
       console.warn(`[remux] 流せませんでした: ${reason}`, error);
       options.state("failed", reason);
       return;
