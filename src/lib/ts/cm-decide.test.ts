@@ -933,6 +933,68 @@ describe("ロゴの区間の末尾の、見えないまま持ち越された所"
   });
 });
 
+describe("ロゴの区間の外で判断できなかった所", () => {
+  /*
+   * 本番のテレ東のアニメ (録画 592) の並び。前の番組の CM のあと 5.5 秒から番組で、冒頭は「解説放送」「字幕」の案内、
+   * 12.7 秒から白い背景の場面が 2 分近く続いてロゴが溶けて見えず、ロゴの区間は 127.7 秒から。
+   * 冒頭の無音の切れ目が 15 秒の倍数に近く並ぶと、ロゴの無い秒の減点で 120 秒の CM になっていた
+   */
+  const joints = [7.4, ...every15(22.4, 127.4), ...every15(255.7, 315.7)];
+  const logo = [
+    { start: 127.7, end: 255.5 },
+    { start: 315.9, end: 600 },
+  ];
+  const span = { programLength: 1800, programStart: 4.9 };
+  const blind = [
+    { start: 12.7, end: 78.8 },
+    { start: 79.9, end: 127.7 },
+  ];
+
+  test("録画 592: 冒頭の白い場面が CM 1 本より長く判断できなければ、15 秒の倍数に並んでも番組", () => {
+    const before = round(decideCm(recording(600, joints, logo, span)));
+    expect(before[0]).toEqual({ start: 0, end: 127.4 });
+    const cm = round(
+      decideCm(recording(600, joints, logo, { ...span, logoBlind: blind })),
+    );
+    expect(cm).toEqual([
+      { start: 0, end: 7.4 },
+      { start: 255.7, end: 315.7 },
+    ]);
+  });
+
+  test("CM 1 本までの判断できなかった所は、尺が合えば CM のまま", () => {
+    // CM 255.7〜315.7 のうち 2 本目 (270.7〜285.7) が白い後ろで判断できなかった
+    const input = recording(
+      600,
+      [7.4, ...every15(255.7, 315.7)],
+      [{ start: 7.7, end: 255.5 }, logo[1]!],
+      { ...span, logoBlind: [{ start: 270.7, end: 285.7 }] },
+    );
+    expect(round(decideCm(input))).toEqual([
+      { start: 0, end: 7.4 },
+      { start: 255.7, end: 315.7 },
+    ]);
+  });
+
+  test("番組表どおりの始まりより前の、判断できなかった所は録画の先頭の CM のまま", () => {
+    // 前の番組の終わりの白い場面 (2〜28 秒)。番組は 30 秒から
+    const input = recording(
+      600,
+      [30, ...every15(255.7, 315.7)],
+      [{ start: 30.3, end: 255.5 }, logo[1]!],
+      {
+        programLength: 1800,
+        programStart: 30,
+        logoBlind: [{ start: 2, end: 28 }],
+      },
+    );
+    expect(round(decideCm(input))).toEqual([
+      { start: 0, end: 30 },
+      { start: 255.7, end: 315.7 },
+    ]);
+  });
+});
+
 describe("映像の欠けた所", () => {
   // 番組 10〜600 と 660〜1790、間に 60 秒の CM。録画は 1800 秒
   const joints = [10, ...every15(600, 660), 1790, 1805];

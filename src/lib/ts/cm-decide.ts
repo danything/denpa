@@ -23,6 +23,11 @@ export interface CmInput {
   logo?: Range[] | null;
   /** コマごとのロゴの点 (`times` と同じ並び)。境目の候補のうちロゴが替わった所を選ぶのに使う */
   logoScores?: ArrayLike<number>;
+  /**
+   * ロゴの区間の外で、後ろが見えずにロゴが出ているか判断できなかった所 (秒。`logo-detect.readLogo` の `blind`)。
+   * ロゴがあったとも無かったとも数えない (`logoIndex`)
+   */
+  logoBlind?: Range[];
   /** 番組の尺 (番組表。秒)。録画の先頭と末尾に入った前後の番組を見分けるのに使う */
   programLength?: number;
   /** 番組表どおりなら番組が始まる秒 (録画の先頭の放送時刻から測る。`server/encoder.programSpan`)。番組の置き場所が決めきれないときの目安 */
@@ -336,7 +341,8 @@ const PROGRAM_LOGO = 1;
  */
 const PROGRAM_BARE = 0.5;
 /**
- * 番組: ロゴの区間の末尾で、見えないまま持ち越された 1 秒ごとの点 (`unseenTails`)。見えた秒の半分。CM のほうはロゴの減点をしない
+ * 番組: ロゴの区間の末尾で見えないまま持ち越された所 (`unseenTails`) と、区間の外で判断できなかった短い所 (`logoBlind`) の
+ * 1 秒ごとの点。見えた秒の半分。CM のほうはロゴの減点をしない
  */
 const UNSEEN_PROGRAM = 0.5;
 /** CM: 尺が 15 秒の倍数にぴったりのときの 1 秒ごとの点。ずれると減り、`CM_TOLERANCE` で 0 */
@@ -614,6 +620,13 @@ function measure(ranges: Range[]): (t: number) => number {
  * ロゴの区間の末尾の、ロゴが見えないまま持ち越された所 (`unseenTails`) は、見えた秒 (`lit`) にもロゴの無い秒 (`bare`) にも
  * 入れず、別に数える (`unseen`)。その先頭もロゴの消え際に足す。
  *
+ * **ロゴの区間の外で、後ろが見えずに判断できなかった所 (`logoBlind`) は、ロゴの無い秒に入れない。** ロゴの判定はそこで
+ * 直前の「消えた」を持ち越しているだけで、ロゴが無かったとは言えない。CM 1 本 (`UNSEEN_MAX`) より長く続く所は見えた秒に、
+ * それまでの所は区間の末尾と同じく `unseen` に数える (区間の末尾の長い所を番組に数えるのと同じ考え。CM は 15 秒ごとに映像が替わる)。
+ * 白い背景で始まる番組の冒頭で、ロゴが溶けて見えないまま 2 分近く続き、その間の無音の切れ目が 15 秒の倍数に近く並んで、
+ * 120 秒の CM にされていた (本番のテレ東のアニメで、番組の冒頭の 12.7〜127.5 秒)。
+ * 番組表の尺の外 (前後の番組) は見えた秒にしない。そこの CM は尺を問わずに外す
+ *
  * **映像の欠けた所 (`missingVideo`) は、見えた秒にもロゴの無い秒にも入れない。** コマが無いのでロゴがあったか分からない。
  * ロゴの無い秒に数えていた頃は、録画の途中から最後まで映像が欠けた録画 (本番の TBS の 30 分で、18 分 50 秒から後ろ) で、
  * 欠けた 11 分が CM になり、半分以上が CM だとしてロゴの結果を捨てていた
@@ -634,14 +647,30 @@ function logoIndex(input: CmInput, spans: Range[]) {
   /** ロゴの区間のうち、映像の欠けた所 */
   const hidden = intersect(merged, missing);
   /**
+   * ロゴの区間の外で判断できなかった所 (欠けた所は除く)。CM 1 本 (`UNSEEN_MAX`) より長く続く所はロゴが見えたものとして、
+   * それまでの所は見えないまま持ち越された所と同じに数える
+   */
+  const blind = subtract(subtract(input.logoBlind ?? [], merged), missing);
+  // 録画の先頭と末尾に入った前後の番組 (番組表の尺の外) は見えたものにしない。そこの CM は尺を問わずに外すため
+  const { programStart = 0, programLength = duration } = input;
+  const blindLong = intersect(
+    blind.filter((s) => s.end - s.start > UNSEEN_MAX),
+    [{ start: programStart, end: programStart + programLength }],
+  );
+  const blindShort = blind.filter((s) => s.end - s.start <= UNSEEN_MAX);
+  /**
    * 0 から `t` までのロゴの区間の秒 / そのうち見えないまま持ち越された秒 (欠けた所は除く) /
-   * 映像の欠けた秒 / そのうちロゴの区間に入る秒
+   * 映像の欠けた秒 / そのうちロゴの区間に入る秒 / ロゴの区間の外で判断できなかった秒
    */
   const coveredTo = measure(merged);
-  const unseenTo = measure(subtract(tails, missing));
+  const tailTo = measure(subtract(tails, missing));
   const missingTo = measure(missing);
   const hiddenTo = measure(hidden);
-  const unseen = (a: number, b: number) => unseenTo(b) - unseenTo(a);
+  const longTo = measure(blindLong);
+  const shortTo = measure(blindShort);
+  const tailIn = (a: number, b: number) => tailTo(b) - tailTo(a);
+  const longIn = (a: number, b: number) => longTo(b) - longTo(a);
+  const shortIn = (a: number, b: number) => shortTo(b) - shortTo(a);
   const hiddenIn = (a: number, b: number) => hiddenTo(b) - hiddenTo(a);
   // 録画の端で切れているロゴは、そこで出入りしたのではない
   const rises = merged.map((s) => s.start).filter((t) => t > EDGE);
@@ -652,14 +681,21 @@ function logoIndex(input: CmInput, spans: Range[]) {
     merged,
     /** ロゴが見えていた秒 */
     lit: (a: number, b: number) =>
-      coveredTo(b) - coveredTo(a) - unseen(a, b) - hiddenIn(a, b),
-    unseen,
-    /** ロゴの無い秒 (映像の欠けた所は除く) */
+      coveredTo(b) -
+      coveredTo(a) -
+      tailIn(a, b) -
+      hiddenIn(a, b) +
+      longIn(a, b),
+    /** ロゴが見えないまま持ち越された秒と、ロゴの区間の外で判断できなかった秒 */
+    unseen: (a: number, b: number) => tailIn(a, b) + shortIn(a, b),
+    /** ロゴの無い秒 (映像の欠けた所と、判断できなかった所は除く) */
     bare: (a: number, b: number) =>
       b -
       a -
       (coveredTo(b) - coveredTo(a)) -
-      (missingTo(b) - missingTo(a) - hiddenIn(a, b)),
+      (missingTo(b) - missingTo(a) - hiddenIn(a, b)) -
+      longIn(a, b) -
+      shortIn(a, b),
     rises,
     falls,
   };

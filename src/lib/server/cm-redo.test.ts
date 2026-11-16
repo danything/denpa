@@ -113,6 +113,7 @@ test("材料の控えがあれば読み直さずに決める (控えの物差し
         { start: 1600, end: 5999 },
       ],
       scores: new Float32Array(6000),
+      blind: [],
     },
     why: "",
   });
