@@ -47,7 +47,7 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 
 撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています。画面の BIZ UDPゴシック
 (OFL で配られているもの) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
-ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30fps で組む) は `scripts/capture-docs.ts` の冒頭に
+ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30 fps で組む) は `scripts/capture-docs.ts` の冒頭に
 あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
 
 ## README の謝辞

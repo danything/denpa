@@ -118,7 +118,7 @@ DB 名は `denpa-offline` で、ストアは次の 4 つです (正は [offline-
 見分ける (`… [H265].mkv`・`… [H264].mkv`。H.264 だけでエンコードした録画は主がもう H.264)。
 
 - AV1 … `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.0.09M.08` を 1080p60 で問うた `supported`)。
-  AV1 の Matroska は WebM としても読める。**Level は 4.1** (`09M`)。4.0 は 30fps までで、Safari は Level と
+  AV1 の Matroska は WebM としても読める。**Level は 4.1** (`09M`)。4.0 は 30 fps までで、Safari は Level と
   コマ数を突き合わせて「デコードできない」と答える
 - H.265 … 同じく `hvc1.…` でデコードできて、**しかも `canPlayType` が Matroska の H.265 を読めると言うとき**。保存するのは
   Matroska のままで、WebM に H.265 は入れられないので、デコーダがあっても入れ物を読めない端末 (Safari など) がある
