@@ -362,7 +362,7 @@ async function collectChannel(
           places,
           controller.signal,
           `epg ${channel.channel}`,
-          // 押されている間は、開くたびに高い優先度で取る
+          // 押されている間は、開くたびに取り合いで先になる順で取る
           boosted ? config.priority.epgNow : config.priority.epg,
         ),
       () => controller.signal.aborted,
@@ -619,7 +619,7 @@ export function collectOnce(): Promise<number> {
  * スキャン・衛星のロゴを積んだ中継 (`config.priority.carousel`) に譲るので、他が動いていると番組表がなかなか埋まらない。
  * 押されている間は**録画とライブ以外には全部譲らせて**取得する (`config.priority.epgNow`)。
  *
- * **既に回っている最中なら、その回の優先度を上げる。** 開くのは 1 チャンネルずつなので、
+ * **既に回っている最中なら、その回を取り合いで先にする。** 開くのは 1 チャンネルずつなので、
  * 次に開くところから効く (待たせて仕切り直すより早い)。
  */
 export function collectNow(): Promise<number> {
@@ -1046,7 +1046,7 @@ async function run(): Promise<number> {
         known.has(serviceKey(sweep.networkId, serviceId, sweep.type)),
       );
 
-  // 押されている間は高い優先度で開く (`collectChannel`)。並べる数も、その優先度で使えるチューナーで数える
+  // 押されている間は取り合いで先になる順で開く (`collectChannel`)。並べる数も、その順で使えるチューナーで数える
   const lanes = laneTypes(
     await getTuners().catch(() => []),
     boosted ? config.priority.epgNow : config.priority.epg,

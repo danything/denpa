@@ -368,7 +368,7 @@ describe("並べる数 (laneTypes)", () => {
     expect(laneTypes(tuners, config.priority.epgNow)).toHaveLength(6);
   });
 
-  test("ふだんの優先度では、衛星のロゴを待つ選局にも譲る", () => {
+  test("ふだんの取り合いの順では、衛星のロゴを待つ選局にも譲る", () => {
     expect(
       laneTypes(
         [tuner(["BS"], [config.priority.carousel]), tuner(["GR"])],

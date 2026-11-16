@@ -256,7 +256,7 @@ const READ_TIMEOUT = 30_000;
 
 /**
  * **衛星の放送の一覧を、中継器を開いて読む** (`satellite.readLineup`)。スキャンの最中でないときに読むもの
- * (再編の読み直しと、`satellite-lineup.ts` の局を入れる回) が使う。チューナーはスキャンと同じ優先度で取る。
+ * (再編の読み直しと、`satellite-lineup.ts` の局を入れる回) が使う。チューナーは取り合いの順をスキャンと同じにして取る。
  * チューナーが塞がっていて開けなかった中継器があれば `busy`
  */
 export async function readFromAir(

@@ -506,7 +506,7 @@ export const rules = sqliteTable("rules", {
     .default(sql`1`),
   /**
    * チューナーが足りないとき、どの予約を残すか。大きいほうが残る (conflict.ts)。
-   * **エージェントに渡すチューナーの取り合いの優先度 (`config.priority`) とは別物** (docs/agent.md)。
+   * **エージェントに渡すチューナーの取り合いの順 (`config.priority`) とは別物** (docs/agent.md)。
    * ルールは 1、手動予約は 2。比べる相手は予約どうしだけなので小さいところから数える
    */
   priority: integer("priority").notNull().default(1),

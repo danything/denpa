@@ -195,7 +195,7 @@ class FakePool {
     });
   }
 
-  /** 約束の 3 (同じチャンネルを同じか高い優先度の利用者が読んでいれば共有) と 2 (使ってよいチューナーのうち順位のいちばん前) */
+  /** 約束の 3 (同じチャンネルを取り合いで同じか先になる利用者が読んでいれば共有) と 2 (使ってよいチューナーのうち順位のいちばん前) */
   private open(url: URL): Response {
     const type = url.searchParams.get("type")!;
     const channel = url.searchParams.get("channel")!;
