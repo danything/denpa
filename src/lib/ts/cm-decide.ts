@@ -204,7 +204,7 @@ const CHANGE_RATIO = 0.5;
 
 /**
  * 切れ目の前後でロゴの点がどれだけ変わったか (`way` が 1 なら上がった量、-1 なら下がった量)。
- * ロゴの出入りの判定 (`logo-detect.logoSpans`) はならすぶん遅れ、ロゴに似た字 (番宣の放送時刻) に
+ * ロゴの出入りの判定 (`logo-detect.readLogo`) はならすぶん遅れ、ロゴに似た字 (番宣の放送時刻) に
  * 引きずられることもある。点が実際に大きく替わった切れ目のほうが確か (実機の日テレの番宣で 5 秒)
  */
 function logoChange(
@@ -662,7 +662,7 @@ function logoIndex(input: CmInput, spans: Range[]) {
   const blindShort = blind.filter((s) => s.end - s.start <= UNSEEN_MAX);
   /**
    * 0 から `t` までのロゴの区間の秒 / そのうち見えないまま持ち越された秒 (欠けた所は除く) /
-   * 映像の欠けた秒 / そのうちロゴの区間に入る秒 / ロゴの区間の外で判断できなかった秒
+   * 映像の欠けた秒 / そのうちロゴの区間に入る秒 / ロゴの区間の外で判断できなかった秒 (CM 1 本より長い所 / それまでの所)
    */
   const coveredTo = measure(merged);
   const tailTo = measure(subtract(tails, missing));
@@ -718,7 +718,7 @@ const UNSEEN_MIN = 2;
 const UNSEEN_MAX = 15 + CM_TOLERANCE;
 
 /**
- * **ロゴの区間の末尾の、ロゴが見えないまま持ち越された所。** ロゴの判定 (`logo-detect.logoSpans`) は、ロゴが溶けて見えない後ろ
+ * **ロゴの区間の末尾の、ロゴが見えないまま持ち越された所。** ロゴの判定 (`logo-detect.readLogo`) は、ロゴが溶けて見えない後ろ
  * (白っぽい場面・細かい柄) では直前の判断を持ち越すので、区間の末尾に点が 0 のままの所が残ることがある。そこは番組の終わりの
  * 明るい場面のこともあれば、番組から続けて入った CM のこともある (実機の TBS のアニメで、番組の直後の 15 秒の CM が、
  * ロゴの点は 0 のまま区間に入り、番組にされた)。ロゴがあったとも無かったとも言い切れないので、番組には見えた秒の

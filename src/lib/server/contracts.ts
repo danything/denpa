@@ -70,7 +70,7 @@ async function usableCardId(agent?: Agent): Promise<string | null> {
   return (card.ok && getActiveCardId(card)) || null;
 }
 
-/** Date オブジェクト（または現在）を JST 基準の MJD (修正ユリウス日) に変換 */
+/** Date オブジェクト (または現在) を JST 基準の MJD (修正ユリウス日) に変換 */
 export function toMjd(date: Date = new Date()): number {
   const jstMs = date.getTime() + 9 * 3600 * 1000;
   return Math.floor(jstMs / 86_400_000) + 40587;
@@ -81,9 +81,9 @@ export function fromMjd(mjd: number): number {
   return (mjd - 40587) * 86_400_000 - 9 * 3600 * 1000;
 }
 
-/** 返り値コードから契約有効フラグ（月額TierまたはPPV）が立っているかを判定 */
+/** 返り値コードから契約有効フラグ (月額 Tier または PPV) が立っているかを判定 */
 export function isCodeSubscribed(code: number): boolean {
-  // 0x0800: 月額Tier有効, 0x0400: 前払いPPV, 0x0200: 後払いPPV。
+  // 0x0800: 月額 Tier 有効, 0x0400: 前払い PPV, 0x0200: 後払い PPV。
   // 上の桁や 0x0100 が立つ値 (実機の 0x8901 など) は契約の答えではないので、契約中とは見ない
   return (code & 0x0e00) !== 0 && (code & 0xf100) === 0;
 }
@@ -130,7 +130,7 @@ export async function confirmCardContract(
 }
 
 /**
- * 有料放送局の最新の CA契約情報を、カードごとに確かめて card_contracts テーブルを更新する。
+ * 有料放送局の最新の CA 契約情報を、カードごとに確かめて card_contracts テーブルを更新する。
  *
  * カードは全部のエージェントの `/denpa/card` から集め、1 枚につき 1 台に問い合わせる (`agent-cards.contractAgents`。
  * そのカードを手元に持つエージェント、無ければそのカードから鍵を貰うエージェント)。カードは世帯で 1 枚の勧めどおりなら、問い合わせるのは 1 台。
@@ -214,7 +214,7 @@ async function checkCard(
     let validUntil: number | null = null;
 
     if (verification) {
-      /** その日 (今日からの日数) に観られるか。カードに聞けなければ投げる (今の行を上書きしない) */
+      /** その日 (今日からの日数) に観られるか。カードに聞けなければ例外にする (今の行を上書きしない) */
       const valid = async (days: number): Promise<boolean> => {
         const res = await confirmCardContract(
           verification,
@@ -253,7 +253,7 @@ async function checkCard(
         state = "unsubscribed";
       }
     } else {
-      // 放送波 (EIT) に CA契約情報記述子 (0xCB) が載っていない局 (多くの CS 月額局など)。
+      // 放送波 (EIT) に CA 契約情報記述子 (0xCB) が載っていない局 (多くの CS 月額局など)。
       // 復号テストで 31 日以内に復号できていれば契約中とみなす (`DECODE_VALID_MS`)
       state =
         existing?.decodeOk === true && freshDecode(existing.decodedAt, nowMs)
@@ -689,7 +689,7 @@ export async function noteDecoded(
  *
  * 未契約・期限切れの局と、まだ確かめていない局 (確かめる前・カードが無い・番組表に 0xCB が無く
  * 復号も試していない) は録らない。録ってもスクランブルのままで観られないため。
- * 設定の「無料放送だけ録る」はこれに置き換えた。カードを持たない人は、今までの既定 (無料だけ) と同じになる。
+ * カードを持たない人は、無料の番組だけを録る。
  * カードに聞けない局 (番組表に 0xCB が無い) は、復号テストか有料の番組を復号できた録画から 31 日のあいだだけ (`DECODE_VALID_MS`)。
  * 1 回の当てはめで 1 回だけ読む (呼ぶ側が関数を使い回す)
  */
@@ -767,8 +767,8 @@ function serviceContracts(
  * **ライブで局の映像・音声がスクランブルされたまま届いたときの文** (`live.ts`)。
  *
  * エージェントは、カードが鍵を返さなかった (未契約の) ES をスクランブルされたまま流す。カードを読めないときも同じ形で届くので、
- * 先にカードの状態で分ける。読めているなら、残る理由は契約。期限切れと分かっている局はそう言い、契約中と確かめた局は
- * カードが鍵を返さなかったことだけを言う。それ以外 (未契約・確かめていない・行が無い) は契約されていないと言う。
+ * 先にカードの状態で分ける。読めているなら、残る理由は契約。期限切れと分かっている局はそう書き、契約中と確かめた局は
+ * カードが鍵を返さなかったことだけを書く。それ以外 (未契約・確かめていない・行が無い) は契約されていないと書く。
  * B-CAS 以外の方式の局は、選局する前に断っている (`services.decodable`)
  *
  * @param cardReadable エージェントがカードを読めているか (`CardStatus.ok`)

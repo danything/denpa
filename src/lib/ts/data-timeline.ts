@@ -30,9 +30,9 @@ import { fromTsTime, type Ruler } from "./watch";
 
 export interface TimedMessage {
   /**
-   * 放送の実時刻 (TDT/TOT 由来, unix ms)。**先頭で時計を見る前のものは null。**
+   * 放送の実時刻 (TDT/TOT 由来、unix ms)。**先頭で時計を見る前のものは null。**
    *
-   * TDT は数秒おきにしか来ないので、間のメッセージは「最後に見た時刻」を負う。
+   * TDT は数秒おきにしか来ないので、間のメッセージには「最後に見た時刻」を付ける。
    * データ放送は秒単位で変わるものなので、この粒度で足りる
    */
   at: number | null;
@@ -60,7 +60,7 @@ export function playbackMsAt(
   return Math.round(fromTsTime((atUnixMs - headUnixMs) / 1000, ruler) * 1000);
 }
 
-/** 再生位置 (ms) を負ったメッセージ。サイドカーに書くのはこの形式 */
+/** 再生位置 (ms) を付けたメッセージ。サイドカーに書くのはこの形式 */
 export interface PlacedMessage {
   /** 動画の再生位置 (ms)。先頭の準備 (`at === null`) は 0 に寄せる */
   at: number;

@@ -18,9 +18,8 @@ import * as schema from "./schema";
  */
 let instance: Database | null = null;
 /**
- * 開いた置き場。**置き場が変われば開き直す。** テストは `config.dbPath` を一時ファイルへ差し替える。
- * `--isolate` の前は全部のファイルが 1 つのグローバルを共有していて、最初に開いた 1 本を
- * 使い回していた頃は、前のファイルが残した行が次のファイルのテストに混ざっていた
+ * 開いた置き場。**置き場が変われば開き直す。** テストは `config.dbPath` を一時ファイルへ差し替えるので、
+ * 前に開いた DB を使い回すと、前のテストが残した行が混ざる
  */
 let openedPath = "";
 
@@ -64,8 +63,7 @@ export const MIGRATIONS = "drizzle";
  *
  * 当てたぶんは `__drizzle_migrations` に残り、次からは新しいものだけが当たる。
  * 最初のマイグレーション (baseline) は `IF NOT EXISTS` にしてあるので、
- * マイグレーションを持つ前 (1.7.x まで) の DB にもそのまま当たる。あの頃は起動のたびに
- * `CREATE TABLE IF NOT EXISTS` と足りない列の追加で同じ構成に整えていた
+ * マイグレーションを持つ前 (1.7.x まで) の DB にもそのまま当たる
  */
 export function bootstrap(db: Database): void {
   migrate(drizzle({ client: db }), { migrationsFolder: MIGRATIONS });
@@ -77,7 +75,7 @@ export function bootstrap(db: Database): void {
  *
  * baseline は既にあるテーブルを触らないので、**1.7.x を一度も起動していない古い DB**
  * (足りない列を起動時に足していた頃のもの) は、足りないまま通ってしまう。
- * 動き出してから `no such column` で落ちるより、起動で言って止まるほうが分かる
+ * 動き出してから `no such column` で落ちるより、起動時にエラーで止まるほうが原因が分かる
  */
 function verify(db: Database): void {
   for (const table of Object.values(schema)) {

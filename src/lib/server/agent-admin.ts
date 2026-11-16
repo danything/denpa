@@ -37,9 +37,20 @@ import { type AgentTuner, recordingOf } from "./tuner";
 export class AgentAdminError extends Error {}
 
 /** 貼られた URL が読めないときの文 */
-const URL_SHAPE = "https://ホスト:ポート#pair=… の形で貼ってください";
+const URL_SHAPE = "https://ホスト:ポート#pair=… の形式で貼ってください";
 
-/** 登録・付け替えで貼られた URL を読む。`https://` でない・ホストが読めないときは形を言う */
+/** 行が消えていたときの文 */
+const GONE = "このエージェントはもうありません";
+
+/** 合言葉の無い URL が貼られたときの文 */
+const NO_PAIR =
+  "合言葉 (#pair=…) が入っていません。エージェントが出した URL をそのまま貼ってください";
+
+/** 宛先に繋がらないときの文 */
+const unreachable = (origin: string) =>
+  `${new URL(origin).host} に繋がりません。この denpa から届く名前か IP アドレスに書き換えてください`;
+
+/** 登録・付け替えで貼られた URL を読む。`https://` でない・ホストが読めないときは形式を言う */
 function readUrl(raw: string): { origin: string; pair: string | null } {
   try {
     return parseAgentUrl(raw.trim());
@@ -92,10 +103,7 @@ async function pairWith(origin: string, token: string): Promise<PeerCert> {
   } catch (error) {
     if (!(error instanceof PairError)) throw error;
     if (error.kind === "unreachable") {
-      const host = new URL(origin).host;
-      throw new AgentAdminError(
-        `${host} に繋がりません。この denpa から届く名前か IP アドレスに書き換えてください`,
-      );
+      throw new AgentAdminError(unreachable(origin));
     }
     // 合言葉が違う・断られた。エージェントが返した文のまま
     throw new AgentAdminError(error.message);
@@ -125,8 +133,7 @@ function refresh(agent: Agent): void {
 /** 行の ID から、呼ぶ先のエージェント (並びの全部から引く) */
 function agentOf(id: number): Agent {
   const agent = listAgents().find((a) => a.id === id);
-  if (agent === undefined)
-    throw new AgentAdminError("このエージェントはもうありません");
+  if (agent === undefined) throw new AgentAdminError(GONE);
   return agent;
 }
 
@@ -137,11 +144,7 @@ function agentOf(id: number): Agent {
 export async function addAgent(raw: string): Promise<Agent> {
   const { origin, pair } = readUrl(raw);
   refuseDuplicate({ origin }, null);
-  if (pair === null) {
-    throw new AgentAdminError(
-      "合言葉 (#pair=…) が入っていません。エージェントが出した URL をそのまま貼ってください",
-    );
-  }
+  if (pair === null) throw new AgentAdminError(NO_PAIR);
   const peer = await pairWith(origin, pair);
   refuseDuplicate({ fingerprint: peer.fingerprint }, null);
   const id = orm().transaction((tx) => {
@@ -183,8 +186,7 @@ export function renameAgent(id: number, raw: string): void {
   if (name === "") throw new AgentAdminError("名前は空にできません");
   if (name.length > NAME_MAX)
     throw new AgentAdminError(`名前は ${NAME_MAX} 字までにしてください`);
-  if (rowOf(id) === undefined)
-    throw new AgentAdminError("このエージェントはもうありません");
+  if (rowOf(id) === undefined) throw new AgentAdminError(GONE);
   // 繋がった・繋がらないの通知 (Webhook) は、知らせるときに今の名前を引く (`runtime.ts`)。購読は繋ぎ直さない
   orm().update(agents).set({ name }).where(eq(agents.id, id)).run();
   emit("tuners");
@@ -196,8 +198,7 @@ export function renameAgent(id: number, raw: string): void {
  */
 export async function moveAgent(id: number, raw: string): Promise<Agent> {
   const row = rowOf(id);
-  if (row === undefined)
-    throw new AgentAdminError("このエージェントはもうありません");
+  if (row === undefined) throw new AgentAdminError(GONE);
   if (row.from_env) {
     throw new AgentAdminError(
       "環境変数 (TUNER_AGENT_URL) で決めたエージェントの URL は、環境変数で変えます",
@@ -210,11 +211,7 @@ export async function moveAgent(id: number, raw: string): Promise<Agent> {
     peer = await pairWith(origin, pair);
     refuseDuplicate({ fingerprint: peer.fingerprint }, id);
   } else {
-    if (row.cert === null) {
-      throw new AgentAdminError(
-        "合言葉 (#pair=…) が入っていません。エージェントが出した URL をそのまま貼ってください",
-      );
-    }
+    if (row.cert === null) throw new AgentAdminError(NO_PAIR);
     let res: Response;
     try {
       res = await fetchAt(origin, row.cert, "/denpa/about", {
@@ -226,9 +223,7 @@ export async function moveAgent(id: number, raw: string): Promise<Agent> {
           "証明書が変わりました。エージェントが出した登録用の URL (#pair=… の入ったもの) を貼ってください",
         );
       }
-      throw new AgentAdminError(
-        `${new URL(origin).host} に繋がりません。この denpa から届く名前か IP アドレスに書き換えてください`,
-      );
+      throw new AgentAdminError(unreachable(origin));
     }
     // 同じ証明書のエージェントだが、この denpa の登録が消えている (`tls/clients` から消された)。組み直すには合言葉が要る
     if (await refusedAsUnpaired(res)) {
@@ -269,8 +264,7 @@ export interface Removed {
  */
 export async function removeAgent(id: number): Promise<Removed> {
   const row = rowOf(id);
-  if (row === undefined)
-    throw new AgentAdminError("このエージェントはもうありません");
+  if (row === undefined) throw new AgentAdminError(GONE);
   if (row.from_env) {
     throw new AgentAdminError(
       "環境変数 (TUNER_AGENT_URL) で決めたエージェントは、環境変数から消すと外れます",
@@ -283,7 +277,7 @@ export async function removeAgent(id: number): Promise<Removed> {
       method: "DELETE",
       signal: AbortSignal.timeout(5000),
     });
-    // 古いエージェントは知らない API に 404 を返す。登録は残る
+    // 古いエージェントはこの API が無く 404 を返す。登録は残る
     reached = res.ok;
   } catch {
     reached = false;

@@ -81,7 +81,7 @@ export function start(): void {
   /*
    * **取り込んだ DB に入れ替える** (設定の「連携」の「denpa を別の機械へ移す」。transfer.ts)。
    * DB とロゴに触る前にやる。取り込みはプロセスを終えて、ここで入れ替わる。
-   * **入れ替えられなければ起動を止める。** 入れ替えかけのまま動くより、起き直してやり直すほうがよい
+   * **入れ替えられなければ起動を止める。** 入れ替えかけのまま動くより、起動し直してやり直すほうがよい
    * (何度やっても同じ結果になる作り)
    */
   try {
@@ -95,7 +95,7 @@ export function start(): void {
 
   /*
    * 前のバージョンの置き場の変数は読まない (docs/config.md「置き場を変えた」)。黙って既定に変わると
-   * 空の置き場を見て「録画が全部消えた」ように見えるので、残っていたら言う
+   * 空の置き場を見て「録画が全部消えた」ように見えるので、残っていたら警告する
    */
   for (const old of ["RECORDED_DIR", "LIBRARY_DIR"]) {
     if (process.env[old]) {
@@ -378,7 +378,7 @@ function listenToAgent(agent: Agent): () => void {
         case "card":
           /*
            * カードが契約の更新を受け入れた。番組表に契約の情報がある局は、カードに聞き直すと
-           * 更新後の状態と期限が入る (12 時間ごとの確かめ直しを待たない)
+           * 更新後の状態と期限が入る (12 時間ごとに確かめ直すのを待たない)
            */
           console.log(
             "[contracts] カードが契約の更新を受け入れました。10 秒後に契約を確かめ直します",
@@ -390,8 +390,8 @@ function listenToAgent(agent: Agent): () => void {
           break;
       }
     },
-    // エージェントに繋がらない状態が続いたら知らせる。黙って落ちても、
-    // 次の録画が失敗するまで気付けなかったのを埋める (agent-events.ts が切り替えを判定)
+    // エージェントに繋がらない状態が続いたら通知する。通知しないと、エージェントが止まっても
+    // 次の録画が失敗するまで気付けない (agent-events.ts が切り替えを判定)
     (up) => {
       if (up) {
         // 落ちている間にカードや置き場が変わったかもしれない。振り分けと後からの復号の前に訊き直す
@@ -475,9 +475,9 @@ function installShutdownHooks(): void {
    */
   let draining = false;
   /*
-   * **落ちても終了する。** `drain` の中で投げると、`void` で捨てているぶん
-   * 誰も受け止めず、**プロセスが生きたまま残る** = 入れ替えが止まる。
-   * 受け止めて、使っているものだけ放して終了する
+   * **失敗しても終了する。** `drain` が例外で終わると、受け取る処理が無いので
+   * **プロセスが生きたまま残り**、入れ替えが止まる。
+   * catch して、使っているものだけ放して終了する
    */
   const onSignal = (signal: NodeJS.Signals) => {
     if (draining) return;
@@ -492,7 +492,7 @@ function installShutdownHooks(): void {
   /*
    * **もう一度、あとから引き取り直す。** adapter-bun が後始末を登録するのは
    * `build/index.js` の**いちばん最後**で、こちら (`hooks.server.ts`) はその手前なので、
-   * 最初の引き取りでは外す相手がまだいない (外す理由は `takeOverSignals`)。
+   * 最初の引き取りでは外すリスナーがまだ無い (外す理由は `takeOverSignals`)。
    * 入口の `server.js` が `build/index.js` を読み終えたところで呼ぶ。
    * `setImmediate` では足りない。adapter はアプリの初期化を `await` してから登録するので、
    * 先に走ることがありうる。
@@ -508,22 +508,21 @@ function installShutdownHooks(): void {
 /**
  * 停止のシグナルを**こちらで受け取る**。先に入っていた後始末は外す。
  *
- * 外す相手は adapter (adapter-bun。前は adapter-node) で、SIGTERM を受けた**その場で listen を閉じる**。
+ * 外すのは adapter-bun のリスナーで、SIGTERM を受けた**その場で listen を閉じる**。
  * 両方残すと、録画が終わるのを待っている間、プロセスは生きているのにポートだけ
  * 閉じて画面がどこからも開けなかった (実機で 34 分。`/proc/net/tcp` に listen が
  * 1 つも無く、当時の前段 (Traefik) は「no available server」)。
  *
- * 落とすのはこちらの `drain` の最後で `process.exit` するときだけにする。
- * 開いている応答は切れるが、これは今までと同じ (以前も待たずに exit していた)。
+ * 終了するのはこちらの `drain` の最後で `process.exit` するときだけにする (開いている応答はそこで切れる)。
  *
- * **外れたかどうかは数で分かる。** 0 なら相手がまだ登録していないので、
+ * **外れたかどうかは数で分かる。** 0 なら adapter がまだ登録していないので、
  * 呼ぶ側があとでもう一度引き取る (`installShutdownHooks`)。
  *
- * **2 度目の合図でも落ちないようにする。** `once` にしていた頃は、1 度目で
- * 自分の後始末が外れ、2 度目は**誰も聞いていない**状態になっていた。そこへ
+ * **2 度目の合図でも終了しないようにする。** `once` にすると、1 度目で
+ * 自分のリスナーが外れ、2 度目を受けるリスナーが無くなる。そこへ
  * デプロイがもう一度走ると、録画の途中でも既定どおりその場で終わる。
  *
- * **自分を先に入れてから、ほかを外す。** 外してから入れると、そのすき間は誰も聞いていない。
+ * **自分を先に入れてから、ほかを外す。** 外してから入れると、そのすき間に来た合図を受けるリスナーが無い。
  * PID 1 (コンテナ) では、そこへ来た合図は捨てられる (`hold-signals.ts`)。
  *
  * **起動の途中に来た合図を受け直す。** 入口の `hold-signals.ts` が取っておいたものがあれば、
@@ -562,7 +561,7 @@ const DRAIN_REPORT = 60_000;
 
 /**
  * 止まる前に画面へ送った通知 (`live.announceRestart`) が送り出されるまで待つ時間 (ms)。
- * `process.exit` は送り待ちの塊を捨てるので、待たないと通知が届かないことがある。短い待ちで足りると見ている (推定)
+ * `process.exit` はまだ送り出していないデータを捨てるので、待たないと通知が届かないことがある。短い待ちで足りると見ている (推定)
  */
 const RESTART_NOTICE_FLUSH = 200;
 
@@ -575,7 +574,7 @@ const RESTART_NOTICE_FLUSH = 200;
  * こうなると `terminationGracePeriodSeconds` (6 時間) を使い切るまで
  * **新しい Pod が上がらない**。Recreate なので、その間ずっと古いまま。
  *
- * 待つループを回す前に**先に目覚ましを掛ける**。ループの中で何が起きても、
+ * 待つループを回す前に**先にタイマーを掛ける**。ループの中で何が起きても、
  * `SHUTDOWN_WAIT` を過ぎたら終了する。原因が分からなくても、
  * 「入れ替えが 6 時間止まる」だけは起こさない
  */
@@ -589,13 +588,13 @@ function forceExitAfter(ms: number, why: string): void {
     }
     setTimeout(() => process.exit(0), RESTART_NOTICE_FLUSH);
   }, ms);
-  // 目覚ましそのものがプロセスを生かし続けないように
+  // このタイマーのためにプロセスを残し続けない
   timer.unref?.();
 }
 
 async function drain(signal: string): Promise<void> {
   /*
-   * **まず残す。** 何をしているかを先に書いておかないと、この先で躓いたときに
+   * **まず残す。** 何をしているかを先に書いておかないと、この先で失敗したときに
    * 「合図を受け取ったのかどうか」すら分からない。実際、終了しない Pod を
    * 調べたときに、記録から読み取れることが何も無かった
    */
@@ -618,7 +617,7 @@ async function drain(signal: string): Promise<void> {
   let reported = Date.now();
   while (activeRecordingIds().length > 0 && Date.now() < until) {
     await Bun.sleep(DRAIN_CHECK);
-    // **黙って待たない。** 何を待っているのかが分からないと、外からは固まって見える
+    // **待っている間もログを出力する。** 何を待っているのかが分からないと、外からは固まって見える
     if (Date.now() - reported >= DRAIN_REPORT) {
       reported = Date.now();
       console.log(

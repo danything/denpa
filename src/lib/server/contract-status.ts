@@ -1,7 +1,7 @@
 /**
  * **カードの契約の状態の決め方** (`card_contracts` の 1 行から)。契約を確かめる所 (`contracts.ts`) と、
  * 有料の局をどのエージェントに振り分けるかを決める所 (`agent-cards.ts`) が同じ決め方を使う。
- * どちらからも読めるよう、選局 (`tuner.ts`) に頼らないここに置く
+ * どちらからも読めるよう、選局 (`tuner.ts`) を読み込まないここに置く
  */
 
 export type ContractState = "subscribed" | "unsubscribed" | "expired";

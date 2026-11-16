@@ -45,7 +45,7 @@ function respond(
    * 基本はエンコード済み、無ければ元の TS。ただし**エンコードを待っている間・走っている間は
    * 元の TS のほう**を配る。再エンコードを待っている間は library_path がまだ古いファイルを
    * 指していて、しかもその古いファイルは走り出すときに消える (`encoder.runJob`) ので、
-   * 押した瞬間によって出るものが変わっていた
+   * 押した瞬間によって出るものが変わる
    */
   const encoding = activeEncodeJob(recording.id) !== undefined;
   /*

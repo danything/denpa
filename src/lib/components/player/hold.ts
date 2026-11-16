@@ -10,7 +10,7 @@ import { isShiftD } from "./keys";
  *   長押しのあとに来る click は捨てる (開く・閉じるを起こさない)
  * - マウスは右クリック (`contextmenu`)。ブラウザのメニューは出さない。Android の Chrome は長押しでも `contextmenu` を出すので、
  *   タッチの長押しを済ませた直後のものは数えない (2 回切り替えない)
- * - キーボードは Shift+D (ボタンに焦点があるとき。焦点がほかにあるときは画面のキー操作 `keys.ts` の `D`)
+ * - キーボードは Shift+D (ボタンにフォーカスがあるとき。ほかにあるときは画面のキー操作 `keys.ts` が受ける)
  *
  * iOS の Safari は長押しで文字の選択と呼び出しのメニューを出すので、付けた要素の `-webkit-touch-callout` と `user-select` を切る
  */

@@ -112,7 +112,7 @@ export interface HwDevice {
   qsvSystem: HwCodec[];
   /**
    * VA-API のうち、**放送の MPEG-2 を GPU でデコードして、GPU でインタレ解除してエンコードできる**と
-   * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU にフレームを降ろさない (`liveHwArgs`)
+   * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU へフレームを移さない (`liveHwArgs`)
    */
   full: HwCodec[];
 }
@@ -247,14 +247,14 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * (vaapi_encode.c の `vaapi_encode_init_quality`)。B フレームを持たないドライバでは `-bf` を捨てて I と P だけにし、
  * `-b_depth` は B の枚数から決まる深さで頭打ちにする (hw_base_encode.c の `ff_hw_base_init_gop_structure`)。
  * 落ちうるのは段の問い合わせ (`vaGetConfigAttributes`) そのものが失敗したときだけで、同じ問い合わせは
- * レート制御を決めるときにも行うので、それが通るドライバなら通る。
+ * レート制御を決めるときにもするので、それが通るドライバなら通る。
  *
  * ## ICQ を持たないドライバの AV1 は CQP で指定する
  *
  * **i965 (Gemini Lake などの古い Intel)・Mesa (AMD) は ICQ を持たない。** ICQ で試すと落ちて
  * 「エンコードできない」に見えていた (issue #417)。AV1 は ICQ が落ちたら CQP でも試し (`probeOnce`)、
  * 通ればそちらでエンコードする (`HwWay.cqp`)。H.264・H.265 は初めから CQP なので落ちない。
- * **av1_vaapi は `-qp` を受けず、`-global_quality` で量子化の値 (0〜255) を受ける。** `-qp` は黙って無視され、
+ * **av1_vaapi は `-qp` を受けず、`-global_quality` で量子化の値 (0〜255) を受ける。** `-qp` はエラーにならずに無視され、
  * 既定の値で 9〜12 Mbps も出ていた (前の `-qp 120` がそれ。HuC の無い A310 の録画が 2.5GB になった)。
  * 値は **75** (`AV1_CQP`)。
  *
@@ -278,7 +278,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * NVENC は `-global_quality` (ICQ) を受けない (FFmpeg の nvenc.c が断る)。Rockchip MPP と同じ表のビットレートを
  * **VBR** で渡す (`vbrRate`)。GPU は番号 (`-gpu`) で選び、デバイスは開かない。CPU で作ったフレームを nv12 で
  * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は 7 段 (p1〜p7) の真ん中。遅い段は録画の時間が延びるので、
- * p7 などへ変えるなら実機で測ってから別の変更で行う。**実機では測っていない** (手元に NVIDIA の GPU が無い)
+ * p7 などへ変えるなら実機で測ってから別の変更にする。**実機では測っていない** (手元に NVIDIA の GPU が無い)
  *
  * ## Windows の Intel (QSV) は ICQ で指定する
  *
@@ -315,7 +315,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * (同じビットレートで画質が上がる。FFmpeg は枚数を渡さず、使うかどうかだけを VideoToolbox に渡す。既定の 0 では使わない)。
  * **ハードウェアでだけエンコードする。** FFmpeg の videotoolboxenc.c は `-allow_sw` を渡さなければ
  * ハードウェアのエンコーダを求め (`RequireHardwareAcceleratedVideoEncoder`)、無ければ開けずに落ちる。
- * Apple のソフトウェアのエンコーダに黙って倒れず、試しのエンコードが落ちて x264 に戻る。
+ * Apple のソフトウェアのエンコーダには切り替わらず、試しのエンコードが落ちて x264 に戻る。
  * デバイスは開かない (VideoToolbox が自分でメディアエンジンを選ぶ)。CPU で作ったフレームを nv12 で渡す。
  * `-g 250` は同じ。**画質と大きさは測っていない** (CI の Mac のランナーで試しのエンコードが通り、放送に似せた素材をエンコードできるところまで見ている)
  *
@@ -512,7 +512,7 @@ function vaapiQuality(
   qp: Record<Exclude<HwCodec, "av1">, number>,
 ): string[] {
   if (codec !== "av1") return ["-rc_mode", "CQP", "-qp", String(qp[codec])];
-  // AV1 は `-qp` を受けない (黙って無視される)。量子化の値は `-global_quality` で渡す
+  // AV1 は `-qp` を受けない (エラーにならずに無視される)。量子化の値は `-global_quality` で渡す
   return way.cqp === true
     ? ["-rc_mode", "CQP", "-global_quality:v", String(AV1_CQP)]
     : ["-rc_mode", "ICQ", "-global_quality:v", String(AV1_ICQ)];
@@ -663,7 +663,7 @@ function highProfile(codec: HwCodec): string[] {
 }
 
 /**
- * MediaCodec のエンコーダを名前で開く引数 (`hwArgs` の説明)。**名前が無ければ投げる。** 名前を渡さないと FFmpeg は
+ * MediaCodec のエンコーダを名前で開く引数 (`hwArgs` の説明)。**名前が無ければ例外にする。** 名前を渡さないと FFmpeg は
  * MIME の種類で選び、ソフトウェアのエンコーダを開くことがあるため。名前は `probeAndroid` と `wayOf` が付ける
  */
 function mediacodecName(way: HwWay): string[] {
@@ -674,7 +674,7 @@ function mediacodecName(way: HwWay): string[] {
 
 /**
  * **アプリが渡した MediaCodec のエンコーダの名前を読む** (`config.mediacodecEncoders`。`h264=c2.qti.avc.encoder,hevc=…`)。
- * 知らないコーデックと、名前に使わない文字 (英数字・`.`・`_`・`-` のほか) を含むものは捨てる。同じコーデックが 2 つあれば先のもの
+ * `HW_CODECS` に無いコーデックと、名前に使わない文字 (英数字・`.`・`_`・`-` のほか) を含むものは捨てる。同じコーデックが 2 つあれば先のもの
  * (アプリは `MediaCodecList` の並び、つまり端末が勧める順で先のものを書く)
  */
 export function parseMediacodecEncoders(
@@ -713,7 +713,7 @@ function vtRate(bps: number, peak = bps * 2): string[] {
  * どちらも「空けば通る」ので同じに扱ってよい。
  *
  * **これで失敗したものは GPU の故障ではない。** その 1 本だけソフトウェアでエンコードし、
- * 方式を覚えて外すことはしない (`live.ts` の `blameLiveHw`)。録画は今までどおり次の方式へ倒れるだけ
+ * 方式を覚えて外すことはしない (`live.ts` の `blameLiveHw`)。録画は今までどおり次の方式へ切り替えるだけ
  * (`encoder.ts` は落ちた方式を覚えない)。**実機の上限で確かめてはいない** (手元に NVIDIA の GPU が無い)
  */
 export function nvencBusy(stderr: string): boolean {
@@ -793,7 +793,7 @@ export function liveHw(
  * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU でデコードし、フレームを GPU に
  * 置いたまま `deinterlace_vaapi=rate=field` (フィールドごとに 1 コマ。bwdif の既定と同じ
  * 59.94p) に通して、そのままエンコードする。**CPU のフィルタは 1 つも挟めない。** 挟むなら
- * `hwdownload` が要り、降ろしたぶんだけ遅くなる。ライブの映像のフィルタはインタレ解除だけ
+ * `hwdownload` が要り、CPU へ移したぶんだけ遅くなる。ライブの映像のフィルタはインタレ解除だけ
  * なので挟むものは無い (`-fpsmax` はコマを間引くだけでフィルタではなく、字幕と音声は
  * 別のストリーム)。インタレ解除の映像は bwdif と変わる (**まだ見比べていない**)。
  *
@@ -813,7 +813,7 @@ export function liveHw(
  * - VA-API は CQP をやめて **VBR で上限を決める** (`-b:v` と `-maxrate:v` に同じ値)。CQP は量を場面に任せるので、回線に収まる保証が無い
  * - VideoToolbox も `-b:v` と `-maxrate` に段の値を渡す
  * - MediaCodec は上限を持たないので、CBR で段の値を渡す
- * - `full` なら GPU の上でインタレ解除して 30 コマにし (`rate=frame`)、そのまま `scale_vaapi` で縮める。フレームを CPU に降ろさない。
+ * - `full` なら GPU の上でインタレ解除して 30 コマにし (`rate=frame`)、そのまま `scale_vaapi` で縮める。フレームを CPU へ移さない。
  *   `full` でなければ、縮めるのは呼ぶ側の CPU の `scale` (`live.ts` の `rungVideo`)
  *
  * `half` はエンコードが遅れたときの 30 コマ (`live.ts` の `videoArgs`)。`full` なら GPU のインタレ解除を `rate=frame` にする
@@ -1195,9 +1195,9 @@ export function probe(): Promise<HwEncode> {
 
 /**
  * **一度は確かめ終わった見立て。** まだなら (起動した直後) 確かめ終わるのを待つ。確かめ終わっていれば探し直さない。
- * 録画のエンコードはこれを待ってからコーデックと方式を決める (`encoder.ts`)。待たずに決めていた頃は、
- * 起動した直後に溜まっていたジョブが確かめの終わる前に始まり、GPU が無いものとして H.265 を黙って飛ばし、
- * H.264 を CPU でエンコードしていた (起動は確かめを待たずに進む。`runtime.ts`)
+ * 録画のエンコードはこれを待ってからコーデックと方式を決める (`encoder.ts`)。待たずに決めると、
+ * 起動した直後に溜まっていたジョブが確かめ終わる前に始まり、GPU が無いものとして H.265 を飛ばし、
+ * H.264 を CPU でエンコードしてしまう (起動は確かめを待たずに進む。`runtime.ts`)
  */
 export function hwReady(): Promise<HwEncode> {
   return state.probed ? Promise.resolve(state) : probe();
@@ -1466,7 +1466,7 @@ function wayNote(way: HwWay): string {
  * `mpeg2video` で。一時ファイルに置くのは、`run` が標準入力を渡さないため)。
  * それをライブと同じ引数 (`liveHwArgs` の `full`) でデコードして、インタレ解除して、エンコードする。
  *
- * **GPU でデコードできなかったら必ず落ちる。** ffmpeg は `-hwaccel` が使えないと黙って CPU で
+ * **GPU でデコードできなかったら必ず落ちる。** ffmpeg は `-hwaccel` が使えないとエラーにせず CPU で
  * デコードするが、そのフレームは GPU に無いので `deinterlace_vaapi` が受け取れずに失敗する。
  * 「通った = GPU でデコードできた」と読んでよい
  */

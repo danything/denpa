@@ -214,12 +214,12 @@ type StreamCodec = LiveCodec | "audio";
  * ## `-flags low_delay` は付けない
  *
  * `-i` より前に書くと**エンコーダではなくデコーダに効く**。放送の MPEG-2 には
- * B フレームがあるので、この指定を受けたデコーダは表示順ではなく**復号順**で
+ * B フレームがあるので、この指定を受けたデコーダは表示順ではなく**デコード順**で
  * フレームを出す。結果、1 枚進んでは戻るように見える。
  *
  * 実測 (NHK総合の高校野球・本物の 60i): 隣り合うコマの差が交互に大小し、
  * その比は 2.17。外すと 1.11 に落ち、元の素材のフィールドを直に測った
- * 値 (1.02) に並ぶ。エンコーダ側の遅れは `-tune zerolatency` が見ている。
+ * 値 (1.02) に並ぶ。エンコーダ側の遅れは `-tune zerolatency` で抑える。
  *
  * **インタレ解除には録画と同じフィルタを使う** (`encoder.deinterlace`)。放送は 1080i
  * なので、デコードせずにブラウザへ渡すと動きのある場面が櫛状になる。録画と違って
@@ -339,7 +339,7 @@ export function encodeArgs(
     // 1 局に絞ってあるが、字幕まで見つけさせるぶん要る (上の説明)。映像を写すときは多く読む (`HEVC_COPY_PROBE`)
     "-probesize",
     copy ? HEVC_COPY_PROBE : "100000",
-    // GPU デバイスを開く。復号から GPU なら `-hwaccel` もここ (入力より前でないと効かない)
+    // GPU デバイスを開く。デコードから GPU なら `-hwaccel` もここ (入力より前でないと効かない)
     ...(picture?.input ?? []),
     "-i",
     "pipe:0",
@@ -535,7 +535,7 @@ function broadcastFilters(smooth: boolean): string[] {
  * ## H.265
  *
  * **GPU でだけエンコードする** (ソフトウェアのエンコーダを組んでいない。`#lib/hw.ts` の `SOFTWARE_CODECS`)。
- * GPU が無いのにリクエストされたら投げる。選局の指示を受けるところで H.264 に替えてあるので (`attend`)、ふつうは来ない。
+ * GPU が無いのにリクエストされたら例外にする。選局の指示を受けるところで H.264 に替えてあるので (`attend`)、ふつうは来ない。
  * コンテナ内のタグは `hvc1` にする。ffmpeg の既定の `hev1` は Safari が受け取らない (`#lib/live.ts` の `codecsFor`)。
  * 音声は H.264 と同じ AAC (`audioArgs`)
  *
@@ -543,7 +543,7 @@ function broadcastFilters(smooth: boolean): string[] {
  *
  * `/api/recordings/<id>/stream` (`server/playback.ts`) もここを使う。元がエンコード済み
  * (インタレ解除が済んでいる) なら `interlaced` を false にする。インタレ解除を挟まず、
- * GPU も復号からは載せない (`full` は放送の MPEG-2 を GPU でデコードする経路)
+ * GPU もデコードからは載せない (`full` は放送の MPEG-2 を GPU でデコードする経路)
  *
  * ## 回線に合わせて下げた段
  *
@@ -582,7 +582,7 @@ export function videoArgs(
     );
     return {
       input: gpu.input,
-      // 復号から GPU なら CPU のインタレ解除は挟まない (挟むとフレームを降ろすことになる)
+      // デコードから GPU なら CPU のインタレ解除は挟まない (挟むとフレームを GPU から CPU へ移すことになる)
       filter: (hw.full && interlaced
         ? gpu.filter
         : [...(interlaced ? broadcastFilters(smooth) : []), ...gpu.filter]
@@ -654,7 +654,7 @@ function softwareArgs(codec: Exclude<LiveCodec, "hevc">, gop = "60"): string[] {
    * **一度入れて、外して、戻して、また外した。** 「一瞬止まって遅延が増えて
    * いく」を流量の話だと見立てて入れたが、原因は受け側の貯め方だった
    * ([stream.md](../../../docs/stream.md#一瞬止まって遅延が増えていく))。そのあと実機で「映像だけ遅れる」が
-   * 出たので流量を疑って戻したが、そちらは**復号**の話で
+   * 出たので流量を疑って戻したが、そちらは**デコード**の話で
    * (`live-player.svelte.ts` の `unslip`)、やはり山とは関係が無かった。
    * **2 回とも、症状から流量を疑ったのが外れている**
    */
@@ -1260,7 +1260,7 @@ function hwKey(codec: StreamCodec, hw: LiveHw): string {
  * このセッションを GPU でエンコードするか。ライブの印 (`liveHwAllow`。録画の `hwAllow` は見ない) と
  * 試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
  * 追っかけと録画のその場の変換 (`server/playback.ts`) も使う。元がエンコード済みなら `interlaced` を false
- * (復号からは GPU に載せない。`videoArgs`)。`devices` はテストで差し替えるときだけ渡す
+ * (デコードからは GPU に載せない。`videoArgs`)。`devices` はテストで差し替えるときだけ渡す
  */
 export function pickLiveHw(
   codec: LiveCodec,
@@ -1511,7 +1511,7 @@ class Session {
    * ffmpeg に渡すときも同じ fMP4 なので、`start:` を引けばエンコードしたものの物差しになる
    */
   private mmtAnchor: Anchor | null = null;
-  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f]・自動起動の指定・スクランブルの判定で分け合う (`tap`) */
+  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f]・自動起動の指定・PMT の音声・スクランブルの判定で分け合う (`tap`) */
   private readonly packets = new PacketStream();
   /**
    * 入口の部品に自動起動の指定があるか (`tap`。ライブだけ)。PMT だけ読み、決まったときと変わったときに `autoStart` で知らせる。
@@ -2394,7 +2394,7 @@ class Session {
             return;
           }
           console.warn(
-            `[live] ${label}: GPU (${hw.way.device} の ${hw.way.kind}${hw.full ? "・復号から" : ""}) でエンコードできなかったので、ソフトウェアで再エンコードします${this.busy ? " (同時に開ける数を超えた。方式は覚えない)" : ""}`,
+            `[live] ${label}: GPU (${hw.way.device} の ${hw.way.kind}${hw.full ? "・デコードから" : ""}) でエンコードできなかったので、ソフトウェアで再エンコードします${this.busy ? " (同時に開ける数を超えた。方式は覚えない)" : ""}`,
           );
           this.blame = { hw, busy: this.busy };
           hw = null;
@@ -2694,13 +2694,13 @@ class Session {
 
   /**
    * 届いた塊を 1 局に絞り (`pump` の説明)、**絞ったあとを** データ放送・時計・
-   * Hybridcast・EIT[p/f]・自動起動の指定 (`AutoStartWatch`)・スクランブルの判定の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
+   * Hybridcast・EIT[p/f]・自動起動の指定 (`AutoStartWatch`)・PMT の音声 (`PmtAudioWatch`)・スクランブルの判定の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
    */
   private tap(filter: ServiceFilter | null, chunk: Uint8Array): Uint8Array {
     const out = filter === null ? chunk : filter.filter(chunk);
     if (filter !== null) this.tsid = filter.transportStreamId;
     if (out.length === 0) return out;
-    // **188 バイトに切るのは 1 回だけ** (6 つの読み取りで使い回す。ライブの処理でいちばん重いところ)
+    // **188 バイトに切るのは 1 回だけ** (7 つの読み取りで使い回す。ライブの処理でいちばん重いところ)
     const receivedAt = Date.now();
     const data = this.data;
     const ait =
@@ -3884,7 +3884,7 @@ function httpWant(
  * **HTTP で流す追っかけ再生** (`GET /api/recordings/<id>/chase`)。テレビのアプリ向け。
  *
  * - `raw` … 録画中の元の TS を、`at` 秒に当たるところから**そのまま**流し、伸びるのを追い読みする
- *   (位置の当て方は `chasePlan` のバイト比例)。録り終えて尻まで読んだら閉じる
+ *   (位置の当て方は `chasePlan` のバイト比例)。録り終えて末尾まで読んだら閉じる
  * - `h264` / `av1` (段を下げたときは `hevc` も) … 画面の追っかけ (`openChase`) と同じ再エンコードを、WebSocket ではなく
  *   HTTP の fMP4 で流す。読み切ったら (`ended`) 閉じる
  *
@@ -4277,7 +4277,7 @@ export function sessionStream(
  *
  * **画面はすぐ来る**。実測で、ページを組みはじめてから WebSocket が繋がる
  * まで 160ms。それでも来ないなら開いたそばから離れた人なので、使ったままに
- * しない (ライブは録画の次に優先度が高いので、放っておくと番組表の取得からチューナーを取り上げ続ける)。
+ * しない (チューナーが足りないときはライブを録画の次に先にするので、放っておくと番組表の取得からチューナーを取り上げ続ける)。
  */
 const WARM_WAIT = 8_000;
 
@@ -4396,7 +4396,7 @@ export function chaseForm(
  * キーフレームから始まるが、それが出るのは選局・エージェントのバッファ・ffmpeg の立ち上がりの
  * あとなので、160ms で来る画面はまだ何も渡されていない状態で繋がる。
  *
- * 待たない・投げない。使えなくても画面はいつもどおり繋いでくるので、
+ * 待たず、例外も出さない。使えなくても画面はいつもどおり繋いでくるので、
  * そのとき改めて開くだけ。
  */
 export function warm(
@@ -5112,7 +5112,7 @@ export function chaseMedia(recordingId: number): {
   };
 }
 
-/** もう書き足されないか。録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり */
+/** もう書き足されないか。録り終えたら (行が消えたときも)、末尾に着いた時点で読み終わり */
 function recordingDone(id: number): boolean {
   const row = orm()
     .select({ finished_at: recordings.finished_at })
@@ -5127,7 +5127,7 @@ interface NowPlaying {
    * 放送が名乗っている番号 (ARIB の service_id = TS の program_number)。
    * **`services.id` とは別物**。あちらは `network_id * 100000 + service_id` の
    * 内部 ID で、TS の中には出てこない。**内部 ID を渡すと** ffmpeg はその番号の局を
-   * 探して見つけられず、**映像も音も出ない** (実機でやった)。ffmpeg に渡すのはこちら
+   * 探して見つけられず、**映像も音も出ない** (実機で確かめた)。ffmpeg に渡すのはこちら
    */
   program: number;
   /** 選べる音声。画面へそのまま送る */

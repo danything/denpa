@@ -77,7 +77,7 @@ describe("audioLabel", () => {
     expect(audioLabel({ componentType: 1 })).toBe("モノラル");
   });
 
-  test("知らない種別は番号のまま残す", () => {
+  test("表に無い種別は番号のまま残す", () => {
     expect(audioLabel({ componentType: 99, langs: ["xyz"] })).toBe(
       "種別 99 (xyz)",
     );

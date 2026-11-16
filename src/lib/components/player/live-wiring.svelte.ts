@@ -18,7 +18,7 @@ interface Options {
   separateAudio?: () => boolean;
 }
 
-export interface LiveWiring {
+interface LiveWiring {
   background: Background;
   ambient: Ambient;
   pip: Pip;

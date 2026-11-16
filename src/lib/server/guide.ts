@@ -133,8 +133,8 @@ export function programsOf(
         copy_never: p.copy_never,
         /*
          * 予約の状態は録画の行から引く (reservationState)。r.state をそのまま
-         * 出していた頃は、録り終えた番組が「予約済み」のまま並び、
-         * 取消ボタンまで出ていた (予約側は録り始めた時刻しか持たないため)
+         * 出すと、録り終えた番組が「予約済み」のまま並び、
+         * 取消ボタンまで出る (予約側は録り始めた時刻しか持たないため)
          */
         reservation_state: sql<ReservationState | null>`CASE WHEN ${r.id} IS NULL THEN NULL ELSE ${reservationState(r, done)} END`,
         // 外から使う API (`GET /api/programs`) が予約の中身として返す

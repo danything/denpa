@@ -15,7 +15,7 @@
 import { toHalfWidth } from "./fold";
 import { hasVideo, origin } from "./types";
 
-/** 鍵ごとの並びに足す */
+/** キーごとの並びに足す */
 function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   const list = map.get(key);
   if (list === undefined) map.set(key, [value]);
@@ -175,7 +175,7 @@ export function columnsOf<S extends Station>(
 
 /** 表の 1 マス。同じ番組が 2 つ以上のマスになることがある (分割放送の前後で幅が変わるとき) */
 export interface Cell<P extends Airing> {
-  /** 描くときの鍵。番組の id だけでは重なる */
+  /** 描くときのキー。番組の id だけでは重なる */
   key: string;
   program: P;
   /** 左から何列目か (0 始まり。時刻の列は数えない) */

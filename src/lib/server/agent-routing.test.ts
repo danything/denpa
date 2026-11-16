@@ -180,7 +180,7 @@ class FakePool {
   /** 本物 (RawProbe.cs) と同じく、置き場の中身の SHA-256 を返す。置き場は denpa と同じ `config.rawDir` */
   private async probe(request: Request): Promise<Response> {
     this.probes++;
-    // 古いエージェントは知らない API に、ほかの知らない API と同じ答えを返す (エージェントの `MapFallback`)
+    // 古いエージェントは、無い API にほかの無い API と同じ答えを返す (エージェントの `MapFallback`)
     if (this.raw === "old")
       return Response.json({ ok: false, error: "not found" }, { status: 404 });
     const { path } = (await request.json()) as { path: string };
@@ -787,7 +787,7 @@ describe("後から復号させる先", () => {
     expect(pools.map((p) => p.decodes)).toEqual([0, 1]);
   });
 
-  test("API の無い古いエージェント (知らない API への 404) は確かめられない。ファイルが無い 404 は見えない", async () => {
+  test("API の無い古いエージェント (無い API への 404) は確かめられない。ファイルが無い 404 は見えない", async () => {
     startAgents(pool(localCard(CARD_X)), pool(localCard(CARD_X)));
     pools[0]!.raw = "missing";
     pools[1]!.raw = "old";

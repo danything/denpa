@@ -82,7 +82,7 @@ describe("偽 ffmpeg の「そろうまで終えない」目印", () => {
     expect([await first.exited, await second.exited]).toEqual([0, 0]);
     const after = Date.now();
 
-    // 落ちたときに、残った時刻とテストから見た時刻をそのまま出す
+    // 失敗したときに、残った時刻とテストから見た時刻をそのまま出す
     const text = readFileSync(spans, "utf8");
     const at = (kind: string) =>
       text

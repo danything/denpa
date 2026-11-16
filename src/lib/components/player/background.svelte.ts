@@ -14,7 +14,7 @@ import { nativeBackgroundRecovery } from "./native-background";
  *   こちらが止めたときだけ再開する。ライブは放送の今へ戻り (張り付いていたとき)、
  *   追っかけ・録画は止めた所から
  * - **OS・ブラウザに勝手に小窓にさせない** (`disablePictureInPicture`。`pip.svelte.ts` の `auto`)。
- *   全画面からホームへ戻っただけで小窓が出て、鳴り続けていた
+ *   許すと、全画面からホームへ戻っただけで小窓が出て、鳴り続ける
  * - **canvas で描くときの音は「再生する音」として鳴らさない** (Safari は Audio Session を `auto` の
  *   まま、ほかはページから直に鳴らす。`raw/engine.ts`)
  *

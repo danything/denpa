@@ -542,7 +542,7 @@ function readTraf(
 /**
  * **MP4 の AAC の 1 コマに付ける ADTS のヘッダ。** デコーダ (`wasm/decoder.c` の `aac_open`) は
  * 放送の ADTS を受け取る作りなので、MP4 の 1 コマ (ヘッダ無し) はそのままでは渡せない。
- * ヘッダの中身は AudioSpecificConfig (esds) から起こす: 種類 (LC なら 2)・標本化周波数の番号・チャンネル数。
+ * ヘッダに書く種類 (LC なら 2)、標本化周波数の番号、チャンネル数は AudioSpecificConfig (esds) から起こす。
  *
  * ヘッダは 7 バイト (CRC 無し)。ADTS に書ける種類は 1〜4 (Main / LC / SSR / LTP) だけで、
  * それ以外 (HE-AAC など) と、標本化周波数を値で書いたもの (番号 15) は null

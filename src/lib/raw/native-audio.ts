@@ -1,6 +1,6 @@
 /**
  * ライブの映像は <video> のまま、音声だけ WASM のデコーダ (canvas に描く worker と同じ。`wasm-audio.ts`) と Web Audio で再生する。
- * WebKit の MSE → MediaElementAudioSource が音声を渡さない問題を避ける (WebKit だけ。`native-audio-choice.ts`)。
+ * WebKit の MSE → MediaElementAudioSource が音声を渡さない問題を避ける (WebKit だけ。`#lib/native-audio-choice.ts`)。
  * 同期は映像の時計に合わせ、AudioContext 上では連続する音声の間隔を保つ。
  *
  * **Audio Session はこれが持つ** (作ったら `playback`、破棄したら戻す)。音は常に Web Audio で鳴るので、
@@ -20,7 +20,7 @@ import { Seam, SNAP } from "./seam";
 const TICK_MS = 20;
 /**
  * デコードした PCM を持つ上限。**止めていても増え続けない**ための天井で、`HISTORY_SECONDS` とは別の歯止め。
- * float の 48kHz 2ch なら約 43 秒ぶん (このときは `HISTORY_SECONDS` が先に効く)、5.1ch なら約 14 秒ぶん
+ * float の 48 kHz 2ch なら約 43 秒ぶん (このときは `HISTORY_SECONDS` が先に効く)、5.1ch なら約 14 秒ぶん
  */
 const PCM_LIMIT = 16 * 1024 * 1024;
 /** 観ている位置よりこれだけ前の PCM は捨てる (秒) */
@@ -273,7 +273,7 @@ export class NativeAudio {
     }
     const rate = video.playbackRate;
     const follow = (last: Clock) => last.position + (now - last.at) * last.rate;
-    // 映像と音の対応は 1 つに保つ。21ms の AAC の 1 コマごとに video.currentTime を読み直すと、
+    // 映像と音の対応は 1 つに保つ。21 ms の AAC の 1 コマごとに video.currentTime を読み直すと、
     // 時刻の揺れがそのまま音の隙間・重なりになる。大きくずれたときだけ組み直す
     if (
       this.last !== null &&
@@ -347,7 +347,7 @@ export class NativeAudio {
       node.start(when, plan.offset, plan.duration);
     }
   }
-  /** 自動再生を断られたら、通常の「音を出す」操作へ渡す。 */
+  /** 自動再生を断られているか。断られていれば、画面はふだんの「音を出す」操作へ回す */
   get blocked(): boolean {
     return this.context.state !== "running";
   }

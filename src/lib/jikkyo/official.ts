@@ -12,7 +12,7 @@ import type { PostResult } from "./post";
 export const HEARTBEAT = 30_000;
 
 /** サーバが言う接続の状態 (`server/niconico-live.ts` の `LiveState`) */
-export type OfficialState = "connecting" | "ready" | "unlinked" | "down";
+type OfficialState = "connecting" | "ready" | "unlinked" | "down";
 
 const STATES: readonly OfficialState[] = [
   "connecting",
@@ -31,7 +31,7 @@ const RESULTS: readonly PostResult[] = [
 ];
 
 /** 差し替えられるもの (単体テストで偽物を渡す) */
-export interface OfficialDeps {
+interface OfficialDeps {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   now: () => number;
 }

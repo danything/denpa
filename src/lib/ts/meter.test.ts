@@ -21,7 +21,7 @@ function feed(
 describe("受け取りの速さ (Meter)", () => {
   test("読んでいる間に届いた量を、読んでいた時間で割る。1 秒読むまでは値を返さない", () => {
     const meter = new Meter();
-    // 100ms ごとに 25,000 バイト = 2 Mbit/s
+    // 100 ms ごとに 25,000 バイト = 2 Mbit/s
     feed(meter, 0, 5, 100, 25_000);
     expect(meter.bps()).toBeNull();
     feed(meter, 500, 10, 100, 25_000);
@@ -63,7 +63,7 @@ describe("受け取りの速さ (Meter)", () => {
     let now = feed(meter, 0, 20, 100, 25_000);
     meter.pause();
     now += 10_000;
-    // 足すのに 20ms かかり、その間に次の塊が届いている。読み出しは毎回 1ms で返る (15 Mbit/s ほど)
+    // 足すのに 20 ms かかり、その間に次の塊が届いている。読み出しは毎回 1 ms で返る (15 Mbit/s ほど)
     for (let i = 0; i < 400; i++) {
       meter.add(37_500, now, now + 1);
       now += 20;

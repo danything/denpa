@@ -106,7 +106,7 @@ describe("覚えていた選択の読み方", () => {
       expect(readChoice(choice)).toBe(choice);
   });
 
-  test("知らない値・前の形式 (選択が無い) は自動", () => {
+  test("どの選択でもない値・前の形式 (選択が無い) は自動", () => {
     expect(readChoice(undefined)).toBe("auto");
     expect(readChoice("vp9")).toBe("auto");
     expect(readChoice(3)).toBe("auto");

@@ -19,7 +19,7 @@ export const SKIP = 10;
 /**
  * 2 回目とみなす間合い (ms)。
  *
- * **短いと繋がらず、長いと普通の連打まで数える。** 300ms は OS の既定
+ * **短いと繋がらず、長いと普通の連打まで数える。** 300 ms は OS の既定
  * (ダブルクリック) とほぼ同じで、指でも届く
  */
 export const DOUBLE_TAP = 300;
@@ -330,7 +330,7 @@ export function toTsTime(at: number, ruler: Ruler | null): number {
 
 /**
  * 元の TS の物差しで測った位置 (秒) が、`ruler` の物差しのどこで観られるか (コメントの一覧の時刻)。
- * `fromTsTime` と違って寄せない: 観られる所より前は `"before"`、切った CM の中 (と残した区間の後) は `"cut"`
+ * `fromTsTime` と違って寄せず、観られる所より前は `"before"`、切った CM の中と残した区間の後は `"cut"` を返す
  */
 export function playbackAt(
   at: number,

@@ -142,7 +142,7 @@ function parseV4(raw: string): bigint | null {
 function parseV6(raw: string): bigint | null {
   if (!raw.includes(":")) return null;
   let text = raw.toLowerCase();
-  // 末尾が IPv4 の書き方 (::ffff:10.0.0.1) なら 16bit 2 つに直す
+  // 末尾が IPv4 の書き方 (::ffff:10.0.0.1) なら 16 bit 2 つに直す
   const tail = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(text);
   if (tail) {
     const v4 = parseV4(tail[2]!);

@@ -17,13 +17,11 @@ import { enabled as oidcEnabled } from "./oidc";
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
  * | Hybridcast の中継のトークン | Hybridcast のアプリの読み込みだけ (`hc-relay.ts`。下の `OPEN_PATHS`) |
  *
- * **どれも設定していなければ、全部断る** (`configured`)。以前は起動時にベーシック認証を
- * 自動で掛けていたが、残っていたのは「画面に出して覚えさせるパスワード」だけだったので
- * 廃止した。全部開けたいなら `TRUSTED_NETWORKS=0.0.0.0/0`
+ * **どれも設定していなければ、全部断る** (`configured`)。全部開けたいなら `TRUSTED_NETWORKS=0.0.0.0/0`
  * (公開の注意は docs/auth.md)。
  */
 
-/** Hybridcast の中継のトークンの形 (16 バイトを 16 進で書いたもの)。`hc-relay.ts` もこれで確かめる */
+/** Hybridcast の中継のトークンの形式 (16 バイトを 16 進で書いたもの)。`hc-relay.ts` もこれで確かめる */
 export const HC_TOKEN = "[0-9a-f]{32}";
 
 /**
@@ -31,9 +29,8 @@ export const HC_TOKEN = "[0-9a-f]{32}";
  *
  * - **ログインの入口。** 守ると入れなくなる (ログイン画面へ行くのにログインが要る)
  * - **`/logout`。** ここも素通し (ログアウトするのにログインを要求しない)
- * - **`/api/health`。** Kubernetes の `livenessProbe` が呼ぶ。守ると**Pod が
- *   再起動を繰り返す** (掛ける範囲を選べるのをやめたときに実際に起き、
- *   E2E のスタックが起動待ちで固まった)。出しているのは
+ * - **`/api/health`。** Kubernetes の `livenessProbe` が呼ぶ。守ると **Pod が
+ *   再起動を繰り返す** (E2E のスタックも起動待ちで止まる)。出しているのは
  *   「生きているか・動いているバージョンと新しいバージョン・局が何件か・録画が何本か・エンコードが何本動いているか」だけ
  * - **`/manifest.webmanifest`。** ブラウザは**資格情報を付けずに**取得する
  *   ので (`<link rel="manifest">` に `crossorigin` を書かない限り)、守ると
@@ -62,8 +59,7 @@ export function isOpenPath(pathname: string): boolean {
  * ログイン方法が 1 つでも設定してあるか。**無ければ全部断る** (fail-closed)。
  *
  * 分からない状態で開けておくより、閉まっていることが起動ログとエラーページから
- * はっきり分かるほうがいい。以前の「起動時にパスワードを自動生成して掛ける」は、
- * 掛かってはいるが**受け取り損ねると誰も入れない**うえ、その状態と区別が付かなかった。
+ * はっきり分かるほうがいい。
  */
 export function configured(): boolean {
   return oidcEnabled() || networks(config.trustedNetworks).length > 0;
@@ -308,7 +304,7 @@ export function warnIfProxyHidden(): void {
  *
  * アドレスは入口の server.js が決めて `x-denpa-remote` に入れ、adapter-bun はそれを読む
  * (`ADDRESS_HEADER` は server.js が固定する。前段をどこまで信じるかは `TRUSTED_PROXIES`)。
- * adapter-bun はそのヘッダが無いと**例外を投げる**。server.js が相手のアドレスを
+ * adapter-bun はそのヘッダが無いと**例外を送出する**。server.js が相手のアドレスを
  * 読めなかったときがそれで、そのまま呼ぶと 500 になる。
  *
  * **読めなかったときは素通しにしない** (空文字はどの CIDR にも当たらない)。

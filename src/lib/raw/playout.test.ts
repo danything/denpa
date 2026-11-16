@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { DRY, LAST_WAIT, LEAD, Playout, SLACK, SLACK_FOR } from "./playout";
 
-/** AAC の 1 コマ (1024 標本 @48kHz) = 1920 (90kHz) = 21.3ms */
+/** AAC の 1 コマ (48 kHz で 1024 サンプル) = 1920 (90 kHz) = 21.3 ms */
 const D = 1920;
 const chunk = (n: number) => ({ pts: 90_000 + n * D, duration: D, n });
 
@@ -135,7 +135,7 @@ describe("Playout (録画: 飛ぶ先と終わり)", () => {
     expect(started.schedule.every((s) => s.chunk.n >= 50)).toBe(true);
   });
 
-  test("終わりまで届いたら、貯めが足りなくても残りを鳴らし、鳴らしきったら end", () => {
+  test("終わりまで届いたら、貯めた量が足りなくても残りを鳴らし、鳴らしきったら end", () => {
     const playout = new Playout<ReturnType<typeof chunk>>(1);
     playout.follow = true;
     // 最後の 3 コマ (0.06 秒) だけ。target (1 秒) には届かない

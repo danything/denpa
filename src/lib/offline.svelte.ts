@@ -289,7 +289,7 @@ interface SaveTarget {
 /**
  * これから落とすものを HEAD で下見して、**在るものだけ**に絞り、実サイズを足す。
  *
- * どちらも Background Fetch の仕様が理由 (実機の Edge で踏んだ):
+ * どちらも Background Fetch の仕様が理由 (実機の Edge で起きた)。
  *
  * - **404 が 1 つでも混ざると全体が失敗になる** (`failureReason: bad-status`)。
  *   付属のデータ (字幕・データ放送・ポスター) は無い録画もあるので、そのまま

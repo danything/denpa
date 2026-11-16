@@ -194,7 +194,7 @@ describe("ICQ を持たないドライバの AV1 (i965・Mesa)", () => {
   });
 
   test("AV1 の CQP は -qp を受けないので -global_quality の 75 で", () => {
-    // AV1 の量子化の値は 0〜255。`-qp` は黙って無視されるので使わない
+    // AV1 の量子化の値は 0〜255。`-qp` はエラーにならずに無視されるので使わない
     expect(
       hwArgs({ device: C.path, kind: "vaapi", cqp: true }, "av1").encoder,
     ).toEqual([
@@ -361,7 +361,7 @@ describe("Rockchip MPP", () => {
     expect(p720).toBeGreaterThan(sd60);
     expect(hwBitrate("h264", { height: Number.NaN, smooth: true })).toBe(hd60);
     expect(hwBitrate("h264", { height: Number.NaN, smooth: false })).toBe(hd30);
-    // MPP が受ける幅 (1K〜100M bit/s)。外れると MPP は黙って既定の 2 Mbit/s に戻す
+    // MPP が受ける幅 (1K〜100M bit/s)。外れると MPP はエラーにせず既定の 2 Mbit/s に戻す
     for (const bps of [hd30, hd60, p720, sd60]) {
       expect(bps).toBeGreaterThan(1000);
       expect((bps * 17) / 16).toBeLessThan(100_000_000);
@@ -715,7 +715,7 @@ describe("Mac の VideoToolbox", () => {
       "-g",
       "250",
     ]);
-    // H.265 は既定の Main のまま。ソフトウェアのエンコーダに倒れる指定 (-allow_sw) は渡さない
+    // H.265 は既定の Main のまま。ソフトウェアのエンコーダに切り替わる指定 (-allow_sw) は渡さない
     const hevc = hwArgs(V, "hevc", picture).encoder;
     expect(hevc[0]).toBe("hevc_videotoolbox");
     expect(hevc).not.toContain("-profile:v");
@@ -834,7 +834,7 @@ describe("Android の MediaCodec", () => {
     expect(hwChain("av1", {}, 0, [device])).toEqual([]);
   });
 
-  test("アプリが渡した名前を読む。知らないコーデック・使わない文字・2 つ目は捨てる", () => {
+  test("アプリが渡した名前を読む。HW_CODECS に無いコーデック・使わない文字・2 つ目は捨てる", () => {
     expect(parseMediacodecEncoders("")).toEqual({});
     expect(
       parseMediacodecEncoders(

@@ -13,6 +13,8 @@
  * 「形式が違う」だけでは、相手のどのバージョンと噛み合っていないのか分からない
  */
 
+import { beforeJapanese } from "./format";
+
 export class ShapeError extends Error {}
 
 /** 読み取り関数。`path` は失敗したときに言うパス */
@@ -39,7 +41,7 @@ function refuse(path: string, expected: string, value: unknown): never {
 export const string: Shape<string> = (value, path) =>
   typeof value === "string" ? value : refuse(path, "文字列", value);
 
-/** 有限の数。JSON に NaN は無いが、`Infinity` を投げてくる実装はある */
+/** 有限の数。JSON に NaN は無いが、`Infinity` を返す実装はある */
 export const number: Shape<number> = (value, path) =>
   typeof value === "number" && Number.isFinite(value)
     ? value
@@ -66,7 +68,7 @@ export function literal<const L extends string | number | boolean>(
 }
 
 /**
- * 無くてもよい。`object` の中では、無ければ鍵ごと付けない。
+ * 無くてもよい。`object` の中では、無ければキーごと付けない。
  * **null も「無い」と読む**。無いクレームを null で送る IdP がある。ログインが
  * そこで止まるのは、こちらの型の都合を相手に押し付けている
  */
@@ -75,7 +77,7 @@ export function optional<T>(shape: Shape<T>): Shape<T | undefined> {
     value === undefined || value === null ? undefined : shape(value, path);
 }
 
-/** null でもよい。**無いのも null と読む**。null の鍵を省いて書く実装がある (手で書いた設定ファイルも) */
+/** null でもよい。**無いのも null と読む**。null のキーを省いて書く実装がある (手で書いた設定ファイルも) */
 export function nullable<T>(shape: Shape<T>): Shape<T | null> {
   return (value, path) =>
     value === null || value === undefined ? null : shape(value, path);
@@ -88,7 +90,7 @@ export function array<T>(item: Shape<T>): Shape<T[]> {
       : refuse(path, "配列", value);
 }
 
-/** 鍵が決まっていないオブジェクト。値の形式だけ見る */
+/** キーが決まっていないオブジェクト。値の形式だけ見る */
 export function record<T>(item: Shape<T>): Shape<Record<string, T>> {
   return (value, path) => {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -120,7 +122,7 @@ type Fields = Record<string, Shape<unknown>>;
 type OptionalKeys<F extends Fields> = {
   [K in keyof F]: undefined extends Infer<F[K]> ? K : never;
 }[keyof F];
-/** `optional()` の鍵は省けるようにする (exactOptionalPropertyTypes に合わせて、無ければ鍵ごと無い) */
+/** `optional()` のキーは省けるようにする (exactOptionalPropertyTypes に合わせて、無ければキーごと無い) */
 type ObjectOf<F extends Fields> = {
   [K in Exclude<keyof F, OptionalKeys<F>>]: Infer<F[K]>;
 } & {
@@ -128,7 +130,7 @@ type ObjectOf<F extends Fields> = {
 };
 
 /**
- * 決まった鍵を持つオブジェクト。**知らない鍵は捨てる**。相手が足したものを
+ * 決まったキーを持つオブジェクト。**`fields` に無いキーは捨てる**。相手が足したものを
  * こちらの型に混ぜないため。丸ごと要るなら `record(unknown)` で受ける
  */
 export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
@@ -140,18 +142,16 @@ export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
     const out: Record<string, unknown> = {};
     for (const [key, shape] of Object.entries(fields)) {
       const parsed = shape(source[key], path === "" ? key : `${path}.${key}`);
-      // 無い (undefined / null を optional が「無い」と読んだ) 鍵は付けない
+      // 無い (undefined / null を optional が「無い」と読んだ) キーは付けない
       if (parsed !== undefined) out[key] = parsed;
     }
     return out as ObjectOf<F>;
   };
 }
 
-/**
- * 「〇〇の」の形にする。名前が英数字で終わるとき (`/api/rules` など) だけ、日本語との間に空白を入れる
- */
+/** 「〇〇の」の形にする。名前が英数字で終わるとき (`/api/rules` など) だけ、日本語との間に空白を入れる (`beforeJapanese`) */
 function of(what: string): string {
-  return /[!-~]$/.test(what) ? `${what} の` : `${what}の`;
+  return `${beforeJapanese(what)}の`;
 }
 
 /**
@@ -182,7 +182,7 @@ const warned = new Set<string>();
  * 読む。**形式が違っても止めない。** 警告を 1 回だけ出して、来たものをそのまま型にする
  * (前の `as X` と同じ振る舞い)。
  *
- * 相手 (チューナーエージェント) は別のリポジトリで、バージョンがずれると鍵が増えたり
+ * 相手 (チューナーエージェント) は別のリポジトリで、バージョンがずれるとキーが増えたり
  * 名前が変わったりする。そのたびに録画が止まるのでは困る。動いているものは
  * 動かしたまま、**どこが違うかを言う**。直すのは人
  */

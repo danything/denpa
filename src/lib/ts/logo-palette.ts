@@ -1,7 +1,7 @@
 /**
  * 放送で流れてくるロゴの PNG に、色の表を入れ直す。
  *
- * ARIB (STD-B21) のロゴは 8bit のパレット PNG なのだが、**パレットそのもの
+ * ARIB (STD-B21) のロゴは 8 ビットのパレット PNG なのだが、**パレットそのもの
  * (PLTE/tRNS) は送られてこない。** 色は放送で決め打ちの 128 色 + 半透明ぶんと
  * 決まっているので、受け取った側がその表を入れて初めて画像になる。
  *
@@ -70,9 +70,9 @@ const PALETTE = (() => {
   return concatBytes([pngChunk("PLTE", rgb), pngChunk("tRNS", alpha)]);
 })();
 
-/** 署名(8) + IHDR(25)。パレットはこの直後に入れる */
+/** 署名 (8) + IHDR (25)。パレットはこの直後に入れる */
 const AFTER_IHDR = 33;
-/** 8bit パレットの PNG だけが対象。IHDR の色の種類 */
+/** 8 ビットパレットの PNG だけが対象。IHDR の色の種類 */
 const COLOR_TYPE_PALETTE = 3;
 
 /**

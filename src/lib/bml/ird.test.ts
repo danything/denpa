@@ -9,7 +9,7 @@ describe("getIRDID に返すカードの番号", () => {
     expect(irdIdOf(5, "0281474976710655")).toBe("FFFFFFFFFFFF");
   });
 
-  test("ほかの種別、番号が無い・形が違う・48 ビットを超える番号は null", () => {
+  test("ほかの種別、番号が無い・形式が違う・48 ビットを超える番号は null", () => {
     expect(irdIdOf(0, "0000000000000255")).toBeNull();
     expect(irdIdOf(5, null)).toBeNull();
     expect(irdIdOf(5, "12-34")).toBeNull();

@@ -38,7 +38,7 @@ describe("Seam", () => {
     expect(seam.place(at, FRAME) * RATE).toBeCloseTo(Math.round(at * RATE), 6);
   });
 
-  test("コマのサンプルレートが違っても (44.1kHz の音)、終わりの位置を小数のまま持ち越す", () => {
+  test("コマのサンプルレートが違っても (44.1 kHz の音)、終わりの位置を小数のまま持ち越す", () => {
     const seam = new Seam(RATE);
     const length = 1024 / 44_100;
     seam.place(1, length);

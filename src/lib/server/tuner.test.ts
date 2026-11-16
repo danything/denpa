@@ -23,7 +23,7 @@ import {
 } from "./tuner";
 
 describe("局と番組の ID", () => {
-  test("アンテナの局の ID は今までどおり networkId * 100000 + serviceId", () => {
+  test("アンテナの局の ID は networkId * 100000 + serviceId", () => {
     expect(serviceKey(32391, 23608, "GR")).toBe(3239123608);
     expect(serviceKey(4, 151, "BS")).toBe(400151);
     expect(programKey(4, 151, 1, "BS")).toBe(40015100001);
@@ -63,7 +63,7 @@ describe("流れてくるバイト列の形式", () => {
     expect(of("video/MP2T")).toBe("ts");
   });
 
-  test("知らない形式と Content-Type の無い答えは、TS として読む", () => {
+  test("想定していない形式と Content-Type の無い答えは、TS として読む", () => {
     expect(streamTransport(new Headers({ "Content-Type": "text/plain" }))).toBe(
       "ts",
     );

@@ -33,7 +33,7 @@ export function recordingFromForm(form: FormData): Recording | undefined {
 
 /**
  * `/api/recordings/<id>` 系の前置き。id を確かめて行を引く。
- * 数字でなければ 400、無ければ 404 をここで投げるので、呼ぶ側は
+ * 数字でなければ 400、無ければ 404 をここで送出するので、呼ぶ側は
  * ある前提で書ける。
  *
  * @param deleted 消した行も引くか。**既定は引かない** (観る API が

@@ -393,7 +393,7 @@ const DECODED = object({ ok: optional(boolean), error: optional(string) });
  * カードリーダーの状態。設定画面に出す。`agent` を渡さなければ並びの先頭のエージェント。
  * 渡さないのは、どのエージェントか分からないときだけ (録ったエージェントの分からない録画・エージェントが 1 台も無いときの理由)。
  *
- * リーダーが見えていてもカードを読めていないことがある (挿さっていない・USB が黙る)。
+ * リーダーが見えていてもカードを読めていないことがある (挿さっていない・USB が応答しなくなる)。
  * そのまま録ると上に書いた壊れ方になるので、画面から見えるようにしてある。
  */
 export async function cardStatus(
@@ -515,7 +515,7 @@ const RAW_PROBE = object({
   error: optional(string),
 });
 
-/** エージェントが知らない API に返す `error` (エージェントの Program.cs の `MapFallback`) */
+/** エージェントに無い API へのリクエストに返る `error` (エージェントの Program.cs の `MapFallback`) */
 const UNKNOWN_API = "not found";
 
 /** 確かめた結果 (メモリだけ)。見えた・見えなかったものだけ控え、確かめられなかったものは次に訊き直す */
@@ -559,7 +559,7 @@ export async function probeRaw(agent: Agent): Promise<boolean | null> {
     const body = tolerate(RAW_PROBE, raw, "エージェントの /denpa/raw/probe");
     if (res.ok && typeof body.sha256 === "string")
       return body.sha256 === createHash("sha256").update(content).digest("hex");
-    // 無いのがファイルなら見えない。知らない API には、古いエージェントも 404 と `not found` を返す (`MapFallback`) ので、それは確かめられない
+    // 無いのがファイルなら見えない。無い API には、古いエージェントも 404 と `not found` を返す (`MapFallback`) ので、それは確かめられない
     return res.status === 404 &&
       typeof body.error === "string" &&
       body.error !== UNKNOWN_API

@@ -1,7 +1,7 @@
 /**
  * **LAN でエージェントを見つける** (mDNS / DNS-SD。docs/agent.md「LAN で見つける」)。
  *
- * エージェントは `_denpa-agent._tcp` を知らせる (agent/Denpa.Agent/Mdns.cs。Android はアプリが `NsdManager` で)。
+ * エージェントは `_denpa-agent._tcp` をアナウンスする (agent/Denpa.Agent/Mdns.cs。Android はアプリが `NsdManager` で)。
  * TXT は `v=1`・`id` (証明書の指紋の先頭 16 字)・`name` だけで、**合言葉は入らない**。見つけたものは次の 2 つに使う。
  *
  * - 設定の「エージェントを追加」の候補に出す。組むには今どおり登録用の URL (合言葉入り) が要る
@@ -361,18 +361,18 @@ function send(packet: Uint8Array): void {
   }
 }
 
+/** 問いの ID。legacy unicast のときだけ 0 以外 (答えを問いと突き合わせるため) */
+function queryId(): number {
+  return legacy ? 1 + Math.floor(Math.random() * 0xfffe) : 0;
+}
+
 /** `_denpa-agent._tcp.local` を問う。続けては送らない */
 function query(): void {
   const now = Date.now();
   if (socket === null || now - lastQuery < QUERY_GAP) return;
   lastQuery = now;
   join();
-  send(
-    queryPacket(
-      [{ name: SERVICE, type: TYPE_PTR }],
-      legacy ? 1 + Math.floor(Math.random() * 0xfffe) : 0,
-    ),
-  );
+  send(queryPacket([{ name: SERVICE, type: TYPE_PTR }], queryId()));
 }
 
 function receive(message: Buffer, source: string): void {
@@ -392,7 +392,7 @@ function receive(message: Buffer, source: string): void {
           { name, type: TYPE_SRV },
           { name, type: TYPE_TXT },
         ]),
-        legacy ? 1 + Math.floor(Math.random() * 0xfffe) : 0,
+        queryId(),
       ),
     );
   }

@@ -193,7 +193,7 @@ describe("録画の字幕 (recordingCaptions)", () => {
     });
 
     const pages = got.filter((f) => f.kind === CHANNEL.captionText);
-    // 時刻は 90kHz (コンテナの 40ms = 3600)。中身は文字の配置の JSON。消す 1 枚 (runs が空) も来る
+    // 時刻は 90 kHz (コンテナの 40 ms = 3600)。中身は文字の配置の JSON。消す 1 枚 (runs が空) も来る
     expect(pages.map((f) => f.pts)).toEqual([3600n, 270_000n]);
     const runs = pages.map((f) =>
       JSON.parse(new TextDecoder().decode(f.payload))
@@ -234,7 +234,7 @@ describe("録画の字幕 (recordingCaptions)", () => {
       config.ffmpeg = join(dir, "no-such-ffmpeg");
       let failure = "";
       try {
-        // 投げたものは、作るところか読むところのどちらかで受け取る
+        // 送出した例外は、作るところか読むところのどちらかで受け取る
         await recordingCaptions(RECORDING_FAILING, 0)?.getReader().read();
       } catch (error) {
         failure = String(error);

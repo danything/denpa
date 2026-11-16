@@ -43,8 +43,7 @@ function filled(seed: DetailSeed): ProgramDetail {
 
 /**
  * 録画の行から出す番組の中身。**観る画面と追っかけの右の列で同じもの。**
- * 開いた時点で `programDetail().open` の種にもそのまま渡す。別に組み直していた頃は
- * ジャンル・音声を落としていて、番組表から消えた録画でラベルが出なかった
+ * 開いた時点で `programDetail().open` の種にもそのまま渡す (ジャンル・音声を落とすと、番組表から消えた録画でラベルが出ない)
  */
 export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
   const {
@@ -78,13 +77,10 @@ export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
 /**
  * 行を押して出す番組詳細。**まず行が持っている分をすぐ出し、EPG から引けたら差し替える。**
  *
- * 引き終わってから出していた頃は、押してから中身が出るまで何も起きない間があった。
- * 古い録画は番組が EPG から消えているので、そもそも引けないことのほうが普通で、
+ * 古い録画は番組が EPG から消えているので、引けないことのほうが普通で、
  * そのときは行が持っている分だけが出たままになる。
  *
- * 予約・録画の一覧とルールのプレビューで同じものが要る。**開く手順を写していると
- * 片方だけ直したときに見え方がずれる** (実際、先に出す・あとで差し替えるという
- * 段取りそのものが 2 か所にあった)。
+ * 予約・録画の一覧とルールのプレビューで同じものを使う (開く手順を写すと、片方だけ直したときに見え方がずれる)
  */
 export function programDetail() {
   let current = $state<ProgramDetail | null>(null);
@@ -108,16 +104,11 @@ export function programDetail() {
      */
     async open(programId: number | null, seed: DetailSeed): Promise<void> {
       const token = ++opened;
-      /*
-       * **既定を先に置いて、行の分で上書きする。** 逆順に書いていた頃は、
-       * 行が持っているジャンル・音声・詳細を既定の null で潰していた。
-       * 番組表から引けるうちは引き直しで戻るので気付かず、**番組表から
-       * 消えた録画 (24 時間過ぎ) だけジャンルのラベルが出なかった** (実機)
-       */
+      // `filled` は既定を先に置いて行の分で上書きする。逆にすると、番組表から消えた録画 (24 時間過ぎ) のジャンル・音声・詳細が null になる
       current = filled(seed);
       if (programId === null) return;
 
-      // 届かなかったとき (回線が切れた・応答が読めない) も行の分のまま。呼ぶ側は待たないので、投げると拾う所が無い
+      // 届かなかったとき (回線が切れた・応答が読めない) も行の分のまま。呼ぶ側は待たないので、例外を投げても受け取る所が無い
       const body = await fetch(resolve(`api/programs/${programId}`))
         .then(async (res) =>
           res.ok ? ((await res.json()) as ProgramDetail) : null,

@@ -18,7 +18,7 @@ import {
 
 /**
  * **追っかけで抱えきれなくなったとき** (`follow`)。圧縮のまま持つのが上限を超えたら、受け取るのを
- * やめて `full` を 1 回だけ返し、以降は捨てる。リクエストし直し (`reset` → 新しい init) で元に戻る。
+ * やめて `full` を 1 回だけ返し、以降は捨てる。リクエストし直す (`reset` → 新しい init) と元に戻る。
  *
  * 映像はデコードさせない (刻まないので VideoDecoder に渡らない)。VideoDecoder と 2D のコンテキストは形だけの偽物。
  * 流すのは E2E と同じ作り置き (本物の ffmpeg が書いた AV1 + Opus。`tests/fake/fmp4-loop.ts`)
@@ -104,7 +104,7 @@ describe("Fmp4Video (追っかけで抱えきれないとき)", () => {
   test("上限を超えたら full を 1 回だけ返し、以降は音も映像も捨てる。リクエストし直せば戻る", () => {
     const { video, seen } = watcher(true);
     video.feed(init);
-    // 作り置きは 2 秒で 140KB ほど。120MB を超えるまで流す
+    // 作り置きは 2 秒で 140 KB ほど。120 MB を超えるまで流す
     for (let round = 0; round < 2_000 && seen.full === 0; round++)
       feedRounds(video, 1);
     expect(seen.full).toBe(1);
@@ -115,7 +115,7 @@ describe("Fmp4Video (追っかけで抱えきれないとき)", () => {
     expect(seen.full).toBe(1);
     expect(seen.sounds).toBe(sounds);
 
-    // リクエストし直し: 選局し直しと同じく reset のあとに新しい init
+    // リクエストし直す。選局し直すときと同じく reset のあとに新しい init
     video.reset();
     video.feed(init);
     feedRounds(video, 1);
@@ -241,7 +241,7 @@ describe("Fmp4Video (描く大きさ)", () => {
 });
 
 /**
- * **音の開き方と 1 コマの形** (`audioCodec`・`audioFrame`)。canvas に描く worker とライブの音だけの worker が
+ * **音の開き方と 1 コマの渡し方** (`audioCodec`・`audioFrame`)。canvas に描く worker とライブの音だけの worker が
  * 同じものを使う。作り置きの H.264 は AAC、AV1 は Opus (本物の ffmpeg が書いたもの)
  */
 describe("audioCodec・audioFrame", () => {
