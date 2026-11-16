@@ -371,7 +371,7 @@
       font-size: var(--dp-text-base);
     }
   }
-  /* 押すキーの印。線は付けず、淡い面だけ (docs/design.md の「入力欄」と同じ) */
+  /* 押すキーの印。線は付けず、淡い面だけ (docs/design.md の「メニュー・ダイアログ・検索の候補」) */
   .key {
     padding: 0 0.375rem;
     border: 0;

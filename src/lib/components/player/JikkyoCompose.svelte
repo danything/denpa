@@ -140,7 +140,7 @@
   const caught = $derived(caughtUp(lag, paused));
   const why = $derived(refusal(text));
   const left = $derived(MAX_LENGTH - graphemes(text.trim()));
-  /** 先頭の 1 行。結果 → 書けない理由 → 中身の断り → いつもの表示 の順 */
+  /** 先頭の 1 行。結果 → 書けない理由 → 中身を断る理由 → いつもの表示 の順 */
   const line = $derived(
     note !== ""
       ? note

@@ -19,7 +19,7 @@
    * 再生の設定 (⚙。3 画面で同じ)。何を並べるかは `StageTail`、振る舞いは docs/player.md。上の並びは切り替えが先で
    * その場で変わり (`menuitemcheckbox`)、選ぶものは押すと選択肢の並びに入る (先頭は戻る行で、項目の名前を出す。選ぶと閉じる。
    * `menuitemradio`。Esc か ← で戻る)。操作バーから畳んだもの (`head`。`PlayerStage` の `fold`) は先頭に置き、余白で分ける。
-   * 音量のつまみ (`volume`) は畳んだものの次、切り替えの前に置き、行の幅の横のカプセル (`VolumeSlider`) にする。←→ で動かし、
+   * 音量のつまみ (`volume`) は畳んだものの次、切り替えの前に置き、横長のカプセル (行と同じ幅。`VolumeSlider`) にする。←→ で動かし、
    * ↑↓ はほかの行と同じく行を移る。渡されるのは音のボタンがつまみを出せないときだけ (`StageTail`)。
    *
    * testid: ボタンは `{prefix}-settings`、枠は `{prefix}-settings-menu`、行は `{prefix}-{id}`、

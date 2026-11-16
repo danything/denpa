@@ -40,7 +40,7 @@
    * - 写す繰り返しと前の色からの入れ替えは、テーブルトップの反射 (`FoldReflection`) と同じ部品 (`glow-loop.svelte.ts`)。
    *   入れ替えは CSS の `opacity` の transition (下の style)
    * - 色は枠に重ならない 4 本の帯 (`.band`) にだけ描く (`strips`)。枠の後ろに敷くと映像のコマごとに合成し直す
-   * - ブラウザの枠の色 (`theme-color`) もページの上の端の色にする (`washTop`)
+   * - ブラウザの枠の色 (`theme-color`) もページの上端の色にする (`washTop`)
    * - 写さないときは `ambient.ts` の `plan`。映像の上には何も重ねない
    */
   let {

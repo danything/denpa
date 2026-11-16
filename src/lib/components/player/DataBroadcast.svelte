@@ -506,7 +506,7 @@
     }
   }
 
-  /** 取得中が終わるのを待つ上限。「取得中」が下りない局でも、白くても出るほうがまし */
+  /** 取得中が終わるのを待つ上限。「取得中」が終わらない局でも、白くても出るほうがまし */
   const SHOW_WAIT = 8000;
   let waiting: ReturnType<typeof setTimeout> | null = null;
 
@@ -568,7 +568,7 @@
       return;
     }
     tap(DATA_BUTTON);
-    // 押しただけ数える。**反応があれば `loaded` が下ろす**ので、ここでは待つだけ
+    // 押しただけ数える。**反応があれば `loaded` が `dueD` を外す**ので、ここでは待つだけ
     if (++taps >= TAP_MOST) {
       dueD = false;
       return;
@@ -618,7 +618,7 @@
     const loadedEngine = await loadEngine(() => import("#lib/bml/engine.js"));
     // 待っている間に離されていたら、作らない
     if (mine !== generation) return;
-    // 読み込めなかった。「データ取得中…」を下ろし、読み込めなかったと出す (閉じて開き直したときも読み込み直す)
+    // 読み込めなかった。「データ取得中…」を消し、読み込めなかったと出す (閉じて開き直したときも読み込み直す)
     if (loadedEngine === null) {
       loading = false;
       failed = true;

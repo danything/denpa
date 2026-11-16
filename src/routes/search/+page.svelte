@@ -312,8 +312,8 @@
 <Toasts {notices} source={form} />
 
 <!--
-    **結果と、右の「ルールとして保存」** (`RuleDraft`)。広い形では右の列、スマホの形では
-    下のボタンで下から出す。書く欄の条件を変えると、結果の「これからの放送」の行ごとに録るかが出る
+  **結果と、右の「ルールとして保存」** (`RuleDraft`)。広い形では右の列、スマホの形では
+  下のボタンで下から出す。書く欄の条件を変えると、結果の「これからの放送」の行ごとに録るかが出る
 -->
 <div class="search-layout" class:drafting>
   <div class="search-page">
@@ -321,9 +321,9 @@
     {#if q === ""}
       {#if drafting}
         <!--
-                **言葉なしでルールを開いたとき** (`?rule=`)。結果の代わりに、そのルールで録る番組を出す
-                (下見の行。予約を立てるときと同じ判定)
-            -->
+          **言葉なしでルールを開いたとき** (`?rule=`)。結果の代わりに、そのルールで録る番組を出す
+          (下見の行。予約を立てるときと同じ判定)
+        -->
         {@render rulePreview()}
       {:else if recent.length > 0}
         <section class="hits-section" aria-labelledby="recent-head">
@@ -849,10 +849,10 @@
     margin-inline: auto;
   }
   /*
-     * **広い形では右に書く欄の列** (`RuleDraft`)。列は右と下を main の余白の外まで出して画面の右端に付け、
-     * ヘッダーの下に貼り付ける。結果は残りの幅の真ん中 (48rem まで) で、ページごと巻いて浮いたヘッダーの裏を流れる。
-     * 広い形とスマホの形は `#lib/phone-form.ts` (`<html data-phone>`) で分ける。テーブルトップは 1000px 以上でもスマホの形
-     */
+   * **広い形では右に書く欄の列** (`RuleDraft`)。列は右と下を main の余白の外まで出して画面の右端に付け、
+   * ヘッダーの下に貼り付ける。結果は残りの幅の真ん中 (48rem まで) で、ページごと巻いて浮いたヘッダーの裏を流れる。
+   * 広い形とスマホの形は `#lib/phone-form.ts` (`<html data-phone>`) で分ける。テーブルトップは 1000px 以上でもスマホの形
+   */
   :global(:where(html:not([data-phone]))) .search-layout.drafting {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 25rem;
@@ -868,10 +868,10 @@
     display: none;
   }
   /*
-     * スマホの形では書く欄を下から出すボタンを、下のタブの上に浮かせる。地も線も敷かず、ボタン (主のボタン) だけが浮く
-     * (浮きの上に浮きを重ねない。docs/design.md)。読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
-     * 結果の一覧の最後の行が隠れないよう、ボタンの高さぶんの余白を下に足す
-     */
+   * スマホの形では書く欄を下から出すボタンを、下のタブの上に浮かせる。地も線も敷かず、ボタン (主のボタン) だけが浮く
+   * (浮きの上に浮きを重ねない。docs/design.md)。読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
+   * 結果の一覧の最後の行が隠れないよう、ボタンの高さぶんの余白を下に足す
+   */
   :global(:where(html[data-phone])) .drafting > .search-page {
     padding-bottom: 4rem;
   }
@@ -906,9 +906,9 @@
     padding-inline-start: 0;
   }
   /*
-     * **節は見出しだけ** (カードで囲まず、線も引かない)。行は名前と小さな説明の 2 段で、
-     * ホームの行と同じく 1 件ずつ件の面に乗せ、件の間は `--dp-list-gap`。指を乗せると面が一段変わる (押せる範囲は行の中身いっぱい)
-     */
+   * **節は見出しだけ** (カードで囲まず、線も引かない)。行は名前と小さな説明の 2 段で、
+   * ホームの行と同じく 1 件ずつ件の面に乗せ、件の間は `--dp-list-gap`。指を乗せると面が一段変わる (押せる範囲は行の中身いっぱい)
+   */
   .hits-section {
     display: flex;
     flex-direction: column;
@@ -949,7 +949,6 @@
   }
   .hits-head h2 {
     margin: 0;
-    font-size: var(--dp-text-lg);
     font-weight: var(--dp-weight-bold);
   }
   .count {

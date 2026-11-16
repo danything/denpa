@@ -57,7 +57,7 @@
         />
         <span class="hint">
           denpa のサーバから届く URL。サブディレクトリも含めて書きます。Basic
-          認証があれば <code>http://ユーザー:パスワード@…</code> の形で。保存はしません
+          認証があれば <code>http://ユーザー:パスワード@…</code> の形式で。保存はしません
         </span>
       </label>
       <CheckRow

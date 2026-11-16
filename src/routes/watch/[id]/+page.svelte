@@ -1855,7 +1855,7 @@
   onMount(() => () => jikkyo.close());
 
   /**
-   * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端に縦に並ぶボタンで出す (端末ごとに覚える)。
+   * 右の列に出す「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端に縦に並ぶボタンで出す (端末ごとに覚える)。
    * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない。時刻は録画の中の再生位置で出し、押すとそこへ飛ぶ
    */
   const jikkyoList = jikkyoListSwitch(
@@ -2097,7 +2097,7 @@
       if (copy !== null) askCaptions();
     });
     video?.play().catch(() => undefined);
-    // 指のときは最初から全画面 (観るために置いてある画面)。画面の幅では決めない。狭い窓の PC まで全画面になる
+    // 指のときは最初から全画面 (観るために置いてある画面)。画面の幅では決めない (幅で決めると狭い窓の PC まで全画面になる)
     if (window.matchMedia("(pointer: coarse)").matches) fullscreen.enter();
     const onResize = () => place();
     window.addEventListener("resize", onResize);
@@ -3089,7 +3089,7 @@
         </div>
         <!--
           録画のデータ放送。エンコードするときに取り出した変化ログ (`data.hasData`) を再生位置に合わせて流す
-          (`feedData`/`listenData`)。双方向は使わない (送り先が生きていない)
+          (`feedData`/`listenData`)。双方向は使わない (録画した時点の送り先は、もう使えない)
         -->
         <DataBroadcast
           on={showData}
@@ -3110,7 +3110,7 @@
         <!--
           観られないわけと、待っていることを言う幕 (`problem`)。見た目の決まりはライブ・追っかけと共通 (`PlayerVeil`)。
           観られないときは映像を暗く覆い、詰まりと繋ぎ直しの最中は映っている映像を覆わずに回るものだけを出す。
-          黙って止まっていると壊れたように見え、待てばいいのかが決められない (サーバの入れ替えでは数十秒帰ってこない)
+          黙って止まっていると壊れたように見え、待てばいいのかが決められない (サーバの入れ替えでは数十秒繋がらない)
         -->
         {#if problem !== "" || buffering || resuming}
           <PlayerVeil
