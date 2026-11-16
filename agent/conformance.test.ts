@@ -69,7 +69,7 @@ const ROOT = resolve(import.meta.dir, "..");
  * 地上波のチューナーは**1 台だけ**にしてある。
  *
  * 偽の放送にある地上波は T16 と T21 の 2 つしかないので、チューナーが 2 台あると
- * 「空きが無い」も「優先度の低い相手に譲らせる」も作れない。総当たりが少し遅くなるだけで
+ * 「空きが無い」も「後に回る相手に譲らせる」も作れない。総当たりが少し遅くなるだけで
  * 済むほうを取る。
  *
  * 選局は `FAKE_TUNE` で偽物に差し替える (エージェントが `<種別> <チャンネル>` を足して起動する)。
@@ -708,7 +708,7 @@ describe("チューナー", () => {
     }
   });
 
-  test("用途と優先度がそのまま見える", async () => {
+  test("用途と取り合いの順 (priority) がそのまま見える", async () => {
     const stream = await open("type=GR&channel=T16&use=rec%2012&priority=10");
     await stream.reader?.read();
 
@@ -748,7 +748,7 @@ describe("チューナー", () => {
    * 向こうから終わったなら、それは失敗である。読む側 (denpa) は EOF を
    * 「録り終えた」と読んではいけない。この約束なら .NET でも成り立つ
    */
-  test("空きが無ければ優先度の低い相手に譲らせる。譲った側はそこで読めなくなる", async () => {
+  test("空きが無ければ取り合いで後に回る相手に譲らせる。譲った側はそこで読めなくなる", async () => {
     const weak = await open("type=GR&channel=T16&use=logo&priority=1");
     await weak.reader?.read();
     const ended = drain(weak.reader as ReadableStreamDefaultReader);
@@ -786,7 +786,7 @@ describe("チューナー", () => {
     expect(body.error ?? "").toContain("no signal");
   });
 
-  test("自分より優先度の高い相手しかいなければ 409 で断る", async () => {
+  test("取り合いで自分より先になる相手しかいなければ 409 で断る", async () => {
     const strong = await open("type=GR&channel=T16&use=rec%201&priority=10");
     await strong.reader?.read();
 
@@ -1687,7 +1687,7 @@ describe("チューナーの名指し", () => {
     }
   });
 
-  test("指定のチューナーを同じか優先度の高い相手が使っていれば、空きがあっても 409 で断る", async () => {
+  test("指定のチューナーを取り合いで同じか先になる相手が使っていれば、空きがあっても 409 で断る", async () => {
     const holder = await open(
       "type=BS&channel=BS11:18000&use=rec%209&priority=10&tuner=bs1",
     );
@@ -1701,7 +1701,7 @@ describe("チューナーの名指し", () => {
     holder.close();
   });
 
-  test("同じチューナーを名指しして同じチャンネルを見る 2 台目は、優先度が低くても選局を共有する", async () => {
+  test("同じチューナーを名指しして同じチャンネルを見る 2 台目は、取り合いで後に回っても選局を共有する", async () => {
     const a = await open(
       "type=BS&channel=BS11:18000&use=pin%206&priority=10&tuner=bs1",
     );

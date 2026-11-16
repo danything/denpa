@@ -352,7 +352,7 @@ describe("並べる数 (laneTypes)", () => {
   });
   const MLT = ["GR", "BS", "CS", "CATV"];
 
-  test("無効なチューナーと、同じか優先度の高い利用者がいるチューナーは数えない", () => {
+  test("無効なチューナーと、取り合いで同じか先になる利用者がいるチューナーは数えない", () => {
     const tuners = [
       tuner(["BS", "CS"]),
       tuner(["BS", "CS"], [], true),
@@ -562,7 +562,7 @@ describe("受信できなかったと数える回 (receptionFailed)", () => {
   test("空きが無かった回と、途中で切れた回は数えない", () => {
     // 409 (開いていない)
     expect(receptionFailed(none)).toBe(false);
-    // 開けたが、上限より前に切れた (優先度の高い要求に譲った)
+    // 開けたが、上限より前に切れた (取り合いで先になる要求に譲った)
     expect(receptionFailed({ ...none, opened: true })).toBe(false);
   });
 

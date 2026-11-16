@@ -4,7 +4,7 @@ namespace Denpa.Agent.Tests;
  * **読み出しが追いつかずに切った利用者も、読む側が去れば選局から抜ける。**
  *
  * 切ったあと (`Sink.Push` の `MaxLag`) に抜けたことが選局に伝わらず、選局の利用者に残っていた。
- * そのチューナーは誰も読んでいないのに同じ優先度で塞がり続け、実機では番組表の取得が
+ * そのチューナーは誰も読んでいないのに同じ取り合いの順で塞がり続け、実機では番組表の取得が
  * 「BS のチューナーに空きがありません」と断られ続け、衛星の局ロゴは残りの 1 台を
  * 30 分ごとに番組表の取得に取り上げられて読み切れなかった。
  */
@@ -33,7 +33,7 @@ public class SinkTests
     {
         var sink = new Sink("logo BS/BS15:16625", 4, _ => { });
         sink.Fail(TunerPool.PreemptedBy("epg BS03:16432"));
-        await Assert.That(sink.FailedWith).IsEqualTo("優先度の高い要求 (epg BS03:16432) にチューナーを譲りました");
+        await Assert.That(sink.FailedWith).IsEqualTo("取り合いで先になる要求 (epg BS03:16432) にチューナーを譲りました");
     }
 
     /// <summary>取り上げられたのか、選局できなかったのかを見分ける。送る前に取り上げられたら 409 で返す (Program.cs)</summary>

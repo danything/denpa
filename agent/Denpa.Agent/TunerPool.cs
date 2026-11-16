@@ -24,7 +24,7 @@ public sealed record TuneOptions(string? FakeTune = null);
 /// </para>
 ///
 /// <list type="bullet">
-/// <item>**優先度に下限が無い。** 負の値もそのまま並ぶ (丸めない)</item>
+/// <item>**取り合いの順に下限が無い。** 負の値もそのまま並ぶ (丸めない)</item>
 /// <item>**番組表の取得が特別扱いされない。** 録画もロゴも番組表も同じ「開きたい人」で、priority だけで並ぶ</item>
 /// <item>**同じ物理チャンネルなら 1 台で足りる。** 番組表・ロゴ・録画が同じ選局を共有する</item>
 /// </list>
@@ -101,7 +101,7 @@ public sealed class TunerPool(
         /// **この 1 台を選局し直す間のロック。チューナーごとに別**なので、他のチューナーは待たない。
         ///
         /// <para>
-        /// 選局の最中に、優先度の高い要求が同じチューナーを取り上げることがある。
+        /// 選局の最中に、取り合いで先になる要求が同じチューナーを取り上げることがある。
         /// その相手が続けて選局を始めると、1 つのデバイスに 2 つの選局が同時に
         /// 入ることになるので、ここで順番にする。
         /// </para>
@@ -207,7 +207,7 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// **<paramref name="pin"/> があれば、その目印 (<see cref="PinKey"/>。デバイス、無ければ名前) のチューナーだけで選局する** (デバッグ用の名指し。
-    /// docs/agent.md「デバッグ用の名指し」)。受けられない種別・無効のとき、別のチャンネルを同じか優先度の高い利用者が読んでいるときは、ほかへ振り替えずに断る。
+    /// docs/agent.md「デバッグ用の名指し」)。受けられない種別・無効のとき、別のチャンネルを取り合いで同じか先になる利用者が読んでいるときは、ほかへ振り替えずに断る。
     /// 同じチャンネルをほかのチューナーが読んでいても共有せず、指定のチューナーで選局する
     /// </para>
     ///
@@ -280,7 +280,7 @@ public sealed class TunerPool(
         lock (_gate)
         {
             /*
-             * **自分と同じか優先度の高い利用者がいれば、どのチューナーでもその選局を共有する** (約束 3)。優先度の低い
+             * **取り合いで自分と同じか先になる利用者がいれば、どのチューナーでもその選局を共有する** (約束 3)。後に回る
              * 利用者しかいない選局と余韻だけの選局は、そのチューナーが選ぶ順で先頭の組のときだけ `Pick` が選んで下で共有する
              * (わけは docs/agent.md「選ぶ順の約束」)
              */
@@ -309,7 +309,7 @@ public sealed class TunerPool(
 
             if (_leases.TryGetValue(index, out var victim))
             {
-                // 引き継ぐ相手は正常に終わらせる (取り上げられたのではない)。残りの優先度の低い利用者は下で切断する
+                // 引き継ぐ相手は正常に終わらせる (取り上げられたのではない)。残りの後に回る利用者は下で切断する
                 lock (victim.Sinks)
                 {
                     foreach (var leaving in victim.Sinks.Where(s => after.Contains(s.Use)).ToList())
@@ -318,7 +318,7 @@ public sealed class TunerPool(
                         victim.Sinks.Remove(leaving);
                     }
                 }
-                // 同じチャンネルなら、選局し直さずにそのまま共有する (余韻ならそのまま使い回し、優先度の低い利用者も残す)
+                // 同じチャンネルなら、選局し直さずにそのまま共有する (余韻ならそのまま使い回し、後に回る利用者も残す)
                 if (victim.Type == type && victim.Channel == channel)
                 {
                     return Join(victim, priority, use, service);
@@ -705,7 +705,7 @@ public sealed class TunerPool(
     /// </summary>
     public static string PreemptedBy(string use) => $"{Preempted} ({use}) にチューナーを譲りました";
 
-    private const string Preempted = "優先度の高い要求";
+    private const string Preempted = "取り合いで先になる要求";
 
     /// <summary>取り上げられた理由か (<see cref="PreemptedBy"/>)。送る前に取り上げられたら 409 で返す (Program.cs)</summary>
     public static bool IsPreempted(string reason) => reason.StartsWith($"{Preempted} (", StringComparison.Ordinal);
@@ -736,14 +736,14 @@ public sealed class TunerPool(
 
     /// <summary>
     /// どのチューナーを使うか決める。**denpa との約束** (docs/agent.md「選ぶ順の約束」の 2) で、
-    /// 空いているチューナー (余韻だけのものも) と**自分より優先度の低い利用者しかいないチューナー**のうち、
+    /// 空いているチューナー (余韻だけのものも) と**取り合いで自分より後に回る利用者しかいないチューナー**のうち、
     /// 受けられて**順位 (<see cref="Ranks"/>) がいちばん小さい組**から選ぶ。空いている兼用のチューナーへ逃げずに、
-    /// 優先度の低い相手から取り上げる。
+    /// 後に回る相手から取り上げる。
     ///
     /// <para>
     /// 組の中では、同じチャンネルの選局 → もうそのチャンネルに合っているもの (<see cref="Held.Channel"/>。
     /// 実測 0.6〜0.8 秒の選局し直しが 10 ms になる) → ほかの余韻 (1 人の視聴で 2 台塞がない) → 空いているもの →
-    /// いちばん優先度の低い相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)。
+    /// 取り合いでいちばん後に回る相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)。
     /// どの段でも、このチャンネルで同期しなかったチューナー (<see cref="UnsyncedFor"/> の間) は組の後ろに回す。
     /// 電源を入れ直すまで使えないと答えたチューナー (<see cref="Unusable"/>) は、ほかに選べるチューナーが無いときだけ選ぶ
     /// (組を決めるときも、使っているチューナーと同じく数えない)
@@ -751,7 +751,7 @@ public sealed class TunerPool(
     ///
     /// <para>
     /// **<paramref name="tried"/> が空でなければ、同期しなかったあとの選局し直し。** 最初のチューナーと同じ組で、まだ試していない、
-    /// 空いているもの (余韻だけのものも) から選ぶ。優先度の低い利用者からは取り上げない (同期するか分からない選局のために切断しない)。
+    /// 空いているもの (余韻だけのものも) から選ぶ。後に回る利用者からは取り上げない (同期するか分からない選局のために切断しない)。
     /// ほかの組へは移らない (同じ組ならどれを使ってもよいという約束 2 の内に収め、denpa の割り振りを崩さない)
     /// </para>
     /// </summary>
@@ -784,12 +784,12 @@ public sealed class TunerPool(
         }
         // 同期しなかったチューナーを後ろに回す (OrderBy は安定なので、ほかの並びは変わらない)
         group = [.. group.OrderBy(index => Unsynced(index, type, channel))];
-        // 電源を入れ直すまで使えないチューナーは、組にほかが無いときだけ選ぶ (空いていても、優先度の低い利用者がいるほかのチューナーを先にする)
+        // 電源を入れ直すまで使えないチューナーは、組にほかが無いときだけ選ぶ (空いていても、後に回る利用者がいるほかのチューナーを先にする)
         if (group.Any(index => !Unusable(index))) group = [.. group.Where(index => !Unusable(index))];
 
         foreach (var index in group)
         {
-            // 組の中に同じチャンネルの選局があれば共有する (余韻か、優先度の低い利用者しかいないもの)
+            // 組の中に同じチャンネルの選局があれば共有する (余韻か、後に回る利用者しかいないもの)
             if (_leases.TryGetValue(index, out var same) && same.Type == type && same.Channel == channel) return index;
         }
         foreach (var index in group)
@@ -825,7 +825,7 @@ public sealed class TunerPool(
     /// <summary>
     /// <paramref name="pin"/> のデバイスのチューナーを返す。**ほかのチューナーへは振り替えない。**
     /// 見つからない・無効・その種別を受けられないときは <see cref="TunerPinException"/>、
-    /// 別のチャンネルを同じか優先度の高い利用者が読んでいるときは <see cref="TunerBusyException"/>。同じチャンネルなら共有する
+    /// 別のチャンネルを取り合いで同じか先になる利用者が読んでいるときは <see cref="TunerBusyException"/>。同じチャンネルなら共有する
     /// </summary>
     private int PickPinned(string pin, string type, string channel, int priority, IReadOnlySet<string> after)
     {
@@ -838,14 +838,14 @@ public sealed class TunerPool(
         if (!spec.Types.Contains(type)) throw new TunerPinException($"{spec.Name} ({pin}) は {type} を受けられません");
         if (_leases.TryGetValue(index, out var lease))
         {
-            // 同じチャンネルを読んでいる選局には入れる (優先度にかかわらず共有する。Open が Join する)
+            // 同じチャンネルを読んでいる選局には入れる (取り合いの順にかかわらず共有する。Open が Join する)
             if (lease.Type == type && lease.Channel == channel) return index;
-            if (StrongestOf(lease, after) >= priority) throw new TunerBusyException($"{spec.Name} ({pin}) は同じか優先度の高い利用者が使っています");
+            if (StrongestOf(lease, after) >= priority) throw new TunerBusyException($"{spec.Name} ({pin}) は取り合いで同じか先になる利用者が使っています");
         }
         return index;
     }
 
-    /// <summary>残る利用者のうち、いちばん高い優先度。引き継ぐ相手 (<c>after</c>) はもう離れたものとして数えない。誰もいなければ null</summary>
+    /// <summary>残る利用者のうち、取り合いでいちばん先になる値 (priority)。引き継ぐ相手 (<c>after</c>) はもう離れたものとして数えない。誰もいなければ null</summary>
     private static int? StrongestOf(Lease lease, IReadOnlySet<string> after)
     {
         lock (lease.Sinks) return lease.Sinks.Where(sink => !after.Contains(sink.Use)).Max(sink => (int?)sink.Priority);
@@ -1085,7 +1085,7 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     /// <summary>
     /// 読む側が去った。共有から抜ける。**先に切られていても抜ける。** 読み出しが追いつかずに切った
     /// (<see cref="Push"/>) あとも選局の利用者に残っていると、そのチューナーは誰も読んでいないのに
-    /// 同じ優先度のまま塞がり続けた (実機で、番組表の取得が「空きがありません」と断られ続け、
+    /// 同じ取り合いの順のまま塞がり続けた (実機で、番組表の取得が「空きがありません」と断られ続け、
     /// 衛星の局ロゴは空いた 1 台を番組表の取得に 30 分ごとに取り上げられた)。
     /// 取り上げられて先に外されたぶんは、抜ける側 (<c>Join</c>) が見分けて何もしない
     /// </summary>
