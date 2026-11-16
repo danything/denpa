@@ -256,6 +256,7 @@
   /**
    * 段 0 のビットレート (kbit/s)。ファイル (`?source=`。元の TS は `ts`) ごとに、ファイルの大きさと尺から出す。
    * 形式を選び直して前のファイルに戻ったときも、そのファイルの値で比べる
+   * キーは録画とファイルの組 (`fileKey`)。別の録画へ移ってもページは作り直されないことがあるため
    */
   const base = new Map<string, number>();
   /** 段を切り替えている最中か (応答を待っている間は刻まない) */
@@ -1229,8 +1230,9 @@
 
   /** ファイルの大きさから段 0 のビットレートを読む (`HEAD`)。読めなければ null のまま */
   async function readBaseKbps(source: string, duration: number): Promise<void> {
-    if (baseAsked.has(source)) return;
-    baseAsked.add(source);
+    const key = fileKey(source);
+    if (baseAsked.has(key)) return;
+    baseAsked.add(key);
     try {
       const res = await fetch(
         resolve(`api/recordings/${rec.id}/file?source=${source}`),
@@ -1238,15 +1240,20 @@
       );
       const bytes = Number(res.headers.get("Content-Length"));
       if (res.ok && bytes > 0 && duration > 0)
-        base.set(source, (bytes * 8) / duration / 1000);
+        base.set(key, (bytes * 8) / duration / 1000);
     } catch {
       // 分からなければ `adapt.ts` の目安を使う
     }
   }
 
+  /** `base`・`baseAsked` のキー (録画と `?source=` の組) */
+  function fileKey(source: string): string {
+    return `${rec.id}:${source}`;
+  }
+
   /** `source` のファイルのビットレート (kbit/s)。読めていなければ null */
   function baseOf(source: string | null): number | null {
-    return source === null ? null : (base.get(source) ?? null);
+    return source === null ? null : (base.get(fileKey(source)) ?? null);
   }
 
   /** 段 0 で観るファイルの `?source=`。MPEG-2 は元の TS、その場で流すもの (段 0 が変換) は null */
