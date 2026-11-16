@@ -338,7 +338,7 @@ export class RungAdapter {
    * (先が埋まって読まない間はサーバも出さないので null になるが、受け取りの速さ `throughput` も最後に測った値のまま)
    */
   private waitShare: number | null = null;
-  /** 直前の刻みで、詰まりかバッファの減りを回線のせいにしたか (`short`)。下げ先を受け取りの速さで選ぶ (`lower`) */
+  /** この刻みの `short` で、詰まりかバッファの減りを回線のせいにしたか。そうなら下げ先を受け取りの速さで選ぶ (`lower`) */
   private starving = false;
   /** ライブで、段 0 で足りていたときに測った受け取りの速さ (bit/s)。段 0 へ上げてよいかを見るのに使う */
   private baseRate: number | null = null;

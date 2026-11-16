@@ -701,7 +701,7 @@ function logoIndex(input: CmInput, spans: Range[]) {
       longIn(a, b),
     /** ロゴが見えないまま持ち越された秒 */
     unseen: (a: number, b: number) => tailIn(a, b),
-    /** ロゴの無い秒 (映像の欠けた所と、判断できなかった所は除く) */
+    /** ロゴの無い秒。映像の欠けた所と、判断できなかった所のうち見えた秒に数える所 (`blindLong`) とどちらにも数えない所 (`blindShort`) は除く */
     bare: (a: number, b: number) =>
       b -
       a -
