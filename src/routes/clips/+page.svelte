@@ -1223,11 +1223,15 @@
     height: 100%;
     object-fit: contain;
   }
-  /* 読みものは左下。右端の列に掛からないよう右を空け、明るい画像の上でも読めるよう下から影を敷く */
+  /*
+   * 読みものは左下。明るい画像の上でも読めるよう下から影を敷く。**影は舞台の右端まで流し、字だけ右端の列の手前で止める。**
+   * 影も右を空けていた頃は、右端の列の影と重ならない右下の角だけ下の影が無く、境目が縦の線に見えた
+   */
   .v-info {
     position: absolute;
-    inset: auto 5rem 0 0;
-    padding: 2.5rem var(--dp-space-4) var(--dp-space-4);
+    inset: auto 0 0 0;
+    padding: 2.5rem calc(5rem + var(--dp-space-4)) var(--dp-space-4)
+      var(--dp-space-4);
     background: linear-gradient(
       to top,
       var(--dp-video-veil-strong),
