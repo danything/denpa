@@ -19,13 +19,10 @@
 import { ascii, concatBytes, joinBytes, u32 } from "@danything/arib/bytes";
 import { ADTS_RATES } from "@danything/arib/pes";
 
+import type { Fmp4Segment } from "../mp4/fmp4";
+
 /** ボックスのヘッダ。大きさと種別で 8 バイト */
 const HEADER = 8;
-
-interface Segment {
-  kind: "init" | "media";
-  data: Uint8Array;
-}
 
 /**
  * バイト列を渡すと、組み上がったセグメントを返す。
@@ -42,10 +39,10 @@ export class Fmp4Splitter {
   /** 読めないボックスが来た。以降は持ち越さずに捨てる (持ったままだと、届くたびに溜まり続ける) */
   private broken = false;
 
-  feed(chunk: Uint8Array): Segment[] {
+  feed(chunk: Uint8Array): Fmp4Segment[] {
     if (this.broken) return [];
     this.buffer = concatBytes([this.buffer, chunk]);
-    const out: Segment[] = [];
+    const out: Fmp4Segment[] = [];
     let at = 0;
     while (this.buffer.length - at >= HEADER) {
       const size = u32(this.buffer, at);
