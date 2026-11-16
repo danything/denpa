@@ -300,6 +300,56 @@ describe("観る画面で、回線が足りているのに詰まったとき", (
     ).toBeNull();
   });
 
+  test("ファイルの直再生で、ブラウザが読むのを止めていれば、終わり際にバッファが減っても回線のせいにしない", () => {
+    // 30 秒のファイルを読み終えている。先は終わりまでの長さなので、終わり際に 2 秒を切って減り続ける
+    const ending = (now: number): Partial<AdaptSample> => ({
+      baseKbps: 1_900,
+      ahead: Math.max(0, 30 - now / 1_000),
+    });
+    // 読むのを止めていることを渡さなければ、終わり際に下げてしまう (直す前の動き)
+    expect(first(new RungAdapter(), 0, 29_000, ending)).toEqual({
+      at: 29_000,
+      decision: { step: 1, reason: "slow" },
+    });
+    expect(
+      first(new RungAdapter(), 0, 29_000, (now) => ({
+        ...ending(now),
+        idle: true,
+      })),
+    ).toBeNull();
+  });
+
+  test("飛んだ先をデコードし終えるまで詰まっても、ブラウザが読むのを止めていれば回線のせいにしない", () => {
+    // AV1 のファイルを直再生。10 秒目に飛び、飛んだ先を出すまで 5 秒詰まる。先はブラウザの数え方で 1 秒しか無い
+    const seek = (idle: boolean) => {
+      const a = new RungAdapter();
+      expect(first(a, 0, 9_000, { baseKbps: 1_900, idle })).toBeNull();
+      a.reset(10_000);
+      return first(a, 10_000, 15_000, (now) => ({
+        baseKbps: 1_900,
+        ahead: 1,
+        waiting: now < 15_000,
+        idle,
+      }));
+    };
+    expect(seek(false)).toEqual({
+      at: 10_000 + GRACE,
+      decision: { step: 1, reason: "slow" },
+    });
+    expect(seek(true)).toBeNull();
+  });
+
+  test("ファイルの直再生で、ブラウザが読み続けたまま先を使い切ったら、これまでどおり下げる", () => {
+    // 回線が細く、先が埋まらないのでブラウザは読むのを止めない。先が 10 秒から減っていき、使い切って詰まる
+    const a = new RungAdapter();
+    expect(
+      first(a, 0, 30_000, (now) => {
+        const ahead = Math.max(0, 10 - now / 1_000);
+        return { baseKbps: 1_900, ahead, waiting: ahead === 0, idle: false };
+      })?.decision,
+    ).toEqual({ step: 1, reason: "slow" });
+  });
+
   test("測った速さが段に足りなければ、これまでどおり詰まりで下げる", () => {
     // 15 Mbit/s × 0.7 = 10.5 Mbit/s は MPEG-2 の 13.7 Mbit/s に足りない
     const a = new RungAdapter();
