@@ -144,7 +144,7 @@ describe("局の選り分け", () => {
   });
 
   /**
-   * **絞るのに要るわけではない。** データ放送が受信機に訊いてくるので覚える —
+   * **絞るのに要るわけではない。** データ放送が受信機に訊いてくるので覚える。
    * テレ朝の TVer リンクはこれを TVer のサーバへ送り、無いと `DT-RE` で止まる
    * ([server/live.ts](https://github.com/danything/denpa/blob/main/src/lib/server/live.ts) の `programInfo`)
    */
@@ -231,7 +231,7 @@ describe("局の選り分け", () => {
   });
 
   /*
-   * エージェントは、覚えた PAT・PMT で流し始めたとき、その 1 組を先頭に差し込む (docs/agent.md「素の TS を流す」)。
+   * エージェントは、覚えた PAT・PMT で流し始めたとき、その 1 組を先頭に差し込む (docs/agent.md「通信は HTTPS」)。
    * 差し込んだぶんのあとに本物の PAT・PMT が続き、連続性カウンタは本物とつながらない
    */
   test("先頭に差し込んだ PAT・PMT で通し始め、あとから来た本物の PAT・PMT (連続性カウンタが飛ぶ) も読む", () => {
@@ -347,7 +347,7 @@ describe("コピー禁止", () => {
     expect(filter.copyNever).toBe(true);
   });
 
-  test("途中で禁止に変わり、また解ける。絞り方は変わらない", () => {
+  test("途中で禁止に変わり、また禁止でなくなる。絞り方は変わらない", () => {
     const filter = new ServiceFilter(MX1);
     filter.filter(Uint8Array.from([...pat(), ...pmt([])]));
     expect(filter.copyNever).toBe(false);

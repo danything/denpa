@@ -158,7 +158,7 @@ export class ServiceFilter {
   /**
    * **映像・音声・字幕の並び** (最後に読んだ PMT の `種別:PID`)。PMT を読むまでは null。
    *
-   * これが変わったら ffmpeg を作り直す (`StreamsWatch`)。ffmpeg は起きたときの並びのまま
+   * これが変わったら ffmpeg を起動し直す (`StreamsWatch`)。ffmpeg は起動したときの並びのまま
    * 音声・字幕を選んでいるので、番組が替わって音声の本数や字幕の PID が変わると追従しない。
    * データ放送などのセクション (0x0D など) は入れない。番組ごとに増減しても ffmpeg には関係ない
    */
@@ -277,8 +277,8 @@ export class ServiceFilter {
  * **映像・音声・字幕の並びが変わったか** (`ServiceFilter.streams`) を見る。最初に読んだ並びを覚え、変わったら
  * 1 回だけ true を返して新しい並びを覚え直す。
  *
- * 並びを決め打ちで起こした ffmpeg (`-map`) は、番組が替わって音声の本数や字幕の PID が変わっても追従しない。
- * 変わったら起こし直す。使うのはライブと追っかけのエンコード (denpa の `server/live.ts` の `Session.pump`)、MPEG-2 をそのまま
+ * 並びを決め打ちで起動した ffmpeg (`-map`) は、番組が替わって音声の本数や字幕の PID が変わっても追従しない。
+ * 変わったら起動し直す。使うのはライブと追っかけのエンコード (denpa の `server/live.ts` の `Session.pump`)、MPEG-2 をそのまま
  * 流す経路の字幕 (`Session.runRaw`・`recordingCaptions`)
  */
 export class StreamsWatch {

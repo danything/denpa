@@ -160,7 +160,7 @@ describe("TS から見つける", () => {
   });
 
   test("AIT が先に来ても、PMT を読むまでは読み取らない", () => {
-    // **印を知らない PID は読まない。** 読み取ってしまうと他局の表まで混ざる
+    // **PMT に印の無い PID は読まない。** 読み取ってしまうと他局の表まで混ざる
     const reader = new AitReader(1024);
     const ait = packetize(
       0x0200,

@@ -219,7 +219,7 @@ describe("smoothDrcs", () => {
     expect([wide.w, wide.h]).toEqual([255, 1]);
   });
 
-  test("読めない画像 (大きさ 0・知らない bits) はそのまま渡す", () => {
+  test("読めない画像 (大きさ 0・対応していない bits) はそのまま渡す", () => {
     expect(smoothDrcs(0, 0, 2, 1, new Uint8Array())).toEqual({
       w: 0,
       h: 0,

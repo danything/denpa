@@ -3,7 +3,7 @@
  * TS の字幕の `b24caption.ts` に当たり、受け側は TS の字幕と同じように描くだけで済む。
  *
  * 字幕の文書は MPU 1 つに 1 つ来る (`mmt-media.ts` の `CaptionUnit`)。文書の中の時刻 (begin・end・dur) は、
- * MPU の最初の提示時刻からのずれとして読む (推定。字幕のパケットは実機の録りにまだ来ていない)。
+ * MPU の最初の提示時刻からのずれとして読む (推定。実機で録ったものに字幕のパケットがまだ無い)。
  *
  * 読むのは文字・位置 (region の origin・extent、textAlign・displayAlign)・大きさ (fontSize・lineHeight)・
  * 色 (color・backgroundColor・textOutline)・太字・斜体・下線・ルビ。画像を参照する字幕 (PNG) と

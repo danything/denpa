@@ -511,7 +511,7 @@ export class MmtTableStream {
  * 局の元の放送は MH-SDT の original_network_id (ケーブルで受けた BS4K なら 0x000B)、TSID の代わりに tlv_stream_id を入れる。
  * TLV にはリモコン番号が無い (TLV-NIT に見当たらない) ので null。
  *
- * 局ごとの CA_system_id は、PLT から package (= service_id) の MPT を引き、そのアクセス制御記述子から読む (`caSystemIdsOf`)。
+ * 局ごとの CA_system_id は、package (= service_id) ごとに覚えた MPT のアクセス制御記述子から読む (`caSystemIdsOf`)。
  * free_CA_mode は使わない (`MhService.isFree`)。
  *
  * MH-SDT[actual] が来なくても、自分の TLV ストリームは TLV-NIT と PLT で分かる (`ownStream`)。

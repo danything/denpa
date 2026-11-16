@@ -112,7 +112,7 @@ function drcsSet(final: number): Entry | undefined {
   return { set: { drcs: index }, bytes: index === 0 ? 2 : 1 };
 }
 
-/** マクロの終わりはどれも同じ: G3 にマクロを載せて (ESC 0x2B 0x20 0x70)、LS0・LS2R */
+/** マクロの終わりはどれも同じで、G3 にマクロを載せて (ESC 0x2B 0x20 0x70)、LS0・LS2R */
 const MACRO_TAIL = [0x1b, 0x2b, 0x20, 0x70, 0x0f, 0x1b, 0x7d];
 
 /** 既定のマクロ (0x60〜0x6F)。符号の集合を組み替えるだけ。ここに書くのは G0〜G2 の指示 (ESC 列) */

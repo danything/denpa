@@ -63,8 +63,8 @@ function ipv4Text(data: Uint8Array, at: number): string {
 /**
  * TLV パケットから UDP を取り出す。**CID ごとの宛先を覚える**ので、1 つの TLV のストリームに 1 つ使う。
  *
- * 圧縮したものは、CID の宛先をまだ知らなくても中身を返す (`address` が null)。
- * 圧縮できるのは UDP だけなので中身は UDP の中身と決まっていて、MMTP は宛先を知らなくても読める。
+ * 圧縮したものは、CID の宛先がまだ分からなくても中身を返す (`address` が null)。
+ * 圧縮できるのは UDP だけなので中身は UDP の中身と決まっていて、MMTP は宛先が分からなくても読める。
  * 全部のヘッダーは 1 秒に 10 回ほどしか来ないので、待つと選局したての 0.1 秒ぶんを捨てることになる
  */
 export class TlvIpReader {

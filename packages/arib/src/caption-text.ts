@@ -9,7 +9,7 @@ import { LANGUAGE } from "./language.js";
  * 合わせて縦横それぞれ伸ばす。色は `#rrggbbaa`。
  */
 
-/** 形式のバージョン。**互換の無い変え方をしたら上げる** (受け側は知らないバージョンを描かない) */
+/** 形式のバージョン。**互換の無い変え方をしたら上げる** (受け側は対応していないバージョンを描かない) */
 export const CAPTION_TEXT_VERSION = 1;
 
 /** 縁取り (ORN) の太さ。面の単位で、字の輪郭の外側へ。libaribcaption の既定 (ffmpeg の `outline_width`) と同じ */
@@ -127,13 +127,13 @@ export interface CaptionLanguage {
   index: number;
   /** ISO 639-2 の 3 文字 (`jpn` / `eng`)。読めなければ空 */
   code: string;
-  /** 読める名前 (日本語・英語)。知らない符号はそのまま */
+  /** 読める名前 (日本語・英語)。表に無い符号はそのまま */
   label: string;
 }
 
 /**
  * 録画の字幕のうち、第 2 言語から後ろ (`CaptionPages.others`)。**第 1 言語は今までどおり `pages`。**
- * バージョン (`v`) を上げずに足したので、知らない受け側は第 1 言語だけを描く
+ * バージョン (`v`) を上げずに足したので、`others` に対応していない受け側は第 1 言語だけを描く
  */
 export interface CaptionLanguagePages extends CaptionLanguage {
   pages: { at: number; page: CaptionPage }[];
