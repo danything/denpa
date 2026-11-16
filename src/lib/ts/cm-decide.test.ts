@@ -982,13 +982,17 @@ describe("ロゴの区間の外で判断できなかった所", () => {
      * CM の中のちょうど 5 秒の所に強い切れ目があると、260.7〜270.7 を「CM の前の提供」とみる分け方ができる。
      * 判断できなかった秒を番組に半分の点で数えると、その分け方が CM 1 本を上回っていた
      */
-    const input = recording(
-      600,
-      [7.4, ...every15(255.7, 315.7)],
-      [{ start: 7.7, end: 255.5 }, logo[1]!],
-      { ...span, logoBlind: [{ start: 255.8, end: 270.6 }] },
-    );
-    input.cuts[Math.round(260.7 * FPS)] = 20;
+    const breaks = [7.4, ...every15(255.7, 315.7)];
+    const material = frames(600, breaks);
+    material.cuts[Math.round(260.7 * FPS)] = 20;
+    const input: CmInput = {
+      duration: 600,
+      silences: silencesAt(breaks),
+      ...material,
+      logo: [{ start: 7.7, end: 255.5 }, logo[1]!],
+      ...span,
+      logoBlind: [{ start: 255.8, end: 270.6 }],
+    };
     expect(round(decideCm(input))).toEqual([
       { start: 0, end: 7.4 },
       { start: 255.7, end: 315.7 },
