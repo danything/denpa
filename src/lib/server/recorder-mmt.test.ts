@@ -14,9 +14,21 @@ mock.module("./webhook", () => ({ notify: () => undefined }));
 
 const SERVICE_ID = 0x65;
 const actualTuner = await import("./tuner");
+/*
+ * **差し替えはこのファイルの中だけで効かせる。** `--isolate` を付けずに動かすと `mock.module` は他のファイルにも残り、
+ * `tuner.ts` の中から呼ぶ `openChannel` (`openChannelStream` が呼ぶもの) まで差し替わったままになる。
+ * 終わったら本物の `openChannel` に渡す (すぐ下の `afterAll`)
+ */
+const realOpenChannel = actualTuner.openChannel;
+let faking = true;
+afterAll(() => {
+  faking = false;
+});
 mock.module("./tuner", () => ({
   ...actualTuner,
-  openChannel: async (_type: string, _channel: string, signal: AbortSignal) => {
+  openChannel: async (...args: Parameters<typeof realOpenChannel>) => {
+    if (!faking) return realOpenChannel(...args);
+    const signal = args[2];
     const av = new SynthMmtAv({
       serviceId: SERVICE_ID,
       mptPacketId: 0x9000,
