@@ -77,8 +77,10 @@ function i965(argv: string[]): number {
  */
 test("hwReady: まだ確かめていなければ確かめ終わるのを待ち、済んでいれば探し直さない", async () => {
   answer = i965;
-  calls.length = 0;
   const wasProbed = hwEncode().probed;
+  // --isolate を付けずに動かすと、前のファイルが確かめた見立てが残っている。このファイルのデバイスで確かめ直しておく
+  if (wasProbed) await probe();
+  calls.length = 0;
   const ready = await hwReady();
   expect(ready.probed).toBe(true);
   expect(ready.devices[0]?.vaapi).toEqual(["hevc", "h264"]);
