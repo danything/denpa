@@ -44,7 +44,7 @@
   onMount(markLite);
 
   /*
-   * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると、スマホの形で出す下のタブ (とその上の操作の 1 行) を隠し、上へ戻すと出す。
+   * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると、スマホの形で下のタブの上に出す操作の 1 行を隠し、上へ戻すと出す。**下のタブはいつも出す** (ほかの画面へ移るのに上へ戻させない。#2911)。
    * 広い形のヘッダーは引っ込めない (検索の欄を見せたまま)。JS は印 (`data-retract`) を付け外しするだけで、動きは CSS。
    * **見るのは窓の巻き取りと、自分で巻き取る箱 (`data-retract-scroll`。番組表の表の箱) の縦の巻き取り。**
    * 箱を横に送ったときは出し入れしない (縦の量が変わらない。局を探しているところで、読み進めているのではない)。
@@ -53,8 +53,11 @@
    * **箱は、自分でその中を巻いたときだけ見る** (最後に触った所 `touched` が箱の中)。開いた直後の「いま」への位置合わせや、
    * 操作の 1 行の時刻へ送るボタンで動いたぶんは読んでいるのではないので、押したボタンごと隠さない。
    * 画面を移ったら出し、触った所も忘れる (番組表から移ると窓は巻かれないので、隠れたまま残っていた)
+   * **隠すのは窓の高さが `SHORT` に満たないときだけ** (横向きのスマホ)。それより高い画面では、出し入れの動きのほうが空く 1 行より気になる (#2911)
    */
   let retract = $state(false);
+  /** 操作の 1 行を隠してよい窓の高さ。横向きのスマホ (430px 前後まで) を含み、縦向きのスマホ (640px から) を含まない */
+  const SHORT = "(max-height: 599.98px)";
   let jumped = false;
   let touched: EventTarget | null = null;
   afterNavigate(({ to }) => {
@@ -64,8 +67,13 @@
   });
   onMount(() => {
     let prev = scrollY;
+    const short = matchMedia(SHORT);
+    const onShort = () => {
+      if (!short.matches) retract = false;
+    };
+    short.addEventListener("change", onShort);
     const follow = (y: number, before: number) => {
-      if (y < 48) retract = false;
+      if (!short.matches || y < 48) retract = false;
       else if (y - before > 4) retract = true;
       else if (before - y > 4) retract = false;
     };
@@ -109,6 +117,7 @@
     for (const type of OWN) addEventListener(type, own, { passive: true });
     addEventListener("click", onClick, { capture: true });
     return () => {
+      short.removeEventListener("change", onShort);
       removeEventListener("scroll", onScroll);
       document.removeEventListener("scroll", onBoxScroll, { capture: true });
       for (const type of OWN) removeEventListener(type, own);
@@ -882,10 +891,6 @@
    */
   .tabbar[data-theme] {
     color: var(--pico-color);
-  }
-  /* キーボードで中に触っている間は引っ込めない (見えないまま操作させない) */
-  .shell[data-retract] .tabbar:not(:has(:focus-visible)) {
-    transform: translateY(calc(100% + 0.5rem + env(safe-area-inset-bottom)));
   }
   .tabbar .tab,
   .tab-more :global(.tab) {
