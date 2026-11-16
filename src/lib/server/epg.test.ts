@@ -1403,6 +1403,8 @@ describe("読めなかったエージェントの取り込み直し", () => {
     // denpa とエージェントを同時に入れ替えると、起動直後の取り込みはエージェントに繋がらない
     const { listAgents } = await import("./agents");
     const agent = listAgents()[0]!;
+    // --isolate を付けずに動かすと、前のファイルで読めなかったエージェントの印が残っている。読める間に取り込んで消しておく
+    await sync(agent);
     expect(syncPending(agent.id)).toBe(false);
 
     starting = true;
