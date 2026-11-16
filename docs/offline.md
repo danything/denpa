@@ -6,7 +6,7 @@
 
 下の「ダウンロード」は、端末に保存するためにブラウザが録画を受け取ることを指します (使い方は [watch.md](watch.md#端末に保存して観る-オフライン))。
 
-実装の入口:
+実装の入口です。
 
 - [src/lib/offline-db.ts](../src/lib/offline-db.ts) … IndexedDB (ページと SW の共有層)
 - [src/lib/offline.svelte.ts](../src/lib/offline.svelte.ts) … 画面側 (保存・進捗・削除・outbox)
@@ -30,12 +30,12 @@
               online 復帰 ──▶ outbox を処理: DELETE /api/recordings/<id> → deleteRecordingFiles
 ```
 
-**Service Worker は配信のキャッシュに使いません** (`/api/` は素通し、キャッシュするのは殻だけ)。
+**Service Worker は配信のキャッシュに使いません** (`/api/` は素通し、キャッシュするのは画面の HTML と JS だけ)。
 足したのは Background Fetch の受け取りとオフラインの入口だけで、
 `/offline` を install 時に控えて、ナビゲーションが繋がらないときの行き先にします
 (ブラウザのダウンロード表示を押したときも `backgroundfetchclick` で `/offline` を開く)。
 繋がらないときは**どの画面を開いても `/offline` へ移します** (その URL のまま `/offline` の HTML を返すと、
-殻がその URL の画面として始まり、データを取得してエラーになる)。`/offline` は SSR を切った殻で、開くたびに
+読み込んだ JS がその URL の画面として始まり、データを取得してエラーになる)。`/offline` は SSR を切った画面で、開くたびに
 共通の枠のデータ (`/offline/__data.json`。ログイン情報など) を取得するので、これも一緒にキャッシュして
 繋がらないときだけ返します。キャッシュしていなかった頃は、電波が無いと真っ白な画面になっていました。
 
@@ -56,7 +56,7 @@ adapter-bun は名前に指紋の無い静的ファイルに `Cache-Control` を
 
 ## データモデル (IndexedDB)
 
-DB 名 `denpa-offline`、ストア 4 つ (実体は [offline-db.ts](../src/lib/offline-db.ts) の型が正):
+DB 名は `denpa-offline` で、ストアは次の 4 つです (正は [offline-db.ts](../src/lib/offline-db.ts) の型)。
 
 - `videos` (key: 録画 ID) … 保存した録画 1 本。`video: Blob` と付属のデータ
   (`captionText`: `captions.json` の JSON・`poster: Blob`・`chapters`/`databroadcast`: JSON) を 1 行にまとめ、
@@ -65,7 +65,7 @@ DB 名 `denpa-offline`、ストア 4 つ (実体は [offline-db.ts](../src/lib/o
 - `outbox` (key: 録画 ID) … オンライン復帰で処理する予約 (`{op: 'delete', name, queuedAt}`)。
 - `resume` (key: 録画 ID) … オフライン中に進んだ視聴位置。復帰時にまとめて
   `POST /api/recordings/<id>/resume` で送る。
-- `parts` (key: `[録画ID, 番号]`) … ページで受け取った動画の塊 (16MiB ずつ。下記の 5)。
+- `parts` (key: `[録画ID, 番号]`) … ページで受け取った動画の塊 (16 MiB ずつ。下記の 5)。
   その録画の `videos` の行は `video` の代わりに塊の数 (`parts`) と形式 (`videoType`) を持つ。
   **読むときは `videos.get` / `all` が塊を 1 本の `video` につないで出す**ので、観る画面・`/offline`・SW は
   塊を知らなくてよい (つないでも中身は写さない。置き場の Blob はファイルを指しているだけ)。
@@ -79,12 +79,12 @@ DB 名 `denpa-offline`、ストア 4 つ (実体は [offline-db.ts](../src/lib/o
 
 ## 主要な流れ
 
-### ダウンロード — Background Fetch API を使う
+### ダウンロードは Background Fetch API を使う
 
 1. **HEAD で下見してから預ける** (`probeDownloads`。一度に訊く)。Background Fetch は
    404 が 1 つでも混ざると全体が失敗になる (`failureReason: bad-status`) ので、付属のデータは
    在るものだけに絞る。`downloadTotal` を超えても打ち切られるので、HEAD の実測合計 (+2%) を渡す。
-   どちらも実機の Edge で踏んだ。
+   どちらも実機の Edge で起きた。
 2. `backgroundFetch.fetch(id, urls, {title, downloadTotal})` でブラウザに預ける (タブを
    閉じても続く。`/api/…/file` もほかの API と同じくログインの控えで通る)。登録 ID は
    `rec-<録画ID>-<source>-<試みの印>`。同じ ID が生きている間は再登録できないので
@@ -104,21 +104,21 @@ DB 名 `denpa-offline`、ストア 4 つ (実体は [offline-db.ts](../src/lib/o
      付属のデータは動画と同時に取得する。途中の失敗は `state='failed'` で残し、塊は捨てる
    - 取り消し・削除は受け取りも止める。開き直したときに「保存中」なのに受け取っていない行は失敗に倒す
      (ページを閉じた・読み込み直した時点で止まっている。`watchRunning`)
-   - **動画は 16MiB の塊ごとに `parts` へ書きながら受け取る** (`stream-parts.ts`)。全部をメモリに
-     溜めてから 1 つの Blob にしていた頃は、900MB の録画で iPhone の Safari のタブがだんだん重くなり、
+   - **動画は 16 MiB の塊ごとに `parts` へ書きながら受け取る** (`stream-parts.ts`)。全部をメモリに
+     溜めてから 1 つの Blob にしていた頃は、900 MB の録画で iPhone の Safari のタブがだんだん重くなり、
      最後は落とされて読み込み直しになっていた。書いている間も次の塊を受け取る (書き込みは 1 つずつ)
    - **割合の分母は、返事に `Content-Length` が無ければ下見 (HEAD) の大きさ。** Cloudflare など
      間に入るものが外して送ることがあり、そのときは割合が出ず流れるだけの表示になっていた。
      割合は 1% 変わったときだけ書き換える (届くたびに一覧を描き直さない)
 
-### どれを保存するか — 端末がデコードできるコーデック
+### 保存するのは端末がデコードできるコーデック
 
 エンコード済みのファイル (主 `library_path`・H.265 `hevc_path`・H.264 `alt_path`) のうち、**AV1 → H.265 → H.264 の順で
 この端末で観られる最初のもの**を保存する (観る画面と同じ順。`offline-db.ts` の `offlineSource`)。コーデックは置き場の名前で
 見分ける (`… [H265].mkv`・`… [H264].mkv`。H.264 だけでエンコードした録画は主がもう H.264)。
 
 - AV1 … `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.0.09M.08` を 1080p60 で問うた `supported`)。
-  AV1 の Matroska は WebM としても読める。**Level は 4.1** — 4.0 は 30fps までで、Safari は Level と
+  AV1 の Matroska は WebM としても読める。**Level は 4.1** (`09M`)。4.0 は 30 fps までで、Safari は Level と
   コマ数を突き合わせて「デコードできない」と答える
 - H.265 … 同じく `hvc1.…` でデコードできて、**しかも `canPlayType` が Matroska の H.265 を読めると言うとき**。保存するのは
   Matroska のままで、WebM に H.265 は入れられないので、デコーダがあっても入れ物を読めない端末 (Safari など) がある
@@ -147,7 +147,7 @@ DB 名 `denpa-offline`、ストア 4 つ (実体は [offline-db.ts](../src/lib/o
 ### 削除とサーバ同期
 
 - `/offline` で削除 → `videos` から除去し、`outbox` に `{op:'delete'}` を積む (オンラインならその場で流す)。
-- `online` イベント (と起動時の `navigator.onLine`) で `outbox` を処理:
+- `online` イベント (と起動時の `navigator.onLine`) で `outbox` を処理する。
   `DELETE /api/recordings/<id>` → サーバは [`deleteRecordingFiles`](../src/lib/server/files.ts) を呼ぶ。
   成功と 404 (もう無い) は済みとして消し、他の失敗は残して次の復帰で再試行。
   視聴位置 (`resume` ストア) も同じ合図で送る。
@@ -159,10 +159,10 @@ DB 名 `denpa-offline`、ストア 4 つ (実体は [offline-db.ts](../src/lib/o
 
 ## 決めたこと
 
-コーデック (AV1 → H.265 → H.264) とダウンロード方式 (Background Fetch) は上記。ほかに:
+コーデック (AV1 → H.265 → H.264) とダウンロード方式 (Background Fetch) は上に書いたとおりです。
 
 - **削除の API: `DELETE /api/recordings/[id]`。** 何度呼んでも同じ結果になる
   (答えは [api.md](api.md#録画を消す-delete-apirecordingsid))。
-- **容量: 保存する前に確かめる** (30 分で約 300MB)。`navigator.storage.estimate()` の空きが
+- **容量: 保存する前に確かめる** (30 分で約 300 MB)。`navigator.storage.estimate()` の空きが
   HEAD で測った合計の 1.2 倍に満たなければ断り、`navigator.storage.persist()` で
   ブラウザに勝手に消させない。

@@ -7,7 +7,7 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 
 チューナー・カードリーダー・OS の一覧と機材ごとのページは [tuners.md](tuners.md#要るもの) に。
 
-- イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
+- イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものを取得します
 - **Intel・AMD の GPU**: `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
   `compose.override.yml` で渡します (Helm は既定で渡す)。Intel・AMD の GPU を使えるのは amd64 だけです
   ([encode.md](encode.md#gpu-でエンコードする-va-api))
@@ -16,7 +16,7 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 - **Rockchip (RK3588 / RK3588S)**: BSP カーネルの上で `/dev/mpp_service` と `/dev/dma_heap` を渡せば、H.264 と H.265 を
   ハードウェアでエンコードします (arm64。[encode.md](encode.md#rockchip-rk3588-でエンコードする))
 
-## 1行で入れる
+## 1 行で入れる
 
 **イメージは公開してあるので、clone は要りません。** 立ち上がるとブラウザが開きます。
 
@@ -62,7 +62,7 @@ docker compose up -d
 
 `.env` の `AGENT_PAIR_TOKEN` が無いと compose は止まります (install.sh は無いときだけ作ります)。
 
-### 1つのコンテナで (`denpa-aio`)
+### 1 つのコンテナで (`denpa-aio`)
 
 本体とエージェントを 1 つにまとめたイメージです。チューナーを挿した機械で全部動かすとき
 (NAS や、ほかの仕組みに載せるとき) 向け。中身は 2 つのイメージと同じです。
@@ -217,7 +217,7 @@ kubectl debug -it deploy/denpa --image=busybox --target=denpa -n denpa
 - **`Host` をそのまま渡し、WebSocket を通します。** `Host` が書き換わると設定の保存などの POST が
   `403 Cross-site POST form submissions are forbidden` で断られ、WebSocket が通らないとライブが
   「繋がりませんでした」になります。Caddy・Traefik・Envoy (Gateway API) は何もしなくても満たします。
-  Nginx Proxy Manager は「Websockets Support」を入れます。nginx は次のように書きます。
+  Nginx Proxy Manager は「Websockets Support」をオンにします。nginx は次のように書きます。
 
   ```nginx
   location / {
