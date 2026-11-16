@@ -135,7 +135,9 @@ if (slow !== undefined && (await Bun.file(slow).exists()))
  * 塊の後ろに `free` の箱を足して、ビットレートを本物のエンコードに近づける (サーバは次の塊の先頭に付けて区切り、MSE は読み飛ばす)
  */
 async function pacedOut(data: Uint8Array, spec: string): Promise<void> {
-  const [speed = 1, kbps = 0] = spec.split(/\s+/).map(Number);
+  const [given = 1, kbps = 0] = spec.split(/\s+/).map(Number);
+  // 倍率が 0 以下・数でなければ実時間で出す
+  const speed = given > 0 ? given : 1;
   const segments = new Fmp4Splitter().feed(data);
   const media = segments.filter((segment) => segment.kind === "media");
   const each = PACED_CLIP / Math.max(1, media.length);

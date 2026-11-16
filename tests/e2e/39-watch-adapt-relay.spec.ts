@@ -70,20 +70,16 @@ test.describe("観る画面で、エンコードが遅いその場の変換を�
   test("応答を溜める中継の先で回線が細ければ、サーバが ffmpeg を待っていても詰まって下げる", async ({
     page,
     request,
-    stack,
   }) => {
     test.setTimeout(180_000);
     const id = await watchable(page, request);
     await streamOnly(page, id);
     const asked = streamRequests(page);
     const waits = paceWaits(page);
-    const relay = await bufferingRelay(stack.appUrl, 2_000_000);
+    const relay = await bufferingRelay(2_000_000);
     try {
       await page.route(`**/api/recordings/${id}/stream?**`, (route) => {
-        const url = new URL(route.request().url());
-        return route.continue({
-          url: `${relay.url}${url.pathname}${url.search}`,
-        });
+        return route.continue({ url: relay.via(route.request().url()) });
       });
 
       await goto(page, `/watch/${id}`);
@@ -102,22 +98,29 @@ test.describe("観る画面で、エンコードが遅いその場の変換を�
 });
 
 /**
- * **応答を溜める中継** (応答を溜める設定の逆プロキシのようなもの)。`origin` から受けるそばから溜め、
- * 画面へは `bps` の速さで送る。リクエストのヘッダはそのまま渡し、応答のヘッダもそのまま返す
+ * **応答を溜める中継** (応答を溜める設定の逆プロキシのようなもの)。`via` に渡した URL から受けるそばから溜め、
+ * 画面へは `bps` の速さで送る。リクエストのヘッダはそのまま渡し、応答のヘッダもそのまま返す。
+ * 宛先は `via` で控えた URL だけ (中継に来たリクエストの URL から宛先を組まない)
  */
 async function bufferingRelay(
-  origin: string,
   bps: number,
-): Promise<{ url: string; close: () => void }> {
+): Promise<{ via: (url: string) => string; close: () => void }> {
+  /** 中継の URL のパス (`/1` など) から、宛先の URL */
+  const targets = new Map<string, string>();
   const server = createServer((req, res) => {
     const abort = new AbortController();
     res.on("close", () => abort.abort());
+    const target = targets.get(req.url ?? "");
+    if (target === undefined) {
+      res.writeHead(404).end();
+      return;
+    }
     void (async () => {
       const headers = new Headers();
       for (const [name, value] of Object.entries(req.headers))
         if (typeof value === "string" && name !== "host")
           headers.set(name, value);
-      const upstream = await fetch(`${origin}${req.url ?? "/"}`, {
+      const upstream = await fetch(target, {
         headers,
         signal: abort.signal,
       });
@@ -171,7 +174,11 @@ async function bufferingRelay(
   );
   const { port } = server.address() as AddressInfo;
   return {
-    url: `http://127.0.0.1:${port}`,
+    via: (url) => {
+      const path = `/${targets.size + 1}`;
+      targets.set(path, url);
+      return `http://127.0.0.1:${port}${path}`;
+    },
     close: () => {
       server.closeAllConnections();
       server.close();

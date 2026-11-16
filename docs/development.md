@@ -120,7 +120,7 @@ CI では 10 組に割って別のランナーに出し、3 ワーカーの 8 �
 
 ブラウザは Chromium です。手元で Firefox・WebKit でも流すときは、イメージの中で `bunx playwright install --with-deps firefox webkit` を
 済ませてから `E2E_BROWSER=firefox` (か `webkit`) を付けます (`playwright.config.ts`)。`--browser` で替えると、Chromium だけの起動引数が
-WebKit に渡って起動できません。CDP で回線を絞るテストは Chromium だけで流します
+WebKit に渡って起動できません。CDP で回線を絞るテストは Chromium だけで流します。
 
 ## CI
 
