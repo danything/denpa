@@ -32,8 +32,9 @@ import {
 } from "@danything/arib/synth-mmt-av";
 
 import { readFragment, readInit } from "../ts/fmp4";
+import type { Fmp4Segment } from "./fmp4";
 import { nalType, parseSps } from "./hevc";
-import { type Fmp4Segment, MmtFmp4 } from "./mmt";
+import { MmtFmp4 } from "./mmt";
 
 /**
  * 本物の ffmpeg が作った HEVC と AAC (`@danything/arib/synth-mmt-av` の素材) を MMT で包み (`synth-mmt.ts`)、取り出して fMP4 にする。

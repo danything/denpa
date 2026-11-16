@@ -16,7 +16,8 @@ import { CLOCK, MmtMediaReader } from "@danything/arib/mmt-media";
 import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
 import { ttmlPages } from "@danything/arib/ttml";
 
-import { type Fmp4Segment, MmtFmp4 } from "#lib/mp4/mmt.js";
+import type { Fmp4Segment } from "#lib/mp4/fmp4.js";
+import { MmtFmp4 } from "#lib/mp4/mmt.js";
 
 /** NTP の時刻 (1900 年から) と UNIX 時刻 (1970 年から) の差 (ミリ秒) */
 const NTP_TO_UNIX_MS = 2_208_988_800_000;

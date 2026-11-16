@@ -40,6 +40,15 @@ export interface Mp4Sample {
   keyframe: boolean;
 }
 
+/**
+ * fMP4 のセグメント 1 つ。初期化セグメント (`init`) かメディアセグメント (`media`)。
+ * ffmpeg の出力を割ったもの (`ts/fmp4.ts` の `Fmp4Splitter`) も、4K の放送を詰め替えたもの (`mmt.ts`) もこの形
+ */
+export interface Fmp4Segment {
+  kind: "init" | "media";
+  data: Uint8Array;
+}
+
 const be16 = (value: number) => [(value >> 8) & 0xff, value & 0xff];
 const be32 = (value: number) => [
   (value >>> 24) & 0xff,

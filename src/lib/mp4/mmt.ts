@@ -23,6 +23,7 @@ import type {
 
 import {
   type AudioTrack,
+  type Fmp4Segment,
   initSegment,
   mediaSegment,
   type Mp4Sample,
@@ -32,12 +33,6 @@ import { hvcC, NAL_PPS, NAL_SPS, NAL_VPS, nalType, parseSps } from "./hevc";
 
 const VIDEO_TRACK = 1;
 const AUDIO_TRACK = 2;
-
-/** 出すもの (`ts/fmp4.ts` の `Fmp4Splitter` が出すものと同じ形) */
-export interface Fmp4Segment {
-  kind: "init" | "media";
-  data: Uint8Array;
-}
 
 /** 長さ (4 バイト) を前に付けて並べる (MP4 のサンプルの形) */
 function sampleData(nals: readonly Uint8Array[]): Uint8Array {

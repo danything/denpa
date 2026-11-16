@@ -20,7 +20,8 @@ import {
 } from "@danything/arib/mmt-media";
 import { ttmlPages } from "@danything/arib/ttml";
 
-import { type Fmp4Segment, MmtFmp4 } from "#lib/mp4/mmt.js";
+import type { Fmp4Segment } from "#lib/mp4/fmp4.js";
+import { MmtFmp4 } from "#lib/mp4/mmt.js";
 
 import { keepNewest } from "./expiring";
 import { readRecording, recordingStream } from "./recording-io";

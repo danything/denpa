@@ -61,6 +61,7 @@ import {
   type LiveCodec,
   type Notice,
 } from "#lib/live.js";
+import type { Fmp4Segment } from "#lib/mp4/fmp4.js";
 import {
   busyNote,
   ENCODE_SLOW,
@@ -2982,10 +2983,7 @@ class Session {
    * fMP4 の init か media を 1 つ配る (`drain` が ffmpeg の出力を割ったもの、`runMmt` が詰め替えたもの)。
    * `current` はいまの ffmpeg (詰め替えはいつも) が出したものか。違えば開くまでの内訳と速さに数えない
    */
-  private deliver(
-    segment: { kind: "init" | "media"; data: Uint8Array },
-    current: boolean,
-  ): void {
+  private deliver(segment: Fmp4Segment, current: boolean): void {
     if (segment.kind === "init") {
       this.init = segment.data;
       if (current) {
