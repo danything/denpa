@@ -364,7 +364,7 @@ internal sealed class Dt295Fake : IUsbDevice
     /// <summary>実機の USB は制御転送を 1 つずつ通す。偽物も、複数のスレッド (TS の要求と I2C の読み出し) から同時に呼ばれても 1 つずつ通す</summary>
     public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
     {
-        lock (_controlGate) return ControlInCore(requestType, request, value, index, data, timeoutMs);
+        lock (_controlGate) return ControlInCore(requestType, request, value, index, data);
     }
 
     /// <summary>機材のプログラムへの要求 (wValue 0x0C7D) を処理したあと、応答を読む前に呼ぶ (別のスレッドの要求が間に入る場合の再現)</summary>
@@ -372,11 +372,11 @@ internal sealed class Dt295Fake : IUsbDevice
 
     public void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs)
     {
-        lock (_controlGate) ControlOutCore(requestType, request, value, index, data, timeoutMs);
+        lock (_controlGate) ControlOutCore(requestType, request, value, index, data);
         if (value == 0x0C7D && Interlocked.Exchange(ref AfterRequest, null) is { } hook) hook();
     }
 
-    private int ControlInCore(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
+    private int ControlInCore(byte requestType, byte request, ushort value, ushort index, Span<byte> data)
     {
         Controls++;
         if (Wedged) throw new IOException("制御転送 (IN) (時間切れ)");
@@ -393,7 +393,7 @@ internal sealed class Dt295Fake : IUsbDevice
         return data.Length;
     }
 
-    private void ControlOutCore(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs)
+    private void ControlOutCore(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data)
     {
         Controls++;
         if (Wedged) throw new IOException("制御転送 (OUT) (時間切れ)");

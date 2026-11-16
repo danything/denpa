@@ -838,7 +838,7 @@ public class B25Tests
 
     /// <summary>
     /// **観る局が決まっていれば、その局の PMT と ECM の答えがそろった時点で、ほかの局の PMT を待たずに流し始める** (ライブ)。
-    /// 本番 (2026-11-11、地上波の局の切り替え) では、ほかの局の PMT を待つぶん、送り出しが 170〜300ms 遅れていた。
+    /// 本番 (2026-11-11、地上波の局の切り替え) では、ほかの局の PMT を待つぶん、送り出しが 170〜300 ms 遅れていた。
     /// ほかの局の ES は、その PMT と ECM の答えが来るまで捨て、来たあとは復号して流す
     /// </summary>
     [Test]
@@ -1240,7 +1240,7 @@ public class B25Tests
             .Pat((0x0400, PmtPid))
             .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
             .Videos(2, 1);
-        // カードの往復を 50ms にする
+        // カードの往復を 50 ms にする
         var cards = new Cards { Fail = _ => { Thread.Sleep(50); return null; } };
         var descrambler = new Descrambler(cards);
 

@@ -896,7 +896,7 @@ public sealed class It930xDevice
         }
         catch (Exception error)
         {
-            // 閉じている途中の失敗 (入力を閉じて EP 0x84 をリセットした読み出し) は、閉じる側が片付ける
+            // 止めている途中・閉じている途中の失敗 (転送要求の取り消し、入力を閉じて EP 0x84 をリセットした読み出し) は、止める側・閉じる側が片付ける
             if (_stopping || _closing) return;
             // IOException でない失敗 (受信機ごとに分ける処理の不具合など) も同じく片付ける。スレッドごと落ちると、入力を開けたまま読む側がいなくなる
             // EP 0x84 の読み出しは全部の受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
@@ -909,7 +909,7 @@ public sealed class It930xDevice
         }
         finally
         {
-            // どの終わり方でも、開くのを待っている Setup を待たせたままにしない (読み出しを始められていなければ _readerRunning は false のまま)
+            // どの終わり方でも、転送要求を出し終えるのを待っている StartReader を待たせたままにしない (読み出しを始められていなければ _readerRunning は false のまま)
             _readerOpened.Set();
             // 読み出しを終えたあとは、Read の外にいる時間として数えない (`TakeLongestAway`)
             Interlocked.Exchange(ref _awaySince, 0);

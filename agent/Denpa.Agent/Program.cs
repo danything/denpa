@@ -14,7 +14,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *
  * denpa から触れないものが 3 つある。
  *
- * - B-CASカード … USB のリーダーも IT930x の機材の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
+ * - B-CAS カード … USB のリーダーも IT930x の機材の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。
@@ -411,7 +411,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
         return;
     }
 
-    // 溜めない。数パケット届いたらそのまま流す (64KB 貯めると 25ms 積み上がる)
+    // 溜めない。数パケット届いたらそのまま流す (64 KB 貯めると 25 ms 積み上がる)
     http.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
 
     /*

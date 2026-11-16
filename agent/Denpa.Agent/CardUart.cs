@@ -92,7 +92,7 @@ internal sealed class CardUart(Func<uint, uint> read32, Action<uint, uint> write
         return (baud, control, cwt, bwt, (int)(CardClock / n));
     }
 
-    /// <summary>1 ブロックの待ち (仕様書 13.7 の「500ms から。ATR の BWI で変わる」。3 秒まで)</summary>
+    /// <summary>1 ブロックの待ち (仕様書 13.7 の「500 ms から。ATR の BWI で変わる」。3 秒まで)</summary>
     internal static int BlockWaitMs(Atr atr) => Math.Min(3000, 500 << Math.Max(0, atr.Bwi - 4));
 
     /// <summary>ATR の長さ。まだ決まらなければ null</summary>

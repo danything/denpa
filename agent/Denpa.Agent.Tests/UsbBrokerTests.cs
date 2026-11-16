@@ -109,7 +109,7 @@ public sealed partial class UsbBrokerTests
     }
 
     /// <summary>
-    /// <paramref name="fd"/> を付けて attached を送り、送った側の fd は閉じる (アプリが持っていても、
+    /// <paramref name="descriptors"/> を書いた memfd を付けて attached を送り、送った側の fd は閉じる (アプリが持っていても、
     /// エージェントが受け取ったものは別の fd なので変わらない)
     /// </summary>
     private static void Attach(App app, string name, int vendor, int product, byte[] descriptors, string interfaces = "[]", string serial = "null", string memfd = "usb")
