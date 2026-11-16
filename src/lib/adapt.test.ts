@@ -319,6 +319,24 @@ describe("観る画面で、届く速さがエンコードに縛られている�
     ).toBe(GRACE + THIN);
   });
 
+  test("割合が 1 に近くても、詰まれば受け取りの速さで比べて下げる (応答を溜める中継があると、回線が細くてもサーバは待たされない)", () => {
+    // 2 Mbit/s ÷ (1 − 0.9) × 0.7 = 14 Mbit/s は段 1 に足りるが、受け取りの速さ × 0.7 = 1.4 Mbit/s は段 2 にも足りない
+    const relayed = paces(() => ({
+      backlog: 0,
+      dropped: 0,
+      speed: 1.2,
+      wait: 0.9,
+    }));
+    expect(
+      first(new RungAdapter(), 0, 60_000, (now) => ({
+        current: 1,
+        throughput: 2_000_000,
+        ...STUCK,
+        pace: relayed(now),
+      })),
+    ).toEqual({ at: GRACE, decision: { step: 3, reason: "slow" } });
+  });
+
   test("先が埋まってサーバが測れなくなっても (wait が null)、最後に測った割合を使う", () => {
     const paused = paces((n) => ({
       backlog: 0,

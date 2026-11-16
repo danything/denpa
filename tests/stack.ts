@@ -82,6 +82,11 @@ export interface Stack {
    */
   liveFmp4File: string;
   /**
+   * これを `liveFmp4File` と一緒に置くと、録画をその場で流す偽 ffmpeg (`tests/fake/fmp4-out.ts`) が、実時間の何倍かでしか出せない
+   * エンコードのふりをする。中身は「倍率 ビットレート (kbit/s)」(`1.2 6000`)
+   */
+  streamPaceFile: string;
+  /**
    * **偽の GPU の置き場。** ここに `renderD128` のような名前でファイルを置くと、
    * denpa は `HW_DEVICES` (`<ここ>/renderD*`) のデバイスとして見つけ、偽 ffmpeg は渡された
    * デバイスが在るのを見て「GPU がある」と答える (VA-API の試しのエンコードが通る)。
@@ -206,6 +211,7 @@ export async function boot(
     liveNoCaptionsFile: `${root}/no-captions-live`,
     liveTsFile: `${root}/live-ffmpeg-ts`,
     liveFmp4File: `${root}/live-fmp4`,
+    streamPaceFile: `${root}/stream-pace`,
     hwDir: `${root}/gpu`,
     encodeArgsFile: `${root}/encode-ffmpeg-args`,
     encodeSpansFile: `${root}/encode-ffmpeg-spans`,
@@ -283,6 +289,7 @@ export async function boot(
       FAKE_FFMPEG_NO_CAPTIONS_FILE: stack.liveNoCaptionsFile,
       FAKE_FFMPEG_TS_FILE: stack.liveTsFile,
       FAKE_FFMPEG_LIVE_FMP4_FILE: stack.liveFmp4File,
+      FAKE_FFMPEG_STREAM_PACE_FILE: stack.streamPaceFile,
       // 偽の GPU。denpa にはデバイスとして、偽 ffmpeg には「ある」印として同じファイルを見せる
       HW_DEVICES: `${stack.hwDir}/renderD*`,
       RKMPP_DEVICE: `${stack.hwDir}/mpp_service`,

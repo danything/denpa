@@ -1,5 +1,5 @@
 {
-  "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割る (割り方は docs/development.md「並べて流す」)。1 組から 8 組は 3 ワーカーで、どの組もテストの秒数の和が 320 秒ほど (1 ワーカー 110 秒ほど) になるように割ってある。1 本で 60 秒を超えるスペックは分けて、どのファイルも 50 秒以下にしてある (長い 1 本が組の時間の下限になるため)。映像を長くデコードし続けるスペック (20-live・20-live-tune・20-live-player・20-live-encode、22-watch・22-watch-clips・22-watch-layout、28-live-raw・28-live-raw-device、38/40/41 の互換モードと 40-watch-compat-long・39-watch-adapt、43-raw-cadence・44-ambient・57-jikkyo・57-jikkyo-write・57-jikkyo-list・58-volume) は 1 つの組に 3 本までにする (混むとどれも遅くなる)。9 組と 10 組はライブの貯め方 (50-live-pacing・51-live-gaps) を 1 本ずつ、1 ワーカーで流す (test.yml。同じ組でほかのワーカーが動くと、届く間隔が乱れて貯める量がそれを覆う高さへ上がり、「下限のまま」を見るテストが落ちる。デコードが重なると、途中から入ったときにコマも落とす。1 ワーカーなので、足したぶんだけ組が長くなる)。33-recordings-group は 21-onair-fallback と同じ組に入れない (21 が延長して録り終えた録画が、同じワーカーで次に流れた 33 のホームの一覧に入る)。どの組にも入っていないスペックは 5 組で流す。足したら CI の結果の所要時間を見て、あとでどこかの組に入れ直せばよい。ここに書いた名前のファイルが無い・2 つの組に入っている、は CI の「組分けの検算」が落とす",
+  "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割る (割り方は docs/development.md「並べて流す」)。1 組から 8 組は 3 ワーカーで、どの組もテストの秒数の和が 320 秒ほど (1 ワーカー 110 秒ほど) になるように割ってある。1 本で 60 秒を超えるスペックは分けて、どのファイルも 50 秒以下にしてある (長い 1 本が組の時間の下限になるため)。映像を長くデコードし続けるスペック (20-live・20-live-tune・20-live-player・20-live-encode、22-watch・22-watch-clips・22-watch-layout、28-live-raw・28-live-raw-device、38/40/41 の互換モードと 40-watch-compat-long・39-watch-adapt・39-watch-adapt-encode・39-watch-adapt-relay・39-watch-resume、43-raw-cadence・44-ambient・57-jikkyo・57-jikkyo-write・57-jikkyo-list・58-volume) は 1 つの組に 3 本までにする (混むとどれも遅くなる)。9 組と 10 組はライブの貯め方 (50-live-pacing・51-live-gaps) を 1 本ずつ、1 ワーカーで流す (test.yml。同じ組でほかのワーカーが動くと、届く間隔が乱れて貯める量がそれを覆う高さへ上がり、「下限のまま」を見るテストが落ちる。デコードが重なると、途中から入ったときにコマも落とす。1 ワーカーなので、足したぶんだけ組が長くなる)。33-recordings-group は 21-onair-fallback と同じ組に入れない (21 が延長して録り終えた録画が、同じワーカーで次に流れた 33 のホームの一覧に入る)。どの組にも入っていないスペックは 5 組で流す。足したら CI の結果の所要時間を見て、あとでどこかの組に入れ直せばよい。ここに書いた名前のファイルが無い・2 つの組に入っている、は CI の「組分けの検算」が落とす",
   "1": [
     "09-behaviour",
     "18-pwa",
@@ -19,6 +19,7 @@
     "22-watch-clips",
     "25-chase",
     "26-hwenc",
+    "39-watch-resume",
     "40-watch-compat-long",
     "42-copy-never"
   ],
@@ -38,6 +39,7 @@
     "20-live-player",
     "21-onair-fallback",
     "26-hwenc-vendors",
+    "39-watch-adapt-encode",
     "53-header-float",
     "56-transfer",
     "57-jikkyo-recorded",
@@ -53,6 +55,7 @@
     "30-api",
     "34-live-yield",
     "36-bml",
+    "39-watch-adapt-relay",
     "39-watch-stream",
     "49-guide-skeleton",
     "58-volume",

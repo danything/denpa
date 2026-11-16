@@ -13,6 +13,7 @@
  */
 import { CLOCK, WRAP } from "@danything/arib/pes";
 
+import { Fmp4Splitter } from "../../src/lib/ts/fmp4";
 import { pesMarks } from "../../src/lib/ts/seek";
 import { clipFrom, readClip } from "./fmp4-clip";
 
@@ -61,6 +62,8 @@ if (after("-i") === "pipe:0") {
  * (`fmp4-clip.ts`)。互換モードの観る画面 (`40-watch-compat`) が canvas に描くところまで見るため
  */
 const CLIP = 10;
+/** 速さを絞って出すとき (`FAKE_FFMPEG_STREAM_PACE_FILE`) に並べる長さ (秒)。観る画面が 1 分ほど観続けられる */
+const PACED_CLIP = 120;
 if (
   await Bun.file(
     process.env["FAKE_FFMPEG_LIVE_FMP4_FILE"] ?? "/nonexistent",
@@ -70,6 +73,14 @@ if (
   const clip = readClip(
     new Uint8Array(await Bun.file(`${import.meta.dir}/${name}`).arrayBuffer()),
   );
+  const paced = process.env["FAKE_FFMPEG_STREAM_PACE_FILE"] ?? "/nonexistent";
+  if (await Bun.file(paced).exists()) {
+    await pacedOut(
+      clipFrom(clip, Math.max(0, seconds), PACED_CLIP),
+      (await Bun.file(paced).text()).trim(),
+    );
+    process.exit(0);
+  }
   // 書き切ってから終了する (`process.stdout.write` のまま終了すると、大きいものは尻が落ちる)
   await Bun.write(Bun.stdout, clipFrom(clip, Math.max(0, seconds), CLIP));
   process.exit(0);
@@ -117,3 +128,34 @@ for (const part of out) process.stdout.write(part);
 const slow = process.env["FAKE_FFMPEG_SLOW_FILE"];
 if (slow !== undefined && (await Bun.file(slow).exists()))
   await Bun.sleep(120_000);
+
+/**
+ * **実時間の何倍かでしか出せないエンコードのふり** (`FAKE_FFMPEG_STREAM_PACE_FILE`。中身は「倍率 ビットレート (kbit/s)」)。
+ * 媒体の塊を、その時刻を倍率で割った頃合いに 1 つずつ出す。作り置きの fMP4 は 0.5 Mbit/s ほどしかないので、
+ * 塊の後ろに `free` の箱を足して、ビットレートを本物のエンコードに近づける (サーバは次の塊の先頭に付けて区切り、MSE は読み飛ばす)
+ */
+async function pacedOut(data: Uint8Array, spec: string): Promise<void> {
+  const [given = 1, kbps = 0] = spec.split(/\s+/).map(Number);
+  // 倍率が 0 以下・数でなければ実時間で出す
+  const speed = given > 0 ? given : 1;
+  const segments = new Fmp4Splitter().feed(data);
+  const media = segments.filter((segment) => segment.kind === "media");
+  const each = PACED_CLIP / Math.max(1, media.length);
+  const pad = Math.max(0, Math.round((kbps * 1000 * each) / 8));
+  const start = performance.now();
+  let n = 0;
+  for (const segment of segments) {
+    if (segment.kind === "media") {
+      const due = start + (n * each * 1000) / speed;
+      const wait = due - performance.now();
+      if (wait > 0) await Bun.sleep(wait);
+      n++;
+    }
+    await Bun.write(Bun.stdout, segment.data);
+    if (segment.kind === "media" && pad > segment.data.length + 8)
+      await Bun.write(
+        Bun.stdout,
+        box("free", new Uint8Array(pad - segment.data.length - 8)),
+      );
+  }
+}
