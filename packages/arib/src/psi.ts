@@ -115,7 +115,7 @@ export interface NetworkInfo {
   transportStreams: NetworkTransport[];
 }
 
-/** 何も組み上がらなかったときの返り。使い回すので `Object.freeze` してある */
+/** 何も組み上がらなかったときの戻り値。使い回すので `Object.freeze` してある */
 const NONE: readonly Uint8Array[] = Object.freeze([]);
 
 /**
@@ -144,7 +144,7 @@ export class SectionAssembler {
   /**
    * パケットを 1 つ渡す。組み上がったセクションを返す。
    *
-   * 返りは**読むだけ**にすること。何も組み上がらないとき (ほとんどのパケット) は
+   * 戻り値は**読むだけ**にすること。何も組み上がらないとき (ほとんどのパケット) は
    * 使い回しの空配列を返す (関係ないパケットのたびに配列を作らないため)
    */
   feed(packet: Uint8Array): readonly Uint8Array[] {
@@ -517,7 +517,7 @@ export interface TerrestrialDelivery {
  * ケーブルの分配の記述子 (0x44)。どの周波数で、どう変調して流れているか。
  *
  * **並びは推定。** 有線の告示にある 0x44 の本文は読めていない。同じ系統の有線複数搬送波伝送分配システム記述子 (0xF3。総務省の告示の改正案) は
- * 周波数 (32)・0xFF (8)・多重フレーム型式番号 (4)・外符号 (4)・変調 (8)・シンボルレート (28)・内符号 (4) の並びで、0x44 も同じと見ている。
+ * 周波数 (32)・0xFF (8)・多重フレーム型式番号 (4)・外符号 (4)・変調 (8)・シンボルレート (28)・内符号 (4) の並びで、0x44 も同じとみなしている。
  * DVB (EN 300 468) では、多重フレーム型式番号の 4 ビットは reserved
  */
 export interface CableDelivery {

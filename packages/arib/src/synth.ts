@@ -834,8 +834,8 @@ export function logoModule(
 
 /*
  * --- データ放送のテストで使う定番の割り振り ---
- * denpa の bml / data-timeline / recorded-bml の 3 つのテストが、同じ表と同じ組み立てを
- * それぞれに書いていた。番号そのものに意味は無く、揃っていることに意味がある。
+ * denpa の databroadcast・data-timeline・recorded-bml・ts-head のテストが、同じ表と同じ組み立てを使う。
+ * 番号そのものに意味は無く、揃っていることに意味がある。
  */
 export const BML_TS = {
   service: 1024,

@@ -158,7 +158,7 @@ describe("moduleFiles", () => {
     expect(files[1]!.contentType.type).toBe("image");
   });
 
-  /** 中身が 1 つのモジュールは包まれていない。置き場所は BML 側が知っている */
+  /** 中身が 1 つのモジュールは包まれていない。置き場所は BML の文書側で決まる */
   test("multipart でなければ丸ごと 1 ファイル", () => {
     const files = moduleFiles(new TextEncoder().encode("PNG"), "image/png");
     expect(files).toHaveLength(1);
@@ -179,8 +179,8 @@ describe("inflate", () => {
     expect(inflate(squeezed, { type: 0 })).toEqual(original);
   });
 
-  /** 知らない縮め方は諦める。**壊れたものを配るより出さないほうがいい** */
-  test("知らない縮め方は null", () => {
+  /** 対応していない圧縮方式は諦める。**壊れたものを配るより出さないほうがいい** */
+  test("対応していない圧縮方式は null", () => {
     expect(inflate(new Uint8Array(4), { type: 9 })).toBeNull();
   });
 

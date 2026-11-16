@@ -3,7 +3,7 @@
  * [aribtext-gaiji.ts](aribtext-gaiji.ts) がここの追加記号を引いて作る)。
  *
  * 元は libaribcaption v1.1.2 の表 (b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp /
- * b24_drcs_conv.cpp) に denpa の外字の直しを当てたもの。ここが元で、上流は追わない。
+ * b24_drcs_conv.cpp) の外字を denpa が直したもの。ここが元で、上流は追わない。
  *
  * libaribcaption: Copyright (C) 2021 magicxqq <xqq@xqq.im> (MIT。著作権表示は [LICENSE](../LICENSE))
  *

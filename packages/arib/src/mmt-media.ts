@@ -10,10 +10,10 @@
  * (ケーブルで受けた実機の BS4K で確かめた。映像は 1 MPU に 32 コマ、音声は 4 フレーム)。
  * 時刻は NTP の 64 ビットで来るので、ここで **90 kHz** に直す (TS の PTS と同じ物差し。一周はしない)。
  *
- * 中身の形式は次のとおり。実機の録りは映像・音声がスクランブルされていて中身を読めないので、どれも推定。
+ * 中身の形式は次のとおり。実機で録ったものは映像・音声がスクランブルされていて中身を読めないので、どれも推定。
  *
  * - 映像 (`hev1`): データユニット 1 つが、長さ (4 バイト) を前に付けた NAL ユニット。MPU は ISO BMFF の形式なので、
- *   サンプルの中身も MP4 と同じ形と見ている。同じ sample_number のデータユニットが 1 つのコマ
+ *   サンプルの中身も MP4 と同じ形式とみなしている。同じ sample_number のデータユニットが 1 つのコマ
  * - 音声 (`mp4a`): データユニット 1 つが LATM の AudioMuxElement (LOAS の同期のヘッダーは付かない)。
  *   MPT の音声コンポーネント記述子の stream_type は 0x11 (LATM/LOAS) だった (確かめた)
  * - 字幕 (`stpp`): MPU 1 つが TTML の文書 1 つ (`ttml.ts` で読む)。文書の中の画像 (PNG) は扱わない
@@ -234,7 +234,7 @@ function latmValue(bits: BitReader): number {
  * LATM の AudioMuxElement (muxConfigPresent = 1) から、AAC のフレームを取り出す。
  * **設定 (StreamMuxConfig) は来たときだけ書いてあり、あいだは「前と同じ」になる** ので、前の設定を覚えておく。
  *
- * 読むのは放送で使う形 (番組 1・層 1・サブフレーム 1・frameLengthType 0) だけ。ほかの形は null を返す
+ * 読むのは放送で使う形式 (番組 1・層 1・サブフレーム 1・frameLengthType 0) だけ。ほかの形式は null を返す
  */
 export class LatmReader {
   private config: AacConfig | null = null;
