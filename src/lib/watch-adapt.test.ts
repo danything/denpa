@@ -5,6 +5,7 @@ import type { Pace } from "./rungs";
 import {
   autoLabel,
   busyNote,
+  fileIdle,
   rungQuery,
   watchAdapt,
   type WatchSample,
@@ -29,6 +30,45 @@ describe("画面に出すもの", () => {
   test("段を下げたリクエストには段と端末が再生できるコーデックを足す。段 0 は足さない", () => {
     expect(rungQuery(2, ["av1", "h264"])).toBe("&rung=2&playable=av1,h264");
     expect(rungQuery(0, ["av1", "h264"])).toBe("");
+  });
+});
+
+/** **ファイルの直再生で、ブラウザが読むのを止めているか** (`fileIdle`)。読み終えたときだけ足りている印にする */
+describe("読むのを止めているか (fileIdle)", () => {
+  const LOADING = 2;
+  const IDLE = 1;
+  /** 0〜30 秒を読み終え、10 秒目を観ている */
+  const read = {
+    networkState: IDLE,
+    seeking: false,
+    buffered: [[0, 30]] as [number, number][],
+    currentTime: 10,
+  };
+
+  test("いまの位置を読めていて、NETWORK_IDLE か直前の刻みの間に suspend が来たら止めている", () => {
+    expect(fileIdle(read, Number.NEGATIVE_INFINITY, 5_000)).toBe(true);
+    const loading = { ...read, networkState: LOADING };
+    expect(fileIdle(loading, 4_500, 5_000)).toBe(true);
+    expect(fileIdle(loading, 3_000, 5_000)).toBe(false);
+    // ファイルの終わりに着いた (先は 0 秒)
+    expect(fileIdle({ ...read, currentTime: 30 }, 0, 5_000)).toBe(true);
+  });
+
+  test("読み始める前の NETWORK_IDLE は、止めていると見ない (回線が細くて 1 バイトも届かなくても下げなくなる)", () => {
+    expect(fileIdle({ ...read, buffered: [], currentTime: 0 }, 0, 5_000)).toBe(
+      false,
+    );
+  });
+
+  test("読んでいない先へ飛んだ直後と、飛んでいる最中は止めていると見ない", () => {
+    expect(fileIdle({ ...read, currentTime: 600 }, 0, 5_000)).toBe(false);
+    expect(fileIdle({ ...read, seeking: true }, 0, 5_000)).toBe(false);
+  });
+
+  test("先頭は、映像と音声の始まりのずれのぶん後ろから読めていても数える", () => {
+    expect(
+      fileIdle({ ...read, buffered: [[0.03, 30]], currentTime: 0 }, 0, 5_000),
+    ).toBe(true);
   });
 });
 
@@ -123,6 +163,19 @@ describe("刻み (watchAdapt)", () => {
     expect(h.decided.every((d) => d.reason === "encode" && d.step === 1)).toBe(
       true,
     );
+  });
+
+  test("その場の変換が実時間の 1.2 倍でしか出ず、受け取りの速さが段に足りなくても、サーバが ffmpeg を待っていれば下げない", async () => {
+    // 段 1 (3.096 Mbit/s) の 1.2 倍。× 0.7 では段 1 に届かない
+    const h = harness({ current: 1, paceId: "a", throughput: 3_715_200 });
+    h.pace({ backlog: 0, dropped: 0, speed: 1.2, wait: 0.8 });
+    await h.run(30_000);
+    expect(h.decided).toEqual([]);
+    // 割合を返さないサーバなら、これまでどおり下げる
+    const old = harness({ current: 1, paceId: "a", throughput: 3_715_200 });
+    old.pace({ backlog: 0, dropped: 0, speed: 1.2 });
+    await old.run(30_000);
+    expect(old.decided[0]).toEqual({ step: 2, reason: "slow" });
   });
 
   test("別のストリームに替わったら、前のストリームの具合は使わずにすぐ読み直す", async () => {

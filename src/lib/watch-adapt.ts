@@ -16,11 +16,45 @@ import {
 import { CODEC_LABEL } from "./hw";
 import type { LiveCodec } from "./live";
 import type { Pace, Rung } from "./rungs";
+import type { Ranges } from "./ts/playback";
 
 /** `adapt.ts` を呼ぶ間隔 (ms)。`adapt.ts` の数 (2〜3 秒続いたら) を読み分けられる細かさ */
 export const ADAPT_TICK = 1_000;
 /** 送り出しの具合を読み直す間 (ms)。WebSocket の `pace` と同じ 2 秒ごと */
 const PACE_EVERY = 2_000;
+
+/** `HTMLMediaElement.NETWORK_IDLE` (ここは DOM を触らないので値で持つ) */
+const NETWORK_IDLE = 1;
+
+/** `fileIdle` に渡す `<video>` の様子 */
+interface FileMedia {
+  networkState: number;
+  seeking: boolean;
+  /** 読めている区間 (`remux-player.ts` の `rangesOf`) */
+  buffered: Ranges;
+  currentTime: number;
+}
+
+/**
+ * **ファイルの直再生で、ブラウザがファイルを読むのを止めているか** (`adapt.ts` の `AdaptSample.idle`)。
+ * `networkState` が `NETWORK_IDLE` か、直前の刻みの間に `suspend` が来た (`suspendAt`) ときに止めていると見る。
+ *
+ * いまの位置をまだ読んでいない間と、飛んでいる最中は false にする。`NETWORK_IDLE` は読み終えたときだけでなく、
+ * 読み始める前 (`preload` が `none` なら再生するまで読まない) と、飛んだ先を読み始める前にも付く。
+ * ここで足りている印にすると、回線が細くて 1 バイトも届かなくても下げなくなる
+ */
+export function fileIdle(
+  media: FileMedia,
+  suspendAt: number,
+  now: number,
+): boolean {
+  if (media.seeking) return false;
+  const t = media.currentTime;
+  // 先頭は映像と音声の始まりのずれ (数十 ms) だけ後ろから溜まることがあるので、少し手前も含める (`aheadOf` と同じ 0.5 秒)
+  if (!media.buffered.some(([start, end]) => start <= t + 0.5 && t <= end))
+    return false;
+  return media.networkState === NETWORK_IDLE || now - suspendAt <= ADAPT_TICK;
+}
 
 /** 段を下げた変換をリクエストするときに足すクエリ (`&rung=2&playable=av1,h264`)。段 0 は空 */
 export function rungQuery(rung: Rung, playable: readonly LiveCodec[]): string {

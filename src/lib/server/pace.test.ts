@@ -40,6 +40,18 @@ describe("エンコードの速さ", () => {
     expect(meter.speed(15_000)).toBe(1);
   });
 
+  test("使った時間が実時間に占める割合 (HTTP の変換の wait)。窓より古い点は使わず、1 秒に満たなければ測れていない", () => {
+    const meter = new SpeedMeter();
+    // 初めの 10 秒は待たず、あとの 5 秒は 8 割待った
+    for (let s = 0; s <= 10; s++) meter.record(s * 1000, s, 0);
+    for (let s = 11; s <= 15; s++) meter.record(s * 1000, s, (s - 10) * 800);
+    expect(meter.share(15_000)).toBe(0.8);
+    const short = new SpeedMeter();
+    short.record(0, 0, 0);
+    short.record(500, 0.5, 500);
+    expect(short.share(500)).toBeNull();
+  });
+
   test("使った時間が 0 (ffmpeg を待たずに済んでいる) なら上限", () => {
     const meter = new SpeedMeter();
     meter.record(0, 0, 0);
@@ -86,7 +98,29 @@ describe("HTTP の具合", () => {
   test("写すだけなら速さは null。回線のバッファと捨てた数は HTTP では 0", () => {
     const copy = new StreamPace(false);
     copy.output(new Uint8Array([1, 2, 3]));
-    expect(copy.read()).toEqual({ backlog: 0, dropped: 0, speed: null });
+    expect(copy.read()).toEqual({
+      backlog: 0,
+      dropped: 0,
+      speed: null,
+      wait: null,
+    });
+  });
+
+  test("読みに来てから ffmpeg が出すまでの時間を、出したときに足す (wait は写すだけでも測る)", () => {
+    // 1 秒ごとに読みに来て、0.8 秒待って出る (エンコードが届く速さを決めている)
+    const bound = new StreamPace(false);
+    for (let s = 0; s < 6; s++) {
+      bound.ask(s * 1000);
+      bound.output(new Uint8Array([1]), s * 1000 + 800);
+    }
+    expect(bound.read(5_800).wait).toBe(0.8);
+    // 読みに来るとすぐ出る (回線のほうが遅く、ffmpeg は先に出して待っている)
+    const thin = new StreamPace(false);
+    for (let s = 0; s < 6; s++) {
+      thin.ask(s * 1000 + 990);
+      thin.output(new Uint8Array([1]), s * 1000 + 1000);
+    }
+    expect(thin.read(6_000).wait).toBe(0.01);
   });
 
   test("ヘッダで返す id で読め、閉じたら null", () => {

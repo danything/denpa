@@ -1025,7 +1025,7 @@ interface Attempt {
  *   上限は同じ `IDLE_LIMIT`。分けないと、出だしの遅い ffmpeg を待っている相手を「読まれない」(`idle`) で切ってしまう。
  *   何も出さずに固まった ffmpeg は、相手が切らなくても止める (枠を持ったまま残さない)
  * - 止めたら `done` を呼ぶ (枠を返す)
- * - `pace` があれば、出したものと ffmpeg を待った時間を渡す (送り出しの具合。`server/pace.ts`)
+ * - `pace` があれば、読みに来た時刻と出したものを渡す (送り出しの具合。`server/pace.ts`)
  */
 export function transcodeBody(
   attempts: Attempt[],
@@ -1083,14 +1083,13 @@ export function transcodeBody(
       }, idle.every);
     },
     async pull(controller) {
-      const since = Date.now();
-      waitingSince = since;
+      waitingSince = Date.now();
+      pace?.ask(waitingSince);
       try {
         await fill(controller);
       } finally {
         waitingSince = null;
         lastRead = Date.now();
-        pace?.wait(lastRead - since);
       }
     },
     cancel() {
@@ -1546,7 +1545,7 @@ function mmtsPassthrough(
   const reader = mmtsFmp4(mmts, program, mmtsOffset(mmts, from)).getReader();
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
-      const since = Date.now();
+      pace.ask();
       let read: Awaited<ReturnType<typeof reader.read>>;
       try {
         read = await reader.read();
@@ -1557,7 +1556,6 @@ function mmtsPassthrough(
         return;
       }
       const { done, value } = read;
-      pace.wait(Date.now() - since);
       if (done) {
         opened.close();
         controller.close();
