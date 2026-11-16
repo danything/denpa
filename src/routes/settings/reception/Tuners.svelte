@@ -16,7 +16,7 @@
     <div class="section-head">
       <h2>チューナー</h2>
     </div>
-    <!-- 譲り合う順は数字ではなく用途の並びで言う (順番は config.priority から) -->
+    <!-- 取り合いの順は数字ではなく用途の並びで言う (順番は config.priority から) -->
     <Lead>
       足りないときは、決まった用途の順に使います
       {#snippet more()}

@@ -175,7 +175,7 @@ export function load(locals: { token?: number }, all: Agent[], lists: Lists) {
         ),
       ),
     ).then((got) => ({ list: got.flat() })),
-    // チューナーを譲り合う順。チューナーの節の「詳しく」に出す
+    // チューナーの取り合いの順。チューナーの節の「詳しく」に出す
     yieldOrder: yieldOrder(),
   };
 }
