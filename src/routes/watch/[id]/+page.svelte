@@ -1224,8 +1224,13 @@
     if (note !== null) noteAdapt(note);
   }
 
+  /** ビットレートを読みにいったファイル (`?source=`)。読めなくても同じファイルはリクエストし直さない (シーク・作り直しのたびに増やさない) */
+  const baseAsked = new Set<string>();
+
   /** ファイルの大きさから段 0 のビットレートを読む (`HEAD`)。読めなければ null のまま */
   async function readBaseKbps(source: string, duration: number): Promise<void> {
+    if (baseAsked.has(source)) return;
+    baseAsked.add(source);
     try {
       const res = await fetch(
         resolve(`api/recordings/${rec.id}/file?source=${source}`),
