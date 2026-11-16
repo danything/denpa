@@ -25,9 +25,21 @@ mock.module("./webhook", () => ({
 /** 流す p/f の「次」の番組 (録る番組)。テストごとに差し替える */
 let following: SynthEvent;
 const actualTuner = await import("./tuner");
+/*
+ * **差し替えはこのファイルの中だけで効かせる。** `--isolate` を付けずに動かすと `mock.module` は他のファイルにも残り、
+ * `tuner.ts` の中から呼ぶ `openChannel` (`openChannelStream` が呼ぶもの) まで差し替わったままになる。
+ * 終わったら本物の `openChannel` に渡す (下の `afterAll`)
+ */
+const realOpenChannel = actualTuner.openChannel;
+let faking = true;
+afterAll(() => {
+  faking = false;
+});
 mock.module("./tuner", () => ({
   ...actualTuner,
-  openChannel: async (_type: string, _channel: string, signal: AbortSignal) => {
+  openChannel: async (...args: Parameters<typeof realOpenChannel>) => {
+    if (!faking) return realOpenChannel(...args);
+    const signal = args[2];
     let timer: ReturnType<typeof setInterval> | undefined;
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
