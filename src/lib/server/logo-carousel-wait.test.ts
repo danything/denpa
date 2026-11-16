@@ -21,8 +21,8 @@ import { trustFakeAgent } from "./fake-agent-trust";
  * 衛星のロゴを流す中継で、**カルーセルが来るまで待つ** (`logo.awaitCarousel`・「いますぐ」)。
  *
  * 実機の報告 (#1939): 衛星のチューナーが 2 台の環境で、番組表の取得が次のチャンネルへ移るたびにロゴの選局を
- * 取り上げ、一晩経っても BS/CS のロゴが揃わなかった。当たりの中継で待つときは番組表の取得より上の優先度で開き、
- * 上限で切れても途中まで届いていれば続きを読む。番組表の取得より上で待つのはダウンロードの期間中だけ (`logo-period.ts`)。
+ * 取り上げ、一晩経っても BS/CS のロゴが揃わなかった。当たりの中継で待つときは取り合いで番組表の取得より先になる順で開き、
+ * 上限で切れても途中まで届いていれば続きを読む。番組表の取得より先になる順で待つのはダウンロードの期間中だけ (`logo-period.ts`)。
  *
  * チューナーの API は手元に立てた偽物で、選局は中継ごとに用意した TS を流したあと、`holding` の中継は
  * こちらが閉じるまで開いたままにする (上限 `config.logoCarouselWait` まで待たせるため)。カルーセルは作り物
@@ -108,7 +108,7 @@ const tuners: Tuner[] = [idle(), idle()];
 const streams = new Map<string, Uint8Array>();
 /** 流し終えても閉じない中継 */
 const holding = new Set<string>();
-/** 開かれた中継と、そのときの優先度 */
+/** 開かれた中継と、そのときの取り合いの順 */
 const opened: { channel: string; priority: number }[] = [];
 
 const agent = Bun.serve({
@@ -213,7 +213,7 @@ async function logged(run: () => Promise<unknown>): Promise<string[]> {
 }
 
 describe("ロゴを流す中継でカルーセルを待つ", () => {
-  test("当たりが分かるまではいちばん下の優先度で探す。上限で切れても途中まで届いていれば、期間中とみなして次も開く", async () => {
+  test("当たりが分かるまでは取り合いでいちばん後に回る順で探す。上限で切れても途中まで届いていれば、期間中とみなして次も開く", async () => {
     config.logoCarouselWait = 300;
     // DII と BS のブロックの一部だけ。読み切れないまま上限で切れる
     streams.set("BS15_0", stream(...psi, dii, ...bsBlocks.slice(0, 1)));
@@ -228,7 +228,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     ]);
   });
 
-  test("当たりと分かった中継は番組表の取得より上の優先度で開く。何も届かずに上限で切れたら、期間の外とみなして 7 時間は開き直さない", async () => {
+  test("当たりと分かった中継は取り合いで番組表の取得より先になる順で開く。何も届かずに上限で切れたら、期間の外とみなして 7 時間は開き直さない", async () => {
     // 前の回と同じ DII と受け取り済みのブロックだけ。読み進まないので「来なかった」と数える
     streams.set("BS15_0", stream(...psi, dii, ...bsBlocks.slice(0, 1)));
     const lines = await logged(sweep);
@@ -247,7 +247,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     expect(opened).toHaveLength(2);
   });
 
-  test("期間の外でも、共通データの SDTT を見たら期間中に戻り、次の定期チェックで番組表の取得より上の優先度で開く", async () => {
+  test("期間の外でも、共通データの SDTT を見たら期間中に戻り、次の定期チェックで取り合いで番組表の取得より先になる順で開く", async () => {
     // 新しいブロックは無く、SDTT だけ。「いますぐ」で開いて見かける (上限を待たずに閉じる)
     streams.set("BS15_0", stream(...psi, commonSdtt));
     holding.delete("BS15_0");
@@ -297,7 +297,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     while (sweepState().running) await Bun.sleep(20);
   });
 
-  test("「いますぐ」も当たりの中継は番組表の取得より上の優先度で開き、読み切ったら上限を待たずに手放す", async () => {
+  test("「いますぐ」も当たりの中継は取り合いで番組表の取得より先になる順で開き、読み切ったら上限を待たずに手放す", async () => {
     config.logoCarouselWait = 60_000;
     // DII は前の回に読んだぶんを覚えている。続きのブロックだけ流して、閉じずに待つ
     streams.set("BS15_0", stream(...psi, ...bsBlocks.slice(1), ...csBlocks));
@@ -310,7 +310,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
       channel: "BS15_0",
       priority: config.priority.carousel,
     });
-    // 当たりと分かっていない中継はいちばん下のまま
+    // 当たりと分かっていない中継は取り合いでいちばん後のまま
     expect(opened).toContainEqual({
       channel: "CS02",
       priority: config.priority.logo,

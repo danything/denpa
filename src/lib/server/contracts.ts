@@ -560,7 +560,7 @@ async function decodeOnChannel(
   const timeout = setTimeout(() => abortController.abort(), 15_000);
 
   try {
-    // スキャンと同じ優先度でストリームを開く (WantsKeys が有効な live プレフィックス)
+    // 取り合いの順をスキャンと同じにしてストリームを開く (WantsKeys が有効な live プレフィックス)
     const stream = await openChannelStream(
       first.type,
       mine,
