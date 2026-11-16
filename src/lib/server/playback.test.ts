@@ -721,7 +721,12 @@ describe("流す (streamResponse)", () => {
     expect(res.headers.get(CODEC_HEADER)).toBe("h264");
     expect(res.headers.get(RUNG_HEADER)).toBe("1");
     const pace = res.headers.get(PACE_HEADER)!;
-    expect(readPace(pace)).toEqual({ backlog: 0, dropped: 0, speed: null });
+    expect(readPace(pace)).toEqual({
+      backlog: 0,
+      dropped: 0,
+      speed: null,
+      wait: null,
+    });
     // 変換なので枠を使う
     expect(transcodesInUse()).toBe(1);
     await res.body?.cancel();

@@ -58,10 +58,17 @@ import {
  * - 観る画面で、測った速さ × 0.7 がいまの段に足りている間は、詰まりとバッファの減りを回線のせいにしない。
  *   接続が切れて繋ぎ直している・サーバがファイルを読むのが遅れた、のように下げても直らない詰まりで、
  *   ローカルネットでも「回線が細い」と出ていた。速さは読んでいる間に測るので、回線が細くなれば 5 秒の窓のうちに下がる
+ * - 観る画面のその場の変換で、届く速さがエンコードに縛られている間は、受け取りの速さだけを回線の速さと読まない。
+ *   サーバが ffmpeg の出力を待っていた割合 (`Pace.wait`) を w とすると、回線は残りの 1 − w の間に受け取ったぶんを
+ *   送れたので、受け取りの速さ ÷ (1 − w) を回線の速さと見て比べる (w の上限は 0.9)。エンコードが実時間の 1.43 倍を
+ *   切る段では、受け取りの速さ × 0.7 が段に届かず、ローカルネットでも 10 秒で「回線が細い」と下げていた。
+ *   回線が細ければサーバは送るのを待たされ、ffmpeg を待たないので w は 0 に近く、これまでどおり下げる。
+ *   上げるときは受け取りの速さだけで決める (エンコードが縛っている間に重い段へ上げると、エンコードがもっと遅れる)
  * - 観る画面のファイルの直再生で、ブラウザがファイルを読むのを止めている (`AdaptSample.idle`) 間は、詰まりとバッファの減りを
  *   回線のせいにしない。ブラウザは先を読み終えたときに止めるので、回線は足りている。直再生は受け取りの速さを測れず、
  *   ファイルの終わり際にバッファが減るのと、飛んだ先をデコードし終えるまでの詰まりで、ローカルネットでも 720p に下げていた。
- *   回線が細ければ先が埋まらず、ブラウザは読み続けるので、これまでどおり下げる
+ *   回線が細ければ先が埋まらず、ブラウザは読み続けるので、これまでどおり下げる。いまの位置をまだ読んでいない間
+ *   (読み始める前・読んでいない先へ飛んだ直後) と、飛んでいる最中は止めていても足りている印にしない (`watch-adapt.ts` の `fileIdle`)
  * - 形式を手で選んでいる間は段を動かさず、足りないときに `pinned` だけを返す
  */
 
@@ -175,6 +182,11 @@ const FALL_LEAST = 0.5;
 const BACKLOG_GROW = 3_000;
 /** 測った速さのうち、映像と音声に使ってよい割合。残りは揺れとほかの通信のぶん */
 const HEADROOM = 0.7;
+/**
+ * サーバが ffmpeg の出力を待っていた割合 (`Pace.wait`) を、回線の速さの見積もりに使う上限。0.9 なら受け取りの速さの
+ * 10 倍まで。1 に近い値で割ると、塊の届き方の揺れで見積もりがいくらでも大きくなる
+ */
+const WAIT_MOST = 0.9;
 /**
  * 上げるのは、次の段の何倍の速さが続いたときか。観る画面は速さ × 0.7 がいまの段に足りないと下げる (いまの段の 1/0.7 ≈ 1.43 倍未満)。
  * 2 倍ならその間が 4 割ほど空き、上げた直後に速さが揺れても上げる前の段へ戻さない
@@ -319,6 +331,11 @@ export class RungAdapter {
   private slowSince: number | null = null;
   /** 観る画面で、測った速さがいまの段に足りなくなった時刻 */
   private thinSince: number | null = null;
+  /**
+   * 観る画面で、サーバが最後に測った「ffmpeg の出力を待っていた割合」(`Pace.wait`)。測れていない `pace` が来ても捨てない
+   * (先が埋まって読まない間はサーバも出さないので null になるが、受け取りの速さ `throughput` も最後に測った値のまま)
+   */
+  private waitShare: number | null = null;
   /** ライブで、段 0 で足りていたときに測った受け取りの速さ (bit/s)。段 0 へ上げてよいかを見るのに使う */
   private baseRate: number | null = null;
   /** ライブで、上げる前に測りたい回線の速さ (bit/s。`wantProbe`)。要らなければ null */
@@ -338,6 +355,8 @@ export class RungAdapter {
     if (this.last === null) this.reset(now);
     else if (s.current !== this.last) this.switched(now, this.last, s.current);
     this.last = s.current;
+    const wait = s.pace?.wait ?? null;
+    if (s.route === "watch" && wait !== null) this.waitShare = wait;
     if (this.probe !== null && now >= this.probe.until) {
       // 上げたあと 1 分足りていた。ほかの分岐より先に見て、待ちの倍数をその刻みで戻す
       this.probe = null;
@@ -485,6 +504,7 @@ export class RungAdapter {
     this.prevAhead = null;
     this.prevBacklog = null;
     this.slowSince = null;
+    this.waitShare = null;
   }
 
   /**
@@ -574,14 +594,15 @@ export class RungAdapter {
     }
     const watch = s.route === "watch";
     /*
-     * 観る画面で、回線がいまの段に足りているか。分からなければ null。測った速さがあれば比べ、無ければ
-     * ブラウザがファイルを読むのを止めている (`idle`) ことを足りている印にする
+     * 観る画面で、回線がいまの段に足りているか。分からなければ null。測った速さがあれば (エンコードを待っていた
+     * ぶんを足して。`rate`) 比べ、無ければブラウザがファイルを読むのを止めている (`idle`) ことを足りている印にする
      */
+    const rate = this.rate(s);
     const enough = !watch
       ? null
-      : s.throughput !== null
+      : rate !== null
         ? s.current === "audio" ||
-          s.throughput * HEADROOM >= stepBps(s.current, s.baseKbps)
+          rate * HEADROOM >= stepBps(s.current, s.baseKbps)
         : s.idle === true
           ? true
           : null;
@@ -601,14 +622,26 @@ export class RungAdapter {
   /** 下げ先。速さが分かれば収まるいちばん高い段、分からなければ 2 段下 (段 0 からは段 1) */
   private lower(s: AdaptSample): Rung {
     const from = s.current as Rung;
-    if (s.throughput === null) {
+    const rate = this.rate(s);
+    if (rate === null) {
       // 段 0 (MPEG-2 は 16 Mbit/s ほど) から段 1 (3 Mbit/s) で、もう数分の 1 になる
       return from === 0 ? 1 : (Math.min(LOWEST_RUNG, from + 2) as Rung);
     }
-    const room = s.throughput * HEADROOM;
+    const room = rate * HEADROOM;
     for (let r = from + 1; r <= LOWEST_RUNG; r++)
       if (stepBps(r as Rung, s.baseKbps) <= room) return r as Rung;
     return LOWEST_RUNG;
+  }
+
+  /**
+   * 下げるかを決めるときの回線の速さ (bit/s)。測れていなければ null。観る画面では、受け取りの速さを、サーバが
+   * ffmpeg の出力を待っていなかった割合で割る (`waitShare`。上限 `WAIT_MOST`)。待っていた間は回線が空いていたので、
+   * その間も送れていたと見る
+   */
+  private rate(s: AdaptSample): number | null {
+    if (s.throughput === null) return null;
+    if (s.route !== "watch" || this.waitShare === null) return s.throughput;
+    return s.throughput / (1 - Math.min(WAIT_MOST, this.waitShare));
   }
 
   private remember(s: AdaptSample): void {

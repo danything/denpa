@@ -8,6 +8,8 @@
  * | WebSocket (ライブ・追っかけ) | 接続の送れずに溜まっている量 (`ws.ts`) | 溜まりすぎて捨てた塊 (映像と、変換せずに送る TS) の数 | 出した映像の時刻の進み ÷ 実時間 |
  * | HTTP の変換 (`/api/recordings/<id>/stream`) | 0 (送る速さは TCP が決める) | 0 (捨てない) | 出した映像の時刻の進み ÷ ffmpeg が出すのを待った時間 |
  *
+ * HTTP はほかに `wait` (ffmpeg が出すのを待っていた時間の割合) を返す。WebSocket は省略する。
+ *
  * WebSocket は `pace` の通知で 2 秒ごとか変わったときに送る (`PaceMeter`)。HTTP は応答の途中で何かを足せないので、
  * 応答のヘッダで id を返し、画面が `GET /api/playback/pace?id=` で読む (`openPace`)
  */
@@ -32,7 +34,8 @@ export const SPEED_MOST = 10;
 
 /**
  * **エンコードの速さ** (`Pace.speed`)。出した映像の長さ (秒) を、使った時間と組にして窓の中で割る。
- * 使った時間はライブなら実時間、HTTP の変換なら ffmpeg が出すのを待った時間 (`StreamPace`)
+ * 使った時間はライブなら実時間、HTTP の変換なら ffmpeg が出すのを待った時間 (`StreamPace`)。
+ * HTTP の変換は、待った時間が窓の実時間に占める割合も出す (`share`)
  */
 export class SpeedMeter {
   private readonly points: { at: number; media: number; spent: number }[] = [];
@@ -55,6 +58,21 @@ export class SpeedMeter {
     const spent = (last.spent - first.spent) / 1000;
     const speed = spent <= 0 ? SPEED_MOST : media / spent;
     return Math.round(Math.min(SPEED_MOST, speed) * 100) / 100;
+  }
+
+  /**
+   * 窓の中で、使った時間が実時間に占める割合 (0〜1。小数 2 桁)。測れていなければ null。
+   * HTTP の変換では ffmpeg が出すのを待っていた割合で、1 に近ければ送る速さはエンコードが決めている (`Pace.wait`)
+   */
+  share(now: number): number | null {
+    const live = this.points.filter((p) => p.at >= now - SPEED_WINDOW);
+    const first = live[0];
+    const last = live.at(-1);
+    if (first === undefined || last === undefined) return null;
+    const span = last.at - first.at;
+    if (span < SPEED_LEAST) return null;
+    const share = (last.spent - first.spent) / span;
+    return Math.round(Math.min(1, Math.max(0, share)) * 100) / 100;
   }
 }
 
@@ -111,8 +129,8 @@ export class PaceMeter {
 }
 
 /**
- * **HTTP の変換 1 本ぶんの具合** (`server/playback.ts` の `transcodeBody` が出力と待ち時間を渡す)。
- * 映像を写すだけ (`encoding` が false) なら `speed` は null
+ * **HTTP の変換 1 本ぶんの具合** (`server/playback.ts` の `transcodeBody` が、読みに来た時刻と出力を渡す)。
+ * 映像を写すだけ (`encoding` が false) なら `speed` は null。`wait` は写すだけでも測る
  */
 export class StreamPace {
   private readonly splitter = new Fmp4Splitter();
@@ -120,22 +138,31 @@ export class StreamPace {
   private readonly meter = new SpeedMeter();
   private media = 0;
   private waited = 0;
+  /** 読みに来て、まだ何も渡していなければその時刻 (ms)。渡したら null */
+  private askedAt: number | null = null;
 
   constructor(private readonly encoding: boolean) {}
 
-  /** ffmpeg が出したもの (区切りは問わない) */
-  output(chunk: Uint8Array, now = Date.now()): void {
-    if (!this.encoding) return;
-    for (const segment of this.splitter.feed(chunk)) {
-      if (segment.kind === "init") this.length.init(segment.data);
-      else this.media += this.length.media(segment.data);
-    }
-    this.meter.record(now, this.media, this.waited);
+  /** 読みに来た (ffmpeg が出すのを待ち始めた) */
+  ask(now = Date.now()): void {
+    this.askedAt = now;
   }
 
-  /** 読みに来て、ffmpeg が出すまで待った時間 (ms) */
-  wait(ms: number): void {
-    this.waited += ms;
+  /**
+   * ffmpeg が出したもの (区切りは問わない)。読みに来てからここまでを待った時間に足してから、出した映像の長さと組にする。
+   * 渡し終えてから足すと、待った時間が塊 1 つぶん遅れて入る (ffmpeg が 1 秒ごとに塊を出すなら、5 秒の窓で 2 割ずれる)
+   */
+  output(chunk: Uint8Array, now = Date.now()): void {
+    if (this.askedAt !== null) {
+      this.waited += Math.max(0, now - this.askedAt);
+      this.askedAt = null;
+    }
+    if (this.encoding)
+      for (const segment of this.splitter.feed(chunk)) {
+        if (segment.kind === "init") this.length.init(segment.data);
+        else this.media += this.length.media(segment.data);
+      }
+    this.meter.record(now, this.media, this.waited);
   }
 
   read(now = Date.now()): Pace {
@@ -143,6 +170,7 @@ export class StreamPace {
       backlog: 0,
       dropped: 0,
       speed: this.encoding ? this.meter.speed(now) : null,
+      wait: this.meter.share(now),
     };
   }
 }

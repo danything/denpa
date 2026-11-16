@@ -195,6 +195,7 @@
     ADAPT_TICK,
     autoLabel,
     busyNote,
+    fileIdle,
     rungQuery,
     watchAdapt,
   } from "#lib/watch-adapt.js";
@@ -1432,12 +1433,21 @@
       paceId: plan.way === "stream" ? paceId : null,
       /*
        * ファイルの直再生は受け取りの速さを測れない。ブラウザが先を読み終えて読むのを止めていれば、回線は足りている
-       * (ファイルの終わり際や、飛んだ先をデコードしている間の詰まりを回線のせいにしない)
+       * (ファイルの終わり際や、飛んだ先をデコードしている間の詰まりを回線のせいにしない)。
+       * いまの位置をまだ読んでいない間と、飛んでいる最中は数えない (`fileIdle`)
        */
       idle:
         plan.way === "file" &&
-        (target.networkState === HTMLMediaElement.NETWORK_IDLE ||
-          Date.now() - suspendAt <= ADAPT_TICK),
+        fileIdle(
+          {
+            networkState: target.networkState,
+            seeking: target.seeking,
+            buffered: rangesOf(target.buffered),
+            currentTime: target.currentTime,
+          },
+          suspendAt,
+          Date.now(),
+        ),
       // 段 0 が変換 (エンコード済みが無い録画) なら分からない
       baseKbps: baseOf(zeroSource(fileZero ?? plan)),
     };

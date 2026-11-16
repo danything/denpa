@@ -25,6 +25,9 @@ import {
 } from "./adapt";
 import { ENCODE_SLOW, type Pace } from "./rungs";
 
+/** HTTP の変換で、ffmpeg を待たずに済んでいるときの `speed` (`server/pace.ts` の `SPEED_MOST`) */
+const SPEED_CAP = 10;
+
 const calm: Omit<AdaptSample, "now"> = {
   route: "watch",
   current: 0,
@@ -252,6 +255,125 @@ describe("観る画面で速さが足りないとき", () => {
         throughput: 2_000_000,
         ahead: 1,
       }),
+    ).toBeNull();
+  });
+});
+
+describe("観る画面で、届く速さがエンコードに縛られているとき", () => {
+  /** 段 1 (3 + 0.096 Mbit/s) を実時間の 1.2 倍でエンコードしている。受け取りの速さもその 1.2 倍 */
+  const BOUND = 1.2 * 3_096_000;
+  const encodeBound = (wait: number | null) =>
+    paces(() => ({ backlog: 0, dropped: 0, speed: 1.2, wait }));
+
+  test("サーバが ffmpeg を待っていた割合のぶん回線は空いていたと見て、ローカルネットで下げない", () => {
+    // 割合が届かなければ、受け取りの速さ × 0.7 (2.6 Mbit/s) が段 1 に足りず、10 秒で下げる (直す前の動き)
+    const before = encodeBound(null);
+    expect(
+      first(new RungAdapter(), 0, 60_000, (now) => ({
+        current: 1,
+        throughput: BOUND,
+        ahead: 20,
+        pace: before(now),
+      })),
+    ).toEqual({ at: GRACE + THIN, decision: { step: 2, reason: "slow" } });
+    // 8 割待っていたなら、回線は受け取りの速さの 5 倍出る
+    const bound = encodeBound(0.8);
+    expect(
+      first(new RungAdapter(), 0, 60_000, (now) => ({
+        current: 1,
+        throughput: BOUND,
+        ahead: 20,
+        pace: bound(now),
+      })),
+    ).toBeNull();
+  });
+
+  test("回線が細ければ ffmpeg をほとんど待たないので、これまでどおり 10 秒で下げる", () => {
+    // 2 Mbit/s ÷ 0.95 × 0.7 ≈ 1.47 Mbit/s は段 2 (1.596 Mbit/s) にも足りない
+    const thin = paces(() => ({
+      backlog: 0,
+      dropped: 0,
+      speed: SPEED_CAP,
+      wait: 0.05,
+    }));
+    expect(
+      first(new RungAdapter(), 0, 60_000, (now) => ({
+        current: 1,
+        throughput: 2_000_000,
+        ahead: 20,
+        pace: thin(now),
+      })),
+    ).toEqual({ at: GRACE + THIN, decision: { step: 3, reason: "slow" } });
+  });
+
+  test("割合が 1 でも、受け取りの速さの 10 倍までしか見ない", () => {
+    // 0.3 Mbit/s × 10 × 0.7 = 2.1 Mbit/s は段 1 に足りない
+    const full = encodeBound(1);
+    expect(
+      first(new RungAdapter(), 0, 60_000, (now) => ({
+        current: 1,
+        throughput: 300_000,
+        ahead: 20,
+        pace: full(now),
+      }))?.at,
+    ).toBe(GRACE + THIN);
+  });
+
+  test("先が埋まってサーバが測れなくなっても (wait が null)、最後に測った割合を使う", () => {
+    const paused = paces((n) => ({
+      backlog: 0,
+      dropped: 0,
+      speed: n < 3 ? 1.2 : null,
+      wait: n < 3 ? 0.8 : null,
+    }));
+    expect(
+      first(new RungAdapter(), 0, 60_000, (now) => ({
+        current: 1,
+        throughput: BOUND,
+        ahead: 20,
+        pace: paused(now),
+      })),
+    ).toBeNull();
+  });
+
+  test("シークしたら (reset) 覚えた割合を捨て、新しいストリームで測り直す", () => {
+    const a = new RungAdapter();
+    const bound = encodeBound(0.8);
+    expect(
+      first(a, 0, 9_000, (now) => ({
+        current: 1,
+        throughput: BOUND,
+        ahead: 20,
+        pace: bound(now),
+      })),
+    ).toBeNull();
+    a.reset(10_000);
+    const fresh = encodeBound(null);
+    expect(
+      first(a, 10_000, 60_000, (now) => ({
+        current: 1,
+        throughput: BOUND,
+        ahead: 20,
+        pace: fresh(now),
+      }))?.at,
+    ).toBe(10_000 + GRACE + THIN);
+  });
+
+  test("上げるときは受け取りの速さだけを見る (エンコードが縛っている間に重い段へ上げない)", () => {
+    // 4 Mbit/s は段 1 の 2 倍 (6.2 Mbit/s) に届かない。割合で割ると届くが、上げない
+    const bound = paces(() => ({
+      backlog: 0,
+      dropped: 0,
+      speed: 2.5,
+      wait: 0.9,
+    }));
+    expect(
+      first(new RungAdapter(), 0, 120_000, (now) => ({
+        current: 2,
+        throughput: 4_000_000,
+        ahead: 20,
+        pace: bound(now),
+      })),
     ).toBeNull();
   });
 });

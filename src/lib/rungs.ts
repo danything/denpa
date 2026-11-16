@@ -59,6 +59,11 @@ export interface Pace {
   dropped: number;
   /** エンコードの速さ (出力した時刻の進み ÷ 実時間)。エンコードしない経路は null */
   speed: number | null;
+  /**
+   * HTTP の変換 (`GET /api/playback/pace`) で、送る側が ffmpeg の出力を待っていた時間の割合 (0〜1。5 秒の窓)。
+   * 1 に近いほど、届く速さを決めているのは回線ではなくエンコード。測れるまでは null、WebSocket は省略
+   */
+  wait?: number | null;
 }
 
 /**
