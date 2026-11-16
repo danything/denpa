@@ -62,7 +62,10 @@ interface Index {
   cues: MkvCue[];
 }
 
-/** 先頭と Cues を読む。H.264・H.265 でない・Cues が無い・読めなければ null */
+/**
+ * 先頭と Cues を読む。H.264・H.265 でない・Cues が無い・先頭が読めなければ null。Cues の中身が読めなければ `cues` は空
+ * (`cleanFrom` はどちらも `from` をそのまま返す)
+ */
 async function readIndex(path: string): Promise<Index | null> {
   const read: ReadAt = (offset, length) => readRecording(path, offset, length);
   const head = await loadMkvHead(read);
