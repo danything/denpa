@@ -496,7 +496,7 @@ test.describe("PWA", () => {
       page,
     }) => {
       await stopGuideClock(page, hours);
-      await page.setViewportSize({ width: 844, height: 390 });
+      await page.setViewportSize({ width: 667, height: 375 });
       await goto(page, "/guide?type=GR");
       const grid = page.getByTestId("guide-grid");
       await expect(page.getByTestId("program-button").first()).toBeVisible();
@@ -505,7 +505,7 @@ test.describe("PWA", () => {
       const top = async (locator: typeof bar) =>
         (await locator.boundingBox())!.y;
       const shown = async () => {
-        await expect.poll(() => top(tabbar)).toBeLessThan(390);
+        await expect.poll(() => top(tabbar)).toBeLessThan(375);
         await expect.poll(() => top(bar)).toBeLessThan(await top(tabbar));
       };
       const size = () =>
@@ -517,7 +517,7 @@ test.describe("PWA", () => {
       // 開いた直後 (「いま」への位置合わせで巻かれていても) は出ている。表は画面の下の端まで
       await shown();
       const opened = await size();
-      expect(Math.abs(opened.bottom - 390)).toBeLessThanOrEqual(1);
+      expect(Math.abs(opened.bottom - 375)).toBeLessThanOrEqual(1);
 
       // 横に送っても出し入れしない
       await grid.evaluate((el) => {
@@ -527,13 +527,13 @@ test.describe("PWA", () => {
       await shown();
 
       // 下へ送ると操作の 1 行が隠れる。下のタブは残る。箱の大きさと巻いた位置は、隠れる前後で変わらない
-      await page.mouse.move(400, 200);
+      await page.mouse.move(330, 200);
       await page.mouse.wheel(0, 400);
       await expect
         .poll(() => grid.evaluate((el) => el.scrollTop))
         .toBeGreaterThan(0);
-      await expect.poll(() => top(bar)).toBeGreaterThanOrEqual(390);
-      expect(await top(tabbar)).toBeLessThan(390);
+      await expect.poll(() => top(bar)).toBeGreaterThanOrEqual(375);
+      expect(await top(tabbar)).toBeLessThan(375);
       const scrolled = await grid.evaluate((el) => el.scrollTop);
       await page.waitForTimeout(400);
       expect(await grid.evaluate((el) => el.scrollTop)).toBe(scrolled);
