@@ -25,7 +25,7 @@ public sealed record TuneOptions(string? FakeTune = null);
 ///
 /// <list type="bullet">
 /// <item>**取り合いの順に下限が無い。** 負の値もそのまま並ぶ (丸めない)</item>
-/// <item>**番組表の取得が特別扱いされない。** 録画もロゴも番組表も同じ「開きたい人」で、priority だけで並ぶ</item>
+/// <item>**番組表の取得が特別扱いされない。** 録画もロゴも番組表も同じ選局の要求で、priority だけで並ぶ</item>
 /// <item>**同じ物理チャンネルなら 1 台で足りる。** 番組表・ロゴ・録画が同じ選局を共有する</item>
 /// </list>
 ///
@@ -289,7 +289,7 @@ public sealed class TunerPool(
             {
                 foreach (var open in _leases.Values)
                 {
-                    if (open.Type == type && open.Channel == channel && StrongestOf(open, after) >= priority) return Join(open, priority, use, service);
+                    if (open.Type == type && open.Channel == channel && HighestOf(open, after) >= priority) return Join(open, priority, use, service);
                 }
             }
 
@@ -758,9 +758,9 @@ public sealed class TunerPool(
     private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after, IReadOnlyList<Attempt> tried)
     {
         var ranks = Ranks(Tuners);
-        int? Strongest(int index) => _leases.TryGetValue(index, out var lease) ? StrongestOf(lease, after) : null;
-        bool Idle(int index) => _leases.ContainsKey(index) && Strongest(index) is null;
-        bool Usable(int index) => Strongest(index) is not { } strongest || strongest < priority;
+        int? Highest(int index) => _leases.TryGetValue(index, out var lease) ? HighestOf(lease, after) : null;
+        bool Idle(int index) => _leases.ContainsKey(index) && Highest(index) is null;
+        bool Usable(int index) => Highest(index) is not { } highest || highest < priority;
 
         List<int> group;
         if (tried.Count > 0)
@@ -768,7 +768,7 @@ public sealed class TunerPool(
             var first = tried[0].Index;
             if (first >= ranks.Length || ranks[first] is not { } rank) return null;
             group = [.. Enumerable.Range(0, Tuners.Count)
-                .Where(index => ranks[index] == rank && Tuners[index].Types.Contains(type) && Strongest(index) is null && !tried.Any(attempt => attempt.Index == index))];
+                .Where(index => ranks[index] == rank && Tuners[index].Types.Contains(type) && Highest(index) is null && !tried.Any(attempt => attempt.Index == index))];
             if (group.Count == 0) return null;
         }
         else
@@ -813,7 +813,7 @@ public sealed class TunerPool(
         {
             if (!_leases.ContainsKey(index)) return index;
         }
-        return group.MinBy(index => Strongest(index) ?? int.MinValue);
+        return group.MinBy(index => Highest(index) ?? int.MinValue);
     }
 
     /// <summary>名指しで選べなかったときの理由 (<see cref="Open"/> の <c>pin</c>)</summary>
@@ -840,13 +840,13 @@ public sealed class TunerPool(
         {
             // 同じチャンネルを読んでいる選局には入れる (取り合いの順にかかわらず共有する。Open が Join する)
             if (lease.Type == type && lease.Channel == channel) return index;
-            if (StrongestOf(lease, after) >= priority) throw new TunerBusyException($"{spec.Name} ({pin}) は取り合いで同じか先になる利用者が使っています");
+            if (HighestOf(lease, after) >= priority) throw new TunerBusyException($"{spec.Name} ({pin}) は取り合いで同じか先になる利用者が使っています");
         }
         return index;
     }
 
     /// <summary>残る利用者のうち、取り合いでいちばん先になる値 (priority)。引き継ぐ相手 (<c>after</c>) はもう離れたものとして数えない。誰もいなければ null</summary>
-    private static int? StrongestOf(Lease lease, IReadOnlySet<string> after)
+    private static int? HighestOf(Lease lease, IReadOnlySet<string> after)
     {
         lock (lease.Sinks) return lease.Sinks.Where(sink => !after.Contains(sink.Use)).Max(sink => (int?)sink.Priority);
     }
@@ -1085,7 +1085,7 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     /// <summary>
     /// 読む側が去った。共有から抜ける。**先に切られていても抜ける。** 読み出しが追いつかずに切った
     /// (<see cref="Push"/>) あとも選局の利用者に残っていると、そのチューナーは誰も読んでいないのに
-    /// 同じ取り合いの順のまま塞がり続けた (実機で、番組表の取得が「空きがありません」と断られ続け、
+    /// 切った利用者の取り合いの順のまま塞がり続けた (実機で、番組表の取得が「空きがありません」と断られ続け、
     /// 衛星の局ロゴは空いた 1 台を番組表の取得に 30 分ごとに取り上げられた)。
     /// 取り上げられて先に外されたぶんは、抜ける側 (<c>Join</c>) が見分けて何もしない
     /// </summary>
