@@ -263,6 +263,11 @@
   let switching = false;
   /** これより前 (ms) は段を動かさない。混んでいて断られたあと、続けてリクエストしない */
   let adaptQuietUntil = 0;
+  /**
+   * ファイルの直再生で、ブラウザが最後にファイルを読むのを止めた時刻 (ms。`suspend`)。刻みの間に読み足して止めたぶんも
+   * `adapt.ts` に「読むのを止めている」(`idle`) と渡す
+   */
+  let suspendAt = Number.NEGATIVE_INFINITY;
   /** 段の断り書き。しばらくで引っ込める */
   let adaptText = $state<string | null>(null);
   let adaptTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1425,6 +1430,14 @@
         target.readyState < HTMLMediaElement.HAVE_FUTURE_DATA &&
         !target.seeking,
       paceId: plan.way === "stream" ? paceId : null,
+      /*
+       * ファイルの直再生は受け取りの速さを測れない。ブラウザが先を読み終えて読むのを止めていれば、回線は足りている
+       * (ファイルの終わり際や、飛んだ先をデコードしている間の詰まりを回線のせいにしない)
+       */
+      idle:
+        plan.way === "file" &&
+        (target.networkState === HTMLMediaElement.NETWORK_IDLE ||
+          Date.now() - suspendAt <= ADAPT_TICK),
       // 段 0 が変換 (エンコード済みが無い録画) なら分からない
       baseKbps: baseOf(zeroSource(fileZero ?? plan)),
     };
@@ -3021,6 +3034,8 @@
                 stall();
                 // シーク・CM スキップのあとは測り直す。段は持ち越す
                 adapt.reset();
+                // 飛んだ先はまだ読んでいない
+                suspendAt = Number.NEGATIVE_INFINITY;
                 // 飛んだ直後の 1 コマは飛ぶ前の時刻を持っていることがあるので、映像の遅れに数えない (`unslipper`)
                 unslip.seeked();
               }}
@@ -3039,7 +3054,13 @@
                 feedData();
               }}
               onseeked={(event) => {
-                if (event.currentTarget === video) feedData();
+                if (event.currentTarget !== video) return;
+                feedData();
+                // 飛んだ先に着いてからも 3 秒は数えない。飛んだ先を出すまでのデコードが長い (AV1) と、着いた直後にまだ詰まる
+                adapt.reset();
+              }}
+              onsuspend={(event) => {
+                if (event.currentTarget === video) suspendAt = Date.now();
               }}
               onloadedmetadata={(event) => {
                 if (event.currentTarget !== video) return;

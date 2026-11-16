@@ -58,6 +58,10 @@ import {
  * - 観る画面で、測った速さ × 0.7 がいまの段に足りている間は、詰まりとバッファの減りを回線のせいにしない。
  *   接続が切れて繋ぎ直している・サーバがファイルを読むのが遅れた、のように下げても直らない詰まりで、
  *   ローカルネットでも「回線が細い」と出ていた。速さは読んでいる間に測るので、回線が細くなれば 5 秒の窓のうちに下がる
+ * - 観る画面のファイルの直再生で、ブラウザがファイルを読むのを止めている (`AdaptSample.idle`) 間は、詰まりとバッファの減りを
+ *   回線のせいにしない。ブラウザは先を読み終えたときに止めるので、回線は足りている。直再生は受け取りの速さを測れず、
+ *   ファイルの終わり際にバッファが減るのと、飛んだ先をデコードし終えるまでの詰まりで、ローカルネットでも 720p に下げていた。
+ *   回線が細ければ先が埋まらず、ブラウザは読み続けるので、これまでどおり下げる
  * - 形式を手で選んでいる間は段を動かさず、足りないときに `pinned` だけを返す
  */
 
@@ -125,6 +129,12 @@ export interface AdaptSample {
    * (`GET /api/playback/probe`) の速さを足したもの。無ければ null・省略。ライブで上げてよいかを決めるのにだけ使う
    */
   capacity?: { bps: number; at: number } | null;
+  /**
+   * 観る画面のファイルの直再生で、ブラウザがファイルを読むのを止めているか (`networkState` が `NETWORK_IDLE`。
+   * 先を読み終えた・ファイルを読み終えた)。止めている間は、詰まりとバッファの減りを回線のせいにしない。
+   * 測った速さ (`throughput`) があればそちらを使う。省略は false
+   */
+  idle?: boolean;
   /**
    * 端末のデコードが追いついていないか (`unslip.ts` の `DecodeLag`)。省略は false。「自動」なら 1 段下げ、
    * その段から上へはもう上げない (`ceiling`)。手で選んだ段は動かさない
@@ -563,12 +573,18 @@ export class RungAdapter {
       dropped = pace !== this.lastPace && pace.dropped > 0;
     }
     const watch = s.route === "watch";
-    // 観る画面で測った速さが、いまの段に足りているか。測れていなければ null
-    const enough =
-      watch && s.throughput !== null
+    /*
+     * 観る画面で、回線がいまの段に足りているか。分からなければ null。測った速さがあれば比べ、無ければ
+     * ブラウザがファイルを読むのを止めている (`idle`) ことを足りている印にする
+     */
+    const enough = !watch
+      ? null
+      : s.throughput !== null
         ? s.current === "audio" ||
           s.throughput * HEADROOM >= stepBps(s.current, s.baseKbps)
-        : null;
+        : s.idle === true
+          ? true
+          : null;
     // 先が埋まっている間の速さは高めに出やすい。外れても下げ遅れるほうなので、そのまま比べる
     if (enough === false) this.thinSince ??= now;
     else this.thinSince = null;

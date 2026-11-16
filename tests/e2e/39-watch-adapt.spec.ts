@@ -149,7 +149,23 @@ test.describe("観る画面でその場で流す", () => {
           },
         }),
       );
-      // ファイルは先頭の 12 秒ぶんしか無い。先のバッファが減り続けて 2 秒を切ると、段を下げる
+      /*
+       * 回線が細い。ファイルは先頭の 12 秒ぶんしか届かず、ブラウザは続きを読み続ける。先のバッファが減り続けて
+       * 2 秒を切ると、段を下げる。
+       * 続きを届かないままにすると、作り置きの fMP4 は索引を作るのに全部の moof を読むので、読み始めない。
+       * そこで 12 秒のファイルをまるごと返し、ブラウザは読み続けている (`networkState` が `NETWORK_LOADING` で、
+       * `suspend` が来ない) ことにする。読み終えたままだと、回線は足りていると見て下げない (`adapt.ts` の `idle`)
+       */
+      await page.addInitScript(() => {
+        Object.defineProperty(HTMLMediaElement.prototype, "networkState", {
+          get: () => HTMLMediaElement.NETWORK_LOADING,
+        });
+        window.addEventListener(
+          "suspend",
+          (event) => event.stopImmediatePropagation(),
+          true,
+        );
+      });
       const file = Buffer.from(clipFrom(clip, 0, 12));
       await page.route(`**/api/recordings/${id}/file?**`, (route) =>
         route.fulfill({ status: 200, contentType: "video/mp4", body: file }),
@@ -240,5 +256,70 @@ test.describe("観る画面でその場で流す", () => {
     } finally {
       await setRecording(request);
     }
+  });
+
+  /**
+   * **ファイルを読み終えていれば、終わり際に先のバッファが減っても画質を下げない** (`adapt.ts` の `idle`)。
+   * ファイルの直再生は受け取りの速さを測れないので、先が終わりまでの長さになって 2 秒を切ると、
+   * ローカルネットでも「回線が細いため、720p に下げました」と出していた
+   */
+  test("ファイルを読み終えていれば、終わり際に先のバッファが減っても下げない", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { id } = await recordOne(page, request);
+    const clip = readClip(
+      new Uint8Array(
+        readFileSync(new URL("../fake/live-av1.mp4", import.meta.url)),
+      ),
+    );
+    await page.route(`**/api/recordings/${id}/playback`, (route) =>
+      route.fulfill({
+        json: {
+          duration: 20,
+          axis: "encoded",
+          audios: [{ id: "0", label: "" }],
+          offers: [
+            {
+              codec: "av1",
+              way: "file",
+              source: "encoded",
+              codecs: "av01.0.08M.08,opus",
+            },
+            { codec: "av1", way: "stream", codecs: "av01.0.08M.08,opus" },
+          ],
+        },
+      }),
+    );
+    // 20 秒のファイルをまるごと返す (すぐ読み終える)
+    const file = Buffer.from(clipFrom(clip, 0, 20));
+    await page.route(`**/api/recordings/${id}/file?**`, (route) =>
+      route.fulfill({ status: 200, contentType: "video/mp4", body: file }),
+    );
+    await page.route(`**/api/recordings/${id}/chapters`, (route) =>
+      route.fulfill({ json: { chapters: [] } }),
+    );
+    const asked = streamRequests(page);
+
+    await goto(page, `/watch/${id}`);
+    const video = page.getByTestId("watch-video");
+    await expect(video).toHaveAttribute(
+      "src",
+      `/api/recordings/${id}/file?source=encoded`,
+    );
+    await video.evaluate((v) => {
+      const media = v as HTMLVideoElement;
+      media.muted = true;
+      void media.play().catch(() => undefined);
+    });
+    // 終わりまで観る。終わり際の 2 秒も段を動かさない
+    await expect
+      .poll(() => video.evaluate((v) => (v as HTMLVideoElement).ended), {
+        timeout: 60_000,
+      })
+      .toBe(true);
+    expect(asked).toHaveLength(0);
+    await expect(page.getByTestId("watch-adapt")).toHaveCount(0);
   });
 });
