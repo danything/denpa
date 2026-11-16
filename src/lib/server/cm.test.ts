@@ -246,6 +246,7 @@ describe("ロゴの結果を捨てたときの覚え書き", () => {
       logo: logo
         ? {
             spans: [{ start: 0, end: 1499 }],
+            blind: [],
             scores: Float32Array.from({ length: frames }, (_, i) =>
               i < 1500 ? 0.7 : i < 2250 ? 0.18 : 0.02,
             ),
@@ -374,6 +375,7 @@ describe("途中から映像が欠けた録画", () => {
           end: frameAt(to) - 1,
         })),
         scores: Float32Array.from(times, (t) => (lit(t) ? 0.75 : 0.02)),
+        blind: [],
       },
       why: "",
     };

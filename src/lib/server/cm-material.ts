@@ -13,7 +13,7 @@ import type { Span } from "../ts/logo-detect";
  */
 
 /** 中身の形式のバージョン。形式を変えたら上げる (古いバージョンの行は使わずに読み直す) */
-export const MATERIAL_VERSION = 1;
+export const MATERIAL_VERSION = 2;
 
 /** 切れ目はこの強さ以上だけ持つ (`cm-decide` の弱い切れ目の下限) */
 const CUT_KEEP = 3;
@@ -37,7 +37,7 @@ export interface CmMaterial {
   /** コマごとの切れ目の点。`CUT_KEEP` より弱いものは 0 */
   cuts: Float32Array;
   /** ロゴ。使えなかったときは null で、理由が `why` */
-  logo: { spans: Span[]; scores: Float32Array } | null;
+  logo: { spans: Span[]; scores: Float32Array; blind: Span[] } | null;
   /**
    * 当てた型の在り処と大きさ (`logo-own` の `model`)。ロゴの結果を捨てたときの覚え書きに出す。
    * 型は録画のたびに育つので、あとから置き場を見てもこの回に当てた型は分からない
@@ -56,6 +56,8 @@ type Header = Omit<CmMaterial, "silences" | "times" | "cuts" | "logo"> & {
   cuts: number;
   silences: [number, number][];
   spans: [number, number][] | null;
+  /** ロゴの区間の外で判断できなかった所 (コマ番号の組)。ロゴが使えなければ null */
+  blind: [number, number][] | null;
 };
 
 /**
@@ -79,6 +81,7 @@ export function encodeMaterial(material: CmMaterial): Uint8Array {
     cuts: kept.length,
     silences: silences.map((s) => [+s.start.toFixed(4), +s.end.toFixed(4)]),
     spans: logo === null ? null : logo.spans.map((s) => [s.start, s.end]),
+    blind: logo === null ? null : logo.blind.map((s) => [s.start, s.end]),
   };
   const head = new TextEncoder().encode(JSON.stringify(header));
   const deltas = new Int32Array(Math.max(0, frames - 1));
@@ -122,6 +125,7 @@ export function decodeMaterial(bytes: Uint8Array): CmMaterial | null {
       cuts: cutCount,
       silences,
       spans,
+      blind,
       ...rest
     } = JSON.parse(
       new TextDecoder().decode(raw.subarray(4, 4 + length)),
@@ -158,10 +162,11 @@ export function decodeMaterial(bytes: Uint8Array): CmMaterial | null {
       times,
       cuts,
       logo:
-        spans === null || scores === null
+        spans === null || blind === null || scores === null
           ? null
           : {
               spans: spans.map(([start, end]) => ({ start, end })),
+              blind: blind.map(([start, end]) => ({ start, end })),
               scores: Float32Array.from(scores, (s) => s / SCORE_SCALE),
             },
     };

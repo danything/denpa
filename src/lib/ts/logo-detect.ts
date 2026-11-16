@@ -494,10 +494,41 @@ const MISS_MAX = 0.1;
  * 判断できる後ろの決め方は `byLevel`/`byCell`
  */
 export function logoSpans(r: Readings, fps: number): Span[] {
+  return readLogo(r, fps).spans;
+}
+
+/** ロゴの出ていた区間と、区間の外でロゴが出ているか判断できなかった所 (どちらもコマ番号) */
+export interface LogoReading {
+  spans: Span[];
+  /**
+   * **区間の外で、後ろが見えない段ばかりで判断できなかった所** (`MIN_SPAN` 秒以上)。判断は直前の「消えた」を持ち越しているので、
+   * ロゴが無かったとは言い切れない。白い場面で始まる番組の冒頭のように、ロゴが出ていても溶けて見えない所 (`cm-decide`)
+   */
+  blind: Span[];
+}
+
+/** `logoSpans` と同じ区間に、区間の外の判断できなかった所を添える */
+export function readLogo(r: Readings, fps: number): LogoReading {
   const s = smooth(r.scores);
   const known = flat(r, byLevel(r, fps));
   const first = spansOf(r.scores, s, known, fps);
-  return spansOf(r.scores, s, flat(r, byCell(r, first, known, fps)), fps);
+  const final = flat(r, byCell(r, first, known, fps));
+  const spans = spansOf(r.scores, s, final, fps);
+  const q = peak(r.scores, final, Math.round(PEAK_WINDOW * fps), PEAK_RANK);
+  const inside = new Uint8Array(q.length);
+  for (const span of spans) inside.fill(1, span.start, span.end + 1);
+  const blind: Span[] = [];
+  let from = -1;
+  for (let i = 0; i <= q.length; i++) {
+    const unknown = i < q.length && inside[i] === 0 && Number.isNaN(q[i]!);
+    if (unknown && from < 0) from = i;
+    if (!unknown && from >= 0) {
+      if (i - from >= Math.round(MIN_SPAN * fps))
+        blind.push({ start: from, end: i - 1 });
+      from = -1;
+    }
+  }
+  return { spans, blind };
 }
 
 /**

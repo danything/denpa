@@ -564,7 +564,11 @@ export async function openCm(
            */
           if (result.learned !== null)
             share(serviceId, result.learned.file, result.learned.again);
-          lit = { spans: result.spans, scores: result.scores };
+          lit = {
+            spans: result.spans,
+            scores: result.scores,
+            blind: result.blind,
+          };
           logoModel = result.model;
         } else {
           why = `ロゴ判定に失敗: ${result.note}`;
@@ -687,6 +691,10 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
         end: at(s.end + 1),
       })),
       logoScores: material.logo.scores,
+      logoBlind: material.logo.blind.map((s) => ({
+        start: at(s.start),
+        end: at(s.end + 1),
+      })),
     });
     if (cm.length === 0) why = "ロゴの消えている所がありませんでした";
     // 番組の半分以上が CM になったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
