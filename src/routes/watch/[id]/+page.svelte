@@ -254,10 +254,10 @@
   /** canvas のプレイヤーがバッファを使い切って止まっているか (`waiting`)。段を決めるのに渡す */
   let canvasStuck = false;
   /**
-   * 段 0 のビットレート (kbit/s) と、どのファイル (`?source=`。元の TS は `ts`) のものか。ファイルの大きさと尺から。
-   * 読めていなければ null
+   * 段 0 のビットレート (kbit/s)。ファイル (`?source=`。元の TS は `ts`) ごとに、ファイルの大きさと尺から出す。
+   * 形式を選び直して前のファイルに戻ったときも、そのファイルの値で比べる
    */
-  let base: { source: string; kbps: number } | null = null;
+  const base = new Map<string, number>();
   /** 段を切り替えている最中か (応答を待っている間は刻まない) */
   let switching = false;
   /** これより前 (ms) は段を動かさない。混んでいて断られたあと、続けてリクエストしない */
@@ -1238,7 +1238,7 @@
       );
       const bytes = Number(res.headers.get("Content-Length"));
       if (res.ok && bytes > 0 && duration > 0)
-        base = { source, kbps: (bytes * 8) / duration / 1000 };
+        base.set(source, (bytes * 8) / duration / 1000);
     } catch {
       // 分からなければ `adapt.ts` の目安を使う
     }
@@ -1246,7 +1246,7 @@
 
   /** `source` のファイルのビットレート (kbit/s)。読めていなければ null */
   function baseOf(source: string | null): number | null {
-    return source !== null && base?.source === source ? base.kbps : null;
+    return source === null ? null : (base.get(source) ?? null);
   }
 
   /** 段 0 で観るファイルの `?source=`。MPEG-2 は元の TS、その場で流すもの (段 0 が変換) は null */
