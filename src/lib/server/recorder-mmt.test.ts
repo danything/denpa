@@ -17,7 +17,7 @@ const actualTuner = await import("./tuner");
 /*
  * **差し替えはこのファイルの中だけで効かせる。** `--isolate` を付けずに動かすと `mock.module` は他のファイルにも残り、
  * `tuner.ts` の中から呼ぶ `openChannel` (`openChannelStream` が呼ぶもの) まで差し替わったままになる。
- * 終わったら本物の `openChannel` に渡す (下の `afterAll`)
+ * 終わったら本物の `openChannel` に渡す (すぐ下の `afterAll`)
  */
 const realOpenChannel = actualTuner.openChannel;
 let faking = true;
