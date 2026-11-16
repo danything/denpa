@@ -455,40 +455,34 @@ test.describe("PWA", () => {
     await context.close();
   });
 
-  test("狭い画面の下のタブは、下へ読むと引っ込み、上へ戻すと出る", async ({
-    page,
-  }) => {
+  test("狭い画面の下のタブは、下へ読んでも引っ込まない", async ({ page }) => {
     /*
-     * **読んでいる間は操作の層を引っ込める** (docs/design.md の「3 つの層」)。
-     * 窓ごと巻く画面 (受信の設定) で、下へ送るとタブは画面の外へ、上へ戻すと元の位置に戻る
+     * **下のタブはいつも出す** (docs/design.md の「3 つの層」。#2911)。ほかの画面へ移るのに上へ戻させない。
+     * 縦向き (高い) と横向き (低い) のどちらでも、窓ごと巻く画面 (受信の設定) を下へ送ってもタブは元の位置のまま
      */
-    await page.setViewportSize({ width: 390, height: 780 });
-    await goto(page, "/settings/reception");
-    const tabbar = page.getByTestId("tabbar");
-    const bottom = async () => {
-      const box = (await tabbar.boundingBox())!;
-      return box.y + box.height;
-    };
-    await expect.poll(bottom).toBeLessThanOrEqual(780);
-    await page.mouse.move(195, 300);
-    await page.mouse.wheel(0, 600);
-    await expect
-      .poll(async () => (await tabbar.boundingBox())!.y)
-      .toBeGreaterThanOrEqual(780);
-    await page.mouse.wheel(0, -600);
-    await expect.poll(bottom).toBeLessThanOrEqual(780);
-
-    // 画面を移ると出す
-    await page.mouse.wheel(0, 600);
-    await expect
-      .poll(async () => (await tabbar.boundingBox())!.y)
-      .toBeGreaterThanOrEqual(780);
-    await goto(page, "/settings/general");
-    await expect.poll(bottom).toBeLessThanOrEqual(780);
+    for (const [width, height] of [
+      [390, 780],
+      [844, 390],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await goto(page, "/settings/reception");
+      const tabbar = page.getByTestId("tabbar");
+      const bottom = async () => {
+        const box = (await tabbar.boundingBox())!;
+        return box.y + box.height;
+      };
+      await expect.poll(bottom).toBeLessThanOrEqual(height);
+      await page.mouse.move(width / 2, height / 3);
+      await page.mouse.wheel(0, 600);
+      await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+      await page.waitForTimeout(400);
+      expect(await bottom()).toBeLessThanOrEqual(height);
+    }
   });
 
   /*
-   * 番組表は窓ではなく表の箱 (`.grid-box`) の中で巻くので、箱の縦の巻き取りで出し入れする (`+layout.svelte`)。
+   * 番組表は窓ではなく表の箱 (`.grid-box`) の中で巻くので、箱の縦の巻き取りで操作の 1 行を出し入れする (`+layout.svelte`)。
+   * 隠すのは低い画面 (横向きのスマホ) だけで、下のタブはいつも出ている。高い画面 (縦向き) では 1 行も隠さない。
    * 表は画面の下の端まで伸びていて、出し入れで箱の大きさも巻いた位置も変わらない (中身が跳ねない)。
    * 開いたときの箱の位置は時刻で変わるので、時計を止めて 2 通り見る。昼は「いま」への位置合わせで巻かれていて、
    * 表の先頭 (4:00) は先頭のまま (初めての巻き取りで隠す)。夜遅くは開いた時点で表の最後に着いていて下へ送れない
@@ -498,11 +492,11 @@ test.describe("PWA", () => {
     [8, "昼"],
     [0, "表の先頭"],
   ] as const) {
-    test(`スマホの番組表は、表の箱を下へ送ると下のタブと操作の1行が引っ込み、上へ戻すと出る (${when})`, async ({
+    test(`横向きのスマホの番組表は、表の箱を下へ送ると操作の1行が引っ込み、上へ戻すと出る (${when})`, async ({
       page,
     }) => {
       await stopGuideClock(page, hours);
-      await page.setViewportSize({ width: 390, height: 844 });
+      await page.setViewportSize({ width: 844, height: 390 });
       await goto(page, "/guide?type=GR");
       const grid = page.getByTestId("guide-grid");
       await expect(page.getByTestId("program-button").first()).toBeVisible();
@@ -511,7 +505,7 @@ test.describe("PWA", () => {
       const top = async (locator: typeof bar) =>
         (await locator.boundingBox())!.y;
       const shown = async () => {
-        await expect.poll(() => top(tabbar)).toBeLessThan(844);
+        await expect.poll(() => top(tabbar)).toBeLessThan(390);
         await expect.poll(() => top(bar)).toBeLessThan(await top(tabbar));
       };
       const size = () =>
@@ -523,7 +517,7 @@ test.describe("PWA", () => {
       // 開いた直後 (「いま」への位置合わせで巻かれていても) は出ている。表は画面の下の端まで
       await shown();
       const opened = await size();
-      expect(Math.abs(opened.bottom - 844)).toBeLessThanOrEqual(1);
+      expect(Math.abs(opened.bottom - 390)).toBeLessThanOrEqual(1);
 
       // 横に送っても出し入れしない
       await grid.evaluate((el) => {
@@ -532,14 +526,14 @@ test.describe("PWA", () => {
       await page.waitForTimeout(400);
       await shown();
 
-      // 下へ送ると隠れる。箱の大きさと巻いた位置は、隠れる前後で変わらない
-      await page.mouse.move(200, 400);
+      // 下へ送ると操作の 1 行が隠れる。下のタブは残る。箱の大きさと巻いた位置は、隠れる前後で変わらない
+      await page.mouse.move(400, 200);
       await page.mouse.wheel(0, 400);
       await expect
         .poll(() => grid.evaluate((el) => el.scrollTop))
         .toBeGreaterThan(0);
-      await expect.poll(() => top(tabbar)).toBeGreaterThanOrEqual(844);
-      await expect.poll(() => top(bar)).toBeGreaterThanOrEqual(844);
+      await expect.poll(() => top(bar)).toBeGreaterThanOrEqual(390);
+      expect(await top(tabbar)).toBeLessThan(390);
       const scrolled = await grid.evaluate((el) => el.scrollTop);
       await page.waitForTimeout(400);
       expect(await grid.evaluate((el) => el.scrollTop)).toBe(scrolled);
@@ -557,6 +551,28 @@ test.describe("PWA", () => {
       await shown();
     });
   }
+
+  test("縦向きのスマホの番組表は、表の箱を下へ送っても操作の1行を隠さない", async ({
+    page,
+  }) => {
+    // 高い画面では出し入れの動きのほうが空く 1 行より気になる (#2911)
+    await stopGuideClock(page, 8);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await goto(page, "/guide?type=GR");
+    const grid = page.getByTestId("guide-grid");
+    await expect(page.getByTestId("program-button").first()).toBeVisible();
+    const bar = page.getByTestId("guide-toolbar");
+    await page.mouse.move(200, 400);
+    await page.mouse.wheel(0, 400);
+    await expect
+      .poll(() => grid.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+    await page.waitForTimeout(400);
+    expect((await bar.boundingBox())!.y).toBeLessThan(844);
+    expect((await page.getByTestId("tabbar").boundingBox())!.y).toBeLessThan(
+      844,
+    );
+  });
 
   test("ホーム画面から開いた iPhone では、暗いテーマのときだけステータスバーの裏まで描く", async ({
     page,
