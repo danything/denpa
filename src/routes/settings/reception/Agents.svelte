@@ -28,7 +28,7 @@
   /** 名前を変えている行 */
   let renaming = $state<number | null>(null);
 
-  /** エージェントに訊く様子。読み直しの間も前の中身を出したままにする (`held`) */
+  /** エージェントに問い合わせた結果。読み直しの間も前の中身を出したままにする (`held`) */
   const states = held(() => data.agentStates);
   const stateOf = (id: number): AgentState | undefined =>
     states.value?.find((state) => state.id === id);
@@ -187,7 +187,7 @@
                   <Icon icon={Pencil} size="size-4" />名前を変える
                 </button>
                 {#if agent.fromEnv}
-                  <!-- 宛先と削除は環境変数が持ち主 -->
+                  <!-- 宛先と削除は環境変数で決める -->
                   <p class="menu-note small muted" data-testid="agent-env-note">
                     TUNER_AGENT_URL から消すと外れます
                   </p>
