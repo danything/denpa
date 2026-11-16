@@ -484,7 +484,7 @@ const STREAM_CAUSE: Record<StreamCause, string> = {
   stall: "詰まって読み直したとき",
   retry: "繋ぎ直したとき",
   audio: "音声を切り替えたとき",
-  switch: "段を切り替えたとき",
+  switch: "画質を切り替えたとき",
 };
 
 /**
@@ -768,6 +768,11 @@ export function aheadOf(ranges: Ranges, t: number): number {
  * (音声の先頭は AAC の前置きぶん早い) と、ブラウザが跨いで再生する程度の隙間
  */
 const GAP = 0.5;
+
+/** `t` が溜まっている区間に入っているか。始まりは `GAP` だけ手前も、終わりはちょうど (読み終えた所) も入れる */
+export function holds(ranges: Ranges, t: number): boolean {
+  return ranges.some(([start, end]) => start <= t + GAP && t <= end);
+}
 
 /**
  * 飛んだ先 `t` を、**リクエストし直さずに待てば届くか。**

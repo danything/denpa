@@ -14,16 +14,11 @@
 
 import {
   cueBefore,
-  elementSize,
-  type MkvCue,
+  loadCues,
+  loadMkvHead,
   type MkvTrack,
-  readCues,
-  readMkvHead,
+  type ReadAt,
 } from "#lib/ts/mkv-media.js";
-
-/** 先頭を読む量 (バイト)。足りなければ倍にして読み直す (Tags・Chapters が大きい録画) */
-const HEAD_FIRST = 1024 * 1024;
-const HEAD_MOST = 32 * 1024 * 1024;
 
 export interface MkvSource {
   /** 尺 (秒)。書いていなければ null */
@@ -36,24 +31,13 @@ export interface MkvSource {
   request(from: number): Response;
 }
 
-async function bytes(
-  blob: Blob,
-  start: number,
-  end: number,
-): Promise<Uint8Array> {
-  return new Uint8Array(await blob.slice(start, end).arrayBuffer());
-}
-
 /** 開く。**Matroska として読めなければ null** (互換モードで描けない。呼ぶ側がほかの方式を選ぶ) */
 export async function openMkv(blob: Blob): Promise<MkvSource | null> {
-  let size = HEAD_FIRST;
-  let head = readMkvHead(await bytes(blob, 0, size));
-  while (head === null && size < Math.min(HEAD_MOST, blob.size)) {
-    size *= 2;
-    head = readMkvHead(await bytes(blob, 0, size));
-  }
+  const read: ReadAt = async (offset, length) =>
+    new Uint8Array(await blob.slice(offset, offset + length).arrayBuffer());
+  const head = await loadMkvHead(read, blob.size);
   if (head === null) return null;
-  const { segment, firstCluster, scale } = head;
+  const { segment, firstCluster } = head;
   const video = head.tracks.find((t) => t.kind === "video") ?? null;
   const codec = video?.codec?.startsWith("avc1")
     ? "h264"
@@ -61,18 +45,7 @@ export async function openMkv(blob: Blob): Promise<MkvSource | null> {
       ? "av1"
       : null;
 
-  let cues: MkvCue[] = [];
-  if (head.cues !== null && video !== null) {
-    // ヘッダ (大きさ) を読んでから、要素ごと読む
-    const lead = await bytes(blob, head.cues, head.cues + 16);
-    const length = elementSize(lead);
-    if (length !== null)
-      cues = readCues(
-        await bytes(blob, head.cues, head.cues + length),
-        scale,
-        video.number,
-      );
-  }
+  const cues = video === null ? [] : await loadCues(read, head, video.number);
   const top = blob.slice(0, firstCluster);
   return {
     duration: head.duration,

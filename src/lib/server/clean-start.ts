@@ -15,11 +15,11 @@
  */
 
 import {
-  elementSize,
+  loadCues,
+  loadMkvHead,
   type MkvCue,
   MkvDemuxer,
-  readCues,
-  readMkvHead,
+  type ReadAt,
 } from "#lib/ts/mkv-media.js";
 import {
   cleanStart,
@@ -29,9 +29,6 @@ import {
 
 import { readRecording } from "./recording-io";
 
-/** 先頭を読む量 (バイト)。足りなければ倍にして読み直す (`mkv-source.ts` と同じ) */
-const HEAD_FIRST = 1024 * 1024;
-const HEAD_MOST = 32 * 1024 * 1024;
 /** Cluster を読む単位と上限 (バイト)。キーフレームとその次のコマが入るまで読む */
 const CLUSTER_STEP = 512 * 1024;
 const CLUSTER_MOST = 16 * 1024 * 1024;
@@ -67,25 +64,15 @@ interface Index {
 
 /** 先頭と Cues を読む。H.264・H.265 でない・Cues が無い・読めなければ null */
 async function readIndex(path: string): Promise<Index | null> {
-  let size = HEAD_FIRST;
-  let head = readMkvHead(await readRecording(path, 0, size));
-  while (head === null && size < HEAD_MOST) {
-    size *= 2;
-    head = readMkvHead(await readRecording(path, 0, size));
-  }
+  const read: ReadAt = (offset, length) => readRecording(path, offset, length);
+  const head = await loadMkvHead(read);
   if (head === null || head.cues === null) return null;
   const video = head.tracks.find((t) => t.kind === "video");
   const codec = video === undefined ? null : nalCodec(video.codecId);
   if (video === undefined || codec === null) return null;
   const lengthSize = nalLengthSize(codec, video.config);
   if (lengthSize === null) return null;
-  const length = elementSize(await readRecording(path, head.cues, 16));
-  if (length === null) return null;
-  const cues = readCues(
-    await readRecording(path, head.cues, length),
-    head.scale,
-    video.number,
-  );
+  const cues = await loadCues(read, head, video.number);
   return {
     codec,
     lengthSize,

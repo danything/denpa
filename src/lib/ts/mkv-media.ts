@@ -456,6 +456,44 @@ export function readCues(
   return out.sort((a, b) => a.time - b.time);
 }
 
+/** ファイルの `offset` バイト目から `length` バイトを読む。末尾に掛かれば、そこまでの短いものを返す */
+export type ReadAt = (offset: number, length: number) => Promise<Uint8Array>;
+
+/** 先頭を読む量 (バイト)。足りなければ倍にして読み直す (Tags・Chapters が大きい録画) */
+const HEAD_FIRST = 1024 * 1024;
+const HEAD_MOST = 32 * 1024 * 1024;
+
+/**
+ * ファイルの先頭を、最初の Cluster が入るまで読み足して読む (`readMkvHead`)。`size` はファイルの大きさで、
+ * 分かればそれより長くは読み直さない。`HEAD_MOST` まで読んでも入らなければ null
+ */
+export async function loadMkvHead(
+  read: ReadAt,
+  size = Number.POSITIVE_INFINITY,
+): Promise<MkvHead | null> {
+  let length = HEAD_FIRST;
+  let head = readMkvHead(await read(0, length));
+  while (head === null && length < Math.min(HEAD_MOST, size)) {
+    length *= 2;
+    head = readMkvHead(await read(0, length));
+  }
+  return head;
+}
+
+/** `track` (映像トラック) の Cues を読む (`readCues`)。Cues が無い・読めなければ空 */
+export async function loadCues(
+  read: ReadAt,
+  head: MkvHead,
+  track: number,
+): Promise<MkvCue[]> {
+  if (head.cues === null) return [];
+  // ヘッダ (大きさ) を読んでから、要素ごと読む
+  const length = elementSize(await read(head.cues, 16));
+  return length === null
+    ? []
+    : readCues(await read(head.cues, length), head.scale, track);
+}
+
 /** `seconds` から観るときに読み始める Cluster。表に無ければ null (先頭から) */
 export function cueBefore(
   cues: readonly MkvCue[],

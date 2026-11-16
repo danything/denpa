@@ -10,7 +10,7 @@ import {
   test,
   wakeControls,
 } from "./helpers";
-import { streamRequests } from "./watch-stream";
+import { playMuted, streamRequests } from "./watch-stream";
 
 /**
  * **観る画面で、回線が細いと画質の段を下げて流す** (`watch-adapt.ts`・`handoff.ts`)。
@@ -84,12 +84,7 @@ test.describe("観る画面でその場で流す", () => {
       "src",
       `/api/recordings/${id}/file?source=encoded`,
     );
-    // 再生を始めておく (音を消した自動再生はブラウザが断らない)
-    await video.evaluate((v) => {
-      const media = v as HTMLVideoElement;
-      media.muted = true;
-      void media.play().catch(() => undefined);
-    });
+    await playMuted(page);
 
     await expect.poll(() => asked.length, { timeout: 15_000 }).toBe(1);
     const first = asked[0]!;
@@ -169,11 +164,7 @@ test.describe("観る画面でその場で流す", () => {
       "src",
       `/api/recordings/${id}/file?source=encoded`,
     );
-    await video.evaluate((v) => {
-      const media = v as HTMLVideoElement;
-      media.muted = true;
-      void media.play().catch(() => undefined);
-    });
+    await playMuted(page);
 
     await expect.poll(() => asked.length, { timeout: 15_000 }).toBe(1);
     expect(asked[0]!.searchParams.get("rung")).toBe("1");
@@ -274,11 +265,7 @@ test.describe("観る画面でその場で流す", () => {
         "src",
         `/api/recordings/${id}/file?source=encoded`,
       );
-      await video.evaluate((v) => {
-        const media = v as HTMLVideoElement;
-        media.muted = true;
-        void media.play().catch(() => undefined);
-      });
+      await playMuted(page);
       const where = (): Promise<number> =>
         video.evaluate((v) => (v as HTMLVideoElement).currentTime);
       // 先頭の CM を飛んで本編を観る (ここで出る「CM を飛ばしました」は本当に飛んだもの)
@@ -381,11 +368,7 @@ test.describe("観る画面でその場で流す", () => {
       "src",
       `/api/recordings/${id}/file?source=encoded`,
     );
-    await video.evaluate((v) => {
-      const media = v as HTMLVideoElement;
-      media.muted = true;
-      void media.play().catch(() => undefined);
-    });
+    await playMuted(page);
     // 終わりまで観る。終わり際の 2 秒も段を動かさない
     await expect
       .poll(() => video.evaluate((v) => (v as HTMLVideoElement).ended), {

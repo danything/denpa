@@ -16,7 +16,7 @@ import {
 import { CODEC_LABEL } from "./hw";
 import type { LiveCodec } from "./live";
 import type { Pace, Rung } from "./rungs";
-import type { Ranges } from "./ts/playback";
+import { holds, type Ranges } from "./ts/playback";
 
 /** `adapt.ts` を呼ぶ間隔 (ms)。`adapt.ts` の数 (2〜3 秒続いたら) を読み分けられる細かさ */
 export const ADAPT_TICK = 1_000;
@@ -49,10 +49,8 @@ export function fileIdle(
   now: number,
 ): boolean {
   if (media.seeking) return false;
-  const t = media.currentTime;
-  // 先頭は映像と音声の始まりのずれ (数十 ms) だけ後ろから溜まることがあるので、少し手前も含める (`aheadOf` と同じ 0.5 秒)
-  if (!media.buffered.some(([start, end]) => start <= t + 0.5 && t <= end))
-    return false;
+  // 先頭は映像と音声の始まりのずれ (数十 ms) だけ後ろから溜まることがあるので、少し手前も含める
+  if (!holds(media.buffered, media.currentTime)) return false;
   return media.networkState === NETWORK_IDLE || now - suspendAt <= ADAPT_TICK;
 }
 
