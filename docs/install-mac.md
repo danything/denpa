@@ -19,12 +19,12 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
    答えたらブラウザで開きます
 
 **LaunchDaemon は root で動くので、誰もログインしていなくても録画でき、外から観られます。** そのために sudo で流します
-(sudo を付けなければ、install.sh がそう言って止まる)。
+(sudo を付けなければ、install.sh がそう表示して止まる)。
 
 - **要るのは macOS だけです。** Homebrew も要りません。エージェントは USB を OS の IOKit で直に扱い、
   同梱の ffmpeg も macOS に最初からあるものにしか繋ぎません
 - **Developer ID の署名と公証はしていません。** curl で取ったファイルには「インターネットから来た」印 (隔離) が付かないので、
-  Gatekeeper に止められません。ブラウザで落とした tar.gz を手で渡したとき (`DENPA_AGENT_TARBALL` など) は、install.sh が印を外します。
+  Gatekeeper に止められません。ブラウザでダウンロードした tar.gz を手で渡したとき (`DENPA_AGENT_TARBALL` など) は、install.sh が印を外します。
   ffmpeg とエージェントは ad-hoc 署名 (`codesign -s -`)、bun は Oven の署名のままです
 - 2 つが組むときの合言葉 ([agent.md](agent.md)) はエージェント自身の置き場 (`~/denpa/config/tls/pair-token`) に無いときだけ作り、エージェントはそこから読み
   (手で `denpa-agent --pair` を流しても同じ URL が出る)、denpa には `TUNER_AGENT_URL` (`https://127.0.0.1:25252#pair=<合言葉>`) で渡します。上げ直しても変えません
@@ -50,11 +50,11 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 root が書いた録画も Finder から消したり動かしたりできます。`~/Movies` はその人しか開けないので、ほかの人からは見えません。
 
 - もう一度流せば上げ直し (本体もエージェントも最新のリリースへ)。録画中なら、本体とエージェントが録画の終わりを待ってから入れ替わります
-- 消すときは `… | sudo bash -s -- --uninstall`。LaunchDaemon・プログラムを外し、DB と `denpa.env`・エージェントの設定・録画・ログは残して、消し方を言います
+- 消すときは `… | sudo bash -s -- --uninstall`。LaunchDaemon・プログラムを外し、DB と `denpa.env`・エージェントの設定・録画・ログは残して、消し方を表示します
 - denpa 本体は別の機械で動かし、Mac にはエージェントだけ置くなら `… | sudo bash -s -- --agent-only`。
   install.sh が最後に出す登録用の URL (`https://<Mac の名前>.local:25252#pair=<合言葉>`) とその下の QR を、denpa の設定の「受信」の「エージェントを追加」に貼るか読ませます。`TUNER_AGENT_URL` に書いても登録できます
   ([別の所に置く](agent.md#エージェントは別イメージ別プロセス)のと同じ構成)。このときエージェントは全部のインターフェースで待ち受けます。
-  エージェントが応答するのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
+  エージェントが応答するのは合言葉で組んだ denpa だけです ([agent.md](agent.md))。
   エージェントは LAN に知らせる (mDNS) ので、同じ LAN の denpa なら「エージェントを追加」の入力欄の下に Mac の名前が出ます (選んだあとも合言葉は要る。[agent.md](agent.md#lan-で見つける))
 - 手元でビルドした tar.gz を入れるとき (開発と CI) は、`DENPA_AGENT_TARBALL`・`DENPA_SERVER_TARBALL` に絶対パスを書き、`sudo -E` で環境変数を渡します
 
@@ -104,17 +104,17 @@ root でないと書けないので、`sudo nano "/Library/Application Support/d
 ## スリープ
 
 **録画・ライブ視聴・エンコードの間は、本体が Mac をスリープさせません** (IOKit の `PreventUserIdleSystemSleep`。src/lib/server/awake.ts)。
-止めるのは操作が無いことで眠るのだけで、画面は消えてかまいません。蓋を閉じる・メニューの「スリープ」は止めません。
+止めるのは操作が無いことによるスリープだけで、画面は消えてかまいません。蓋を閉じる・メニューの「スリープ」は止めません。
 録画を始める 5 分前からもスリープさせません。`pmset -g assertions` に `denpa: recording, live viewing or encoding` として出ます (pmset が ASCII でない名前を出さないので英語)。
 
 **次の録画の 3 分前に、スリープから起こします。** 本体が IOKit の `IOPMSchedulePowerEvent` で起こす予約を 1 つ置き、
 次の録画が変わるたびに置き直します (録画が無ければ取り消す)。予約は `pmset -g sched` に `denpa` の名前で出ます。
 置くには root が要るので、本体は root の LaunchDaemon で動かしています。
 
-- 予約は OS が覚えていて、本体が起き直しても残ります。そこで置いた時刻を `data/wake-at` に書き、置き直すときと起き直したときに前のものを取り消します。
-  本体が止まるとき (上げ直す・外す・再起動する) にも取り消し、起き直したら置き直します
+- 予約は OS が持つので、本体が起動し直しても残ります。そこで置いた時刻を `data/wake-at` に書き、置き直すときと起動し直したときに前のものを取り消します。
+  本体が止まるとき (上げ直す・外す・再起動する) にも取り消し、起動し直したら置き直します
 - 電源が切れている Mac は起こしません。シャットダウンしたら録画は始まりません
-- 録画した番組を観ている間 (ライブでない再生) は、スリープを止めません。省エネルギーの設定の時間で眠ることがあります
+- 録画した番組を観ている間 (ライブでない再生) は、スリープを止めません。省エネルギーの設定の時間でスリープすることがあります
 
 **外からいつも観るなら、この Mac をスリープしない設定にします** (システム設定の「エネルギー」で「ディスプレイがオフのときに自動でスリープさせない」をオン)。
 スリープしている Mac は外からの要求を受けられないので、観ようとしても繋がりません (Wake-on-LAN で起こす作りはありません)。
@@ -132,12 +132,12 @@ root でないと書けないので、`sudo nano "/Library/Application Support/d
    (`~/Library/Application Support/denpa-agent`・`~/Library/Caches/denpa-agent`) を消す
 
 **このときだけ Docker が動いている必要があります** (DB がボリュームの中にあるため)。動かなければ、install.sh は何も変えずに止まり、
-Docker Desktop か OrbStack を起こすよう言います。途中で止まっても、流し直せば続きから進みます (写した DB があれば写し直さない)。
+Docker Desktop か OrbStack を起動するよう表示します。途中で止まっても、流し直せば続きから進みます (写した DB があれば写し直さない)。
 写したあとは Docker は要りません。
 
 - 録画のフォルダ (`~/Movies/denpa`)・エージェントの設定 (`~/denpa/config`)・組むときの合言葉は同じ場所のまま使います。
   本体の鍵も DB と一緒に移るので、組み直しは要りません
-- `compose.override.yml` は読みません。`environment` に書き足したものがあれば、`denpa.env` に `KEY=値` の形で書き直します (install.sh がそう言う)。
+- `compose.override.yml` は読みません。`environment` に書き足したものがあれば、`denpa.env` に `KEY=値` の形で書き直します (install.sh がそう表示する)。
   genkan への登録は要らなくなります (genkan はほかのプロジェクトのために残す)
 - `~/denpa/.env` (Docker の本体に合言葉を渡していたもの) は使いません。要らなければ消してかまいません
 - 前のバージョンで `--no-docker` (エージェントだけ) で入れていたなら、`--agent-only` で流し直します。古い LaunchAgent は同じく外します
@@ -145,7 +145,7 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
 ## 別の機械へ移す
 
 **別の機械 (Linux の Docker Compose や Kubernetes) へ移すとき**は、設定の「連携」の「denpa を別の機械へ移す」で書き出します。
-ブラウザのダウンロードとして落ちてきます。録画のフォルダ (`~/Movies/denpa/library`・`~/Movies/denpa/recorded`) は自分で写します
+ファイルはブラウザでダウンロードされます。録画のフォルダ (`~/Movies/denpa/library`・`~/Movies/denpa/recorded`) は自分で写します
 ([migrate.md](migrate.md#別の機械へ移す))。
 
 ## Linux と違うところ
@@ -230,6 +230,6 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/io.github.danything.denpa
 
 開けないときは、エージェントのログ (`/Library/Logs/denpa/denpa-agent.log`。設定の「その他」→「ログ」でも見られる) に
 `[Sony CECH-ZD1 J <ポート>] 開けません (…ところで): …` の行が、どこで止まったか (USB を開く・ブリッジを起動する・コア 1 との
-bulk の経路を用意する) 付きで出ます。開けたときは `開きました` の行と、初めて開いたときに端点の一覧
+bulk の経路を用意する) 付きで出ます。開けたときは `開きました` の行と、初めて開いたときにエンドポイントの一覧
 (`[usb <ポート>] EP 0x81 bulk …`) が出ます。これらの行と `--card` の出力を、設定の「その他」→「ログ」の「Issue にする」で
 送ってもらえると調べられます。

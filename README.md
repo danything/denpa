@@ -16,7 +16,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 
 <table>
   <tr>
-    <td align="center"><a href="docs/screens.md#録画"><img src="docs/images/dashboard.webp" alt="録画" width="380"></a><br><sub><b>録画</b><br>予約と録画を 1 本の一覧に。サムネ付きで、押せばその場で観る</sub></td>
+    <td align="center"><a href="docs/screens.md#録画"><img src="docs/images/dashboard.webp" alt="録画" width="380"></a><br><sub><b>録画</b><br>予約と録画を 1 本の一覧に。サムネイル付きで、押せばその場で観る</sub></td>
     <td align="center"><a href="docs/screens.md#ライブ"><img src="docs/images/live.webp" alt="ライブ" width="380"></a><br><sub><b>ライブ</b><br>字幕もデータ放送も。止めれば追っかけ</sub></td>
     <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b><br>放送どおりの字幕、CM は自動で飛ばす</sub></td>
   </tr>
@@ -74,13 +74,13 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 ```
 
-OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書き場所は [docs/install.md](docs/install.md#1行で入れる)。
+OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書き場所は [docs/install.md](docs/install.md#1-行で入れる)。
 
 ### 3. 開く
 
 - <http://denpa.localhost> (Linux で [genkan](https://github.com/danything/genkan) を入れられたとき) か
   `http://<IP>:3000` (Mac と Windows は <http://localhost:3000>)。LAN のほかの機器 (テレビ・スマホ) からも `http://<IP>:3000`
-- **誰を通すか** — 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、
+- 誰を通すかを設定するまでは、全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、
   ここからはログインなしで通ります。範囲の変え方と、画面をログイン (OIDC) で守るときは
   [docs/install.md](docs/install.md#誰を通すか)
 - 設定の「受信」の「チューナー」で見つかったチューナーを確かめ、「チャンネル」で**スキャン**を押します (局が 1 つも無いうちは、録画・番組表・ライブの上に案内が出ます)。衛星は最初から局が入っていて、
@@ -92,9 +92,9 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 ## 観る
 
-- **ブラウザ** — ホーム画面にも置ける ([docs/watch.md](docs/watch.md#ホーム画面に置く))
-- **テレビ** (Android TV / Fire TV) — [denpa-tv](https://github.com/danything/denpa-tv)。テレビに出る QR をスマホで読めば繋がる
-- **外から使う API** — 局・録画の一覧、ライブ、音声だけ (Home Assistant やスクリプト向け。[docs/api.md](docs/api.md))
+- ブラウザで観る。ホーム画面にも置ける ([docs/watch.md](docs/watch.md#ホーム画面に置く))
+- テレビ (Android TV / Fire TV) は [denpa-tv](https://github.com/danything/denpa-tv)。テレビに出る QR をスマホで読めば繋がる
+- 外から使う API で、局・録画の一覧、ライブ、音声だけを取れる (Home Assistant やスクリプト向け。[docs/api.md](docs/api.md))
 
 ## もっと詳しく
 
@@ -130,7 +130,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 **運用**
 
 - [docs/config.md](docs/config.md) — **環境変数** (一覧と、前のバージョンから上げるとき)
-- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング)
+- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼するネットワーク・ペアリング)
 
 **外から使う**
 

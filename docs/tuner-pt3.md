@@ -6,12 +6,10 @@ denpa が使える内蔵のカードリーダーは無いので、USB のカー�
 
 チューナーの一覧は [tuners.md](tuners.md)、エージェントの中でどう扱っているかは [agent.md](agent.md#デバイスを開いたままチャンネルを変える)。
 
-「Amazon で見る」は広告のリンクです ([tuners.md](tuners.md))。
-
 ## 機材とドライバ
 
-**実機で確かめているのは PT3 だけです。** ほかの機材は、カーネルのドライバと denpa の選局の手順を照らし合わせて「動くはず」と見ているもので、
-実機では確かめていません。使ってみたら、動いた・動かなかったを教えてください ([下記](#動いたか教えてください))。
+**実機で確かめているのは PT3 だけです。** ほかの機材は、カーネルのドライバと denpa の選局の手順を照らし合わせて「動くはず」と見ているものです。
+使ってみたら、動いた・動かなかったを教えてください ([下記](#動いたか教えてください))。
 
 ### 実機で確かめた機材
 
@@ -24,8 +22,8 @@ denpa が使える内蔵のカードリーダーは無いので、USB のカー�
 | 機材                                                                                                                                                                     | 種別             | 使うドライバ                                                                     | メモ                                                                                                                                                                                                                       |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | PT1 / PT2 (Earthsoft、PCI)。Amazon で見る (広告): [PT1](https://www.amazon.co.jp/dp/B00BS3D2LC?tag=doa08-22)、[PT2](https://www.amazon.co.jp/dp/B002WLP190?tag=doa08-22) | 地上波 2・衛星 2 | mainline の `earth_pt1`                                                          | PT3 と同じ復調 IC (`tc90522`) です                                                                                                                                                                                         |
-| PX-BCUD (PLEX、USB)。[Amazon で見る (広告)](https://www.amazon.co.jp/dp/B007L05B88?tag=doa08-22)                                                                         | 衛星 1           | mainline の `em28xx` (Linux 4.7 以降)                                            | ドライバに LNB の電源の切り替えが無く、denpa からは電源を指示できません。LNB を選んでいても電源の指示は飛ばして選局し、そのことを記録に 1 回だけ残します                                                                   |
-| PX-S1UD (PLEX、USB)。[Amazon で見る (広告)](https://www.amazon.co.jp/dp/B006RQLNES?tag=doa08-22)                                                                         | 地上波 1         | mainline の Siano `smsusb` + `smsdvb`                                            | ホストに firmware `isdbt_rio.inp` が要ります。smsusb を blacklist すれば、ホストに何も入れずにエージェントが USB を直に持ちます (この実装は実機で確かめていません。[tuner-px-s1ud.md](tuner-px-s1ud.md))                   |
+| PX-BCUD (PLEX、USB)。[Amazon で見る (広告)](https://www.amazon.co.jp/dp/B007L05B88?tag=doa08-22)                                                                         | 衛星 1           | mainline の `em28xx` (Linux 4.7 以降)                                            | ドライバに LNB の電源の切り替えが無く、denpa からは電源を指示できません ([下記](#設定))                                                                                                                                    |
+| PX-S1UD (PLEX、USB)。[Amazon で見る (広告)](https://www.amazon.co.jp/dp/B006RQLNES?tag=doa08-22)                                                                         | 地上波 1         | mainline の Siano `smsusb` + `smsdvb`                                            | ホストに firmware `isdbt_rio.inp` が要ります。smsusb を blacklist すれば、ホストに何も入れずにエージェントが USB を直に持ちます (Linux ではこの実装を実機で確かめていません。[tuner-px-s1ud.md](tuner-px-s1ud.md))         |
 | Friio (白、USB)                                                                                                                                                          | 地上波 1         | mainline の `dvb_usb_gl861`                                                      | 内蔵のカードリーダーはカーネルが扱わないので、USB のカードリーダーを別に挿します                                                                                                                                           |
 | 南米の地デジ (ISDB-Tb) の機材                                                                                                                                            | 地上波           | mainline の `dvb_usb_dib0700`、または `mb86a20s` を使うドライバ (`cx231xx` など) | Pixelview SBTVD・EvolutePC TVWay+・Kworld UB430-AF・C3 Tech Digital Duo・MyGica X8502 / X8507 など。放送方式は日本の地デジと同じです。地上波だけで、dib0700 の機材はホストに firmware `dvb-usb-dib0700-1.20.fw` が要ります |
 | DiBcom の DiB8096 のリファレンス基板 (STK8096GP・NIM8096MD など)                                                                                                         | 地上波           | mainline の `dvb_usb_dib0700`                                                    | CECH-ZD1 J と同じ DiB8096 を載せた基板です。ホストに firmware `dvb-usb-dib0700-1.20.fw` が要ります                                                                                                                         |
@@ -44,14 +42,14 @@ denpa が使える内蔵のカードリーダーは無いので、USB のカー�
 
 - Siano のうち PX-S1UD (Rio) と Pele 以外は、地上波の選局がワンセグになります
 - Leadership ISDBT は、ワンセグのモジュールです
-- Digital Devices の CXD2838 / CXD2854 は、mainline のチューナーのドライバが地デジの選局を受け付けません
+- Digital Devices の CXD2838 / CXD2854 は、mainline にあるチューナーのドライバが地デジの選局を受け付けません
 
 ## 入れ方
 
 1. **ホストでドライバを読み込みます。** PX-Q3PE と PX-W3PE のほかは、どれも mainline のカーネルに入っているドライバです。
    `/dev/dvb/adapter0` などが出ていれば準備はできています。
    Talos Linux なら、ドライバは system extension `siderolabs/dvb-pt3` で入ります (PT3 だけ。[install-talos.md](install-talos.md))
-2. **denpa を入れます** ([install.md](install.md#1行で入れる))。compose.prod.yml・`denpa-aio`・Helm は、
+2. **denpa を入れます** ([install.md](install.md#1-行で入れる))。compose.prod.yml・`denpa-aio`・Helm は、
    どれも `/dev/dvb` をディレクトリごと渡してあります。compose.prod.yml と `denpa-aio` の手順は
    DVB のデバイス (212) を開く許可も付けてあるので、挿し直しても再起動は要りません
 3. **設定の「受信」の「チューナー」で確かめ、「チャンネル」でスキャンします。** 見つかったチューナーと種別が並びます

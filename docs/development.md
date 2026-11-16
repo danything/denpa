@@ -57,7 +57,7 @@ Issue・Discussion を立てた人を GitHub の履歴から並べたもので�
 Actions の **Thanks** (`.github/workflows/thanks.yml`) が週に 1 回回し、変わっていれば image marks と同じく
 PR を出して自分でマージします。急ぐときは Actions から手で走らせるか、手元で
 `GH_TOKEN=$(gh auth token) bun run thanks` (コンテナの中で) を回して PR にします。
-特別協賛と土台にしている仕事は印の外で、手で書きます。載せない人 (持ち主) は `EXCLUDE` にあります
+特別協賛と土台にしている仕事は印の外で、手で書きます。載せない人 (持ち主) は `EXCLUDE` にあります。
 
 ## テストの方針
 
@@ -90,13 +90,12 @@ PR を出して自分でマージします。急ぐときは Actions から手�
 **1 台ではこれ以上縮みません。** 中身の合計は約 3 分で大半は偽の放送を待つ時間、
 下限はいちばん長いファイル 1 本の時間です。
 
-CI では 10 組に割って別のランナーに出し、3 ワーカー×8 台と 1 ワーカー×2 台の 10 組 (下) で 26 ワーカーぶん並べます。
+CI では 10 組に割って別のランナーに出し、3 ワーカーの 8 組と 1 ワーカーの 2 組 (下) で 26 ワーカーぶん並べます。
 組の中身は `tests/e2e/shards.json` で、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割っています。
 1 組から 8 組は、テストの秒数の和がどれも 320 秒ほど (1 ワーカー 110 秒ほど) になるように割ります。
 8 組の秒数の和を 24 ワーカーで割った値が、組の時間の下限です。ジョブの時間は、これにチェックアウト・ビルド・ワーカーの立ち上がりの約 20 秒を足したものです。
 
-- **1 本のスペックは 50 秒以下にします。** 組の中ではファイル名の順に空いたワーカーへ配られるので、組の時間の下限は
-  いちばん長いファイル 1 本です。1 本で 60 秒を超えたら、確かめる中身はそのままで、describe やテストの切れ目で
+- **1 本のスペックは 50 秒以下にします。** 組の時間の下限は、いちばん長いファイル 1 本の時間です。1 本で 60 秒を超えたら、確かめる中身はそのままで、describe やテストの切れ目で
   ファイルを分けます。いまは 03-recording・15-scramble・20-live・22-watch・23-watch-data・26-hwenc・28-live-raw・
   39-watch-stream・40-watch-compat・57-jikkyo・57-jikkyo-recorded をそうして分けてあり、いちばん長いのは 50 秒ほどです
 - 分けた先のファイルは、ほかのファイルの後でも前でも、単独でも通るようにします。同じファイルの前のテストが録った録画を
@@ -154,8 +153,8 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
 
 **キャッシュの鍵は、中身を決めるものだけから作ります。** バージョン・csproj・組むスクリプトが変わったときだけ外れます。
 
-- .NET の SDK と NuGet は別のキャッシュに置き、置くのは main だけです。PR が置いたキャッシュはその PR でしか使えません。
-  前は PR ごとに SDK と NuGet を合わせて 840MB 置いていて、リポジトリの上限 (10GB) を超えるたびに、ffmpeg や Playwright のキャッシュが古いものから消されていました
+- .NET の SDK と NuGet は別のキャッシュに置き、置くのは main だけです。PR が置いたキャッシュはその PR でしか使えず、
+  PR ごとに置くと (SDK と NuGet で 840 MB) リポジトリの上限 (10 GB) を超え、ffmpeg や Playwright のキャッシュが古いものから消されるためです
 - csproj を変えた PR は main の前の NuGet を戻し、足りないぶんだけを取ります (`restore-keys`)
 - ffmpeg (Windows・Mac) の鍵は、Dockerfile の ffmpeg 段と組むスクリプトから作ります。そこを変えた PR と、それが main に入った直後の 1 回は組み直します (Windows で 15 分ほど)
 - Windows で別に置く Opus と SVT-AV1 の組み上がりは、MSYS2 の gcc のパッケージのバージョンも鍵に入れます。SVT-AV1 の静的ライブラリは LTO の中間表現で、
@@ -276,7 +275,7 @@ coreutils もありません。どちらも root で動きます。本体の ffm
 Debian のパッケージを入れてから要るファイルだけを写しています (dlopen で読むドライバはディレクトリごと)。
 足りないものが無いかは `.github/image-smoke.sh` が ld.so に依存を解決させて確かめます。
 
-denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しません (denpa-aio の入口・Helm の prepull も bun で動かす)。実行ファイルを直に呼ぶことはできます
+denpa が起動するのは ffmpeg / ffprobe だけで、シェルを通しません (denpa-aio の入口・Helm の prepull も bun で動かす)。実行ファイルは直に呼べます
 (`kubectl exec deploy/denpa -- ffmpeg -hide_banner -hwaccels`、`kubectl exec deploy/tuner-agent -- denpa-agent --tune …`)。
 コンテナの中を見たいときは、シェルのあるコンテナを横に付けます (手順は [install.md](install.md#うまくいかないとき)。エージェントは `--target=tuner-agent`)。
 
@@ -374,7 +373,7 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・字・デコーダを返すこと。エージェントが全部のインターフェースで待ち受け、
   denpa が 127.0.0.1 からアプリの作った合言葉でエージェントと組み、設定の「受信」の「チューナー」の一覧 (0 台) を読めること
 - アプリの子プロセスの bun で `.github/android-bun-check.js` を流し (debug の受け口)、JIT が動くこと、`localhost` を引けること、
-  `/proc` から読めること、bun が自分を子プロセスで起動できること、`TZ=Asia/Tokyo` を解けること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
+  `/proc` から読めること、bun が自分を子プロセスで起動できること、`TZ=Asia/Tokyo` のタイムゾーンを読めること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ
 - bun が `FFMPEG`・`FFPROBE` の ffmpeg・ffprobe を起動できること。`tests/native-smoke.ts` を bun build で 1 つにまとめてアプリの置き場に置き、
   debug の受け口で流す (エンコード、4K の局の HLG を SDR に直すフィルタ、ffprobe で 10 種類のファイルを読む、MediaCodec の H.264 のエンコードと、MediaCodec のエンコーダを名前で選ぶこと、4 本目の出口)
 - 同じ APK を入れ直す (更新) と常駐サービスが始まり直し、書き出した置き場が入れ替わって古いものが消え、DB が残ること

@@ -10,19 +10,19 @@
 
 - **チューナー**: 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
 
-  | チューナー                                                                                                                                                                                                                         | 使う仕組み                                                      | ホストに入れるもの                                                        |
-  | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-  | PT3 ([tuner-pt3.md](tuner-pt3.md))                                                                                                                                                                                                 | Linux DVB                                                       | ドライバ                                                                  |
-  | **実機で確かめていない**: PT1 / PT2、PX-BCUD、PX-S1UD、Friio (白)、南米の地デジ (ISDB-Tb) の機材、DiB8096 のリファレンス基板 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))                                               | Linux DVB                                                       | ドライバ (機材によってはファームウェアも)                                 |
-  | **実機で確かめていない** (カーネルに入っていないドライバを自分で入れる): PX-Q3PE、PX-W3PE Rev1.3 ([tuner-pt3.md](tuner-pt3.md#カーネルに入っていないドライバで使う機材))                                                           | Linux DVB                                                       | ドライバ (PX-W3PE はファームウェアも)                                     |
-  | IT930x の機材: PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P、PX-Q3U4 / PX-Q3PE4 / PX-W3U4 など (Linux の PX-MLT5PE と PX-Q3PE4 の実機で確かめた。Windows・Mac は未確認。[tuner-it930x.md](tuner-it930x.md))                                 | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
-  | **実機で確かめていない**: PX-S1UD と、Siano の Rio 系の USB チューナー (USB `187f:0600`)。Linux は smsusb を blacklist したとき。Mac・Windows も ([tuner-px-s1ud.md](tuner-px-s1ud.md)、[下記](#siano-の-rio-系の-usb-チューナー)) | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
-  | PX-W3U3・PX-W3U2 など (**実機で確かめていない**。[下記](#px-w3u3-など-asicen-userland試験的))                                                                                                                                      | asicen-userland (試験的。上流のプレリリース v1.0.0-beta に固定) | なし (ファームウェアはエージェントのイメージに同梱)                       |
-  | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                                                                          | エージェントが USB を直に                                       | なし                                                                      |
-  | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                                                                  | エージェントが USB を直に                                       | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
+  | チューナー                                                                                                                                                                                                                                 | 使う仕組み                                                      | ホストに入れるもの                                                        |
+  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
+  | PT3 ([tuner-pt3.md](tuner-pt3.md))                                                                                                                                                                                                         | Linux DVB                                                       | ドライバ                                                                  |
+  | **実機で確かめていない**: PT1 / PT2、PX-BCUD、PX-S1UD、Friio (白)、南米の地デジ (ISDB-Tb) の機材、DiB8096 のリファレンス基板 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))                                                       | Linux DVB                                                       | ドライバ (機材によってはファームウェアも)                                 |
+  | **実機で確かめていない** (カーネルに入っていないドライバを自分で入れる): PX-Q3PE、PX-W3PE Rev1.3 ([tuner-pt3.md](tuner-pt3.md#カーネルに入っていないドライバで使う機材))                                                                   | Linux DVB                                                       | ドライバ (PX-W3PE はファームウェアも)                                     |
+  | IT930x の機材: PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P、PX-Q3U4 / PX-Q3PE4 / PX-W3U4 など (Linux の PX-MLT5PE と PX-Q3PE4 の実機で確かめた。Windows・Mac は未確認。[tuner-it930x.md](tuner-it930x.md))                                         | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
+  | PX-S1UD と、Siano の Rio 系の USB チューナー (USB `187f:0600`)。Linux は smsusb を blacklist したとき。Mac・Windows も (**実機の報告は Mac の 1 件だけ**。[tuner-px-s1ud.md](tuner-px-s1ud.md)、[下記](#siano-の-rio-系の-usb-チューナー)) | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
+  | PX-W3U3・PX-W3U2 など (**実機で確かめていない**。[下記](#px-w3u3-など-asicen-userland試験的))                                                                                                                                              | asicen-userland (試験的。上流のプレリリース v1.0.0-beta に固定) | なし (ファームウェアはエージェントのイメージに同梱)                       |
+  | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                                                                                  | エージェントが USB を直に                                       | なし                                                                      |
+  | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                                                                          | エージェントが USB を直に                                       | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
 
   「実機で確かめていない」機材は、ドライバと denpa の選局の手順を照らし合わせて動くはずと見ているものです。
-  PX-S1UD を Linux DVB を使わずに動かす実装 (エージェントが USB を直に持つ) は、仕様書だけから書いたもので、実機ではまだ確かめていません。
+  PX-S1UD を Linux DVB を使わずに動かす実装 (エージェントが USB を直に持つ) は仕様書から書いたものです。実機の報告は Mac の 1 件 (初めて開いたときの選局から TS の受信まで) だけで、Linux と Windows では確かめていません。
   Linux で動かなければ、カーネルのドライバで DVB として使えます ([tuner-px-s1ud.md](tuner-px-s1ud.md) に、その方法と実機で確かめる順があります)。
   使ってみたら、動いたか動かなかったかを [Issue](https://github.com/danything/denpa/issues) で教えてください
   (設定の「その他」→「ログ」の「Issue にする」から作れます。[tuner-pt3.md](tuner-pt3.md#動いたか教えてください))
@@ -270,20 +270,9 @@ LNB の給電と同時に受けられる数は、上流が未確認・未解明�
 
 ### ファームウェア
 
-**ファームウェア (`asicen-loader.bin`) は、再配布の許諾を確かめられていません。上流と同じ判断で、エージェントのイメージに同梱しています。**
-権利を持つ人から申し出があれば外します。分かっている事実は次のとおりです ([licenses.md](licenses.md#asicen-のファームウェアを同梱している判断) にも同じ内容があります)。
-
-- ファームウェアは、PLEX の Windows 用ドライバ (`Loader.sys`) から上流が取り出した 16,384 バイトのイメージです。
-  上流の配布アーカイブに入っているものをそのまま使います。イメージを組むときに、SHA-256 が `5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a` であることを確かめます (`agent/Dockerfile` の `ASICEN_FIRMWARE_SHA256`)。
-  Android のアプリにも同じものを入れ、APK を組むときに同じ値を確かめます (`.github/asicen-android.sh`)
-- チップの会社 ASICEN (昇亮科技股份有限公司 / Asicen Technology、台湾) は解散し、2017-02-23 に清算が完結したと登記されています。
-  台湾の会社情報サイト (<https://www.twincn.com/item.aspx?no=80342850>) の記載で、経済部の公式の登記では確かめていません
-- PLEX は 2026-11 の時点で、公式サイトの「旧製品ドライバ」のページ (<https://plex-net.co.jp/old-driver/>) で PX-W3U3・PX-W3U3 V2・PX-S3U2 の Windows 用ドライバを配っています。
-  そのページにも、上流が調べた公式のパッケージにも、再配布を認める文はありません
-- PLEX が以前配っていた Linux 用ドライバのモジュールには `license=GPL` の表示があり、同じファームウェアが埋め込まれています。
-  それだけではファームウェア自体のライセンスは決まりません (上流の `NOTICES.md` の整理)
-- 上流が添える通知 (`VENDOR-FIRMWARE-NOTICE.txt` など) は、配布物のままイメージに置いてあります (`/opt/asicen-userland/licenses/`)。
-  Android のアプリは APK の `assets/licenses/asicen-userland/` に入れています
+**ファームウェア (`asicen-loader.bin`) は、再配布の許諾を確かめられていません。上流と同じ判断で、エージェントのイメージと Android のアプリに同梱しています。**
+権利を持つ人から申し出があれば外します。分かっている事実と判断は [licenses.md](licenses.md#asicen-のファームウェアを同梱している判断) にあります。
+上流の配布アーカイブに入っているものをそのまま使い、イメージと APK を組むときに SHA-256 を確かめます (`agent/Dockerfile` の `ASICEN_FIRMWARE_SHA256`・`.github/asicen-android.sh`)。
 
 エージェントの中でどう扱っているかは [agent.md](agent.md#asicen-userland-の作り)。
 
