@@ -45,7 +45,7 @@ export function parseAgentUrl(raw: string): AgentTarget {
   const url = URL.parse(base);
   if (url === null || url.hostname === "") {
     throw new Error(
-      `TUNER_AGENT_URL のホストが読めません (${base})。https://ホスト:ポート の形で書きます (docs/agent.md)`,
+      `TUNER_AGENT_URL のホストが読めません (${base})。https://ホスト:ポート の形式で書きます (docs/agent.md)`,
     );
   }
   // 大文字と小文字だけが違うホスト名を別の行にしない (`https://Host` と `https://host`)

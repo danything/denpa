@@ -184,7 +184,7 @@ const AV1_PROFILES: Record<string, number> = {
   Professional: 2,
 };
 
-/** 映像の codecs 文字列。知らないものは null (判断に使わない) */
+/** 映像の codecs 文字列。H.264・H.265・AV1 のほかは null (判断に使わない) */
 function videoCodec(stream: ProbedStream | undefined): string | null {
   if (stream === undefined) return null;
   const level =
@@ -196,8 +196,8 @@ function videoCodec(stream: ProbedStream | undefined): string | null {
   if (stream.codec_name === "hevc") {
     /*
      * `hvc1.<profile>.<互換の印>.<tier と level>.<制約>` (ISO/IEC 14496-15 の付録 E)。互換の印は profile ごとの
-     * 決まった値 (Main は 1 と 2 が立って 6、Main 10 は 2 だけで 4)。tier は ffprobe が言わないので Main tier (L)。
-     * 制約は「プログレッシブでフレームだけ」の 90 と決め打つ (ffprobe が言わない。ブラウザはここで断らない前提)。
+     * 決まった値 (Main は 1 と 2 が立って 6、Main 10 は 2 だけで 4)。ffprobe は tier を出さないので Main tier (L)。
+     * 制約は「プログレッシブでフレームだけ」の 90 と決め打つ (ffprobe は出さない。ブラウザはこの値では拒否しない前提)。
      * 詰め替えでも `hvc1` と名乗らせる (`copyArgs`。Safari は `hev1` を受け取らない)
      */
     const head = HEVC_PROFILES[stream.profile ?? ""] ?? "1.6";
@@ -206,7 +206,7 @@ function videoCodec(stream: ProbedStream | undefined): string | null {
   if (stream.codec_name === "av1") {
     const profile = AV1_PROFILES[stream.profile ?? ""] ?? 0;
     const depth = /10/.test(stream.pix_fmt ?? "") ? "10" : "08";
-    // tier は ffprobe が言わない。放送の再エンコードは Main tier
+    // ffprobe は tier を出さない。放送の再エンコードは Main tier
     return `av01.${profile}.${String(level ?? 8).padStart(2, "0")}M.${depth}`;
   }
   return null;
@@ -654,7 +654,7 @@ const FMP4_OUT = [
  * **エンコード済みを詰め替える引数** (映像は写すだけ。音声は H.264・H.265 なら AAC、AV1 なら Opus。`streamAudio`)。
  * H.265 は `hvc1` と名乗らせる。mp4 の muxer の既定は `hev1` で、Safari は `hev1` を受け取らない。
  * `hvc1` は「パラメータセットは入れ物の先頭に」の印で、GPU のエンコーダがキーフレームごとに中にも
- * 書いているものはそのまま残るが、ブラウザはそれで断らない前提 (実機では見ていない)。
+ * 書いているものはそのまま残るが、ブラウザはそれで拒否しない前提 (実機では見ていない)。
  * `audio` は入れ物の中の何本目の音声か (主・副で分けてエンコードしてある。`encoder.ts`)。
  *
  * ## 位置はファイルの時刻のまま出す
@@ -668,7 +668,7 @@ const FMP4_OUT = [
  *   tfdt が壊れる (負の数が符号なしで書かれる)。`make_non_negative` で全体を揃って
  *   ずらす。ずれは数十 ms (手元で試して 0.067 秒) で、映像と音声の間は崩れない
  *
- * 手元の ffmpeg (9.x の開発ビルド) で試した tfdt (秒、映像・音声の順):
+ * 手元の ffmpeg (9.x の開発ビルド) で試した tfdt (秒、映像・音声の順) は次のとおり。
  *
  *     -ss 10   8.342 (キーフレーム)   9.979 (AAC の前置きぶん手前)
  *     -ss 30  25.025               …
@@ -765,7 +765,7 @@ export function presented(pts: number): number {
  * 置かない。
  *
  * ffmpeg 9.0.2 で、120 秒の MPEG-2 の TS (先頭の PTS が 1000 秒・一周の 30 秒前・40 秒前の 3 本) を
- * 途中から標準入力へ流して測った最初の tfdt (物差しの時刻からの差):
+ * 途中から標準入力へ流して測った最初の tfdt (物差しの時刻からの差) は次のとおり。
  *
  *     要求した位置   映像 (次のキーフレームから)   音声 (映像より先に多重化されている)
  *     20 秒        +0.39〜+0.40 秒             -0.43 秒
@@ -824,8 +824,8 @@ export function tsTranscodeArgs(
     ...video.encoder,
     /*
      * 時刻を詰め直させない (`tsOffset` の説明)。既定 (mp4 は cfr) だと負の時刻のコマを捨てる。
-     * ライブのようにコマ数の上限 (`-fpsmax`) は付けられない。 passthrough と一緒だと ffmpeg が
-     * 「矛盾している」と断って変換が始まらない。探りは既定の大きさなのでコマ数を読み違えない。
+     * ライブのようにコマ数の上限 (`-fpsmax`) は付けられない。passthrough と一緒だと ffmpeg が
+     * 「矛盾している」というエラーで終了し、変換が始まらない。探りは既定の大きさなのでコマ数を読み違えない。
      * 映像を写すときはエンコーダが無いので付けない
      */
     ...(copy ? [] : ["-fps_mode", "passthrough"]),
@@ -1000,7 +1000,7 @@ const IDLE_CHECK = 30_000;
 /** ffmpeg を 1 回起こすぶん */
 interface Attempt {
   argv: string[];
-  /** 標準入力へ流し込むもの (TS が元)。起こすたびに読み直す */
+  /** 標準入力へ流し込むもの (元の TS か、4K の局の録画を詰め替えた fMP4)。起こすたびに読み直す */
   input?: () => ReadableStream<Uint8Array>;
   /**
    * 前の手が 1 バイトも出せずに終了し、これで出せたときに呼ぶ (GPU のせいだったと覚える)。
@@ -1022,8 +1022,7 @@ interface Attempt {
  * - 1 バイトも出さずに終了したら、次の手 (GPU → ソフトウェア) で起こし直す。次で出せたら、失敗した手の標準エラーを添えて `blame` を呼ぶ
  * - `IDLE_LIMIT` のあいだ読まれなければ止める。閉じられた・読み切った・落ちたときも止める
  * - **読みに来て ffmpeg が出すのを待っている間は、「読まれない」ではなく「ffmpeg が出さない」として数える。**
- *   上限は同じ `IDLE_LIMIT`。分けていなかった頃は、出だしの遅い ffmpeg を待っている相手を
- *   「読まれない」(`idle`) で切っていた (単体テストで `sh` の起動が上限の 50ms に間に合わなかった回に落ちた)。
+ *   上限は同じ `IDLE_LIMIT`。分けないと、出だしの遅い ffmpeg を待っている相手を「読まれない」(`idle`) で切ってしまう。
  *   何も出さずに固まった ffmpeg は、相手が切らなくても止める (枠を持ったまま残さない)
  * - 止めたら `done` を呼ぶ (枠を返す)
  * - `pace` があれば、出したものと ffmpeg を待った時間を渡す (送り出しの具合。`server/pace.ts`)
@@ -1213,6 +1212,7 @@ function audioIndex(asked: string | null): number {
  *   コーデックはサーバが `playable` から選ぶ (`live.rungCodec`)。H.265 のエンコード済みでも、GPU があれば H.265 のまま下げられる。
  *   `mpeg2` では効かない (放送のまま流す)
  * - `codec=audio` は音声だけ (AAC 96k の fMP4。`audioOnlyArgs`)。段 3 でも足りないときの最後の手で、枠は使わない
+ * - `offset` は `mpeg2` だけ。秒で探さずにそのバイト位置から流す (`rawResponse`)
  *
  * fMP4 の応答には、中身のコーデック (`CODEC_HEADER`)・段 (`RUNG_HEADER`)・送り出しの具合を読む id (`PACE_HEADER`) を付ける
  */
@@ -1235,7 +1235,7 @@ export async function streamResponse(
   const from = Number.isFinite(fromRaw) ? Math.max(0, fromRaw) : 0;
 
   const plan = await playbackPlan(recording);
-  if (plan === null) error(404, "この形式では再生できません");
+  if (plan === null) error(404, "再生できない形式です");
   // 変換の元。エンコード済み (中身を読めたもの) があればそれ、無ければ元の TS
   const source = plan.encoded.find((file) => file.codec !== null);
   const label = `[stream] 録画 ${recording.id} (${codec})`;
@@ -1244,7 +1244,7 @@ export async function streamResponse(
     return audioResponse(plan, source, from, query, label);
   if (codec === "mpeg2") {
     if (!plan.info.offers.some((o) => o.codec === "mpeg2"))
-      error(404, "この形式では再生できません");
+      error(404, "再生できない形式です");
     return rawResponse(plan, from, query.get("offset"));
   }
 
@@ -1254,7 +1254,7 @@ export async function streamResponse(
     rung === 0
       ? plan.info.offers.some((o) => o.codec === codec && o.way !== "file")
       : source !== undefined || plan.ts !== null || plan.mmts !== null;
-  if (!offered) error(404, "この形式では再生できません");
+  if (!offered) error(404, "再生できない形式です");
 
   // 4K の局の元の録画の H.265 は、放送の HEVC と AAC の詰め替え (エンコードしない。枠も使わない)
   if (plan.mmts !== null && codec === "hevc" && rung === 0)
@@ -1275,7 +1275,7 @@ export async function streamResponse(
       "hevc",
       0,
     );
-    if (attempts === null) error(404, "この形式では再生できません");
+    if (attempts === null) error(404, "再生できない形式です");
     const pace = new StreamPace(false);
     const opened = openPace(() => pace.read());
     return new Response(
@@ -1312,7 +1312,7 @@ export async function streamResponse(
     );
   }
   // 段を下げないなら H.265 は詰め替えだけ (`playbackPlan`)。offers にあればファイルがあるので、ここには来ない
-  if (codec === "hevc" && rung === 0) error(404, "この形式では再生できません");
+  if (codec === "hevc" && rung === 0) error(404, "再生できない形式です");
 
   /*
    * 段を下げるならコーデックはサーバが選ぶ。H.265・AV1 は GPU があるときだけ選ばれる (`live.rungCodec`)。
@@ -1364,7 +1364,7 @@ export async function streamResponse(
   }
   if (attempts === null) {
     release();
-    error(404, "この形式では再生できません");
+    error(404, "再生できない形式です");
   }
   return new Response(
     transcodeBody(attempts, `${label} の変換`, release, undefined, pace),
@@ -1445,7 +1445,7 @@ async function audioResponse(
       };
     }
   }
-  if (attempt === null) error(404, "この形式では再生できません");
+  if (attempt === null) error(404, "再生できない形式です");
   const pace = new StreamPace(false);
   const opened = openPace(() => pace.read());
   return new Response(
@@ -1622,12 +1622,12 @@ async function rawResponse(
   offset: string | null,
 ): Promise<Response> {
   const ts = plan.ts;
-  if (ts === null) error(404, "この形式では再生できません");
+  if (ts === null) error(404, "再生できない形式です");
   const start = offset === null ? null : rawOffset(offset, ts.size);
   if (start === undefined)
     error(400, "offset は 0 から録画の大きさまでの整数です");
   const at = start ?? (await seekFrom(ts, plan.skip, from))?.at;
-  if (at === undefined) error(404, "この形式では再生できません");
+  if (at === undefined) error(404, "再生できない形式です");
   const origin = inWrap(ts.head + Math.round(plan.skip * CLOCK));
   return new Response(recordingStream(ts.path, at), {
     headers: {

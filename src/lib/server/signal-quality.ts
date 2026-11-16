@@ -114,7 +114,7 @@ export class PacketCheck {
  *
  * **スキャンと同じ順でチューナーを取る** (録画・ライブ視聴・番組表をいますぐ集める処理・スキャンからは取り上げない。
  * 名乗りの先頭が `scan` なので、エージェントはカードに聞かずに流す)。
- * 選局できなければ `openChannelStream` の失敗をそのまま投げる。届いたパケットが無ければ `packets` が 0
+ * 選局できなければ `openChannelStream` の失敗をそのまま例外にする。届いたパケットが無ければ `packets` が 0
  */
 export async function measureSignal(
   type: ChannelType,

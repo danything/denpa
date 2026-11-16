@@ -400,12 +400,10 @@ export function fetchForBml(raw: string): Promise<Fetched> {
 /**
  * 送る (`browser.transmitTextDataOverIP`)。
  *
- * **「応募・投票」の API だと思っていたら、疎通の判定そのものだった。**
- * NHK のデータ放送は `isIPConnected` に 1 と答えても信じず、ここへ一度
+ * **「応募・投票」だけでなく、疎通の判定にも使われる。**
+ * NHK のデータ放送は `isIPConnected` が 1 を返しても、ここへ一度
  * 送ってみて、返らなければ「インターネットに接続されていません」と案内
- * します (実機で確かめた。`confirmIPNetwork` は呼びに来もしない)。
- * 最初は実装しないと決めていて、それでは双方向を入れても入っていないのと同じ
- * でした。
+ * します (実機で確かめた。`confirmIPNetwork` は呼ばない)。
  *
  * **中身は組み立てません。** エンジン (`src/lib/bml/`) が `Denbun=<EUC-JP を
  * %xx にしたもの>` まで作ってから渡してくるので、denpa はそれを

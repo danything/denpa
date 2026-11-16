@@ -168,7 +168,7 @@ export function needsLineup(
  * 入れるべきなら入れる。入れた種別を返す (無ければ空)。
  *
  * **見るのは局の一覧を取り込むとき** (runtime.ts の `syncChannels`。起動時と `CHANNEL_SYNC_INTERVAL` ごと)。
- * 局を入れたらエージェントが `channels` を知らせてくるので、取り込み直しと番組表の集め直しはその通知で走る
+ * 局を入れたらエージェントが `channels` を知らせてくるので、取り込み直しと番組表の取得はその通知で走る
  */
 export function fillSatellites(
   /** 控えを読んだエージェント。放送の一覧から作った局はここに預ける (エージェントごとに決める) */

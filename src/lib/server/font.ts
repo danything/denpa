@@ -1,7 +1,7 @@
 /**
  * Denpa Font をどう配るか (`/api/font/` の woff2 の 2 つと、それを宣言する CSS)。
  *
- * 画面はバージョン付きの URL (`?v=v2.1`。`#lib/font.ts`。woff2 は CSS が付ける) で取りに来る。**入っている字とバージョンが
+ * 画面はバージョン付きの URL (`?v=v2.1`。`#lib/font.ts`。woff2 は CSS が付ける) で読み込む。**入っている字とバージョンが
  * 合うときだけ 1 年持たせる** (`immutable`)。字が変わるのはリリースを上げたときだけで、
  * そのとき URL も変わる。
  *
@@ -39,7 +39,7 @@ const RANGES =
  * 基本の字 (`denpa-font.woff2`) と、JIS X 0213 で足された漢字 (`denpa-font-jisx0213.woff2`) で、後のほうには
  * `unicode-range` を付けるので、ブラウザはその字が画面に出たときだけ取得する (多くの画面は基本の字だけで済む)。
  *
- * URL は CSS からの相対 (接頭辞の下でも同じ)。`version` は入っているバージョンで、woff2 を 1 年持たせる鍵。
+ * URL は CSS からの相対 (接頭辞の下でも同じ)。`version` は入っているバージョンで、woff2 を 1 年持たせるときに URL に付ける値。
  * 範囲 (`ranges`) が無い・読めないときは基本のファイルだけを宣言する
  */
 export function fontCss(version: string, ranges: string | null): string {

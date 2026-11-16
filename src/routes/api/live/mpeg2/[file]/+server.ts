@@ -2,7 +2,7 @@
  * ブラウザで MPEG-2・AAC・Opus をデコードする WebAssembly を配る (変換せずに観るライブと録画・互換モードの音。docs/stream.md#放送そのままmpeg-2を送る)。
  *
  * **static/ に置かないのは、組むのがイメージの中だから** (Dockerfile の `mpeg2wasm` 段。
- * emscripten で FFmpeg のデコーダを組む)。git には入れない。1MB ほどの
+ * emscripten で FFmpeg のデコーダを組む)。git には入れない。1 MB ほどの
  * 生成物を抱えると FFmpeg を上げるたびに差し替えが要り、組んだ手順と中身が食い違っても気づけない。
  *
  * 配るのはローダー (`decoder.mjs`) と中身 (`decoder.wasm`) の 2 つだけ。**名前は決め打ちにして、**
@@ -35,10 +35,9 @@ const TYPES: Record<string, string> = {
  * **縮めて配る。** wasm は brotli で 3 分の 1 ほどになる (大きさは docs/stream.md#放送そのままmpeg-2を送る)。前段に縮める proxy が無い家が多いので
  * ここで縮める。縮めるのは中身が変わったとき (ETag が変わったとき) の 1 度だけで、あとは覚えたものを返す
  *
- * **縮め終えるまでは縮めずに返す。** brotli の 11 は wasm 1 つで 2 秒ほど掛かる (実測 2079ms)。
- * 同期で縮めていた頃はその間サーバ全体が止まり、デコーダの読み込みも遅れて、互換モードの観る画面が
- * 1 コマも描けなかった (E2E の 40-watch-compat・41-watch-compat-local。adapter-node の中継が
- * `Accept-Encoding` を外していた間はここを通らず、表に出ていなかった)。縮めるのは別のスレッドに任せる
+ * **縮め終えるまでは縮めずに返す。** brotli の 11 は wasm 1 つで 2 秒ほど掛かる (実測 2079 ms)。
+ * 同期で縮めると、その間サーバ全体が止まり、デコーダの読み込みも遅れて、互換モードの観る画面が
+ * 1 コマも描けない (E2E の 40-watch-compat・41-watch-compat-local)。縮めるのは別のスレッドに任せる
  */
 /** zlib が返すのは自分の ArrayBuffer を持つ Buffer (共有メモリではない) */
 type Packed = { br: Buffer<ArrayBuffer>; gzip: Buffer<ArrayBuffer> };

@@ -48,13 +48,13 @@ public partial class DeviceStreamTests
             clock.Stop();
 
             await Assert.That(read).IsEqualTo(0);
-            await Assert.That(clock.ElapsedMilliseconds < 1000).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
+            await Assert.That(clock.ElapsedMilliseconds < 1000).IsTrue().Because($"{clock.ElapsedMilliseconds} ms 掛かった");
         }
     }
 
     /*
      * **止めたあとは、読みかけが戻るまでだけ待つ** (`WaitReaders`)。局替えのたびに
-     * 固定で 300ms 待っていたのを、読む側がいなければ待たないようにした
+     * 固定で 300 ms 待っていたのを、読む側がいなければ待たないようにした
      */
     [Test]
     public async Task 読んでいる処理がなければ待たず_あれば戻るまで待つ()
@@ -66,7 +66,7 @@ public partial class DeviceStreamTests
             stream.Stop();
             var idle = Stopwatch.StartNew();
             stream.WaitReaders(TimeSpan.FromSeconds(2));
-            await Assert.That(idle.ElapsedMilliseconds < 50).IsTrue().Because($"{idle.ElapsedMilliseconds}ms 待った");
+            await Assert.That(idle.ElapsedMilliseconds < 50).IsTrue().Because($"{idle.ElapsedMilliseconds} ms 待った");
         }
 
         (stream, write) = Silent();
@@ -78,7 +78,7 @@ public partial class DeviceStreamTests
                 () => stream.Read(buffer, 0, buffer.Length, () => false),
                 CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             /*
-             * **読む側が中に入ったのを見てから止める。** 決め打ちで 100ms 待っていた頃は、混んだ Mac の
+             * **読む側が中に入ったのを見てから止める。** 決め打ちで 100 ms 待っていた頃は、混んだ Mac の
              * ランナーでまだ入っていないうちに止めてしまい、待つ相手のいない WaitReaders が
              * すぐ戻って落ちた (CI)
              */
@@ -146,7 +146,7 @@ public partial class DeviceStreamTests
             await Assert.That(stream.Discard()).IsEqualTo(stale.Length);
             // 空なら待たずに戻る (書き込み側は開いたまま)
             await Assert.That(stream.Discard()).IsEqualTo(0);
-            await Assert.That(clock.ElapsedMilliseconds < 500).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
+            await Assert.That(clock.ElapsedMilliseconds < 500).IsTrue().Because($"{clock.ElapsedMilliseconds} ms 掛かった");
 
             var fresh = new byte[] { 0x47, 0x00, 0x00 };
             await Assert.That(Write(write, fresh)).IsEqualTo(fresh.Length);
@@ -220,7 +220,7 @@ public class DeviceStreamPipedTests
         using var stream = new DeviceStream(pipe.Reader);
         var buffer = new byte[188];
 
-        // 1 回目: 待っている間に届く。合図は溜めたままなので、読む側は 200ms ごとに印を確かめて読む
+        // 1 回目: 待っている間に届く。合図は溜めたままなので、読む側は 200 ms ごとに印を確かめて読む
         var first = Task.Run(() => stream.Read(buffer, 0, buffer.Length), cancel);
         while (stream.Readers == 0) await Task.Delay(5, cancel);
         await Task.Delay(50, cancel);
@@ -242,8 +242,8 @@ public class DeviceStreamPipedTests
     }
 
     /*
-     * **止めたら、待っている読む側はすぐ戻る** (200ms ごとの確認を待たない)。200ms ごとに
-     * 印を確かめるだけだと、止めてから戻るまでに最大 200ms 掛かり、混んだ CI では 500ms を超えていた
+     * **止めたら、待っている読む側はすぐ戻る** (200 ms ごとの確認を待たない)。200 ms ごとに
+     * 印を確かめるだけだと、止めてから戻るまでに最大 200 ms 掛かり、混んだ CI では 500 ms を超えていた
      */
     [Test]
     public async Task 止めたら_待っている読む側はすぐ戻る(CancellationToken cancel)
@@ -258,7 +258,7 @@ public class DeviceStreamPipedTests
         }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
         while (stream.Readers == 0) await Task.Delay(5, cancel);
-        // 待ちに入ってすぐ止める (200ms ごとに確かめるだけなら、次の確認まで 180ms ほど掛かる)
+        // 待ちに入ってすぐ止める (200 ms ごとに確かめるだけなら、次の確認まで 180 ms ほど掛かる)
         await Task.Delay(20, cancel);
         Volatile.Write(ref stoppedAt, Stopwatch.GetTimestamp());
         stream.Stop();
@@ -266,8 +266,8 @@ public class DeviceStreamPipedTests
 
         await Assert.That(read).IsEqualTo(0);
         /*
-         * 200ms ごとに確かめるだけなら、止めてから戻るまで 180ms ほど掛かる。それより短ければ、止めたことで待ちから戻っている。
-         * 100ms にしていた頃は、混んだ Windows のランナーで 131ms になって落ちた (待ちが終わってから、スレッドが動き出すまでの遅れ)
+         * 200 ms ごとに確かめるだけなら、止めてから戻るまで 180 ms ほど掛かる。それより短ければ、止めたことで待ちから戻っている。
+         * 100 ms にしていた頃は、混んだ Windows のランナーで 131 ms になって落ちた (待ちが終わってから、スレッドが動き出すまでの遅れ)
          */
         await Assert.That(left).IsLessThan(TimeSpan.FromMilliseconds(160));
     }
@@ -281,7 +281,7 @@ public class DeviceStreamPipedTests
 
         var clock = Stopwatch.StartNew();
         await Assert.That(stream.Read(buffer, 0, buffer.Length, () => clock.ElapsedMilliseconds > 300)).IsEqualTo(0);
-        await Assert.That(clock.ElapsedMilliseconds < 1000).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
+        await Assert.That(clock.ElapsedMilliseconds < 1000).IsTrue().Because($"{clock.ElapsedMilliseconds} ms 掛かった");
 
         // 抜けた側の待っていた読みに届いたものも、次に読む側が受け取る (捨てない)
         await pipe.Writer.WriteAsync(new byte[] { 0x47, 0x01, 0x02 }, cancel);

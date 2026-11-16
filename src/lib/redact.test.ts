@@ -75,7 +75,7 @@ describe("伏せる (Issue に貼る前)", () => {
       );
     });
 
-    test("サーバが知っている値は形にかかわらず消す", () => {
+    test("`known` に渡した値は形にかかわらず消す", () => {
       expect(
         redact("value plainsecret123 leaked", { secrets: ["plainsecret123"] }),
       ).toBe(`value ${MASK.secret} leaked`);

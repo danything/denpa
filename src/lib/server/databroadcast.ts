@@ -64,11 +64,11 @@ export class DataBroadcast {
   }
 
   /**
-   * 1 局に絞った TS の、切り分け済みのパケットを 1 つ (`BmlDecoder.feedPacket`)。**デコードが例外を投げても外へ投げ返さない。**
+   * 1 局に絞った TS の、切り分け済みのパケットを 1 つ (`BmlDecoder.feedPacket`)。**デコードが例外を送出しても外へ送出し直さない。**
    *
    * データ放送は映像の付け足しなので、デコードが失敗したらデコードだけやめて、映像は
-   * 流し続ける。**投げ返すと TS を送り込んでいるところ (`Session.tap`。`pump` と `runRaw` の両方から呼ぶ) ごと
-   * 落ちて、映像まで出なくなる。** 実際に落としたことがある。
+   * 流し続ける。**送出し直すと TS を送り込んでいるところ (`Session.tap`。`pump` と `runRaw` の両方から呼ぶ) ごと
+   * 止まり、映像まで出なくなる。**
    */
   feedPacket(packet: Uint8Array): void {
     if (this.closed) return;

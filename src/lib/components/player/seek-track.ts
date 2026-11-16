@@ -9,7 +9,7 @@
  */
 
 /** 溝の 1 部分。`from`・`to` は比 (0〜1)、`cm` は CM の部分か */
-export type TrackPart = { from: number; to: number; cm: boolean };
+type TrackPart = { from: number; to: number; cm: boolean };
 
 /** 比を 4 桁で丸める (1 時間で 0.4 秒。溝の 1px より細かい) */
 function round(ratio: number): number {

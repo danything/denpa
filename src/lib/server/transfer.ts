@@ -40,7 +40,7 @@ import { readTar, type TarSource, writeTar } from "./tar";
  * 取り込めるのは、まだ使っていない denpa だけ。送られたファイルを検証し、写しに drizzle の migrate を当て、
  * 録画のファイルが置き場にあるかを数えてから、次の起動の最初で入れ替える (`swapAtBoot`)。
  * 動いている DB を差し替えると、予約やエンコードの待ち行列などメモリにある状態が古いまま残るので、
- * 入れ替えはプロセスの起き直しに任せる。
+ * 入れ替えはプロセスの再起動に任せる。
  *
  * **形式のバージョンは持たない。** 中身を決めるのは写しの `__drizzle_migrations` だけで、上げるのは
  * 起動と同じ drizzle の migrate。`denpa-export.json` は画面に出すためだけで、無くても取り込める
@@ -92,7 +92,7 @@ interface UploadMeta {
   lastModified: number;
 }
 
-/** 置き場の確かめ。**この機械の** `ENCODED_DIR`・`RAW_DIR` で引く */
+/** 置き場を確かめた結果。**この機械の** `ENCODED_DIR`・`RAW_DIR` で引く */
 interface FileCheck {
   /** 削除済みでない録画のうち、ファイルがあったもの */
   present: number;
@@ -926,7 +926,7 @@ export function cancel(): void {
 
 /**
  * プロセスを終える。compose (`restart: unless-stopped`)・Helm (Pod の再起動)・Mac (LaunchDaemon の KeepAlive)・Windows (install.ps1 が書く `denpa.cmd` の
- * ループ。Windows ではこの合図で待たずに終わる)・Android (アプリの常駐サービス) が起こし直し、
+ * ループ。Windows ではこの合図で待たずに終わる)・Android (アプリの常駐サービス) が起動し直し、
  * 起動の最初で入れ替わる。いつもの止まり方 (SIGTERM。`runtime.ts` の drain) で終わる。
  * 空の denpa なので録画を待つことはない
  */

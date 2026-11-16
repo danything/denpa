@@ -13,7 +13,7 @@
     onclick,
     testid,
   }: {
-    /** 張り付いているか (放送の今・録れている際) */
+    /** 張り付いているか (放送の今・録れている最新の所) */
     active: boolean;
     label: string;
     onclick: () => void;

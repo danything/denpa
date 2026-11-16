@@ -38,6 +38,13 @@ function cardOf(agent: number, status: CardStatus): AgentCard {
   };
 }
 
+/** 使えるカードの番号。重なりを除き、初めて出てきた順 */
+function cardIds(cards: Iterable<AgentCard>): string[] {
+  const ids = new Set<string>();
+  for (const entry of cards) if (entry.card !== null) ids.add(entry.card);
+  return [...ids];
+}
+
 /** 全部のエージェントのカードを、並びの順にその場で読む (契約を確かめるとき) */
 export async function readAgentCards(
   agents: readonly Agent[] = listAgents(),
@@ -64,10 +71,7 @@ export function contractAgents(
         !holders.has(entry.card)
       )
         holders.set(entry.card, entry.agent);
-  const order = [
-    ...new Set(cards.flatMap((c) => (c.card === null ? [] : [c.card]))),
-  ];
-  return new Map(order.map((card) => [card, holders.get(card)!]));
+  return new Map(cardIds(cards).map((card) => [card, holders.get(card)!]));
 }
 
 /**
@@ -190,11 +194,7 @@ export async function keyRanks(
   wait: number,
 ): Promise<Map<number, number>> {
   const cards = await routeCards(agents, wait);
-  const contracts = contractsOf(service, [
-    ...new Set(
-      [...cards.values()].flatMap((c) => (c.card === null ? [] : [c.card])),
-    ),
-  ]);
+  const contracts = contractsOf(service, cardIds(cards.values()));
   return cardRanks(cards.values(), (card) => contracts.get(card) ?? null);
 }
 
@@ -217,11 +217,7 @@ export async function cardNarrower(
     const key = `${service}\n${places}`;
     let narrowed = memo.get(key);
     if (narrowed === undefined) {
-      const contracts = contractsOf(service, [
-        ...new Set(
-          [...cards.values()].flatMap((c) => (c.card === null ? [] : [c.card])),
-        ),
-      ]);
+      const contracts = contractsOf(service, cardIds(cards.values()));
       narrowed = narrowPlaces(
         places,
         cards,
@@ -255,7 +251,7 @@ export function narrowPlaces(
   });
   const ranks = cardRanks(mine, statusOf);
   // 訊けなかったエージェントは、使えるカードが無いものとして数える (振り分けと同じ)
-  const rank = (id: number) => ranks.get(id) ?? 3;
+  const rank = (id: number) => ranks.get(id) ?? NO_KEY;
   const best = Math.min(...[...ids].map(rank));
   return lines
     .filter((_line, i) => {

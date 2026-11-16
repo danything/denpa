@@ -88,7 +88,7 @@ export async function send(
 /** 送れなかった理由。例外の文には URL が入りうるので、決まった言葉とエラーコードだけにする */
 export function failure(error: unknown): string {
   if (error === null || typeof error !== "object") return "繋がりませんでした";
-  // AbortSignal.timeout は DOMException で投げる (Error を継がない実装もある)
+  // AbortSignal.timeout は DOMException を送出する (Error を継がない実装もある)
   if ("name" in error && error.name === "TimeoutError") return "時間切れです";
   const code = "code" in error ? String(error.code) : "";
   return /^[\w-]{1,40}$/.test(code)

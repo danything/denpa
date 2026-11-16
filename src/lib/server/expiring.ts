@@ -4,7 +4,7 @@
 
 /**
  * **期限の切れたものを捨て、`most` 未満になるまで古いものから捨てる。** 新しいものを 1 つ足す前に呼ぶ
- * (`hc-relay.grant`・`niconico.startLink`・`live.keepLight`・`live.rememberResume`・`tickets.issue`)。
+ * (`hc-relay.grant`・`niconico.startLink`・`live.keepLight`・`live.rememberResume`・`tickets.sweep`)。
  *
  * `until` は期限の時刻で、`at` がその時刻を過ぎていれば切れている。`most` を渡さなければ、数では捨てない
  */

@@ -16,7 +16,7 @@ namespace Denpa.Agent;
 /// 新しい PAT の transport_stream_id が覚えたものと違えば、そのチャンネルの PMT を全部捨てる (チャンネルの定義が変わった・別の中継を受けた)。
 /// 同じでも、新しい PAT が挙げていない局と、PMT の PID が変わった局の PMT は捨てる。
 /// service_id だけをキーにしないのは、ケーブルの再送信で同じ service_id の局が別のチャンネルに入っていることがあるため (推定)。
-/// 大きさは局 1 つにつき PMT 1 つ (1KB まで) で、BS・CS を全部覚えても数百 KB (推定)
+/// 大きさは局 1 つにつき PMT 1 つ (1 KB まで) で、BS・CS を全部覚えても数百 KB (推定)
 /// </para>
 /// </summary>
 public sealed class PsiMemory

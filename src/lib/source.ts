@@ -58,7 +58,7 @@ export function tsPathOf(recording: {
  */
 export type FileSource = "ts" | "encoded" | "hevc" | "alt";
 
-/** クエリの文字を語彙に直す。知らない値は null (= 名指しなし) */
+/** クエリの文字を語彙に直す。ほかの値は null (= 名指しなし) */
 export function parseFileSource(raw: string | null): FileSource | null {
   return raw === "ts" || raw === "encoded" || raw === "hevc" || raw === "alt"
     ? raw

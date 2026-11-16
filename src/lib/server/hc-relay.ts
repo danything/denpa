@@ -40,7 +40,7 @@ interface Grant {
 
 const grants = new Map<string, Grant>();
 
-/** トークンの形。`auth.ts` の `OPEN_PATHS` と同じもの (`HC_TOKEN`) */
+/** トークンの形式。`auth.ts` の `OPEN_PATHS` と同じもの (`HC_TOKEN`) */
 export const TOKEN = new RegExp(`^${HC_TOKEN}$`);
 
 /** `origin` (`http(s)://host[:port]`) へ中継するトークンを出す */

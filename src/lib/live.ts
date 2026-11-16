@@ -508,8 +508,8 @@ export interface Tuned {
 }
 
 /**
- * 前回見ていた局を覚えておく cookie (`/live` にだけ付ける。中身は局・音声と、コーデックのメニューで選んだもの (`choice`。
- * `#lib/live-choice.ts`) の JSON。前の形式の `codec`・`raw` は読まない)。サーバが読んで、繋いでくる前に
+ * 前回見ていた局を覚えておく cookie (`/live` にだけ付ける)。中身は局・音声と、コーデックのメニューで選んだもの (`choice`。
+ * `#lib/live-choice.ts`) の JSON で、前の形式の `codec`・`raw` は読まない。サーバが読んで、繋いでくる前に
  * エンコードし始める (`server/live.ts` の `warm`)。どの局を開くかはサーバ側 1 箇所で決める (`server/viewing.ts` の `liveStart`)。
  * localStorage と二重に持つと、先にエンコードしたものが使われず別の局が開いていた
  */

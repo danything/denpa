@@ -88,7 +88,7 @@ describe("RankingRelay", () => {
     expect(reads).toBe(2);
   });
 
-  test("読めなければ投げ、記録には同じ理由を 1 行だけ。戻ったら 1 行", async () => {
+  test("読めなければ例外を送出し、記録には同じ理由を 1 行だけ。戻ったら 1 行", async () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     const log = spyOn(console, "log").mockImplementation(() => {});
     let now = 0;

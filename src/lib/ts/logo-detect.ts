@@ -1,11 +1,10 @@
 /**
- * **局ロゴを自分で覚えて、どのコマに出ているかを当てる。** 以前は logoframe に任せていた。
+ * **局ロゴを自分で覚えて、どのコマに出ているかを当てる。**
  *
- * logoframe はロゴを「色と濃さ (α)」で覚えていた。濃さを測るには**ロゴの後ろが
- * のっぺりしたコマ**が要り、BSテレ東のように後ろが明るいセットばかりの局では
- * `initial logo estimate contains too few active pixels` で止まっていた (`docs/cm.md`「logoframe から乗り換えた」)。
+ * ロゴを「色と濃さ (α)」で覚えるには**ロゴの後ろがのっぺりしたコマ**が要り、BSテレ東のように
+ * 後ろが明るいセットばかりの局では覚えられない (`docs/cm.md`「logoframe から乗り換えた」)。
  *
- * こちらが覚えるのは**線の向き**だけ。ロゴは後ろが何であれ毎コマ同じ所に同じ向きの
+ * 覚えるのは**線の向き**だけ。ロゴは後ろが何であれ毎コマ同じ所に同じ向きの
  * 縁を出し、中身の縁の向きはコマごとにばらばら。画素ごとに勾配の向きを足し合わせると、
  * ロゴの縁だけ長さが残る (`coherence`)。濃さも色も測らないので、後ろがのっぺり
  * している必要は無い。
@@ -489,14 +488,6 @@ const CONTEXT = 2;
 /** ロゴが出ているはずのコマで、これより多く点が割れる後ろは当てにしない */
 const MISS_MAX = 0.1;
 
-/**
- * コマごとの測り (`score`・`level`・`texture`) から、ロゴの出ていた区間を出す。
- * 判断できる後ろの決め方は `byLevel`/`byCell`
- */
-export function logoSpans(r: Readings, fps: number): Span[] {
-  return readLogo(r, fps).spans;
-}
-
 /** ロゴの出ていた区間と、区間の外でロゴが出ているか判断できなかった所 (どちらもコマ番号) */
 export interface LogoReading {
   spans: Span[];
@@ -507,7 +498,10 @@ export interface LogoReading {
   blind: Span[];
 }
 
-/** `logoSpans` と同じ区間に、区間の外の判断できなかった所を添える */
+/**
+ * コマごとの測り (`score`・`level`・`texture`) から、ロゴの出ていた区間と、区間の外で判断できなかった所を出す。
+ * 判断できる後ろの決め方は `byLevel`/`byCell`
+ */
 export function readLogo(r: Readings, fps: number): LogoReading {
   const s = smooth(r.scores);
   const known = flat(r, byLevel(r, fps));

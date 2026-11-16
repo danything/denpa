@@ -320,7 +320,7 @@ public static class CardLan
             }
             if (OperatingSystem.IsMacOS())
             {
-                // struct tcp_connection_info の tcpi_srtt (ms)。刻みが 1ms なので、0 は「1ms 未満」として扱う
+                // struct tcp_connection_info の tcpi_srtt (ms)。刻みが 1 ms なので、0 は「1 ms 未満」として扱う
                 // (受けた側も SYN-ACK への ACK から測るので、たいていは繋がった時点で測ってある)
                 var length = socket.GetRawSocketOption(IpProtoTcp, MacTcpConnectionInfo, info);
                 if (length < 48) return null;

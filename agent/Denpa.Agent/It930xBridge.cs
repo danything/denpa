@@ -152,7 +152,7 @@ public sealed class It930xBridge
 
     /// <summary>
     /// ホストが出す 1 回の転送要求の大きさ。<see cref="TsTransferSize"/> を最大パケット長の倍数に切り上げた 65,536 バイト
-    /// (IT930x の仕様書 6.4 の WinUSB 版の実装も、同じように 512 の倍数に切り上げる)。
+    /// (IT930x の仕様書 6.4 の WinUSB を使う実装も、同じように 512 の倍数に切り上げる)。
     /// WinUSB の RAW_IO は、最大パケット長の倍数でない転送要求を受け付けないため。ほかの OS でも同じ値にする。
     /// ブリッジは 65,424 バイトごとに短いパケット (400 バイト) で区切ると推定している (前は転送要求も 65,424 バイトで、区切らなければ誤りになるはずだが、実機で受けられていた)。区切れば転送はそこで終わる。
     /// 区切らずに続けて送っても、512 バイトの倍数なので、パケットが転送要求の残りに入りきらない誤り (EOVERFLOW) にはならない。受けたバイト列は、転送の区切りによらず分けられる (<see cref="It930xTsDemux"/>)
@@ -517,8 +517,8 @@ public sealed class It930xBridge
     }
 
     /// <summary>
-    /// ブリッジの TS のバッファを捨てる (IT930x の仕様書 6.4 の「受信の始め」の 1)。<c>0xDA1D</c> の bit0 ← 1、EP 0x84 から <see cref="PurgeLength"/> バイトを
-    /// <see cref="PurgeTimeoutMs"/> まで読む、<c>0xDA1D</c> の bit0 ← 0 (読み出しが失敗しても書く)。EP 0x84 の転送要求を出していない間に呼ぶ。読んだバイトの数を返す。
+    /// ブリッジの TS のバッファを捨てる (IT930x の仕様書 6.4 の「受信の始め」の 1)。<c>0xDA1D</c> の bit 0 ← 1、EP 0x84 から <see cref="PurgeLength"/> バイトを
+    /// <see cref="PurgeTimeoutMs"/> まで読む、<c>0xDA1D</c> の bit 0 ← 0 (読み出しが失敗しても書く)。EP 0x84 の転送要求を出していない間に呼ぶ。読んだバイトの数を返す。
     ///
     /// <para>
     /// 仕様書は 1,024 バイトの読み出しを 1 回で、512 バイトを読んで時間切れなら成功とする。Linux の usbfs の同期の bulk の読み出しは、
@@ -536,7 +536,6 @@ public sealed class It930xBridge
             var total = 0;
             while (total < PurgeLength)
             {
-                // 最初のパケットは 2000 ms まで待ち、そのあとは短く待つ (PurgeRestTimeoutMs)
                 var got = _usb.Read(TsIn, buffer, total == 0 ? PurgeTimeoutMs : PurgeRestTimeoutMs);
                 if (got <= 0) break;
                 total += got;

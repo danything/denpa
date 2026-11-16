@@ -999,7 +999,7 @@ describe("ffprobe の読み (mediaInfo)", () => {
     expect(hevc("Main")).toBe("hvc1.1.6.L120.90");
   });
 
-  test("知らない形式・読めない出力は null (判断に使わない)", () => {
+  test("H.264・H.265・AV1 のほかの形式・読めない出力は null (判断に使わない)", () => {
     expect(
       mediaInfo(
         "encoded",

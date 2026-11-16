@@ -78,6 +78,6 @@ export const OVERLAY_ROUND = "ov-round";
 /**
  * 赤い字と赤い短い線。戻せない操作の 2 回目 (削除) と、「今」へ張り付いている `EdgeButton` に使う。
  * 2 回目は大きさを変えず色とアイコンだけ変える。「確定」の文字にすると幅が変わって
- * 隣のボタンが動き、同じ場所を押し直せなかった
+ * 隣のボタンが動き、同じ場所を押し直せない
  */
 export const OVERLAY_DANGER = "ov-danger";

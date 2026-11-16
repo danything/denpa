@@ -6,7 +6,7 @@
  * 認証まわりで「中で何をしているか分からない」を抱えることになります。
  *
  * 相手は Entra ID を想定していますが、OIDC の標準しか使っていないので
- * Keycloak でも Google でも同じはずです (実機で当てたのは Entra だけ)。
+ * Keycloak でも Google でも同じはずです (実際に確かめたのは Entra だけ)。
  *
  * **ここは「誰か」を確かめ、グループとロールでログインさせるかを決めます** (`allowed`)。
  * どのリクエストを通すかは `auth.ts` が決めます。
@@ -382,7 +382,7 @@ export function allowed(
   if (held.length === 0) {
     /*
      * **グループが多い人はここに来ます。** Entra はクレームが大きくなりすぎると
-     * `groups` の代わりに `_claim_names` を入れて「Graph を呼んで取れ」と言う。
+     * `groups` の代わりに `_claim_names` を入れ、Graph から取得するよう示す。
      * 黙って弾くと「なぜか自分だけ入れない」になるので、理由を出す
      */
     const overflow = claims._claim_names?.["groups"] !== undefined;

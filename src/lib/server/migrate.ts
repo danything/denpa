@@ -342,7 +342,7 @@ interface ImportContext {
 }
 
 /**
- * 1 件を取り込む。結果は imported / skipped (取り込み済み) / missing (ファイルが無い)。取れなければ投げる。
+ * 1 件を取り込む。結果は imported / skipped (取り込み済み) / missing (ファイルが無い)。取れなければ例外にする。
  *
  * **ファイルを置き終えてから行を入れる。** 取る (`downloadVideo`。続きから・長さを確かめる) →
  * 最終の名前へ rename → DB、の順で、rename と DB への書き込みを 1 つのトランザクションに入れる。
@@ -963,7 +963,7 @@ function needsByFilesystem(pending: { raw: boolean; bytes: number }[]): Need[] {
 /**
  * **空きを先に確かめる。** まだ入っていないファイルの合計 (書きかけのぶんを引く) と、置き場の空きを比べる。
  * ディスクの空きの定期チェック (`disk.ts`) が残す量 (`DISK_LOW_THRESHOLD`) も足す。取り込みで埋めて録画が書けなく
- * なるのを防ぐ。足りなければ取り込みでは投げ (録画には入らない。ルール・予約は入ったまま)、下見では記録に残す
+ * なるのを防ぐ。足りなければ取り込みでは例外で止め (録画には入らない。ルール・予約は入ったまま)、下見では記録に残す
  */
 function checkSpace(
   pending: { raw: boolean; bytes: number }[],
@@ -1078,7 +1078,7 @@ export function running(): boolean {
 
 /**
  * 引き継ぎを 1 回走らせる。進み具合をまっさらに戻して `body` を回し、終わりと失敗を進み具合に書く。
- * 失敗は投げずに `failed` と理由で残す (画面からは待たずに呼ぶので、受け取る相手がいない)。
+ * 失敗は例外にせず `failed` と理由で残す (画面からは待たずに呼ぶので、受け取る相手がいない)。
  * `signal` で止めたものは `canceled`
  */
 export async function track(

@@ -41,7 +41,7 @@ const MAX_CM_RATIO = 0.5;
 
 /**
  * CM 判定が占める割合 (0〜1)。**映像の欠けた所 (`missing`) は分母にも分子にも入れない。** 欠けた所は CM か番組か決められない。
- * 尺で割っていた頃は、途中から最後まで映像が欠けた録画で、欠けた所のぶん割合が上がっていた (`ts/cm-decide.missingVideo`)
+ * 尺で割ると、途中から最後まで映像が欠けた録画で、欠けた所のぶん割合が上がる (`ts/cm-decide.missingVideo`)
  */
 function cmShare(cm: Range[], duration: number, missing: Range[]): number {
   const known = duration - totalLength(missing);
@@ -100,7 +100,7 @@ export function invertRanges(ranges: Range[], duration: number): Range[] {
  * エンコードは先頭 (映像が出るまでの音声だけの区間、実機で 0.5〜0.9 秒) を
  * `-ss` で捨てて 0 秒から始める (`encoder.headSkip`)。検出した時刻をそのまま
  * チャプターに書くと**全チャプターがそのぶん遅れて入り**、CM の自動スキップは
- * 毎回そのぶん CM を見せてから飛んで、着地も本編に食い込んでいた
+ * 毎回そのぶん CM を見せてから飛び、着地も本編に食い込む
  * (字幕はエンコードする ffmpeg が映像と一緒に詰める)。
  *
  * 詰めた結果 {@link MIN_RANGE} も残らない区間は落とす。

@@ -50,11 +50,11 @@ import { notify } from "./webhook";
 
 /**
  * 録り始めてから PMT でコピー禁止と分かり、1 バイトも保存しなかった録画の理由
- * (番組表が古い・無かったとき。ふだんは予約の時点で止まる: `format.COPY_NEVER_REASON`)
+ * (番組表が古い・無かったとき。ふだんは予約の時点で止まる。`format.COPY_NEVER_REASON`)
  */
 const COPY_NEVER_RECORDING = "コピー禁止の番組なので録画しませんでした";
 
-/** 録画中のストリームを止めるための手段。プロセス内にしか無いので再起動で失われる (起動時に回収する: recoverOrphanedRecordings) */
+/** 録画中のストリームを止めるための手段。プロセス内にしか無いので再起動で失われる (起動時に回収する。`recoverOrphanedRecordings`) */
 const active = new Map<number, AbortController>();
 
 export function activeRecordingIds(): number[] {
@@ -532,10 +532,9 @@ async function pump(
       /*
        * **選局は自分から切るまで終わらない。** 向こうから終わったなら (EOF でも
        * 例外でも) チューナーを取り上げられたか切れたかで、終了時刻 (自分の abort) までは取り直す。
-       * EOF を正常終了と読んでいた頃は、チューナーを取り上げられた録画が末尾の欠けたまま「録れた」に
-       * なり (HTTP 越しでは失敗も正常終了に見える。`agent/conformance.test.ts`)、
-       * 例外で抜けていた頃はエージェントの Pod を入れ替えただけで番組が丸ごと
-       * 失敗した (実機)
+       * EOF を正常終了と読むと、チューナーを取り上げられた録画が末尾の欠けたまま「録れた」に
+       * なる (HTTP 越しでは失敗も正常終了に見える。`agent/conformance.test.ts`)。
+       * 例外で抜けると、エージェントの Pod を入れ替えただけで番組が丸ごと失敗する (実機)
        */
       // 引き継ぎは最初に使うときだけ。取り直すころには、止めた録画はもう離れている
       let handoff = after;

@@ -285,7 +285,7 @@ export function recordedBody(result: Extract<RecordAiring, { ok: true }>) {
 
 /**
  * **番組 ID を指定して録る** (アプリの `POST /api/programs/<id>/record`)。
- * 番組表に無ければ 404、予約できなければ (放送が終わっている、コピー禁止) 400。
+ * 番組表に無ければ 404、予約できなければ (放送が終わっている・コピー禁止・復号できない局) 400。
  * 予約は手動予約と同じ処理 ({@link reserve}) で、何度呼んでも二重には録らない
  */
 export async function recordProgram(programId: number): Promise<RecordAiring> {

@@ -21,7 +21,7 @@ import type { IconShape } from "./icons";
  *
  * 何を覚えるか (端末ごと) は各画面と `ambient.svelte.ts`・`background.svelte.ts` が持つ。ここは並べ方だけ
  */
-export interface SettingOption {
+interface SettingOption {
   key: string | number;
   label: string;
   /** いま選ばれているか (`aria-checked`) */

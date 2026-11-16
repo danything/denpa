@@ -149,7 +149,7 @@
   }
 
   /**
-   * 再起動を待って開き直す。先に落ちるのを待ち (止まる前の返事を「起きた」と取り違えない)、
+   * 再起動を待って開き直す。先にサーバが止まるのを待ち (止まる前の返事を「起動した」と取り違えない)、
    * それから返事が来るまで待つ。来なければ「再起動してください」
    */
   async function waitForRestart(): Promise<void> {
@@ -170,7 +170,7 @@
       await new Promise((r) => setTimeout(r, 1000));
       const up = await alive();
       if (!up) wentDown = true;
-      // 再起動が速くて落ちたことを確かめられなくても、10 秒たてば開き直す
+      // 再起動が速くて止まったことを確かめられなくても、10 秒たてば開き直す
       else if (wentDown || Date.now() > until - RESTART_WAIT + 10_000) {
         const url = new URL(location.href);
         url.searchParams.delete("transfer_error");

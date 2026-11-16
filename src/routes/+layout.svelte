@@ -143,7 +143,7 @@
    * いた (押した指の先に返事が無い)。
    *
    * 150ms 待ってから出す。速い遷移でまで出すと、押すたびに光ってちらつく。
-   * 消すのは `navigating.complete` の解決/拒否で。`navigating` の下りを待つと、
+   * 消すのは `navigating.complete` の解決/拒否で。`navigating` が null に戻るのを待つと、
    * 取り消された遷移 (読み直しに追い越されたもの) で**永久に出たまま**になる
    * ([reload.svelte.ts](../lib/reload.svelte.ts) と同じ落とし穴)
    */
@@ -675,7 +675,7 @@
 {/snippet}
 
 <style>
-  /* 土台。高さは html から % で受け継ぐ(上のコメント) */
+  /* 土台。高さは html から % で受け継ぐ (上のコメント) */
   .shell {
     /*
      * **余白の幅は `--dp-gutter` で配る。** スマホの縦で映像だけ端まで広げる (`PlayerStage`) のに、

@@ -35,7 +35,7 @@ interface Available {
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
 let available: Available | null = null;
-/** 繋がらなかった。1 回だけ言う (1 時間おきに同じことを言わない) */
+/** 繋がらないことを警告したか。警告は 1 回だけ出す (1 時間おきに同じ警告を出さない) */
 let warned = false;
 
 /** 直近に見比べた結果。画面はこれを読むだけ */
@@ -83,7 +83,7 @@ export async function checkForUpdate(
       signal: AbortSignal.timeout(10_000),
     });
     if (res.status === 404) {
-      // 繋がった (リリースが 1 つも無いだけ)。次に繋がらなくなったら、また言う
+      // 繋がった (リリースが 1 つも無いだけ)。次に繋がらなくなったら、また警告する
       available = null;
       warned = false;
       return available;

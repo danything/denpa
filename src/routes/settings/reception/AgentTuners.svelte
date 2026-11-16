@@ -31,7 +31,7 @@
   /** 有料契約確認モーダルの開閉 */
   let showContractDialog = $state(false);
 
-  /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
+  /** チューナーの設定を保存した結果 (その場で保存する。`autosave`) */
   const configSave = new SaveState();
   /** チューナーの行の削除は 2 回押し (ほかの画面の削除と同じ。`arming`) */
   const deleting = arming('[data-testid^="tuner-delete"]');
@@ -71,7 +71,7 @@
       : [...LNB_CHOICES, { value: lnb, label: lnb }];
   }
   /**
-   * チューナーの表の骨組みの行の高さ (rem)。本物の行 (名前とデバイスの 2 行で 2.9rem) から行の間 (`--dp-space-2`。0.5rem) を
+   * チューナーの表を待つ骨組みで、行の高さ (rem)。本物の行 (名前とデバイスの 2 行で 2.9rem) から行の間 (`--dp-space-2`。0.5rem) を
    * 引いたもの。台数は届くまで分からないので、よくある 4 台ぶん
    */
   const TUNER_SKELETON = [2.4, 2.4, 2.4, 2.4];
@@ -149,7 +149,7 @@
       ? (signals[tuner.index] ?? null)
       : tuner.signal;
 
-  /** カードリーダーの状態のバッジの色。ほかは色なし */
+  /** カードリーダーの状態を示すバッジの色。ほかは色なし */
   const READER_TONE: Partial<Record<CardReaderState, string>> = {
     active: "success",
     error: "error",
@@ -311,7 +311,7 @@
                     <!--
                                             空き・使用中と、使っているもの。**数字は出さない** (わけは `tuners.server.ts` の `USE_LABEL`)。
                                             数は調べるとき用に `data-priority` にだけ残す。
-                                            目印は番号で。同じ用途が 2 つ並ぶこともあり、字を目印にすると落ちる
+                                            each のキーは番号で。同じ用途が 2 つ並ぶこともあり、字をキーにすると重なって例外になる
                                         -->
                     <div class="cluster state">
                       {#if tuner.disabled}
@@ -408,7 +408,7 @@
                         {#if deleting.armed === index}
                           <!--
                                                         2 回目。この行を除いて保存する。2 回押しを戻すのは送り出したあと。
-                                                        押した場で下ろすと、送る前にこのボタンが消えて何も送られない
+                                                        押したその場で戻すと、送る前にこのボタンが消えて何も送られない
                                                     -->
                           <button
                             type="submit"
@@ -511,7 +511,7 @@
         復号するので、「使っているチューナー」は使用中の行にだけ並ぶ。ほかのリーダーは予備で、
         使用中のカードが答えなくなったら繋ぎ直すときに使われる
     -->
-  <!-- 繋がらないエージェントは、チューナーの表の場所の 1 行だけにする (カードリーダーの表も出さない) -->
+  <!-- 繋がらないエージェントは、チューナーの表の代わりに出す 1 行だけにする (カードリーダーの表も出さない) -->
   {#if shownTuners.value?.error == null}
     <div class="reader">
       <div class="cluster">
@@ -604,7 +604,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <!-- 同じ型のリーダーを 2 つ挿すと名前が並ぶ。目印は番号で -->
+                  <!-- 同じ型のリーダーを 2 つ挿すと名前が並ぶ。each のキーは番号で -->
                   {#each card.readers as reader, i (i)}
                     {@const label = splitReaderName(reader.name)}
                     {@const last =
@@ -1032,7 +1032,6 @@
     }
     .table-wrap .row-cards td {
       padding: 0;
-      border: 0;
       background: transparent;
     }
     .row-cards td::before {

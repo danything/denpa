@@ -16,12 +16,12 @@ import { notify } from "./webhook";
  * 遅いので、残量が閾値を下回ったところで一度だけ知らせる。照合と同じ周期で回す
  * (`runtime.ts`)。
  *
- * **境目をまたいだ一度だけ鳴らす。** 毎周期ごとに鳴らすと、空けるまで数分おきに
+ * **境目をまたいだときに一度だけ通知する。** 毎周期ごとに通知すると、空けるまで数分おきに
  * 通知が飛び続ける。下回った置き場を覚えておいて、戻ったら忘れる (次に下回れば
- * また鳴る)。録画の外側の話なので、録画を止めたり消したりは一切しない。通知するだけ。
+ * また通知する)。録画の外側の話なので、録画を止めたり消したりは一切しない。通知するだけ。
  */
 
-/** いま「残りわずか」を知らせ済みの置き場。またぐたびに 1 回だけ鳴らすための覚え */
+/** いま「残りわずか」を知らせ済みの置き場。境目をまたぐたびに 1 回だけ通知するために覚えておく */
 const warned = new Set<string>();
 
 /** その置き場の空きバイト数。読めなければ null (統計が取れない環境もある) */
@@ -48,7 +48,7 @@ export function checkDisk(): void {
     if (free === null) continue;
 
     if (free < config.diskLowThreshold) {
-      // すでに知らせてある置き場は、空けるまで黙る
+      // すでに知らせてある置き場は、空くまで通知しない
       if (warned.has(dir)) continue;
       warned.add(dir);
       console.warn(`[disk] 残量わずか: ${dir} (残り ${size(free)})`);
@@ -57,7 +57,7 @@ export function checkDisk(): void {
         text: `ディスクの残りがわずかです: ${dir} (残り ${size(free)} / 閾値 ${size(config.diskLowThreshold)})`,
       });
     } else if (warned.has(dir)) {
-      // 閾値より上へ戻った。覚えを消して、次に下回ればまた鳴らす
+      // 閾値より上へ戻った。覚えた置き場から外して、次に下回ればまた通知する
       warned.delete(dir);
       console.log(`[disk] 残量が戻りました: ${dir} (残り ${size(free)})`);
     }
@@ -93,7 +93,7 @@ type Capacity = { free: number; hours: number | null };
 const CAPACITY_TTL = 30_000;
 let cached: { at: number; value: Capacity | null } | null = null;
 
-/** 量り直す (`capacity`)。テストは覚えを通さずにこちらを呼ぶ */
+/** 量り直す (`capacity`)。テストは覚えておいた値を使わずにこちらを呼ぶ */
 export function measure(): Capacity | null {
   const frees = watched()
     .map(freeBytes)
@@ -145,5 +145,5 @@ export function measure(): Capacity | null {
 const SAMPLES = 20;
 /** これより少なければ時間は出さない。1 本だけだと、その番組の映像の細かさに引きずられる */
 const SAMPLES_MIN = 3;
-/** 短すぎる録画は量りに入れない (途中で止めたものなど。先頭の固定分で 1 時間あたりが膨らむ) */
+/** 短すぎる録画は目安に入れない (途中で止めたものなど。先頭の固定分で 1 時間あたりが膨らむ) */
 const SAMPLE_MIN_MS = 5 * 60_000;

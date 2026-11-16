@@ -53,9 +53,7 @@ import { getChannels, programKey, serviceAbilities, serviceKey } from "./tuner";
  * 局の行は消さない。消すと、その局で録った録画や過去の予約が辿れなくなるため
  * ([data.md](../../../docs/data.md))。代わりに、**直近の取り込みで見かけなかった
  * 局と、設定から消した種別の局は画面に出さない** (`services.listed`)。
- *
- * 実機では、スキャンをやり直した結果、エージェントの一覧は 32 局なのに denpa 側には
- * 120 局が残っていて、番組表に空の列が並んでいた。
+ * 出すと、スキャンをやり直したあとも消えた局が残り、番組表に空の列が並ぶ。
  */
 export function currentServices() {
   return eq(services.listed, true);
@@ -391,7 +389,7 @@ export function syncServices(read: readonly AgentChannels[]): number {
  *
  * エージェントが預かっている名前はスキャンしたときのもので、英数を半角で読んでいた頃の
  * スキャンなら「TOKYO MX1」のまま。放送のとおりの幅 (「ＴＯＫＹＯ　ＭＸ１」) は番組表を
- * 集めるときに SDT から入れる (`widenServices`)。ここで毎分エージェントの名前に戻すと
+ * 取得するときに SDT から入れる (`widenServices`)。ここで毎分エージェントの名前に戻すと
  * それが消えるので、半角に寄せて同じなら触らない。名前そのものが変わったときだけ入れ替える
  */
 function widthKept(current: string | undefined, incoming: string): string {
@@ -401,7 +399,7 @@ function widthKept(current: string | undefined, incoming: string): string {
 }
 
 /**
- * **局の名前の幅を放送のとおりにする。** 番組表を集めるときに読んだ SDT から (`epg-collect.ts`)。
+ * **局の名前の幅を放送のとおりにする。** 番組表を取得するときに読んだ SDT から (`epg-collect.ts`)。
  *
  * 入れるのは半角に寄せて今の名前と同じものだけ。名前そのものはスキャン (エージェントの控え) が
  * 決める。ここで変えると、毎分の取り込み (`syncServices`) と取り合いになる。
@@ -498,9 +496,8 @@ function clearBelongings(
  * 起動直後や不調で空を返すことはあり、それを「全部消えた」と読むと番組表ごと消える。
  *
  * **1 回見かけなかっただけでも片付けない。** 空ではなく*欠けた*一覧が返ることも
- * あり、そちらは `count > 0` の条件に掛からない。実機では、一覧が欠けた 1 分間の取り込みが
- * 1 回あっただけで、まだ現役の局 (NHK総合1・TOKYO MX1・テレ東・テレビ朝日・フジテレビ…) の予約が
- * **44 件まとめて取り消されていた**。
+ * あり、そちらは `count > 0` の条件に掛からない。すぐ片付けると、一覧が欠けた取り込みが
+ * 1 回あっただけで、まだ現役の局の予約が**まとめて取り消される** (実機で 44 件)。
  *
  * 見かけた局には毎回 `updated_at` を入れているので、**そこから見かけていない
  * 時間が測れる**。それが `serviceForgetAfter` を超えた局だけ片付ける。
@@ -543,7 +540,7 @@ function forgetMissing(at: number, seen: Set<number>): number {
 /**
  * 局の一覧をエージェントから取り込む。番組表は待たない。
  *
- * **どの局があるかはスキャンで決まる。** 番組表を集めるのはそのあとで、
+ * **どの局があるかはスキャンで決まる。** 番組表を取得するのはそのあとで、
  * 局によっては数分かかる。局だけ先に出しておかないと、スキャンの直後に
  * 番組表が空のまま何も出ない時間が続く。
  */
@@ -596,7 +593,7 @@ function indexKey(type: string, networkId: number, serviceId: number): string {
 /**
  * 読み取った番組を DB に書く。取り込めた件数を返す。
  *
- * 書いた局には番組表を集めた時刻 (`services.epg_at`) を付ける。番組表の取得が次に行くかをこれで決める
+ * 書いた局には番組表を取得した時刻 (`services.epg_at`) を付ける。番組表の取得が次に行くかをこれで決める
  * (`epg-collect.lastCollected`)。ライブが写す p/f (`followOnAir`) は `onAir` を渡して付けない。
  * p/f は現在と次の番組だけで、その先の番組表は埋まっていないため。
  *
@@ -607,7 +604,7 @@ export function savePrograms(
   { type, onAir = false }: { type: string; onAir?: boolean },
 ): number {
   const index = serviceIdIndex();
-  /** その表がシリーズを言っていれば (`series_said`) 新しい値、言っていなければ前のまま */
+  /** その表にシリーズが入っていれば (`series_said`) 新しい値、入っていなければ前のまま */
   const kept = (column: AnyColumn) =>
     sql`CASE WHEN ${sql.placeholder("series_said")} = 1 THEN excluded.${sql.identifier(column.name)} ELSE ${column} END`;
   /**
@@ -635,7 +632,7 @@ export function savePrograms(
     audios: sql`excluded.audios`,
     video_type: sql`excluded.video_type`,
     video_resolution: sql`excluded.video_resolution`,
-    // コピー禁止か。**表が言っていない回 (NULL) は前のまま** (`EitEvent.copyNever`)
+    // コピー禁止か。**表に入っていない回 (NULL) は前のまま** (`EitEvent.copyNever`)
     copy_never: sql`COALESCE(${sql.placeholder("copy_never")}, ${programs.copy_never})`,
     contract_verification: sql`COALESCE(${sql.placeholder("contract_verification")}, ${programs.contract_verification})`,
     // シリーズも同じ。**詳細の表 (載せない表) から来た回は前のまま** (`EitEvent.series`)
@@ -652,7 +649,7 @@ export function savePrograms(
    * 野球が延びると、いま流れている番組の終わりが EIT で後ろへ動く (延長)。
    * このとき**潰された側の番組はすぐには書き換わらない**。局は後から新しい
    * 時刻で送り直してくるが、それまでの間、古い行が延長された行の下に
-   * 重なったまま残り、番組表の 1 マスに 2 つ 3 つの番組が重なって出ていた。
+   * 重なったまま残り、番組表の 1 マスに 2 つ 3 つの番組が重なって出る。
    * 受信機の流儀に合わせて、重なった古い行はここで消す (送り直しが来れば
    * event_id ごと戻ってくる)
    */
@@ -796,10 +793,10 @@ export function savePrograms(
 }
 
 /**
- * **放送が言う「いま」と「次」(EIT[p/f]) を番組表に写す。** ライブで開いている局のぶん
+ * **放送の「いま」と「次」(EIT[p/f]) を番組表に写す。** ライブで開いている局のぶん
  * (`server/live.ts`)。
  *
- * 番組表は集めた時点の予定なので、**延長・繰り下げがあると、画面がいまの番組を取り違える**
+ * 番組表は取得した時点の予定なので、**延長・繰り下げがあると、画面がいまの番組を取り違える**
  * (予定の終わりで次の番組に変わってしまう・延びたぶんが出ない)。ライブで開いている TS には
  * p/f が流れているので、写せば放送どおりになる。録画が延長に追従するのと同じ元 (`recorder.ts`)。
  * 延びて重なった後ろの番組は `savePrograms` が消す (局の送り直しで戻ってくる)。
@@ -842,7 +839,7 @@ export function followOnAir(
       row === undefined ||
       row.start_at !== event.startAt ||
       row.end_at !== event.startAt + event.duration ||
-      // タイトルの無い回は、入っているタイトルを消さない (`savePrograms`)。違うとも言わない
+      // タイトルの無い回は、入っているタイトルを消さない (`savePrograms`)。違うとも見なさない
       (event.name !== "" && row.name !== event.name)
     );
   });
@@ -924,7 +921,7 @@ interface SettleResult {
  * 番組表が変わったあとの片付け。
  *
  * ルールを当て直し、予約の時刻を合わせ、古い番組を捨てる。取り合いの裁き直し
- * (`resolveConflicts`) は呼ぶ側がやる。**番組を読むところとは分けてある。** 1 チャンネル集めるたびに全部やり直すと、
+ * (`resolveConflicts`) は呼ぶ側がやる。**番組を読むところとは分けてある。** 1 チャンネル取得するたびに全部やり直すと、
  * 52 チャンネルぶん同じことを 52 回することになる。
  *
  * **ルールを当て直すのはここ。** 決まった時刻の定期チェックではなく、
@@ -960,7 +957,7 @@ export function syncPending(agent: number): boolean {
  * 局と番組表を取り込み直す。E2E と docs の画像を撮るスクリプトが呼ぶとき (`/api/sync`)・起動直後・スキャンのあと・
  * エージェントの `channels` の通知と、読めていなかったエージェントの通知に繋がったとき (`runtime.ts`)・種別を消したとき (`scan.removeType`)。
  *
- * 番組そのものを集めるのは `epg-collect.ts` で、こちらは**溜まっているものを
+ * 番組そのものを取得するのは `epg-collect.ts` で、こちらは**溜まっているものを
  * 使って予約を組み直すだけ**。
  */
 export async function sync(

@@ -132,7 +132,7 @@ describe("いま流れている番組を録る", () => {
     expect(rows[0]?.manual).toBe(true);
   });
 
-  test("2度押しても予約は1本のまま", async () => {
+  test("2 度押しても予約は 1 本のまま", async () => {
     reset();
     program(2, NOW - 10 * MINUTE, NOW + 20 * MINUTE);
     await recordAiring(SERVICE, NOW);

@@ -473,7 +473,7 @@ class FunctionCompiler {
         this.emit(OP.JUMP, top);
         this.land(exit);
         this.landAll(loop.breaks);
-        // 使い終わった列挙を降ろす
+        // 使い終わった列挙をスタックから取り除く
         this.emit(OP.POP);
         return;
       }
@@ -518,7 +518,7 @@ class FunctionCompiler {
         return;
       }
       case "continue": {
-        // 間にある switch の積んだ値を降ろしてから、いちばん内側のループ (for-in も) へ
+        // 間にある switch の積んだ値を取り除いてから、いちばん内側のループ (for-in も) へ
         for (let i = this.breakables.length - 1; i >= 0; i--) {
           const target = this.breakables[i]!;
           if (target.kind === "switch") {
@@ -552,7 +552,7 @@ class FunctionCompiler {
     for (const at of list) this.code.ops[at] = to;
   }
 
-  /** 積まれた値を左辺に入れて降ろす (for-in の名前) */
+  /** 積まれた値を左辺に入れて取り除く (for-in の名前) */
   private assignTop(target: Expr): void {
     if (target.kind === "name") {
       this.store(target.name);

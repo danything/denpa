@@ -4,7 +4,7 @@ import { concatBytes } from "@danything/arib/bytes";
 
 import { pngChunk } from "#lib/ts/png.js";
 
-/** 塊 (長さ・名前・中身・CRC) */
+/** チャンク (長さ・名前・中身・CRC) */
 export function chunk(name: string, body: number[] | Uint8Array): Uint8Array {
   return pngChunk(name, Uint8Array.from(body));
 }

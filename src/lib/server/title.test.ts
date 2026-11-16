@@ -74,7 +74,7 @@ describe("parseTitle", () => {
     });
   });
 
-  test("作品名の後ろの鍵括弧は今までどおり副題", () => {
+  test("作品名の後ろの鍵括弧は副題", () => {
     expect(parseTitle("名探偵コナン「黒の組織」")).toMatchObject({
       series: "名探偵コナン",
       arc: "",
@@ -156,7 +156,7 @@ describe("parseTitle", () => {
       series: "テストアニメ",
       arc: "A編 第2期",
     });
-    // 後ろに名前が続くものは、どこまでが編か分からないので今までどおり
+    // 後ろに名前が続くものは、どこまでが編か分からないので編にしない
     expect(parseTitle("将棋)第34期 銀河戦").arc).toBe("");
   });
 
@@ -324,7 +324,7 @@ describe("displayTitle", () => {
 });
 
 describe("sanitizeFileName", () => {
-  test("パス区切りとWindowsの禁止文字を落とす", () => {
+  test("パス区切りと Windows の禁止文字を落とす", () => {
     expect(sanitizeFileName('a/b:c*d?e"f<g>h|i')).toBe("a b c d e f g h i");
   });
 

@@ -9,7 +9,7 @@ import { packetize, sdtSection } from "@danything/arib/synth";
 import type { AgentChannel } from "./tuner";
 
 /**
- * 地上波は付いていかず、知らせるだけ。合成の SDT と受信の記録で、お知らせが出ることを見る
+ * 地上波は付いていかず、知らせるだけ。合成の SDT と受信の記録で、通知が出ることを見る
  */
 const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-ground-")), "denpa.db");
@@ -54,7 +54,7 @@ beforeEach(() => {
   );
 });
 
-describe("地上波のお知らせ", () => {
+describe("地上波の通知", () => {
   test("局の顔ぶれがスキャンの結果と違えば知らせ、同じに戻れば消す", () => {
     expect(groundNotice()).toBeNull();
     // MX2 (23610) が増えた
@@ -113,8 +113,8 @@ describe("地上波のお知らせ", () => {
   });
 });
 
-describe("チャンネルのお知らせの順", () => {
-  test("BS・CS の書き換えを地上波のお知らせより先に出す", async () => {
+describe("チャンネルの通知の順", () => {
+  test("BS・CS の書き換えを地上波の通知より先に出す", async () => {
     const { channelAlert } = await import("./channel-alert");
     const { channelChanges } = await import("./schema");
     compareGround(

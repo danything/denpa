@@ -47,7 +47,7 @@ export const config = {
    *
    * 選局もスクランブルの復号もチャンネルスキャンも、全部エージェントが窓口。
    * B-CAS カードのリーダーを使うのも向こう側。
-   * `https://<名前>:<ポート>#pair=<合言葉>` の形で、カンマで区切って何台でも書ける。
+   * `https://<名前>:<ポート>#pair=<合言葉>` の形式で、カンマで区切って何台でも書ける。
    * 書いたものは起動のたびに DB の `agents` と突き合わせる (agents.ts)。既定は空 (エージェントなし)
    */
   agentUrl: str("TUNER_AGENT_URL", ""),
@@ -99,13 +99,13 @@ export const config = {
   ffmpeg: str("FFMPEG", "/usr/local/bin/ffmpeg"),
   /**
    * ブラウザで MPEG-2・AAC・Opus をデコードする WebAssembly の置き場 (変換せずに観るライブと録画・互換モードの音。docs/stream.md#放送そのままmpeg-2を送る)。
-   * Dockerfile の `mpeg2wasm` 段が置き、Mac と Windows はインストーラが配布物の中を指す。**アプリの外にあるのは、開発の compose がソースを
+   * Dockerfile の `mpeg2wasm` 段が置き、Mac と Windows はインストーラが、Android はアプリが配布物の中を指す。**アプリの外にあるのは、開発の compose がソースを
    * /app に被せるため** (中に置くと隠れる)。無ければ放送そのままの経路は使えず、画面はエンコードしたものに戻る
    */
   mpeg2Dir: str("MPEG2_DIR", "/opt/denpa/mpeg2"),
   /**
    * データ放送と字幕を描く字 (Denpa Font) の置き場。Dockerfile の `denpa-font` 段が置く (`/api/font/` が配る)。
-   * Mac と Windows はインストーラが配布物の中を指す。無ければ 404 を返し、画面は端末の字で描く
+   * Mac と Windows はインストーラが、Android はアプリが配布物の中を指す。無ければ 404 を返し、画面は端末の字で描く
    */
   fontDir: str("FONT_DIR", "/usr/share/denpa-font"),
   /** 録ったあとのエンコードを同時に走らせる本数。**ジョブではなく ffmpeg の本数で数える** (コーデックごとに 1 本。`encode-slots.ts`) */
@@ -156,11 +156,11 @@ export const config = {
   cmLogoDir: `${dataDir}/logos/cm`,
   /** CM 検出でロゴの区間をならすときの fps。ffprobe で取れなければこれを使う (地上波・BS は 30000/1001) */
   cmFallbackFps: 30000 / 1001,
-  /** CM 検出のために別に回す ffmpeg (ロゴを覚える・読み直す・CM 検出だけやり直す) 1 回の上限時間(ms)。エンコードする ffmpeg で一緒に行う読み込みには掛けない */
+  /** CM 検出のために別に回す ffmpeg (ロゴを覚える・読み直す・CM 検出だけやり直す) 1 回の上限時間 (ms)。エンコードする ffmpeg が一緒に読むときには掛けない */
   cmDetectTimeout: 30 * MIN,
 
   /**
-   * サムネイルを切り出す位置(秒)。冒頭は提供表示や CM のことが多いので少し進める。
+   * サムネイルを切り出す位置 (秒)。冒頭は提供表示や CM のことが多いので少し進める。
    * CM 検出が効いているときは、この秒数を**本編の最初の区間の先頭からの**位置として使う
    */
   thumbnailPosition: 120,
@@ -178,7 +178,7 @@ export const config = {
   bmlDns: str("BML_DNS", "1.1.1.1,8.8.8.8"),
 
   /**
-   * 動いているバージョン (`v1.8.1` の形式)。**リリースのイメージと、Mac・Windows のインストーラが書く起動スクリプトにだけ入る。**
+   * 動いているバージョン (`v1.8.1` の形式)。**リリースのイメージと、Mac・Windows のインストーラが書く起動スクリプト、Android のリリースの APK にだけ入る。**
    * イメージはリリースのとき、main で組んだものに 1 層足す (.github/release.Dockerfile)。main (develop) の
    * イメージと手元・テストは `dev` で、そのときは新しいバージョンの通知を出さない (update.ts)
    */
@@ -196,21 +196,21 @@ export const config = {
   /** 新しいバージョンを見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
   updateCheckInterval: num("UPDATE_CHECK_INTERVAL", 60 * MIN),
 
-  /** 録画の前後マージン(ms)。放送時刻のズレを吸収する */
+  /** 録画の前後マージン (ms)。放送時刻のズレを吸収する */
   startMargin: num("START_MARGIN", 10 * SEC),
   endMargin: num("END_MARGIN", 15 * SEC),
 
   /**
-   * 番組表を集めに行く間隔。**この周期で「集め直すべき局」を選び直す。**
+   * 番組表を取得する間隔。**この周期で「取得し直す局」を選び直す。**
    *
    * チューナーが空いていれば空いているだけ並列に回すので、周期を短くしても
    * 取り合いにはならない
    */
   epgCollectInterval: num("EPG_COLLECT_INTERVAL", 30 * MIN),
-  /** 同じチャンネルを集め直すまでの間。番組表は当日ぶんが直前まで書き換わる */
+  /** 同じチャンネルを取得し直すまでの間。番組表は当日ぶんが直前まで書き換わる */
   epgChannelInterval: num("EPG_CHANNEL_INTERVAL", 6 * 60 * MIN),
   /**
-   * 集めに行った直後は、どれだけ薄く見えても行き直さない下限。EIT が 1 件も来ない
+   * 取得した直後は、どれだけ薄く見えても取得し直さない下限。EIT が 1 件も来ない
    * CS の局を 30 分ごとに選び続けないため。**使えなかった回は数えない**
    * (`collectChannel`)。経緯は docs/data.md
    */
@@ -233,7 +233,7 @@ export const config = {
    */
   epgSweepSettle: num("EPG_SWEEP_SETTLE", MIN),
   /**
-   * 番組表がこの先まで埋まっていない局は、周期を待たずに集め直す。
+   * 番組表がこの先まで埋まっていない局は、周期を待たずに取得し直す。
    *
    * スキャンの直後や初回起動では全部が空なので、ここで先に埋まる
    */
@@ -264,12 +264,12 @@ export const config = {
   reconcileInterval: num("RECONCILE_INTERVAL", 5 * MIN),
   /**
    * ディスク残量がこれを下回ったら知らせる (バイト)。**録画が全部失敗して初めて
-   * 気付く**のを防ぐ。録画 1 本は数百 MB〜数 GB なので、既定は数本ぶんの余裕がある 20GB。
+   * 気付く**のを防ぐ。録画 1 本は数百 MB〜数 GB なので、既定は数本ぶんの余裕がある 20 GB。
    * 照合と同じ周期で見る (disk.ts)。0 にすると監視しない
    */
   diskLowThreshold: num("DISK_LOW_THRESHOLD", 20 * 1024 * 1024 * 1024),
   /**
-   * チューナー(エージェント)に繋がらない状態がこれだけ続いたら知らせる。
+   * チューナー (エージェント) に繋がらない状態がこれだけ続いたら知らせる。
    * 一瞬の切れ (デプロイ・つなぎ直し) で鳴らさないための猶予 (agent-events.ts)
    */
   agentDownGrace: num("AGENT_DOWN_GRACE", 3 * MIN),

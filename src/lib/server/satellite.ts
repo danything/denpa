@@ -175,7 +175,7 @@ export function lineupFrom(
 const nameKey = (onid: number, tsid: number, sid: number) =>
   `${onid}:${tsid}:${sid}`;
 
-/** 前の控えの局名を引く鍵 (`lineupFrom` の `known`) */
+/** 前の控えの局名を引くキー (`lineupFrom` の `known`) */
 const serviceKeyOf = (networkId: number, serviceId: number) =>
   `${networkId}:${serviceId}`;
 
@@ -211,7 +211,7 @@ interface TableRead {
  * 名前が SDT でそろったら打ち切る。** そろわなくても `timeout` で打ち切る (名前は欠けたまま返す)
  *
  * `other` を渡すと、それに当てはまる NIT[other] がそろうまでも待つ。CS はこれでもう片方のネットワークの
- * 中継器を知る。NIT[actual] と NIT[other] は別々に流れてくるので、actual と局名だけで打ち切ると other を読み落とす
+ * 中継器が分かる。NIT[actual] と NIT[other] は別々に流れてくるので、actual と局名だけで打ち切ると other を読み落とす
  */
 export async function readTables(
   stream: ReadableStream<Uint8Array>,

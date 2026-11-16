@@ -221,7 +221,7 @@ test("映像の時刻が揺れても、続く PCM の間に隙間を作らない
   worker.pcm(1, 10.1);
   const firstStart = context.sources[0]!.starts[0]![0]!;
   context.currentTime = 50.01;
-  video.currentTime = 10.012; // 読んだときの 2ms の揺れ (飛んだのではない)
+  video.currentTime = 10.012; // 読んだときの 2 ms の揺れ (飛んだのではない)
   worker.pcm(1, 10.1 + 1024 / 48000);
   expect(context.sources[1]!.starts[0]![0]).toBeCloseTo(
     firstStart + 1024 / 48000,
@@ -417,7 +417,7 @@ test("映像が進んでいて時計だけずれたときは、組み直して�
   worker.pcm(1, 10.3);
   expect(context.sources.length).toBeGreaterThan(count);
 });
-test("AudioContext を 48kHz で作り、続いたコマは前のコマの終わりのサンプルにつなぐ", () => {
+test("AudioContext を 48 kHz で作り、続いたコマは前のコマの終わりのサンプルにつなぐ", () => {
   const { worker, context, audio } = setup();
   expect(context.sampleRate).toBe(48_000);
   audio.setMuted(false);

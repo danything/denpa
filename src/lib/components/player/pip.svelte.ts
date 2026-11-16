@@ -442,8 +442,8 @@ export function pictureInPicture(options: Options): Pip {
     else if (webkit(video)) {
       /*
        * Safari の API は断っても例外を出さないので、切り替わったかを見て通知を出す。
-       * **一度でも切り替わったかで見る**。1 秒の間に閉じられた・画面を離れたものまで
-       * 「切り替わらなかった」と言っていた
+       * **一度でも切り替わったかで見る**。1 秒後の状態だけで見ると、その間に閉じられた・画面を離れたものまで
+       * 「切り替わらなかった」になる
        */
       const target = video;
       let reached = false;

@@ -1,11 +1,9 @@
 /**
  * **映した 1 枚ごとに呼ぶ。** ライブと観る画面で同じもの。
  *
- * どちらも「いま画面に出ているフレームに合わせて何かする」ために要ります。
- * ライブは字幕の貼り直しと映像の遅れの実測、観る画面は字幕と CM の跨ぎと映像の遅れの実測。
- * `timeupdate` はブラウザが 250ms ごとにしか出さないので、**そこに載せると
- * 最大 250ms・平均 125ms 遅れます** (実機では字幕が遅れて見え、CM は
- * 飛ばすまでに 7 コマぶん映っていた)。
+ * ライブは字幕の貼り直しと映像の遅れの実測、観る画面は字幕と CM の跨ぎと映像の遅れの実測を、
+ * いま画面に出ているフレームに合わせる。`timeupdate` はブラウザが 250ms ごとにしか出さないので、
+ * **そこに載せると最大 250ms・平均 125ms 遅れる** (実機では字幕が遅れて見え、CM は飛ばすまでに 7 コマぶん映った)。
  */
 
 /** 映した 1 枚のこと。`requestVideoFrameCallback` を持つブラウザでだけ分かる */
@@ -23,12 +21,11 @@ type WithCallback = HTMLVideoElement & {
 /**
  * `video` が 1 枚映すたびに `run` を呼ぶ。**`run` が false を返したら終い。**
  *
- * `requestVideoFrameCallback` を持たないブラウザでは画面の書き換えごとに
- * 代えます (60Hz なら 16ms)。そのときは `frame` が `undefined`。**映したフレームの
- * 時刻が分からない**ので、呼ぶ側はそのつもりで受けること (`currentTime` は
+ * `requestVideoFrameCallback` を持たないブラウザでは、代わりに画面の書き換えごとに呼ぶ (60Hz なら 16ms)。
+ * そのときは `frame` が `undefined` で、**映したフレームの時刻が分からない** (`currentTime` は
  * 位置を代入した時点で飛んだ先を返すので、着いたかどうかの判断には使えない)。
  *
- * **止めて見ている間は来ません** (`requestVideoFrameCallback` の決まり)。
+ * **止めて見ている間は呼ばない** (`requestVideoFrameCallback` の決まり)。
  */
 export function eachFrame(
   video: HTMLVideoElement,

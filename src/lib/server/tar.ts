@@ -17,7 +17,7 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 export interface TarSource {
   /** tar の中の名前 (`/` 区切り) */
   name: string;
-  /** 大きさ (バイト)。流れてきた量と合わなければ止める (書き出しの途中で変わったもの) */
+  /** 大きさ (バイト)。届いた量と合わなければ止める (書き出しの途中で変わったもの) */
   size: number;
   body: () => ReadableStream<Uint8Array<ArrayBuffer>>;
 }
@@ -115,7 +115,7 @@ export interface TarEntry {
   size: number;
 }
 
-/** 読んだ中身の書き込み先。`write` は流れてきた順に呼ぶ */
+/** 読んだ中身の書き込み先。`write` は届いた順に呼ぶ */
 interface TarSink {
   write(chunk: Uint8Array): void;
   close(): void;
@@ -147,7 +147,7 @@ class Reader {
     return true;
   }
 
-  /** ちょうど `n` バイト。何も残っていなければ null、途中で尽きたら投げる */
+  /** ちょうど `n` バイト。何も残っていなければ null、途中で尽きたら例外にする */
   async exact(n: number): Promise<Uint8Array | null> {
     while (this.left < n) {
       if (await this.fill()) continue;
@@ -216,7 +216,7 @@ function parseHeader(block: Uint8Array): TarEntry {
 
 /**
  * tar を読み、エントリごとに `accept` に渡す。`accept` は書き込み先 (読み捨てるなら null) を返すか、
- * 名前が駄目なら投げる。上限 (`limits`) を超えたら、書き込む前に止める
+ * 名前が駄目なら例外にする。上限 (`limits`) を超えたら、書き込む前に止める
  */
 export async function readTar(
   stream: ReadableStream<Uint8Array>,

@@ -284,7 +284,7 @@ describe("DRCS・PNG", () => {
     const mask = alphaPng(2, 1, Uint8Array.of(0, 255));
     const fixed = applyClut(mask, [[1, 2, 3, 4]]);
     expect(fixed?.width).toBe(2);
-    // 灰 + 透明度の PNG (色の型 4) には手を入れない
+    // グレー + 透明度の PNG (色の型 4) には手を入れない
     expect(fixed?.data.length).toBe(mask.length);
   });
 });
@@ -312,7 +312,7 @@ describe("押さえ直し", () => {
 });
 
 describe("PNG・DRCS・深い入れ子", () => {
-  /** PNG の塊の名前の並び */
+  /** PNG のチャンクの名前の並び */
   const chunks = (png: Uint8Array): string[] => {
     const names: string[] = [];
     const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
@@ -330,7 +330,7 @@ describe("PNG・DRCS・深い入れ子", () => {
     const idat = png.subarray(idatAt + 8, idatAt + 8 + view.getUint32(idatAt));
     const raw = inflateSync(idat);
     expect(raw.length).toBe(40 * (1 + 40 * 2));
-    // 2 行目 (y=1) の x=1 の透明度: 行の先頭 81 + フィルタ 1 + 灰と透明度 2 × 1 + 灰 1
+    // 2 行目 (y=1) の x=1 の透明度: 行の先頭 81 + フィルタ 1 + グレーと透明度 2 × 1 + グレー 1
     expect(raw[81 + 1 + 2 + 1]).toBe(alpha[41]);
   });
 

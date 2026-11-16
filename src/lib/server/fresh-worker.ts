@@ -1,8 +1,8 @@
 /**
  * `service-worker.js` の応答に `Cache-Control: no-cache` を付ける。
  *
- * adapter-bun は名前に指紋の無い静的ファイルに `Cache-Control` を付けない。前段 (Cloudflare など) が
- * `.js` として持ち続けると、組み直しても古いサービスワーカーを配り続け、端末は「新しいものは無い」と
+ * adapter-bun は名前にハッシュの無い静的ファイルに `Cache-Control` を付けない。前段 (Cloudflare など) が
+ * `.js` として持ち続けると、ビルドし直しても古いサービスワーカーを配り続け、端末は「新しいものは無い」と
  * 判断する。静的ファイルは adapter が `Bun.serve` の `routes` で渡す (`fetch` を通らない) ので、
  * `/service-worker.js` の route だけを包む (`server.js`)。
  *

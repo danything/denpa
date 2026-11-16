@@ -97,10 +97,7 @@ export interface BrowserHost {
   log(message: string): void;
   /** Hybridcast のアプリを開けるか (双方向がオンで、データ放送を開いていて、AIT にアプリがある)。無ければ開けない */
   canStartApp?(): boolean;
-  /**
-   * `getIRDID(type)` の答え。渡せないなら null。種別 5 に B-CAS カードの番号を、48 ビットを 16 進 12 桁にして返す
-   * (規格の本文では確かめていない。ほかの実装が実際の放送で確かめた形。文書は 10 進のままだと数として読めない)
-   */
+  /** `getIRDID(type)` の答え。渡せないなら null (返す形式は [ird.ts](ird.ts) の `irdIdOf`) */
   irdId?(type: number): string | null;
   /**
    * Hybridcast のアプリを開く (startAITControlledApp)。`hint` は数の引数 (どのアプリかの手がかり。

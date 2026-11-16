@@ -411,7 +411,7 @@ describe("映像の中の動き", () => {
     });
   };
 
-  test("真ん中の動きは、縁を延ばした光には入らない (4x3 の格子に平均していた頃より揺れない)", () => {
+  test("真ん中の動きは、縁を延ばした光には入らない (4x3 の格子に平均するより揺れない)", () => {
     const edges = variance(
       glow((n) => edgeExtend(frame(n, true)), GLANCE.width, GLANCE.height),
     );
@@ -426,7 +426,7 @@ describe("映像の中の動き", () => {
     expect(edges).toBeLessThan(grid / 3);
   });
 
-  test("縁を小さなものが横切っても、外周の 1 マスから取っていた頃の半分より揺れない", () => {
+  test("縁を小さなものが横切っても、外周の 1 マスから取るときの半分より揺れない", () => {
     // 1 マスの点が上の端を横切る
     const dot = (n: number) => {
       const data = new Uint8ClampedArray(GLANCE.width * GLANCE.height * 4);

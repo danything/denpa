@@ -39,7 +39,7 @@ function average(
  */
 describe("デコードを始める間合い (模擬)", () => {
   test.each([5, 8, 10, 13])(
-    "60Hz で 1 枚 %dms なら、フィールドはずれず、コマも捨てない",
+    "60 Hz で 1 枚 %d ms なら、フィールドはずれず、コマも捨てない",
     (decodeMs) => {
       const result = average(GATES.change, 60, decodeMs);
       expect(result.off).toBe(0);
@@ -54,7 +54,7 @@ describe("デコードを始める間合い (模擬)", () => {
     [144, 10],
     [90, 13],
   ])(
-    "%dHz で 1 枚 %dms なら、前の作り (切り替わりの間隔の前半だけ) の 1/4 より少ない",
+    "%d Hz で 1 枚 %d ms なら、前の作り (切り替わりの間隔の前半だけ) の 1/4 より少ない",
     (rate, decodeMs) => {
       const before = average(GATES.half, rate, decodeMs);
       const after = average(GATES.change, rate, decodeMs);
@@ -72,7 +72,7 @@ describe("デコードを始める間合い (模擬)", () => {
     [120, 0.45],
     [144, 0.45],
   ])(
-    "%dHz で 1 枚 5〜16ms (揺れ ±%p) のどれも、前の作りより目立って増えない",
+    "%d Hz で 1 枚 5〜16 ms (揺れ ±%p) のどれも、前の作りより目立って増えない",
     (rate, spread) => {
       for (const decodeMs of [5, 8, 10, 13, 16]) {
         const before = average(GATES.half, rate, decodeMs, spread);

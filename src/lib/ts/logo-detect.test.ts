@@ -12,7 +12,6 @@ import {
   framer,
   level,
   type LogoModel,
-  logoSpans,
   makeTemplate,
   mergeModel,
   readLogo,
@@ -218,7 +217,7 @@ describe("区間にする", () => {
       [450, 0, 80],
       [600, 0.8, 80],
     ]);
-    const spans = logoSpans(readings, FPS);
+    const spans = readLogo(readings, FPS).spans;
     expect(spans.map((s) => [s.start, s.end])).toEqual([
       [0, 299],
       [750, 1349],
@@ -234,7 +233,7 @@ describe("区間にする", () => {
       [450, 0, 80],
       [600, 0.8, 80],
     ]);
-    const spans = logoSpans(readings, FPS);
+    const spans = readLogo(readings, FPS).spans;
     expect(spans.map((s) => [s.start, s.end])).toEqual([
       [0, 1499],
       [1950, 2549],
@@ -265,7 +264,7 @@ describe("区間にする", () => {
     // CM (のっぺりした後ろで見えない = 無い)
     push(450, 0, 0);
     push(300, 0.8, 0);
-    const spans = logoSpans(
+    const { spans } = readLogo(
       {
         scores: Float32Array.from(scores),
         levels: Uint8Array.from(levels),
@@ -305,7 +304,7 @@ describe("区間にする", () => {
       [20, 0.5, 80],
       [400, 0, 80],
     ]);
-    const spans = logoSpans(readings, FPS);
+    const spans = readLogo(readings, FPS).spans;
     expect(spans.map((s) => [s.start, s.end])).toEqual([[0, 1202]]);
   });
 });

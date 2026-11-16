@@ -24,7 +24,7 @@ describe("出し入れの本文", () => {
     });
   });
 
-  test("空・知らない名前・真偽でない値・オブジェクトでないものは読まない", () => {
+  test("空・重ねに無い名前・真偽でない値・オブジェクトでないものは読まない", () => {
     expect(parseLayerPatch({})).toBeNull();
     expect(parseLayerPatch({ captions: true, video: false })).toBeNull();
     expect(parseLayerPatch({ captions: "false" })).toBeNull();

@@ -9,7 +9,7 @@
  * - FRAM: 重ね方 (1・2 は前のコマに重ねる、3・4 は消してから描く) と、コマの間隔 (刻み)
  * - DEFI: コマを置く場所
  * - IHDR〜IEND: コマの PNG (パレットは持たない。色は文書の CLUT)
- * - TERM: くり返しの回数 (0x7fffffff は限り無し)
+ * - TERM: くり返しの回数 (0x7fffffff は無限)
  */
 
 import { ascii, concatBytes } from "@danything/arib/bytes";
@@ -31,7 +31,7 @@ interface Mng {
   width: number;
   height: number;
   frames: MngFrame[];
-  /** くり返しの回数 (TERM が無ければ 1。限り無しは Infinity) */
+  /** くり返しの回数 (TERM が無ければ 1。無限は Infinity) */
   iterations: number;
 }
 
@@ -121,7 +121,7 @@ export function parseMng(data: Uint8Array): Mng | null {
         }
         break;
       default:
-        // コマの中の塊 (IDAT・gAMA など) はそのまま。パレットは CLUT で入れ直す
+        // コマの中のチャンク (IDAT・gAMA など) はそのまま。パレットは CLUT で入れ直す
         if (png !== null && name !== "PLTE" && name !== "tRNS") png.push(whole);
     }
     at = end;

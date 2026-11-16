@@ -75,7 +75,7 @@ interface ThumbnailPlace {
  * どうせ縦 270 まで縮めるので 540 行あれば足り、インタレ解除 (bwdif) より軽い (実測で約 0.7 秒差)。
  * 縦が半分になるぶん画素の縦横比を半分にし、**縦横比を直して縮める** (地上波 HD は 1440x1080 の SAR 4:3)。
  * jpg の SAR は画面が使わない。
- * 縮めてから選ぶのは、`thumbnail` が候補を全部持つため (1080p のままだと候補 450 コマで 1.4GB ほど使う)。
+ * 縮めてから選ぶのは、`thumbnail` が候補を全部持つため (1080p のままだと候補 450 コマで 1.4 GB ほど使う)。
  * 選ぶ基準 (ヒストグラム) は縮めても変わらない。
  *
  * **4K の局 (`hlg`) は、縮めたあとで HLG を SDR に直す** (`uhd.HLG_TO_SDR`)。直さないと色の薄い画像になる
@@ -169,7 +169,7 @@ export async function writeThumbnail(
           videoPath,
           thumbnail,
           thumbnailPlace(durationSec),
-          // 元の TS を読むときは、ほかの元の TS を読む ffmpeg と同じ探り (`TS_PROBE`)
+          // 元の TS を読むときは、ほかの元の TS を読む ffmpeg と同じ解析の設定 (`TS_PROBE`)
           videoPath.endsWith(".mkv") ? [] : TS_PROBE,
           hlg,
         )

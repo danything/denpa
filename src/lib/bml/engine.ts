@@ -10,7 +10,7 @@
  * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、置くのは呼ぶ側
  * - 文書は自前の XML パーサ → 中身の木 → Shadow DOM に置いた絶対配置の div ([render.ts](render.ts))
  * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かす
- * - **ページを占めるのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
+ * - **ページを占めるのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5 ms まで** ([budget.ts](budget.ts))。
  *   スクリプト・描き直し・Promise の続きは全部その下で動かし、休みなく回り続ける文書は止める
  *
  * 時計は `clock` (録画は再生位置から放送の時刻を出す)。無ければ TOT + 経過時間 (TOT が来なくなったら、30 秒たった所で止める)。
@@ -1174,7 +1174,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const { window, ratio } = this.budget.limits;
     this.halted = true;
     this.log(
-      `文書が休みなく動き続けるので止めました (${window}ms のうち ${Math.round(ratio * 100)}% を超えて動いた): ${this.current ?? ""}`,
+      `文書が休みなく動き続けるので止めました (${window} ms のうち ${Math.round(ratio * 100)}% を超えて動いた): ${this.current ?? ""}`,
     );
     this.exit();
   }

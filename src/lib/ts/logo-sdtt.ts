@@ -8,7 +8,7 @@
  * なのでここで読むのは「いま共通データのダウンロードが出ているか」だけ (`server/logo-period.ts`)。
  *
  * 書式は ARIB STD-B21 12.2.1 / TR-B15。PID 0x0023、table_id 0xC3、table_id_extension が
- * maker_id (8bit) + model_id (8bit)。中身ごとに download_content_descriptor (0xC9) が付き、
+ * maker_id (8 ビット) + model_id (8 ビット)。中身ごとに download_content_descriptor (0xC9) が付き、
  * その component_tag で運ぶ ES が分かる。
  */
 

@@ -9,7 +9,7 @@
  *   外から止められたのと見分けられないので戻さない
  * - 音を消している・終わった・中身がまだ無い・ほかの音に割り込まれている (`audioSession`) ときも戻さない
  */
-export interface NativeVideo extends EventTarget {
+interface NativeVideo extends EventTarget {
   readonly paused: boolean;
   readonly ended: boolean;
   readonly muted: boolean;
@@ -17,7 +17,7 @@ export interface NativeVideo extends EventTarget {
   play(): Promise<void>;
 }
 
-export interface MediaActions {
+interface MediaActions {
   setActionHandler(
     action: "play" | "pause",
     handler: (() => void) | null,

@@ -1,7 +1,7 @@
 /**
  * **バグ報告に貼る前に伏せるもの** (設定の「その他」→「ログ」の「Issue にする」)。
  *
- * 伏せるのは、貼ったその人やその家に辿り着けるものと、盗まれると使われるもの:
+ * 伏せるのは、貼ったその人やその家に辿り着けるものと、盗まれると使われるもの。
  * B-CAS カードの番号・アクセストークン・パスワード・秘密の値 (OIDC のクライアントシークレットなど)・
  * Webhook の URL・Cookie と Authorization・IP アドレスとホスト名 (家の LAN の作り)・メールアドレス・
  * ホームフォルダのユーザー名。
@@ -27,7 +27,7 @@ export const MASK = {
 
 /**
  * Webhook の URL。Discord・Slack と、パスに `webhook`・`hook` を含むもの。URL ごと伏せる
- * (パスそのものが鍵になっている)
+ * (パスそのものが秘密の値になっている)
  */
 const WEBHOOK = /\bhttps?:\/\/[^\s"'<>]*?hooks?\b[^\s"'<>]*/gi;
 
@@ -47,12 +47,12 @@ const DENPA_TOKEN = /\bdenpa_[A-Za-z0-9_-]{8,}/g;
 
 /**
  * `password=…`・`"client_secret": "…"`・`OIDC_CLIENT_SECRET=…` の値。
- * 名前に secret・token・password などを含む鍵を、値だけ伏せる
+ * 名前に secret・token・password などを含むキーの値だけを伏せる
  */
 const SECRET_PAIR =
   /\b([\w.-]*(?:secret|token|passw(?:or)?d|passwd|pwd|api[_-]?key|private[_-]?key|credential|session[_-]?id)[\w.-]*)(["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s"',;&]+)/gi;
 
-/** URL の問い合わせのうち、それ自体が鍵になるもの (OIDC の `code`・`state` など) */
+/** URL の問い合わせのうち、それ自体が秘密の値になるもの (OIDC の `code`・`state` など) */
 const SECRET_QUERY =
   /([?&](?:code|state|nonce|token|access_token|id_token|refresh_token|key|sig|signature)=)[^&\s"'#]+/gi;
 

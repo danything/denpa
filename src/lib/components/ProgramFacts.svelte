@@ -165,7 +165,7 @@
   {#if note.tone === "warning"}
     <!-- 録れてはいるが欠けがある録画。一覧の行と同じ注意の色で、失敗の赤にしない (`types.ts` の `DetailNote`) -->
     <div class="block" data-testid="detail-warning">
-      <div class="warn small head">{note.title}</div>
+      <div class="text-warn small head">{note.title}</div>
       <div class="tiny muted">{note.text}</div>
     </div>
   {:else}
@@ -219,9 +219,6 @@
   }
   .head {
     font-weight: var(--dp-weight);
-  }
-  .warn {
-    color: var(--dp-warn-text);
   }
   .pre {
     white-space: pre-wrap;

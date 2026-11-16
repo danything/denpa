@@ -60,11 +60,12 @@ const DEFAULT_PORT = 4510;
 
 /**
  * 入力欄の `host:port` を読む。ポートを省けば 4510、IPv6 は `[::1]:4510`。
- * `tcp://` のようなスキームは付けない。読めなければ理由を投げる
+ * `tcp://` のようなスキームは付けない。読めなければ理由を付けた例外にする
  */
 export function parseTarget(input: string): EdcbTarget {
   const text = input.trim();
-  const usage = "宛先は host:port の形で入れてください (例: 192.168.1.10:4510)";
+  const usage =
+    "宛先は host:port の形式で入れてください (例: 192.168.1.10:4510)";
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) throw new Error(usage);
   const match =
     /^\[([0-9a-fA-F:.]+)\](?::(\d+))?$/.exec(text) ??

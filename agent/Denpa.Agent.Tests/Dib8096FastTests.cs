@@ -126,7 +126,7 @@ public class Dib8096FastTests
         time.Sleeps.Clear();
         dib.Tune(Uhf27);
         await Assert.That(time.Sleeps).Contains(Dib8096.FastPollMs);
-        // 段 5・7 の時間切れに関わる間は 10ms のまま (偽物ではロックがすぐ立つので、段 4 の前の 10ms が残る)
+        // 段 5・7 の時間切れに関わる間は 10 ms のまま (偽物ではロックがすぐ立つので、段 4 の前の 10 ms が残る)
         await Assert.That(time.Sleeps).Contains(10);
     }
 }
