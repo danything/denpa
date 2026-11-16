@@ -2374,7 +2374,12 @@
     // 映像は出せていない。字幕のボタンは出せるように取る
     askCaptions();
     const code = video.error?.code ?? 0;
-    const why = failedWith(failureText(video.error));
+    // その場で流しているなら、開いた直後か飛んだ・切り替えたあとかと、何秒の位置かを添える
+    const why = failedWith(
+      [failureText(video.error), remux?.origin() ?? ""]
+        .filter((part) => part !== "")
+        .join("。"),
+    );
     if (
       remux === null &&
       picked?.way === "file" &&

@@ -19,6 +19,7 @@ import {
   type PlaybackInfo,
   STREAM_RETRIES,
   streamForAudio,
+  streamOrigin,
   StreamRetry,
   type StreamState,
   switchPoint,
@@ -439,6 +440,15 @@ describe("再生できなかった理由の 1 行 (failureText・pickedText・of
     expect(
       failureText(null, new DOMException("not supported", "NotSupportedError")),
     ).toBe("NotSupportedError: not supported");
+  });
+
+  test("その場で流すストリームは、最後にリクエストしたきっかけと位置、止まった位置を添える (streamOrigin)", () => {
+    expect(streamOrigin("open", 1234, 1240.46)).toBe(
+      "開いたときに 1234.0 秒から読み、1240.5 秒で止まりました",
+    );
+    expect(streamOrigin("switch", 30.25, 31)).toBe(
+      "段を切り替えたときに 30.3 秒から読み、31.0 秒で止まりました",
+    );
   });
 
   test("何を再生しようとしたかを、コーデック・出し方・codecs で書く", () => {

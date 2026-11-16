@@ -474,6 +474,31 @@ export function failureText(
   return error === undefined ? "" : String(error);
 }
 
+/** その場で流すストリームを、何をきっかけにリクエストしたか (`remux-player.ts`。`streamOrigin` が幕に添える) */
+export type StreamCause =
+  "open" | "seek" | "stall" | "retry" | "audio" | "switch";
+
+const STREAM_CAUSE: Record<StreamCause, string> = {
+  open: "開いたとき",
+  seek: "飛んだとき",
+  stall: "詰まって読み直したとき",
+  retry: "繋ぎ直したとき",
+  audio: "音声を切り替えたとき",
+  switch: "段を切り替えたとき",
+};
+
+/**
+ * **その場で流すストリームが止まったときに、幕の 1 行へ添える文** (`failureText` の後ろ)。最後にリクエストしたきっかけと
+ * その位置 (`from`)、止まった再生位置 (`at`)。開いた直後か、飛んだ・切り替えたあとかを、報告の画面写真から読み分けるため
+ */
+export function streamOrigin(
+  cause: StreamCause,
+  from: number,
+  at: number,
+): string {
+  return `${STREAM_CAUSE[cause]}に ${from.toFixed(1)} 秒から読み、${at.toFixed(1)} 秒で止まりました`;
+}
+
 /** 幕に添えるコーデックの名前。エンコードするものは設定と同じ (`#lib/hw.ts` の `CODEC_LABEL`) */
 const PLAY_CODEC_LABEL: Record<PlayCodec, string> = {
   ...CODEC_LABEL,
