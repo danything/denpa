@@ -18,6 +18,16 @@ import { defineConfig } from "@playwright/test";
  */
 const WORKERS = process.env.CI ? 3 : Math.max(2, Math.min(6, cpus().length));
 
+/**
+ * 使うブラウザ。CI は Chromium だけで流す。手元で Firefox・WebKit でも試すときは `E2E_BROWSER=firefox` のように渡す
+ * (先に `bunx playwright install --with-deps firefox webkit`)。`--browser` で替えると、下の Chromium だけの起動引数が
+ * WebKit に渡って起動できない
+ */
+const BROWSER =
+  process.env.E2E_BROWSER === "firefox" || process.env.E2E_BROWSER === "webkit"
+    ? process.env.E2E_BROWSER
+    : "chromium";
+
 export default defineConfig({
   testDir: "tests/e2e",
   // 並ぶのはファイル単位。中は順番 (前のテストが作った予約や録画を次が当てにしている)
@@ -53,8 +63,9 @@ export default defineConfig({
      * E2E のイメージがそう) と日本語の番組名を表せず、`<a download>` の名前を捨てて
      * 「download」にする (切り抜きのテストが落ちる)。CI のランナーは `C.UTF-8` なので通っていた
      */
+    browserName: BROWSER,
     launchOptions: {
-      args: ["--disable-gpu"],
+      args: BROWSER === "chromium" ? ["--disable-gpu"] : [],
       env: { ...process.env, LC_ALL: "C.UTF-8" },
     },
   },

@@ -6,7 +6,7 @@ import type { APIRequestContext, Page } from "@playwright/test";
 import { expect, fakeDataBroadcast, recordOne } from "./helpers";
 
 /**
- * 録画を観る画面のテスト (22-watch・22-watch-clips・22-watch-layout・23-watch-data・23-watch-data-receive) の道具
+ * 録画を観る画面のテスト (22-watch・22-watch-clips・22-watch-layout・23-watch-data・23-watch-data-receive・39-watch-adapt-relay・39-watch-resume) の道具
  */
 
 /** 使い回す録画を返す関数。初めて呼んだときに録る */

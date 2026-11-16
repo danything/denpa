@@ -118,6 +118,10 @@ CI では 10 組に割って別のランナーに出し、3 ワーカーの 8 �
 そう) では 3 で固定**です (4 つ並べるとチューナー待ちで落ちる。実測は `playwright.config.ts` の冒頭)。
 混み具合でごく稀にブラウザ側が落ちるので、1 回だけやり直します (`retries: 1`)。
 
+ブラウザは Chromium です。手元で Firefox・WebKit でも流すときは、イメージの中で `bunx playwright install --with-deps firefox webkit` を
+済ませてから `E2E_BROWSER=firefox` (か `webkit`) を付けます (`playwright.config.ts`)。`--browser` で替えると、Chromium だけの起動引数が
+WebKit に渡って起動できません。CDP で回線を絞るテストは Chromium だけで流します
+
 ## CI
 
 **PR の CI は、触ったファイルに関係するジョブだけ中身を回します。** main への push では全部回します。
