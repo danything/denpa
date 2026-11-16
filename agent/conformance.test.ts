@@ -749,19 +749,19 @@ describe("チューナー", () => {
    * 「録り終えた」と読んではいけない。この約束なら .NET でも成り立つ
    */
   test("空きが無ければ取り合いで後に回る相手に譲らせる。譲った側はそこで読めなくなる", async () => {
-    const weak = await open("type=GR&channel=T16&use=logo&priority=1");
-    await weak.reader?.read();
-    const ended = drain(weak.reader as ReadableStreamDefaultReader);
+    const low = await open("type=GR&channel=T16&use=logo&priority=1");
+    await low.reader?.read();
+    const ended = drain(low.reader as ReadableStreamDefaultReader);
 
-    const strong = await open("type=GR&channel=T21&use=rec%201&priority=10");
-    await strong.reader?.read();
+    const high = await open("type=GR&channel=T21&use=rec%201&priority=10");
+    await high.reader?.read();
     expect((await tuners())[0].channel).toEqual({ type: "GR", channel: "T21" });
 
     // 読めなくなること自体が合図。理由が付いていればなお良い
     const result = await Promise.race([ended, sleep(5000).then(() => null)]);
     expect(result).not.toBeNull();
 
-    strong.close();
+    high.close();
   });
 
   /**
@@ -787,13 +787,13 @@ describe("チューナー", () => {
   });
 
   test("取り合いで自分より先になる相手しかいなければ 409 で断る", async () => {
-    const strong = await open("type=GR&channel=T16&use=rec%201&priority=10");
-    await strong.reader?.read();
+    const high = await open("type=GR&channel=T16&use=rec%201&priority=10");
+    await high.reader?.read();
 
-    const weak = await open("type=GR&channel=T21&use=epg&priority=3");
-    expect(weak.status).toBe(409);
+    const low = await open("type=GR&channel=T21&use=epg&priority=3");
+    expect(low.status).toBe(409);
 
-    strong.close();
+    high.close();
   });
 
   test("無効にしたチューナーは使わない", async () => {
