@@ -67,7 +67,30 @@ public class CardChoiceTests
         await Assert.That(shown.Readers.Count).IsEqualTo(1);
     }
 
+    /// <summary>**調べるコマンド (<c>--tune --decode</c>・<c>--decode-file</c>) も cards.json を読み、「使わない」にしたリーダーを探す候補から外す** (Probe.LoadCardChoice)</summary>
     [Test]
+    [NotInParallel(nameof(CardChoice))]
+    public async Task 調べるコマンドも使わないリーダーを外す()
+    {
+        var config = TunerSpecTests.Fresh();
+        try
+        {
+            File.WriteAllText(config.CardsFile, """{"disabled":["Gemplus (usb 3-11)"]}""");
+            Probe.LoadCardChoice(config);
+            await Assert.That(CardChoice.Disabled.Contains("Gemplus (usb 3-11)")).IsTrue();
+            IReadOnlyList<CardLinkCandidate> found = [Never("Gemplus (usb 3-11)"), Never("SCM SCR3310 (usb 1-2)")];
+            var left = CardLinks.Without(found, CardChoice.Disabled);
+            await Assert.That(left.Select(candidate => candidate.Name).ToArray()).IsEquivalentTo(new[] { "SCM SCR3310 (usb 1-2)" });
+        }
+        finally
+        {
+            CardChoice.Set([]);
+            Directory.Delete(config.Dir, recursive: true);
+        }
+    }
+
+    [Test]
+    [NotInParallel(nameof(CardChoice))]
     public async Task 挿さっていないリーダーの使わない設定は保存し直しても残す()
     {
         var dir = Directory.CreateTempSubdirectory("denpa-cards-");

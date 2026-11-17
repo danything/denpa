@@ -93,8 +93,7 @@ public static class Probe
         }
 
         if (CardHops() is not { } hops) return 2;
-        // 画面で「使わない」にしたカードリーダーは、常駐のときと同じく使わない (cards.json。CardChoice.cs)
-        CardChoice.Load(Config.FromEnvironment().CardsFile);
+        LoadCardChoice(Config.FromEnvironment());
         Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"), hops);
         var b25 = new Descrambler(Keys.Source);
         using var input = File.OpenRead(source);
@@ -242,8 +241,8 @@ public static class Probe
         var cardAt = Array.IndexOf(args, "--card-url");
         // 鍵を受け取る接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
         if (CardHops() is not { } hops) return 2;
-        // 画面で「使わない」にしたカードリーダーは、常駐のときと同じく使わない (cards.json。CardChoice.cs)。機材を名指ししたときのその機材のリーダーは別 (KeysFor)
-        CardChoice.Load(Config.FromEnvironment().CardsFile);
+        // 機材を名指ししたときのその機材のリーダーは、「使わない」でも使う (KeysFor)
+        LoadCardChoice(Config.FromEnvironment());
         Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : Environment.GetEnvironmentVariable("CARD_URL"), hops);
 
         var secondsAt = Array.IndexOf(args, "--seconds");
@@ -287,6 +286,12 @@ public static class Probe
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
         return TuneChannels(tuner, channels, options, source, seconds, Console.Out, Console.Error, null).Failed ? 1 : 0;
     }
+
+    /// <summary>
+    /// 画面で「使わない」にしたカードリーダーを読む (cards.json。CardChoice.cs)。<c>--tune</c> と <c>--decode-file</c> が、鍵の出どころを決める前に呼ぶ。
+    /// 読んだあとは常駐のときと同じく、カードリーダーを探すとき (<see cref="CardLinks.Find"/>) に外れる
+    /// </summary>
+    internal static void LoadCardChoice(Config config) => CardChoice.Load(config.CardsFile);
 
     /// <summary>その機材の鍵の出どころ。PIX-DT295 と IT930x の機材は、その機材のカードリーダーだけ (試験でほかのリーダーに触らない)。--card-url があればそちら</summary>
     private static IKeySource KeysFor(string device, bool decode, bool cardUrl) =>
