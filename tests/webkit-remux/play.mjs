@@ -687,6 +687,8 @@ const server = createServer((request, response) => {
       "Content-Type": "video/mp4",
       "Content-Length": statSync(file).size,
     });
+    // make.ts が LIMIT で切った fMP4 も、ここで応答を終える。remux-player は endOfStream を呼び、尺がそこまでになるので、
+    // Chrome は切ったところより先へ飛べない (player-seek で 85 秒から先が止まる)。Safari は飛べる
     createReadStream(file, { highWaterMark: 64 * 1024 }).pipe(response);
     return;
   }
