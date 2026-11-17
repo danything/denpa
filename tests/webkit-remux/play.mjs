@@ -440,7 +440,7 @@ async function inPage({ source, codecs, steps, watch, first, order, nudge }) {
  * ページの中で回す。観る画面と同じく remux-player.ts で流す (`player-open`・`player-seek`)。
  * 観る画面と同じく、作ってすぐ play() を呼ぶ。player-seek は先頭から `first` ミリ秒流してから飛ぶ
  */
-async function inPlayer({ codecs, steps, files, watch, first, kind }) {
+async function inPlayer({ codecs, steps, files, watch, first, kind, rechunk }) {
   const state = {
     stage: "start",
     events: [],
@@ -488,18 +488,28 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
   // 届いたバイト数を数える (中身は変えない)
   const realFetch = window.fetch.bind(window);
   let received = 0;
+  let largest = 0;
   window.fetch = async (...args) => {
     state.events.push(`fetch ${String(args[0]).split("/").at(-1)}`);
     const response = await realFetch(...args);
     const reader = response.body.getReader();
+    // rechunk: 256 KB ずつに分けて渡す (大きな塊で止まる件と分けて見るため)
+    let rest = new Uint8Array(0);
     const body = new ReadableStream({
       async pull(controller) {
-        const { done, value } = await reader.read();
-        if (done) controller.close();
-        else {
-          received += value.length;
-          controller.enqueue(value);
+        if (rest.length === 0) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          largest = Math.max(largest, value.length);
+          rest = value;
         }
+        const part = rechunk ? rest.subarray(0, 256 * 1024) : rest;
+        rest = rest.subarray(part.length);
+        received += part.length;
+        controller.enqueue(part.slice());
       },
       cancel: (reason) => reader.cancel(reason),
     });
@@ -633,6 +643,7 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
     startupMs: startup === null ? null : Math.round(startup),
     origin: player.origin(),
     received,
+    largest,
     streaming: made?.streaming ?? null,
     msState: made?.readyState ?? null,
     end,
@@ -761,6 +772,7 @@ for (const c of cases) {
         .run(c.kind.startsWith("player") ? inPlayer : inPage, {
           ...c,
           nudge: process.env.PLAY_NUDGE === "1",
+          rechunk: process.env.PLAY_RECHUNK === "1",
           watch: WATCH,
           first: FIRST,
         })

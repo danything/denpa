@@ -51,6 +51,12 @@ const SLACK = 15;
 /** 受け取りの速さをこれだけ測れていなければ、先を多めに溜めて測る (ms)。`adapt.ts` の上げるまでの待ちと同じ */
 const PROBE_EVERY = UP_WAIT_WATCH;
 /** 開く位置を入れたあと、流しているのにこれだけ進まなければ入れ直す (ms。`watchStart`) */
+/**
+ * 1 回に足す上限 (バイト)。読むのを止めている間にブラウザが溜めたぶんは 1 回の読み出しでまとめて返る (`aheadLimit`)。
+ * 空の SourceBuffer に溜められる量を超える塊は、後ろを捨てても足せず (`QuotaExceededError`)、観て減るのを待ったまま止まる
+ * (手元から速く届くと、Safari は 30 MB を超える塊を返した。`.github/workflows/webkit-remux.yml`。#2884)
+ */
+const APPEND_MOST = 1024 * 1024;
 const STUCK_AFTER = 1500;
 const STUCK_EVERY = 250;
 /** `HTMLMediaElement.HAVE_FUTURE_DATA` (テストの偽物にも効くように数で持つ) */
@@ -375,7 +381,9 @@ export function remuxPlayer(
       if (mine !== run) return;
       if (done) break;
       meter.add(value.byteLength, asked, performance.now());
-      await append(value, mine);
+      // 大きな塊は分けて足す (`APPEND_MOST`)
+      for (let at = 0; at < value.length && mine === run; at += APPEND_MOST)
+        await append(value.subarray(at, at + APPEND_MOST), mine);
       place();
       retry.flowing();
       // 後ろを捨てるのは足したついでに。捨てる長さが溜まってから (毎回は削らない)

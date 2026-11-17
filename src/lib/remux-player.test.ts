@@ -210,6 +210,44 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     player.destroy();
   });
 
+  test("大きな塊は 1 MB ずつに分けて足す (空の SourceBuffer に入りきらない塊で止まらない)", async () => {
+    const big = new Uint8Array(2.5 * 1024 * 1024);
+    big.set(new Uint8Array(new Float64Array([100, 102]).buffer));
+    globalThis.fetch = (async (url: string) => {
+      requests.push(url);
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(big);
+            controller.close();
+          },
+        }),
+      );
+    }) as typeof fetch;
+    const sizes: number[] = [];
+    const original = FakeSourceBuffer.prototype.appendBuffer;
+    FakeSourceBuffer.prototype.appendBuffer = function (data: BufferSource) {
+      const bytes = data as Uint8Array;
+      sizes.push(bytes.byteLength);
+      // 2 つ目からは中身を見ない (範囲は先頭の 16 バイトにだけ書いてある)
+      if (sizes.length === 1) original.call(this, data);
+      else
+        original.call(
+          this,
+          new Uint8Array(new Float64Array([102, 102]).buffer),
+        );
+    };
+    try {
+      const { video, player } = start(100);
+      await settle();
+      expect(sizes).toEqual([1024 * 1024, 1024 * 1024, 0.5 * 1024 * 1024]);
+      expect(video.currentTime).toBe(100);
+      player.destroy();
+    } finally {
+      FakeSourceBuffer.prototype.appendBuffer = original;
+    }
+  });
+
   test("入れた位置から、流していて先も溜まっているのに進まなければ、1 回だけ同じ位置へ入れ直す", async () => {
     const { video, player } = start(100);
     video.readyState = 4;

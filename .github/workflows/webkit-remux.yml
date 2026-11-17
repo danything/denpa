@@ -55,6 +55,10 @@ on:
         description: "player で流す remux-player.ts のコミット (空なら回すコミットのもの)"
         type: string
         default: ""
+      rechunk:
+        description: "player で、届いた塊を 256 KB ずつに分けて渡す"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -181,6 +185,7 @@ jobs:
           HEADED: ${{ inputs.headed && '1' || '0' }}
           REMUX_JS: ${{ runner.temp }}/remux.js
           PLAY_BROWSER: ${{ inputs.browser }}
+          PLAY_RECHUNK: ${{ inputs.rechunk && '1' || '0' }}
         run: |
           if [ "$PLAY_BROWSER" = safari ]; then
             sudo safaridriver --enable
