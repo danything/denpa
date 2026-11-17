@@ -80,7 +80,7 @@ config.agentUrl = fakeAgentUrl(server.port!);
 trustFakeAgent();
 
 const { orm } = await import("./db");
-const { programs, recordings, reservations, services } =
+const { programs, recordings, reservations, rules, services } =
   await import("./schema");
 const {
   airing,
@@ -424,6 +424,139 @@ describe("消えた局の片付け", () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
     syncServicesOnly(await readChannels());
     expect(listedIds()).toEqual([3239123608]);
+  });
+
+  /*
+   * 局が一覧から外れて予約が取り消されたあと、局が戻ると番組表も同じ番組 (同じ program_id) で戻る。
+   * 取り消しの行が残っていると、ルールは同じ番組に予約を立てられず (`INSERT OR IGNORE`)、
+   * 番組表に出ているのに録らなかった (本番で 27 件)
+   */
+  test("局が戻ると、システムが取り消した予約を戻す。人の取り消しと録り始めたものは戻さない", async () => {
+    const MX = 3239123608;
+    const OTHER = 3239123609;
+    offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ"), channel(23609, "別の局")];
+    syncServicesOnly(await readChannels());
+    orm().delete(reservations).run();
+    orm().delete(programs).run();
+    orm().delete(rules).run();
+    const at = Date.now();
+    const start = at + 3 * 3600_000;
+    orm()
+      .insert(rules)
+      .values({
+        id: 1,
+        name: "戻る番組",
+        keyword: "戻る番組",
+        priority: 3,
+        created_at: at,
+      })
+      .run();
+    const lineup = [
+      { id: 1, service_id: MX, name: "戻る番組 #1" },
+      { id: 2, service_id: MX, name: "手動の番組" },
+      { id: 3, service_id: MX, name: "人が取り消した番組" },
+      { id: 4, service_id: MX, name: "列を足す前に取り消した番組" },
+      { id: 5, service_id: MX, name: "録り始めた番組" },
+      { id: 6, service_id: OTHER, name: "戻らない局の番組" },
+    ].map((row) => ({
+      ...row,
+      network_id: 32391,
+      event_id: row.id,
+      start_at: start,
+      end_at: start + 1800_000,
+      updated_at: at,
+    }));
+    orm().insert(programs).values(lineup).run();
+    const reservation = (
+      id: number,
+      fields: Partial<typeof reservations.$inferInsert>,
+    ) => ({
+      id,
+      program_id: id,
+      service_id: lineup[id - 1]!.service_id,
+      name: lineup[id - 1]!.name,
+      start_at: start,
+      end_at: start + 1800_000,
+      created_at: at,
+      updated_at: at,
+      ...fields,
+    });
+    orm()
+      .insert(reservations)
+      .values([
+        // ルールの予約。取り消されている間にルールの優先度を上げた
+        reservation(1, { rule_id: 1, priority: 1 }),
+        reservation(2, { manual: true, priority: 2 }),
+        reservation(3, {
+          manual: true,
+          state: "canceled",
+          canceled_by: "user",
+        }),
+        reservation(4, { manual: true, state: "canceled" }),
+        reservation(5, { manual: true, started_at: at }),
+        reservation(6, { manual: true }),
+      ])
+      .run();
+    const states = () =>
+      orm()
+        .select({
+          id: reservations.id,
+          state: reservations.state,
+          canceled_by: reservations.canceled_by,
+        })
+        .from(reservations)
+        .orderBy(reservations.id)
+        .all();
+
+    // 2 局とも一覧から外れ、しばらくして片付く (システムの取り消し)
+    offered = [channel(23699, "ほかの局")];
+    syncServicesOnly(await readChannels());
+    unseenFor(MX, config.serviceForgetAfter + 1);
+    unseenFor(OTHER, config.serviceForgetAfter + 1);
+    syncServicesOnly(await readChannels());
+    expect(states()).toEqual([
+      { id: 1, state: "canceled", canceled_by: "system" },
+      { id: 2, state: "canceled", canceled_by: "system" },
+      { id: 3, state: "canceled", canceled_by: "user" },
+      { id: 4, state: "canceled", canceled_by: null },
+      { id: 5, state: "scheduled", canceled_by: null },
+      { id: 6, state: "canceled", canceled_by: "system" },
+    ]);
+
+    // MX だけ戻る。番組表が戻るまでは戻さない
+    offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
+    syncServicesOnly(await readChannels());
+    expect(settle().restored).toBe(0);
+    // 番組表も同じ番組で戻る。録り始めた予約は、システムの取り消しが付いていても戻さない
+    orm().insert(programs).values(lineup).run();
+    orm()
+      .update(reservations)
+      .set({ state: "canceled", canceled_by: "system" })
+      .where(eq(reservations.id, 5))
+      .run();
+    expect(settle().restored).toBe(2);
+    expect(states()).toEqual([
+      { id: 1, state: "scheduled", canceled_by: null },
+      { id: 2, state: "scheduled", canceled_by: null },
+      { id: 3, state: "canceled", canceled_by: "user" },
+      { id: 4, state: "canceled", canceled_by: null },
+      { id: 5, state: "canceled", canceled_by: "system" },
+      // 局が一覧に戻っていない
+      { id: 6, state: "canceled", canceled_by: "system" },
+    ]);
+    // 戻したルールの予約は、当て直しがいまのルールの優先度に合わせる
+    expect(
+      orm()
+        .select({
+          rule_id: reservations.rule_id,
+          priority: reservations.priority,
+        })
+        .from(reservations)
+        .where(eq(reservations.id, 1))
+        .get(),
+    ).toEqual({ rule_id: 1, priority: 3 });
+    orm().delete(rules).run();
+    orm().delete(reservations).run();
   });
 });
 

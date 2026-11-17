@@ -464,7 +464,7 @@ function clearBelongings(
   const canceled = affected(
     orm()
       .update(reservations)
-      // システムの取り消し。人が押したものと違い、局が戻ればルールが立て直してよい
+      // システムの取り消し。人が押したものと違い、局が戻れば予約に戻す (`restoreReturned`)
       .set({ state: "canceled", canceled_by: "system", updated_at: at })
       .where(
         and(
@@ -909,7 +909,45 @@ function pruneOldPrograms(): number {
   return affected(orm().delete(programs).where(lt(programs.end_at, cutoff)));
 }
 
+/**
+ * **局が戻ったら、システムが取り消した予約を戻す。**
+ *
+ * 局が選局できなくなる・取り込みで見かけなくなると、まだ始めていない予約はシステムが取り消す
+ * (`clearBelongings`、`canceled_by = 'system'`)。局が戻ると、番組表も同じ番組 (同じ `program_id`) で戻る。
+ * 取り消しの行が残ったままだと、ルールはその番組に予約を立てられず (`INSERT OR IGNORE` で止まる)、
+ * 番組表に出ているのに録らない。
+ *
+ * 戻すのは、局がまた一覧に出ていて (`services.listed`)、番組がまた番組表に載っていて、放送が終わっていないもの。
+ * 手動の予約も戻す (予約したのは人で、取り消したのはシステム)。ルールの予約は、このあとの当て直し
+ * (`rules.applyRules`) がルールと優先度を合わせ、もう条件に当たらなければ引っ込める。
+ * 名前と時刻は `syncReservationTimes` が番組表に合わせる。
+ *
+ * **人の取り消し (`user` と、列を足す前の NULL) は戻さない。** 録り始めたものも触らない
+ *
+ * @returns 戻した予約の数
+ */
+function restoreReturned(at: number): number {
+  return affected(
+    orm()
+      .update(reservations)
+      .set({ state: "scheduled", canceled_by: null, updated_at: at })
+      .where(
+        and(
+          eq(reservations.state, "canceled"),
+          eq(reservations.canceled_by, "system"),
+          isNull(reservations.started_at),
+          gt(reservations.end_at, at),
+          // 局の表にも service_id の列があるので、外の行は表の名前を付けて指す
+          sql`EXISTS (SELECT 1 FROM programs p WHERE p.id = reservations.program_id)`,
+          sql`EXISTS (SELECT 1 FROM services s WHERE s.id = reservations.service_id AND s.listed = 1)`,
+        ),
+      ),
+  );
+}
+
 interface SettleResult {
+  /** 局が戻ったので、システムの取り消しから戻した予約 */
+  restored: number;
   retimed: number;
   pruned: number;
   reserved: number;
@@ -920,7 +958,7 @@ interface SettleResult {
 /**
  * 番組表が変わったあとの片付け。
  *
- * ルールを当て直し、予約の時刻を合わせ、古い番組を捨てる。取り合いの裁き直し
+ * 局が戻った予約を戻し (`restoreReturned`)、ルールを当て直し、予約の時刻を合わせ、古い番組を捨てる。取り合いの裁き直し
  * (`resolveConflicts`) は呼ぶ側がやる。**番組を読むところとは分けてある。** 1 チャンネル取得するたびに全部やり直すと、
  * 52 チャンネルぶん同じことを 52 回することになる。
  *
@@ -929,8 +967,12 @@ interface SettleResult {
  * 外れたものは引っ込む (`rules.applyRules`)。
  */
 export function settle(): SettleResult {
+  // 当て直しより先に戻す。戻した予約の持ち主と優先度は当て直しが合わせる
+  const restored = restoreReturned(now());
+  if (restored > 0) emit("reservations");
   const rules = applyRules();
   const result: SettleResult = {
+    restored,
     retimed: syncReservationTimes(),
     pruned: pruneOldPrograms(),
     reserved: rules.created,
