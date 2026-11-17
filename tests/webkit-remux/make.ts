@@ -205,7 +205,7 @@ interface Made {
   codec: string;
   codecs: string;
   pos: number;
-  version: "copy" | "fixed" | "both";
+  version: "copy" | "fixed" | "both" | "silent";
   /** fixed のときの作り方。詰め替え (印を直した・直していない) か変換 */
   how: "copy" | "marked" | "transcode";
   from: number;
@@ -291,6 +291,9 @@ async function make(pos: number, version: Made["version"]): Promise<void> {
   let cleared = 0;
   if (version === "copy") {
     await produce(copyArgs(mkv, pos, 0, spec!.codec), name, null);
+  } else if (version === "silent") {
+    // 音声の無い詰め替え (音声の何本目かに無い番号を渡すと `0:a:<n>?` が何も選ばない)。止まるのが音声のせいかを見る
+    await produce(copyArgs(mkv, pos, 99, spec!.codec), name, null);
   } else {
     const start = await cleanFrom(mkv, pos);
     if (start.missing && spec!.codec === "h264") {
@@ -317,7 +320,7 @@ async function make(pos: number, version: Made["version"]): Promise<void> {
   made.push({
     variant: variant!,
     codec: spec!.codec,
-    codecs,
+    codecs: version === "silent" ? (info.video ?? "") : codecs,
     pos,
     version,
     how,
@@ -338,6 +341,7 @@ for (const pos of POSITIONS) {
   }
   await make(pos, "copy");
   await make(pos, "fixed");
+  if (variant === "h264-closed") await make(pos, "silent");
 }
 
 writeFileSync(

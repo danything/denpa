@@ -18,6 +18,30 @@ on:
         description: "fMP4 をこの run の artifact から取る (空なら作り直す)"
         type: string
         default: ""
+      variants:
+        description: "流す録画の種類 (カンマ区切り。空なら全部)"
+        type: string
+        default: ""
+      versions:
+        description: "流す作り方 (both・copy・fixed・silent。空なら全部)"
+        type: string
+        default: ""
+      kinds:
+        description: "流し方 (open・seek)"
+        type: string
+        default: "open,seek"
+      orders:
+        description: "開く位置を currentTime に入れる時 (before・after)"
+        type: string
+        default: "before"
+      rounds:
+        description: "open を何回ずつ流すか"
+        type: string
+        default: "2"
+      headed:
+        description: "画面を出して流す (headless でない)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -108,6 +132,13 @@ jobs:
           sysctl -n machdep.cpu.brand_string
 
       - name: Play
+        env:
+          PLAY_VARIANTS: ${{ inputs.variants }}
+          PLAY_VERSIONS: ${{ inputs.versions }}
+          PLAY_KINDS: ${{ inputs.kinds }}
+          PLAY_ORDERS: ${{ inputs.orders }}
+          PLAY_ROUNDS: ${{ inputs.rounds }}
+          HEADED: ${{ inputs.headed && '1' || '0' }}
         run: |
           node "$RUNNER_TEMP/pw/play.mjs" "$PWD/out" "$PWD/result.json"
           cat result.md >> "$GITHUB_STEP_SUMMARY"

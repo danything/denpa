@@ -27,35 +27,68 @@ const manifests = readdirSync(root, { withFileTypes: true })
     JSON.parse(readFileSync(join(root, d.name, "manifest.json"), "utf8")),
   );
 
+/**
+ * 絞り込み (環境変数。カンマ区切り。空なら全部)。ワークフローの入力から渡す
+ *
+ * - `PLAY_VARIANTS`: 録画の種類 (`h264-closed` など)
+ * - `PLAY_VERSIONS`: 作り方 (`both`・`copy`・`fixed`・`silent`)
+ * - `PLAY_KINDS`: 流し方 (`open`・`seek`)
+ * - `PLAY_ORDERS`: 開く位置を currentTime に入れる時 (`before` は足す前。remux-player.ts と同じ。`after` は足し終えてから)
+ * - `PLAY_ROUNDS`: open を何回ずつ流すか (既定 2)
+ */
+const pick = (name, all) => {
+  const value = process.env[name] ?? "";
+  return value === "" ? all : value.split(",").map((s) => s.trim());
+};
+const VARIANTS = pick("PLAY_VARIANTS", null);
+const VERSIONS = pick("PLAY_VERSIONS", null);
+const KINDS = pick("PLAY_KINDS", ["open", "seek"]);
+const ORDERS = pick("PLAY_ORDERS", ["before"]);
+const ROUNDS = Number(process.env.PLAY_ROUNDS || 2);
+const versionOf = (x) =>
+  x.file
+    .split("/")[1]
+    .replace(/^[0-9_]+-/, "")
+    .replace(".mp4", "");
+
 const cases = [];
 for (const m of manifests) {
+  if (VARIANTS !== null && !VARIANTS.includes(m.variant)) continue;
   const start = m.made.find((x) => x.pos === 0);
   // iPhone の Safari と同じ ManagedMediaSource で流す (Mac の Safari の MediaSource でも同じ結果だった。#2884)
-  for (const source of ["ManagedMediaSource"])
-    for (const x of m.made) {
-      // 開く位置から始める場合は、同じものでも止まったり止まらなかったりしたので 2 回ずつ
-      for (const round of [1, 2])
-        cases.push({
-          kind: "open",
-          round,
-          source,
-          variant: m.variant,
-          codecs: m.codecs,
-          steps: [x],
-        });
-      if (x.pos !== 0 && source === "ManagedMediaSource")
+  const source = "ManagedMediaSource";
+  for (const x of m.made) {
+    if (VERSIONS !== null && !VERSIONS.includes(versionOf(x))) continue;
+    const codecs = x.codecs ?? m.codecs;
+    for (const order of ORDERS) {
+      // 開く位置から始める場合は、同じものでも止まったり止まらなかったりしたので何回か
+      if (KINDS.includes("open"))
+        for (let round = 1; round <= ROUNDS; round++)
+          cases.push({
+            kind: "open",
+            round,
+            order,
+            source,
+            variant: m.variant,
+            codecs,
+            steps: [x],
+          });
+      if (KINDS.includes("seek") && x.pos !== 0 && x.codecs === m.codecs)
         cases.push({
           kind: "seek",
+          round: 1,
+          order,
           source,
           variant: m.variant,
-          codecs: m.codecs,
+          codecs,
           steps: [start, x],
         });
     }
+  }
 }
 
 /** ページの中で回す。1 つの case を流して、段ごとの結果を返す */
-async function inPage({ source, codecs, steps, watch, first }) {
+async function inPage({ source, codecs, steps, watch, first, order }) {
   const type = `video/mp4; codecs="${codecs}"`;
   // 途中で止まっても読めるように、進み具合をここへ書く (node から読む)
   const state = { stage: "start", timeouts: [], events: [], results: [] };
@@ -140,7 +173,7 @@ async function inPage({ source, codecs, steps, watch, first }) {
         buffer.remove(0, Number.POSITIVE_INFINITY);
         await idle();
       }
-      if (at > 0) video.currentTime = at;
+      if (at > 0 && order === "before") video.currentTime = at;
       const stepStart = performance.now();
       state.stage = `step ${i} fetch`;
       const data = new Uint8Array(
@@ -168,6 +201,7 @@ async function inPage({ source, codecs, steps, watch, first }) {
           break;
         }
       }
+      if (at > 0 && order === "after") video.currentTime = at;
       const quality0 = video.getVideoPlaybackQuality();
       const presented0 = presented;
       const t0 = video.currentTime;
@@ -293,6 +327,8 @@ for (const c of cases) {
   const row = {
     kind: c.kind,
     round: c.round ?? 1,
+    order: c.order,
+    headed: process.env.HEADED === "1",
     source: c.source,
     variant: c.variant,
     codecs: c.codecs,
@@ -323,7 +359,7 @@ await browser.close();
 writeFileSync(resultPath, JSON.stringify(out, null, 2));
 
 const lines = [
-  "| 流し方 | 回 | MSE | 録画 | 位置 | バージョン | -ss | 先頭のコマ (NAL・始められるか) | エラー | デコード | 進んだ秒 | 観はじめ (ms) |",
+  "| 流し方 | 回 | currentTime を入れる時 | 録画 | 位置 | バージョン | -ss | 先頭のコマ (NAL・始められるか) | エラー | デコード | 進んだ秒 | 観はじめ (ms) |",
   "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 ];
 for (const row of out) {
@@ -340,7 +376,7 @@ for (const row of out) {
   const cells = [
     row.kind,
     row.round,
-    row.source,
+    row.order,
     row.variant,
     last?.pos ?? "",
     file.replace(/^.*-/, "").replace(".mp4", ""),
