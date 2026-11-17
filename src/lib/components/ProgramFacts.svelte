@@ -81,9 +81,9 @@
 </script>
 
 <!--
-    説明文。中に書かれた URL はリンクにする。
-    `{@html}` は使わない。EPG の文面は放送局が書いたものをそのまま持ってきているので、
-    そのまま流し込めるものとして扱わない
+  説明文。中に書かれた URL はリンクにする。
+  `{@html}` は使わない。EPG の文面は放送局が書いたものをそのまま持ってきているので、
+  そのまま流し込めるものとして扱わない
 -->
 {#snippet body(
   text: string,
@@ -152,9 +152,9 @@
 
 {#if cmNote}
   <!--
-        **いつもの精度が出なかったときだけ出す** (うまくいった回は `cmNote` ごと渡ってこない。`format.cmNoteWorthShowing`)。
-        どこを切ったかは書かない (チャプターとして動画に入っている)。覚えたロゴは設定の「受信できるチャンネル」の「CM ロゴ」で確かめられる
-    -->
+    **いつもの精度が出なかったときだけ出す** (うまくいった回は `cmNote` ごと渡ってこない。`format.cmNoteWorthShowing`)。
+    どこを切ったかは書かない (チャプターとして動画に入っている)。覚えたロゴは設定の「受信できるチャンネル」の「CM ロゴ」で確かめられる
+  -->
   <div class="block" data-testid="detail-cm">
     <div class="small head">CM</div>
     <div class="tiny muted" data-testid="detail-cm-note">{cmNote}</div>

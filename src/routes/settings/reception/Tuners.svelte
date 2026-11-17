@@ -8,8 +8,8 @@
 </script>
 
 <!--
-    **表はエージェントごとに分け、エージェントの名前を見出しにする** (`AgentTuners.svelte`)。1 台でも見出しを出す。
-    表とカードリーダーの作りは `AgentTuners.svelte` の説明
+  **表はエージェントごとに分け、エージェントの名前を見出しにする** (`AgentTuners.svelte`)。1 台でも見出しを出す。
+  表とカードリーダーの作りは `AgentTuners.svelte` の説明
 -->
 <div class="sections">
   <section class="section" data-testid="tuner-section">

@@ -46,7 +46,7 @@
    */
   const FIRST = 5;
   type Key = "programs" | "recordings" | "reservations" | "rules" | "ranking";
-  /** 開いた節。言葉が変わったら畳み直す */
+  /** 開いた節。言葉が変わったら閉じた形に戻す */
   let expanded = $derived.by<Record<Key, boolean>>(() => {
     void q;
     return {

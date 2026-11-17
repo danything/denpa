@@ -159,7 +159,7 @@
         start: at >= length - 1 ? 0 : at,
         audio: "0",
         /*
-         * **「再生する音」として鳴らす。** そうしないと iPhone は消音スイッチで Web Audio を黙らせる
+         * **「再生する音」として鳴らす。** そうしないと iPhone は消音スイッチで Web Audio の音を消す
          * (`<video>` は消音スイッチでも鳴る)。押して観はじめたものなので、`<video>` と同じに扱う
          */
         background: true,
@@ -339,6 +339,7 @@
     <ul class="item-list">
       {#each list as item (item.id)}
         {@const thumb = posterUrl(item)}
+        {@const progress = offline.entries[item.id]?.progress ?? null}
         <li class="row item">
           {#if thumb !== null}
             <img src={thumb} alt="" class="thumb" />
@@ -358,10 +359,6 @@
             </div>
           </div>
           {#if item.state === "downloading"}
-            {@const progress = offline.entries[item.id]?.progress ?? null}
-            <span class="tag keep">
-              保存中{progress === null ? "…" : ` ${percent(progress)}`}
-            </span>
             <!-- 進み具合は件の面の下端いっぱいに敷く (ホームの行と同じ)。取れないときは動いているだけのバー -->
             <progress
               class="row-bar"
@@ -370,36 +367,43 @@
               max="1"
               aria-label="端末への保存の進み具合"
             ></progress>
-          {:else if item.state === "failed"}
-            <span class="tag error keep">保存に失敗</span>
-          {:else}
-            <button type="button" class="small keep" onclick={() => play(item)}>
-              再生
-            </button>
           {/if}
-          {#if item.state === "failed"}
-            <!-- 失敗した控えの片付け。**サーバの録画には触らない** (中身が無いだけ) -->
-            <button
-              type="button"
-              class="ghost small keep"
-              onclick={async () => {
-                await removeLocal(item.id);
-                await load();
-              }}
-            >
-              失敗した保存データを削除
-            </button>
-          {:else}
-            <button
-              type="button"
-              class="small keep danger"
-              class:outline={deleting.armed !== item.id}
-              onclick={() => remove(item)}
-              data-testid="offline-delete"
-            >
-              {deleting.armed === item.id ? "端末とサーバから削除" : "削除"}
-            </button>
-          {/if}
+          <!-- 行の操作。押せる高さはホームの行と同じ 40px (`app.css` の `.row-actions`。docs/design.md の「何行かある一覧」) -->
+          <div class="row-actions">
+            {#if item.state === "downloading"}
+              <span class="tag">
+                保存中{progress === null ? "…" : ` ${percent(progress)}`}
+              </span>
+            {:else if item.state === "failed"}
+              <span class="tag error">保存に失敗</span>
+              <!-- 失敗した控えの片付け。**サーバの録画には触らない** (中身が無いだけ) -->
+              <button
+                type="button"
+                class="ghost small"
+                onclick={async () => {
+                  await removeLocal(item.id);
+                  await load();
+                }}
+              >
+                失敗した保存データを削除
+              </button>
+            {:else}
+              <button type="button" class="small" onclick={() => play(item)}>
+                再生
+              </button>
+            {/if}
+            {#if item.state !== "failed"}
+              <button
+                type="button"
+                class="small danger"
+                class:outline={deleting.armed !== item.id}
+                onclick={() => remove(item)}
+                data-testid="offline-delete"
+              >
+                {deleting.armed === item.id ? "端末とサーバから削除" : "削除"}
+              </button>
+            {/if}
+          </div>
         </li>
       {/each}
     </ul>
@@ -509,7 +513,7 @@
     min-width: 0;
     flex: 1 1 0%;
   }
-  .keep {
+  .row-actions {
     flex-shrink: 0;
   }
   .pending {

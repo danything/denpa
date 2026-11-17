@@ -385,8 +385,8 @@
   {/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!--
-    映像の周りは黒 (letterbox の帯にテーマ色を出さない)。低くしすぎない (224px)。上下と右に重ねる操作バーどうしが重なる
--->
+    映像の周りは黒 (letterbox の帯にテーマ色を出さない)。低くしすぎない (224px。それより低いと、上下と右に重ねる操作バーどうしが重なる)
+  -->
   <div
     bind:this={element}
     class="stage"

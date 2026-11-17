@@ -246,11 +246,11 @@
   </form>
 
   <!--
-        候補。押す・選ぶのは行そのもの (中にボタンは置かない。listbox の行は 1 つの操作)。焦点は欄に置いたまま
-        (`aria-activedescendant`)、押した瞬間に欄から焦点が外れて閉じないよう、mousedown では焦点を動かさない。
-        結果の画面 (`live`) では出さない (欄の `aria-controls` が指す先として空のまま置く)。
-        `item` が null の行は「すべての結果を見る」
-    -->
+    候補。押す・選ぶのは行そのもの (中にボタンは置かない。listbox の行は 1 つの操作)。焦点は欄に置いたまま
+    (`aria-activedescendant`)、押した瞬間に欄から焦点が外れて閉じないよう、mousedown では焦点を動かさない。
+    結果の画面 (`live`) では出さない (欄の `aria-controls` が指す先として空のまま置く)。
+    `item` が null の行は「すべての結果を見る」
+  -->
   {#snippet option(index: number, item: SuggestGroup["items"][number] | null)}
     <div
       id={optionId(index)}
@@ -324,10 +324,10 @@
     min-width: 0;
   }
   /*
-     * **欄の形は虫眼鏡と字と `/` の印だけ。** 中の input は素のままにし、包んだ `form` を欄の面にする (虫眼鏡も欄の中に見せる)。
-     * ほかの入力欄と同じく**線も凹みも無い平らな面** (`app.css` の「入力欄」)。ヘッダー (操作の層) の上でも同じ面。
-     * 字を打っている間は外側の 2px の主の色の線
-     */
+   * **欄の形は虫眼鏡と字と `/` の印だけ。** 中の input は素のままにし、包んだ `form` を欄の面にする (虫眼鏡も欄の中に見せる)。
+   * ほかの入力欄と同じく**線も凹みも無い平らな面** (`app.css` の「入力欄」)。ヘッダー (操作の層) の上でも同じ面。
+   * 字を打っている間は外側の 2px の主の色の線
+   */
   .search-field {
     display: flex;
     align-items: center;
@@ -392,10 +392,10 @@
   }
 
   /*
-     * 候補。欄の真下に浮かせ、欄より少し広く取る (ヘッダーの欄が縮んでも読める幅)。
-     * 節は小さな見出しと行だけ (カードにしない)。指している行はメニューと同じ地 (`--dp-pop-hover`)。
-     * 箱はメニューと同じ面 (`--dp-pop`)・内側の余白 (8px)・項目の余白 (8px × 12px) と間 (2px) に影だけ (縁もぼかしも付けない。docs/design.md)
-     */
+   * 候補。欄の真下に浮かせ、欄より少し広く取る (ヘッダーの欄が縮んでも読める幅)。
+   * 節は小さな見出しと行だけ (カードにしない)。指している行はメニューと同じ地 (`--dp-pop-hover`)。
+   * 箱はメニューと同じ面 (`--dp-pop`)・内側の余白 (8px)・項目の余白 (8px × 12px) と間 (2px) に影だけ (縁もぼかしも付けない。docs/design.md)
+   */
   .suggest {
     position: absolute;
     top: calc(100% + var(--dp-space-1));
@@ -416,10 +416,10 @@
       transform var(--dp-duration-enter) var(--dp-ease-spring);
   }
   /*
-     * **開き方と閉じ方はメニューと同じ** (`app.css` の `.menu`)。少し縮んで少し上にずれた透明な姿からばねで出て、
-     * 閉じるときは短く引っ込む。閉じる間も描いておくため、`display` も一緒に移す (`allow-discrete`。対応していないブラウザはすぐ消える)。
-     * 引っ込む間は押させない (下の行を押した手を取らない)
-     */
+   * **開き方と閉じ方はメニューと同じ** (`app.css` の `.menu`)。少し縮んで少し上にずれた透明な姿からばねで出て、
+   * 閉じるときは短く引っ込む。閉じる間も描いておくため、`display` も一緒に移す (`allow-discrete`。対応していないブラウザはすぐ消える)。
+   * 引っ込む間は押させない (下の行を押した手を取らない)
+   */
   @starting-style {
     .suggest:not([hidden]) {
       opacity: 0;
@@ -437,9 +437,9 @@
       display var(--dp-duration-exit) allow-discrete;
   }
   /*
-     * **節は縦に積む。** Pico は `role="group"` を横並びの組 (inline-flex。角を落とし、間に線) にするので、
-     * 打ち消して普通の縦の並びに戻す
-     */
+   * **節は縦に積む。** Pico は `role="group"` を横並びの組 (inline-flex。角を落とし、間に線) にするので、
+   * 打ち消して普通の縦の並びに戻す
+   */
   .suggest-group {
     display: flex;
     flex-direction: column;

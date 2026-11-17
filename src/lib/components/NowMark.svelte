@@ -136,9 +136,9 @@
     pointer-events: none;
   }
   /*
-     * 高さの半分だけ上げる (`translateY(-50%)`)。字の大きさが変わっても、いまの位置の真ん中に乗る。
-     * `sticky` (`left: 0`) で横に流しても左端に残る
-     */
+   * 高さの半分だけ上げる (`translateY(-50%)`)。字の大きさが変わっても、いまの位置の真ん中に乗る。
+   * `sticky` (`left: 0`) で横に流しても左端に残る
+   */
   .overlay .now-time {
     position: sticky;
     left: 0;

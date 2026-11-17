@@ -103,16 +103,16 @@
 <Toasts {notices} source={form} />
 
 <!--
-    節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先。
-    **ほかの場所で切り替えられるものはここに並べない** (互換モードは再生画面の ⚙)。
-    同じ設定が 2 か所にあると、どちらが効いているのか迷う
+  節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先。
+  **ほかの場所で切り替えられるものはここに並べない** (互換モードは再生画面の ⚙)。
+  同じ設定が 2 か所にあると、どちらが効いているのか迷う
 -->
 <div id="browser" data-part>
   <div class="sections readable">
     <!--
-            **テーマはここだけで選ぶ** (`#lib/theme.svelte.ts`)。前はヘッダーのボタンと下のタブの「その他」にあったが、
-            ほかの端末ごとの設定と同じくここに置く。サーバには送らず、端末に覚える (localStorage)
-        -->
+      **テーマはここだけで選ぶ** (`#lib/theme.svelte.ts`)。前はヘッダーのボタンと下のタブの「その他」にあったが、
+      ほかの端末ごとの設定と同じくここに置く。サーバには送らず、端末に覚える (localStorage)
+    -->
     <section class="section">
       <div class="section-head">
         <h2>テーマ</h2>
@@ -135,11 +135,11 @@
       </Lead>
     </section>
     <!--
-            **端末でしか出ない食い違いを、その端末で読むための入口。** 縦のはみ出しは、引っ込む
-            アドレスバーや画面の切り欠きが絡むと**その端末でしか起きない**。入口をここに置くのは、
-            PWA にアドレスバーが無いため (`?measure` を打つところがない)。
-            サーバには送らず、端末に覚える (localStorage)
-        -->
+      **端末でしか出ない食い違いを、その端末で読むための入口。** 縦のはみ出しは、引っ込む
+      アドレスバーや画面の切り欠きが絡むと**その端末でしか起きない**。入口をここに置くのは、
+      PWA にアドレスバーが無いため (`?measure` を打つところがない)。
+      サーバには送らず、端末に覚える (localStorage)
+    -->
     <section class="section">
       <div class="section-head">
         <h2>画面の高さを見る</h2>
@@ -173,9 +173,9 @@
       </Lead>
     </section>
     <!--
-            **ライブで使うチューナーを名指しする** (開発者向け。`#lib/live-tuner.svelte.ts`)。
-            ふだんはエージェントが選ぶ (docs/agent.md「選ぶ順の約束」)。サーバには送らず、端末に覚える (localStorage)
-        -->
+      **ライブで使うチューナーを名指しする** (開発者向け。`#lib/live-tuner.svelte.ts`)。
+      ふだんはエージェントが選ぶ (docs/agent.md「選ぶ順の約束」)。サーバには送らず、端末に覚える (localStorage)
+    -->
     <section class="section">
       <div class="section-head">
         <h2>ライブのチューナー (開発者向け)</h2>
@@ -224,9 +224,9 @@
       </Lead>
     </section>
     <!--
-            **ロゴを取得した結果を記録する** (開発者向け。`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)。
-            衛星のロゴが流れてくる期間を測るためのもの。世帯の設定で、既定はオフ
-        -->
+      **ロゴを取得した結果を記録する** (開発者向け。`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)。
+      衛星のロゴが流れてくる期間を測るためのもの。世帯の設定で、既定はオフ
+    -->
     <section class="section" data-testid="logo-record">
       <div class="section-head">
         <h2>ロゴを集めた結果を記録する (開発者向け)</h2>
@@ -313,10 +313,10 @@
 <div id="login" data-part>
   <div class="sections readable">
     <!--
-            **ログアウトはヘッダーではなくここ。** ヘッダーと下のタブの「その他」に置いていた頃は、
-            たまにしか押さないものが毎回目に入っていた。押すのは POST (`/logout`)。
-            リンク (GET) にすると、先読みで勝手に切れる
-        -->
+      **ログアウトはヘッダーではなくここ。** ヘッダーと下のタブの「その他」に置いていた頃は、
+      たまにしか押さないものが毎回目に入っていた。押すのは POST (`/logout`)。
+      リンク (GET) にすると、先読みで勝手に切れる
+    -->
     <section class="section">
       <div class="section-head">
         <h2>ログイン</h2>
