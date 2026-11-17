@@ -237,10 +237,14 @@ async function inPage({ source, codecs, steps, watch, first, order }) {
             break;
           }
           // covered: 足したもので開く位置まで溜まったところで入れる (remux-player.ts の直し方)
-          if (at > 0 && order === "covered" && !placed) {
+          // covered+N: 開く位置から N 秒先まで溜まったところで入れる
+          const margin = order.startsWith("covered")
+            ? Number(order.split("+")[1] ?? 0)
+            : null;
+          if (at > 0 && margin !== null && !placed) {
             const ranges = buffer.buffered;
             for (let r = 0; r < ranges.length; r++)
-              if (ranges.end(r) > at) {
+              if (ranges.end(r) > at + margin) {
                 video.currentTime = Math.max(at, ranges.start(r));
                 placed = true;
                 break;
@@ -252,6 +256,9 @@ async function inPage({ source, codecs, steps, watch, first, order }) {
         }
       }
       if (at > 0 && order === "after") video.currentTime = at;
+      // covered+N で N 秒先まで届かなかった (末尾まで足した)
+      if (at > 0 && order.startsWith("covered") && !placed)
+        video.currentTime = at;
       const quality0 = video.getVideoPlaybackQuality();
       const presented0 = presented;
       const t0 = video.currentTime;
