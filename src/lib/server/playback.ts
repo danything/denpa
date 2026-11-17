@@ -1334,12 +1334,15 @@ export async function streamResponse(
         viewer === null ? null : `${recording.id}:${viewer}`,
       );
       if (converted instanceof Response) return converted;
-      // 変換できない。始めてよいコマから始まるものを求められていれば、もっと手前の始めてよいキーフレームから詰め替える
+      const why =
+        converted === "busy" ? "変換の枠が埋まっている" : "変換もできない";
+      // 変換できない。始めてよいコマから始まるものを求められていれば、もっと手前の始めてよいキーフレームから詰め替える。
+      // たどり直して読めなかった (`marks` が null) ときも、見つからなかったのと同じに扱う
       if (query.get("clean") === "1") {
         const far = await cleanFrom(same.path, from, FAR);
         if (!far.missing && far.marks !== null) {
           console.warn(
-            `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、${converted === "busy" ? "変換の枠が埋まっている" : "変換もできない"}ので、${far.from.toFixed(3)} 秒から詰め替えます`,
+            `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、${why}ので、${far.from.toFixed(3)} 秒から詰め替えます`,
           );
           start = far;
         } else if (converted === "busy") {
@@ -1351,7 +1354,7 @@ export async function streamResponse(
       }
       if (start.missing)
         console.warn(
-          `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、${converted === "busy" ? "変換の枠が埋まっている" : "変換もできない"}ので、印を直さずに詰め替えます`,
+          `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、${why}ので、印を直さずに詰め替えます`,
         );
     }
     const pace = new StreamPace(false);

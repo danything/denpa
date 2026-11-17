@@ -45,7 +45,7 @@ export function pickMediaSource(
  *
  * WebKit は飛ぶとき・開くときに、目標の手前でいちばん近い sync のコマからデコーダに渡すので、印の付いた P のコマからは始められない
  * (`ts/fmp4-marks.ts`)。Chrome・Edge は始められるので、変換の枠が埋まっていれば印を直さずに詰め替えたものを受け取る (観はじめが早い)。
- * ほかのブラウザが `ManagedMediaSource` を持っても、観はじめが遅くなるだけで止まらない
+ * ほかのブラウザが `ManagedMediaSource` を持っても、観はじめが遅くなるか、枠が埋まっているときに 503 (混んでいる) を受けるだけで、デコードには失敗しない
  */
 export function wantsCleanStart(
   scope: MediaSourceScope = globalThis as unknown as MediaSourceScope,
