@@ -50,6 +50,7 @@ import {
   TransportChangedError,
   TuneError,
   TunerBusyError,
+  TunerUnusableError,
 } from "./tuner";
 
 /**
@@ -313,6 +314,8 @@ async function collectChannel(
   const ground = channel.type === "GR" ? new GroundWatch(channel) : null;
   /** エージェントが「選局できない」と返したか (空き待ちやエージェントに繋がらないのは入れない) */
   let refused = false;
+  /** そのうち、選んだチューナーが電源を入れ直すまで使えないと返されたか (503。`TunerUnusableError`) */
+  let unusable = false;
   /** 空きが無かったか (409) */
   let busy = false;
   /** 開けたあと、こちらが閉じる前にストリームが切れたか */
@@ -438,6 +441,7 @@ async function collectChannel(
       console.warn(`[epg] ${label} の番組表を取得できませんでした: ${error}`);
     }
     refused = error instanceof TuneError;
+    unusable = error instanceof TunerUnusableError;
     if (error instanceof TuneError) sentTo ??= error.place;
     busy = error instanceof TunerBusyError;
     cut = opened && !controller.signal.aborted;
@@ -500,7 +504,14 @@ async function collectChannel(
    */
   lineup?.follow();
   ground?.compare();
-  const failed = receptionFailed({ received, refused, opened, timedOut, last });
+  const failed = receptionFailed({
+    received,
+    refused,
+    unusable,
+    opened,
+    timedOut,
+    last,
+  });
   if (failed) {
     collected.set(key(channel), Date.now());
     if (
@@ -573,18 +584,24 @@ export function endedEarly(read: {
 /**
  * 1 回読んだ結果を「受信できなかった」に数えるか (`reception.ts`)。数えるのは、選局できなかった最後の回
  * (`last`) と、開けたのに上限まで待っても何も来なかった回だけ。空きが無かった回 (開いていない) と、
- * 途中で切れた回 (上限より前に終わる) は数えない
+ * 途中で切れた回 (上限より前に終わる) は数えない。
+ *
+ * **チューナーが使えないと返された回 (`unusable`) も数えない。** エージェントが「選んだチューナーは電源を入れ直すまで使えない」
+ * と返すのは (503。IT930x のブリッジのバッファが溢れたとき。`tuner.TunerUnusableError`)、機材の問題でチャンネルの問題ではない
+ * (docs/data.md)
  */
 export function receptionFailed(read: {
   received: boolean;
   refused: boolean;
+  unusable: boolean;
   opened: boolean;
   timedOut: boolean;
   last: boolean;
 }): boolean {
   return (
     !read.received &&
-    ((read.refused && read.last) || (read.opened && read.timedOut))
+    ((read.refused && !read.unusable && read.last) ||
+      (read.opened && read.timedOut))
   );
 }
 
