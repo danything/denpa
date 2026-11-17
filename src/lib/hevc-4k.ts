@@ -15,7 +15,7 @@ export const BROADCAST_HEVC_VIDEO = {
   width: 3840,
   height: 2160,
   framerate: 60000 / 1001,
-  // 1 局で約 33Mbit/s (推定)
+  // 1 局で約 33 Mbit/s (推定)
   bitrate: 33_000_000,
   transferFunction: "hlg",
   colorGamut: "rec2020",

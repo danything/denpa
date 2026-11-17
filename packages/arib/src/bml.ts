@@ -42,6 +42,7 @@ import {
 } from "./dsmcc.js";
 import { parseTimeTable, PID_TIME } from "./eit.js";
 import { parseMediaType, readEntity } from "./multipart.js";
+import { WRAP } from "./pes.js";
 import {
   descriptors,
   packetPid,
@@ -199,9 +200,6 @@ export function pmtAudios(section: Uint8Array): (number | null)[] {
 const u33 = (data: Uint8Array, at: number) =>
   (data[at]! & 1) * 0x100000000 + u32(data, at + 1);
 
-/** STC・NPT の一周 (33 ビット・90kHz) */
-const WRAP_33 = 2 ** 33;
-
 /**
  * いまの NPT (90kHz)。TR-B14 第二分冊の NPT 値の算出に従う。
  * 進む (scale 1/1) か止まっている (scale 0/1) ときだけ求め、ほかの速さ (運用されない) は null
@@ -210,8 +208,8 @@ function nptAt(reference: NPTReference, stc: number): number | null {
   if (reference.scaleDenominator !== 1) return null;
   if (reference.scaleNumerator === 0) return reference.NPTReference;
   if (reference.scaleNumerator !== 1) return null;
-  const elapsed = (stc - reference.STCReference + WRAP_33) % WRAP_33;
-  return (reference.NPTReference + elapsed) % WRAP_33;
+  const elapsed = (stc - reference.STCReference + WRAP) % WRAP;
+  return (reference.NPTReference + elapsed) % WRAP;
 }
 
 /**
@@ -220,7 +218,7 @@ function nptAt(reference: NPTReference, stc: number): number | null {
  * 33 ビットで一周するので、差が半周より大きいものはまだ先とみなす
  */
 function reached(reference: NPTReference, stc: number): boolean {
-  return (stc - reference.STCReference + WRAP_33) % WRAP_33 < WRAP_33 / 2;
+  return (stc - reference.STCReference + WRAP) % WRAP < WRAP / 2;
 }
 
 /** ストリーム記述子 (table_id 0x3D)。NPT と イベントメッセージが載っている */

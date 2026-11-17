@@ -102,7 +102,7 @@ export class BroadcastClock {
   private pcr = Number.NaN;
   /** いまの区切りで採っている組 */
   private current: Anchor | null = null;
-  /** 1 つ前の区切りで採った組。**区切りの直後に遅れた組しか無くても困らないように** */
+  /** 1 つ前の区切りで採った組。**区切りの直後に遅れた組しか無くても、遅れの小さい組を使えるように** */
   private previous: Anchor | null = null;
   private windowFrom = Number.NaN;
 

@@ -3,8 +3,8 @@
  *
  * - 運営者の負担を考え、細かく何度も取らない。API はリクエストのたびに Hugging Face から日のファイルを読む。
  *   録画は開いたときに 1 回で全区間を取り、録画中の追っかけは 5 分おきに新しいところだけ取り足す (`feed.svelte.ts`)
- * - 1 回に 3 日まで。`endtime` は今より後にできない (誤りになる) ので切る
- * - 誤りも HTTP 200 で `{"error": …}` が返る。`{"packet": []}` は誤りではなく「コメントなし」
+ * - 1 回に 3 日まで。`endtime` は今より後にできない (エラーになる) ので切る
+ * - エラーも HTTP 200 で `{"error": …}` が返る。`{"packet": []}` はエラーではなく「コメントなし」
  * - `credentials: "omit"`・`referrerPolicy: "no-referrer"` で呼ぶ (Cookie も denpa のページの URL も渡さない)
  */
 import { type Comment, readPackets } from "./comments";

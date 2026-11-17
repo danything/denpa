@@ -159,7 +159,7 @@ interface CollectedLogo {
    *
    * 衛星はロゴ自身が「どのネットワークのどの局か」を持っているので、開いた
    * チャンネルのものとは限らない (1 つの中継に他ネットワークの局が入る)。
-   * 地上波は CDT にその情報が無いので、開いたチャンネルのものを使う。
+   * 地上波は開いたチャンネルの SDT で局と紐付けるので、開いたチャンネルのものを使う。
    */
   networkId: number;
   serviceIds: number[];
@@ -187,8 +187,8 @@ export class LogoCollector {
   private cdtCount = 0;
 
   /**
-   * @param networkId 開いている物理チャンネルのネットワーク。地上波の CDT には
-   *   ネットワークが入っていないので、呼ぶ側が渡す
+   * @param networkId 開いている物理チャンネルのネットワーク。地上波のロゴはこのネットワークの局として返す
+   *   (CDT の original_network_id は読まない)
    * @param carousel 衛星のカルーセルの読みかけ (`CarouselProgress`)。渡せば、前に開いたときの続きから
    *   読む。渡さなければ一から
    */
