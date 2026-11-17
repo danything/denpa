@@ -587,9 +587,8 @@ export function endedEarly(read: {
  * 途中で切れた回 (上限より前に終わる) は数えない。
  *
  * **チューナーが使えないと返された回 (`unusable`) も数えない。** エージェントが「選んだチューナーは電源を入れ直すまで使えない」
- * と返すのは機材の問題で (503。IT930x のブリッジの溢れ。`tuner.TunerUnusableError`)、チャンネルの問題ではない。
- * そのチューナーに入った選局は、どのチャンネルも同じ答えで失敗する。数えていた頃は、ブリッジが溢れるたびに BS の中継器が
- * まとめて「受信できない」になり、局が一覧から外れて予約が取り消されていた (本番で 2 日に 6 局)
+ * と返すのは (503。IT930x のブリッジのバッファが溢れたとき。`tuner.TunerUnusableError`)、機材の問題でチャンネルの問題ではない
+ * (docs/data.md)
  */
 export function receptionFailed(read: {
   received: boolean;
