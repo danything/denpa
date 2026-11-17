@@ -28,13 +28,23 @@ describe("環境変数の読み方", () => {
     }
   });
 
+  test("下限より小さい値も読めない値と同じく止める", () => {
+    expect(() => parseNum("SCHEDULER_TICK", "0", 5000, { min: 1 })).toThrow(
+      "SCHEDULER_TICK は 1 以上の数で書きます (いまは「0」)",
+    );
+    expect(parseNum("START_MARGIN", "0", 10000, { min: 0 })).toBe(0);
+    expect(() => parseNum("START_MARGIN", "-1", 10000, { min: 0 })).toThrow(
+      "START_MARGIN は 0 以上の数で書きます",
+    );
+  });
+
   test("オン/オフは 1・true・0・false だけを読む", () => {
     expect(parseBool("DENPA_AUTOSTART", "1", false)).toBe(true);
     expect(parseBool("DENPA_AUTOSTART", "TRUE", false)).toBe(true);
     expect(parseBool("DENPA_AUTOSTART", "0", true)).toBe(false);
     expect(parseBool("DENPA_AUTOSTART", "false", true)).toBe(false);
     expect(() => parseBool("DENPA_AUTOSTART", "yes", true)).toThrow(
-      "DENPA_AUTOSTART は 1 か 0",
+      "DENPA_AUTOSTART に使える値は 1・true・0・false です (いまは「yes」)",
     );
   });
 });
