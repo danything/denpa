@@ -42,6 +42,10 @@ on:
         description: "画面を出して流す (headless でない)"
         type: boolean
         default: false
+      nudge:
+        description: "進まなければ同じ位置へ入れ直す (open・seek)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -154,6 +158,7 @@ jobs:
           PLAY_KINDS: ${{ inputs.kinds }}
           PLAY_ORDERS: ${{ inputs.orders }}
           PLAY_ROUNDS: ${{ inputs.rounds }}
+          PLAY_NUDGE: ${{ inputs.nudge && '1' || '0' }}
           HEADED: ${{ inputs.headed && '1' || '0' }}
           REMUX_JS: ${{ runner.temp }}/remux.js
         run: |

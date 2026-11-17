@@ -118,7 +118,7 @@ for (const m of manifests) {
 }
 
 /** ページの中で回す。1 つの case を流して、段ごとの結果を返す */
-async function inPage({ source, codecs, steps, watch, first, order }) {
+async function inPage({ source, codecs, steps, watch, first, order, nudge }) {
   const type = `video/mp4; codecs="${codecs}"`;
   // 途中で止まっても読めるように、進み具合をここへ書く (node から読む)
   const state = { stage: "start", timeouts: [], events: [], results: [] };
@@ -276,9 +276,28 @@ async function inPage({ source, codecs, steps, watch, first, order }) {
       const begin = performance.now();
       // 観はじめ: 読み始めてから、開いた位置より先へ進むまで
       let startup = null;
+      // nudge: 流しているのに 1.5 秒進まなければ、同じ位置へ入れ直す (1 回だけ)
+      let nudged = false;
+      let lastTime = video.currentTime;
+      let lastMoved = performance.now();
       while (performance.now() - begin < limit && video.error === null) {
         if (startup === null && video.currentTime > t0 + 0.1)
           startup = performance.now() - stepStart;
+        if (video.currentTime !== lastTime) {
+          lastTime = video.currentTime;
+          lastMoved = performance.now();
+        } else if (
+          nudge &&
+          !nudged &&
+          !video.paused &&
+          !video.seeking &&
+          video.readyState >= 3 &&
+          performance.now() - lastMoved > 1500
+        ) {
+          nudged = true;
+          state.events.push(`nudge@${video.currentTime.toFixed(2)}`);
+          video.currentTime = video.currentTime;
+        }
         if (i === steps.length - 1 && video.currentTime > t0 + 2) break;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -512,6 +531,7 @@ for (const c of cases) {
       page
         .evaluate(c.kind.startsWith("player") ? inPlayer : inPage, {
           ...c,
+          nudge: process.env.PLAY_NUDGE === "1",
           watch: WATCH,
           first: FIRST,
         })
