@@ -494,6 +494,19 @@ async function hops(
 }
 
 /**
+ * `confirmReachable` の宛先から名前 (か IP) だけを取り出す。読めなければ空文字。
+ * `example.jp` でも `example.jp:443` でも `https://example.jp/x` でも受ける (繋ぐのはどれも 443 番)。
+ * IPv6 は括弧付きで返し (`[2001:db8::1]:443` → `[2001:db8::1]`)、括弧は `resolvable` が外す
+ */
+export function reachHost(destination: string): string {
+  if (destination.includes("://")) return new URL(destination).hostname;
+  const bare = destination.replace(/^\/+/, "").split("/")[0] ?? "";
+  return bare
+    .replace(/^(\[[^\]]*\]):\d+$/, "$1")
+    .replace(/^([^:[\]]+):\d+$/, "$1");
+}
+
+/**
  * 相手まで届くかを確かめる (`browser.confirmIPNetwork`)。
  *
  * 「相手まで届くか」を訊かれたときに答える API です。**NHK は呼びに来ません**
@@ -514,11 +527,7 @@ export async function confirmReachable(
   ipAddress: string | null;
   responseTimeMillis: number | null;
 }> {
-  // `example.jp` でも `example.jp:443` でも `https://example.jp/x` でも受ける (繋ぐのはどれも 443 番)
-  const bare = destination.replace(/^\/+/, "").split("/")[0] ?? "";
-  const host = destination.includes("://")
-    ? new URL(destination).hostname
-    : bare.replace(/^([^:[\]]+):\d+$/, "$1");
+  const host = reachHost(destination);
   if (host === "") throw new Refused("宛先がありません");
 
   return limited(async () => {

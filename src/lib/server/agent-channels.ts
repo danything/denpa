@@ -21,8 +21,8 @@ export interface AgentChannels {
 }
 
 /**
- * 1 台のエージェントの行を、返した控えで入れ直す。局の取り込み (`epg.syncServices`) はトランザクションの中で、
- * 種別の削除 (`scan.removeType`) はエージェントが返した残りで呼ぶ
+ * 1 台のエージェントの行を、返した控えで入れ直す。消してから入れ直すので、**トランザクションの中で呼ぶ**
+ * (局の取り込み `epg.syncServices` と、種別の削除 `scan.removeType`)。間に読んだ処理に写しが空に見えないように
  */
 export function storeAgentChannels(read: AgentChannels): void {
   orm()

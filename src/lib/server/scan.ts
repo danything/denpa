@@ -61,6 +61,7 @@ import {
   toStored,
 } from "./cable";
 import { config } from "./config";
+import { orm } from "./db";
 import { savePrograms, settle, sync, typeRank, unlistType } from "./epg";
 import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
@@ -1601,13 +1602,13 @@ export async function removeType(
   const everyone = agents.length === chosenAgents(undefined).length;
   /*
    * エージェントの控えから消す。返ってきた残りをその場で写しに入れる (最後の種別を消すと空の一覧になり、
-   * 取り込みは空の一覧を「返さなかった」と読んで前の写しを残すため)
+   * 取り込みは空の一覧を「返さなかった」と読んで前の写しを残すため)。
+   * 消してから入れ直すので、1 つのトランザクションにする (間に読んだ処理に、写しが空に見えないように)
    */
-  for (const agent of agents)
-    storeAgentChannels({
-      agent: agent.id,
-      channels: await deleteChannels(type, agent),
-    });
+  for (const agent of agents) {
+    const channels = await deleteChannels(type, agent);
+    orm().transaction(() => storeAgentChannels({ agent: agent.id, channels }));
+  }
   // ケーブル局の NIT から作った一覧も消す (次のスキャンで入口から探し直す)
   if (type === "CATV")
     for (const agent of agents) store(cableKey(agent.id), "");
