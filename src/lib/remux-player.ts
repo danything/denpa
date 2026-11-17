@@ -383,6 +383,13 @@ export function remuxPlayer(
     }
     if (mine !== run) return;
     loadingFrom = null;
+    // 開く位置まで届かずに終わった (尺の端より後ろを開いた)。届いた末尾に入れる
+    if (startAt !== null) {
+      const last = buffered().at(-1);
+      const at = last === undefined ? startAt : Math.min(startAt, last[1]);
+      startAt = null;
+      video.currentTime = at;
+    }
     // 末尾まで届いた。終わりを伝えない (`endOfStream`) と、最後で止まったまま `ended` が来ない
     await idle();
     if (mine === run && media.readyState === "open") media.endOfStream();
