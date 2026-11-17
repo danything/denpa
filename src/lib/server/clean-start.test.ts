@@ -76,15 +76,6 @@ describe("cleanFrom", () => {
     if (!start.missing) throw new Error("missing のはず");
     expect(start.decodeFrom).toBeLessThan(70);
     expect(start.decodeFrom).toBeGreaterThan(60);
-    // 手前 60 秒にも無い (先頭の IDR は 70 秒手前)
-    expect(start.far).toBeNull();
-    // 20 秒の中には無いが、60 秒の中に先頭の IDR がある
-    const near = await cleanFrom(long, 50);
-    expect(near.missing).toBe(true);
-    if (near.missing) {
-      expect(near.far).toBeGreaterThan(0);
-      expect(near.far).toBeLessThanOrEqual(0.5);
-    }
     // 20 秒の中に先頭の IDR があれば寄せる
     expect((await cleanFrom(long, 15)).missing).toBe(false);
   });

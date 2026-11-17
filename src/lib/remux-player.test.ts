@@ -91,6 +91,10 @@ class FakeVideo extends EventTarget {
   src = "";
   error = null;
   disableRemotePlayback = false;
+  // 既定は何も読めていない (入れた位置から進むかを見る時計 `watchStart` が入れ直さない)
+  readyState = 0;
+  paused = true;
+  seeking = false;
   private at = 0;
   get currentTime(): number {
     return this.at;
@@ -203,6 +207,24 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     expect(requests).toEqual(["remux?from=100&audio=0"]);
     expect(media().buffer?.ranges).toEqual([[100, 102]]);
     expect(player.origin()).toContain("100.0");
+    player.destroy();
+  });
+
+  test("入れた位置から、流していて先も溜まっているのに進まなければ、1 回だけ同じ位置へ入れ直す", async () => {
+    const { video, player } = start(100);
+    video.readyState = 4;
+    video.paused = false;
+    await settle();
+    expect(video.currentTime).toBe(100);
+    let seeks = 0;
+    video.addEventListener("seeking", () => seeks++);
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    expect(seeks).toBe(1);
+    expect(video.currentTime).toBe(100);
+    // 入れ直すのは 1 回だけ。飛んだのと見なさないので、リクエストし直さない
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    expect(seeks).toBe(1);
+    expect(requests).toEqual(["remux?from=100&audio=0"]);
     player.destroy();
   });
 

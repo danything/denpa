@@ -50,6 +50,11 @@ const BEHIND = 30;
 const SLACK = 15;
 /** 受け取りの速さをこれだけ測れていなければ、先を多めに溜めて測る (ms)。`adapt.ts` の上げるまでの待ちと同じ */
 const PROBE_EVERY = UP_WAIT_WATCH;
+/** 開く位置を入れたあと、流しているのにこれだけ進まなければ入れ直す (ms。`watchStart`) */
+const STUCK_AFTER = 1500;
+const STUCK_EVERY = 250;
+/** `HTMLMediaElement.HAVE_FUTURE_DATA` (テストの偽物にも効くように数で持つ) */
+const HAVE_FUTURE_DATA = 3;
 
 /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
 export type StreamUrl = (from: number, audio: string) => string;
@@ -160,6 +165,10 @@ export function remuxPlayer(
    * `.github/workflows/webkit-remux.yml` で確かめた。#2884)。入れたら null
    */
   let startAt: number | null = null;
+  /** 自分で入れた位置の seeking を、飛ばれたのと見分ける */
+  let ownSeek = false;
+  /** 入れた位置から進むかを見ている時計 (`watchStart`) */
+  let startWatch: ReturnType<typeof setInterval> | null = null;
   /** いまの位置。開く位置をまだ入れていなければ、その位置 */
   const position = (): number => startAt ?? video.currentTime;
 
@@ -498,14 +507,58 @@ export function remuxPlayer(
     if (range === undefined) return;
     const at = Math.max(startAt, range[0]);
     startAt = null;
+    ownSeek = true;
     video.currentTime = at;
+    watchStart(at);
+  }
+
+  /**
+   * **入れた位置から進まなければ、1 回だけ同じ位置へ入れ直す。** macOS の WebKit は、開く位置を入れたあとに続きを足すと、
+   * 1 コマ映したまま進まないことがある (流していて、先も溜まっているのに)。同じ位置へ入れ直すと進む
+   * (`.github/workflows/webkit-remux.yml` で確かめた。#2884)。進んだ・止めた・閉じた・飛ばれたら見るのをやめる
+   */
+  function watchStart(at: number): void {
+    stopWatch();
+    let last = video.currentTime;
+    let moved = Date.now();
+    startWatch = setInterval(() => {
+      if (closed || video.currentTime > at + 0.1) {
+        stopWatch();
+        return;
+      }
+      if (video.currentTime !== last || video.paused || video.seeking) {
+        last = video.currentTime;
+        moved = Date.now();
+        return;
+      }
+      if (
+        video.readyState < HAVE_FUTURE_DATA ||
+        Date.now() - moved < STUCK_AFTER
+      )
+        return;
+      stopWatch();
+      console.warn(
+        `[remux] ${last.toFixed(1)} 秒から進まないので、同じ位置へ入れ直します`,
+      );
+      ownSeek = true;
+      video.currentTime = last;
+    }, STUCK_EVERY);
+  }
+
+  function stopWatch(): void {
+    if (startWatch !== null) clearInterval(startWatch);
+    startWatch = null;
   }
 
   /** 飛んだ先が溜まっておらず、待っても届かないなら、そこからリクエストし直す */
   const onSeeking = (): void => {
     nudge();
-    // 開く位置を入れる前に飛ばれた。飛んだ先を採る
-    startAt = null;
+    // 自分で入れた位置 (`place`・`watchStart`) でなければ、飛ばれた。開く位置を入れる前なら、飛んだ先を採る
+    if (ownSeek) ownSeek = false;
+    else {
+      startAt = null;
+      stopWatch();
+    }
     if (!opened || retry.waiting) return;
     if (!covers(buffered(), video.currentTime, loadingFrom, SLACK))
       void load(video.currentTime, "seek");
@@ -571,6 +624,7 @@ export function remuxPlayer(
     throughput: () => meter.bps(),
     destroy(): void {
       closed = true;
+      stopWatch();
       run++;
       controller?.abort();
       pendingSwitch?.abort();
