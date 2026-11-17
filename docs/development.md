@@ -122,6 +122,15 @@ CI では 10 組に割って別のランナーに出し、3 ワーカーの 8 �
 済ませてから `E2E_BROWSER=firefox` (か `webkit`) を付けます (`playwright.config.ts`)。`--browser` で替えると、Chromium だけの起動引数が
 WebKit に渡って起動できません。CDP で回線を絞るテストは Chromium だけで流します。
 
+### 詰め替えを macOS の WebKit で確かめる
+
+**iPhone で詰め替えが止まるかは、Actions の WebKit remux check (`.github/workflows/webkit-remux.yml`) を手で走らせて見ます。**
+Linux の WebKit は H.264 の fMP4 を再生できないので、iPhone の Safari と同じ VideoToolbox でデコードする macOS のランナーで回します。
+
+- Linux のランナーで x264・x265 の作り物の録画を作り、本物の `copyArgs`・`cleanFrom` で詰め替える (`tests/webkit-remux/make.ts`)
+- macOS のランナーで、`remux-player.ts` と同じ足し方で MSE に流し、`MEDIA_ERR_DECODE` になったか、何コマデコードしたか、何秒進んだかを表にする (`tests/webkit-remux/play.mjs`)
+- 録画を作るのに 2 分ほど (make)、流すのに 35 分ほど (play) かかります。`from_run` に前の run の番号を入れると、録画を作り直さずにその run の fMP4 を使います (3 日で消えます)
+
 ## CI
 
 **PR の CI は、触ったファイルに関係するジョブだけ中身を回します。** main への push では全部回します。
