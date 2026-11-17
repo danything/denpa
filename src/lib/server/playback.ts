@@ -63,6 +63,7 @@ import type { BroadcastCodec } from "#lib/live-choice.js";
 import { BROADCAST_HEVC, codecsFor, type LiveCodec } from "#lib/live.js";
 import { LOWEST_RUNG, parseRung, type Rung } from "#lib/rungs.js";
 import { type FileSource, recordedTransport, tsPathOf } from "#lib/source.js";
+import { syncMarksStream } from "#lib/ts/fmp4-marks.js";
 import {
   BUSY,
   CODEC_HEADER,
@@ -661,7 +662,8 @@ const FMP4_OUT = [
  * ## 位置はファイルの時刻のまま出す
  *
  * - `-ss` を `-i` の前に置く。映像は写すので、`from` の手前のキーフレームから始まる。
- *   そのキーフレームが IDR でなければ、呼ぶ側が `from` を手前の IDR に寄せてから渡す (`clean-start.ts` の `cleanFrom`)
+ *   そのキーフレームから始められなければ (印の付いた P のコマ)、呼ぶ側が `from` を手前の始められるキーフレームに寄せてから渡し、
+ *   出した fMP4 の sync の印も直す (`clean-start.ts` の `cleanFrom`、`ts/fmp4-marks.ts`)。手前に無ければ変換する (`missingStart`)
  * - `-copyts` で入力の時刻を出力まで運ぶ
  * - mp4 の muxer は既定で先頭を 0 に詰め直す。`frag_discont` で塊の時刻 (tfdt) を
  *   そのまま書かせ、`negative_cts_offsets` で B フレームのぶんを編集リストに逃がさせない
@@ -1287,28 +1289,35 @@ export async function streamResponse(
 
   const same = plan.encoded.find((file) => file.codec === codec);
   if (same !== undefined && rung === 0) {
+    const start = await cleanFrom(same.path, from);
+    const audio = audioIndex(query.get("audio"));
+    // 手前に始めてよいキーフレームが無い。詰め替えると WebKit が始められないので、同じコーデックに変換する (`missingStart`)
+    const converted = start.missing
+      ? missingStart(same, from, audio, codec, label)
+      : null;
+    if (converted !== null) return converted;
     const pace = new StreamPace(false);
     const opened = openPace(() => pace.read());
+    const body = transcodeBody(
+      [
+        {
+          argv: [
+            config.ffmpeg,
+            ...copyArgs(same.path, start.from, audio, codec),
+          ],
+        },
+      ],
+      `${label} の詰め替え`,
+      opened.close,
+      undefined,
+      pace,
+    );
+    // 変換できずに詰め替えるときは、印を直さない。直すと始めてよいコマが 1 つも無くなり、どのブラウザも始められない
+    const marks = start.missing ? null : start.marks;
     return new Response(
-      transcodeBody(
-        [
-          {
-            argv: [
-              config.ffmpeg,
-              ...copyArgs(
-                same.path,
-                await cleanFrom(same.path, from),
-                audioIndex(query.get("audio")),
-                codec,
-              ),
-            ],
-          },
-        ],
-        `${label} の詰め替え`,
-        opened.close,
-        undefined,
-        pace,
-      ),
+      marks === null
+        ? body
+        : body.pipeThrough(syncMarksStream(marks.codec, marks.lengthSize)),
       { headers: mp4Headers(codec, 0, opened.id) },
     );
   }
@@ -1481,6 +1490,55 @@ function withFallback(
   };
   if (!softwareEncodes(codec, rung)) return [{ ...build(hw), gaveUp: blame }];
   return [build(hw), { ...build(null), blame }];
+}
+
+/**
+ * **手前に始めてよいキーフレームが無い録画を、その位置から同じコーデックに変換して送る** (`cleanFrom` の `missing`)。
+ * 詰め替えると、送る中に始めてよいコマが無く、WebKit は目標の手前の印の付いた P のコマからデコーダに渡して
+ * MEDIA_ERR_DECODE になる (#2884)。変換すれば先頭は IDR になる。
+ *
+ * 変換できないとき (H.265 をエンコードできる GPU が無い) と、変換の枠が埋まっているときは null。呼ぶ側は前と同じく
+ * 詰め替える。Chrome・Edge は印の付いた P のコマからでも始められ、断ると (503) そちらも観られなくなるため
+ */
+function missingStart(
+  file: EncodedFile,
+  from: number,
+  audio: number,
+  codec: HwCodec,
+  label: string,
+): Response | null {
+  if (pickLiveHw(codec, false) === null && !softwareEncodes(codec, 0)) {
+    console.warn(
+      `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、変換もできないので詰め替えます`,
+    );
+    return null;
+  }
+  const held = holdTranscode();
+  if (held === null) {
+    console.warn(
+      `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無いが、変換の枠が埋まっているので詰め替えます`,
+    );
+    return null;
+  }
+  console.log(
+    `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無いので、変換して送ります`,
+  );
+  const pace = new StreamPace(true);
+  const opened = openPace(() => pace.read());
+  const release = () => {
+    held();
+    opened.close();
+  };
+  return new Response(
+    transcodeBody(
+      fileAttempts(file, from, audio, codec, 0),
+      `${label} の変換`,
+      release,
+      undefined,
+      pace,
+    ),
+    { headers: mp4Headers(codec, 0, opened.id) },
+  );
 }
 
 function fileAttempts(
