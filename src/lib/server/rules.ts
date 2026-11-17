@@ -845,14 +845,33 @@ export function duplicateAtStart(recordingId: number): string | null {
 }
 
 /**
- * 外れても引っ込めない予約か (下見の行に出す。猶予は `applyRules` と同じ)。手動のものと、もうすぐ始まる (猶予の内) もの。
+ * 外れても引っ込めない予約か (`applyRules` と下見が同じ決まりで見る)。手動のものと、**有効なルール** (`enabled`) の予約で
+ * もうすぐ始まる (猶予の内) もの。ルールごと消された・止められた予約は、直前でも引っ込める (人が押した結果なので)。
  * 録り始めたものは予約の候補 (`started_at` が空) に入らないので、ここには来ない
  */
 export function keepsReservation(
-  held: { manual: boolean; start_at: number },
+  held: { manual: boolean; start_at: number; rule_id: number | null },
   at: number,
+  enabled: (rule: number) => boolean,
 ): boolean {
-  return held.manual || held.start_at < at + config.ruleRetractGrace;
+  if (held.manual) return true;
+  return (
+    held.rule_id !== null &&
+    enabled(held.rule_id) &&
+    held.start_at < at + config.ruleRetractGrace
+  );
+}
+
+/** 有効なルールの ID (`keepsReservation` に渡す) */
+export function enabledRuleIds(): Set<number> {
+  return new Set(
+    orm()
+      .select({ id: ruleTable.id })
+      .from(ruleTable)
+      .where(eq(ruleTable.enabled, true))
+      .all()
+      .map((row) => row.id),
+  );
 }
 
 interface RuleSync {
@@ -1049,7 +1068,6 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   const listed = new Map(programs.map((program) => [program.id, program]));
   /** 有効なルール。消された/止められたぶんは猶予を置かずに引っ込める */
   const enabled = new Set(rules.map((rule) => rule.id));
-  const grace = at + config.ruleRetractGrace;
 
   orm().transaction((tx) => {
     for (const { rule, program } of wanted.values()) {
@@ -1105,10 +1123,13 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
       const program = listed.get(reservation.program_id);
       // 番組表から消えているだけかもしれない。タイトルが空のものも判断材料にならない
       if (program === undefined || program.name === "") continue;
-      // ルールが有効なのに外れた = 番組表が動いた。直前なら録っておく
-      const byChurn =
-        reservation.rule_id !== null && enabled.has(reservation.rule_id);
-      if (byChurn && reservation.start_at < grace) continue;
+      // ルールが有効なのに外れた = 番組表が動いた。直前なら録っておく (`keepsReservation`)
+      const kept = keepsReservation(
+        { ...reservation, manual: false },
+        at,
+        (id) => enabled.has(id),
+      );
+      if (kept) continue;
       tx.delete(reservations).where(eq(reservations.id, reservation.id)).run();
       result.dropped++;
     }

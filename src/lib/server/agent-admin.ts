@@ -21,7 +21,7 @@ import {
   refusedAsUnpaired,
 } from "./agent-client";
 import { agentDownSince } from "./agent-events";
-import { aboutName, NAME_MAX } from "./agent-name";
+import { type About, NAME_MAX, readAbout } from "./agent-name";
 import { type Agent, listAgents, parseAgentUrl } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
@@ -168,7 +168,7 @@ export async function addAgent(raw: string): Promise<Agent> {
       .get().id;
   });
   let agent = agentOf(id);
-  const name = await aboutName(agent);
+  const { name } = await readAbout(agent);
   if (name !== null) {
     orm().update(agents).set({ name }).where(eq(agents.id, id)).run();
     agent = { ...agent, name };
@@ -355,37 +355,11 @@ export interface AgentState {
   versionDiffers: boolean;
   /** チューナーの台数。訊けなければ null */
   tuners: number | null;
-  trouble: "changed" | "unpaired" | null;
+  trouble: About["trouble"];
   downSince: number | null;
   rawVisible: boolean | null;
   /** このエージェントで録画している番組の名前 (削除の確かめに出す) */
   recordings: string[];
-}
-
-/** エージェントの `/denpa/about` を読む。証明書が変わった・組んでいないと断られたなら `trouble` */
-async function readAbout(
-  agent: Agent,
-): Promise<{ version: string | null; trouble: AgentState["trouble"] }> {
-  try {
-    const res = await fetchAgent(agent, "/denpa/about", {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (await refusedAsUnpaired(res))
-      return { version: null, trouble: "unpaired" };
-    if (!res.ok) return { version: null, trouble: null };
-    const body = (await res.json().catch(() => null)) as {
-      version?: unknown;
-    } | null;
-    return {
-      version: typeof body?.version === "string" ? body.version : null,
-      trouble: null,
-    };
-  } catch (error) {
-    if (error instanceof AgentTrustError)
-      return { version: null, trouble: error.kind };
-    return { version: null, trouble: null };
-  }
 }
 
 /**

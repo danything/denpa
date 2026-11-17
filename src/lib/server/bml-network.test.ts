@@ -282,6 +282,13 @@ describe("届くかを確かめる宛先", () => {
     expect(reachHost("https://[2001:db8::1]:8443/x")).toBe("[2001:db8::1]");
   });
 
+  test("URL として読めない宛先は空にする (例外を出さずに「宛先がありません」で断る)", async () => {
+    expect(reachHost("https://")).toBe("");
+    await expect(confirmReachable("https://", 1000)).rejects.toThrow(
+      "宛先がありません",
+    );
+  });
+
   test("括弧付きの IPv6 にポートが付いていても、内部のアドレスなら断る", async () => {
     for (const destination of ["[::1]:443", "[fd00::1]:443", "[fe80::1]"]) {
       await expect(confirmReachable(destination, 1000)).rejects.toThrow(

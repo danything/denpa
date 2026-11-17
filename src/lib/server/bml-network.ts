@@ -494,12 +494,15 @@ async function hops(
 }
 
 /**
- * `confirmReachable` の宛先から名前 (か IP) だけを取り出す。読めなければ空文字。
+ * `confirmReachable` の宛先から名前 (か IP) だけを取り出す。読めなければ空文字 (URL として読めないものも)。
  * `example.jp` でも `example.jp:443` でも `https://example.jp/x` でも受ける (繋ぐのはどれも 443 番)。
  * IPv6 は括弧付きで返し (`[2001:db8::1]:443` → `[2001:db8::1]`)、括弧は `resolvable` が外す
  */
 export function reachHost(destination: string): string {
-  if (destination.includes("://")) return new URL(destination).hostname;
+  if (destination.includes("://")) {
+    // URL として読めなければ空 (呼ぶ側が「宛先がありません」で断る)
+    return URL.canParse(destination) ? new URL(destination).hostname : "";
+  }
   const bare = destination.replace(/^\/+/, "").split("/")[0] ?? "";
   return bare
     .replace(/^(\[[^\]]*\]):\d+$/, "$1")
