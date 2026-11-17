@@ -15,17 +15,58 @@ function str(key: string, fallback: string): string {
   return v === undefined || v === "" ? fallback : v;
 }
 
-function num(key: string, fallback: number): number {
-  const v = process.env[key];
+/**
+ * 数を書く変数を読む。**空か空白だけなら既定、読めない値は既定に戻さずに例外を送出する** (起動をやめる)。
+ * 打ち間違えたまま既定で動くと、間違えたことに気づけない (`SHUTDOWN_WAIT` なら録画を待たずに止まる)。
+ * エージェントの読み方 (`Config.Present`・`AGENT_PORT`・`SHUTDOWN_WAIT`) と同じ。`min`・`integer` は範囲と整数かも確かめる
+ */
+export function parseNum(
+  key: string,
+  text: string | undefined,
+  fallback: number,
+  { min, integer = false }: { min?: number; integer?: boolean } = {},
+): number {
+  const v = text?.trim();
   if (v === undefined || v === "") return fallback;
   const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+  if (
+    !Number.isFinite(n) ||
+    (min !== undefined && n < min) ||
+    (integer && !Number.isInteger(n))
+  ) {
+    const what = `${min === undefined ? "" : `${min} 以上の`}${integer ? "整数" : "数"}`;
+    throw new Error(
+      `${key} は${min === undefined ? "" : " "}${what}で書きます (いまは「${text}」)`,
+    );
+  }
+  return n;
+}
+
+/** オン/オフを書く変数を読む。`1`・`true` でオン、`0`・`false` でオフ。空か空白だけなら既定、ほかの値は読めないので例外を送出する (`parseNum` と同じ) */
+export function parseBool(
+  key: string,
+  text: string | undefined,
+  fallback: boolean,
+): boolean {
+  const v = text?.trim().toLowerCase();
+  if (v === undefined || v === "") return fallback;
+  if (v === "1" || v === "true") return true;
+  if (v === "0" || v === "false") return false;
+  throw new Error(
+    `${key} は 1 か 0 (true か false) で書きます (いまは「${text}」)`,
+  );
+}
+
+function num(
+  key: string,
+  fallback: number,
+  range?: { min?: number; integer?: boolean },
+): number {
+  return parseNum(key, process.env[key], fallback, range);
 }
 
 function bool(key: string, fallback: boolean): boolean {
-  const v = process.env[key];
-  if (v === undefined || v === "") return fallback;
-  return v === "1" || v.toLowerCase() === "true";
+  return parseBool(key, process.env[key], fallback);
 }
 
 const SEC = 1000;
@@ -259,7 +300,7 @@ export const config = {
    * 0 で待たずに止まる。**Kubernetes の terminationGracePeriodSeconds・
    * docker compose の stop_grace_period・Mac の plist の ExitTimeOut (install.sh) をこれ以上にしておくこと** (runtime.ts)
    */
-  shutdownWait: num("SHUTDOWN_WAIT", 6 * 60 * MIN),
+  shutdownWait: num("SHUTDOWN_WAIT", 6 * 60 * MIN, { min: 0, integer: true }),
   schedulerTick: num("SCHEDULER_TICK", 5 * SEC),
   /** 保存先の実体と DB を突き合わせる間隔。外から消されたものをここで見つける */
   reconcileInterval: num("RECONCILE_INTERVAL", 5 * MIN),
