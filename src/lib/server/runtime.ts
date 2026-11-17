@@ -21,6 +21,10 @@ import { probe } from "./hwenc";
 import { announceRestart, attend } from "./live";
 import { reconcile as logoReconcile, ride, sweep } from "./logo";
 import { checkPower, forgetWake } from "./power";
+import {
+  CHECK_EVERY as RANKING_CHECK,
+  sendIfDue as sendRanking,
+} from "./ranking";
 import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
 import { restoreWidths } from "./restore-width";
 import { fillSatellites } from "./satellite-lineup";
@@ -261,6 +265,12 @@ export function start(): void {
    */
   void guard("logo", () => logoReconcile(true));
   every(config.logoSweepInterval, "logo", sweep);
+
+  /*
+   * **予約数ランキングに予約を送る** (ranking.ts)。参加している世帯だけ、6 時間ごとに家ごとにずらした時刻で送る。
+   * ここでは送る時刻が来たかを見るだけで、参加していなければ何もしない
+   */
+  every(RANKING_CHECK, "ranking", sendRanking);
 }
 
 /**

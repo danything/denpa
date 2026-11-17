@@ -13,6 +13,8 @@ import { idTokenFor, sealForDenpa } from "./niconico-seal";
  * - `POST /niconico/token`: 更新。更新に使うトークンは毎回替わり、古いものは `invalid_grant`
  * - `POST /niconico/live/watch`: 出したアクセストークンなら、この偽物の視聴の WebSocket (`/__watch`) を返す。ほかは 401
  * - 視聴の WebSocket: `startWatching` に `seat` を返し、`postComment` を `posts` に貯めて `postCommentResult` を返す
+ * - `/ranking/*`: 予約数ランキング (denpa-hub の docs/ranking.md)。トークンを出し、送られた本文を `votes` に貯める。
+ *   `/__control/ranking` で `off` にすると、本物の hub がランキングを受け付けていないときと同じく 404 を返す
  */
 const PORT = Number(process.env["FAKE_HUB_PORT"] ?? 8100);
 /** 偽のニコニコのユーザー ID */
@@ -28,6 +30,14 @@ const accessTokens = new Set<string>();
 const posts: Record<string, unknown>[] = [];
 /** 接続先を求められた回数 (局ごと) */
 const watched: string[] = [];
+/** 予約数ランキング。`off` は hub がランキングを受け付けていないとき (404) */
+let ranking: "ok" | "off" = "ok";
+/** 出したランキングのトークン (消したら外す) */
+const rankingTokens = new Set<string>();
+/** 受けたランキングの送信 (`POST /ranking/votes` の本文) と、消したトークンの数 */
+const votes: unknown[] = [];
+let revoked = 0;
+let rankingSerial = 0;
 
 function tokens(): Record<string, unknown> {
   serial++;
@@ -98,6 +108,37 @@ Bun.serve({
         url: `ws://127.0.0.1:${PORT}/__watch?channel=${channel}`,
       });
     }
+    if (url.pathname.startsWith("/ranking")) {
+      if (ranking === "off") return json({ error: "not_found" }, 404);
+      const bearer = (request.headers.get("authorization") ?? "").replace(
+        /^Bearer /,
+        "",
+      );
+      if (url.pathname === "/ranking/tokens" && request.method === "POST") {
+        const token = `fake-ranking-${++rankingSerial}`.padEnd(43, "x");
+        rankingTokens.add(token);
+        return json({ token }, 201);
+      }
+      if (!rankingTokens.has(bearer))
+        return json({ error: "invalid_token" }, 401);
+      if (url.pathname === "/ranking/votes" && request.method === "POST") {
+        votes.push(await request.json());
+        return json({ accepted: 0, rejected: 0 });
+      }
+      if (
+        url.pathname === "/ranking/tokens/self" &&
+        request.method === "DELETE"
+      ) {
+        rankingTokens.delete(bearer);
+        revoked++;
+        return new Response(null, { status: 204 });
+      }
+      return json({ error: "not_found" }, 404);
+    }
+    if (url.pathname === "/__control/ranking" && request.method === "POST") {
+      ranking = (await request.text()) === "off" ? "off" : "ok";
+      return json({ ranking });
+    }
     if (url.pathname === "/__watch") {
       if (server.upgrade(request)) return undefined;
       return new Response("upgrade が要ります", { status: 400 });
@@ -107,7 +148,13 @@ Bun.serve({
       return json({ mode });
     }
     if (url.pathname === "/__control/state")
-      return json({ mode, serial, posts, watched });
+      return json({
+        mode,
+        serial,
+        posts,
+        watched,
+        ranking: { tokens: rankingTokens.size, votes, revoked },
+      });
     return new Response("not found", { status: 404 });
   },
   websocket: {

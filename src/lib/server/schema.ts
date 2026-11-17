@@ -1017,6 +1017,48 @@ export const niconicoLink = sqliteTable("niconico_link", {
 });
 
 /**
+ * **予約数ランキングへの参加** (`ranking.ts`。世帯で 1 つなので行は多くて 1 つ、`id` はいつも 1)。行があれば参加している。
+ *
+ * - トークンは denpa-hub が出したもの。denpa のサーバだけが持ち、端末と記録には出さない
+ * - 送る時刻は 6 時間の中の `slot` を家ごとに乱数で決め、毎回そこから ±15 分ずらす (`next_at`)
+ * - オフにしたら行ごと消す (送った票を hub で取り消してから)
+ */
+export const rankingLink = sqliteTable("ranking_link", {
+  id: integer("id").primaryKey(),
+  token: text("token").notNull(),
+  /** 6 時間の中で送る位置 (ms。0 以上 6 時間未満)。参加したときに乱数で決める */
+  slot: integer("slot").notNull(),
+  /** 次に送る時刻 (unix ms) */
+  next_at: integer("next_at").notNull(),
+  /** 最後に送れた時刻。まだなら null */
+  sent_at: integer("sent_at"),
+  /** 最後に送れなかった時刻。そのあと送れたら null に戻す */
+  failed_at: integer("failed_at"),
+  /** 送れなかったわけ。`unreachable` = 届かない・断られた、`disabled` = hub がランキングを受け付けていない (404) */
+  failure: text("failure", { enum: ["unreachable", "disabled"] }),
+  joined_at: integer("joined_at").notNull(),
+});
+
+/**
+ * **予約数ランキングに送った予約の控え** (`ranking.ts`)。次に送るときに、いまの予約と比べて差分 (add・remove) を作る。
+ * 送った中身 (時刻・番組名・局名・ジャンル・ルールの予約か手の予約か) は `digest` にまとめて持ち、変わったら送り直す。
+ * 始まった番組の行は hub に送らずに消す (hub は始まった番組を順位に入れない)
+ */
+export const rankingSent = sqliteTable(
+  "ranking_sent",
+  {
+    network_id: integer("network_id").notNull(),
+    service_id: integer("service_id").notNull(),
+    event_id: integer("event_id").notNull(),
+    /** 番組の始まり (unix ms) */
+    start_at: integer("start_at").notNull(),
+    /** 送った中身の SHA-256 (`ranking.ts` の `digest`) */
+    digest: text("digest").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.network_id, t.service_id, t.event_id] })],
+);
+
+/**
  * **ロゴを取得した記録** (`logo-record.ts`)。設定の「その他」の「ロゴの取得を記録する」(`recordLogo`) がオンの間だけ、
  * 当たりの中継で待つたびに 1 行足す。衛星のロゴはダウンロードの期間にしか流れず、期間がいつ来るかは分からないので、
  * その来方 (間隔・長さ) を実測で知るためのもの (docs/logo.md「ロゴの取得を記録する」)。
