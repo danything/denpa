@@ -72,7 +72,7 @@ interface HybridcastApp {
   /** 放送局を表す番号 (organisation_id) */
   organisationId: number;
   applicationId: number;
-  /** `CONTROL` のどれか。生の値をそのまま持つ (知らない値でも捨てない) */
+  /** `CONTROL` のどれか。放送の値をそのまま持つ (知らない値でも捨てない) */
   controlCode: number;
   /** アプリの名前。放送が入れていなければ空 */
   name: string;

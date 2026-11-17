@@ -3,7 +3,7 @@
  *
  * 1 本の WebSocket で全部を一緒に送る ([stream.md](../../docs/stream.md#websocket-プロトコル))。
  *
- *     [1 byte: 種別][8 bytes: 時刻 (90kHz, BE)][中身...]
+ *     [1 byte: 種別][8 bytes: 時刻 (90 kHz, BE)][中身...]
  *
  * 時刻は**エンコードした mp4 の物差し**。受け側の `video.currentTime` と直に
  * 突き合わせられる。映像と字幕を**同じ ffmpeg** でエンコードしているので、入口で
@@ -45,7 +45,7 @@ export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
  * いるので、その組に対応する値を返す。
  *
  * - `avc1.640029` … High profile / Level 4.1。1080p60 まで
- * - `av01.0.08M.08` … Main profile / Level 4.0 / 8bit。同じく 1080p60 まで
+ * - `av01.0.08M.08` … Main profile / Level 4.0 / 8 ビット。同じく 1080p60 まで
  * - `hvc1.1.6.L123.B0` … Main profile / Level 4.1。同じく 1080p60 まで。入れ物の中の名前も `hvc1` にする
  *   (`server/live.ts` の `videoArgs`。ffmpeg の既定の `hev1` は Safari が受け取らない)
  * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る。
@@ -227,7 +227,7 @@ export type Notice =
       /** 録り終わっているか。true なら右端はもう伸びない */
       finished: boolean;
       /**
-       * 元の TS で送るとき (`ChaseCommand.raw`)、**録画の先頭の PTS** (90kHz。`ts/seek.ts` の `tsHead`)。画面は届いた
+       * 元の TS で送るとき (`ChaseCommand.raw`)、**録画の先頭の PTS** (90 kHz。`ts/seek.ts` の `tsHead`)。画面は届いた
        * PTS からこれを引いて再生位置を出す (`sinceHead`)。バイト数から割り出した位置 (`at`) より正しい。読めなければ省く
        */
       origin?: number;

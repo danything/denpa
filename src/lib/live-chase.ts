@@ -37,7 +37,7 @@ export function nextHold(
 
 /**
  * **通しの再生位置から `base` を引いた秒。** 届いた PTS (`at`。秒。一周を伸ばしてあってよい) から録画の先頭の PTS
- * (`origin`。90kHz。`timeline` の `origin`) を引く (観る画面の MPEG-2 と同じ `sinceHead`)。バイト数から割り出した
+ * (`origin`。90 kHz。`timeline` の `origin`) を引く (観る画面の MPEG-2 と同じ `sinceHead`)。バイト数から割り出した
  * `base` より正しい
  */
 export function rawChasePosition(

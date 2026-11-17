@@ -140,7 +140,7 @@ export function videoRect(
 /**
  * JPEG を描く大きさ ([幅, 高さ])。**背景 (background-image) と object で同じ決まり。**
  * 960x540 の面では静止画プレーンが 1920x1080 なので、画像の半分の大きさで描く。描く箱も画像も 960x540 のときだけ
- * (全面の静止画) そのまま (STD-B24 第二分冊 付属 2 表 5-3、TR-B14 第二分冊のスケーリング。web-bml の `fixJPEGScaling`
+ * (全面の静止画) そのまま (STD-B24 第二編 付属 2 表 5-3、TR-B14 第二分冊のスケーリング。web-bml の `fixJPEGScaling`
  * も同じ)。720x480 の面は静止画プレーンと同じ大きさなのでそのまま
  */
 export function jpegSize(

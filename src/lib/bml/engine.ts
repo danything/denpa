@@ -270,8 +270,10 @@ function looksLikeBml(file: CarouselFile): boolean {
   return /<bml[\s>]/i.test(ascii(file.data, 0, 1024));
 }
 
-/** JPEG の大きさ (SOF) */
-function jpegSize(data: Uint8Array): { width: number; height: number } | null {
+/** JPEG の画像の大きさ (SOF)。描く大きさは render.ts の `jpegSize` */
+function jpegDimensions(
+  data: Uint8Array,
+): { width: number; height: number } | null {
   let at = 2;
   while (at + 9 < data.length) {
     if (data[at] !== 0xff) return null;
@@ -423,7 +425,18 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   releaseKeys(): void {
+    const held = this.held;
     this.held = null;
+    // 決定の keyup は来ないので、押している間の見た目 (activeStyle) を戻す。keydown の後始末が済んでから
+    if (held === null || this.doc === null) return;
+    this.enqueue({
+      kind: "native",
+      token: this.token,
+      run: () => {
+        const focused = this.focusedElement;
+        if (focused?.state === "active") focused.setState("focus");
+      },
+    });
   }
 
   get path(): string | null {
@@ -1907,7 +1920,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       }
     } else {
       const mime = `${file.type.type}/${file.type.subtype}`;
-      const size = mime === "image/jpeg" ? jpegSize(file.data) : null;
+      const size = mime === "image/jpeg" ? jpegDimensions(file.data) : null;
       source = {
         url: blobUrl(file.data, mime),
         width: size?.width ?? null,

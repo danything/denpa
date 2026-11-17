@@ -1696,3 +1696,30 @@ describe("画像の待ちと「無い」の上限", () => {
     expect([...missing].some((key) => key.endsWith("/a0.jpg"))).toBe(false);
   });
 });
+
+describe("キーを離す", () => {
+  test("決定を押している間にフォーカスが外れたら (releaseKeys)、押している間の見た目を戻す", async () => {
+    const { bml } = open();
+    feedAll(bml, [
+      PROGRAM,
+      ...carousel([
+        bmlFile(
+          "startup.bml",
+          '<a id="go">x</a>',
+          'function start() { document.getElementById("go").focus(); browser.Ureg[1] = "ready"; }',
+        ),
+      ]),
+    ]);
+    const { done } = await watch(() => inside(bml).ureg[1] === "ready");
+    expect(done).toBe(true);
+    const focused = () =>
+      (bml as unknown as { focusedElement: { state: string } | null })
+        .focusedElement;
+    bml.key(18, true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(focused()?.state).toBe("active");
+    bml.releaseKeys();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(focused()?.state).toBe("focus");
+  });
+});
