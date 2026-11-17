@@ -689,7 +689,23 @@ const server = createServer((request, response) => {
     });
     // make.ts が LIMIT で切った fMP4 も、ここで応答を終える。remux-player は endOfStream を呼び、尺がそこまでになるので、
     // Chrome は切ったところより先へ飛べない (player-seek で 85 秒から先が止まる)。Safari は飛べる
-    createReadStream(file, { highWaterMark: 64 * 1024 }).pipe(response);
+    // PLAY_RATE (バイト/秒) があれば、その速さで送る (遅い回線のふり)
+    const rate = Number(process.env.PLAY_RATE || 0);
+    const stream = createReadStream(file, { highWaterMark: 64 * 1024 });
+    if (rate <= 0) {
+      stream.pipe(response);
+      return;
+    }
+    (async () => {
+      for await (const chunk of stream) {
+        if (!response.write(chunk))
+          await new Promise((resolve) => response.once("drain", resolve));
+        await new Promise((resolve) =>
+          setTimeout(resolve, (chunk.length / rate) * 1000),
+        );
+      }
+      response.end();
+    })().catch(() => response.destroy());
     return;
   }
   response.writeHead(200, { "Content-Type": "text/html" });
