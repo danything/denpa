@@ -8,7 +8,8 @@
  * - `from` の手前のキーフレームから始めてよいなら、`from` をそのまま返す。ほとんどの録画はここで終わる
  * - そうでなければ、Cues を手前へたどって最初に見つかった始めてよいキーフレームの、少し後ろ (`AIM`) の時刻を返す。
  *   ffmpeg は `-ss` の手前のキーフレームを選ぶので、そのコマから出す
- * - `LOOKBACK` 秒たどっても無ければ `missing`。呼ぶ側は詰め替えずに変換する (`playback.ts`)
+ * - `LOOKBACK` 秒たどっても無ければ `missing`。呼ぶ側は詰め替えずに変換する (`playback.ts`)。
+ *   変換できず、相手が始めてよいコマから始まるものを求めている (`?clean=1`) ときは、`FAR` 秒までたどり直して詰め替える
  * - Cues が無い・読めない・AV1 なら、`from` をそのまま返し、印も直さない (`marks` が null。前と同じ)
  *
  * 寄せるだけでは足りない。WebKit は目標の時刻の手前でいちばん近い sync のコマからデコーダに渡すので、出した fMP4 の
@@ -44,6 +45,15 @@ const CLUSTER_MOST = 16 * 1024 * 1024;
  */
 const LOOKBACK = 20;
 /**
+ * 変換できずに詰め替えるときに、始めてよいキーフレームを探して手前へたどる長さ (秒。`?clean=1` のとき)。
+ * **観る画面が後ろを捨てない長さで決めた。**
+ *
+ * 観る画面 (`remux-player.ts`) は、溜まっている先頭が再生位置より `BEHIND` の 2 倍 (60 秒) より前になると、
+ * 再生位置の 30 秒より前を捨てる。開く位置の 60 秒より前から送ると、WebKit がそのキーフレームからデコードする前に捨てられうる。
+ * 余裕を取って 50 秒にした。macOS の WebKit では、間が 50 秒なら映るまで 13 秒掛かった (`LOOKBACK` の説明)
+ */
+export const FAR = 50;
+/**
  * 選んだキーフレームより、これだけ後ろの時刻を `-ss` に渡す (秒。次のキーフレームが近ければその半分)。
  * ffmpeg は B フレームのある映像では `-ss` の 3/23 秒手前で探す (fftools/ffmpeg_demux.c の `dts_heuristic`) ので、
  * ちょうどの時刻を渡すと 1 つ手前のキーフレームから出してしまう
@@ -74,7 +84,7 @@ export type CleanStart =
       marks: Marks | null;
     }
   | {
-      /** 手前 `LOOKBACK` 秒に始めてよいキーフレームが無い。詰め替えると WebKit が始められない */
+      /** 手前 `lookback` 秒に始めてよいキーフレームが無い。詰め替えると WebKit が始められない */
       missing: true;
       /** 開く位置 (秒)。変換できずに詰め替えるときは、ここから印を直さずに詰め替える (前と同じ) */
       from: number;
@@ -143,10 +153,14 @@ async function keyFrame(
   return null;
 }
 
-/** **詰め替えの始め方** (冒頭の説明)。`from` の手前のキーフレームから始められなければ、手前の始めてよいキーフレーム */
+/**
+ * **詰め替えの始め方** (冒頭の説明)。`from` の手前のキーフレームから始められなければ、手前の始めてよいキーフレーム。
+ * `lookback` はたどる長さ (秒)。変換できずに詰め替えるときは `FAR` を渡す
+ */
 export async function cleanFrom(
   path: string,
   from: number,
+  lookback = LOOKBACK,
 ): Promise<CleanStart> {
   const asIs: CleanStart = { missing: false, from, marks: null };
   try {
@@ -160,7 +174,7 @@ export async function cleanFrom(
     if (last < 0) return { from, marks, missing: false };
     for (let i = last; i >= 0; i--) {
       const cue = cues[i]!;
-      if (cue.time < from - LOOKBACK) break;
+      if (cue.time < from - lookback) break;
       const key = await keyFrame(path, index, cue);
       if (key === null) return asIs;
       if (!startable(index.codec, index.lengthSize, key)) continue;
@@ -174,7 +188,7 @@ export async function cleanFrom(
       );
       return { from: start, marks, missing: false };
     }
-    // LOOKBACK 秒の中に無かった (先頭のキーフレームまで来ていれば、そこは IDR なので見つかっている)
+    // lookback 秒の中に無かった (先頭のキーフレームまで来ていれば、そこは IDR なので見つかっている)
     const before = cues[last - 1];
     const decodeFrom =
       before === undefined

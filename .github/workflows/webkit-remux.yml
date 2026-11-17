@@ -4,7 +4,8 @@ name: WebKit remux check
 # iPhone の Safari と同じ VideoToolbox でデコードする。Linux の WebKit は H.264 の fMP4 を再生できないため、macOS で回す。
 #
 # 1. make (Linux): x264・x265 で作り物の録画 (Matroska) を作り、開く位置ごとに `cleanFrom` を通さない・通す の両方で
-#    `copyArgs` の ffmpeg を回す。sync の印を IDR にだけ残したもの (`+sync`) も作る (tests/webkit-remux/make.ts)
+#    `copyArgs` の ffmpeg を回す。sync の印を IDR にだけ残したもの (`+sync`) も作る (tests/webkit-remux/make.ts)。
+#    H.264 で変換するところは、変換の枠が埋まっていたときに返す詰め替え (`busy`) も作る
 # 2. play (macOS): Playwright の WebKit で、remux-player.ts と同じ足し方で流す。新しい <video> で開く (open) のと、
 #    先頭を流したあとに飛ぶ (seek) の 2 通り (tests/webkit-remux/play.mjs)。表は Step Summary と artifact の result に出る
 #

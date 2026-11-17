@@ -2,8 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-import { mkvFromClip } from "../../../tests/fake/mkv-clip";
-import { cleanFrom } from "./clean-start";
+import { mkvFromClip, notStartable } from "../../../tests/fake/mkv-clip";
+import { cleanFrom, FAR } from "./clean-start";
 
 /**
  * 作り置きの fMP4 (x264 がエンコードした H.264。キーフレームはどれも IDR) から組んだ Matroska で確かめる
@@ -13,24 +13,6 @@ import { cleanFrom } from "./clean-start";
 const clip = new Uint8Array(
   readFileSync(new URL("../../../tests/fake/live-h264.mp4", import.meta.url)),
 );
-
-/**
- * 長さ 4 バイトの NAL の並びの、IDR のスライス (5) を IDR でない P のスライスにする。
- * x264 のスライスの先頭は `0x88` (first_mb_in_slice 0・slice_type 7 の I) なので、`0x89` (slice_type 8 の SP。I でない) にする
- */
-function notStartable(data: Uint8Array): Uint8Array {
-  const out = data.slice();
-  let at = 0;
-  while (at + 4 < out.length) {
-    const size = new DataView(out.buffer).getUint32(at);
-    if ((out[at + 4]! & 0x1f) === 5) {
-      out[at + 4] = (out[at + 4]! & 0xe0) | 1;
-      if (out[at + 5] === 0x88) out[at + 5] = 0x89;
-    }
-    at += 4 + size;
-  }
-  return out;
-}
 
 const dir = mkdtempSync(`${tmpdir()}/clean-start-`);
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -78,6 +60,16 @@ describe("cleanFrom", () => {
     expect(start.decodeFrom).toBeGreaterThan(60);
     // 20 秒の中に先頭の IDR があれば寄せる
     expect((await cleanFrom(long, 15)).missing).toBe(false);
+  });
+
+  test("たどる長さを延ばせば (変換できないとき)、20 秒より手前の始められるキーフレームから始める", async () => {
+    const start = await cleanFrom(long, 40, FAR);
+    expect(start.missing).toBe(false);
+    expect(start.from).toBeGreaterThan(0);
+    expect(start.from).toBeLessThanOrEqual(0.5);
+    expect(start.marks).toEqual({ codec: "h264", lengthSize: 4 });
+    // FAR 秒より手前にしか無ければ、延ばしても missing
+    expect((await cleanFrom(long, FAR + 10, FAR)).missing).toBe(true);
   });
 
   test("Matroska でないファイルなら、そのまま返し、印も直さない", async () => {

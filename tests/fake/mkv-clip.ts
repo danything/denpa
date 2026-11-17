@@ -214,3 +214,22 @@ export function mkvFromClip(
   );
   return join([ebml, segment]);
 }
+
+/**
+ * 長さ 4 バイトの NAL の並びの、IDR のスライス (5) を IDR でない P のスライスにする (`mkvFromClip` の `rewrite` に渡す)。
+ * MediaCodec のエンコーダが、intra-refresh の回復点に印を付けて返したときの形 (`server/clean-start.ts`)。
+ * x264 のスライスの先頭は `0x88` (first_mb_in_slice 0・slice_type 7 の I) なので、`0x89` (slice_type 8 の SP。I でない) にする
+ */
+export function notStartable(data: Uint8Array): Uint8Array {
+  const out = data.slice();
+  let at = 0;
+  while (at + 4 < out.length) {
+    const size = new DataView(out.buffer).getUint32(at);
+    if ((out[at + 4]! & 0x1f) === 5) {
+      out[at + 4] = (out[at + 4]! & 0xe0) | 1;
+      if (out[at + 5] === 0x88) out[at + 5] = 0x89;
+    }
+    at += 4 + size;
+  }
+  return out;
+}

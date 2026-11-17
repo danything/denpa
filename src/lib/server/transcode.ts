@@ -10,6 +10,8 @@
  * | 詰め替えるだけ (映像を写す)・元の TS をそのまま・音声だけ | 数えない (軽い) |
  *
  * 埋まっていたら断る (503「サーバが混んでいます」)。画面はエンコード済みのファイルか MPEG-2 を勧める。
+ * 手前に始めてよいコマが無い録画の変換 (`playback.ts` の `missingStart`) は、同じ観る画面の前の変換を先に止めて枠を譲らせる
+ * (`yieldTranscodes`)。それでも埋まっていれば、断らずに詰め替える。
  *
  * ## 上限は GPU の有無で決め、設定で変えられる
  *
@@ -71,4 +73,35 @@ export function holdTranscode(): (() => void) | null {
     held = false;
     used--;
   };
+}
+
+/** 譲らせられる変換 (`ownTranscode`) */
+const owned = new Set<{ owner: string; stop: () => void }>();
+
+/**
+ * **`owner` が持っている変換を、譲らせられるものとして覚える。** 返す関数で忘れる (変換が止まったときに呼ぶ)。
+ * `stop` は変換を止めて枠を返す関数で、`yieldTranscodes` が呼ぶ
+ */
+export function ownTranscode(owner: string, stop: () => void): () => void {
+  const entry = { owner, stop };
+  owned.add(entry);
+  return () => {
+    owned.delete(entry);
+  };
+}
+
+/**
+ * **`owner` が持っている変換を止めて、枠を返させる。** 止めた本数を返す。
+ * 観る画面が別の位置をリクエストし直すと前の応答を閉じるが、サーバが気づくまで前の変換は枠を持ったままになる。
+ * シークを続けて押すと、そのぶん枠が埋まるため (`playback.ts` の `missingStart`)
+ */
+export function yieldTranscodes(owner: string): number {
+  let stopped = 0;
+  for (const entry of [...owned]) {
+    if (entry.owner !== owner) continue;
+    owned.delete(entry);
+    entry.stop();
+    stopped++;
+  }
+  return stopped;
 }

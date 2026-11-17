@@ -526,7 +526,8 @@ denpa が渡すオプション (`profile`・`prio_speed`・`realtime`) を持つ
 - `-g` は FFmpeg が秒に直して MediaCodec の `i-frame-interval` に渡します (`-g 250` で 30 コマなら 8 秒、ライブの `-g 60` は 1 秒)
 - キーフレームの印は、端末のエンコーダが同期フレームと返したコマにそのまま付きます (FFmpeg の mediacodecenc.c。IDR を指定する手段はありません)。
   VA-API などは IDR にだけ印を付けるので、MediaCodec の録画だけは IDR でないコマ (P のコマも) に印が付いていることがありえます。
-  観る画面の詰め替えは、印の付いたコマから始められなければ手前の始められるコマから始め、20 秒の中に無ければ変換して流します ([api.md](api.md#録画を流す-get-apirecordingsidstream))
+  観る画面の詰め替えは、印の付いたコマから始められなければ手前の始められるコマから始め、20 秒の中に無ければ変換して流します。
+  変換できないとき (H.265 をエンコードできるものが無い・枠が埋まっている)、WebKit には 50 秒まで手前の始められるコマから詰め替えます ([api.md](api.md#録画を流す-get-apirecordingsidstream))
 
 **CI** (android.yml の `emulator`) は、エミュレータ (API 29・35) の中で `tests/native-smoke.ts` を bun で流し、次のことを確かめます。
 

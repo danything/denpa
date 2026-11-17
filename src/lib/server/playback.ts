@@ -43,7 +43,11 @@
  *
  * その場で変換するもの (映像をエンコードし直す) は枠を 1 つ使う (`transcode.ts`)。埋まっていたら
  * 503。詰め替え・元の TS をそのまま流すのは軽いので数えない。**読まれずに詰まった ffmpeg は
- * 5 分で止める** (止めたまま放っておかれた画面のぶんの枠を返すため)
+ * 5 分で止める** (止めたまま放っておかれた画面のぶんの枠を返すため)。
+ *
+ * 手前に始めてよいキーフレームが無いエンコード済みの詰め替えは、同じコーデックに変換する (`missingStart`)。同じ観る画面の前の変換は
+ * 先に止めて枠を譲らせ (`?viewer=`)、それでも埋まっていれば 503 にせず詰め替える。`?clean=1` なら `FAR` 秒手前までの
+ * 始めてよいキーフレームから印を直して詰め替え、それも無ければ 503
  */
 
 import { existsSync, statSync } from "node:fs";
@@ -89,7 +93,7 @@ import { fromTsTime, type Ruler } from "#lib/ts/watch.js";
 import type { Recording } from "#lib/types.js";
 
 import { programSpec } from "./captions";
-import { cleanFrom } from "./clean-start";
+import { cleanFrom, FAR } from "./clean-start";
 import { chapterList } from "./cm";
 import { config } from "./config";
 import { aribServiceId, programSpan } from "./encoder";
@@ -120,7 +124,7 @@ import {
   recordingStream,
 } from "./recording-io";
 import { endInput, run } from "./stream";
-import { holdTranscode } from "./transcode";
+import { holdTranscode, ownTranscode, yieldTranscodes } from "./transcode";
 import { tsProbe } from "./ts-probe";
 
 /** エンコード済みのファイル 1 本の中身 (ffprobe で読む。`probeMedia`) */
@@ -1030,6 +1034,7 @@ interface Attempt {
  *   何も出さずに固まった ffmpeg は、相手が切らなくても止める (枠を持ったまま残さない)
  * - 止めたら `done` を呼ぶ (枠を返す)
  * - `pace` があれば、読みに来た時刻と出したものを渡す (送り出しの具合。`server/pace.ts`)
+ * - `stop` が中断されたら止める (同じ観る画面が別の位置をリクエストし直し、枠を譲らせた。`transcode.yieldTranscodes`)
  */
 export function transcodeBody(
   attempts: Attempt[],
@@ -1037,6 +1042,7 @@ export function transcodeBody(
   done: () => void,
   idle = { limit: IDLE_LIMIT, every: IDLE_CHECK },
   pace: StreamPace | null = null,
+  stop: AbortSignal | null = null,
 ): ReadableStream<Uint8Array> {
   let index = 0;
   let proc: ReturnType<typeof spawnAttempt> | null = null;
@@ -1085,6 +1091,21 @@ export function transcodeBody(
           // もう閉じている
         }
       }, idle.every);
+      stop?.addEventListener(
+        "abort",
+        () => {
+          console.log(
+            `${what}を止めます (同じ観る画面が別の位置をリクエストし直しました)`,
+          );
+          finish();
+          try {
+            controller.error(new Error("yielded"));
+          } catch {
+            // もう閉じている
+          }
+        },
+        { once: true },
+      );
     },
     async pull(controller) {
       waitingSince = Date.now();
@@ -1207,6 +1228,11 @@ function audioIndex(asked: string | null): number {
   return Number.isInteger(n) && n >= 0 ? n : 0;
 }
 
+/** `?viewer=` (観る画面ごとに作る値)。英数字と `-`・`_` の 8〜64 文字でなければ null */
+function viewerOf(asked: string | null): string | null {
+  return asked !== null && /^[\w-]{8,64}$/.test(asked) ? asked : null;
+}
+
 /**
  * **`GET /api/recordings/<id>/stream` に答える。** `codec` は `h264` / `hevc` / `av1` / `mpeg2` / `audio`、`from` は物差しの秒、
  * `audio` は `playback` の `audios` の `id`。出せない形式は 404、枠が埋まっていれば 503。
@@ -1216,6 +1242,10 @@ function audioIndex(asked: string | null): number {
  *   `mpeg2` では効かない (放送のまま流す)
  * - `codec=audio` は音声だけ (AAC 96k の fMP4。`audioOnlyArgs`)。段 3 でも足りないときの最後の手で、枠は使わない
  * - `offset` は `mpeg2` だけ。秒で探さずにそのバイト位置から流す (`rawResponse`)
+ * - `clean=1` は、始めてよいコマから始まるものを求める印 (観る画面が WebKit で付ける。`ts/media-source.ts` の `wantsCleanStart`)。
+ *   エンコード済みの詰め替えで、手前に始めてよいキーフレームが無いのに変換できないとき、印を直さずに詰め替えるのをやめ、
+ *   `FAR` 秒手前までの始めてよいキーフレームから印を直して詰め替える。それも無く枠が埋まっていれば 503
+ * - `viewer` は観る画面ごとに作る値。同じ録画と同じ値の前の変換 (`missingStart`) を止めて枠を譲らせる
  *
  * fMP4 の応答には、中身のコーデック (`CODEC_HEADER`)・段 (`RUNG_HEADER`)・送り出しの具合を読む id (`PACE_HEADER`) を付ける
  */
@@ -1289,13 +1319,41 @@ export async function streamResponse(
 
   const same = plan.encoded.find((file) => file.codec === codec);
   if (same !== undefined && rung === 0) {
-    const start = await cleanFrom(same.path, from);
+    let start = await cleanFrom(same.path, from);
     const audio = audioIndex(query.get("audio"));
-    // 手前に始めてよいキーフレームが無い。詰め替えると WebKit が始められないので、同じコーデックに変換する (`missingStart`)
-    const converted = start.missing
-      ? missingStart(same, from, start.decodeFrom, audio, codec, label)
-      : null;
-    if (converted !== null) return converted;
+    if (start.missing) {
+      // 手前に始めてよいキーフレームが無い。詰め替えると WebKit が始められないので、同じコーデックに変換する (`missingStart`)
+      const viewer = viewerOf(query.get("viewer"));
+      const converted = missingStart(
+        same,
+        from,
+        start.decodeFrom,
+        audio,
+        codec,
+        label,
+        viewer === null ? null : `${recording.id}:${viewer}`,
+      );
+      if (converted instanceof Response) return converted;
+      // 変換できない。始めてよいコマから始まるものを求められていれば、もっと手前の始めてよいキーフレームから詰め替える
+      if (query.get("clean") === "1") {
+        const far = await cleanFrom(same.path, from, FAR);
+        if (!far.missing && far.marks !== null) {
+          console.warn(
+            `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、${converted === "busy" ? "変換の枠が埋まっている" : "変換もできない"}ので、${far.from.toFixed(3)} 秒から詰め替えます`,
+          );
+          start = far;
+        } else if (converted === "busy") {
+          console.warn(
+            `${label}: ${from.toFixed(3)} 秒の手前 ${FAR} 秒に始められるキーフレームが無く、変換の枠も埋まっているので断ります`,
+          );
+          error(503, BUSY);
+        }
+      }
+      if (start.missing)
+        console.warn(
+          `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、${converted === "busy" ? "変換の枠が埋まっている" : "変換もできない"}ので、印を直さずに詰め替えます`,
+        );
+    }
     const pace = new StreamPace(false);
     const opened = openPace(() => pace.read());
     const body = transcodeBody(
@@ -1498,8 +1556,11 @@ function withFallback(
  * MEDIA_ERR_DECODE になる (#2884)。変換すれば先頭は IDR になる。
  * 読み始めるのは `decodeFrom` (`CleanStart` の説明)。
  *
- * 変換できないとき (H.265 をエンコードできる GPU が無い) と、変換の枠が埋まっているときは null。呼ぶ側は前と同じく
- * 詰め替える。Chrome・Edge は印の付いた P のコマからでも始められ、断ると (503) そちらも観られなくなるため
+ * - `owner` (録画と観る画面。`?viewer=`) が同じ前の変換は、先に止めて枠を譲らせる (`transcode.yieldTranscodes`)。
+ *   観る画面は飛ぶたびにリクエストし直すので、前の変換は要らない。止めないと、シークを続けて押したぶん枠が埋まる
+ * - 変換できない (H.265 をエンコードできる GPU が無い) なら `"encoder"`、変換の枠が埋まっていれば `"busy"`。
+ *   呼ぶ側は詰め替える (`?clean=1` なら `FAR` 秒手前までの始めてよいキーフレームから)。
+ *   Chrome・Edge は印の付いた P のコマからでも始められ、断ると (503) そちらも観られなくなるため
  */
 function missingStart(
   file: EncodedFile,
@@ -1508,26 +1569,23 @@ function missingStart(
   audio: number,
   codec: HwCodec,
   label: string,
-): Response | null {
-  if (pickLiveHw(codec, false) === null && !softwareEncodes(codec, 0)) {
-    console.warn(
-      `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、変換もできないので詰め替えます`,
-    );
-    return null;
-  }
+  owner: string | null,
+): Response | "encoder" | "busy" {
+  if (pickLiveHw(codec, false) === null && !softwareEncodes(codec, 0))
+    return "encoder";
+  if (owner !== null) yieldTranscodes(owner);
   const held = holdTranscode();
-  if (held === null) {
-    console.warn(
-      `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無いが、変換の枠が埋まっているので詰め替えます`,
-    );
-    return null;
-  }
+  if (held === null) return "busy";
   console.log(
     `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無いので、変換して送ります`,
   );
   const pace = new StreamPace(true);
   const opened = openPace(() => pace.read());
+  const stop = new AbortController();
+  const forget =
+    owner === null ? () => undefined : ownTranscode(owner, () => stop.abort());
   const release = () => {
+    forget();
     held();
     opened.close();
   };
@@ -1538,6 +1596,7 @@ function missingStart(
       release,
       undefined,
       pace,
+      stop.signal,
     ),
     { headers: mp4Headers(codec, 0, opened.id) },
   );

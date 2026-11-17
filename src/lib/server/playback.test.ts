@@ -3,6 +3,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -31,6 +32,8 @@ import {
   RUNG_HEADER,
 } from "#lib/ts/playback.js";
 import { sinceHead } from "#lib/ts/seek.js";
+
+import { mkvFromClip, notStartable } from "../../../tests/fake/mkv-clip";
 
 /**
  * **録画の観方を決めて流す** (`server/playback.ts`)。ffprobe は偽物 (ファイル名で中身を答える)、
@@ -102,6 +105,25 @@ const unknown = join(media, "a-unknown.mkv");
 const unknownHevc = join(media, "a-unknown [H265].mkv");
 for (const path of [h264, av1, hevc, unknown, unknownHevc])
   writeFileSync(path, "mkv");
+
+/**
+ * 先頭のほかに始めてよいキーフレームが無い、75 秒の H.264 のエンコード済み (MediaCodec の intra-refresh の形。`clean-start.test.ts`)。
+ * 名前に h264 を入れて、偽 ffprobe に H.264 と答えさせる
+ */
+const longH264 = join(media, "long-h264.mkv");
+writeFileSync(
+  longH264,
+  mkvFromClip(
+    new Uint8Array(
+      readFileSync(
+        new URL("../../../tests/fake/live-h264.mp4", import.meta.url),
+      ),
+    ),
+    75,
+    "主音声",
+    (data, at) => (at > 0 ? notStartable(data) : data),
+  ),
+);
 
 /** 合成した元の TS。映像と音声の PES に空のパケットを挟む (`ts/seek.test.ts` と同じ作り) */
 function synthTs(start: number, seconds: number): Uint8Array {
@@ -791,6 +813,76 @@ describe("流す (streamResponse)", () => {
     await expect(
       streamResponse(rec, new URLSearchParams({ codec: "mpeg2" })),
     ).rejects.toMatchObject({ status: 404 });
+  });
+
+  describe("手前に始めてよいキーフレームが無い詰め替え", () => {
+    /** 引数を 1 行ずつ書いてから、何も出さずに待つ偽 ffmpeg (閉じるまで枠を持ったままにする) */
+    const log = join(dir, "missing-ffmpeg.log");
+    const fake = join(dir, "missing-ffmpeg");
+    writeFileSync(fake, `#!/bin/sh\necho "$*" >> '${log}'\nexec sleep 5\n`);
+    chmodSync(fake, 0o755);
+
+    /** 偽 ffmpeg が書いた `n` 行目まで待って、その行を返す */
+    const argv = async (n: number): Promise<string> => {
+      for (let i = 0; i < 500; i++) {
+        const lines = Bun.file(log).size
+          ? (await Bun.file(log).text()).trim().split("\n")
+          : [];
+        if (lines.length >= n) return lines[n - 1]!;
+        await Bun.sleep(10);
+      }
+      throw new Error(`偽 ffmpeg が ${n} 回起きませんでした`);
+    };
+    const ss = (line: string) =>
+      Number(line.split(" ")[line.split(" ").indexOf("-ss") + 1]);
+    const ask = (rec: ReturnType<typeof seed>, query: Record<string, string>) =>
+      streamResponse(rec, new URLSearchParams({ codec: "h264", ...query }));
+
+    test("変換して送る。同じ観る画面の前の変換は止めて枠を譲らせ、ほかの観る画面のものは止めない", async () => {
+      rmSync(log, { force: true });
+      config.ffmpeg = fake;
+      saveSettings({ transcodeLimit: 1 });
+      const rec = seed({ library_path: longH264 });
+      const first = await ask(rec, { from: "70", viewer: "viewer-a1" });
+      expect(await argv(1)).not.toContain("-c:v copy");
+      expect(transcodesInUse()).toBe(1);
+      // 同じ観る画面が別の位置をリクエストし直した。前の変換を止めて、また変換する
+      const second = await ask(rec, { from: "72", viewer: "viewer-a1" });
+      expect(await argv(2)).not.toContain("-c:v copy");
+      expect(transcodesInUse()).toBe(1);
+      await expect(first.body!.getReader().read()).rejects.toThrow("yielded");
+      // ほかの観る画面は止めない。枠が埋まっているので、前と同じく印を直さずにその位置から詰め替える
+      const other = await ask(rec, { from: "74", viewer: "viewer-b1" });
+      const copy = await argv(3);
+      expect(copy).toContain("-c:v copy");
+      expect(ss(copy)).toBe(74);
+      expect(transcodesInUse()).toBe(1);
+      await other.body?.cancel();
+      await second.body?.cancel();
+      expect(transcodesInUse()).toBe(0);
+      saveSettings({ transcodeLimit: null });
+    });
+
+    test("枠が埋まっていて clean=1 なら、50 秒手前までの始めてよいキーフレームから詰め替える。それも無ければ 503", async () => {
+      rmSync(log, { force: true });
+      config.ffmpeg = fake;
+      saveSettings({ transcodeLimit: 1 });
+      const held = holdTranscode();
+      const rec = seed({ library_path: longH264 });
+      const far = await ask(rec, { from: "40", clean: "1" });
+      const copy = await argv(1);
+      expect(copy).toContain("-c:v copy");
+      // 先頭の IDR の少し後ろ (ffmpeg がその IDR を選ぶ時刻)
+      expect(ss(copy)).toBeGreaterThan(0);
+      expect(ss(copy)).toBeLessThanOrEqual(0.5);
+      await far.body?.cancel();
+      await expect(ask(rec, { from: "70", clean: "1" })).rejects.toMatchObject({
+        status: 503,
+      });
+      held?.();
+      expect(transcodesInUse()).toBe(0);
+      saveSettings({ transcodeLimit: null });
+    });
   });
 
   test("音声だけは枠を使わない", async () => {
