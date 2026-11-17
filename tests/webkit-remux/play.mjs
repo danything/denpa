@@ -342,9 +342,9 @@ for (const row of out) {
     last?.decoded ?? "",
     last?.advanced ?? "",
   ];
-  // エラーの文言に `|` が入ると列がずれる
-  lines.push(
-    `| ${cells.map((cell) => String(cell).replace(/\|/g, "\\|")).join(" | ")} |`,
-  );
+  // エラーの文言に `|` が入ると列がずれる。先に `\` を重ねてから `|` の前に `\` を置く
+  const escape = (cell) =>
+    String(cell).replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+  lines.push(`| ${cells.map(escape).join(" | ")} |`);
 }
 writeFileSync(resultPath.replace(/\.json$/, ".md"), `${lines.join("\n")}\n`);
