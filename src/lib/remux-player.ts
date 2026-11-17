@@ -171,6 +171,8 @@ export function remuxPlayer(
    * あるとき、開く位置まで溜まるまでの間に先頭から映ってしまう。開く位置を入れたら流す (`release`)
    */
   let held = false;
+  /** `hold` が止めて、まだ来ていない `pause` の数。`pause` は後から届くので、こちらで止めたものを数えて見分ける */
+  let ownPauses = 0;
   /** いまの位置。開く位置をまだ入れていなければ、その位置 */
   const position = (): number => startAt ?? video.currentTime;
 
@@ -530,7 +532,14 @@ export function remuxPlayer(
   function hold(): void {
     if (startAt === null || video.paused) return;
     held = true;
+    ownPauses++;
     video.pause();
+  }
+
+  /** こちらで止めたのでない一時停止 (画面が止めた)。開く位置を入れても流さない */
+  function onPause(): void {
+    if (ownPauses > 0) ownPauses--;
+    else held = false;
   }
 
   /** 止めていたら流す */
@@ -567,6 +576,7 @@ export function remuxPlayer(
 
   video.addEventListener("seeking", onSeeking);
   video.addEventListener("play", hold);
+  video.addEventListener("pause", onPause);
   video.addEventListener("waiting", onWaiting);
   video.addEventListener("timeupdate", nudge);
   media.addEventListener("startstreaming", nudge);
@@ -621,6 +631,8 @@ export function remuxPlayer(
       retry.cancel();
       video.removeEventListener("seeking", onSeeking);
       video.removeEventListener("play", hold);
+      video.removeEventListener("pause", onPause);
+      held = false;
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("timeupdate", nudge);
       media.removeEventListener("startstreaming", nudge);

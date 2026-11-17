@@ -292,6 +292,58 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     player.destroy();
   });
 
+  test("止めている間に画面が一時停止したら、開く位置を入れても流さない", async () => {
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      return fakeFetch(url, init);
+    }) as typeof fetch;
+    const { video, player } = start(100);
+    void video.play();
+    await settle();
+    expect(video.paused).toBe(true);
+    video.pause();
+    respond();
+    await settle();
+    expect(video.currentTime).toBe(100);
+    expect(video.paused).toBe(true);
+    player.destroy();
+  });
+
+  test("止めている間に飛ばれたら、飛んだ先から流す", async () => {
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      return fakeFetch(url, init);
+    }) as typeof fetch;
+    const { video, player } = start(100);
+    void video.play();
+    await settle();
+    video.currentTime = 300;
+    expect(video.paused).toBe(false);
+    respond();
+    await settle();
+    expect(video.currentTime).toBe(300);
+    player.destroy();
+  });
+
+  test("止めている間に開く位置まで届かずに終わったら、届いた末尾に入れて流す", async () => {
+    globalThis.fetch = (async (url: string, init?: RequestInit) =>
+      fakeFetch(url.replace("from=110", "from=100"), init)) as typeof fetch;
+    const { video, player } = start(110);
+    void video.play();
+    await settle();
+    expect(video.currentTime).toBe(106);
+    expect(video.paused).toBe(false);
+    player.destroy();
+  });
+
   test("流すようにリクエストされていなければ、入れたあとも止めたまま", async () => {
     const { video, player } = start(100);
     await settle();
