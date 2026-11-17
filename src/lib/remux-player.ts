@@ -161,7 +161,7 @@ export function remuxPlayer(
   let wake: (() => void) | null = null;
   const meter = new Meter();
   /**
-   * **開く位置。溜まるまで currentTime に入れない** (`place`)。何も無いうちに入れると、macOS の WebKit は
+   * **開く位置。映像が足されるまで currentTime に入れない** (`place`)。何も無いうちに入れると、macOS の WebKit は
    * seeking のまま止まるか、1 コマ映して止まることがある (MediaSource・ManagedMediaSource、headless でも画面を出しても。
    * `.github/workflows/webkit-remux.yml` で確かめた。#2884)。入れたら null
    */
