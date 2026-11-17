@@ -486,8 +486,7 @@ public sealed class Descrambler(
             }
             // 並びが崩れた。**0x47 が 188 バイトおきに 2 つ続くところ**で合わせ直す (1 つだけだと中身の 0x47 に合わせてしまう)
             _synced = false;
-            var found = at;
-            while (found + PacketSize < data.Length && (data[found] != SyncByte || data[found + PacketSize] != SyncByte)) found++;
+            var found = TsSync.FindPair(data, at, PacketSize);
             at = found;
             // 最後の 188 バイトの中の 0x47 は、次が来るまで同期バイトか決まらない
             if (found + PacketSize >= data.Length) return at;
