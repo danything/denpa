@@ -419,7 +419,7 @@ function special(airing: Airing): boolean {
  * 渡された放送と録画のうち、話数の違う回にも出てくる概要 (毎週同じ番組紹介) は、
  * 同じ回の決め手 (`sameSummary`) にしない
  *
- * @param blocked チューナー不足で弾かれている放送 (予約の状態が `conflict`)
+ * @param blocked チューナー不足で弾かれている放送 (予約の状態が `conflict`) と、コピー禁止の放送 (`rules.ts` が足す)
  * @param taken 録ったことのある回
  */
 export function firstAirings<T extends Airing>(
@@ -613,7 +613,7 @@ function episodes<T>(
   list: { airing: T; episode: Episode }[],
 ): { airing: T; episode: Episode }[][] {
   // 確かでない副題 (`Episode.inferred`) は、揃わなければ副題が無いものとして見る。
-  // ただし確かでない副題どうしが食い違うなら、確かとはしない (相手が 1 つに決まるときだけ繋ぐ)
+  // ただし確かでない副題どうしが食い違うなら、確かとはしない (下の 2 で、どの 2 つも同じ回と読めるときだけ繋ぐ)
   const blank = (e: Episode) => e.subtitle === "" || e.inferred;
   const sure = (a: Episode, b: Episode) =>
     sameSummary(a, b) ||

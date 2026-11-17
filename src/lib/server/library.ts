@@ -29,7 +29,7 @@ export interface LibraryNameInput {
  * ディスクでは 1 つのフォルダなのに一覧では 2 つに割れる (またはその逆) ことが起きる。
  * シリーズ名を持たない行 (録り逃し・古い取り込み) は番組名から切り出す
  * (録るときと同じ `parseTitle`)。**ここだけはディスクと違う。** エンコードするときは空のまま
- * `untitled/` に入るが、一覧で無関係な番組が 1 つにまとまっても探しにくいだけなので
+ * `untitled/` に入るが、一覧で無関係な番組が 1 つにまとまっても探しにくいだけなので、一覧では切り出す
  */
 export function seriesFolder(series: string, name: string): string {
   return sanitizeFileName(series === "" ? parseTitle(name).series : series);

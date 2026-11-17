@@ -667,7 +667,7 @@ describe("firstAirings", () => {
     expect(kept([mx, bs])).toEqual([bs.id]);
   });
 
-  test("副題の無い放送は、相手が 1 つに決まるときだけ束ねる", () => {
+  test("副題の無い放送は、当たる回どうしも同じ回と読めるときだけ束ねる", () => {
     // 副題の違う 2 つの回のどちらとも読めるなら、どちらにも寄せない (取り違えて録り逃さない)
     const one = airing("テストアニメ #1「はじまり」", base);
     const other = airing("テストアニメ #1「別の話」", base + DAY);

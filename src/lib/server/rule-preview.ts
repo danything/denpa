@@ -230,7 +230,7 @@ async function countPreview(
     .all();
   const reserved = new Map(pending.map((row) => [row.program_id, row]));
 
-  // 条件のほどきは 1 回だけ。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
+  // 条件は 1 回だけ判定に使う形式に直す (`compile`)。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
   const compiled = compile(conditions);
   /*
    * **SQL で候補を減らしてから JS で当てる** (`globPatterns`)。番組名 (と概要) に `GLOB` を掛ければ

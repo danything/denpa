@@ -182,9 +182,9 @@ export function tlvStart(path: string, offset: number): number {
  * 先へ進まない間は、こちらも次を読まずに待つ。待たずに読むと、倍速で送り込むぶんが
  * どこかに溜まり続ける。
  *
- * @param done もう書き足されないか (録画が終わったか)。EOF のたびに訊く
+ * @param done もう書き足されないか (録画が終わったか)。EOF のたびに呼ぶ
  * @param hold ほかの理由で止めておくか (HTTP の追っかけで、エンコードした先が読まれていないとき。
- *   WebSocket の元の TS の追っかけで、止めてと言われたとき・詰まったとき。`live.ts` の `chaseStream`・`openChase`)。
+ *   WebSocket の元の TS の追っかけで、画面から止める指示を受けたとき・詰まったとき。`live.ts` の `chaseStream`・`openChase`)。
  *   省けば止めない
  * @param burst 倍速の縛りを掛けずに読む先頭のぶん (バイト)。アプリ向けの字幕 API が、リクエストされた位置より
  *   手前から読み始めて観ている位置を追い越すのに使う (`live.ts` の `recordingCaptions`)。省けば 0
@@ -248,7 +248,7 @@ export function followFile(
   });
 }
 
-/** 読んだ先頭の控え。録画中も先頭は変わらないので、読めたものはパスごとに覚える (追っかけはシークのたびに聞く) */
+/** 読んだ先頭の控え。録画中も先頭は変わらないので、読めたものはパスごとに覚える (追っかけはシークのたびに読む) */
 const heads = new Map<string, number>();
 /** 控えごとに覚えておく数 (`heads`・`unreadable`・`spans`)。追っかけと字幕で同時に読む録画はいくつもない */
 const HEADS_MOST = 32;

@@ -197,7 +197,7 @@ const autoStartHeld = new Map<
  * PMT はふつう先頭近くにあるが、指定が無い録画はファイルを最後まで読む (読むのはサーバの中だけで、端末へは送らない)
  *
  * 観る画面を開くたびに呼ぶので、答えはサイドカーのパスごとにメモリに覚える (`AUTO_START_KEEP` まで)。
- * ファイルの大きさか更新時刻が読んだときと違えば読み直す (エンコードし直して書き替わった・まだ伸びている)
+ * ファイルの大きさか更新時刻が読んだときと違えば読み直す (エンコードし直して書き替わった・読んだときは書いている途中だった)
  *
  * @returns サイドカーが無ければ false
  */
@@ -229,7 +229,7 @@ async function readAutoStart(sidecarPath: string): Promise<boolean> {
   try {
     for await (const line of lines) {
       if (!line.includes(PMT_LINE)) continue;
-      // 録画中は最後の行が書きかけのことがある。読めない行は飛ばす (観る画面を開けなくしない)
+      // 書いている途中 (`saveRecordedBml`) に読むと、最後の行が書きかけのことがある。読めない行は飛ばす (観る画面を開けなくしない)
       let placed: PlacedMessage;
       try {
         placed = JSON.parse(line) as PlacedMessage;

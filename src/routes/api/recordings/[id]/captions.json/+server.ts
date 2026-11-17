@@ -62,7 +62,7 @@ const CAPTION_TAG = `c${CAPTION_TEXT_VERSION}.${createHash("md5")
 
 /**
  * 字幕を抜いてデコードし、JSON にする。字幕を持たない (抜けたものが空・画像の字幕) ならその理由。
- * **ffmpeg が失敗で終わった・上限で切れたときは覚えない** (404 を投げる)。時間切れや、ffmpeg を起こせなかっただけかもしれないため
+ * **ffmpeg が失敗で終わった・上限で切れたときは覚えない** (404 を返す)。時間切れや、ffmpeg を起こせなかっただけかもしれないため
  */
 async function build(argv: string[], ts: boolean): Promise<Made> {
   const parts: Uint8Array[] = [];

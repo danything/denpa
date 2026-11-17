@@ -1,11 +1,3 @@
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
 /**
  * エージェントへの呼び出し。**HTTPS で、お互いを証明書で確かめる** (docs/agent.md)。
  *
@@ -17,6 +9,14 @@ import {
  *
  * 合言葉はログにも不具合報告にも DB にも出さない (`agentSecrets`)。
  */
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { connect } from "node:tls";
 
 import {

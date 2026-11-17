@@ -764,7 +764,7 @@ function missingCarousel(): number {
  * いま開いて読んでいる物理チャンネル。
  *
  * **共有 (`ride`) が自分の開けたものを使わないように持つ。** こちらが開くと
- * エージェントが `tuners` を飛ばし、それを合図に共有が走って同じものを二重に読んでしまう。
+ * エージェントが `tuners` を送り、それを合図に共有が走って同じものを二重に読んでしまう。
  */
 const collecting = new Set<string>();
 
@@ -1085,7 +1085,7 @@ export function shareable(
 }
 
 /**
- * 共有する選局を選んでいる最中か。合図 (エージェントの `tuners`) は連続して飛んでくるので、
+ * 共有する選局を選んでいる最中か。合図 (エージェントの `tuners`) は続けて届くので、
  * 選んでいる間に来たぶんは、選び終えてからもう一度見る (`replan`)。
  * **読むほうは並べる。** 衛星の当たりの中継は 20 分読むので、1 つずつ待っていると、その間に
  * 番組表の取得が開いた地上波を共有し損ねる
@@ -1175,12 +1175,12 @@ async function drain(
       const at = queue.findIndex((target) => !handedOver.has(target.type));
       if (at < 0 || signal.aborted) return;
       const target = queue.splice(at, 1)[0]!;
-      // 諦めたぶんも見終えたものとして数える。進み具合が総数に届かなくなる
       /*
        * 衛星は当たりの中継 1 つで BS と CS の全局ぶんが揃う。揃ったあと (読み切ったあと) は、残りの中継を開いて
        * 当たり外れを確かめても取得できる局は無い。
        * 同じ TS をアンテナとケーブルの両方で受けられるときは、片方で読み切るか外れと分かったら、もう片方は開かない。
-       * CDT のチャンネルも、同じ TS をほかで読んで局が揃っていれば開かない
+       * CDT のチャンネルも、同じ TS をほかで読んで局が揃っていれば開かない。
+       * 開かなかったぶんも見終えたものとして数える (数えないと進み具合が総数に届かない)
        */
       if (
         full.has(target.type) ||
@@ -1349,7 +1349,7 @@ function countsNote(counts: Readonly<CarouselCounts>): string {
  * **エージェントは新しいチューナーを使わずに選局を共有させる**ので、こちらはチューナーを増やさずに電波を
  * 読める。空いた時間に自分で開き直すより早く埋まり、チューナーの取り合いも起きない。
  *
- * 合図はエージェントの `tuners`。開いた瞬間に飛んでくるので、閉じるまでの間に読み切る。
+ * 合図はエージェントの `tuners`。開いたときに届くので、閉じるまでの間に読み切る。
  * 相手が先に閉じれば、こちらは取り合いでいちばん後に回る順で開いたまま残り、次に要る人が来たら譲る。
  */
 export async function ride(): Promise<number> {
@@ -1415,7 +1415,7 @@ async function awaitCarousel(): Promise<number> {
   const attempt = nextCarouselAttempt(carouselWatch, Date.now());
   if (attempt.at > Date.now()) return 0;
   let found = 0;
-  /** この手で閉じたばかりの外れの中継。次を開くときに引き継ぐ (`countFree`) */
+  /** ここで閉じたばかりの外れの中継。次を開くときに引き継ぐ (`countFree`) */
   let left: StreamUse[] = [];
   for (;;) {
     const target = await freeRelay(left);

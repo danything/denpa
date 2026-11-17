@@ -320,7 +320,7 @@ function markLost(linkedAt: number, reason: string): void {
   console.warn(`[niconico] 連携が切れました: ${reason}`);
 }
 
-/** 出した形式の警告。同じ警告は 1 度だけ出す (違う警告はそれぞれ 1 度ずつ) */
+/** 応答の形式の警告。同じ警告は 1 度だけ出す (違う警告はそれぞれ 1 度ずつ) */
 const warned = new Set<string>();
 export function warnShape(message: string): void {
   if (warned.has(message)) return;

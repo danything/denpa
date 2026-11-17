@@ -492,7 +492,7 @@ describe("使えなかった理由", () => {
   // ここも土地の時刻で組む
   const until = new Date(2026, 7, 9, 5, 0).getTime();
 
-  test("番組表が休止だと言っていれば、そう言う", () => {
+  test("番組表が休止なら、休止だと伝える", () => {
     expect(whyNotTuned(NOT_LOCKED, until)).toBe(
       "いまは放送休止です (05:00 まで)",
     );
@@ -530,7 +530,7 @@ describe("名指しの選局を断られたときの文面 (pinnedNotTuned)", ()
     );
   });
 
-  test("チューナーがもう無ければ、自動に戻したと言う", () => {
+  test("チューナーがもう無ければ、自動に戻したと伝える", () => {
     expect(pinnedNotTuned("/dev/px4video0", "選局できませんでした", true)).toBe(
       "ライブのチューナーに選んだ /dev/px4video0 が見つからないため、自動に戻しました",
     );
@@ -623,7 +623,7 @@ describe("外から選ぶ音声 (?audio=<id>)", () => {
     expect(args[args.indexOf("-af") + 1]).toBe("pan=stereo|c0=c1|c1=c1");
   });
 
-  test("知らないものは主音声でエンコードする (断らない)", () => {
+  test("一覧に無いものは主音声でエンコードする (断らない)", () => {
     const args = encodeArgs(1024, chosen("3:sub"));
     expect(args[args.indexOf("-af") + 1]).toBe("pan=stereo|c0=c0|c1=c0");
     expect(chosen("only").id).toBe("0:main");
@@ -1210,11 +1210,11 @@ describe("段を下げるときのコーデック", () => {
     expect(rungCodec(["av1", "h264"], true, gpu("av1", "h264"))).toBe("av1");
   });
 
-  test("GPU が無ければソフトウェアの H.264 (再生できると言われていなくても)", () => {
+  test("GPU が無ければソフトウェアの H.264 (再生できると送られていなくても)", () => {
     expect(rungCodec(["av1", "hevc"], true, gpu())).toBe("h264");
   });
 
-  test("再生できるコーデックの読み方。省けばリクエストされたものと H.264、知らない値は捨てる", () => {
+  test("再生できるコーデックの読み方。省けばリクエストされたものと H.264、ほかの値は捨てる", () => {
     expect(parsePlayable(undefined, "av1")).toEqual(["av1", "h264"]);
     expect(parsePlayable("", "h264")).toEqual(["h264"]);
     expect(parsePlayable("hevc,x,h264,hevc", "av1")).toEqual(["hevc", "h264"]);
@@ -1615,7 +1615,7 @@ describe("TS で送る 4K の局のライブ", () => {
     expect(copiesVideo("tlv", "hevc", "hevc")).toBe(false);
   });
 
-  test("放送のままは HEVC の詰め替え。HEVC を再生できないと言った端末にはエンコードする", () => {
+  test("放送のままは HEVC の詰め替え。再生できる形式に HEVC が無い端末にはエンコードする", () => {
     const raw = { codec: "h264", raw: true } as const;
     const copy = { codec: "hevc", raw: false } as const;
     expect(servedFormat(raw, "hevc", null)).toEqual(copy);
@@ -1645,7 +1645,7 @@ describe("TS で送る 4K の局のライブ", () => {
     expect(at(false)).toBe(key("CATV", "QC14", 1, stereo, "raw", 0));
   });
 
-  test("画面が前の答えで知った放送のコーデックを、選局の指示から読む", () => {
+  test("画面が前の答えで受け取った放送のコーデックを、選局の指示から読む", () => {
     const tune = {
       type: "tune",
       channelType: "CATV",
@@ -1729,7 +1729,7 @@ describe("カードの番号", () => {
     expect(told).toEqual(["4444555566667777"]);
   });
 
-  test("双方向がオフなら訊かず、知らせない", async () => {
+  test("双方向がオフなら問い合わせず、知らせない", async () => {
     const { answers, told, card, tune } = setup(false);
     await tune(1);
     expect(answers.size).toBe(0);

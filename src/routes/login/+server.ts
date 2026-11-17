@@ -5,7 +5,7 @@ import { publicBase } from "#lib/server/paths.js";
 import { PENDING_COOKIE, PENDING_TTL } from "#lib/server/session.js";
 
 /**
- * ログインを始める。Entra へ送るだけで、こちらでは何も決めない。
+ * ログインを始める。IdP (Entra ID など) へ送るだけで、こちらでは何も決めない。
  *
  * 途中で使うもの (state / nonce / PKCE の code_verifier / 戻る先) は Cookie に預ける。
  * DB にも置けるが、Cookie なら**捨て忘れが残らない**。期限を切っておけば、

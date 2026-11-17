@@ -611,10 +611,10 @@ describe("順位を見る", () => {
   function addProgram(
     station: Station,
     event: number,
-    options: { startsIn?: number; name?: string } = {},
+    options: { startsIn?: number; at?: number; name?: string } = {},
   ): number {
     const s = STATIONS[station];
-    const start = now() + (options.startsIn ?? 2 * HOUR);
+    const start = options.at ?? now() + (options.startsIn ?? 2 * HOUR);
     const id = programKey(s.network, s.service, event, s.type);
     orm()
       .insert(programs)
@@ -729,8 +729,10 @@ describe("順位を見る", () => {
   });
 
   test("同じ放送を BS とケーブルの再送信で受けていたら、BS の局の行にする", async () => {
-    addProgram("catvBs", 502);
-    const bs = addProgram("bs11", 502);
+    // 同じ放送なので始まりも同じ。別々に now() を読むと、先に入れたほうがミリ秒だけ早く始まることがある
+    const at = now() + 2 * HOUR;
+    addProgram("catvBs", 502, { at });
+    const bs = addProgram("bs11", 502, { at });
     rankingBody = {
       v: 1,
       entries: [

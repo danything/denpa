@@ -73,7 +73,7 @@ describe("ライブが譲った録画を名指しする", () => {
     expect(await yieldedTo(null, list, found, noWait)).toBeNull();
   });
 
-  test("エージェントに訊けない間は読み直す", async () => {
+  test("エージェントから一覧を取得できない間は読み直す", async () => {
     let asked = 0;
     const list = () => {
       asked++;

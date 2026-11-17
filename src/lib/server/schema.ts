@@ -383,7 +383,7 @@ export const channelChanges = sqliteTable("channel_changes", {
 
 /**
  * B-CAS カードごとの有料放送契約・復号状態の控え。
- * 設定の「有料契約確認」に出し、自動予約で有料放送を録る局を決めるのに使う (`contracts.paidAllowed`)。
+ * 設定の「受信」の「有料契約を確認」に出し、自動予約で有料放送を録る局を決めるのに使う (`contracts.paidAllowed`)。
  */
 export const cardContracts = sqliteTable(
   "card_contracts",
@@ -662,7 +662,7 @@ export const recordings = sqliteTable(
     service_id: integer("service_id").notNull(),
     /**
      * 最後に録ったエージェント (`agents.id`)。取り直しで別のエージェントに入れば書き換える。
-     * 有料の番組を復号できて録れたとき、そのエージェントのカードを契約中にする (`contracts.noteDecoded`)。上げる前の行と、まだ選局していない行は null
+     * 有料の番組を復号できて録れたとき、そのエージェントのカードを契約中にする (`contracts.noteDecoded`)。列を足す前の行と、まだ選局していない行は null
      */
     agent_id: integer("agent_id"),
     service_name: text("service_name").notNull().default(""),

@@ -588,7 +588,7 @@ export async function rawVisible(agent: Agent): Promise<boolean | null> {
  *
  * **エージェントが 1 台なら、確かめずにそこへ送る** (1 台のときの動きは変わらない)
  */
-export async function decodeAgent(): Promise<Agent> {
+async function decodeAgent(): Promise<Agent> {
   const all = listAgents();
   if (all.length <= 1) return primaryAgent();
   const cards = await Promise.all(all.map((agent) => cardStatus(agent)));

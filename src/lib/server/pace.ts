@@ -189,7 +189,7 @@ export function openPace(read: () => Pace): { id: string; close: () => void } {
   return { id, close: () => open.delete(id) };
 }
 
-/** いまの具合 (`GET /api/playback/pace?id=`)。閉じた・知らない id なら null */
+/** いまの具合 (`GET /api/playback/pace?id=`)。閉じた・発行していない id なら null */
 export function readPace(id: string): Pace | null {
   return open.get(id)?.() ?? null;
 }

@@ -662,7 +662,7 @@ function wakeStopping(jobId: number): void {
  */
 export async function cancel(jobId: number): Promise<void> {
   canceled.add(jobId);
-  // どの段階にいても止まるようにする。ffmpeg が回っていない段階もある
+  // どの段階にいても止まるようにする。ffmpeg が動いていない段階もある
   aborts.get(jobId)?.abort();
   for (const proc of procs.get(jobId) ?? []) proc.kill();
 
@@ -743,7 +743,7 @@ interface Progress {
 
 /** 残り時間を測る窓。直近の進み方だけ見る (速度は素材や場面で途中から変わる) */
 const ETA_WINDOW_MS = 30_000;
-/** これより短い窓からは速度を出さない。起動直後の数点だけで暴れた値を出さないため */
+/** これより短い窓からは速度を出さない。起動直後の数点だけで大きく外れた値を出さないため */
 const ETA_MIN_SPAN_MS = 4_000;
 
 /**
@@ -792,7 +792,7 @@ export function encodeProgress(totalFrames: number, inputBytes: number) {
       measurable(totalFrames) && Number.isFinite(frames) && frames >= 0;
     // 読み位置が取れない間 (/proc が無い・一瞬の読み損ね) もある
     const readable = measurable(inputBytes) && Number.isFinite(pos) && pos >= 0;
-    // どちらも取れなければ前の値を保ち、当てずっぽうを出さない
+    // どちらも取れなければ前の値を保ち、根拠の無い値を出さない
     const done = counted
       ? Math.min(1, frames / totalFrames)
       : readable
@@ -1131,7 +1131,7 @@ async function decide(
   lead: number,
 ): Promise<CmDetection> {
   const none = (note: string) => ({ cm: [], duration: Number.NaN, note });
-  if (found === null) return none("CM 検出の読み込みが失敗しました");
+  if (found === null) return none("CM 検出の読み込みに失敗しました");
   try {
     // ロゴを覚え直して枠だけ読み直すときも、エンコードしたときと同じだけ先頭を捨てる
     return shiftDetection(
@@ -1397,9 +1397,9 @@ function saveCm(recordingId: number, detection: CmDetection): void {
 }
 
 /**
- * **1 本エンコードするときに ffmpeg を起こす順** (`runJob` の `encodeWays`)。GPU の方式 (`hwChain` の順) のあとにソフトウェア
+ * **1 本エンコードするときに ffmpeg を起動する順** (`runJob` の `encodeWays`)。GPU の方式 (`hwChain` の順) のあとにソフトウェア
  * (H.265 を除く。`SOFTWARE_CODECS`) で、**どの方式も「素のまま → 先頭を少し捨てて」の 2 回だけ**。
- * 1 回の実行の中の起こし直しはこの並びで尽きる (`encode_jobs.attempts` に数えない理由)
+ * 1 回の実行の中の起動し直しはこの並びで尽きる (`encode_jobs.attempts` に数えない理由)
  */
 export function encodeAttempts(
   codec: HwCodec,
@@ -1761,12 +1761,12 @@ async function runJob(jobId: number): Promise<void> {
 
   /**
    * 1 本エンコードする。**試す順。** まず先頭からそのまま。落ちたら先頭を少し捨てて (`-ss`) もう一度。
-   * 録画開始直後の数百 ms だけ壊れているケースをここで救う (buildArgs のコメント)。
+   * 録画開始直後の数百 ms だけ壊れている録画は、これでエンコードできる (buildArgs のコメント)。
    * 別の理由での失敗もここに来るが、もう一度同じ理由で落ちるだけなので無害。
    *
-   * **GPU でエンコードするときは、その 2 回が駄目なら次の方式 (`hwChain` の順。最後はソフトウェア) で
+   * **GPU でエンコードするときは、その 2 回とも落ちたら次の方式 (`hwChain` の順。最後はソフトウェア) で
    * 同じ 2 回をやり直す。** 起動時の試しのエンコードは通っても、素材しだいで落ちることは
-   * ありうる (ドライバの対応していない大きさなど)。GPU が駄目なだけで録画が
+   * ありうる (ドライバの対応していない大きさなど)。GPU で落ちただけで録画が
    * 失敗になるのは避けたい。GPU の失敗は初期化で落ちるので、やり直しは速い
    *
    * `analysis` なら CM 検出を一緒にする。**全部落ちたら、探さずにもう 1 度だけエンコードする**。
@@ -1798,8 +1798,8 @@ async function runJob(jobId: number): Promise<void> {
       if (i > 0) {
         if (canceled.has(jobId)) break;
         /*
-         * ffmpeg の起こし直しは `encode_jobs.attempts` に数えない。あれはジョブを取り出した回数で、上限 (`encodeMaxAttempts`)
-         * はジョブのやり直しにだけ当てる。1 回の実行の中の起こし直しは `encodeAttempts` の並び (方式ごとに 2 回) で尽きるので、上限は要らない。
+         * ffmpeg の起動し直しは `encode_jobs.attempts` に数えない。あれはジョブを取り出した回数で、上限 (`encodeMaxAttempts`)
+         * はジョブのやり直しにだけ当てる。1 回の実行の中の起動し直しは `encodeAttempts` の並び (方式ごとに 2 回) で尽きるので、上限は要らない。
          * 数えると、コーデックをいくつも選んで GPU からソフトウェアへ切り替えた 1 回の実行だけで上限に届き、
          * その実行の途中でポッドが止まると、起動したときに 1 度もやり直さずに失敗にしてしまう
          */
@@ -2145,7 +2145,7 @@ async function runJob(jobId: number): Promise<void> {
   );
   /*
    * **もう一方 (H.265・H.264) の隣にも、ポスターとデータ放送の変化ログを複製しておく** (同じもの。ffmpeg を
-   * もう一度は回さない)。主を消すと残ったほうが主に繰り上がるので (`files.reconcile`)、
+   * もう一度は動かさない)。主を消すと残ったほうが主に繰り上がるので (`files.reconcile`)、
    * そのときも画面のサムネイルとデータ放送が途切れない
    */
   const from = sidecarPaths(output);
