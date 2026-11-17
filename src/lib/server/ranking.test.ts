@@ -22,14 +22,20 @@ interface Received {
   path: string;
   auth: string | null;
   body: unknown;
+  /** クエリ (`?limit=50`) */
+  search: string;
 }
 let received: Received[] = [];
 /** 偽の hub の返事。`path` ごとに差し替える */
 let reply: (request: Received) => Response;
 /** 偽の hub が出すトークン (出すたびに次へ進む) */
 let tokens: string[] = [];
+/** 偽の hub が `GET /ranking` で返す順位 */
+let rankingBody: unknown = { v: 1, entries: [] };
 
 function defaultReply(request: Received): Response {
+  if (request.path === "/ranking" && request.method === "GET")
+    return Response.json(rankingBody);
   if (request.path === "/ranking/tokens")
     return Response.json({ token: tokens.shift() ?? TOKEN_A }, { status: 201 });
   if (request.path === "/ranking/votes")
@@ -48,6 +54,7 @@ const hub = Bun.serve({
       path: new URL(request.url).pathname,
       auth: request.headers.get("authorization"),
       body: text === "" ? null : (JSON.parse(text) as unknown),
+      search: new URL(request.url).search,
     };
     received.push(entry);
     return reply(entry);
@@ -64,14 +71,19 @@ const {
   JITTER,
   MAX_ADD,
   SEND_EVERY,
+  VIEW_FRESH,
+  VIEW_RETRY,
+  VIEW_STALE,
   currentVotes,
   digest,
+  dropRankingView,
   isoJst,
   join,
   leave,
   nextSendAt,
   plan,
   rankingState,
+  rankingView,
   sendIfDue,
 } = ranking;
 const { now, orm } = await import("./db");
@@ -193,6 +205,9 @@ beforeEach(() => {
   received = [];
   tokens = [TOKEN_A, TOKEN_B];
   reply = defaultReply;
+  rankingBody = { v: 1, entries: [] };
+  dropRankingView();
+  orm().update(services).set({ listed: true }).run();
 });
 
 describe("送る中身", () => {
@@ -588,5 +603,321 @@ describe("オフにする", () => {
     received = [];
     await sendIfDue(now() + 10 * SEND_EVERY);
     expect(received).toHaveLength(0);
+  });
+});
+
+describe("順位を見る", () => {
+  /** 番組表に番組を 1 つ入れる (予約は入れない)。返すのは番組の ID */
+  function addProgram(
+    station: Station,
+    event: number,
+    options: { startsIn?: number; name?: string } = {},
+  ): number {
+    const s = STATIONS[station];
+    const start = now() + (options.startsIn ?? 2 * HOUR);
+    const id = programKey(s.network, s.service, event, s.type);
+    orm()
+      .insert(programs)
+      .values({
+        id,
+        service_id: serviceKey(s.network, s.service, s.type),
+        network_id: s.network,
+        event_id: event,
+        start_at: start,
+        end_at: start + 30 * MINUTE,
+        name: options.name ?? `手元の番組 ${event}`,
+        genres: [7],
+        is_free: true,
+        updated_at: now(),
+      })
+      .run();
+    return id;
+  }
+
+  /** hub の順位の 1 件 */
+  function entry(
+    rank: number,
+    votes: number,
+    airings: {
+      network_id: number;
+      service_id: number;
+      event_id: number;
+      startsIn?: number;
+      service_name?: string;
+      region?: string | null;
+    }[],
+  ) {
+    return {
+      rank,
+      votes,
+      name: `hub の番組 ${rank}`,
+      genres: [7],
+      affiliation: null,
+      airings: airings.map((a) => ({
+        network_id: a.network_id,
+        service_id: a.service_id,
+        event_id: a.event_id,
+        start_at: isoJst(now() + (a.startsIn ?? 2 * HOUR)),
+        service_name: a.service_name ?? "hub の局",
+        region: a.region ?? null,
+      })),
+    };
+  }
+
+  function views(): Received[] {
+    return received.filter((r) => r.method === "GET" && r.path === "/ranking");
+  }
+
+  async function view() {
+    const result = await rankingView();
+    if (result === null) throw new Error("参加していません");
+    return result;
+  }
+
+  test("参加していなければ null で、hub を呼ばない", () => {
+    expect(rankingView()).toBeNull();
+    expect(received).toHaveLength(0);
+  });
+
+  test("受信できる局の放送は手元の番組の行に、受信できない局の放送は hub の局名と地域のまま出す", async () => {
+    const local = addProgram("bs11", 501);
+    rankingBody = {
+      v: 1,
+      generated_at: isoJst(now()),
+      entries: [
+        entry(1, 120, [
+          {
+            network_id: 32736,
+            service_id: 1024,
+            event_id: 777,
+            service_name: "NHK総合1・東京",
+            region: "関東広域",
+            startsIn: 3 * HOUR,
+          },
+        ]),
+        entry(2, 60, [{ network_id: 4, service_id: 211, event_id: 501 }]),
+      ],
+    };
+    await join();
+    const result = await view();
+    expect(views()).toHaveLength(1);
+    expect(views()[0]!.auth).toBe(`Bearer ${TOKEN_A}`);
+    expect(views()[0]!.search).toBe("?limit=50");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 順位は hub のまま。受信できない番組を飛ばして振り直さない
+    expect(result.rows.map((r) => r.rank)).toEqual([1, 2]);
+    const [away, mine] = result.rows;
+    expect(away!.program).toBeNull();
+    expect(away!.away).toEqual({
+      name: "hub の番組 1",
+      service_name: "NHK総合1・東京",
+      region: "関東広域",
+      start_at: Math.floor((now() + 3 * HOUR) / 1000) * 1000,
+    });
+    expect(mine!.away).toBeNull();
+    expect(mine!.votes).toBe(60);
+    expect(mine!.program).toMatchObject({
+      id: local,
+      name: "手元の番組 501",
+      service_name: "BS11イレブン",
+      reservation_id: null,
+    });
+    // 画面に渡す行には、局の種別と service_id を入れない (検索の結果の行と同じ形)
+    expect(mine!.program).not.toHaveProperty("service_type");
+    expect(mine!.program).not.toHaveProperty("service_sid");
+  });
+
+  test("同じ放送を BS とケーブルの再送信で受けていたら、BS の局の行にする", async () => {
+    addProgram("catvBs", 502);
+    const bs = addProgram("bs11", 502);
+    rankingBody = {
+      v: 1,
+      entries: [
+        entry(1, 30, [{ network_id: 4, service_id: 211, event_id: 502 }]),
+      ],
+    };
+    await join();
+    const result = await view();
+    expect(result.ok && result.rows[0]!.program?.id).toBe(bs);
+  });
+
+  test("一覧から外れた局は受信できない局として出し、始まっていて手元に無い番組は出さない", async () => {
+    addProgram("mx", 503);
+    orm()
+      .update(services)
+      .set({ listed: false })
+      .where(eq(services.name, "TOKYO MX1"))
+      .run();
+    rankingBody = {
+      v: 1,
+      entries: [
+        entry(1, 50, [
+          {
+            network_id: STATIONS.mx.network,
+            service_id: STATIONS.mx.service,
+            event_id: 503,
+            service_name: "TOKYO MX1",
+          },
+        ]),
+        entry(2, 40, [
+          { network_id: 4, service_id: 999, event_id: 1, startsIn: -MINUTE },
+        ]),
+      ],
+    };
+    await join();
+    const result = await view();
+    if (!result.ok) throw new Error("読めませんでした");
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]!.program).toBeNull();
+    expect(result.rows[0]!.away?.service_name).toBe("TOKYO MX1");
+  });
+
+  test("受け取った順位は 10 分ためておき、行の予約の状態はその都度引き直す", async () => {
+    const local = addProgram("bs11", 504);
+    rankingBody = {
+      v: 1,
+      entries: [
+        entry(1, 10, [{ network_id: 4, service_id: 211, event_id: 504 }]),
+      ],
+    };
+    await join();
+    await view();
+    const at = now();
+    orm()
+      .insert(reservations)
+      .values({
+        program_id: local,
+        rule_id: null,
+        service_id: serviceKey(4, 211, "BS"),
+        name: "手元の番組 504",
+        start_at: at + 2 * HOUR,
+        end_at: at + 2 * HOUR + 30 * MINUTE,
+        manual: true,
+        state: "scheduled",
+        created_at: at,
+        updated_at: at,
+      })
+      .run();
+    // ためた順位がまだ新しければ、Promise ではなくその場で返す (画面が「読み込んでいます…」を挟まない)
+    const again = rankingView();
+    expect(again).not.toBeInstanceOf(Promise);
+    expect(views()).toHaveLength(1);
+    const held = again as Awaited<ReturnType<typeof view>>;
+    expect(held.ok && held.rows[0]!.program?.reservation_id).not.toBeNull();
+
+    // 10 分たてば hub を呼び直す
+    await rankingView(now() + VIEW_FRESH + 1);
+    expect(views()).toHaveLength(2);
+  });
+
+  test("hub に届かなければ読めないと返し、1 分は呼び直さない", async () => {
+    await join();
+    reply = (r) =>
+      r.path === "/ranking"
+        ? new Response("down", { status: 503 })
+        : defaultReply(r);
+    expect(await view()).toEqual({ ok: false });
+    expect(rankingView()).toEqual({ ok: false });
+    expect(views()).toHaveLength(1);
+    reply = defaultReply;
+    expect(await rankingView(now() + VIEW_RETRY + 1)).toEqual({
+      ok: true,
+      rows: [],
+    });
+    expect(views()).toHaveLength(2);
+  });
+
+  test("hub に接続できないときも読めないと返す", async () => {
+    await join();
+    const before = config.hubUrl;
+    config.hubUrl = "http://127.0.0.1:1";
+    try {
+      expect(await view()).toEqual({ ok: false });
+    } finally {
+      config.hubUrl = before;
+    }
+  });
+
+  test("少し前に受け取った順位があれば、届かなくなっても 1 時間は出し続ける", async () => {
+    rankingBody = {
+      v: 1,
+      entries: [
+        entry(1, 10, [{ network_id: 4, service_id: 999, event_id: 9 }]),
+      ],
+    };
+    await join();
+    await view();
+    reply = (r) =>
+      r.path === "/ranking"
+        ? new Response("down", { status: 503 })
+        : defaultReply(r);
+    const stale = await rankingView(now() + VIEW_FRESH + 1);
+    expect(stale !== null && stale.ok && stale.rows).toHaveLength(1);
+    expect(views()).toHaveLength(2);
+    expect(VIEW_STALE).toBeGreaterThan(VIEW_FRESH);
+  });
+
+  test("7 日送っていない (403) なら、送ってから見直す", async () => {
+    await join();
+    let refused = 0;
+    reply = (r) => {
+      if (r.path === "/ranking" && refused === 0) {
+        refused++;
+        return Response.json({ error: "inactive" }, { status: 403 });
+      }
+      return defaultReply(r);
+    };
+    const sentBefore = votesSent().length;
+    expect(await view()).toEqual({ ok: true, rows: [] });
+    expect(votesSent().length).toBe(sentBefore + 1);
+    expect(views()).toHaveLength(2);
+  });
+
+  test("hub がトークンを断ったら (401)、取り直して送ってから新しいトークンで見直す", async () => {
+    await join();
+    reply = (r) =>
+      r.auth === `Bearer ${TOKEN_A}` && r.path !== "/ranking/tokens"
+        ? Response.json({ error: "invalid_token" }, { status: 401 })
+        : defaultReply(r);
+    expect(await view()).toEqual({ ok: true, rows: [] });
+    expect(views().at(-1)!.auth).toBe(`Bearer ${TOKEN_B}`);
+  });
+
+  test("形が違っても読める欄は使い、entries が無ければ読めないと返す", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      rankingBody = {
+        v: 2,
+        entries: [
+          { rank: "1" },
+          entry(2, 10, [{ network_id: 4, service_id: 999, event_id: 9 }]),
+        ],
+      };
+      await join();
+      const read = await view();
+      expect(read.ok && read.rows.map((r) => r.rank)).toEqual([2]);
+      dropRankingView();
+      rankingBody = { v: 1 };
+      expect(await view()).toEqual({ ok: false });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("やめたら null に戻り、ためた順位も捨てる", async () => {
+    rankingBody = {
+      v: 1,
+      entries: [
+        entry(1, 10, [{ network_id: 4, service_id: 999, event_id: 9 }]),
+      ],
+    };
+    await join();
+    await view();
+    await leave();
+    expect(rankingView()).toBeNull();
+    rankingBody = { v: 1, entries: [] };
+    await join();
+    expect(await view()).toEqual({ ok: true, rows: [] });
   });
 });

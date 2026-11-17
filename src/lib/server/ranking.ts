@@ -7,6 +7,8 @@
  *    (`ranking_sent`) を比べ、差分を `POST /ranking/votes` の `add`・`remove` で送る。送る時刻は家ごとにずらし、毎回 ±15 分揺らす
  * 3. オフにする (`leave`): 控えにある予約を全部 `remove` で送ってから `DELETE /ranking/tokens/self` を呼び、手元の行を消す。
  *    hub に届かなくても手元は消す (hub に残った票は放送が終われば消える)
+ * 4. 順位を見る (`rankingView`): 検索を言葉なしで開いたときの節「予約の多い番組」。`GET /ranking` の返事を 10 分ためておき、
+ *    番組ごとに手元の番組表の放送と突き合わせる。受信できる局に無い番組は、hub の局名と地域のまま渡す
  *
  * 送るのは番組の識別・時刻・番組名・局名・ジャンルと、ルールの予約か手の予約かだけ。家のアドレス・利用者の名前・
  * ルールの中身・予約した時刻は送らない。トークンと送った番組の一覧は記録に書かない (書くのは件数だけ)
@@ -15,7 +17,7 @@ import { createHash } from "node:crypto";
 
 import { and, eq, gt, inArray, isNull, lte } from "drizzle-orm";
 
-import { origin } from "../types";
+import { ALL_CHANNEL_TYPES, type ChannelType, origin } from "../types";
 import { config, userAgent } from "./config";
 import { now, orm } from "./db";
 import {
@@ -26,6 +28,7 @@ import {
   services,
   TO_RECORD_STATES,
 } from "./schema";
+import { programRows, withoutService } from "./search";
 
 const HOUR = 60 * 60_000;
 /** 送る間隔。予約した時刻を 6 時間の幅でしかわからないようにする (docs/ranking.md「送る時刻」) */
@@ -238,10 +241,11 @@ type HubResult =
   | { ok: false; status: number | null };
 
 async function hub(
-  method: "POST" | "DELETE",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   token: string | null,
   body?: unknown,
+  timeout = HUB_TIMEOUT,
 ): Promise<HubResult> {
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -254,8 +258,8 @@ async function hub(
     res = await fetch(`${config.hubUrl}${path}`, {
       method,
       headers,
-      body: body === undefined ? null : JSON.stringify(body),
-      signal: AbortSignal.timeout(HUB_TIMEOUT),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(timeout),
     });
   } catch {
     return { ok: false, status: null };
@@ -468,6 +472,7 @@ export function join(
         })
         .run();
     });
+    dropRankingView();
     console.log("[ranking] 予約数ランキングに参加しました");
     await sendNow(at);
     return { ok: true } as const;
@@ -508,6 +513,7 @@ export function leave(): Promise<{ reached: boolean }> {
       tx.delete(rankingSent).run();
       tx.delete(rankingLink).run();
     });
+    dropRankingView();
     console.log(
       reached
         ? "[ranking] 予約数ランキングへの参加をやめました"
@@ -515,4 +521,291 @@ export function leave(): Promise<{ reached: boolean }> {
     );
     return { reached };
   });
+}
+
+// ---- 順位を見る ----
+
+/** 受け取る順位の数。画面は先頭の 5 件を出し、「もっと見る」でここまで広げる (docs/ranking.md「出す件数」) */
+export const VIEW_LIMIT = 50;
+/** 受け取った順位をためておく間。hub は順位を 10 分ごとに作り直す */
+export const VIEW_FRESH = 10 * 60_000;
+/** 受け取れなかったあと、次に hub を呼ぶまでの間。検索を開くたびに hub を待たせない */
+export const VIEW_RETRY = 60_000;
+/** 受け取れなかったとき、前に受け取った順位を出し続ける上限 */
+export const VIEW_STALE = HOUR;
+/** 順位を待つ上限 (ms)。画面は待たずに出し、節だけあとから埋める */
+const VIEW_TIMEOUT = 5_000;
+
+/** hub の順位の放送 1 つ (`GET /ranking` の `airings`) */
+export interface HubAiring extends AiringId {
+  /** 始まり (unix ms) */
+  start_at: number;
+  service_name: string;
+  /** 地上波の放送の地域の名前。hub が地域の表を持つまでは null */
+  region: string | null;
+}
+
+/** hub の順位の 1 件 (`GET /ranking` の `entries`) */
+export interface HubEntry {
+  rank: number;
+  /** 重みを掛けて 5 の倍数に切り下げた数 */
+  votes: number;
+  name: string;
+  airings: HubAiring[];
+}
+
+type ProgramRow = ReturnType<ReturnType<typeof programRows>["all"]>[number];
+
+/** 画面に渡す番組の行。検索の結果の「これからの放送」と同じ形 */
+export type RankedProgram = Omit<ProgramRow, "service_type" | "service_sid">;
+
+/**
+ * 節の 1 行。受信できる局に放送があれば `program` (行から予約・取消・詳細)、
+ * 無ければ `away` (hub が返した名前と局名と地域。予約のボタンも詳細も出さない)
+ */
+export type RankedRow = { rank: number; votes: number } & (
+  | { program: RankedProgram; away: null }
+  | {
+      program: null;
+      away: {
+        name: string;
+        service_name: string;
+        region: string | null;
+        start_at: number;
+      };
+    }
+);
+
+/** 節の中身。hub に届かない・断られたときは `ok: false` (「いまはランキングを読めません」) */
+export type RankingView = { ok: true; rows: RankedRow[] } | { ok: false };
+
+let warnedShape = false;
+
+const isInt = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value);
+
+/**
+ * hub の返事を読む。形が違っても読める欄は使い、記録に 1 度だけ書く (hub と denpa のバージョンのずれ)。
+ * `entries` が無ければ読めなかったとして null
+ */
+export function readEntries(body: unknown): HubEntry[] | null {
+  const top = body as { v?: unknown; entries?: unknown } | null;
+  const warn = (what: string) => {
+    if (warnedShape) return;
+    warnedShape = true;
+    console.warn(
+      `[ranking] hub の順位の形が違います (${what})。denpa と hub のバージョンが合っていないかもしれません。読める欄だけを使います`,
+    );
+  };
+  if (top?.v !== 1) warn(`v=${String(top?.v)}`);
+  if (!Array.isArray(top?.entries)) {
+    warn("entries がありません");
+    return null;
+  }
+  const entries: HubEntry[] = [];
+  for (const raw of top.entries as unknown[]) {
+    const entry = raw as Partial<Record<keyof HubEntry, unknown>> | null;
+    if (
+      !isInt(entry?.rank) ||
+      typeof entry.votes !== "number" ||
+      typeof entry.name !== "string" ||
+      !Array.isArray(entry.airings)
+    ) {
+      warn("読めない順位があります");
+      continue;
+    }
+    const airings: HubAiring[] = [];
+    for (const item of entry.airings as unknown[]) {
+      const a = item as Partial<Record<keyof HubAiring, unknown>> | null;
+      const start =
+        typeof a?.start_at === "string" ? Date.parse(a.start_at) : NaN;
+      if (
+        !isInt(a?.network_id) ||
+        !isInt(a.service_id) ||
+        !isInt(a.event_id) ||
+        !Number.isFinite(start) ||
+        typeof a.service_name !== "string"
+      ) {
+        warn("読めない放送があります");
+        continue;
+      }
+      airings.push({
+        network_id: a.network_id,
+        service_id: a.service_id,
+        event_id: a.event_id,
+        start_at: start,
+        service_name: a.service_name,
+        region: typeof a.region === "string" ? a.region : null,
+      });
+    }
+    if (airings.length === 0) continue;
+    entries.push({
+      rank: entry.rank,
+      votes: entry.votes,
+      name: entry.name,
+      airings,
+    });
+  }
+  return entries;
+}
+
+/** 種別の並び (番組表と同じ)。同じ放送を 2 つの局で受けているとき、地上波・BS・CS の局を先に選ぶ */
+function typeOrder(type: string): number {
+  const at = ALL_CHANNEL_TYPES.indexOf(type as ChannelType);
+  return at < 0 ? ALL_CHANNEL_TYPES.length : at;
+}
+
+/**
+ * **手元の番組表と突き合わせる。** 番組ごとに、受信できる局 (一覧に出している局) にある終わっていない放送を選ぶ。
+ * いくつかあれば始まりの早いもの。無ければ、まだ始まっていない放送のうち早いものを、受信できない局の行にする。
+ * 順位は hub のまま (受信できない番組を飛ばして振り直さない)。どの放送も始まっていて手元に無い番組は出さない
+ */
+export function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
+  const events = [
+    ...new Set(entries.flatMap((e) => e.airings.map((a) => a.event_id))),
+  ];
+  const local = new Map<string, ProgramRow[]>();
+  if (events.length > 0) {
+    const rows = programRows(
+      and(
+        eq(services.listed, true),
+        gt(programs.end_at, at),
+        inArray(programs.event_id, events),
+      ),
+    ).all();
+    for (const row of rows) {
+      const key = keyOf({
+        network_id: row.network_id,
+        service_id: row.service_sid,
+        event_id: row.event_id,
+      });
+      local.set(key, [...(local.get(key) ?? []), row]);
+    }
+  }
+  const out: RankedRow[] = [];
+  for (const entry of entries) {
+    const found = entry.airings
+      .flatMap((a) => local.get(keyOf(a)) ?? [])
+      .sort(
+        (a, b) =>
+          a.start_at - b.start_at ||
+          typeOrder(a.service_type) - typeOrder(b.service_type),
+      )[0];
+    if (found !== undefined) {
+      out.push({
+        rank: entry.rank,
+        votes: entry.votes,
+        program: withoutService(found),
+        away: null,
+      });
+      continue;
+    }
+    const away = entry.airings
+      .filter((a) => a.start_at > at)
+      .sort((a, b) => a.start_at - b.start_at)[0];
+    if (away === undefined) continue;
+    out.push({
+      rank: entry.rank,
+      votes: entry.votes,
+      program: null,
+      away: {
+        name: entry.name,
+        service_name: away.service_name,
+        region: away.region,
+        start_at: away.start_at,
+      },
+    });
+  }
+  return out;
+}
+
+/** 受け取った順位 (読めなかったときは null) と、次に hub を呼ぶ時刻。参加した時刻ごとに持つ */
+let held: {
+  joinedAt: number;
+  entries: HubEntry[] | null;
+  fetchedAt: number;
+  until: number;
+} | null = null;
+let pending: Promise<HubEntry[] | null> | null = null;
+
+/** ためた順位を捨てる。参加したとき・やめたとき (と単体テスト) */
+export function dropRankingView(): void {
+  held = null;
+}
+
+/**
+ * hub から順位を受け取る。401 (トークンが hub から消えた)・403 (7 日送っていない) なら、送ってから 1 度だけ見直す
+ * (送る処理は 401 を受けるとトークンを取り直す)
+ */
+async function fetchEntries(): Promise<HubEntry[] | null> {
+  let row = link();
+  if (row === undefined) return null;
+  const path = `/ranking?limit=${VIEW_LIMIT}`;
+  let result = await hub("GET", path, row.token, undefined, VIEW_TIMEOUT);
+  if (!result.ok && (result.status === 401 || result.status === 403)) {
+    await serial(() => sendNow(now()));
+    row = link();
+    if (row === undefined) return null;
+    result = await hub("GET", path, row.token, undefined, VIEW_TIMEOUT);
+  }
+  if (!result.ok) {
+    console.warn(
+      `[ranking] 順位を受け取れませんでした (${describe(result.status)})`,
+    );
+    return null;
+  }
+  return readEntries(result.body);
+}
+
+/** hub を呼ぶのは同時に 1 回だけ。受け取ったらためる */
+function refresh(joinedAt: number): Promise<HubEntry[] | null> {
+  pending ??= fetchEntries()
+    .catch((error: unknown) => {
+      console.warn("[ranking] 順位を受け取れませんでした", error);
+      return null;
+    })
+    .then((entries) => {
+      const at = now();
+      // 待っている間にやめた・参加し直したなら、ためない
+      if (link()?.joined_at !== joinedAt) return entries;
+      const before = held?.joinedAt === joinedAt ? held : null;
+      if (entries !== null)
+        held = { joinedAt, entries, fetchedAt: at, until: at + VIEW_FRESH };
+      else if (before?.entries != null && at - before.fetchedAt < VIEW_STALE)
+        // 少し前に受け取った順位があれば、それを出し続ける
+        held = { ...before, until: at + VIEW_RETRY };
+      else
+        held = {
+          joinedAt,
+          entries: null,
+          fetchedAt: at,
+          until: at + VIEW_RETRY,
+        };
+      return held.entries;
+    })
+    .finally(() => {
+      pending = null;
+    });
+  return pending;
+}
+
+function present(entries: HubEntry[] | null, at: number): RankingView {
+  return entries === null
+    ? { ok: false }
+    : { ok: true, rows: matchEntries(entries, at) };
+}
+
+/**
+ * **検索を言葉なしで開いたときの節「予約の多い番組」** (docs/screens.md)。参加していなければ null (節を出さない)。
+ * ためた順位がまだ新しければその場で返し、古ければ hub を呼ぶ Promise を返す (画面は待たずに出し、節だけあとから埋める)。
+ * 突き合わせは毎回し直すので、予約・取消のあとの読み直しでも行の状態はいまのもの
+ */
+export function rankingView(
+  at = now(),
+): RankingView | Promise<RankingView> | null {
+  const row = link();
+  if (row === undefined) return null;
+  if (held?.joinedAt === row.joined_at && at < held.until)
+    return present(held.entries, at);
+  return refresh(row.joined_at).then((entries) => present(entries, now()));
 }

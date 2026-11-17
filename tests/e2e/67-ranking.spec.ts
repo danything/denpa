@@ -1,11 +1,21 @@
-import { expect, goto, test } from "./helpers";
+import type { Page } from "@playwright/test";
+
+import {
+  cancelAllReservations,
+  expect,
+  goto,
+  searchRowStart,
+  syncEpg,
+  test,
+} from "./helpers";
 
 /**
  * **予約数ランキングに参加する** (設定の「連携」の「予約数ランキング」。`server/ranking.ts`)。
  *
  * 偽の denpa-hub (`tests/fake/denpa-hub.ts`) がトークンを出し、送られた本文を貯めるので、
  * スイッチをオンにする → トークンを受け取ってすぐ送る → 最後に送った時刻が出る → オフにするとトークンを消す、まで画面で通す。
- * 送る中身・差分・送る時刻のずらし方は単体テスト (`ranking.test.ts`)
+ * 検索を言葉なしで開いたときの節「予約の多い番組」も、偽の hub が送られた予約をそのまま順位にして返すので画面で通す。
+ * 送る中身・差分・送る時刻のずらし方・順位の突き合わせとためておき方は単体テスト (`ranking.test.ts`)
  */
 interface HubState {
   ranking: { tokens: number; votes: { v: number }[]; revoked: number };
@@ -77,4 +87,87 @@ test.describe("予約数ランキング", () => {
     await goto(page, "/settings/integrations#ranking");
     await expect(page.getByTestId("ranking-setting")).not.toBeChecked();
   });
+
+  test("参加すると、検索を言葉なしで開いたときに予約の多い番組を出し、その場で予約できる", async ({
+    page,
+    request,
+  }) => {
+    await syncEpg(request);
+    // 参加していなければ節を出さない
+    await goto(page, "/search");
+    await expect(page.getByTestId("search-ranking")).toHaveCount(0);
+
+    // 先の放送を 1 つ予約してから参加する。参加するとすぐ送り、偽の hub はその予約を順位に入れる
+    const programId = await reserveLater(page);
+    await setRanking(page, true);
+
+    await goto(page, "/search");
+    const section = page.getByTestId("search-ranking");
+    await expect(
+      section.getByRole("heading", { level: 2, name: "予約の多い番組" }),
+    ).toBeVisible();
+    const mine = section.locator(
+      `[data-testid="search-program"][data-program-id="${programId}"]`,
+    );
+    await expect(mine.getByTestId("search-rank")).toHaveText(/^\d+$/);
+    await expect(mine.getByTestId("search-votes")).toHaveText("予約 約 10");
+    await expect(mine.getByTestId("search-program-state")).toHaveText(
+      "予約済み",
+    );
+
+    // 行からその場で取消・予約できる
+    await mine.getByTestId("search-cancel").click();
+    await expect(mine.getByTestId("search-program-state")).toHaveCount(0);
+    await mine.getByTestId("search-reserve").click();
+    await expect(mine.getByTestId("search-program-state")).toHaveText(
+      "予約済み",
+    );
+
+    // 受信できない局の番組は、予約のボタンを出さずに局名を添える
+    const rows = section.locator("li");
+    await expect(rows).toHaveCount(5);
+    await section.getByTestId("search-more-ranking").click();
+    expect(await rows.count()).toBeGreaterThan(5);
+    const away = section.getByTestId("search-ranking-away").first();
+    await expect(away).toContainText("受信できない局・BSよその局1");
+    await expect(away).toContainText("予約 約 5");
+    await expect(away.getByRole("button")).toHaveCount(0);
+
+    // やめると節を出さない
+    await setRanking(page, false);
+    await goto(page, "/search");
+    await expect(page.getByTestId("search-ranking")).toHaveCount(0);
+    await cancelAllReservations(page);
+  });
 });
+
+/** 検索の結果から、まだ予約の無い先の放送を 1 つ予約する (`46-search.spec.ts` と同じ選び方)。番組の ID を返す */
+async function reserveLater(page: Page): Promise<string> {
+  await goto(page, `/search?q=${encodeURIComponent("テストアニメ")}`);
+  const programs = page.getByTestId("search-program");
+  await expect(programs.first()).toBeVisible();
+  const more = page.getByTestId("search-more-programs");
+  if (await more.isVisible()) await more.click();
+  for (const row of await programs.all()) {
+    const later =
+      searchRowStart((await row.textContent()) ?? "") > Date.now() + 2 * 60_000;
+    if (!later || (await row.getByTestId("search-reserve").count()) !== 1)
+      continue;
+    const id = (await row.getAttribute("data-program-id"))!;
+    await row.getByTestId("search-reserve").click();
+    await expect(row.getByTestId("search-program-state")).toHaveText(
+      "予約済み",
+    );
+    return id;
+  }
+  throw new Error("予約できる先の放送がありません");
+}
+
+/** 設定の「予約数ランキング」のスイッチを切り替え、保存されるのを待つ */
+async function setRanking(page: Page, on: boolean): Promise<void> {
+  await goto(page, "/settings/integrations#ranking");
+  await page.getByTestId("ranking-setting").setChecked(on);
+  await expect(
+    page.locator("#ranking").getByTestId("saved-result"),
+  ).toBeVisible();
+}

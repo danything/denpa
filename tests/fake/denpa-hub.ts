@@ -14,7 +14,9 @@ import { idTokenFor, sealForDenpa } from "./niconico-seal";
  * - `POST /niconico/live/watch`: 出したアクセストークンなら、この偽物の視聴の WebSocket (`/__watch`) を返す。ほかは 401
  * - 視聴の WebSocket: `startWatching` に `seat` を返し、`postComment` を `posts` に貯めて `postCommentResult` を返す
  * - `/ranking/*`: 予約数ランキング (denpa-hub の docs/ranking.md)。トークンを出し、送られた本文を `votes` に貯める。
- *   `/__control/ranking` で `off` にすると、本物の hub がランキングを受け付けていないときと同じく 404 を返す
+ *   `/__control/ranking` で `off` にすると、本物の hub がランキングを受け付けていないときと同じく 404 を返す。
+ *   `GET /ranking` は、そのトークンが送った予約をそのまま順位にし (どれも 10 票。始まりの早い順)、
+ *   その下に受信できない局の番組 (`AWAY`) を足して返す。本物の 5 つのトークンの決まりは持たない
  */
 const PORT = Number(process.env["FAKE_HUB_PORT"] ?? 8100);
 /** 偽のニコニコのユーザー ID */
@@ -38,6 +40,64 @@ const rankingTokens = new Set<string>();
 const votes: unknown[] = [];
 let revoked = 0;
 let rankingSerial = 0;
+
+interface FakeVote {
+  network_id: number;
+  service_id: number;
+  event_id: number;
+  start_at: string;
+  name: string;
+  service_name: string;
+}
+/** トークンごとに、いま票を入れている放送 (`add` で足し、`remove` で外す) */
+const ballots = new Map<string, Map<string, FakeVote>>();
+/** 順位の下に足す、受信できない局の番組の数。先頭の 5 件と「もっと見る」を試せるだけ置く */
+const AWAY = 6;
+
+function rankingOf(token: string, limit: number): Record<string, unknown> {
+  const mine = [...(ballots.get(token)?.values() ?? [])]
+    .filter((vote) => Date.parse(vote.start_at) > Date.now())
+    .sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at))
+    .map((vote) => ({
+      votes: 10,
+      name: vote.name,
+      airings: [
+        {
+          network_id: vote.network_id,
+          service_id: vote.service_id,
+          event_id: vote.event_id,
+          start_at: vote.start_at,
+          service_name: vote.service_name,
+          region: null,
+        },
+      ],
+    }));
+  const away = Array.from({ length: AWAY }, (_, i) => ({
+    votes: 5,
+    name: `よその局の番組 ${i + 1}`,
+    airings: [
+      {
+        // 偽エージェントに無い BS の局 (`tests/fake/services.ts`)
+        network_id: 4,
+        service_id: 900 + i,
+        event_id: 1 + i,
+        start_at: new Date(Date.now() + (i + 1) * 3_600_000).toISOString(),
+        service_name: `BSよその局${i + 1}`,
+        region: null,
+      },
+    ],
+  }));
+  return {
+    v: 1,
+    generated_at: new Date().toISOString(),
+    entries: [...mine, ...away].slice(0, limit).map((entry, i) => ({
+      rank: i + 1,
+      genres: [],
+      affiliation: null,
+      ...entry,
+    })),
+  };
+}
 
 function tokens(): Record<string, unknown> {
   serial++;
@@ -122,14 +182,29 @@ Bun.serve({
       if (!rankingTokens.has(bearer))
         return json({ error: "invalid_token" }, 401);
       if (url.pathname === "/ranking/votes" && request.method === "POST") {
-        votes.push(await request.json());
+        const body = (await request.json()) as {
+          add?: FakeVote[];
+          remove?: FakeVote[];
+        };
+        votes.push(body);
+        const mine = ballots.get(bearer) ?? new Map<string, FakeVote>();
+        ballots.set(bearer, mine);
+        const key = (v: FakeVote) =>
+          `${v.network_id}:${v.service_id}:${v.event_id}`;
+        for (const vote of body.add ?? []) mine.set(key(vote), vote);
+        for (const vote of body.remove ?? []) mine.delete(key(vote));
         return json({ accepted: 0, rejected: 0 });
       }
+      if (url.pathname === "/ranking" && request.method === "GET")
+        return json(
+          rankingOf(bearer, Number(url.searchParams.get("limit") ?? 50)),
+        );
       if (
         url.pathname === "/ranking/tokens/self" &&
         request.method === "DELETE"
       ) {
         rankingTokens.delete(bearer);
+        ballots.delete(bearer);
         revoked++;
         return new Response(null, { status: 204 });
       }
