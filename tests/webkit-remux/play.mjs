@@ -687,12 +687,7 @@ const server = createServer((request, response) => {
       "Content-Type": "video/mp4",
       "Content-Length": statSync(file).size,
     });
-    // make.ts が LIMIT で切った fMP4 は、録画の末尾まで届いていない。切ったところで終えると、remux-player が
-    // endOfStream を呼んで尺がそこまでになり、その先へ飛べなくなる (Chrome)。終えずに開いたままにする
-    const cut = statSync(file).size >= 36 * 1024 * 1024 - 64 * 1024;
-    createReadStream(file, { highWaterMark: 64 * 1024 }).pipe(response, {
-      end: !cut,
-    });
+    createReadStream(file, { highWaterMark: 64 * 1024 }).pipe(response);
     return;
   }
   response.writeHead(200, { "Content-Type": "text/html" });
@@ -829,7 +824,6 @@ for (const c of cases) {
   );
 }
 await browser.close();
-server.closeAllConnections();
 server.close();
 writeFileSync(resultPath, JSON.stringify(out, null, 2));
 
