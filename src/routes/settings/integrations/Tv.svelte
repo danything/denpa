@@ -38,7 +38,7 @@
         {#each data.devices as device (device.id)}
           <div class="device item" data-testid="device-row">
             <div class="grow">
-              <div><strong>{device.name}</strong></div>
+              <div>{device.name}</div>
               <div class="small muted">
                 ペアリング {dateTime(
                   device.created_at,
