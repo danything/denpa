@@ -145,6 +145,8 @@ export class JikkyoFeed {
     official?: OfficialWriter,
   ): Promise<PostResult> {
     const nx = this.nx;
+    // nx が無いのは、流していないときと録画だけ (どちらも書けない)。ライブで流している間は、NX-Jikkyo に
+    // 繋がらなくても nx はあり (繋ぎ直し続ける)、公式へは書ける
     if (nx === null) return "closed";
     const before = w();
     let result: PostResult;
