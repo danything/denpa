@@ -11,6 +11,8 @@ describe("行の数え方", () => {
     ["LF", "\n"],
     ["CR LF", "\r\n"],
     ["CR だけ", "\r"],
+    ["LS", "\u2028"],
+    ["PS", "\u2029"],
   ] as const) {
     test(`${what} の改行は、注釈の中でも外でも 1 行に数える`, () => {
       const source = ["a;", "/* x", "y */ b;", "c;"].join(end);

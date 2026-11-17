@@ -82,7 +82,7 @@ export function tokenize(source: string): Token[] {
 
   while (at < source.length) {
     const c = source[at]!;
-    if (c === "\n" || c === "\r" || c === " " || c === " ") {
+    if (c === "\n" || c === "\r" || c === "\u2028" || c === "\u2029") {
       if (c === "\n" || source[at + 1] !== "\n") line++;
       at++;
       newline = true;
@@ -109,7 +109,7 @@ export function tokenize(source: string): Token[] {
       // 行の数え方は上の改行と同じ (CR LF は 1 行、CR だけ・LS・PS も 1 行)
       for (let i = at; i < end; i++) {
         const d = source[i]!;
-        if (d === "\n" || d === "\r" || d === " " || d === " ") {
+        if (d === "\n" || d === "\r" || d === "\u2028" || d === "\u2029") {
           if (d === "\n" || source[i + 1] !== "\n") line++;
           newline = true;
         }
