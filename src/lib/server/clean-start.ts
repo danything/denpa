@@ -8,7 +8,8 @@
  * - `from` の手前のキーフレームから始めてよいなら、`from` をそのまま返す。ほとんどの録画はここで終わる
  * - そうでなければ、Cues を手前へたどって最初に見つかった始めてよいキーフレームの、少し後ろ (`AIM`) の時刻を返す。
  *   ffmpeg は `-ss` の手前のキーフレームを選ぶので、そのコマから出す
- * - `LOOKBACK` 秒たどっても無ければ `missing`。呼ぶ側は詰め替えずに変換する (`playback.ts`)
+ * - `LOOKBACK` 秒たどっても無ければ `missing`。呼ぶ側は詰め替えずに変換する (`playback.ts`)。変換できないときのために、
+ *   `FAR` 秒までたどって見つけたキーフレームを `far` に入れる
  * - Cues が無い・読めない・AV1 なら、`from` をそのまま返し、印も直さない (`marks` が null。前と同じ)
  *
  * 寄せるだけでは足りない。WebKit は目標の時刻の手前でいちばん近い sync のコマからデコーダに渡すので、出した fMP4 の
@@ -43,6 +44,10 @@ const CLUSTER_MOST = 16 * 1024 * 1024;
  * 間が 20 秒なら 26 MB 多く送る (50 Mbit/s で 4 秒)。20 秒までなら、見積もりで 10 秒ほどで映る。それより遠ければ変換する (変換の枠を使う)
  */
 const LOOKBACK = 20;
+/**
+ * 変換できないときに、始めてよいキーフレームを探す長さ (秒)。間が 58 秒で、映るまで 14.5 秒掛かった (`LOOKBACK` の説明)
+ */
+const FAR = 60;
 /**
  * 選んだキーフレームより、これだけ後ろの時刻を `-ss` に渡す (秒。次のキーフレームが近ければその半分)。
  * ffmpeg は B フレームのある映像では `-ss` の 3/23 秒手前で探す (fftools/ffmpeg_demux.c の `dts_heuristic`) ので、
@@ -81,10 +86,15 @@ export type CleanStart =
       marks: Marks;
       /**
        * 変換を始める位置 (秒)。`from` の手前のキーフレームの 1 つ前から読ませる。印の付いた P のコマから読むと、
-       * ffmpeg のデコーダは参照するフレームが揃う (回復点の SEI が示すコマ数を過ぎる) まで出さないので、1 つ前のキーフレームから読んで
-       * `from` より前に揃える。`-ss` の位置より前は出さないので、出る映像は `from` の少し手前から始まる
+       * 参照するフレームが揃う (回復点を過ぎる) までのコマは崩れるので、1 つ前のキーフレームから読んで
+       * `from` より前に揃える。出る映像は `decodeFrom` から始まる (`playback.fileTranscodeArgs` の `anywhere`)
        */
       decodeFrom: number;
+      /**
+       * 変換できないとき (枠が空かない・GPU が無い) に、印を直して詰め替える `-ss` (秒)。手前 `FAR` 秒の中でいちばん近い
+       * 始めてよいキーフレームから。WebKit はそこからデコードし直すので観はじめは遅いが、止まらない。無ければ null
+       */
+      far: number | null;
     };
 
 interface Index extends Marks {
@@ -158,36 +168,35 @@ export async function cleanFrom(
     const { cues } = index;
     const last = cues.findLastIndex((cue) => cue.time <= from);
     if (last < 0) return { from, marks, missing: false };
+    /** `cues[i]` から ffmpeg に出させる `-ss` (`AIM`) */
+    const aim = (i: number): number => {
+      const cue = cues[i]!;
+      const next = cues[i + 1]?.time ?? Number.POSITIVE_INFINITY;
+      return (
+        Math.ceil((cue.time + Math.min(AIM, (next - cue.time) / 2)) * 1000) /
+        1000
+      );
+    };
+    let far: number | null = null;
     for (let i = last; i >= 0; i--) {
       const cue = cues[i]!;
-      if (cue.time < from - LOOKBACK) break;
+      if (cue.time < from - FAR) break;
       const key = await keyFrame(path, index, cue);
       if (key === null) return asIs;
       if (!startable(index.codec, index.lengthSize, key)) continue;
+      if (cue.time < from - LOOKBACK) {
+        far = aim(i);
+        break;
+      }
       if (i === last) return { from, marks, missing: false };
-      const next = cues[i + 1]?.time ?? Number.POSITIVE_INFINITY;
-      const start =
-        Math.ceil((cue.time + Math.min(AIM, (next - cue.time) / 2)) * 1000) /
-        1000;
       console.log(
         `詰め替えを ${from.toFixed(3)} 秒の手前の始められるキーフレーム (${cue.time.toFixed(3)} 秒) から始めます`,
       );
-      return { from: start, marks, missing: false };
+      return { from: aim(i), marks, missing: false };
     }
     // LOOKBACK 秒の中に無かった (先頭のキーフレームまで来ていれば、そこは IDR なので見つかっている)
-    const before = cues[last - 1];
-    const decodeFrom =
-      before === undefined
-        ? from
-        : Math.min(
-            from,
-            Math.ceil(
-              (before.time +
-                Math.min(AIM, (cues[last]!.time - before.time) / 2)) *
-                1000,
-            ) / 1000,
-          );
-    return { from, marks, missing: true, decodeFrom };
+    const decodeFrom = last > 0 ? Math.min(from, aim(last - 1)) : from;
+    return { from, marks, missing: true, decodeFrom, far };
   } catch {
     return asIs;
   }

@@ -120,7 +120,7 @@ import {
   recordingStream,
 } from "./recording-io";
 import { endInput, run } from "./stream";
-import { holdTranscode } from "./transcode";
+import { holdTranscode, holdTranscodeWithin } from "./transcode";
 import { tsProbe } from "./ts-probe";
 
 /** エンコード済みのファイル 1 本の中身 (ffprobe で読む。`probeMedia`) */
@@ -663,7 +663,7 @@ const FMP4_OUT = [
  *
  * - `-ss` を `-i` の前に置く。映像は写すので、`from` の手前のキーフレームから始まる。
  *   そのキーフレームから始められなければ (印の付いた P のコマ)、呼ぶ側が `from` を手前の始められるキーフレームに寄せてから渡し、
- *   出した fMP4 の sync の印も直す (`clean-start.ts` の `cleanFrom`、`ts/fmp4-marks.ts`)。手前に無ければ変換する (`missingStart`)
+ *   出した fMP4 の sync の印も直す (`clean-start.ts` の `cleanFrom`、`ts/fmp4-marks.ts`)。手前に無ければ変換する (`missingWay`)
  * - `-copyts` で入力の時刻を出力まで運ぶ
  * - mp4 の muxer は既定で先頭を 0 に詰め直す。`frag_discont` で塊の時刻 (tfdt) を
  *   そのまま書かせ、`negative_cts_offsets` で B フレームのぶんを編集リストに逃がさせない
@@ -711,6 +711,9 @@ export function copyArgs(
  * 映像のエンコード方法はライブと同じ (`live.videoArgs`)。インタレ解除は済んでいるので挟まない。
  * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`)。段を下げるなら、エンコード済みと同じコーデックにも変換する。
  * `fps` は元のコマ数 (`MediaFile.fps`)。段を下げるとき、30 コマ以下ならそのままのコマ数で縮める
+ * `anywhere` なら、IRAP (IDR) でないコマから読んでもデコーダにコマを出させる (`-flags2 +showall`。`missingTranscode`)。
+ * 付けないと、ffmpeg の H.265 のデコーダは参照するフレームが無いコマを捨て続け、先頭のほかに IRAP の無い録画では
+ * 映像が 1 コマも出ない。参照するフレームが揃うまでのコマは崩れて出る
  */
 export function fileTranscodeArgs(
   path: string,
@@ -721,6 +724,7 @@ export function fileTranscodeArgs(
   rung: Rung = 0,
   fps: number | null = null,
   hlg = false,
+  anywhere = false,
 ): string[] {
   // HLG (4K の局の録画を AV1 にしたもの) は、縮めて SDR に直す (ライブの 4K の局と同じ)
   const video = hlg
@@ -729,6 +733,7 @@ export function fileTranscodeArgs(
   return [
     ...QUIET,
     ...video.input,
+    ...(anywhere ? ["-flags2", "+showall"] : []),
     ...(from > 0 ? ["-ss", from.toFixed(3)] : []),
     "-copyts",
     ...recordingInput(path),
@@ -1291,20 +1296,38 @@ export async function streamResponse(
   if (same !== undefined && rung === 0) {
     const start = await cleanFrom(same.path, from);
     const audio = audioIndex(query.get("audio"));
-    // 手前に始めてよいキーフレームが無い。詰め替えると WebKit が始められないので、同じコーデックに変換する (`missingStart`)
-    const converted = start.missing
-      ? missingStart(same, from, start.decodeFrom, audio, codec, label)
-      : null;
-    if (converted !== null) return converted;
+    let copyFrom = start.from;
+    let marks = start.missing ? null : start.marks;
+    // 手前に始めてよいキーフレームが無い。詰め替えると WebKit が始められないので、同じコーデックに変換する (`missingWay`)
+    if (start.missing) {
+      const convertible =
+        pickLiveHw(codec, false) !== null || softwareEncodes(codec, 0);
+      const held = convertible ? await holdTranscodeWithin(SLOT_WAIT) : null;
+      const way = missingWay(convertible, held !== null, start.far);
+      console.log(
+        `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無いので、${MISSING_TEXT[way]}`,
+      );
+      if (held !== null)
+        return missingTranscode(
+          same,
+          start.decodeFrom,
+          audio,
+          codec,
+          label,
+          held,
+        );
+      if (way === "busy") error(503, BUSY);
+      if (way === "far") {
+        copyFrom = start.far ?? from;
+        marks = start.marks;
+      }
+    }
     const pace = new StreamPace(false);
     const opened = openPace(() => pace.read());
     const body = transcodeBody(
       [
         {
-          argv: [
-            config.ffmpeg,
-            ...copyArgs(same.path, start.from, audio, codec),
-          ],
+          argv: [config.ffmpeg, ...copyArgs(same.path, copyFrom, audio, codec)],
         },
       ],
       `${label} の詰め替え`,
@@ -1312,8 +1335,7 @@ export async function streamResponse(
       undefined,
       pace,
     );
-    // 変換できずに詰め替えるときは、印を直さない。直すと始めてよいコマが 1 つも無くなり、どのブラウザも始められない
-    const marks = start.missing ? null : start.marks;
+    // 印を直さないのは、中身を読めない録画と、手前に始めてよいキーフレームが無く変換もできない録画 (`missingWay` の `plain`)
     return new Response(
       marks === null
         ? body
@@ -1493,38 +1515,56 @@ function withFallback(
 }
 
 /**
- * **手前に始めてよいキーフレームが無い録画を、その位置から同じコーデックに変換して送る** (`cleanFrom` の `missing`)。
- * 詰め替えると、送る中に始めてよいコマが無く、WebKit は目標の手前の印の付いた P のコマからデコーダに渡して
- * MEDIA_ERR_DECODE になる (#2884)。変換すれば先頭は IDR になる。
- * 読み始めるのは `decodeFrom` (`CleanStart` の説明)。
- *
- * 変換できないとき (H.265 をエンコードできる GPU が無い) と、変換の枠が埋まっているときは null。呼ぶ側は前と同じく
- * 詰め替える。Chrome・Edge は印の付いた P のコマからでも始められ、断ると (503) そちらも観られなくなるため
+ * 変換の枠が埋まっていたら、これだけ待って取り直す (ms)。同じ人が続けて飛ぶと、前の変換が枠を返す前に次が来るため
+ * (`transcode.holdTranscodeWithin`)
  */
-function missingStart(
+const SLOT_WAIT = 3000;
+
+/** 手前に始めてよいキーフレームが無いときの送り方 (`missingWay`) */
+export type MissingWay = "transcode" | "far" | "busy" | "plain";
+
+const MISSING_TEXT: Record<MissingWay, string> = {
+  transcode: "変換して送ります",
+  far: "変換できないため、遠くの始められるキーフレームから印を直して詰め替えます",
+  busy: "変換の枠が空かないため断ります",
+  plain:
+    "変換できず、遠くにも始められるキーフレームが無いため、印を直さずに詰め替えます",
+};
+
+/**
+ * **手前 20 秒に始めてよいキーフレームが無い録画の送り方** (`cleanFrom` の `missing`)。
+ * 詰め替えると、送る中に始めてよいコマが無く、WebKit は目標の手前の印の付いた P のコマからデコーダに渡して
+ * MEDIA_ERR_DECODE になる (#2884)。
+ *
+ * - `transcode`: 枠が取れれば、同じコーデックに変換する。先頭は IDR になる (`missingTranscode`)
+ * - `far`: 変換できなければ (枠が `SLOT_WAIT` 待っても空かない・H.265 をエンコードできる GPU が無い)、手前 60 秒の中の
+ *   始めてよいキーフレームから、印を直して詰め替える (`CleanStart` の `far`)。観はじめは遅い (間が 58 秒で 14.5 秒) が、止まらない
+ * - `busy`: それも無く、枠が埋まっているだけなら断る (503)。空けば変換できる。画面はほかの形式を勧める
+ * - `plain`: それも無く、変換できない (GPU が無い) なら、前と同じく印を直さずに詰め替える。断ってもいつまでも観られないので、
+ *   印の付いた P のコマからでも始められる Chrome・Edge には送る
+ */
+export function missingWay(
+  convertible: boolean,
+  held: boolean,
+  far: number | null,
+): MissingWay {
+  if (convertible && held) return "transcode";
+  if (far !== null) return "far";
+  return convertible ? "busy" : "plain";
+}
+
+/**
+ * **手前に始めてよいキーフレームが無い録画を、同じコーデックに変換して送る** (`missingWay` の `transcode`)。`held` は取った枠。
+ * 読み始めるのは `decodeFrom` (`CleanStart` の説明)。IRAP でないコマから読むので、デコーダにコマを出させる (`fileTranscodeArgs` の `anywhere`)
+ */
+function missingTranscode(
   file: EncodedFile,
-  from: number,
   decodeFrom: number,
   audio: number,
   codec: HwCodec,
   label: string,
-): Response | null {
-  if (pickLiveHw(codec, false) === null && !softwareEncodes(codec, 0)) {
-    console.warn(
-      `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無く、変換もできないので詰め替えます`,
-    );
-    return null;
-  }
-  const held = holdTranscode();
-  if (held === null) {
-    console.warn(
-      `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無いが、変換の枠が埋まっているので詰め替えます`,
-    );
-    return null;
-  }
-  console.log(
-    `${label}: ${from.toFixed(3)} 秒の手前に始められるキーフレームが無いので、変換して送ります`,
-  );
+  held: () => void,
+): Response {
   const pace = new StreamPace(true);
   const opened = openPace(() => pace.read());
   const release = () => {
@@ -1533,7 +1573,7 @@ function missingStart(
   };
   return new Response(
     transcodeBody(
-      fileAttempts(file, decodeFrom, audio, codec, 0),
+      fileAttempts(file, decodeFrom, audio, codec, 0, true),
       `${label} の変換`,
       release,
       undefined,
@@ -1549,6 +1589,7 @@ function fileAttempts(
   audio: number,
   codec: LiveCodec,
   rung: Rung,
+  anywhere = false,
 ): Attempt[] {
   return withFallback(
     codec,
@@ -1565,6 +1606,7 @@ function fileAttempts(
           rung,
           source.media.fps,
           source.media.hlg,
+          anywhere,
         ),
       ],
     }),

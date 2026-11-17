@@ -32,7 +32,7 @@ const manifests = readdirSync(root, { withFileTypes: true })
  *
  * - `PLAY_VARIANTS`: 録画の種類 (`h264-closed` など)
  * - `PLAY_VERSIONS`: 作り方 (`both`・`copy`・`fixed`・`silent`)
- * - `PLAY_KINDS`: 流し方 (`open`・`seek`)
+ * - `PLAY_KINDS`: 流し方 (`open`・`seek`・`player-open`・`player-seek`。player は remux-player.ts で流す)
  * - `PLAY_ORDERS`: 開く位置を currentTime に入れる時。`before` は足す前 (直す前の remux-player.ts)、`metadata` は先頭を読んだとき、
  *   `covered` は開く位置まで溜まったとき (直したあとの remux-player.ts)、`after` は足し終えてから
  * - `PLAY_ROUNDS`: open を何回ずつ流すか (既定 2)
@@ -85,6 +85,35 @@ for (const m of manifests) {
           steps: [start, x],
         });
     }
+    // player: 観る画面と同じく remux-player.ts で流す (`REMUX_JS` に組んだもの)。開く位置の入れ方も remux-player に任せる
+    const files = Object.fromEntries(
+      m.made
+        .filter((y) => y.pos === 0 || versionOf(y) === versionOf(x))
+        .map((y) => [y.pos, y.file]),
+    );
+    if (KINDS.includes("player-open"))
+      for (let round = 1; round <= ROUNDS; round++)
+        cases.push({
+          kind: "player-open",
+          round,
+          order: "player",
+          source,
+          variant: m.variant,
+          codecs,
+          steps: [x],
+          files,
+        });
+    if (KINDS.includes("player-seek") && x.pos !== 0 && x.codecs === m.codecs)
+      cases.push({
+        kind: "player-seek",
+        round: 1,
+        order: "player",
+        source,
+        variant: m.variant,
+        codecs,
+        steps: [start, x],
+        files,
+      });
   }
 }
 
@@ -304,6 +333,101 @@ async function inPage({ source, codecs, steps, watch, first, order }) {
   return { supported, results, events, timeouts: state.timeouts };
 }
 
+/**
+ * ページの中で回す。観る画面と同じく remux-player.ts で流す (`player-open`・`player-seek`)。
+ * 観る画面と同じく、作ってすぐ play() を呼ぶ。player-seek は先頭から `first` ミリ秒流してから飛ぶ
+ */
+async function inPlayer({ codecs, steps, files, watch, first, kind }) {
+  const state = { stage: "start", events: [], results: [], states: [] };
+  window.__state = state;
+  const { remuxPlayer } = await import("/remux.js");
+  const Source = window.ManagedMediaSource;
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  document.body.append(video);
+  for (const name of [
+    "error",
+    "stalled",
+    "waiting",
+    "playing",
+    "seeked",
+    "seeking",
+  ])
+    video.addEventListener(name, () =>
+      state.events.push(`${name}@${video.currentTime.toFixed(2)}`),
+    );
+  const positions = Object.keys(files).map(Number);
+  // 飛んだ先に近い位置の fMP4 を返す (どれも開く位置から先が入っている)
+  const url = (from) => {
+    const near = positions.reduce((a, b) =>
+      Math.abs(b - from) < Math.abs(a - from) ? b : a,
+    );
+    return `/files/${files[near]}`;
+  };
+  let failure = null;
+  const player = remuxPlayer(
+    video,
+    { Source, managed: true },
+    {
+      url,
+      codecs: `video/mp4; codecs="${codecs}"`,
+      duration: 150,
+      start: kind === "player-seek" ? 0 : steps[0].pos,
+      audio: "0",
+      state: (s, reason) => {
+        state.states.push(`${s}${reason ? `: ${reason}` : ""}`);
+        if (s === "failed") failure = reason ?? s;
+      },
+    },
+  );
+  void video.play().catch(() => undefined);
+  const begin = performance.now();
+  if (kind === "player-seek") {
+    while (performance.now() - begin < first && video.error === null)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    video.currentTime = steps[1].pos;
+  }
+  const at = steps.at(-1).pos;
+  const stepStart = performance.now();
+  const quality0 = video.getVideoPlaybackQuality();
+  let startup = null;
+  while (
+    performance.now() - stepStart < watch &&
+    video.error === null &&
+    failure === null
+  ) {
+    if (startup === null && video.currentTime > at + 0.1)
+      startup = performance.now() - stepStart;
+    if (video.currentTime > at + 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const quality = video.getVideoPlaybackQuality();
+  state.results.push({
+    pos: at,
+    file: steps.at(-1).file,
+    from: steps.at(-1).from,
+    first: steps.at(-1).first,
+    error:
+      video.error === null
+        ? null
+        : { code: video.error.code, message: video.error.message },
+    failure,
+    startTime: at,
+    currentTime: +video.currentTime.toFixed(3),
+    advanced: +(video.currentTime - at).toFixed(3),
+    decoded: quality.totalVideoFrames - quality0.totalVideoFrames,
+    readyState: video.readyState,
+    seeking: video.seeking,
+    paused: video.paused,
+    startupMs: startup === null ? null : Math.round(startup),
+    origin: player.origin(),
+  });
+  player.destroy();
+  state.stage = "done";
+  return state;
+}
+
 const browser = await webkit.launch({ headless: process.env.HEADED !== "1" });
 const out = [];
 console.log(`webkit ${browser.version()}、${cases.length} 件`);
@@ -313,6 +437,11 @@ for (const c of cases) {
   page.on("console", (m) => console.log(`  [page] ${m.text()}`));
   await page.route("http://t.test/**", (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/remux.js")
+      return route.fulfill({
+        path: process.env.REMUX_JS,
+        contentType: "text/javascript",
+      });
     if (path.startsWith("/files/"))
       return route.fulfill({
         path: join(root, path.slice("/files/".length)),
@@ -329,7 +458,11 @@ for (const c of cases) {
     result = await Promise.race([
       // 打ち切ったあとに context を閉じると、この evaluate は失敗する。それで node を落とさない
       page
-        .evaluate(inPage, { ...c, watch: WATCH, first: FIRST })
+        .evaluate(c.kind.startsWith("player") ? inPlayer : inPage, {
+          ...c,
+          watch: WATCH,
+          first: FIRST,
+        })
         .catch((error) => ({ evaluateError: String(error) })),
       new Promise((resolve) => setTimeout(() => resolve(null), CASE_LIMIT)),
     ]);

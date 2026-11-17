@@ -21,6 +21,7 @@ const { parseTranscodeLimit, saveSettings, settings } =
   await import("./settings");
 const {
   holdTranscode,
+  holdTranscodeWithin,
   TRANSCODE_DEFAULT,
   transcodeAuto,
   transcodeLimit,
@@ -66,4 +67,18 @@ test("本数の読み方: 1〜16 の整数だけ。ほかは自動", () => {
   expect(parseTranscodeLimit("17")).toBeNull();
   expect(parseTranscodeLimit("2.5")).toBeNull();
   expect(parseTranscodeLimit(undefined)).toBeNull();
+});
+
+test("埋まっていれば、待つ間に返された枠を取る。待っても空かなければ null", async () => {
+  saveSettings({ transcodeLimit: 1 });
+  const first = holdTranscode();
+  expect(first).not.toBeNull();
+  // 前の変換が少し遅れて枠を返す (同じ人が続けて飛んだとき)
+  setTimeout(() => first?.(), 50);
+  const second = await holdTranscodeWithin(1000, 10);
+  expect(second).not.toBeNull();
+  expect(await holdTranscodeWithin(50, 10)).toBeNull();
+  second?.();
+  expect(transcodesInUse()).toBe(0);
+  saveSettings({ transcodeLimit: null });
 });

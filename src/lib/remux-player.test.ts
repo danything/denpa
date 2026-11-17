@@ -180,6 +180,32 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     expect(media().readyState).toBe("ended");
   });
 
+  test("開く位置は、溜まってから currentTime に入れる。それまでの詰まりでは先頭からリクエストし直さない", async () => {
+    // 応答を止めておき、2 つ目のチャンクから先も止める
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      return fakeFetch(url, init);
+    }) as typeof fetch;
+    gate = new Promise(() => {});
+    const { video, media, player } = start(100);
+    await settle();
+    // まだ何も足していない。入れると macOS の WebKit が止まることがある
+    expect(video.currentTime).toBe(0);
+    video.dispatchEvent(new Event("waiting"));
+    respond();
+    await settle();
+    // 1 つ目のチャンク (100〜102 秒) を足したところで入れる
+    expect(video.currentTime).toBe(100);
+    expect(requests).toEqual(["remux?from=100&audio=0"]);
+    expect(media().buffer?.ranges).toEqual([[100, 102]]);
+    expect(player.origin()).toContain("100.0");
+    player.destroy();
+  });
+
   test("溜まっている所・読んでいるストリームの少し先へはリクエストし直さない。遠くへ飛べばリクエストし直して前を捨てる", async () => {
     const { video, media } = start(100);
     await settle();

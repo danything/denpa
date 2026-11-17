@@ -72,3 +72,19 @@ export function holdTranscode(): (() => void) | null {
     used--;
   };
 }
+
+/**
+ * **枠が空くのを `wait` ms まで待って取る。** 取れたら返す関数、空かなければ null。
+ * 同じ人が続けて飛ぶと、前の変換が枠を返す (接続が切れたのを知る) より先に次のリクエストが来ることがある。その間だけ待つ
+ */
+export async function holdTranscodeWithin(
+  wait: number,
+  every = 100,
+): Promise<(() => void) | null> {
+  const until = Date.now() + wait;
+  for (;;) {
+    const held = holdTranscode();
+    if (held !== null || Date.now() >= until) return held;
+    await new Promise((resolve) => setTimeout(resolve, every));
+  }
+}

@@ -80,6 +80,7 @@ const {
   fileAudioBody,
   fileTranscodeArgs,
   mediaInfo,
+  missingWay,
   mmtsTranscodeArgs,
   playbackPlan,
   presented,
@@ -458,6 +459,36 @@ describe("ffmpeg の引数", () => {
     expect(args).not.toContain("-vf");
     expect(args.join(" ")).toContain("-ss 30.000 -copyts -i /m/a.mkv");
     expect(args.join(" ")).toContain("-c:v libx264");
+  });
+
+  test("手前に始めてよいキーフレームが無いとき: 枠が取れれば変換、無ければ遠くから印を直して詰め替え、それも無ければ断る", () => {
+    expect(missingWay(true, true, null)).toBe("transcode");
+    expect(missingWay(true, true, 40.5)).toBe("transcode");
+    expect(missingWay(true, false, 40.5)).toBe("far");
+    expect(missingWay(false, false, 40.5)).toBe("far");
+    expect(missingWay(true, false, null)).toBe("busy");
+    // GPU が無く変換できない。断っても観られないので、前と同じく詰め替える
+    expect(missingWay(false, false, null)).toBe("plain");
+  });
+
+  test("手前に始められるキーフレームが無いときの変換: IRAP でないコマからでもデコーダにコマを出させる", () => {
+    const args = fileTranscodeArgs(
+      "/m/a.mkv",
+      30,
+      0,
+      "h264",
+      null,
+      0,
+      null,
+      false,
+      true,
+    );
+    expect(args.join(" ")).toContain(
+      "-flags2 +showall -ss 30.000 -copyts -i /m/a.mkv",
+    );
+    expect(fileTranscodeArgs("/m/a.mkv", 30, 0, "h264", null)).not.toContain(
+      "-flags2",
+    );
   });
 
   test("TS の変換: 標準入力から、局を名指しして、出力の時刻をずらす", () => {
