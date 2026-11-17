@@ -44,7 +44,7 @@ writeFileSync(
     at > 0 ? notStartable(data) : data,
   ),
 );
-/** 先頭のほかに始められるキーフレームが無く、60 秒より長いもの */
+/** 先頭のほかに始められるキーフレームが無く、20 秒より長いもの */
 const long = `${dir}/long.mkv`;
 writeFileSync(
   long,
@@ -70,18 +70,20 @@ describe("cleanFrom", () => {
     expect(start.missing).toBe(false);
   });
 
-  test("手前 60 秒に始められるキーフレームが無ければ missing", async () => {
+  test("手前 20 秒に始められるキーフレームが無ければ missing。変換は手前から読む", async () => {
     const start = await cleanFrom(long, 70);
     expect(start).toMatchObject({ from: 70, missing: true });
-    expect(start.marks).not.toBeNull();
-    // 60 秒の中に先頭の IDR があれば寄せる
-    expect((await cleanFrom(long, 50)).missing).toBe(false);
+    if (!start.missing) throw new Error("missing のはず");
+    expect(start.decodeFrom).toBeLessThan(70);
+    expect(start.decodeFrom).toBeGreaterThan(60);
+    // 20 秒の中に先頭の IDR があれば寄せる
+    expect((await cleanFrom(long, 15)).missing).toBe(false);
   });
 
   test("Matroska でないファイルなら、そのまま返し、印も直さない", async () => {
     const text = `${dir}/text.mkv`;
     writeFileSync(text, "not a matroska");
-    const asIs = { from: 12, marks: null, missing: false };
+    const asIs = { missing: false as const, from: 12, marks: null };
     expect(await cleanFrom(text, 12)).toEqual(asIs);
     expect(await cleanFrom(`${dir}/missing.mkv`, 12)).toEqual(asIs);
   });

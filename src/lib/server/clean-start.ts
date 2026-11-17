@@ -35,10 +35,14 @@ import { readRecording } from "./recording-io";
 const CLUSTER_STEP = 512 * 1024;
 const CLUSTER_MOST = 16 * 1024 * 1024;
 /**
- * 始めてよいキーフレームを探して手前へたどる長さ (秒)。録画のキーフレームの間隔は 8 秒ほど (`-g 250`) なので、7 つほど見る。
- * これより手前から出すと、観はじめるまでに送るぶんが増える
+ * 始めてよいキーフレームを探して手前へたどる長さ (秒)。**観はじめの遅れで決めた。**
+ *
+ * 手前のキーフレームから送ると、WebKit はそこから開いた位置までをデコードし直してから映し、そのぶんを送る時間も掛かる。
+ * macOS の WebKit (GitHub の Mac のランナー。1080p59.94) では、開いた位置から映るまで、間が 30 秒で 9 秒、50 秒で 13 秒、
+ * 58 秒で 14.5 秒掛かった (間が数秒なら 1.5〜2.5 秒。送る時間は入っていない)。MediaCodec の 1080p は 10.5 Mbit/s なので、
+ * 間が 20 秒なら 26 MB 多く送る (50 Mbit/s で 4 秒)。20 秒までなら、見積もりで 10 秒ほどで映る。それより遠ければ変換する (変換の枠を使う)
  */
-const LOOKBACK = 60;
+const LOOKBACK = 20;
 /**
  * 選んだキーフレームより、これだけ後ろの時刻を `-ss` に渡す (秒。次のキーフレームが近ければその半分)。
  * ffmpeg は B フレームのある映像では `-ss` の 3/23 秒手前で探す (fftools/ffmpeg_demux.c の `dts_heuristic`) ので、
@@ -60,14 +64,28 @@ export interface Marks {
 }
 
 /** **詰め替えの始め方** (`cleanFrom`) */
-export interface CleanStart {
-  /** ffmpeg に渡す `-ss` (秒) */
-  from: number;
-  /** 出した fMP4 の sync の印を直すのに要るもの。H.264・H.265 の中身を読めたときだけ。null なら直さない */
-  marks: Marks | null;
-  /** 手前 `LOOKBACK` 秒に始めてよいキーフレームが無い。詰め替えると WebKit が始められない */
-  missing: boolean;
-}
+export type CleanStart =
+  | {
+      /** 詰め替えてよい */
+      missing: false;
+      /** ffmpeg に渡す `-ss` (秒) */
+      from: number;
+      /** 出した fMP4 の sync の印を直すのに要るもの。H.264・H.265 の中身を読めたときだけ。null なら直さない */
+      marks: Marks | null;
+    }
+  | {
+      /** 手前 `LOOKBACK` 秒に始めてよいキーフレームが無い。詰め替えると WebKit が始められない */
+      missing: true;
+      /** 開く位置 (秒)。変換できずに詰め替えるときは、ここから印を直さずに詰め替える (前と同じ) */
+      from: number;
+      marks: Marks;
+      /**
+       * 変換を始める位置 (秒)。`from` の手前のキーフレームの 1 つ前から読ませる。印の付いた P のコマから読むと、
+       * ffmpeg のデコーダは画が揃う (回復点の SEI が示すコマ数を過ぎる) まで出さないので、1 つ前のキーフレームから読んで
+       * `from` より前に揃える。`-ss` の位置より前は出さないので、出る映像は `from` の少し手前から始まる
+       */
+      decodeFrom: number;
+    };
 
 interface Index extends Marks {
   track: number;
@@ -130,7 +148,7 @@ export async function cleanFrom(
   path: string,
   from: number,
 ): Promise<CleanStart> {
-  const asIs: CleanStart = { from, marks: null, missing: false };
+  const asIs: CleanStart = { missing: false, from, marks: null };
   try {
     const index = await readIndex(path);
     if (index === null) return asIs;
@@ -157,7 +175,19 @@ export async function cleanFrom(
       return { from: start, marks, missing: false };
     }
     // LOOKBACK 秒の中に無かった (先頭のキーフレームまで来ていれば、そこは IDR なので見つかっている)
-    return { from, marks, missing: true };
+    const before = cues[last - 1];
+    const decodeFrom =
+      before === undefined
+        ? from
+        : Math.min(
+            from,
+            Math.ceil(
+              (before.time +
+                Math.min(AIM, (cues[last]!.time - before.time) / 2)) *
+                1000,
+            ) / 1000,
+          );
+    return { from, marks, missing: true, decodeFrom };
   } catch {
     return asIs;
   }

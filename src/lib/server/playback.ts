@@ -1293,7 +1293,7 @@ export async function streamResponse(
     const audio = audioIndex(query.get("audio"));
     // 手前に始めてよいキーフレームが無い。詰め替えると WebKit が始められないので、同じコーデックに変換する (`missingStart`)
     const converted = start.missing
-      ? missingStart(same, from, audio, codec, label)
+      ? missingStart(same, from, start.decodeFrom, audio, codec, label)
       : null;
     if (converted !== null) return converted;
     const pace = new StreamPace(false);
@@ -1496,6 +1496,7 @@ function withFallback(
  * **手前に始めてよいキーフレームが無い録画を、その位置から同じコーデックに変換して送る** (`cleanFrom` の `missing`)。
  * 詰め替えると、送る中に始めてよいコマが無く、WebKit は目標の手前の印の付いた P のコマからデコーダに渡して
  * MEDIA_ERR_DECODE になる (#2884)。変換すれば先頭は IDR になる。
+ * 読み始めるのは `decodeFrom` (`CleanStart` の説明)。
  *
  * 変換できないとき (H.265 をエンコードできる GPU が無い) と、変換の枠が埋まっているときは null。呼ぶ側は前と同じく
  * 詰め替える。Chrome・Edge は印の付いた P のコマからでも始められ、断ると (503) そちらも観られなくなるため
@@ -1503,6 +1504,7 @@ function withFallback(
 function missingStart(
   file: EncodedFile,
   from: number,
+  decodeFrom: number,
   audio: number,
   codec: HwCodec,
   label: string,
@@ -1531,7 +1533,7 @@ function missingStart(
   };
   return new Response(
     transcodeBody(
-      fileAttempts(file, from, audio, codec, 0),
+      fileAttempts(file, decodeFrom, audio, codec, 0),
       `${label} の変換`,
       release,
       undefined,

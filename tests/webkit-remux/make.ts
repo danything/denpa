@@ -33,13 +33,13 @@ if (variant === undefined || outRoot === undefined)
 const DURATION = Number(process.env["DURATION"] ?? 150);
 /** 途中の IDR を置く位置 (秒)。録画の種類によっては、ここと先頭だけが IDR */
 const IDR_AT = 70;
-/** 残す fMP4 の大きさ (バイト)。4 Mbit/s でおよそ 72 秒 (60 秒手前の IDR から送っても、開く位置の先まで入る) */
+/** 残す fMP4 の大きさ (バイト)。4 Mbit/s でおよそ 72 秒 (20 秒手前の IDR から送っても、開く位置の先まで十分に入る) */
 const LIMIT = 36 * 1024 * 1024;
 /**
- * 開く位置 (秒)。先頭のほかに IDR が 70 秒にしか無い録画では、手前の IDR までの間が 10・30・50・30・58 秒になる。
- * 140.3 は手前 60 秒に IDR が無い (変換する)
+ * 開く位置 (秒)。先頭のほかに IDR が 70 秒にしか無い録画では、手前の IDR までの間が 10・30・15・30・70 秒になる。
+ * 間が 20 秒 (`clean-start.ts` の `LOOKBACK`) より長ければ変換する
  */
-const POSITIONS = [0, 10.3, 30.3, 50.3, 100.3, 128.3, 140.3];
+const POSITIONS = [0, 10.3, 30.3, 85.3, 100.3, 140.3];
 
 const forcedIdr = ["-force_key_frames", `0,${IDR_AT}`, "-forced-idr", "1"];
 const x264 = [
@@ -295,8 +295,9 @@ async function make(pos: number, version: Made["version"]): Promise<void> {
     const start = await cleanFrom(mkv, pos);
     if (start.missing && spec!.codec === "h264") {
       how = "transcode";
+      from = start.decodeFrom;
       await produce(
-        fileTranscodeArgs(mkv, pos, 0, spec!.codec, null),
+        fileTranscodeArgs(mkv, start.decodeFrom, 0, spec!.codec, null),
         name,
         null,
       );
