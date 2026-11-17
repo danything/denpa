@@ -1,0 +1,113 @@
+name: WebKit remux check
+
+# **詰め替え (`playback.copyArgs`) の fMP4 を、macOS の WebKit の MSE で再生できるかを確かめる** (#2884)。手で回すだけ。
+# iPhone の Safari と同じ VideoToolbox でデコードする。Linux の WebKit は H.264 の fMP4 を再生できないため、macOS で回す。
+#
+# 1. make (Linux): x264・x265 で作り物の録画 (Matroska) を作り、開く位置ごとに `cleanFrom` を通さない・通す の両方で
+#    `copyArgs` の ffmpeg を回す。sync の印を IDR にだけ残したもの (`+sync`) も作る (tests/webkit-remux/make.ts)
+# 2. play (macOS): Playwright の WebKit で、remux-player.ts と同じ足し方で流す。新しい <video> で開く (open) のと、
+#    先頭を流したあとに飛ぶ (seek) の 2 通り (tests/webkit-remux/play.mjs)。表は Step Summary と artifact の result に出る
+#
+# `from_run` に前の run の番号を入れると make を飛ばし、その run の fMP4 を使う (artifact は 3 日で消える)。
+# play は 30 分ほどかかる
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_run:
+        description: "fMP4 をこの run の artifact から取る (空なら作り直す)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  make:
+    if: ${{ inputs.from_run == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - h264-closed
+          - h264-opengop
+          - h264-intra-refresh
+          - hevc-closed
+          - hevc-cra-rasl
+          - hevc-cra-norasl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read bun version from Dockerfile
+        id: bun
+        run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Install ffmpeg 9.0 (x264・x265)
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz | tar -xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/ffmpeg-n9.0-latest-linux64-gpl-9.0/bin" >> "$GITHUB_PATH"
+
+      - name: Make
+        env:
+          DENPA_DB: /tmp/denpa-webkit-remux.db
+        run: |
+          ffmpeg -hide_banner -version | head -1
+          bun tests/webkit-remux/make.ts ${{ matrix.variant }} out
+          rm out/*/rec.mkv
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fmp4-${{ matrix.variant }}
+          path: out
+          retention-days: 3
+
+  play:
+    needs: make
+    if: ${{ !cancelled() }}
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: fmp4-*
+          path: out
+          merge-multiple: true
+          run-id: ${{ inputs.from_run || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Install Playwright WebKit
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pw"
+          cp tests/webkit-remux/play.mjs "$RUNNER_TEMP/pw/"
+          cd "$RUNNER_TEMP/pw"
+          echo '{"type":"module"}' > package.json
+          npm install --no-audit --no-fund playwright@1.65.1
+          npx playwright install webkit
+          sw_vers
+          sysctl -n machdep.cpu.brand_string
+
+      - name: Play
+        run: |
+          node "$RUNNER_TEMP/pw/play.mjs" "$PWD/out" "$PWD/result.json"
+          cat result.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: result
+          path: |
+            result.json
+            result.md
