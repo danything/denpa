@@ -91,6 +91,16 @@ class FakeVideo extends EventTarget {
   src = "";
   error = null;
   disableRemotePlayback = false;
+  paused = true;
+  play(): Promise<void> {
+    this.paused = false;
+    this.dispatchEvent(new Event("play"));
+    return Promise.resolve();
+  }
+  pause(): void {
+    this.paused = true;
+    this.dispatchEvent(new Event("pause"));
+  }
   private at = 0;
   get currentTime(): number {
     return this.at;
@@ -180,7 +190,7 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     expect(media().readyState).toBe("ended");
   });
 
-  test("開く位置は、映像が足されてから currentTime に入れる。それまでの詰まりでは先頭からリクエストし直さない", async () => {
+  test("開く位置は、溜まってから currentTime に入れる。それまでの詰まりでは先頭からリクエストし直さない", async () => {
     // 応答を止めておき、2 つ目のチャンクから先も止める
     let respond!: () => void;
     const held = new Promise<void>((resolve) => {
@@ -225,17 +235,6 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     player.destroy();
   });
 
-  test("手前から送られてきたら、映像が 1 つ足されたところで開く位置に入れる (先頭から映さない)", async () => {
-    // 100 秒を開いたが、サーバは 90 秒の始められるキーフレームから送る
-    globalThis.fetch = (async (url: string, init?: RequestInit) =>
-      fakeFetch(url.replace("from=100", "from=90"), init)) as typeof fetch;
-    gate = new Promise(() => {});
-    const { video, player } = start(100);
-    await settle();
-    expect(video.currentTime).toBe(100);
-    player.destroy();
-  });
-
   test("開く位置まで届かずに終わったら、届いた末尾に入れる", async () => {
     // 応答は 100〜106 秒。尺の端より後ろの 110 秒を開いた
     globalThis.fetch = (async (url: string, init?: RequestInit) =>
@@ -243,6 +242,37 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     const { video, player } = start(110);
     await settle();
     expect(video.currentTime).toBe(106);
+    player.destroy();
+  });
+
+  test("開く位置を入れる前に流すようにリクエストされたら止めておき、入れてから流す (先頭から映さない)", async () => {
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      // 100 秒を開いたが、サーバは 96 秒の始められるキーフレームから送る
+      return fakeFetch(url.replace("from=100", "from=96"), init);
+    }) as typeof fetch;
+    const { video, player } = start(100);
+    // 観る画面は作ってすぐ play() を呼ぶ
+    void video.play();
+    await settle();
+    expect(video.paused).toBe(true);
+    respond();
+    await settle();
+    // 96〜98・98〜100 秒では入れず、100〜102 秒が届いてから入れて流す
+    expect(video.currentTime).toBe(100);
+    expect(video.paused).toBe(false);
+    player.destroy();
+  });
+
+  test("流すようにリクエストされていなければ、入れたあとも止めたまま", async () => {
+    const { video, player } = start(100);
+    await settle();
+    expect(video.currentTime).toBe(100);
+    expect(video.paused).toBe(true);
     player.destroy();
   });
 

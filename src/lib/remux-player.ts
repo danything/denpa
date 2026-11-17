@@ -161,13 +161,16 @@ export function remuxPlayer(
   let wake: (() => void) | null = null;
   const meter = new Meter();
   /**
-   * **開く位置。映像が足されるまで currentTime に入れない** (`place`)。何も無いうちに入れると、macOS の WebKit は
+   * **開く位置。溜まるまで currentTime に入れない** (`place`)。何も無いうちに入れると、macOS の WebKit は
    * seeking のまま止まるか、1 コマ映して止まることがある (MediaSource・ManagedMediaSource、headless でも画面を出しても。
    * `.github/workflows/webkit-remux.yml` で確かめた。#2884)。入れたら null
    */
   let startAt: number | null = null;
-  /** 入れた開く位置。そのストリームを読み終えるまで覚えておく (開く位置まで届かずに終わったら、届いた末尾へ直す) */
-  let placed: number | null = null;
+  /**
+   * 開く位置を入れるまで、こちらで止めているか (`hold`)。手前のキーフレームから送ると、届いた映像の先頭が 0 秒近くに
+   * あるとき、開く位置まで溜まるまでの間に先頭から映ってしまう。開く位置を入れたら流す (`release`)
+   */
+  let held = false;
   /** いまの位置。開く位置をまだ入れていなければ、その位置 */
   const position = (): number => startAt ?? video.currentTime;
 
@@ -307,7 +310,6 @@ export function remuxPlayer(
   ): number {
     const mine = ++run;
     controller?.abort();
-    placed = null;
     controller = abort;
     nudge();
     retry.cancel();
@@ -387,20 +389,13 @@ export function remuxPlayer(
     if (mine !== run) return;
     loadingFrom = null;
     // 開く位置まで届かずに終わった (尺の端より後ろを開いた)。届いた末尾に入れる
-    const last = buffered().at(-1);
     if (startAt !== null) {
+      const last = buffered().at(-1);
       const at = last === undefined ? startAt : Math.min(startAt, last[1]);
       startAt = null;
       video.currentTime = at;
-    } else if (
-      placed !== null &&
-      last !== undefined &&
-      video.currentTime > last[1]
-    ) {
-      // 入れた開く位置が、届いた末尾より後ろだった
-      video.currentTime = last[1];
+      release();
     }
-    placed = null;
     // 末尾まで届いた。終わりを伝えない (`endOfStream`) と、最後で止まったまま `ended` が来ない
     await idle();
     if (mine === run && media.readyState === "open") media.endOfStream();
@@ -515,26 +510,39 @@ export function remuxPlayer(
   }
 
   /**
-   * 映像が足されたら、開く位置を currentTime に入れる (`startAt`)。届いたものが開く位置より後ろから始まっていれば
+   * 開く位置まで溜まったら、currentTime に入れる (`startAt`)。届いたものが開く位置より後ろから始まっていれば
    * (変換は印の付いたコマの都合で少し後ろから出ることがある)、その始まりに入れる
    */
   function place(): void {
     if (startAt === null) return;
-    const ranges = buffered();
-    // 映像が 1 つでも足されたら入れる。開く位置まで待つと、手前のキーフレームから送ったときに、その間だけ先頭から映る
-    if (ranges.length === 0) return;
-    const range = ranges.find(([, end]) => end > startAt!);
-    const at = range === undefined ? startAt : Math.max(startAt, range[0]);
+    const range = buffered().find(([, end]) => end > startAt!);
+    if (range === undefined) return;
+    const at = Math.max(startAt, range[0]);
     startAt = null;
-    placed = at;
     video.currentTime = at;
+    release();
+  }
+
+  /** 開く位置を入れる前に流れ出したら止める (`held`)。止めるのは、流すようにリクエストされているときだけ */
+  function hold(): void {
+    if (startAt === null || video.paused) return;
+    held = true;
+    video.pause();
+  }
+
+  /** 止めていたら流す */
+  function release(): void {
+    if (!held) return;
+    held = false;
+    void video.play().catch(() => undefined);
   }
 
   /** 飛んだ先が溜まっておらず、待っても届かないなら、そこからリクエストし直す */
   const onSeeking = (): void => {
     nudge();
-    // 開く位置を入れる前に飛ばれた。飛んだ先を採る
+    // 開く位置を入れる前に飛ばれた。飛んだ先を採り、止めていたら流す
     startAt = null;
+    release();
     if (!opened || retry.waiting) return;
     if (!covers(buffered(), video.currentTime, loadingFrom, SLACK))
       void load(video.currentTime, "seek");
@@ -555,6 +563,7 @@ export function remuxPlayer(
   };
 
   video.addEventListener("seeking", onSeeking);
+  video.addEventListener("play", hold);
   video.addEventListener("waiting", onWaiting);
   video.addEventListener("timeupdate", nudge);
   media.addEventListener("startstreaming", nudge);
@@ -584,6 +593,8 @@ export function remuxPlayer(
         Math.max(0, options.duration - 1),
       );
       startAt = start > 0 ? start : null;
+      // 開く前に流すようにリクエストされていた (観る画面は作ってすぐ play() を呼ぶ)
+      hold();
       void load(start, "open");
     },
     { once: true },
@@ -606,6 +617,7 @@ export function remuxPlayer(
       nudge();
       retry.cancel();
       video.removeEventListener("seeking", onSeeking);
+      video.removeEventListener("play", hold);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("timeupdate", nudge);
       media.removeEventListener("startstreaming", nudge);
