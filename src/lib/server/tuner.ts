@@ -540,7 +540,7 @@ export class TuneError extends Error {
  */
 export class TunerUnusableError extends TuneError {}
 
-/** エージェントの失敗の本文 (`{ "error": "…" }`) から理由を読む。形が違えば null */
+/** エージェントの失敗の本文 (`{ "error": "…" }`) から理由を読む。形式が違えば null */
 function agentReason(detail: string): string | null {
   try {
     const body = JSON.parse(detail) as { error?: unknown } | null;

@@ -213,7 +213,8 @@ export async function cancel(reservationId: number): Promise<boolean> {
 /**
  * **番組の予約を取り消す** (番組表の「予約取消」と、アプリの `DELETE /api/programs/<id>/record`)。
  * 予約は番組ごとに 1 本 (`reservations.program_id` が一意)。取り消していない予約が無ければ 404、
- * 録り終えた・録り逃したものは 409 ({@link cancelable}。取り消しにすると記録だけが書き換わるため)。
+ * 録り終えた・録画に失敗した・録り逃したものと、放送が終わった「録画しない」は 409
+ * ({@link cancelable}。取り消しにすると記録だけが書き換わるため)。
  * 録画中なら止めて、そこまでの録画は残す ({@link cancel})
  */
 export async function cancelProgram(
@@ -241,7 +242,7 @@ type CancelResult =
 
 /**
  * **予約を ID で取り消す** (ホームと検索の画面の取消)。決まりは {@link cancelProgram} と同じで、
- * 予約が無いか取り消し済みなら 404、録り終えた・録り逃したものは 409
+ * 予約が無いか取り消し済みなら 404、取り消せないもの ({@link cancelable}) は 409
  */
 export async function cancelReservation(
   reservationId: number,

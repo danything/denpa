@@ -1,7 +1,7 @@
 /**
  * **画面の HTML とデータ (JSON) を縮めて返す。** 入口の `server.js` が adapter の応答に掛ける。
  *
- * 静的ファイル (`_app/immutable/*`) は組むときに br / gz を作ってある (`precompress`) が、
+ * 静的ファイル (`_app/immutable/*`) はビルドのときに br / gz を作ってある (`precompress`) が、
  * SvelteKit が組み立てる応答 (HTML・`__data.json`・`/api/*` の JSON) は縮めずに出る。
  * 番組表の `__data.json` は 1 日・1 放送波で 300〜400KB あり、遠い回線ではそのまま待ち時間になる。
  * 前段 (リバースプロキシ) が縮める構成もあるが、直に繋ぐ構成 (`http://<IP>:3000`) もあるので
@@ -69,7 +69,7 @@ export function compress(request: Request, response: Response): Response {
   if (encoding === null) return response;
 
   /*
-   * br の段は 4。ここは応答のたびに縮めるので、静的ファイル (組むときに 1 度だけ。最高段) ほど
+   * br の品質は 4。ここは応答のたびに縮めるので、静的ファイル (ビルドのときに 1 度だけ。最高の品質) ほど
    * 時間を掛けない。JSON なら 4 でも gzip の既定より小さく、速さは同じくらい
    */
   const zip =

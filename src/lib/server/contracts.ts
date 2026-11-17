@@ -560,7 +560,7 @@ async function decodeOnChannel(
   const timeout = setTimeout(() => abortController.abort(), 15_000);
 
   try {
-    // 取り合いの順をスキャンと同じにしてストリームを開く (WantsKeys が有効な live プレフィックス)
+    // 取り合いの順をスキャンと同じにしてストリームを開く。利用者の名前を live で始めて、エージェントに鍵を取らせる (`Sink.WantsKeys`)
     const stream = await openChannelStream(
       first.type,
       mine,
@@ -670,7 +670,7 @@ function saveDecode(
  * **有料の番組を復号できて録れた。** その局を、復号テストで確かめたときと同じく契約中にする (`encoder.ts`。`noteStillScrambled` の反対)。
  * 番組表に契約の情報 (0xCB) が無い局は、手で予約した録画でも契約中になり、録り続けている間は 31 日 (`DECODE_VALID_MS`) を過ぎても契約中のまま。
  *
- * 書くのは、復号したエージェント (後から復号させたエージェント、無ければ録ったエージェントの `recordings.agent_id`) がいま使っているカードの行。録ったエージェントが分からない (上げる前の録画)・
+ * 書くのは、復号したエージェント (後から復号させたエージェント、無ければ録ったエージェントの `recordings.agent_id`) がいま使っているカードの行。録ったエージェントが分からない (列を足す前の録画)・
  * もう無いときは並びの先頭のエージェントのカード。カードが読めないときは書かない (どのカードで観られたか分からない)。
  * カードが答えた行 (`code` がある) の状態は変えない (`saveDecode`)
  */

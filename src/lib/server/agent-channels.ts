@@ -20,7 +20,10 @@ export interface AgentChannels {
   channels: readonly AgentChannel[];
 }
 
-/** 1 台のエージェントの行を、返した控えで入れ直す。`syncServices` のトランザクションの中で呼ぶ */
+/**
+ * 1 台のエージェントの行を、返した控えで入れ直す。局の取り込み (`epg.syncServices`) はトランザクションの中で、
+ * 種別の削除 (`scan.removeType`) はエージェントが返した残りで呼ぶ
+ */
 export function storeAgentChannels(read: AgentChannels): void {
   orm()
     .delete(agentChannels)
@@ -98,7 +101,7 @@ export function serviceChannel(): SQL<string | null> {
 }
 
 /**
- * **局を受けられる所** (エージェントとそのチャンネル) を、エージェントの並びの順につないだもの (`agent-order.placesKey` の形)。
+ * **局を受けられる所** (エージェントとそのチャンネル) を、エージェントの並びの順につないだもの (`agent-order.placesKey` の形式)。
  * 選局の振り分け (`tuner.openChannel`) と予約の割り振り (`conflict.ts`) はここから選ぶ。
  *
  * - エージェントごとに 1 つ。選び方は `serviceChannel` と同じ (受信できないと決めていないほう、次に控えの後ろのほう)

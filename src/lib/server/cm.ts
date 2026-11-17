@@ -246,7 +246,7 @@ export async function probeVideo(input: string): Promise<{
       ]),
     );
   } catch {
-    // ffprobe が使えない環境。呼ぶ側が NaN を見て諦める
+    // ffprobe が使えない環境。呼ぶ側が NaN を見て代わりの値を使う
   }
   const finite = (value: number) => (Number.isFinite(value) ? value : NaN);
   const positive = (value: number) => (value > 0 ? finite(value) : NaN);

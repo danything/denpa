@@ -6,7 +6,7 @@ import { encodedFile } from "#lib/server/library.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 
 /**
- * 録画の状態を返す。**追っかけ再生の画面が「エンコードが終わったか」を聞く API。**
+ * 録画の状態を返す。**追っかけ再生の画面が「エンコードが終わったか」を問い合わせる API。**
  * 開いたまま録り終えても追っかけで観続けられるが、エンコードが終われば普通の観る画面
  * (シークも字幕も揃う) に移りたい。
  * 画面は `recordings` の通知 (SSE) を受けるたびにここを読む。

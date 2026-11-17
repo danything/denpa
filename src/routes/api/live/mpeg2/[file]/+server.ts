@@ -32,12 +32,12 @@ const TYPES: Record<string, string> = {
 };
 
 /**
- * **縮めて配る。** wasm は brotli で 3 分の 1 ほどになる (大きさは docs/stream.md#放送そのままmpeg-2を送る)。前段に縮める proxy が無い家が多いので
- * ここで縮める。縮めるのは中身が変わったとき (ETag が変わったとき) の 1 度だけで、あとは覚えたものを返す
+ * **圧縮して配る。** wasm は brotli で 3 分の 1 ほどになる (大きさは docs/stream.md#放送そのままmpeg-2を送る)。前段に圧縮する proxy が無い家が多いので
+ * ここで圧縮する。圧縮するのは中身が変わったとき (ETag が変わったとき) の 1 度だけで、あとは覚えたものを返す
  *
- * **縮め終えるまでは縮めずに返す。** brotli の 11 は wasm 1 つで 2 秒ほど掛かる (実測 2079 ms)。
- * 同期で縮めると、その間サーバ全体が止まり、デコーダの読み込みも遅れて、互換モードの観る画面が
- * 1 コマも描けない (E2E の 40-watch-compat・41-watch-compat-local)。縮めるのは別のスレッドに任せる
+ * **圧縮し終えるまでは圧縮せずに返す。** brotli の 11 は wasm 1 つで 2 秒ほど掛かる (実測 2079 ms)。
+ * 同期で圧縮すると、その間サーバ全体が止まり、デコーダの読み込みも遅れて、互換モードの観る画面が
+ * 1 コマも描けない (E2E の 40-watch-compat・41-watch-compat-local)。圧縮は別のスレッドに任せる
  */
 /** zlib が返すのは自分の ArrayBuffer を持つ Buffer (共有メモリではない) */
 type Packed = { br: Buffer<ArrayBuffer>; gzip: Buffer<ArrayBuffer> };
@@ -46,7 +46,7 @@ const packed = new Map<string, { tag: string; ready: Packed | null }>();
 const brotli = promisify(brotliCompress);
 const gzipped = promisify(gzip);
 
-/** 縮めたもの。**まだなら null** (縮めはじめるので、今回は縮めずに返す) */
+/** 圧縮したもの。**まだなら null** (圧縮を始めるので、今回は圧縮せずに返す) */
 function pack(path: string, tag: string): Packed | null {
   const hit = packed.get(path);
   if (hit?.tag === tag) return hit.ready;
@@ -63,8 +63,8 @@ function pack(path: string, tag: string): Packed | null {
       gzip: gz as Buffer<ArrayBuffer>,
     };
   })().catch((failure) => {
-    // 縮められなくても配れる。次にリクエストされたときにもう一度試す
-    console.warn(`[mpeg2] ${path} を縮められません: ${failure}`);
+    // 圧縮できなくても配れる。次にリクエストされたときにもう一度試す
+    console.warn(`[mpeg2] ${path} を圧縮できません: ${failure}`);
     if (packed.get(path) === entry) packed.delete(path);
   });
   return null;

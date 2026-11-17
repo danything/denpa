@@ -37,25 +37,19 @@ import {
 } from "@danything/arib/caption-text";
 import { LANGUAGE } from "@danything/arib/language";
 import { CLOCK } from "@danything/arib/pes";
-import {
-  descriptors,
-  packetPid,
-  PacketStream,
-  PID_PAT,
-  pmtStreams,
-  PmtTracker,
-  TABLE_PMT,
-} from "@danything/arib/psi";
+import { descriptors, PacketStream, pmtStreams } from "@danything/arib/psi";
 
 import { type CaptionTrack, CHANNEL, type Notice } from "#lib/live.js";
 import { type MkvFrame, MkvSplitter } from "#lib/ts/mkv.js";
 import type { ServiceVideo } from "#lib/types.js";
 
-/** 失敗を言っている行。**それ以外は入力の説明なので捨てる** */
+import { PmtWatch } from "./pmt-watch";
+
+/** 失敗を示す行。**それ以外は入力の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
 
 /**
- * 放送の欠けにいちいち言われるぶん。**残さない。**
+ * 放送の欠けのたびに出力される行。**残さない。**
  *
  * 電波の欠けは日常的にあり、デコーダはそのたびに「直した」「捨てた」をログに出力する
  * (選べる字幕を入力の見出しから読み取るためにログは info まで開けてある)。
@@ -236,7 +230,11 @@ function pmtAudio(section: Uint8Array): boolean {
  */
 export class PmtPeek {
   private readonly packets = new PacketStream();
-  private readonly pmt: PmtTracker;
+  private readonly pmt: PmtWatch<{
+    count: number;
+    video: ServiceVideo | null;
+    audio: boolean;
+  }>;
   /** 読んだ PMT にある映像のコーデック。まだ読んでいないか、映像が無ければ null */
   video: ServiceVideo | null = null;
   /** 読んだ PMT に音声があるか。まだ読んでいなければ null */
@@ -244,20 +242,22 @@ export class PmtPeek {
 
   /** @param program 放送が名乗っている番号 */
   constructor(program: number) {
-    this.pmt = new PmtTracker(program);
+    this.pmt = new PmtWatch(program, (section) => ({
+      count: captionStreams(section),
+      video: pmtVideo(section),
+      audio: pmtAudio(section),
+    }));
   }
 
-  /** 塊を 1 つ。**PMT を読めたら字幕の本数**、まだなら null。映像のコーデックは `video` に入れる */
+  /** 塊を 1 つ。**PMT を読めたら字幕の本数**、まだなら null。映像のコーデックは `video`、音声があるかは `audio` に入れる */
   feed(chunk: Uint8Array): number | null {
     for (const packet of this.packets.feed(chunk)) {
-      const pid = packetPid(packet);
-      if (pid !== PID_PAT && pid !== this.pmt.pid) continue;
-      for (const section of this.pmt.feed(packet, pid))
-        if (section[0] === TABLE_PMT) {
-          this.video = pmtVideo(section);
-          this.audio = pmtAudio(section);
-          return captionStreams(section);
-        }
+      if (!this.pmt.feedPacket(packet)) continue;
+      const read = this.pmt.value;
+      if (read === null) continue;
+      this.video = read.video;
+      this.audio = read.audio;
+      return read.count;
     }
     return null;
   }
@@ -272,7 +272,7 @@ export class PmtPeek {
 export const PMT_WAIT = 3_000;
 
 /**
- * **ffmpeg を起動する前に、字幕があるかと映像のコーデックを TS の先頭から読む。**
+ * **ffmpeg を起動する前に、字幕があるかと映像のコーデック・音声があるかを TS の先頭から読む。**
  *
  * 字幕を持たない放送に字幕の出力を要求すると ffmpeg は入力を探り終えてから終了し、起動し直すぶん
  * 映像が 1.5 秒ほど遅れる (`NO_SUBTITLE`)。PMT には ES が全部並んでいるので、起動する前に分かる。
@@ -283,7 +283,7 @@ export const PMT_WAIT = 3_000;
  * **読んだ塊は捨てない。** 返すストリームの先頭から同じものが出てくる
  *
  * @param program 放送が名乗っている番号
- * @param wait これだけ待って PMT を読めなければ、字幕の本数と映像のコーデックは null (分からない)
+ * @param wait これだけ待って PMT を読めなければ、字幕の本数・映像のコーデック・音声があるかは null (分からない)
  * @param onChunk 塊が届くたびに呼ぶ (開くまでの内訳の「最初のバイト」)
  */
 export async function peekPmt(
@@ -542,14 +542,14 @@ export function appFrame(
 export const CAPTION_FEED_BACKLOG = 8 * 1024 * 1024;
 
 /**
- * 読まれないまま溜まったら、作る側に**待ってもらう**量 (バイト)。録画の字幕は録画を読む速さで
+ * 読まれないまま溜まったら、作る側を**待たせる**量 (バイト)。録画の字幕は録画を読む速さで
  * 作れるので、受け側が先読みを止めたら (アプリは持つ枚数に上限がある) 録画を読むのも止める
  * (`CaptionOut.backedUp`)。閉じる量より必ず小さくする
  */
 export const CAPTION_FEED_HOLD = 1024 * 1024;
 
 /**
- * 何も届かなくても送る間 (ms)。**字幕の無い時間は数分続く**ので、黙っていると前段
+ * 何も届かなくても送る間 (ms)。**字幕の無い時間は数分続く**ので、何も送らないと前段
  * (nginx の既定は 60 秒) や受け側の読みの時間切れに切られる
  */
 const CAPTION_PING_MS = 20_000;

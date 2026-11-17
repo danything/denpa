@@ -14,6 +14,7 @@
 
 import type { Network } from "@danything/arib/psi";
 
+import { hex } from "./ca-observe";
 import type { AgentChannel } from "./tuner";
 
 /** 選局表の格子の 1 つ。中心周波数 (kHz) は `first` から 6 MHz おき */
@@ -309,7 +310,7 @@ export function describeLineup(
     0,
   );
   const lines = [
-    `${entrance}: ケーブルのネットワーク 0x${hex4(lineup.networkId)}${
+    `${entrance}: ケーブルのネットワーク ${hex(lineup.networkId)}${
       lineup.name === null ? " " : `「${lineup.name}」`
     }の NIT (version ${lineup.version}) を読みました。搬送波 ${lineup.carriers.length}・TS ${streams}`,
   ];
@@ -324,13 +325,13 @@ export function describeLineup(
       `  ${carrier.channel}  ${mhz(carrier.frequency)} MHz  ${MODULATIONS[carrier.modulation] ?? `変調 0x${hex2(carrier.modulation)}`}  ${(carrier.symbolRate / 1_000_000).toFixed(4)} Msps  ${carrier.fecOuter === 0x2 ? "RS(204,188)" : `外符号 0x${carrier.fecOuter.toString(16)}`}  ${tsmf}  ${carrier.streams
         .map(
           (ts) =>
-            `TS 0x${hex4(ts.transportStreamId)} (ONID 0x${hex4(ts.originalNetworkId)}、${ts.services} 局)`,
+            `TS ${hex(ts.transportStreamId)} (ONID ${hex(ts.originalNetworkId)}、${ts.services} 局)`,
         )
         .join("・")}`,
     );
   }
   for (const { transportStreamId, why } of lineup.skipped)
-    lines.push(`  TS 0x${hex4(transportStreamId)} を入れませんでした: ${why}`);
+    lines.push(`  TS ${hex(transportStreamId)} を入れませんでした: ${why}`);
   lines.push(
     lineup.others
       ? "  再送信の TS (ほかの ONID) も載っています"
@@ -468,6 +469,4 @@ function broadcastNetwork(networkId: number): boolean {
 
 const hex2 = (value: number) =>
   value.toString(16).toUpperCase().padStart(2, "0");
-const hex4 = (value: number) =>
-  value.toString(16).toUpperCase().padStart(4, "0");
 const mhz = (hertz: number) => (hertz / 1_000_000).toFixed(4);

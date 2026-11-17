@@ -13,7 +13,7 @@
 /** バージョンが合ったときの持たせ方 */
 export const FONT_IMMUTABLE = "public, max-age=31536000, immutable";
 
-/** `asked` は URL の `v`、`installed` はイメージに入っているバージョン (Dockerfile が書く印) */
+/** `asked` は URL の `v`、`installed` は置き場 (`FONT_DIR`) に入っているバージョン (イメージでは Dockerfile が書く印) */
 export function fontCacheControl(
   asked: string | null,
   installed: string | null,
@@ -23,7 +23,7 @@ export function fontCacheControl(
     : "no-cache";
 }
 
-/** 配るファイル → 中身の種類。woff2 はイメージの置き場 (Dockerfile の `denpa-font` 段) のまま、CSS はここで作る (`fontCss`) */
+/** 配るファイル → 中身の種類。woff2 は置き場 (`FONT_DIR`) のファイルのまま、CSS はここで作る (`fontCss`) */
 export const FONT_FILES = new Map<string, string>([
   ["denpa-font.woff2", "font/woff2"],
   ["denpa-font-jisx0213.woff2", "font/woff2"],

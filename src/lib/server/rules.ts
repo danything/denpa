@@ -96,9 +96,9 @@ function parseGenreDetail(program: Matchable): Genre[] {
 }
 
 /**
- * 判定に使う形式にほどいたルール。
+ * 判定に使う形式に直したルール。
  *
- * ほどく作業 (JSON の読み出し、キーワードの分割、全角を半角に寄せる) を**ルール 1 つにつき
+ * 直す作業 (JSON の読み出し、キーワードの分割、全角を半角に寄せる) を**ルール 1 つにつき
  * 1 回**にするために分けてある。判定のたびにやると、実機では
  * 有効なルール 318 × これから放送される番組 25,608 = **810 万回**になり、ルールを 1 つ足すだけで十数秒掛かった。
  */
@@ -199,7 +199,7 @@ export type Miss =
   | "ignore";
 
 /**
- * ほどいたルールに番組が当てはまらない理由。当てはまれば null。
+ * 直したルール (`compile`) に番組が当てはまらない理由。当てはまれば null。
  *
  * 検索用テキストは**関数で受け取る**。文字を作るのが一番高くつくので、
  * 局やジャンルで落ちる番組にはそもそも作らせない。
@@ -274,7 +274,7 @@ export function missOf(
   return ignores.some((k) => text.includes(k)) ? "ignore" : null;
 }
 
-/** ほどいたルールに番組が当てはまるか ({@link missOf} が理由を返さないか) */
+/** 直したルールに番組が当てはまるか ({@link missOf} が理由を返さないか) */
 export function matchesCompiled(
   compiled: CompiledRule,
   program: Matchable,
@@ -414,7 +414,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  * ところが id が同じでなくなるケースが 2 つあり、どちらも実機で**取り消したはずの回が
  * 録れた**として出た。
  *
- * - **枝番違い。** 同じ放送が 23608 と 23609 の両方に載るとき、束ねが一時的に
+ * - **枝番違い。** 同じ放送が 23608 と 23609 の両方に載るとき、1 本にまとめる判定 (`oneBroadcast`) が一時的に
  *   外れる (片方だけ延長が先に届く、タイトルがまだ違う) と、取り消していないほうの
  *   枝番に予約が無いので立つ。放送直前なら猶予 (`ruleRetractGrace`) の中で
  *   引っ込まず、そのまま録れる
@@ -700,7 +700,7 @@ export function oneBroadcast<
   for (const item of list) {
     const key = `${channelOf(item)} ${item.start_at} ${item.name}`;
     const twin = kept.get(key);
-    // 枝番の小さいほうが本線 (MX1 なら 23608)。並び順に左右されないよう、あとから小さいものが来たら入れ替える
+    // 枝番の小さいほうが本チャンネル (MX1 なら 23608)。並び順に左右されないよう、あとから小さいものが来たら入れ替える
     if (twin !== undefined && twin.service_id <= item.service_id) continue;
     kept.set(key, item);
   }

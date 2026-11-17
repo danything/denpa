@@ -1,7 +1,8 @@
 /**
  * **1 局に絞った TS から PMT だけを読み、そこから決めた値を持つ。** カルーセルや映像はデコードしない。
  *
- * データ放送の自動起動の指定 (`databroadcast.ts` の `AutoStartWatch`) と、選べる音声の部品タグ (`live.ts` の `PmtAudioWatch`) が使う。
+ * データ放送の自動起動の指定 (`databroadcast.ts` の `AutoStartWatch`)、選べる音声の部品タグ (`live.ts` の `PmtAudioWatch`)、
+ * ffmpeg を起こす前に読む字幕の本数・映像のコーデック・音声があるか (`captions.ts` の `PmtPeek`) が使う。
  * PMT は 100ms ごとに来る数百バイトなので、誰もリクエストしていなくても読み続けて安い
  */
 

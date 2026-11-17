@@ -54,18 +54,19 @@ export async function load({ params, url }) {
 
   /*
    * データ放送を取り出してあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る。
-   * **エンコード済みの時刻で書いてある**ので、まだエンコードしていない録画では出さない
+   * **エンコード済みの時刻で書いてある**ので、まだエンコードしていない録画では出さない。
+   * 映像の無い録画はエンコードせず、保存先の TS (`library_path`) の隣に元の TS の時刻で置く (`recorder.ts`。読み出す API と同じ場所)
    */
-  const hasData =
-    encoded !== null && existsSync(sidecarPaths(encoded).dataBroadcast);
+  const dataBase = encoded ?? recording.library_path;
+  const dataPath =
+    dataBase === null ? null : sidecarPaths(dataBase).dataBroadcast;
+  const hasData = dataPath !== null && existsSync(dataPath);
   /*
    * 入口に自動起動の指定があるか (変化ログの PMT。`recordedAutoStart`)。データ放送を自動で受信する端末は、これが true の録画でだけ
    * 開く前から変化ログを取得する。指定の無い録画の入口は d を押すまで始まらない
    */
   const autoStart =
-    encoded !== null &&
-    hasData &&
-    (await recordedAutoStart(sidecarPaths(encoded).dataBroadcast));
+    dataPath !== null && hasData && (await recordedAutoStart(dataPath));
 
   // 続きの位置は元の TS の物差しで覚えている。この画面の物差し (`playbackPlan` の `axis`) に直して渡す
   if (recording.resume_ms !== null) {

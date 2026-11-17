@@ -18,7 +18,7 @@ import { run } from "./stream";
  * - 無音は、主音声の `silencedetect` を `ametadata` で一時ファイルへ書く
  *
  * ふだんは**エンコードと同じ ffmpeg で一緒に読む** (`scanReader` の `outputs` をエンコードする出力のあとに足す。
- * `encoder.ts`)。ここの `scan` が自分で ffmpeg を起こすのは、ロゴを覚え直して枠だけ読み直すとき、
+ * `encoder.ts`)。ここの `scan` が自分で ffmpeg を起動するのは、ロゴを覚え直して枠だけ読み直すとき、
  * CM 検出だけやり直すとき、エンコードのあとに音だけ読み直すとき。
  *
  * **材料は標準エラーに出させない。** ffmpeg は書き切れないログの行をエラーにせず捨てるので、エンコードと一緒に読むと
@@ -263,7 +263,7 @@ export function scanReader(want: ScanWant): ScanReader {
   };
 }
 
-/** 自分で ffmpeg を起こして読むときの引数 (`before` は入力の前に置く) */
+/** 自分で ffmpeg を起動して読むときの引数 (`before` は入力の前に置く) */
 function scanArgs(
   input: string,
   outputs: string[],

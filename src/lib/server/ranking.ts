@@ -38,7 +38,7 @@ export const JITTER = 15 * 60_000;
 /** 1 回に送る `add` の上限 (hub と同じ)。超えた分は次の回に回す */
 export const MAX_ADD = 2000;
 /** 1 回に送る `remove` の上限 (hub と同じ) */
-export const MAX_REMOVE = 5000;
+const MAX_REMOVE = 5000;
 /**
  * 送る番組の始まりの先の端。hub は 9 日先までを受けるので、時計のずれを見込んで少し手前で切る。
  * 外れた番組は、近付いてから次の回で送る
@@ -116,7 +116,7 @@ export function digest(vote: Vote): string {
 }
 
 /** 地上波・BS・CS の局か。ケーブルは元の放送が地上波・BS・CS のもの (パススルー・再送信) だけ */
-export function countedService(type: string, networkId: number): boolean {
+function countedService(type: string, networkId: number): boolean {
   if (type === "SKY") return false;
   const from = origin(networkId);
   return from === "GR" || from === "BS" || from === "CS";
@@ -431,7 +431,7 @@ export function sendIfDue(at = now()): Promise<void> {
 // ---- オン・オフ ----
 
 /** オンにできなかったわけ (設定の画面にそのまま出す) */
-export const JOIN_ERRORS = {
+const JOIN_ERRORS = {
   unreachable: "denpa-hub に届かないため、参加できませんでした",
   disabled:
     "denpa-hub が予約数ランキングを受け付けていないため、参加できませんでした",
@@ -588,7 +588,7 @@ const isInt = (value: unknown): value is number =>
  * hub の返事を読む。形が違っても読める欄は使い、記録に 1 度だけ書く (hub と denpa のバージョンのずれ)。
  * `entries` が無ければ読めなかったとして null
  */
-export function readEntries(body: unknown): HubEntry[] | null {
+function readEntries(body: unknown): HubEntry[] | null {
   const top = body as { v?: unknown; entries?: unknown } | null;
   const warn = (what: string) => {
     if (warnedShape) return;
@@ -660,7 +660,7 @@ function typeOrder(type: string): number {
  * いくつかあれば始まりの早いもの。無ければ、まだ始まっていない放送のうち早いものを、受信できない局の行にする。
  * 順位は hub のまま (受信できない番組を飛ばして振り直さない)。どの放送も始まっていて手元に無い番組は出さない
  */
-export function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
+function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
   const events = [
     ...new Set(entries.flatMap((e) => e.airings.map((a) => a.event_id))),
   ];

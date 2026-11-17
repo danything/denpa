@@ -483,7 +483,7 @@ export async function followAgent(found: {
   return true;
 }
 
-/** 試験から。付け替えを試した時刻を忘れる */
+/** 単体テスト用: 付け替えを試した時刻を忘れる */
 export function forgetFollowTries(): void {
   followTried.clear();
 }
