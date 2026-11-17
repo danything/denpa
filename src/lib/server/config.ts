@@ -32,7 +32,8 @@ export function parseNum(
   if (
     !Number.isFinite(n) ||
     (min !== undefined && n < min) ||
-    (integer && !Number.isInteger(n))
+    // 整数は数字だけで書く (エージェントの読み方と同じ。`1e3` や `0x10` は読まない)
+    (integer && !/^-?\d+$/.test(v))
   ) {
     const what = `${min === undefined ? "" : `${min} 以上の`}${integer ? "整数" : "数"}`;
     throw new Error(

@@ -21,7 +21,7 @@ describe("環境変数の読み方", () => {
     const wait = { min: 0, integer: true };
     expect(parseNum("SHUTDOWN_WAIT", "0", 1, wait)).toBe(0);
     expect(parseNum("SHUTDOWN_WAIT", "60000", 1, wait)).toBe(60000);
-    for (const bad of ["-1", "1.5", "6h"]) {
+    for (const bad of ["-1", "1.5", "6h", "1e3", "0x10"]) {
       expect(() => parseNum("SHUTDOWN_WAIT", bad, 1, wait)).toThrow(
         "SHUTDOWN_WAIT は 0 以上の整数で書きます",
       );
