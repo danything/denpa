@@ -5,11 +5,13 @@
  *
  * 1. 作り物の映像 (1080p59.94・150 秒・AAC) を x264・x265 で Matroska にエンコードする
  * 2. 映像のキーフレームの印が付いたコマを全部並べ、NAL の種類と `startable` の答えを書く
- * 3. 開く位置ごとに、2 通りで fMP4 を作り、先頭 `LIMIT` バイトを残す
+ * 3. 開く位置ごとに、2〜3 通りで fMP4 を作り、先頭 `LIMIT` バイトを残す
  *    - copy: `cleanFrom` を通さずに `copyArgs` で詰め替える (v2.50.0 までの動き)
- *    - fixed: サーバと同じ。`cleanFrom` で始める位置を決め、`ts/fmp4-marks.ts` で sync の印を直す。
- *      手前に始められるキーフレームが無ければ `fileTranscodeArgs` で変換する (GPU の無いランナーなので H.264 はソフトウェア。
- *      H.265 は変換できないので、サーバと同じく印を直さずに詰め替える)
+ *    - fixed: サーバと同じ (観る画面の WebKit と同じく `?clean=1`)。`cleanFrom` で始める位置を決め、`ts/fmp4-marks.ts` で sync の印を直す。
+ *      手前に始められるキーフレームが無ければ `fileTranscodeArgs` で変換する (GPU の無いランナーなので H.264 はソフトウェア)。
+ *      H.265 は変換できないので、サーバと同じく `FAR` 秒手前までの始められるキーフレームから詰め替える (無ければ印を直さずに詰め替える)
+ *    - busy: H.264 で変換するところだけ。変換の枠が埋まっていたときのサーバと同じく、`FAR` 秒手前までの始められるキーフレームから
+ *      詰め替える (無ければサーバは 503 で断るので作らない)
  */
 
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -18,7 +20,7 @@ import { SyncMarks } from "#lib/ts/fmp4-marks.js";
 import { loadCues, loadMkvHead, MkvDemuxer } from "#lib/ts/mkv-media.js";
 import { nalLengthSize, sliceType, startable } from "#lib/ts/random-access.js";
 
-import { cleanFrom } from "../../src/lib/server/clean-start";
+import { cleanFrom, FAR } from "../../src/lib/server/clean-start";
 import {
   copyArgs,
   fileTranscodeArgs,
@@ -205,7 +207,7 @@ interface Made {
   codec: string;
   codecs: string;
   pos: number;
-  version: "copy" | "fixed" | "both";
+  version: "copy" | "fixed" | "busy" | "both";
   /** fixed のときの作り方。詰め替え (印を直した・直していない) か変換 */
   how: "copy" | "marked" | "transcode";
   from: number;
@@ -292,7 +294,14 @@ async function make(pos: number, version: Made["version"]): Promise<void> {
   if (version === "copy") {
     await produce(copyArgs(mkv, pos, 0, spec!.codec), name, null);
   } else {
-    const start = await cleanFrom(mkv, pos);
+    let start = await cleanFrom(mkv, pos);
+    // 変換できない (H.265) か枠が埋まっている (busy)。観る画面の WebKit と同じく `?clean=1` で、FAR 秒手前までたどり直す
+    if (start.missing && (spec!.codec === "hevc" || version === "busy")) {
+      const far = await cleanFrom(mkv, pos, FAR);
+      // サーバは、それも無く枠が埋まっていれば 503 で断る。作るものは無い
+      if (far.missing && version === "busy") return;
+      if (!far.missing) start = far;
+    }
     if (start.missing && spec!.codec === "h264") {
       how = "transcode";
       from = start.decodeFrom;
@@ -338,6 +347,9 @@ for (const pos of POSITIONS) {
   }
   await make(pos, "copy");
   await make(pos, "fixed");
+  // H.264 で変換するところは、枠が埋まっていたときのもの (busy) も作る
+  if (spec.codec === "h264" && (await cleanFrom(mkv, pos)).missing)
+    await make(pos, "busy");
 }
 
 writeFileSync(
