@@ -133,9 +133,10 @@ if (Config.Given("AGENT_HOST") is { } hostText
     return 2;
 }
 // 録画が終わるまで待つ上限 (下の Drain)。読めない値は AGENT_PORT と同じく、既定に戻さずに止める (打ち間違えたまま、録画を待たずに止まらないように)
-if (!Config.TryShutdownWait(Config.Given("SHUTDOWN_WAIT"), out var shutdownWait))
+var shutdownWaitText = Config.Given("SHUTDOWN_WAIT");
+if (!Config.TryShutdownWait(shutdownWaitText, out var shutdownWait))
 {
-    Log.Write($"SHUTDOWN_WAIT は 0 以上のミリ秒の数で書きます (いまは「{Config.Given("SHUTDOWN_WAIT")}」)");
+    Log.Write($"SHUTDOWN_WAIT は 0 以上のミリ秒の数で書きます (いまは「{shutdownWaitText}」)");
     return 2;
 }
 /*
