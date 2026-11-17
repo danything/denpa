@@ -91,6 +91,16 @@ class FakeVideo extends EventTarget {
   src = "";
   error = null;
   disableRemotePlayback = false;
+  paused = true;
+  play(): Promise<void> {
+    this.paused = false;
+    this.dispatchEvent(new Event("play"));
+    return Promise.resolve();
+  }
+  pause(): void {
+    this.paused = true;
+    this.dispatchEvent(new Event("pause"));
+  }
   private at = 0;
   get currentTime(): number {
     return this.at;
@@ -232,6 +242,113 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     const { video, player } = start(110);
     await settle();
     expect(video.currentTime).toBe(106);
+    player.destroy();
+  });
+
+  test("開く位置を入れる前に流すようにリクエストされたら止めておき、入れてから流す (先頭から映さない)", async () => {
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      // 100 秒を開いたが、サーバは 96 秒の始められるキーフレームから送る
+      return fakeFetch(url.replace("from=100", "from=96"), init);
+    }) as typeof fetch;
+    const { video, player } = start(100);
+    // 観る画面は作ってすぐ play() を呼ぶ
+    void video.play();
+    await settle();
+    expect(video.paused).toBe(true);
+    respond();
+    await settle();
+    // 96〜98・98〜100 秒では入れず、100〜102 秒が届いてから入れて流す
+    expect(video.currentTime).toBe(100);
+    expect(video.paused).toBe(false);
+    player.destroy();
+  });
+
+  test("開く位置を入れる前は、ブラウザが送り込みを止めても (ManagedMediaSource) 開く位置まで読む", async () => {
+    class Stopped extends FakeMediaSource {
+      streaming = false;
+    }
+    globalThis.fetch = (async (url: string, init?: RequestInit) =>
+      fakeFetch(url.replace("from=100", "from=96"), init)) as typeof fetch;
+    const video = new FakeVideo();
+    const player = remuxPlayer(
+      video as unknown as HTMLVideoElement,
+      { Source: Stopped as unknown as MediaSourceClass, managed: true },
+      {
+        url: (at, audio) => `remux?from=${at}&audio=${audio}`,
+        codecs: H264,
+        duration: 600,
+        start: 100,
+        audio: "0",
+        state: () => {},
+      },
+    );
+    await settle();
+    expect(video.currentTime).toBe(100);
+    player.destroy();
+  });
+
+  test("止めている間に画面が一時停止したら、開く位置を入れても流さない", async () => {
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      return fakeFetch(url, init);
+    }) as typeof fetch;
+    const { video, player } = start(100);
+    void video.play();
+    await settle();
+    expect(video.paused).toBe(true);
+    video.pause();
+    respond();
+    await settle();
+    expect(video.currentTime).toBe(100);
+    expect(video.paused).toBe(true);
+    player.destroy();
+  });
+
+  test("止めている間に飛ばれたら、飛んだ先から流す", async () => {
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      return fakeFetch(url, init);
+    }) as typeof fetch;
+    const { video, player } = start(100);
+    void video.play();
+    await settle();
+    video.currentTime = 300;
+    expect(video.paused).toBe(false);
+    respond();
+    await settle();
+    expect(video.currentTime).toBe(300);
+    player.destroy();
+  });
+
+  test("止めている間に開く位置まで届かずに終わったら、届いた末尾に入れて流す", async () => {
+    globalThis.fetch = (async (url: string, init?: RequestInit) =>
+      fakeFetch(url.replace("from=110", "from=100"), init)) as typeof fetch;
+    const { video, player } = start(110);
+    void video.play();
+    await settle();
+    expect(video.currentTime).toBe(106);
+    expect(video.paused).toBe(false);
+    player.destroy();
+  });
+
+  test("流すようにリクエストされていなければ、入れたあとも止めたまま", async () => {
+    const { video, player } = start(100);
+    await settle();
+    expect(video.currentTime).toBe(100);
+    expect(video.paused).toBe(true);
     player.destroy();
   });
 

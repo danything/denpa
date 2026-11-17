@@ -56,6 +56,10 @@ on:
         description: "player で流す remux-player.ts のコミット (空なら回すコミットのもの)"
         type: string
         default: ""
+      rate:
+        description: "手元の HTTP サーバが送る速さ (バイト/秒。0 なら速さを絞らない)"
+        type: string
+        default: "0"
       rechunk:
         description: "player で、届いた塊を 256 KB ずつに分けて渡す"
         type: boolean
@@ -186,6 +190,7 @@ jobs:
           HEADED: ${{ inputs.headed && '1' || '0' }}
           REMUX_JS: ${{ runner.temp }}/remux.js
           PLAY_BROWSER: ${{ inputs.browser }}
+          PLAY_RATE: ${{ inputs.rate }}
           PLAY_RECHUNK: ${{ inputs.rechunk && '1' || '0' }}
         run: |
           if [ "$PLAY_BROWSER" = safari ]; then

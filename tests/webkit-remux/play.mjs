@@ -533,6 +533,17 @@ async function inPlayer({ codecs, steps, files, watch, first, kind, rechunk }) {
     video.addEventListener(name, () =>
       state.events.push(`${name}@${video.currentTime.toFixed(2)}`),
     );
+  // 開く位置を入れる前に、手前 (先頭) から映ったか。映った位置のうち、いちばん後ろ
+  let early = null;
+  const target = steps.at(-1).pos;
+  video.addEventListener("timeupdate", () => {
+    if (
+      kind === "player-open" &&
+      video.currentTime > 0.05 &&
+      video.currentTime < target - 0.5
+    )
+      early = Math.max(early ?? 0, +video.currentTime.toFixed(3));
+  });
   const positions = Object.keys(files).map(Number);
   // 飛んだ先に近い位置の fMP4 を返す (どれも開く位置から先が入っている)
   const url = (from) => {
@@ -642,6 +653,7 @@ async function inPlayer({ codecs, steps, files, watch, first, kind, rechunk }) {
     origin: player.origin(),
     received,
     largest,
+    early,
     streaming: made?.streaming ?? null,
     msState: made?.readyState ?? null,
     end,
@@ -675,7 +687,25 @@ const server = createServer((request, response) => {
       "Content-Type": "video/mp4",
       "Content-Length": statSync(file).size,
     });
-    createReadStream(file, { highWaterMark: 64 * 1024 }).pipe(response);
+    // make.ts が LIMIT で切った fMP4 も、ここで応答を終える。remux-player は endOfStream を呼び、尺がそこまでになるので、
+    // Chrome は切ったところより先へ飛べない (player-seek で 85 秒から先が止まる)。Safari は飛べる
+    // PLAY_RATE (バイト/秒) があれば、その速さで送る (遅い回線のふり)
+    const rate = Number(process.env.PLAY_RATE || 0);
+    const stream = createReadStream(file, { highWaterMark: 64 * 1024 });
+    if (rate <= 0) {
+      stream.pipe(response);
+      return;
+    }
+    (async () => {
+      for await (const chunk of stream) {
+        if (!response.write(chunk))
+          await new Promise((resolve) => response.once("drain", resolve));
+        await new Promise((resolve) =>
+          setTimeout(resolve, (chunk.length / rate) * 1000),
+        );
+      }
+      response.end();
+    })().catch(() => response.destroy());
     return;
   }
   response.writeHead(200, { "Content-Type": "text/html" });
