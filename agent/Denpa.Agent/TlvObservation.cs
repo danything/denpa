@@ -47,21 +47,17 @@ public sealed class TlvObservation
     private readonly SortedDictionary<int, (string Name, bool Actual, int FreeCa)> _services = [];
     private long _packets, _skipped, _ntp, _broken, _mpt, _plt, _emm;
     private long _eit, _eitBad, _sdtActual, _sdtOther, _sdtBad, _nit, _nitBad;
-    private int? _package, _networkId;
+    /// <summary>MPT の package (MMT_package_id が 2 バイトならその値。service_id と同じ)。MPT が来ていなければ null</summary>
+    private int? _package;
+    private int? _networkId;
     private string? _networkName;
     private (int Service, string Name)? _eitSample;
 
     /// <summary>MH-SDT のセクション (CRC が合ったもの) の数</summary>
     private long SdtSections => _sdtActual + _sdtOther;
 
-    /// <summary>MPT の package (MMT_package_id が 2 バイトならその値。service_id と同じ)。MPT が来ていなければ null</summary>
-    public int? Package => _package;
-
     /// <summary>MPT のアクセス制御記述子にあった CA_system_id と ECM の packet_id (重なりなし)</summary>
     public IReadOnlyCollection<(int System, int Pid)> AccessControl => _access;
-
-    /// <summary>packet_id ごとの、スクランブルの印 (なし・予約・偶数・奇数) の数</summary>
-    public IReadOnlyDictionary<int, long[]> Scrambling => _pids.ToDictionary(pair => pair.Key, pair => pair.Value.Scramble);
 
     /// <summary>
     /// MPT が ECM の packet_id に挙げた所に来た、CRC の合う最初の ECM のセクション (table_id から CRC まで) と、その packet_id。

@@ -21,10 +21,12 @@ const { parseTranscodeLimit, saveSettings, settings } =
   await import("./settings");
 const {
   holdTranscode,
+  ownTranscode,
   TRANSCODE_DEFAULT,
   transcodeAuto,
   transcodeLimit,
   transcodesInUse,
+  yieldTranscodes,
 } = await import("./transcode");
 
 test("既定は GPU の有無で 2 本か 4 本", () => {
@@ -66,4 +68,20 @@ test("本数の読み方: 1〜16 の整数だけ。ほかは自動", () => {
   expect(parseTranscodeLimit("17")).toBeNull();
   expect(parseTranscodeLimit("2.5")).toBeNull();
   expect(parseTranscodeLimit(undefined)).toBeNull();
+});
+
+test("譲らせると、同じ持ち主の変換だけを止める。忘れたものは止めない", () => {
+  const stopped: string[] = [];
+  ownTranscode("1:a", () => stopped.push("a1"));
+  ownTranscode("1:a", () => stopped.push("a2"));
+  ownTranscode("1:b", () => stopped.push("b"));
+  const forget = ownTranscode("2:a", () => stopped.push("other"));
+  forget();
+  expect(yieldTranscodes("1:a")).toBe(2);
+  expect(stopped).toEqual(["a1", "a2"]);
+  // 止めたものは忘れている
+  expect(yieldTranscodes("1:a")).toBe(0);
+  expect(yieldTranscodes("2:a")).toBe(0);
+  expect(yieldTranscodes("1:b")).toBe(1);
+  expect(stopped).toEqual(["a1", "a2", "b"]);
 });

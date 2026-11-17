@@ -82,7 +82,7 @@ export function tokenize(source: string): Token[] {
 
   while (at < source.length) {
     const c = source[at]!;
-    if (c === "\n" || c === "\r" || c === " " || c === " ") {
+    if (c === "\n" || c === "\r" || c === "\u2028" || c === "\u2029") {
       if (c === "\n" || source[at + 1] !== "\n") line++;
       at++;
       newline = true;
@@ -106,9 +106,11 @@ export function tokenize(source: string): Token[] {
     if (source.startsWith("/*", at)) {
       const end = source.indexOf("*/", at + 2);
       if (end === -1) fail("注釈が閉じていません");
+      // 行の数え方は上の改行と同じ (CR LF は 1 行、CR だけ・LS・PS も 1 行)
       for (let i = at; i < end; i++) {
-        if (source[i] === "\n") {
-          line++;
+        const d = source[i]!;
+        if (d === "\n" || d === "\r" || d === "\u2028" || d === "\u2029") {
+          if (d === "\n" || source[i + 1] !== "\n") line++;
           newline = true;
         }
       }

@@ -243,7 +243,6 @@ public class SianoTests
         var ts = SianoFake.Packets(40);
         var output = Align(aligner, ts[..(20 * 188)], ts[(20 * 188)..]);
         await Assert.That(output.AsSpan().SequenceEqual(ts)).IsTrue();
-        await Assert.That(aligner.Skipped).IsEqualTo(0L);
         await Assert.That(aligner.Packets).IsEqualTo(40L);
     }
 
@@ -255,8 +254,7 @@ public class SianoTests
         // 188 の倍数でない切り方 (1,000・3・残り)
         var output = Align(aligner, ts[..1000], ts[1000..1003], ts[1003..]);
         await Assert.That(output.AsSpan().SequenceEqual(ts)).IsTrue();
-        await Assert.That(aligner.Skipped).IsEqualTo(0L);
-        await Assert.That(aligner.Lost).IsEqualTo(0);
+        await Assert.That(aligner.Packets).IsEqualTo(30L);
     }
 
     [Test]
@@ -269,7 +267,7 @@ public class SianoTests
         junk[10] = 0x47;
         var output = Align(aligner, [.. junk, .. ts[..500]], ts[500..]);
         await Assert.That(output.AsSpan().SequenceEqual(ts)).IsTrue();
-        await Assert.That(aligner.Skipped).IsEqualTo(100L);
+        await Assert.That(aligner.Packets).IsEqualTo(10L);
     }
 
     [Test]
@@ -283,8 +281,7 @@ public class SianoTests
         await Assert.That(output.AsSpan(0, before.Length).SequenceEqual(before)).IsTrue();
         // 欠けた 1 パケットは捨て、次のパケットから渡す
         await Assert.That(output.AsSpan(before.Length).SequenceEqual(after.AsSpan(188))).IsTrue();
-        await Assert.That(aligner.Lost).IsEqualTo(1);
-        await Assert.That(aligner.Skipped).IsEqualTo(138L);
+        await Assert.That(aligner.Packets).IsEqualTo(10L);
     }
 
     // ---- 開く (仕様書 2.2) ----

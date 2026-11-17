@@ -40,7 +40,7 @@ function setup(
   active = "/40/0000/startup.bml",
   app?: Pick<
     BrowserHost,
-    "canStartApp" | "startApp" | "canFetchAit" | "startAppFrom"
+    "canStartApp" | "startApp" | "canFetchAit" | "startAppFrom" | "irdId"
   >,
 ): Setup {
   const xml = parseXml(BML);
@@ -217,6 +217,33 @@ describe("browser.*", () => {
         `);
     // Ctrl.Media は isSupportedMedia が答えるのと揃える。PPP・常駐アプリ・外のブラウザ・AIT・NPT は無い
     expect(items(result)).toEqual([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, null]);
+  });
+
+  test("getBrowserSupport の IRDID は、getIRDID が番号を返せるときだけ 1 と答える", async () => {
+    let card: string | null = "0123456789AB";
+    const s = setup(undefined, {
+      irdId: (type) => (type === 5 ? card : null),
+    });
+    const query = `
+            var result = [
+                browser.getBrowserSupport("ARIB", "IRDID"),
+                browser.getBrowserSupport("ARIB", "IRDID", "5"),
+                browser.getBrowserSupport("ARIB", "IRDID", "0"),
+                browser.getIRDID(5)
+            ];
+        `;
+    expect(items(await s.run(query))).toEqual([1, 1, 0, "0123456789AB"]);
+    // 双方向がオフ・録画の再生など、番号を渡さないときは 0
+    card = null;
+    expect(items(await s.run(query))).toEqual([0, 0, 0, null]);
+    // 番号を渡す手段が無い画面でも 0
+    expect(
+      items(
+        await setup().run(
+          `var result = [browser.getBrowserSupport("ARIB", "IRDID")];`,
+        ),
+      ),
+    ).toEqual([0]);
   });
 
   test("Hybridcast を開けるときだけ AIT の問い合わせに 1 と答え、開くのは画面に任せる", async () => {

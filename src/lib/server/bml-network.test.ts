@@ -3,8 +3,10 @@ import { describe, expect, test } from "bun:test";
 import {
   allowed,
   beforeDeadline,
+  confirmReachable,
   isPublicAddress,
   limited,
+  reachHost,
   Refused,
   relayed,
   requireFetch,
@@ -261,6 +263,37 @@ describe("画面の通信からだけ受ける", () => {
         status = (failure as { status?: number }).status;
       }
       expect(status, dest).toBe(403);
+    }
+  });
+});
+
+/** 「相手まで届くか」の宛先。繋ぐのはどれも 443 番なので、ポートは読み捨てる */
+describe("届くかを確かめる宛先", () => {
+  test("名前・名前とポート・URL から名前を取り出す", () => {
+    expect(reachHost("example.jp")).toBe("example.jp");
+    expect(reachHost("example.jp:443")).toBe("example.jp");
+    expect(reachHost("https://example.jp/x")).toBe("example.jp");
+    expect(reachHost("203.0.113.1:443")).toBe("203.0.113.1");
+  });
+
+  test("括弧付きの IPv6 は、ポートが付いていても括弧ごと取り出す", () => {
+    expect(reachHost("[2001:db8::1]:443")).toBe("[2001:db8::1]");
+    expect(reachHost("[2001:db8::1]")).toBe("[2001:db8::1]");
+    expect(reachHost("https://[2001:db8::1]:8443/x")).toBe("[2001:db8::1]");
+  });
+
+  test("URL として読めない宛先は空にする (例外を出さずに「宛先がありません」で断る)", async () => {
+    expect(reachHost("https://")).toBe("");
+    await expect(confirmReachable("https://", 1000)).rejects.toThrow(
+      "宛先がありません",
+    );
+  });
+
+  test("括弧付きの IPv6 にポートが付いていても、内部のアドレスなら断る", async () => {
+    for (const destination of ["[::1]:443", "[fd00::1]:443", "[fe80::1]"]) {
+      await expect(confirmReachable(destination, 1000)).rejects.toThrow(
+        "内部ネットワークのアドレスです",
+      );
     }
   });
 });

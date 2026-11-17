@@ -25,20 +25,18 @@ public static class It930xFirmware
         48, 48, 48, 48, 47, 10,
     ];
 
+    /// <summary>ファームウェアのファイル名。埋め込んだリソースの名前 (Denpa.Agent.csproj の LogicalName) も同じ</summary>
     public const string FileName = "it930x-firmware.bin";
 
     /// <summary>受け付けるファームウェアの SHA-256 (ITE の Linux ドライバの V1_3_0_0)</summary>
     internal const string Sha256 = "5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484";
 
-    /// <summary>埋め込んだリソースの名前 (Denpa.Agent.csproj の LogicalName)</summary>
-    internal const string ResourceName = FileName;
-
     private static readonly Lazy<byte[]> Bundled = new(() => Check(Embedded()));
 
     /// <summary>実行ファイルに埋め込んだファームウェア (確かめる前のもの)</summary>
-    internal static byte[] Embedded()
+    private static byte[] Embedded()
     {
-        using var stream = typeof(It930xFirmware).Assembly.GetManifestResourceStream(ResourceName)
+        using var stream = typeof(It930xFirmware).Assembly.GetManifestResourceStream(FileName)
             ?? throw new IOException($"同梱の {FileName} が実行ファイルに入っていません");
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);

@@ -185,8 +185,8 @@ internal sealed class It930xTsOutput
 
     public DeviceStream Output { get; }
 
-    /// <summary>詰めたパケットの数 (TLV に組み立てているときは TLV パケットの数)</summary>
-    public long Packets { get; private set; }
+    /// <summary>詰めたパケットの数 (TLV に組み立てているときは TLV パケットの数)。テストが、閉じたあとに詰めていないことを見る</summary>
+    internal long Packets { get; private set; }
 
     /// <summary>Pipe が溢れていて捨てたパケットの数 (TLV に組み立てているときは TLV パケットの数)</summary>
     public long Dropped { get; private set; }

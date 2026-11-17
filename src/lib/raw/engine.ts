@@ -35,13 +35,18 @@ const NO_AUDIO = 5_000;
 const GRAB_WAIT = 2_000;
 /** デコーダの置き場 (`routes/api/live/mpeg2`) */
 const DECODER = "/api/live/mpeg2";
+
+/** デコーダの置き場の URL (置いたパスの下)。WebKit のライブで音を別に鳴らす経路 (`native-audio.ts`) も同じものを読む */
+export function decoderBase(): string {
+  return `${resolve("")}${DECODER.slice(1)}`;
+}
 /**
  * **`<audio>` を通したとき、出口から耳までの遅れの見込み (秒)** (`Outlet.route`)。
  *
  * ストリーム (MediaStream) へ出した音は、Web Audio が組んだその場でストリームに乗る。ページから直に
  * 鳴らすときの出口の遅れ (`baseLatency + outputLatency`。`latencyHint: 'playback'` で
  * 大きめ) を通らず、代わりに `<audio>` の側の出口を通る。その遅れはページから読めないので
- * 見込みで置く。**少なめに置く**。外れても「音が映像より遅れる」側に倒れる (人は音が先に
+ * 見込みで置く。**少なめに置く**。外れても「音が映像より遅れる」側にずれる (人は音が先に
  * 来るほうに気づきやすい)。実測は docs/stream.md#時計は鳴っている音-リップシンク
  */
 const STREAM_OUT = 0.03;
@@ -208,7 +213,7 @@ export class RawEngine {
         {
           type: "init",
           canvas: offscreen,
-          decoder: `${resolve("")}${DECODER.slice(1)}`,
+          decoder: decoderBase(),
           input,
           follow: chase,
         },

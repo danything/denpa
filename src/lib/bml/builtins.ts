@@ -3,7 +3,7 @@
  * STD-B24 第二編 付属 2 の ECMAScript で使えるもの。
  *
  * - 文字の符号は EUC-JP (`charCodeAt` / `fromCharCode`。[euc.ts](euc.ts))
- * - Date は**日本の時刻**で年月日を返す (端末の時間帯に引きずられない)。引数無しの
+ * - Date は**日本の時刻**で年月日を返す (端末の時間帯によらない)。引数無しの
  *   `new Date()` は放送の時刻 (`now`)
  * - Math・eval・escape・小数は無い (web-bml も外している)
  */

@@ -349,11 +349,7 @@ internal sealed class SianoStream
     public void Stop()
     {
         _stopped = true;
-        var stopped = Stopwatch.StartNew();
-        Output.Stop();
-        _writer.Join(TimeSpan.FromSeconds(2));
-        Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
-        Output.Dispose();
+        ChildTs.Close(Output, () => _writer.Join(TimeSpan.FromSeconds(2)));
         _ended = true;
         while (_queue.TryTake(out var chunk)) ArrayPool<byte>.Shared.Return(chunk.Buffer);
     }

@@ -102,7 +102,7 @@ import {
   type YieldedRecording,
 } from "#lib/live.js";
 import { separateLiveAudio } from "#lib/native-audio-choice.js";
-import { RawEngine } from "#lib/raw/engine.js";
+import { decoderBase, RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { NativeAudio } from "#lib/raw/native-audio.js";
 import { audioContext } from "#lib/raw/seam.js";
@@ -148,7 +148,7 @@ type LiveState = "idle" | "connecting" | "playing" | "error";
  */
 const KEEP = 300;
 /**
- * 抱えてよい量 (バイト)。時間だけで切ると、ビットレートの高い映像 (H.264 は実測 35.9Mbit/s。5 分で 1.3GB) で
+ * 抱えてよい量 (バイト)。時間だけで切ると、ビットレートの高い映像 (H.264 は実測 35.9 Mbit/s。5 分で 1.3 GB) で
  * ブラウザの上限を超え、`QuotaExceededError` からあと映像が出なくなる。時間とバイト数の小さいほうで切る
  */
 const BUDGET = 120 * 1024 * 1024;
@@ -228,14 +228,14 @@ const UNDO_BEFORE_CLOSE = 10_000;
 const tenth = (value: number): number => Math.round(value * 10) / 10;
 
 /**
- * データ放送の通知を、受け取る側ができるまでに取っておく数 (`heldData`)。待つのは 700KB を落とす間だけで
- * 数十で足りるが、モジュールは 1 通が 100KB を超えることがあるので、立たなかったときに際限なく抱え込ませない
+ * データ放送の通知を、受け取る側ができるまでに取っておく数 (`heldData`)。待つのは 700 KB を落とす間だけで
+ * 数十で足りるが、モジュールは 1 通が 100 KB を超えることがあるので、立たなかったときに際限なく抱え込ませない
  */
 const HOLD_DATA = 300;
 
 /**
  * 見ている局を覚える。置き場は cookie 1 つで、読むのはサーバ (`LAST_COOKIE` の説明)。
- * 音声も覚える。番組が変わって無くなっても、サーバは主音声に落とす (`arib.pickTrack`)。
+ * 音声も覚える。番組が変わって無くなっても、サーバは主音声を選ぶ (`arib.pickTrack`)。
  * 形式は**メニューで選んだもの** (`choice`) を覚え、自動で決まった形式は覚えない (開いた場所で変わる)
  */
 function remember(target: Tuned, choice: LiveChoice): void {
@@ -448,7 +448,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 新しい局の 1 枚目を描いたとき (`RawEvents.shown`)。
    *
    * **`tuned` が届く前に来たものは前の局のコマなので数えない。** 繋がっている接続で局を替えると、`tuned` が届くまで
-   * 前の局を映し続けている (canvas の経路では前の局のまま動いていて、10〜38ms で出ていた)
+   * 前の局を映し続けている (canvas の経路では前の局のまま動いていて、10〜38 ms で出ていた)
    */
   function reportStartup(at: number): void {
     if (startup?.tuned === undefined) return;
@@ -542,7 +542,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let onData: ((message: ResponseMessage) => void) | null = null;
   /**
    * 受け取る側ができるまでの控え。サーバは押された瞬間に番組・PMT・モジュールをまとめて送るが、描く側は
-   * 700KB を落としてから立ち上がる。番組 (`programInfo`) は一度きりなので、捨てると押しても何も出なかった
+   * 700 KB を落としてから立ち上がる。番組 (`programInfo`) は一度きりなので、捨てると押しても何も出なかった
    */
   let heldData: ResponseMessage[] = [];
   /** 字幕を出すか。**押して切り替えられる** (テレビの字幕ボタン)。端末ごとに覚える (`caption-pref.ts`) */
@@ -881,16 +881,23 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /** 字幕を貼り直し続けている映像。**1 つにつき 1 本** */
   let following: HTMLVideoElement | null = null;
+  /** `seeking` を聞いている映像。同じ映像に戻ってきてもリスナーを重ねない */
+  const seekWatched = new WeakSet<HTMLVideoElement>();
 
   /**
    * 字幕を映した 1 枚ごとに貼り直す ([frames.ts](components/player/frames.ts))。塊が届いたとき (`pace`) だけだと
-   * 遅れる方向にずれていた (実機で平均 15ms・最大 53ms)。止めて見ている間は来ないので、片付けは `pace` に置く
+   * 遅れる方向にずれていた (実機で平均 15 ms・最大 53 ms)。止めて見ている間は来ないので、片付けは `pace` に置く
    */
   function follow(video: HTMLVideoElement): void {
     if (following === video) return;
     following = video;
     // 飛んだ直後の 1 コマは測らない (`unslipper`)。選局し直しの追いつき (`pacing` の `seek`) も含む
-    video.addEventListener("seeking", () => unslipping.seeked());
+    if (!seekWatched.has(video)) {
+      seekWatched.add(video);
+      video.addEventListener("seeking", () => {
+        if (following === video) unslipping.seeked();
+      });
+    }
     eachFrame(video, (frame) => {
       // 別の映像に移ったら、こちらは閉じる
       if (following !== video) return false;
@@ -2590,7 +2597,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       const command = wantedCommand();
       /*
        * やめるなら選局の指示より先に送る。サーバは受信をリクエストしている人が次の局のセッションに入ると、
-       * 覚えているぶん (実機で約 2MB) をまとめて送る (`server/live.ts` の `refreshData`)
+       * 覚えているぶん (実機で約 2 MB) をまとめて送る (`server/live.ts` の `refreshData`)
        */
       if (!wantData()) syncData();
       if (command !== null) send(command);
@@ -2697,7 +2704,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         arrived();
         /*
          * **`tuned` より前に届いたものは前の局の残りなので数えない。** 繋がっている接続で局を替えると、サーバは `tuned` を
-         * 新しい局のデータより先に送る。数えていた頃は、前の局の残りで 6〜10ms と出ていた
+         * 新しい局のデータより先に送る。数えていた頃は、前の局の残りで 6〜10 ms と出ていた
          */
         if (startup?.tuned !== undefined)
           startup.bytes ??= performance.now() - startup.at;
@@ -3144,7 +3151,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           (reason) => {
             if (nativeAudio === separate) giveUpAudio(reason);
           },
-          `${resolve("").replace(/\/$/, "")}/api/live/mpeg2`,
+          decoderBase(),
           (audioContextForLive ??= audioContext("interactive")),
         );
         nativeAudio = separate;
@@ -3181,7 +3188,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         });
         /*
          * 1 枚目が描かれてから前の局の静止画を剥がす (`play()` のあとだと貼ったまま音が鳴った)。待ち構えるのは
-         * `loadedmetadata` から。`loadeddata` からでは 1 枚目を逃して、音より 54〜80ms 遅れて剥がれていた
+         * `loadedmetadata` から。`loadeddata` からでは 1 枚目を逃して、音より 54〜80 ms 遅れて剥がれていた
          */
         video.addEventListener("loadedmetadata", () => onFrame(video, thaw), {
           once: true,
@@ -3201,7 +3208,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * RawEngine を用意する (`tuned` で raw: true と答えられた)。**2 度目からは作り直さず開き直すだけ**。
-   * worker とデコーダの読み込み (1MB ほど) を選局のたびにやり直さない
+   * worker とデコーダの読み込み (1 MB ほど) を選局のたびにやり直さない
    */
   function startRaw(video: HTMLVideoElement): void {
     if (!openEngine(video, "ts-mpeg2")) return;
@@ -3211,7 +3218,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * 互換モードの RawEngine を用意する (`tuned` でエンコードしたものと答えられた)。エンコードしたもの (fMP4) を MSE でなく
-   * RawEngine へ流して canvas に描く。**サーバが別の形式に落としてきて** (AV1 をエンコードできなかった) それが
+   * RawEngine へ流して canvas に描く。**サーバが別の形式に切り替えてきて** (AV1 をエンコードできなかった) それが
    * 描けない形式なら、MPEG-2 か理由へ (`fallBack`)
    */
   function startCompat(video: HTMLVideoElement, baked: LiveCodec): void {

@@ -215,6 +215,24 @@ test.describe("外から使う番組表", () => {
         timeout: 60_000,
       })
       .toBe("recording");
+    /*
+     * **TS が書かれ始めるまで待ってから取り消す。** 「録画中」になるのはチューナーに選局を頼んだ時点で、
+     * 最初のパケットが届く前に止めると 1 バイトも録れず、失敗の録画になる (recorder.ts の size === 0)。
+     * 録り始めた直後に取り消した回だけ、録画が failed になって落ちていた
+     */
+    const growing = (await stateOf())?.recordingId;
+    expect(growing).toBeTruthy();
+    await expect
+      .poll(
+        async () =>
+          (
+            await request.get(`/api/recordings/${growing}/file?source=ts`, {
+              headers: { Range: "bytes=0-0" },
+            })
+          ).status(),
+        { timeout: 30_000 },
+      )
+      .toBe(206);
 
     const canceled = await request.delete(`/api/programs/${airing.id}/record`, {
       headers: JSON_HEADERS,

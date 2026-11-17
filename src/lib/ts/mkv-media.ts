@@ -22,6 +22,9 @@
 import { concatBytes, u16 } from "@danything/arib/bytes";
 
 import { aacCodec, av1Codec, avcCodec, type Fmp4Track } from "./fmp4";
+import type { ReadAt } from "./seek";
+
+export type { ReadAt };
 
 const EBML = 0x1a45dfa3;
 const SEGMENT = 0x18538067;
@@ -455,9 +458,6 @@ export function readCues(
   }
   return out.sort((a, b) => a.time - b.time);
 }
-
-/** ファイルの `offset` バイト目から `length` バイトを読む。末尾に掛かれば、そこまでの短いものを返す */
-export type ReadAt = (offset: number, length: number) => Promise<Uint8Array>;
 
 /** 先頭を読む量 (バイト)。足りなければ倍にして読み直す (Tags・Chapters が大きい録画) */
 const HEAD_FIRST = 1024 * 1024;

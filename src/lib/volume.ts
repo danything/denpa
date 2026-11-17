@@ -61,7 +61,7 @@ export function volumeGain(level: number): number {
  *
  * - 当たり始めは -3 dBFS。山が当たっても 0 dBFS までに余白が残り、`attack` の間に越えるぶんを飲み込む
  * - `knee` 0・`ratio` 20 で、当たった所からほぼ平らに抑える (リミッタとして)
- * - `attack` 3ms で山を素早く捕まえ、`release` 250ms で戻す (速く戻すと音がうねる)
+ * - `attack` 3 ms で山を素早く捕まえ、`release` 250 ms で戻す (速く戻すと音がうねる)
  */
 export const LIMITER = {
   threshold: -3,

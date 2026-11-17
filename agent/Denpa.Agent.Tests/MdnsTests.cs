@@ -30,6 +30,18 @@ public class MdnsTests
         await Assert.That(Strings(Mdns.Txt(Id, "居間"))).IsEquivalentTo(new[] { "v=1", $"id={Id}", "name=居間" });
     }
 
+    /// <summary>**名前は 250 バイトまでに字の切れ目で詰める** (Windows も TXT と同じ値を渡す。Mdns.TxtName)</summary>
+    [Test]
+    public async Task 長い名前は_250_バイトまでに字の切れ目で詰める()
+    {
+        var name = new string('居', 100);
+        var trimmed = Mdns.TxtName(name);
+        await Assert.That(System.Text.Encoding.UTF8.GetByteCount(trimmed)).IsEqualTo(249);
+        await Assert.That(trimmed).IsEqualTo(new string('居', 83));
+        await Assert.That(Strings(Mdns.Txt(Id, name))).Contains($"name={trimmed}");
+        await Assert.That(Mdns.TxtName("居間")).IsEqualTo("居間");
+    }
+
     [Test]
     public async Task 型の問いには_PTR_を返し_SRV_と_TXT_を足す()
     {

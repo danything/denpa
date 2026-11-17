@@ -22,7 +22,7 @@ import {
 
 /** PTS・PCR の刻み (90kHz)。denpa の取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */
 export const CLOCK = 90_000;
-/** PTS の一周 (33 ビット)。26.5 時間 */
+/** PTS の一周 (33 ビット)。26.5 時間。PCR の基準部とデータ放送の NPT も同じ (`bml.ts`) */
 export const WRAP = 2 ** 33;
 
 /** PMT の stream_type。**放送の映像は MPEG-2、音声は ADTS の AAC** (ARIB STD-B32。AAC は psi.ts の `STREAM_AAC`) */

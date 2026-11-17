@@ -104,5 +104,6 @@ if (page !== null) draw(page); // 形式は caption-text.ts の CaptionPage
 
 MIT。字幕の表とデコードの方法は [libaribcaption](https://github.com/xqq/libaribcaption) (MIT)、
 外字表の一部は [ariblib](https://github.com/youzaka/ariblib) (MIT)、
+データ放送の通知の形式 (`bml-protocol`) は [web-bml](https://github.com/otya128/web-bml) (MIT)、
 JIS X 0213 の表は [x0213.org](https://x0213.org/) の対応表 (自由に使ってよいと書かれたもの) から来ています。
 著作権表示は [LICENSE](LICENSE) にあります。

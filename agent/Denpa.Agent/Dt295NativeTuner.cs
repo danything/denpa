@@ -30,16 +30,13 @@ internal sealed class NativeTsFramer
         }
         if (_used > 0) return;
         var at = 0;
-        while (data.Length - at >= 188)
+        while (true)
         {
-            if (data[at] != 0x47)
-            {
-                at++;
-                Discarded++;
-                continue;
-            }
-            var start = at;
-            while (data.Length - at >= 188 && data[at] == 0x47) at += 188;
+            var start = TsSync.FindSingle(data, at);
+            Discarded += start - at;
+            at = start;
+            if (data.Length - at < TsSync.Packet) break;
+            at = TsSync.RunEnd(data, start);
             sink(data[start..at]);
         }
         var rest = data[at..];
@@ -53,17 +50,16 @@ internal sealed class NativeTsFramer
         if (_used + data.Length > _store.Length) Array.Resize(ref _store, Math.Max(_store.Length * 2, _used + data.Length));
         data.CopyTo(_store.AsSpan(_used));
         _used += data.Length;
+        var stored = _store.AsSpan(0, _used);
         var at = 0;
-        while (_used - at >= 188)
+        while (true)
         {
-            if (_store[at] != 0x47)
-            {
-                at++;
-                Discarded++;
-                continue;
-            }
-            sink(_store.AsSpan(at, 188));
-            at += 188;
+            var start = TsSync.FindSingle(stored, at);
+            Discarded += start - at;
+            at = start;
+            if (_used - at < TsSync.Packet) break;
+            sink(stored.Slice(at, TsSync.Packet));
+            at += TsSync.Packet;
         }
         _store.AsSpan(at, _used - at).CopyTo(_store);
         _used -= at;
@@ -305,14 +301,13 @@ internal sealed class Dt295NativeStream
     public void Stop()
     {
         _stopped = true;
-        var stopped = Stopwatch.StartNew();
-        Output.Stop();
-        if (_kicker.IsAlive) _kicker.Join(TimeSpan.FromSeconds(3));
-        _reader.Join(TimeSpan.FromSeconds(2));
-        EndCapture();
-        _in.Dispose();
-        Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
-        Output.Dispose();
+        ChildTs.Close(Output, () =>
+        {
+            if (_kicker.IsAlive) _kicker.Join(TimeSpan.FromSeconds(3));
+            _reader.Join(TimeSpan.FromSeconds(2));
+            EndCapture();
+            _in.Dispose();
+        });
         _ended = true;
     }
 }

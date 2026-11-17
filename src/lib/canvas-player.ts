@@ -52,7 +52,7 @@ import { inWrap, sinceHead } from "#lib/ts/seek.js";
 /** 鳴らし始めるまでに貯める長さ (秒) */
 const TARGET = 1;
 /**
- * 先へ読む上限 (秒。手元の音の尺)。元の TS は重い (1 秒 2〜3MB) ので、worker が圧縮のまま持てる 30 秒・120MB
+ * 先へ読む上限 (秒。手元の音の尺)。元の TS は重い (1 秒 2〜3 MB) ので、worker が圧縮のまま持てる 30 秒・120 MB
  * (`raw/worker.ts` の `FOLLOW_PENDING_MOST`・`FOLLOW_BYTES_MOST`) の手前で止める。追っかけで送るのを止めさせる量
  * (`live-chase.ts` の `HOLD_ABOVE`) と同じ。切れたときに続きが届くまで再生し続けられる長さでもある
  */
@@ -274,7 +274,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
    * 先へ読んでよいか。**手元の尺が `AHEAD` を超えたら待つ** (デコードし始める前はバイト数で)。
    *
    * **端末に保存した録画はバイト数でも抑える** (`bytesPerSecond`)。手元の尺は worker がデコードして返してから
-   * 伸びるので、ネットワークより速く読める Blob はその前に末尾まで読めてしまう。900MB を一度に worker へ
+   * 伸びるので、ネットワークより速く読める Blob はその前に末尾まで読めてしまう。900 MB を一度に worker へ
    * 渡すと、返ってくる音の通知で画面の処理が詰まって描き直せず (音は途切れる)、映像が溜まりすぎて `full`
    * になり、同じ所から読み直していた (iPhone で真っ黒のまま音だけ進んだ)
    */

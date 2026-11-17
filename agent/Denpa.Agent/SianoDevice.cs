@@ -92,8 +92,8 @@ internal sealed class SianoDevice : IDisposable
     private bool _splitDescribed;
     private int _broken;
 
-    /// <summary>渡す先が無い間に捨てた TS のバイト数 (選局の前・ロック待ちの間・誰も読んでいない間。仕様書 6.3)</summary>
-    public long DroppedTs => Interlocked.Read(ref _droppedTs);
+    /// <summary>渡す先が無い間に捨てた TS のバイト数 (選局の前・ロック待ちの間・誰も読んでいない間。仕様書 6.3)。テストが見る</summary>
+    internal long DroppedTs => Interlocked.Read(ref _droppedTs);
 
     private long _droppedTs;
 
@@ -106,8 +106,8 @@ internal sealed class SianoDevice : IDisposable
         }
     }
 
-    /// <summary>最後に受けたバージョンの応答</summary>
-    public SianoVersion? Version => _version;
+    /// <summary>最後に受けたバージョンの応答。テストが見る</summary>
+    internal SianoVersion? Version => _version;
 
     /// <param name="firmware">ファームウェアを読む。機材にファームウェアが入っていないときだけ呼ぶ</param>
     /// <param name="describe">未確認の値を記録に出す</param>

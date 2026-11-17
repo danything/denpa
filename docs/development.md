@@ -127,7 +127,8 @@ WebKit に渡って起動できません。CDP で回線を絞るテストは Ch
 **iPhone で詰め替えが止まるかは、Actions の WebKit remux check (`.github/workflows/webkit-remux.yml`) を手で走らせて見ます。**
 Linux の WebKit は H.264 の fMP4 を再生できないので、iPhone の Safari と同じ VideoToolbox でデコードする macOS のランナーで回します。
 
-- Linux のランナーで x264・x265 の作り物の録画を作り、本物の `copyArgs`・`cleanFrom` で詰め替える (`tests/webkit-remux/make.ts`)
+- Linux のランナーで x264・x265 の作り物の録画を作り、本物の `copyArgs`・`cleanFrom` で詰め替える (`tests/webkit-remux/make.ts`)。
+  変換するところは、変換の枠が埋まっていたときに返す詰め替え (`busy`) も作る
 - macOS のランナーで、製品の `remux-player.ts` を組んだものをページで動かし、手元の HTTP サーバから流す (`tests/webkit-remux/play.mjs`)。
   `MEDIA_ERR_DECODE` になったか、何コマデコードしたか、何秒進んだかと、止まった回の `buffered`・`readyState` などを表と JSON に残す
 - **既定は本物の Safari** (safaridriver。`browser` が `safari`)。Playwright の WebKit (`webkit`) は、本物の Safari と Chrome では起きない止まり方

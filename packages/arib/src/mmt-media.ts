@@ -18,7 +18,7 @@
  *   MPT の音声コンポーネント記述子の stream_type は 0x11 (LATM/LOAS) だった (確かめた)
  * - 字幕 (`stpp`): MPU 1 つが TTML の文書 1 つ (`ttml.ts` で読む)。文書の中の画像 (PNG) は扱わない
  *
- * スクランブルされたパケットは数えて捨てる (`scrambled`)。復号はエージェントの仕事
+ * スクランブルされたパケットは数えて捨てる (`scrambled`)。復号はエージェントの仕事 (まだ扱わない)
  */
 
 import { BitReader } from "./bits.js";

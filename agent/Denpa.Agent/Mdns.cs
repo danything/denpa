@@ -47,7 +47,7 @@ public static class Mdns
         try
         {
             if (OperatingSystem.IsMacOS()) return MacDnsSd.Register(instance, port, txt);
-            if (OperatingSystem.IsWindows()) return WindowsDnsSd.Register(instance, $"{Environment.MachineName}.local", port, id, name);
+            if (OperatingSystem.IsWindows()) return WindowsDnsSd.Register(instance, $"{Environment.MachineName}.local", port, id, TxtName(name));
             return MdnsResponder.Start(new MdnsService(instance, $"{AgentTls.PairHost()}.local", (ushort)port, txt));
         }
         catch (Exception error) when (error is SocketException or NetworkInformationException or DllNotFoundException or EntryPointNotFoundException or InvalidOperationException)
@@ -69,11 +69,11 @@ public static class Mdns
         return Truncate(clean, budget) + suffix;
     }
 
-    /// <summary>TXT の中身 (長さ付きの文字列を並べたもの)。<c>name</c> は 1 本 255 バイトに収まるよう詰める</summary>
+    /// <summary>TXT の中身 (長さ付きの文字列を並べたもの)。<c>name</c> は <see cref="TxtName"/> で詰める</summary>
     public static byte[] Txt(string id, string name)
     {
         var buffer = new List<byte>();
-        foreach (var entry in new[] { $"v={TxtVersion}", $"id={id}", $"name={Truncate(name, 250)}" })
+        foreach (var entry in new[] { $"v={TxtVersion}", $"id={id}", $"name={TxtName(name)}" })
         {
             var bytes = Encoding.UTF8.GetBytes(entry);
             buffer.Add((byte)bytes.Length);
@@ -81,6 +81,9 @@ public static class Mdns
         }
         return [.. buffer];
     }
+
+    /// <summary>TXT の <c>name</c> の値。1 本 255 バイトに収まるよう、250 バイトまでに字の切れ目で詰める (Mac・Linux の <see cref="Txt"/> も Windows も同じ)</summary>
+    internal static string TxtName(string name) => Truncate(name, 250);
 
     /// <summary>UTF-8 で <paramref name="bytes"/> バイトに収まるところまで (字の途中で切らない)</summary>
     private static string Truncate(string text, int bytes)

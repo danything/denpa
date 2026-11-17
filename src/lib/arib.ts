@@ -421,7 +421,7 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
  *
  * `audios` は放送から読み取ったものをそのまま持っているだけなので、無い・壊れている
  * (壊れた行は列の読み取り関数が空にする。`schema.ts`) ことはありうる。そのときは
- * `audio_type` に落とし、それも無ければ何も無いことにする。どちらにしても `audioTracks` が
+ * `audio_type` から組み、それも無ければ何も無いことにする。どちらにしても `audioTracks` が
  * 「そのまま出す」1 つを返す
  */
 export function parseAudios(
@@ -458,7 +458,7 @@ export function pickTrack(
 /**
  * **データ放送が選んだ音声** (`N:es`。PMT の音声の ES の N 本目。映像の object の `setMainAudioStream`)。
  * 番組表に載っていない音声 (J:COM テレビのラジオ選局など) なので、`audioTracks` の一覧には無い。
- * `N:both` は番組表に無ければ主音声に落とす (`pickTrack`) ので、別の書き方にしてある。それ以外の ID は undefined
+ * `N:both` は番組表に無ければ主音声にする (`pickTrack`) ので、別の書き方にしてある。それ以外の ID は undefined
  */
 export function broadcastTrack(
   wanted: string | undefined,
@@ -495,7 +495,7 @@ export function dataAudio(
  * 外から指定された音声の ID (`AudioTrack.id`) を読む。**形式が違えば指定されなかったことにする。**
  *
  * HTTP API (`?audio=0:sub`。docs/api.md) から来るもの。形式が合っていても無いもの
- * (番組が替わって消えた副音声など) は `pickTrack` が主音声に落とすので、ここで断らない
+ * (番組が替わって消えた副音声など) は `pickTrack` が主音声にするので、ここで断らない
  */
 export function askedTrack(value: string | null): string | undefined {
   return value !== null && /^\d{1,2}:(main|sub|both|es)$/.test(value)

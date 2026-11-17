@@ -147,7 +147,7 @@
     type PlacedMessage,
     replayAt,
   } from "#lib/ts/data-timeline.js";
-  import { pickMediaSource } from "#lib/ts/media-source.js";
+  import { pickMediaSource, wantsCleanStart } from "#lib/ts/media-source.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
   import {
     aheadOf,
@@ -815,14 +815,25 @@
       : undefined,
   );
 
-  /** その場で流すもの (`/stream`) のリクエスト先。`at` 秒から、`audio` (`streamAudio`) の音声で */
+  /**
+   * 観る画面ごとの値 (`/stream` の `?viewer=`)。手前に始めてよいコマが無い録画の変換で、サーバが同じ画面の前の変換を止めて
+   * 枠を譲らせるのに使う (シークを続けて押しても枠が埋まらない)
+   */
+  const viewer = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+
+  /**
+   * その場で流すもの (`/stream`) のリクエスト先。`at` 秒から、`audio` (`streamAudio`) の音声で。
+   * WebKit なら、始めてよいコマから始まるものを求める (`?clean=1`。`wantsCleanStart`)
+   */
   function streamUrl(
     codec: PlayCodec | "audio",
     at: number,
     audio: string,
   ): string {
     return resolve(
-      `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
+      `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}&viewer=${viewer}${wantsCleanStart() ? "&clean=1" : ""}`,
     );
   }
 

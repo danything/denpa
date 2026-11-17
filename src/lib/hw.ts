@@ -47,8 +47,8 @@ export const CODEC_LABEL: Record<HwCodec, string> = {
 };
 
 /**
- * ソフトウェア (CPU) でもエンコードできるコーデック。H.265 は入らない。録画のエンコードで GPU が全部落ちても
- * ソフトウェアには倒れず、設定のエンコーダにも「ソフトウェア」を出さない (docs/encode.md「H.265 は GPU でだけ」)
+ * ソフトウェア (CPU) でもエンコードできるコーデック。H.265 は入らない。録画のエンコードで GPU がどれも失敗しても、
+ * ソフトウェアに切り替えず、設定のエンコーダにも「ソフトウェア」を出さない (docs/encode.md「H.265 は GPU でだけ」)
  */
 export const SOFTWARE_CODECS: readonly HwCodec[] = ["av1", "h264"];
 

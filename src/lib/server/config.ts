@@ -15,17 +15,59 @@ function str(key: string, fallback: string): string {
   return v === undefined || v === "" ? fallback : v;
 }
 
-function num(key: string, fallback: number): number {
-  const v = process.env[key];
+/**
+ * 数を書く変数を読む。**空か空白だけなら既定、読めない値は既定に戻さずに例外を送出する** (起動をやめる)。
+ * 打ち間違えたまま既定で動くと、間違えたことに気づけない (`SHUTDOWN_WAIT` なら録画を待たずに止まる)。
+ * エージェントの読み方 (`Config.Present`・`AGENT_PORT`・`SHUTDOWN_WAIT`) と同じ。`min`・`integer` は範囲と整数かも確かめる
+ */
+export function parseNum(
+  key: string,
+  text: string | undefined,
+  fallback: number,
+  { min, integer = false }: { min?: number; integer?: boolean } = {},
+): number {
+  const v = text?.trim();
   if (v === undefined || v === "") return fallback;
   const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+  if (
+    !Number.isFinite(n) ||
+    (min !== undefined && n < min) ||
+    // 整数は数字だけで書く (エージェントの読み方と同じ。`1e3` や `0x10` は読まない)
+    (integer && !/^-?\d+$/.test(v))
+  ) {
+    const what = `${min === undefined ? "" : `${min} 以上の`}${integer ? "整数" : "数"}`;
+    throw new Error(
+      `${key} は${min === undefined ? "" : " "}${what}で書きます (いまは「${text}」)`,
+    );
+  }
+  return n;
+}
+
+/** オン/オフを書く変数を読む。`1`・`true` でオン、`0`・`false` でオフ。空か空白だけなら既定、ほかの値は読めないので例外を送出する (`parseNum` と同じ) */
+export function parseBool(
+  key: string,
+  text: string | undefined,
+  fallback: boolean,
+): boolean {
+  const v = text?.trim().toLowerCase();
+  if (v === undefined || v === "") return fallback;
+  if (v === "1" || v === "true") return true;
+  if (v === "0" || v === "false") return false;
+  throw new Error(
+    `${key} に使える値は 1・true・0・false です (いまは「${text}」)`,
+  );
+}
+
+function num(
+  key: string,
+  fallback: number,
+  range?: { min?: number; integer?: boolean },
+): number {
+  return parseNum(key, process.env[key], fallback, range);
 }
 
 function bool(key: string, fallback: boolean): boolean {
-  const v = process.env[key];
-  if (v === undefined || v === "") return fallback;
-  return v === "1" || v.toLowerCase() === "true";
+  return parseBool(key, process.env[key], fallback);
 }
 
 const SEC = 1000;
@@ -109,7 +151,7 @@ export const config = {
    */
   fontDir: str("FONT_DIR", "/usr/share/denpa-font"),
   /** 録ったあとのエンコードを同時に走らせる本数。**ジョブではなく ffmpeg の本数で数える** (コーデックごとに 1 本。`encode-slots.ts`) */
-  encodeConcurrency: num("ENCODE_CONCURRENCY", 2),
+  encodeConcurrency: num("ENCODE_CONCURRENCY", 2, { min: 1, integer: true }),
   /** 先頭が壊れていて初期化に失敗したときに先頭を捨てて再試行する秒数 */
   encodeRetrySeek: 0.2,
   /**
@@ -120,7 +162,7 @@ export const config = {
    * attempts を数えていて、ここを超えたら諦めて failed にし、後ろを進める。
    * 数えるのはジョブのやり直しだけで、1 回の実行の中の ffmpeg の起こし直し (GPU → ソフトウェア・先頭を捨てる再試行) は数えない
    */
-  encodeMaxAttempts: num("ENCODE_MAX_ATTEMPTS", 5),
+  encodeMaxAttempts: num("ENCODE_MAX_ATTEMPTS", 5, { min: 1, integer: true }),
   ffprobe: str("FFPROBE", "/usr/local/bin/ffprobe"),
   /**
    * GPU のデバイスを探すパターン (最後の段に `*`)。当たったデバイスを全部試して、VA-API が
@@ -147,7 +189,7 @@ export const config = {
    */
   mediacodecEncoders: str("MEDIACODEC_ENCODERS", ""),
   /** GPU の試しのエンコード 1 本に待つ上限 (ms)。ドライバが固まっても起動が止まらないように */
-  hwProbeTimeout: num("HW_PROBE_TIMEOUT", 20000),
+  hwProbeTimeout: num("HW_PROBE_TIMEOUT", 20000, { min: 1 }),
 
   /** 録画エンコードの初期コーデック。設定画面で変えられる */
   encodeCodec: "av1" as VideoCodec,
@@ -195,11 +237,11 @@ export const config = {
    */
   hubUrl: str("DENPA_HUB", "https://dh.doany.io").replace(/\/+$/, ""),
   /** 新しいバージョンを見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
-  updateCheckInterval: num("UPDATE_CHECK_INTERVAL", 60 * MIN),
+  updateCheckInterval: num("UPDATE_CHECK_INTERVAL", 60 * MIN, { min: 1 }),
 
   /** 録画の前後マージン (ms)。放送時刻のズレを吸収する */
-  startMargin: num("START_MARGIN", 10 * SEC),
-  endMargin: num("END_MARGIN", 15 * SEC),
+  startMargin: num("START_MARGIN", 10 * SEC, { min: 0 }),
+  endMargin: num("END_MARGIN", 15 * SEC, { min: 0 }),
 
   /**
    * 番組表を取得する間隔。**この周期で「取得し直す局」を選び直す。**
@@ -207,15 +249,15 @@ export const config = {
    * チューナーが空いていれば空いているだけ並列に回すので、周期を短くしても
    * 取り合いにはならない
    */
-  epgCollectInterval: num("EPG_COLLECT_INTERVAL", 30 * MIN),
+  epgCollectInterval: num("EPG_COLLECT_INTERVAL", 30 * MIN, { min: 1 }),
   /** 同じチャンネルを取得し直すまでの間。番組表は当日ぶんが直前まで書き換わる */
-  epgChannelInterval: num("EPG_CHANNEL_INTERVAL", 6 * 60 * MIN),
+  epgChannelInterval: num("EPG_CHANNEL_INTERVAL", 6 * 60 * MIN, { min: 0 }),
   /**
    * 取得した直後は、どれだけ薄く見えても取得し直さない下限。EIT が 1 件も来ない
    * CS の局を 30 分ごとに選び続けないため。**使えなかった回は数えない**
    * (`collectChannel`)。経緯は docs/data.md
    */
-  epgChannelRetry: num("EPG_CHANNEL_RETRY", 2 * 60 * MIN),
+  epgChannelRetry: num("EPG_CHANNEL_RETRY", 2 * 60 * MIN, { min: 0 }),
   /**
    * 1 チャンネルを開いておく上限。
    *
@@ -226,54 +268,56 @@ export const config = {
    * **5 分では足りない。** 先の日ぶんのセクションは流れてくる間隔が長いので、5 分の間に
    * 一度も回ってこないことがある
    */
-  epgChannelTimeout: num("EPG_CHANNEL_TIMEOUT", 10 * MIN),
+  epgChannelTimeout: num("EPG_CHANNEL_TIMEOUT", 10 * MIN, { min: 1 }),
   /**
    * 衛星の全局ぶんを 1 中継で読むとき (BS の初回と CS。`epg-collect.firstSweeps`・`networkSweeps`)、
    * **新しい局が出てこなくなってからこれだけ待って**閉じる。局ごとに
    * 流れてくる順はばらばらで、見かけた局が揃っただけでは来ていない局を置いていく
    */
-  epgSweepSettle: num("EPG_SWEEP_SETTLE", MIN),
+  epgSweepSettle: num("EPG_SWEEP_SETTLE", MIN, { min: 0 }),
   /**
    * 番組表がこの先まで埋まっていない局は、周期を待たずに取得し直す。
    *
    * スキャンの直後や初回起動では全部が空なので、ここで先に埋まる
    */
-  epgMinCoverage: num("EPG_MIN_COVERAGE", 3 * 24 * 60 * MIN),
+  epgMinCoverage: num("EPG_MIN_COVERAGE", 3 * 24 * 60 * MIN, { min: 0 }),
   /**
    * 条件から外れた予約を引っ込めなくなる、放送開始までの余裕 (番組表は直前まで
    * 書き換わるので、余分に録るほうが安い)。**ルールごと消された/止められたぶんには
    * 効かない** (`rules.applyRules`)。経緯は docs/data.md
    */
-  ruleRetractGrace: num("RULE_RETRACT_GRACE", 60 * MIN),
+  ruleRetractGrace: num("RULE_RETRACT_GRACE", 60 * MIN, { min: 0 }),
   /** 局の一覧をエージェントから取り直す間隔。スキャンの結果はここで届く */
-  channelSyncInterval: num("CHANNEL_SYNC_INTERVAL", 1 * MIN),
+  channelSyncInterval: num("CHANNEL_SYNC_INTERVAL", 1 * MIN, { min: 1 }),
   /**
    * 続けて見かけなかった局の持ち物 (番組表・まだ始めていない予約) を片付けるまでの間。
    * **1 回見かけなかっただけでは片付けない** (欠けた一覧で現役の予約が 44 件消えた。
    * `epg.forgetMissing`、docs/data.md)
    */
-  serviceForgetAfter: num("SERVICE_FORGET_AFTER", 30 * MIN),
+  serviceForgetAfter: num("SERVICE_FORGET_AFTER", 30 * MIN, { min: 0 }),
   /**
    * 止められたとき、録画が終わるまで待つ上限。
    *
    * 0 で待たずに止まる。**Kubernetes の terminationGracePeriodSeconds・
    * docker compose の stop_grace_period・Mac の plist の ExitTimeOut (install.sh) をこれ以上にしておくこと** (runtime.ts)
    */
-  shutdownWait: num("SHUTDOWN_WAIT", 6 * 60 * MIN),
-  schedulerTick: num("SCHEDULER_TICK", 5 * SEC),
+  shutdownWait: num("SHUTDOWN_WAIT", 6 * 60 * MIN, { min: 0, integer: true }),
+  schedulerTick: num("SCHEDULER_TICK", 5 * SEC, { min: 1 }),
   /** 保存先の実体と DB を突き合わせる間隔。外から消されたものをここで見つける */
-  reconcileInterval: num("RECONCILE_INTERVAL", 5 * MIN),
+  reconcileInterval: num("RECONCILE_INTERVAL", 5 * MIN, { min: 1 }),
   /**
    * ディスク残量がこれを下回ったら知らせる (バイト)。**録画が全部失敗して初めて
    * 気付く**のを防ぐ。録画 1 本は数百 MB〜数 GB なので、既定は数本ぶんの余裕がある 20 GB。
    * 照合と同じ周期で見る (disk.ts)。0 にすると監視しない
    */
-  diskLowThreshold: num("DISK_LOW_THRESHOLD", 20 * 1024 * 1024 * 1024),
+  diskLowThreshold: num("DISK_LOW_THRESHOLD", 20 * 1024 * 1024 * 1024, {
+    min: 0,
+  }),
   /**
    * チューナー (エージェント) に繋がらない状態がこれだけ続いたら知らせる。
    * 一瞬の切れ (デプロイ・つなぎ直し) で鳴らさないための猶予 (agent-events.ts)
    */
-  agentDownGrace: num("AGENT_DOWN_GRACE", 3 * MIN),
+  agentDownGrace: num("AGENT_DOWN_GRACE", 3 * MIN, { min: 0 }),
   /**
    * 局ロゴの定期チェックの間隔。**ほかの選局を共有する** (`logo.sweep`)。自分で開くのは、衛星のロゴが足りない間に
    * その中継 (ケーブルで再送信しているチャンネルも) を受けられるチューナーが空いているときに、当たりの中継で待つ (分からなければ探す。`logo.awaitCarousel`)。
@@ -342,7 +386,7 @@ export const config = {
    */
   hostHeader: str("HOST_HEADER", "").toLowerCase(),
   /** ログインしてからの有効期間。切れたらもう一度 OIDC でログインする */
-  oidcSessionTtl: num("OIDC_SESSION_TTL", 30 * 24 * 60 * MIN),
+  oidcSessionTtl: num("OIDC_SESSION_TTL", 30 * 24 * 60 * MIN, { min: SEC }),
 
   /**
    * **ホーム画面に置いたときの名前を、来た名前ごとに変える。**
