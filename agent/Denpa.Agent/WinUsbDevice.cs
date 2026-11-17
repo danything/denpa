@@ -5,7 +5,8 @@ using System.Text;
 namespace Denpa.Agent;
 
 /// <summary>
-/// Windows の WinUSB (<c>winusb.dll</c>) の <see cref="IUsbDevice"/>。機材のドライバは、利用者が WinUSB に替える (install.ps1 の -WinUsb か Zadig。docs/install-windows.md)。Microsoft の公開の資料 (SetupAPI・WinUSB の関数) どおりに P/Invoke だけで呼ぶ。
+/// Windows の WinUSB (<c>winusb.dll</c>) の <see cref="IUsbDevice"/>。機材のドライバは、利用者が install.ps1 の -WinUsb か Zadig で WinUSB に替える (docs/install-windows.md)。
+/// Microsoft の公開の資料 (SetupAPI・WinUSB の関数) どおりに P/Invoke だけで呼ぶ。
 ///
 /// <para>
 /// 並べるのは SetupAPI の <c>GUID_DEVINTERFACE_USB_DEVICE</c> (libwdi (wdi-simple・Zadig) で入れたものも同じ GUID で見える)。ポートの名前は Linux の sysfs と

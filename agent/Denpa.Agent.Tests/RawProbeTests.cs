@@ -119,4 +119,26 @@ public class RawProbeTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    /// <summary>**.denpa/ の下のディレクトリがリンクでも辿らない** (リンクの先の、置き場の外のファイルの手がかりを返さない)</summary>
+    [Test]
+    public async Task リンクのディレクトリは辿らない()
+    {
+        var root = NewRoot();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "outside"));
+            File.WriteAllText(Path.Combine(root, "outside", "probe"), "録画");
+            Directory.CreateSymbolicLink(Path.Combine(root, ".denpa", "dir"), Path.Combine(root, "outside"));
+
+            var (status, body) = RawProbe.Hash(root, ".denpa/dir/probe");
+
+            await Assert.That(status).IsEqualTo(400);
+            await Assert.That(body.ContainsKey("sha256")).IsFalse();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }
