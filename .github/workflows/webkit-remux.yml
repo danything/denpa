@@ -9,7 +9,7 @@ name: WebKit remux check
 #    先頭を流したあとに飛ぶ (seek) の 2 通り (tests/webkit-remux/play.mjs)。表は Step Summary と artifact の result に出る
 #
 # `from_run` に前の run の番号を入れると make を飛ばし、その run の fMP4 を使う (artifact は 3 日で消える)。
-# play は 30 分ほどかかる
+# 録画を作るのに 2 分ほど (make。並べて回す)、流すのに 35 分ほど (play) かかる
 
 on:
   workflow_dispatch:
@@ -51,11 +51,19 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # BtbN の日付のタグと SHA-256 で固定する (`latest` は中身が入れ替わり、結果を後で比べられなくなる)。
+      # 古いタグは消されるので、取れなくなったら新しいタグとその checksums.sha256 の値に替える
       - name: Install ffmpeg 9.0 (x264・x265)
+        env:
+          TAG: autobuild-2026-11-16-15-29
+          NAME: ffmpeg-n9.0.2-57-gd838f9f9ae-linux64-gpl-9.0
+          SHA256: 42d66000492706e00b53ff1d52c3805936f227b4bf7aef36fc19b53d01bd8416
         run: |
           set -euo pipefail
-          curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz | tar -xJ -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/ffmpeg-n9.0-latest-linux64-gpl-9.0/bin" >> "$GITHUB_PATH"
+          curl -fsSL -o "$RUNNER_TEMP/ffmpeg.tar.xz" "https://github.com/BtbN/FFmpeg-Builds/releases/download/$TAG/$NAME.tar.xz"
+          echo "$SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$NAME/bin" >> "$GITHUB_PATH"
 
       - name: Make
         env:

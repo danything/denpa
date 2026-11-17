@@ -313,14 +313,38 @@ await browser.close();
 writeFileSync(resultPath, JSON.stringify(out, null, 2));
 
 const lines = [
-  "| 流し方 | MSE | 録画 | 位置 | バージョン | -ss | 先頭のコマ (NAL・IDR として始められるか) | エラー | デコード | 進んだ秒 |",
-  "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+  "| 流し方 | 回 | MSE | 録画 | 位置 | バージョン | -ss | 先頭のコマ (NAL・IDR として始められるか) | エラー | デコード | 進んだ秒 |",
+  "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 ];
 for (const row of out) {
   const last = row.results?.at(-1);
   const file = last?.file?.split("/")[1] ?? "";
+  const failure = last?.error
+    ? `${last.error.code} ${last.error.message}`
+    : (last?.exception ??
+      last?.appendError ??
+      row.skipped ??
+      row.addSourceBuffer ??
+      row.evaluateError ??
+      "");
+  const cells = [
+    row.kind,
+    row.round,
+    row.source,
+    row.variant,
+    last?.pos ?? "",
+    file.replace(/^.*-/, "").replace(".mp4", ""),
+    last?.from ?? "",
+    last?.first
+      ? `${last.first.pts} (${last.first.type}, ${last.first.clean})`
+      : "",
+    `${failure}${row.caseTimeout ? ` (上限で打ち切り: ${row.stage})` : ""}${row.timeouts?.length ? ` [待ちきれず: ${row.timeouts.join(", ")}]` : ""}`,
+    last?.decoded ?? "",
+    last?.advanced ?? "",
+  ];
+  // エラーの文言に `|` が入ると列がずれる
   lines.push(
-    `| ${row.kind} | ${row.source} | ${row.variant} | ${last?.pos ?? ""} | ${file.replace(/^.*-/, "").replace(".mp4", "")} | ${last?.from ?? ""} | ${last?.first ? `${last.first.pts} (${last.first.type}, ${last.first.clean})` : ""} | ${last?.error ? `${last.error.code} ${last.error.message}` : (last?.appendError ?? row.skipped ?? row.addSourceBuffer ?? row.evaluateError ?? "")}${row.caseTimeout ? ` (上限で打ち切り: ${row.stage})` : ""}${row.timeouts?.length ? ` [待ちきれず: ${row.timeouts.join(", ")}]` : ""} | ${last?.decoded ?? ""} | ${last?.advanced ?? ""} |`,
+    `| ${cells.map((cell) => String(cell).replace(/\|/g, "\|")).join(" | ")} |`,
   );
 }
 writeFileSync(resultPath.replace(/\.json$/, ".md"), `${lines.join("\n")}\n`);

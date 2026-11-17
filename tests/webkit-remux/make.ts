@@ -360,6 +360,8 @@ function fixSync(src: Uint8Array): { data: Uint8Array; cleared: number } {
             size = view.getUint32(p);
             p += 4;
           }
+          // 既定値 (tfhd の default_sample_flags) を書き換えると、同じ traf の全部のサンプルに効く。ffmpeg は
+          // trun にサンプルごと (か先頭だけ) の flags を書くので、既定値に落ちるのは flags が全部同じときだけ
           let flagsAt =
             i === 0 && firstFlagsAt >= 0 ? firstFlagsAt : defaultFlagsAt;
           if (flags & 0x400) {

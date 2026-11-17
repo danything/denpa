@@ -129,7 +129,7 @@ Linux の WebKit は H.264 の fMP4 を再生できないので、iPhone の Saf
 
 - Linux のランナーで x264・x265 の作り物の録画を作り、本物の `copyArgs`・`cleanFrom` で詰め替える (`tests/webkit-remux/make.ts`)
 - macOS のランナーで、`remux-player.ts` と同じ足し方で MSE に流し、`MEDIA_ERR_DECODE` になったか、何コマデコードしたか、何秒進んだかを表にする (`tests/webkit-remux/play.mjs`)
-- 回すと 40 分ほどかかります。`from_run` に前の run の番号を入れると、録画を作り直さずにその run の fMP4 を使います (3 日で消えます)
+- 録画を作るのに 2 分ほど (make)、流すのに 35 分ほど (play) かかります。`from_run` に前の run の番号を入れると、録画を作り直さずにその run の fMP4 を使います (3 日で消えます)
 
 ## CI
 
