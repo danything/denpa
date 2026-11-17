@@ -978,7 +978,7 @@
   /* 1 段目は本文、2 段目 (`.c-meta`) は控えた字 (`.small`)。どの一覧も同じ (docs/design.md) */
   .c-name {
     font-size: var(--dp-text-base);
-    font-weight: var(--dp-weight-bold);
+    font-weight: var(--dp-weight);
   }
   .c-meta {
     display: block;
