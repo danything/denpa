@@ -128,12 +128,14 @@
 
 **`remux-player.ts` は開く位置 (続きの位置・場面) を、そこまで溜まってから `currentTime` に入れます** (`startAt`)。
 
-- 何も無いうち・先頭 (init segment) しか無いうちに入れると、macOS の WebKit は seeking のまま止まります。
-  エラーは出ません。headless でも画面を出しても、音声が無くても同じでした (`.github/workflows/webkit-remux.yml`。#2884)
-- 溜まってから入れても、そのあと続きを足すと、1 コマ映したまま進まないことがあります (流していて、先も溜まっているのに)。
-  1.5 秒進まなければ、1 回だけ同じ位置へ入れ直します (`watchStart`)。入れ直すと進みました
+- 何も無いうち・先頭 (init segment) しか無いうちに入れると、Safari (macOS 26.7 の Safari 27.2) は 36 回中 7 回、開く位置まで溜まっても
+  `readyState` が `HAVE_METADATA` のまま進みませんでした。エラーは出ません。Chrome は同じ流し方で止まりません
+  (`.github/workflows/webkit-remux.yml`。#2884)
 - 入れるまでは、開く位置をいまの位置とみなします。詰まり (`waiting`) で先頭からリクエストし直さないためです
 - 観る画面は、その場で流すときは続きの位置を入れ直しません (`resume`)。入れるのは remux-player です
+- **1 回に足すのは 1 MB まで** (`APPEND_MOST`)。読むのを止めている間にブラウザが溜めたぶんは 1 回の読み出しでまとめて返り、手元から速く届くと
+  Safari は 20〜36 MB の塊を返しました (Chrome は 2 MB まで)。空の SourceBuffer に入りきらない塊は、後ろを捨てても足せず (`QuotaExceededError`)、
+  観て減るのを待ったまま止まっていました
 
 ## ライブの 4K の局は、放送の HEVC を再生できるかで形式を決めます
 

@@ -1,15 +1,16 @@
 name: WebKit remux check
 
-# **詰め替え (`playback.copyArgs`) の fMP4 を、macOS の WebKit の MSE で再生できるかを確かめる** (#2884)。手で回すだけ。
+# **詰め替え (`playback.copyArgs`) の fMP4 を、macOS の Safari の MSE で再生できるかを確かめる** (#2884)。手で回すだけ。
 # iPhone の Safari と同じ VideoToolbox でデコードする。Linux の WebKit は H.264 の fMP4 を再生できないため、macOS で回す。
 #
-# 1. make (Linux): x264・x265 で作り物の録画 (Matroska) を作り、開く位置ごとに `cleanFrom` を通さない・通す の両方で
-#    `copyArgs` の ffmpeg を回す。sync の印を IDR にだけ残したもの (`+sync`) も作る (tests/webkit-remux/make.ts)
-# 2. play (macOS): Playwright の WebKit で、remux-player.ts と同じ足し方で流す。新しい <video> で開く (open) のと、
-#    先頭を流したあとに飛ぶ (seek) の 2 通り (tests/webkit-remux/play.mjs)。表は Step Summary と artifact の result に出る
+# 1. make (Linux): x264・x265 で作り物の録画 (Matroska) を作り、開く位置ごとに `cleanFrom` を通さない (copy)・通す (fixed) の
+#    両方で fMP4 を作る (tests/webkit-remux/make.ts)
+# 2. play (macOS): 製品の remux-player.ts を組んだものをページで動かし、手元の HTTP サーバから流す。新しい <video> で開く
+#    (player-open) のと、先頭を流したあとに飛ぶ (player-seek) の 2 通り (tests/webkit-remux/play.mjs)。
+#    既定は本物の Safari (safaridriver)。表は Step Summary と artifact の result に出る
 #
 # `from_run` に前の run の番号を入れると make を飛ばし、その run の fMP4 を使う (artifact は 3 日で消える)。
-# 録画を作るのに 2 分ほど (make。並べて回す)、流すのに 35 分ほど (play) かかる
+# 録画を作るのに 2 分ほど (make。並べて回す)、流すのに 15〜35 分ほど (play) かかる
 
 on:
   workflow_dispatch:
@@ -27,9 +28,9 @@ on:
         type: string
         default: ""
       kinds:
-        description: "流し方 (open・seek・player-open・player-seek)"
+        description: "流し方 (player-open・player-seek は remux-player.ts で流す。open・seek は足し方を変えて試すとき)"
         type: string
-        default: "open,seek"
+        default: "player-open,player-seek"
       orders:
         description: "開く位置を currentTime に入れる時 (before・metadata・covered・after)"
         type: string
@@ -49,8 +50,8 @@ on:
       browser:
         description: "流す先 (webkit は Playwright の WebKit、chrome は Google Chrome、safari は本物の Safari)"
         type: choice
-        options: [webkit, chrome, safari]
-        default: webkit
+        options: [safari, webkit, chrome]
+        default: safari
       remux_ref:
         description: "player で流す remux-player.ts のコミット (空なら回すコミットのもの)"
         type: string

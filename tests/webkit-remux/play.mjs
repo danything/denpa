@@ -1,13 +1,11 @@
-// @ts-nocheck -- ランナーの node でそのまま動かし、関数をページへ渡す (page.evaluate) 確かめるための道具なので、型は付けない
-// 詰め替えを macOS の WebKit で確かめる (#2884)。make.ts が作った fMP4 を、Playwright の WebKit (macOS) で MSE に流す。
+// @ts-nocheck -- ランナーの node でそのまま動かし、関数をページへ渡す (page.evaluate・WebDriver) 確かめるための道具なので、型は付けない
+// 詰め替えを macOS の Safari で確かめる (#2884)。make.ts が作った fMP4 を、ブラウザ (`PLAY_BROWSER`) の MSE に流す。
 //
 //     node play.mjs <make.ts の出力先> <結果の JSON>
 //
-// 流し方は src/lib/remux-player.ts と同じ (mode = "segments"、尺を先に渡す、開く位置まで溜まってから currentTime へ入れる (`PLAY_ORDERS`)、
-// 飛ぶときは abort → remove(0, ∞) → 足し直す)。
-//
-// - open: 新しい <video> で、その位置の fMP4 を足して再生する
-// - seek: 先頭の fMP4 を足して `FIRST` ミリ秒再生したあと、その位置へ飛んで足し直す (H.265 の報告の「飛ぶと止まる」)
+// - player-open: 製品の remux-player.ts (`REMUX_JS` に組んだもの) で、その位置から開く。観る画面と同じく、作ってすぐ play() を呼ぶ
+// - player-seek: 同じく先頭から開き、`FIRST` ミリ秒流してから飛ぶ (H.265 の報告の「飛ぶと止まる」)
+// - open・seek: remux-player を使わず、足し方を変えて試す (`PLAY_ORDERS`。Playwright の WebKit で切り分けたときのもの)
 
 import {
   createReadStream,
