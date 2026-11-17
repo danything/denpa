@@ -341,7 +341,40 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
   const state = { stage: "start", events: [], results: [], states: [] };
   window.__state = state;
   const { remuxPlayer } = await import("/remux.js");
-  const Source = window.ManagedMediaSource;
+  // 中の様子を残す (MSE の状態と、届いたバイト数)
+  let made = null;
+  const Base = window.ManagedMediaSource;
+  class Source extends Base {
+    constructor() {
+      super();
+      made = this;
+      for (const name of ["sourceopen", "startstreaming", "endstreaming"])
+        this.addEventListener(name, () => state.events.push(name));
+    }
+  }
+  const realFetch = window.fetch.bind(window);
+  let received = 0;
+  window.fetch = async (...args) => {
+    state.events.push(`fetch ${String(args[0]).split("/").at(-1)}`);
+    const response = await realFetch(...args);
+    state.events.push(`response ${response.status}`);
+    const reader = response.body.getReader();
+    const body = new ReadableStream({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) controller.close();
+        else {
+          received += value.length;
+          controller.enqueue(value);
+        }
+      },
+      cancel: (reason) => reader.cancel(reason),
+    });
+    return new Response(body, {
+      headers: response.headers,
+      status: response.status,
+    });
+  };
   const video = document.createElement("video");
   video.muted = true;
   video.playsInline = true;
