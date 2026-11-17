@@ -554,6 +554,7 @@ describe("受信できなかったと数える回 (receptionFailed)", () => {
   const none = {
     received: false,
     refused: false,
+    unusable: false,
     opened: false,
     timedOut: false,
     last: true,
@@ -571,6 +572,16 @@ describe("受信できなかったと数える回 (receptionFailed)", () => {
       false,
     );
     expect(receptionFailed({ ...none, refused: true })).toBe(true);
+  });
+
+  /*
+   * IT930x のブリッジが溢れると、そのチューナーに入った選局はどのチャンネルも 503 で失敗する。
+   * 数えていた頃は BS の中継器がまとめて「受信できない」になり、局が外れて予約が取り消されていた
+   */
+  test("チューナーが使えないと返された回 (503) は、最後の回でも数えない", () => {
+    expect(receptionFailed({ ...none, refused: true, unusable: true })).toBe(
+      false,
+    );
   });
 
   test("開けたのに上限まで何も来なかった回は数える。1 バイトでも来れば数えない", () => {
