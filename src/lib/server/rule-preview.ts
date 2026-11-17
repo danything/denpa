@@ -19,6 +19,7 @@ import { now, orm } from "./db";
 import {
   canceledBroadcasts,
   compile,
+  enabledRuleIds,
   globPatterns,
   haystack,
   keepsReservation,
@@ -196,6 +197,9 @@ async function countPreview(
   // 有料放送は、契約中と確かめた局だけ当てる (`contracts.paidAllowed`。予約を立てるときと同じ)
   const paidOk = paidAllowed();
   const at = now();
+  // 猶予の内でも、有効なルールの予約しか残らない (`keepsReservation`。書く欄は有効かを変えないので、保存してある値で見る)
+  const enabledIds = enabledRuleIds();
+  const enabled = (rule: number) => enabledIds.has(rule);
   /*
    * チューナーの台数。**スケジューラと同じところから取る。**
    * 取れなければ空 (= 何も競合として出さない)。エージェントが止まっているときに
@@ -386,7 +390,7 @@ async function countPreview(
       conflict_reason: conflictReason(held),
       // 引っ込めない予約 (手動・猶予の内) が立っているなら録る。「録らない」とは言わない
       skip:
-        held !== null && keepsReservation(held, at) && !p.copy_never
+        held !== null && keepsReservation(held, at, enabled) && !p.copy_never
           ? null
           : skipOf(p),
     };
@@ -502,7 +506,7 @@ async function countPreview(
         held.state !== "skipped" &&
         (held.rule_id === null ||
           held.rule_id !== editing?.id ||
-          keepsReservation(held, at))
+          keepsReservation(held, at, enabled))
       ) {
         out[id] = { kind: "reserved", state: held.state };
         continue;

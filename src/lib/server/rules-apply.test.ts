@@ -866,16 +866,40 @@ describe("同じ回は最初の放送だけ録る", () => {
     expect(skips.has(11)).toBe(false);
   });
 
-  test("下見: 手動と猶予の内の予約は引っ込めないので「録らない」と言わない", () => {
+  test("下見: 手動と、有効なルールの猶予の内の予約は引っ込めないので「録らない」を出さない", () => {
     const at = now();
     const later = at + config.ruleRetractGrace + HOUR;
-    expect(keepsReservation({ manual: false, start_at: later }, at)).toBe(
-      false,
-    );
-    expect(keepsReservation({ manual: true, start_at: later }, at)).toBe(true);
+    const soon = at + 10 * 60 * 1000;
+    const on = (rule: number) => rule === 1;
     expect(
-      keepsReservation({ manual: false, start_at: at + 10 * 60 * 1000 }, at),
+      keepsReservation({ manual: false, start_at: later, rule_id: 1 }, at, on),
+    ).toBe(false);
+    expect(
+      keepsReservation(
+        { manual: true, start_at: later, rule_id: null },
+        at,
+        on,
+      ),
     ).toBe(true);
+    expect(
+      keepsReservation({ manual: false, start_at: soon, rule_id: 1 }, at, on),
+    ).toBe(true);
+  });
+
+  test("下見: 止めた・消したルールの予約は、猶予の内でも引っ込める (`applyRules` と同じ)", () => {
+    const at = now();
+    const soon = at + 10 * 60 * 1000;
+    const on = (rule: number) => rule === 1;
+    expect(
+      keepsReservation({ manual: false, start_at: soon, rule_id: 2 }, at, on),
+    ).toBe(false);
+    expect(
+      keepsReservation(
+        { manual: false, start_at: soon, rule_id: null },
+        at,
+        on,
+      ),
+    ).toBe(false);
   });
 
   describe("話数の無い局 (実機の tvk)", () => {
