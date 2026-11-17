@@ -234,8 +234,8 @@
 </script>
 
 <!--
-    **スキャンは種別を選ぶ欄とボタンの 1 組。** 回っている間は「中断」に替わる。
-    探す範囲は決め打ち (放送で使う物理チャンネルは決まっていて、狭めても総当たりの時間が少し減るだけ)
+  **スキャンは種別を選ぶ欄とボタンの 1 組。** 回っている間は「中断」に替わる。
+  探す範囲は決め打ち (放送で使う物理チャンネルは決まっていて、狭めても総当たりの時間が少し減るだけ)
 -->
 {#snippet scanControl()}
   <!-- 2 台以上なら、スキャンと局の削除で対象にするエージェントを選ぶチップ (既定は全部) -->
@@ -269,9 +269,9 @@
       />{/if}
     {#if scan.state === "running"}
       <!--
-                十数分かかるので、途中で中断できるようにしてある。中断しても設定は書き換えない
-                (途中までの結果で上書きすると、まだ回っていない局の定義が消える)
-            -->
+        十数分かかるので、途中で中断できるようにしてある。中断しても設定は書き換えない
+        (途中までの結果で上書きすると、まだ回っていない局の定義が消える)
+      -->
       <button type="submit" class="small outline danger" formaction="?/scanStop"
         >中断</button
       >
@@ -289,8 +289,8 @@
 {/snippet}
 
 <!--
-    **局の削除は、種別を選ぶ欄と「局を削除」の 1 組。** スキャンの欄の隣に置き、スキャンの実行中は出さない。
-    消すのはその種別のチャンネルと局だけで、録画は残り、スキャンし直せば戻る (`scan.ts` の `removeType`)
+  **局の削除は、種別を選ぶ欄と「局を削除」の 1 組。** スキャンの欄の隣に置き、スキャンの実行中は出さない。
+  消すのはその種別のチャンネルと局だけで、録画は残り、スキャンし直せば戻る (`scan.ts` の `removeType`)
 -->
 {#snippet removeControl()}
   {#if scan.state !== "running" && removeTarget !== null}
@@ -326,9 +326,9 @@
 <svelte:window onclick={removing.stand} />
 
 <!--
-    **スキャンも、受信できるチャンネルの節の中に。** 押すものは見出しの行にまとめ (スキャン・局の削除・番組表とロゴの取得。スマホの形では下のタブの上)、
-    回っている間の進み具合は見出しのすぐ下。チャンネルが 1 つも無いときは、表を置く場所の真ん中に
-    スキャンの欄を出す (局が無いときの案内 `ChannelNotice` の行き先がここ)
+  **スキャンも、受信できるチャンネルの節の中に。** 押すものは見出しの行にまとめ (スキャン・局の削除・番組表とロゴの取得。スマホの形では下のタブの上)、
+  回っている間の進み具合は見出しのすぐ下。チャンネルが 1 つも無いときは、表を置く場所の真ん中に
+  スキャンの欄を出す (局が無いときの案内 `ChannelNotice` の行き先がここ)
 -->
 <div class="sections">
   <section class="section" data-testid="channel-section">
@@ -348,10 +348,10 @@
             {data.collect.boosted ? "集めています…" : "番組表をいますぐ集める"}
           </ActionButton>
           <!--
-                        取得するものが無ければボタンも出さない。押しても「もう全部持っています」と
-                        断るだけになる。**走っている最中でも押せる**。押されたほうが譲る作りなので、
-                        使えなくすると「BS を取っている間ずっと押せない」に逆戻りする
-                    -->
+            取得するものが無ければボタンも出さない。押しても「もう全部持っています」と
+            断るだけになる。**走っている最中でも押せる**。押されたほうが譲る作りなので、
+            使えなくすると「BS を取っている間ずっと押せない」に逆戻りする
+          -->
           {#if data.logos.pending > 0}
             <ActionButton
               action="?/logoSweep"
@@ -368,9 +368,9 @@
     </div>
 
     <!--
-            **チャンネルのお知らせ** (ヘッダーの印と、スマホの形で設定の入口に付く印と同じ文。`server/channel-alert.ts`)。
-            スマホの形はヘッダーを隠すので、文はここで読む。スキャンは見出しの行のボタン
-        -->
+      **チャンネルのお知らせ** (ヘッダーの印と、スマホの形で設定の入口に付く印と同じ文。`server/channel-alert.ts`)。
+      スマホの形はヘッダーを隠すので、文はここで読む。スキャンは見出しの行のボタン
+    -->
     {#if data.channelAlert !== null}
       <p
         class="notice {data.channelAlert.kind === 'ground'
@@ -388,11 +388,11 @@
         (service) => service.programs > 0,
       ).length}
       <!--
-                **入れ子になった 3 つの数を、その順に並べる。** チャンネル (T19, BS15:16625) の中に
-                局 (TOKYO MX1, MX2) があり、局ごとに番組表がある。「50 / 59 ・ 124 局」とだけ
-                出していた頃は、59 と 124 が同じものの数に見えた。局はスキャンで、番組表は
-                そのあと denpa が取得するもので、埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
-            -->
+        **入れ子になった 3 つの数を、その順に並べる。** チャンネル (T19, BS15:16625) の中に
+        局 (TOKYO MX1, MX2) があり、局ごとに番組表がある。「50 / 59 ・ 124 局」とだけ
+        出していた頃は、59 と 124 が同じものの数に見えた。局はスキャンで、番組表は
+        そのあと denpa が取得するもので、埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
+      -->
       <div class="small" data-testid="channel-coverage">
         <span class="muted">チャンネル</span>
         <strong>{coverage.length}</strong>
@@ -403,9 +403,9 @@
         <span class="muted">番組表のある局</span>
         <strong>{withEpg}</strong>
         <!--
-                    ロゴの数も同じ行に、ほかの数と同じ形で (事実はバッジにしない。docs/design.md の「印の意味」)。
-                    取れないぶんは下の行で断る。CM ロゴは CM 検出のために覚えたもので、局ロゴとは別物 (logo-data.ts)
-                -->
+          ロゴの数も同じ行に、ほかの数と同じ形で (事実はバッジにしない。docs/design.md の「印の意味」)。
+          取れないぶんは下の行で断る。CM ロゴは CM 検出のために覚えたもので、局ロゴとは別物 (logo-data.ts)
+        -->
         <span class="logo-counts">
           <span class="muted">局ロゴ</span>
           <strong class="num" data-testid="status-logos">
@@ -419,10 +419,10 @@
       </div>
       {#if data.logos.unavailable > 0}
         <!--
-                    取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
-                    **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
-                    CS のロゴは BS の中継で送られてくる
-                -->
+          取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
+          **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
+          CS のロゴは BS の中継で送られてくる
+        -->
         <div class="tiny muted" data-testid="logo-unavailable">
           <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません
           (1 週間後にまた確かめます)
@@ -430,9 +430,9 @@
       {/if}
       {#if data.logos.satellite.missing > 0 && !data.logoSweep.running}
         <!--
-                    衛星のロゴはダウンロードの期間にしか流れてこず、揃うまで何回か開き直すことがある。
-                    いつ続きを読むのかを言わないと、止まっているように見える (logo.awaitCarousel)
-                -->
+          衛星のロゴはダウンロードの期間にしか流れてこず、揃うまで何回か開き直すことがある。
+          いつ続きを読むのかを言わないと、止まっているように見える (logo.awaitCarousel)
+        -->
         <div class="tiny muted" data-testid="logo-satellite-waiting">
           BS・CS の <span class="num">{data.logos.satellite.missing}</span>
           局は、{#if data.logos.satellite.carrier !== null}
@@ -618,9 +618,9 @@
     {:else}
       {#if hasSky || hasUndecodableCatv || hasUndecodable4k}
         <!--
-                    復号できない局はライブと録画に使えない。そのわけを、表のすぐ上で言う (`services.decodable`)。
-                    どの局かは、局名の後ろの「復号できません」で示す
-                -->
+          復号できない局はライブと録画に使えない。そのわけを、表のすぐ上で言う (`services.decodable`)。
+          どの局かは、局名の後ろの「復号できません」で示す
+        -->
         <p class="small muted" data-testid="undecodable-note">
           {undecodableNote}
         </p>
@@ -638,9 +638,9 @@
             </tr>
           </thead>
           <!--
-                        **1 行に 1 局。** 種別と ch はチャンネルの局の数だけ縦につなぐ (`rowspan`)。
-                        ロゴは局ごとのものなので、局の行に 1 つずつ置く (チャンネルの行に並べると、どれがどの局か読めない)
-                    -->
+            **1 行に 1 局。** 種別と ch はチャンネルの局の数だけ縦につなぐ (`rowspan`)。
+            ロゴは局ごとのものなので、局の行に 1 つずつ置く (チャンネルの行に並べると、どれがどの局か読めない)
+          -->
           <tbody data-testid="channel-list">
             {#each coverage as channel (`${channel.type}:${channel.channel}`)}
               {#each channel.services as service, index (service.id)}
@@ -773,8 +773,8 @@
 <LogoZoom target={zoomTarget} onclose={() => (zoom = null)} />
 
 <!--
-    局ロゴ。押すと大きく見る (`LogoZoom`)。まだのものは点線の枠、放送に載っていないものは列では「—」。
-    `column` が偽のものは狭い幅で局名の前に出す写し (テスト ID は列のほうにだけ付ける)
+  局ロゴ。押すと大きく見る (`LogoZoom`)。まだのものは点線の枠、放送に載っていないものは列では「—」。
+  `column` が偽のものは狭い幅で局名の前に出す写し (テスト ID は列のほうにだけ付ける)
 -->
 {#snippet stationLogo(id: number, name: string, column: boolean)}
   {@const state = logoOf.get(id)?.logo}
@@ -809,8 +809,8 @@
 {/snippet}
 
 <!--
-    CM 検出のために覚えたロゴ。線の向きがどのコマでも揃うところを白く出した画像で、ロゴの形になっていれば合っている。
-    書き直すたびに URL を変えて、古い画像を出し続けないようにする。覚えていなければ何も出さない
+  CM 検出のために覚えたロゴ。線の向きがどのコマでも揃うところを白く出した画像で、ロゴの形になっていれば合っている。
+  書き直すたびに URL を変えて、古い画像を出し続けないようにする。覚えていなければ何も出さない
 -->
 {#snippet cmLogo(id: number, name: string, column: boolean)}
   {@const at = logoOf.get(id)?.cm ?? null}
@@ -862,9 +862,9 @@
     margin: 0;
   }
   /*
-     * 受信できるチャンネルの表は、スマートフォンの幅では欄の間を詰める。
-     * 局の欄が幅を取り、右端の「10/13 まで」が枠の外へ押し出されていた
-     */
+   * 受信できるチャンネルの表は、スマートフォンの幅では欄の間を詰める。
+   * 局の欄が幅を取り、右端の「10/13 まで」が枠の外へ押し出されていた
+   */
   .channels-wrap {
     container-type: inline-size;
   }
@@ -883,9 +883,9 @@
     margin-left: var(--dp-space-3);
   }
   /*
-     * **行は低く保つ。** 1 行に 1 局で、ロゴは局名の字の高さほど (局ロゴ 1.35rem)。
-     * 同じチャンネルの局は、種別と ch を縦につないでまとめて見せる
-     */
+   * **行は低く保つ。** 1 行に 1 局で、ロゴは局名の字の高さほど (局ロゴ 1.35rem)。
+   * 同じチャンネルの局は、種別と ch を縦につないでまとめて見せる
+   */
   .channels-wrap td {
     padding-block: var(--dp-space-1);
     vertical-align: middle;

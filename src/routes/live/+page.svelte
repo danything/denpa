@@ -411,7 +411,7 @@
     if (canList) {
       jikkyoList.toggle();
       opened = jikkyoList.on;
-      // 書き込む 1 行が受け取ったら下ろす (列を入れ替えて一覧を描き直したときに、またフォーカスを取らない)
+      // 書き込む 1 行が受け取ったら false に戻す (列を入れ替えて一覧を描き直したときに、またフォーカスを取らない)
       void tick().then(() => (opened = false));
     } else writing = !writing;
   }

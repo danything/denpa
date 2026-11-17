@@ -614,7 +614,7 @@
     const mine = ++generation;
     loading = true;
     failed = false;
-    // 押されてから取得する (上の説明)
+    // 押されてから (自動で受信するなら開く前から) 取得する (上の説明)
     const loadedEngine = await loadEngine(() => import("#lib/bml/engine.js"));
     // 待っている間に離されていたら、作らない
     if (mine !== generation) return;
@@ -859,8 +859,8 @@
 />
 
 <!--
-    映像と同じ枠に重ねる。操作バーより下に敷く (`--dp-z-stage-data`。`ControlBar` のボタンは `--dp-z-stage-controls`)。上に載せると
-    d ボタンごと隠れて、出したら消せなくなる
+  映像と同じ枠に重ねる。操作バーより下に敷く (`--dp-z-stage-data`。`ControlBar` のボタンは `--dp-z-stage-controls`)。上に載せると
+  d ボタンごと隠れて、出したら消せなくなる
 -->
 <div
   bind:this={host}

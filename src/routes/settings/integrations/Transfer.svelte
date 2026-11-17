@@ -1,4 +1,5 @@
 <script lang="ts">
+  import "@anyblades/blades/components/accordion";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
 

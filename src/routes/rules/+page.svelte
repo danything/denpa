@@ -231,7 +231,7 @@
                 >
                 <span class="next" data-testid="rule-next">
                   {#if rule.next === null}
-                    予定なし
+                    次の放送なし
                   {:else}
                     次 {upcomingLabel(rule.next.start_at, clock)}
                     <span class="broadcast">{rule.next.service_name}</span>

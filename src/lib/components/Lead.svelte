@@ -16,7 +16,7 @@
     class: extra = "",
   }: {
     children: Snippet;
-    /** 畳んでおく続き。無ければ ⓘ も出さない */
+    /** たたんでおく続き。無ければ ⓘ も出さない */
     more?: Snippet;
     class?: string;
   } = $props();

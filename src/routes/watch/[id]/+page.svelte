@@ -844,7 +844,7 @@
 
   /** 「続きから」を消す時計。続けて出したら前の時計は止める (先に消さない)。画面を離れたら止める */
   let continuedTimer: ReturnType<typeof setTimeout> | null = null;
-  /** **黙って途中から始めない。** 続きから始めたと言って、しばらくで引っ込める */
+  /** **途中から始めたら、そう出す。** 続きから始めたと出し、しばらくで引っ込める */
   function showContinued(): void {
     continued = true;
     if (continuedTimer !== null) clearTimeout(continuedTimer);
@@ -1920,7 +1920,7 @@
   let following: HTMLVideoElement | null = null;
   /** 映像だけ遅れたら飛び直す (`unslip.ts`)。段を替えてデコーダが作り直されると、Android の Chrome で映像だけ取り残される */
   const unslip = unslipper();
-  /** 読めなかったとき。黙って黒いままにしない */
+  /** 読めなかったとき。何も出さずに黒いままにしない */
   let broken = $state(false);
   /**
    * 観られなかったわけの詳しいところ (`giveUp`)。何を再生しようとして (コーデック・出し方・codecs)、何で止まったか
@@ -2045,7 +2045,7 @@
    */
   const SKIP_CM_KEY = "watch-skip-cm";
   let skipCm = $state(false);
-  /** CM を飛ばしたことを短く言う。黙って飛ぶと壊れたように見える */
+  /** CM を飛ばしたことを短く出す。何も出さずに飛ぶと壊れたように見える */
   let skipped = $state(false);
   let skipNotice: ReturnType<typeof setTimeout> | null = null;
   /**
@@ -3153,7 +3153,7 @@
         <!--
           観られないわけと、待っていることを言う幕 (`problem`)。見た目の決まりはライブ・追っかけと共通 (`PlayerVeil`)。
           観られないときは映像を暗く覆い、詰まりと繋ぎ直しの最中は映っている映像を覆わずに回るものだけを出す。
-          黙って止まっていると壊れたように見え、待てばいいのかが決められない (サーバの入れ替えでは数十秒繋がらない)
+          何も出さずに止まっていると壊れたように見え、待てばいいのかが決められない (サーバの入れ替えでは数十秒繋がらない)
         -->
         {#if problem !== "" || buffering || resuming}
           <PlayerVeil
@@ -3418,7 +3418,7 @@
         </ControlBar>
       {/snippet}
 
-      <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。黙って途中から始めたり飛んだりすると壊れて見える -->
+      <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。何も出さずに途中から始めたり飛んだりすると壊れて見える -->
       {#snippet notes()}
         {#if dataNote !== ""}
           <StageNote testid="watch-data-note">{dataNote}</StageNote>

@@ -347,7 +347,7 @@
         {/snippet}
       </MediaStack>
 
-      <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き・コメントの一覧) -->
+      <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き・コメントの一覧。観る画面はその下に削除) -->
       <ControlBar side shown={controls.shown}>
         <CloseLink />
         <ControlButton

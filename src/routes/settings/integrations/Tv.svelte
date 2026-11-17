@@ -14,9 +14,9 @@
 <svelte:window onclick={revoking.stand} />
 
 <!--
-    テレビのアプリ (danything/denpa-tv) に渡したアクセストークン。家の外から OIDC 越しに使うテレビは
-    QR でペアリングしてアクセストークンを持つ (信頼するネットワークの中なら要らない)。
-    なくしたテレビ・手放したテレビはここで止める
+  テレビのアプリ (danything/denpa-tv) に渡したアクセストークン。家の外から OIDC 越しに使うテレビは
+  QR でペアリングしてアクセストークンを持つ (信頼するネットワークの中なら要らない)。
+  なくしたテレビ・手放したテレビはここで止める
 -->
 <div class="sections readable">
   <section class="section">

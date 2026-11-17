@@ -243,7 +243,7 @@
         (result.data as { preview: Preview | null } | undefined)?.preview ??
         null;
     } catch (error) {
-      // 黙って空にしない。もう 1 度変えれば送り直す
+      // 失敗を空の結果に見せない。もう 1 度変えれば送り直す
       preview = {
         total: 0,
         skipped: 0,
@@ -432,7 +432,7 @@
     <!--
       同じ回・前の回のスイッチ、局・ジャンル・時間帯と曜日 (条件)、優先度は枠の無い行に (サイドバーの行と同じ形)。
       名前は左、いまの値は右。**スイッチを条件より上に置く**。同じ回を最初の放送だけにすれば局を絞らずに済むので、
-      先に目に入るように。条件は畳んでおき、閉じていても右の要約で中身が分かる
+      先に目に入るように。条件はたたんでおき、閉じていても右の要約で中身が分かる
     -->
     <div class="rows side-list">
       <label class="row side-item">
@@ -519,7 +519,7 @@
           </div>
         </div>
       </details>
-      <!-- ジャンルは畳んでおく (シリーズ名で足りる)。データとしては残している -->
+      <!-- ジャンルはたたんでおく (シリーズ名で足りる)。データとしては残している -->
       <details class="row picker">
         <summary class="side-item" data-testid="genre-summary">
           <span>ジャンル</span>
@@ -559,7 +559,7 @@
           {/each}
         </div>
       </details>
-      <!-- 時間帯と曜日も畳んでおく。見るのは番組の始まる時刻 (日本時間)。決め方は `rule-time.ts` -->
+      <!-- 時間帯と曜日もたたんでおく。見るのは番組の始まる時刻 (日本時間)。決め方は `rule-time.ts` -->
       <details class="row picker">
         <summary class="side-item" data-testid="slot-summary">
           <span>時間帯と曜日</span>

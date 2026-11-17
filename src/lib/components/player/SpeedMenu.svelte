@@ -51,8 +51,8 @@
 </script>
 
 <!--
-    中身 (`children`) は速めているときだけ渡す。ControlButton は中身が無いときだけ丸くする。
-    ボタンは 1 つのまま、アイコンと数字を差し替える (`{#if}` で ControlButton ごと出し分けない)
+  中身 (`children`) は速めているときだけ渡す。ControlButton は中身が無いときだけ丸くする。
+  ボタンは 1 つのまま、アイコンと数字を差し替える (`{#if}` で ControlButton ごと出し分けない)
 -->
 {#snippet number()}
   <span class="num">{speed}</span>

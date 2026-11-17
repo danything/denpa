@@ -69,9 +69,9 @@
 
     {#if data.webhooks.length > 0}
       <!--
-                1 件を URL・送る通知・直近の結果・ボタンの順に縦に積む。幅がいくらでも横には出ない
-                (URL だけは `text-overflow: ellipsis` で止める)
-            -->
+        1 件を URL・送る通知・直近の結果・ボタンの順に縦に積む。幅がいくらでも横には出ない
+        (URL だけは `text-overflow: ellipsis` で止める)
+      -->
       <div class="item-list">
         {#each data.webhooks as webhook (webhook.id)}
           <div class="webhook item" data-testid="webhook-row">
