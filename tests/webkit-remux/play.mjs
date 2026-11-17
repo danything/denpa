@@ -15,7 +15,8 @@ import { join } from "node:path";
 import { webkit } from "playwright";
 
 const [root, resultPath] = process.argv.slice(2);
-const WATCH = 5000;
+/** 開いた位置から 2 秒進むまで待つ上限 (ms)。手前の IDR からデコードし直すぶん、観はじめまでの時間も測る */
+const WATCH = 20_000;
 const FIRST = 3000;
 /** 1 つの case の上限 (ms)。超えたら、そこまでの進み具合を残して次へ */
 const CASE_LIMIT = 60_000;
@@ -29,7 +30,8 @@ const manifests = readdirSync(root, { withFileTypes: true })
 const cases = [];
 for (const m of manifests) {
   const start = m.made.find((x) => x.pos === 0);
-  for (const source of ["ManagedMediaSource", "MediaSource"])
+  // iPhone の Safari と同じ ManagedMediaSource で流す (Mac の Safari の MediaSource でも同じ結果だった。#2884)
+  for (const source of ["ManagedMediaSource"])
     for (const x of m.made) {
       // 開く位置から始める場合は、同じものでも止まったり止まらなかったりしたので 2 回ずつ
       for (const round of [1, 2])
@@ -139,6 +141,7 @@ async function inPage({ source, codecs, steps, watch, first }) {
         await idle();
       }
       if (at > 0) video.currentTime = at;
+      const stepStart = performance.now();
       state.stage = `step ${i} fetch`;
       const data = new Uint8Array(
         await (await fetch(`/files/${step.file}`)).arrayBuffer(),
@@ -180,8 +183,14 @@ async function inPage({ source, codecs, steps, watch, first }) {
         playError = "play() が 3 秒返りませんでした";
       const limit = i < steps.length - 1 ? first : watch;
       const begin = performance.now();
-      while (performance.now() - begin < limit && video.error === null)
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      // 観はじめ: 読み始めてから、開いた位置より先へ進むまで
+      let startup = null;
+      while (performance.now() - begin < limit && video.error === null) {
+        if (startup === null && video.currentTime > t0 + 0.1)
+          startup = performance.now() - stepStart;
+        if (i === steps.length - 1 && video.currentTime > t0 + 2) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
       const quality = video.getVideoPlaybackQuality();
       // デコードに失敗すると SourceBuffer が外され、buffered を読むと InvalidStateError になる
       let ranges = [];
@@ -208,6 +217,7 @@ async function inPage({ source, codecs, steps, watch, first }) {
         startTime: +t0.toFixed(3),
         currentTime: +video.currentTime.toFixed(3),
         advanced: +(video.currentTime - t0).toFixed(3),
+        startupMs: startup === null ? null : Math.round(startup),
         decoded: quality.totalVideoFrames - quality0.totalVideoFrames,
         dropped: quality.droppedVideoFrames - quality0.droppedVideoFrames,
         corrupted:
@@ -313,8 +323,8 @@ await browser.close();
 writeFileSync(resultPath, JSON.stringify(out, null, 2));
 
 const lines = [
-  "| 流し方 | 回 | MSE | 録画 | 位置 | バージョン | -ss | 先頭のコマ (NAL・IDR として始められるか) | エラー | デコード | 進んだ秒 |",
-  "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+  "| 流し方 | 回 | MSE | 録画 | 位置 | バージョン | -ss | 先頭のコマ (NAL・始められるか) | エラー | デコード | 進んだ秒 | 観はじめ (ms) |",
+  "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 ];
 for (const row of out) {
   const last = row.results?.at(-1);
@@ -341,6 +351,7 @@ for (const row of out) {
     `${failure}${row.caseTimeout ? ` (上限で打ち切り: ${row.stage})` : ""}${row.timeouts?.length ? ` [待ちきれず: ${row.timeouts.join(", ")}]` : ""}`,
     last?.decoded ?? "",
     last?.advanced ?? "",
+    last?.startupMs ?? "",
   ];
   // エラーの文言に `|` が入ると列がずれる。先に `\` を重ねてから `|` の前に `\` を置く
   const escape = (cell) =>

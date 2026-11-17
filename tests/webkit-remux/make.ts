@@ -4,18 +4,26 @@
  *     bun tests/webkit-remux/make.ts <録画の種類> <出力先>
  *
  * 1. 作り物の映像 (1080p59.94・150 秒・AAC) を x264・x265 で Matroska にエンコードする
- * 2. 映像のキーフレームの印が付いたコマを全部並べ、NAL の種類と `cleanStart` の答えを書く
- * 3. 開く位置ごとに、v2.50.0 の動き (`cleanFrom` を通さない) と v2.51.0 の動き (通す) で `copyArgs` の ffmpeg を回し、
- *    出力の先頭 `LIMIT` バイトを fMP4 として残す
+ * 2. 映像のキーフレームの印が付いたコマを全部並べ、NAL の種類と `startable` の答えを書く
+ * 3. 開く位置ごとに、2 通りで fMP4 を作り、先頭 `LIMIT` バイトを残す
+ *    - copy: `cleanFrom` を通さずに `copyArgs` で詰め替える (v2.50.0 までの動き)
+ *    - fixed: サーバと同じ。`cleanFrom` で始める位置を決め、`ts/fmp4-marks.ts` で sync の印を直す。
+ *      手前に始められるキーフレームが無ければ `fileTranscodeArgs` で変換する (GPU の無いランナーなので H.264 はソフトウェア。
+ *      H.265 は変換できないので、サーバと同じく印を直さずに詰め替える)
  */
 
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
+import { SyncMarks } from "#lib/ts/fmp4-marks.js";
 import { loadCues, loadMkvHead, MkvDemuxer } from "#lib/ts/mkv-media.js";
-import { cleanStart, nalLengthSize, sliceType } from "#lib/ts/random-access.js";
+import { nalLengthSize, sliceType, startable } from "#lib/ts/random-access.js";
 
 import { cleanFrom } from "../../src/lib/server/clean-start";
-import { copyArgs, mediaInfo } from "../../src/lib/server/playback";
+import {
+  copyArgs,
+  fileTranscodeArgs,
+  mediaInfo,
+} from "../../src/lib/server/playback";
 
 const [variant, outRoot] = process.argv.slice(2);
 if (variant === undefined || outRoot === undefined)
@@ -25,13 +33,13 @@ if (variant === undefined || outRoot === undefined)
 const DURATION = Number(process.env["DURATION"] ?? 150);
 /** 途中の IDR を置く位置 (秒)。録画の種類によっては、ここと先頭だけが IDR */
 const IDR_AT = 70;
-/** 残す fMP4 の大きさ (バイト)。4 Mbit/s でおよそ 48 秒 (v2.51.0 が 30 秒手前の IDR から送っても、開く位置の先まで入る) */
-const LIMIT = 24 * 1024 * 1024;
+/** 残す fMP4 の大きさ (バイト)。4 Mbit/s でおよそ 72 秒 (20 秒手前の IDR から送っても、開く位置の先まで十分に入る) */
+const LIMIT = 36 * 1024 * 1024;
 /**
- * 開く位置 (秒)。30.3 は手前 60 秒に先頭の IDR、100.3 は 70 秒の IDR がある。140.3 は手前 60 秒に IDR が無い
- * (途中のキーフレームが IDR でない録画のとき)
+ * 開く位置 (秒)。先頭のほかに IDR が 70 秒にしか無い録画では、手前の IDR までの間が 10・30・15・30・70 秒になる。
+ * 間が 20 秒 (`clean-start.ts` の `LOOKBACK`) より長ければ変換する
  */
-const POSITIONS = [0, 30.3, 100.3, 140.3];
+const POSITIONS = [0, 10.3, 30.3, 85.3, 100.3, 140.3];
 
 const forcedIdr = ["-force_key_frames", `0,${IDR_AT}`, "-forced-idr", "1"];
 const x264 = [
@@ -169,18 +177,13 @@ const keys = frames.flatMap((frame, i) =>
           time: Number(frame.time.toFixed(3)),
           type: frame.type,
           nextType: frames[i + 1]?.type ?? null,
-          clean: cleanStart(
-            spec.codec,
-            lengthSize,
-            frame.data,
-            frames[i + 1]?.data ?? null,
-          ),
+          clean: startable(spec.codec, lengthSize, frame.data),
         },
       ]
     : [],
 );
 console.log(
-  `${variant}: キーフレーム ${keys.length} (IDR として始められるもの ${keys.filter((k) => k.clean).length})、Cues ${cues.length}`,
+  `${variant}: キーフレーム ${keys.length} (始められるもの ${keys.filter((k) => k.clean).length})、Cues ${cues.length}`,
 );
 
 const probe = await run([
@@ -202,7 +205,9 @@ interface Made {
   codec: string;
   codecs: string;
   pos: number;
-  version: "v2.50.0" | "v2.51.0" | "both";
+  version: "copy" | "fixed" | "both";
+  /** fixed のときの作り方。詰め替え (印を直した・直していない) か変換 */
+  how: "copy" | "marked" | "transcode";
   from: number;
   file: string;
   bytes: number;
@@ -216,16 +221,14 @@ interface Made {
 }
 const made: Made[] = [];
 
-async function remux(
-  pos: number,
-  version: Made["version"],
-  from: number,
-): Promise<void> {
-  const name = `${String(pos).replace(".", "_")}-${version}.mp4`;
-  const args = copyArgs(mkv, from, 0, spec!.codec);
-  // 出力先 (`pipe:1`) をファイルに替え、`-fs` で LIMIT バイトのところで止める
+/** `args` (出力先が `pipe:1`) の ffmpeg を回して `name` に書く。`LIMIT` バイトで止める。`marks` があれば印を直す */
+async function produce(
+  args: string[],
+  name: string,
+  marks: { codec: "h264" | "hevc"; lengthSize: number } | null,
+): Promise<number> {
   if (args.at(-1) !== "pipe:1")
-    throw new Error("copyArgs の出力先が pipe:1 ではありません");
+    throw new Error("ffmpeg の出力先が pipe:1 ではありません");
   await run([
     "ffmpeg",
     ...args.slice(0, -1),
@@ -234,7 +237,18 @@ async function remux(
     "-y",
     `${out}/${name}`,
   ]);
-  const size = statSync(`${out}/${name}`).size;
+  if (marks === null) return 0;
+  const fixer = new SyncMarks(marks.codec, marks.lengthSize);
+  const parts = [
+    ...fixer.push(new Uint8Array(readFileSync(`${out}/${name}`))),
+    ...fixer.end(),
+  ];
+  writeFileSync(`${out}/${name}`, Buffer.concat(parts));
+  return fixer.cleared;
+}
+
+/** fMP4 の最初の映像のコマと、Matroska でのそのコマ */
+async function firstFrame(name: string): Promise<Made["first"]> {
   const packets = JSON.parse(
     await run([
       "ffprobe",
@@ -252,166 +266,78 @@ async function remux(
     ]),
   ).packets as { pts_time: string; dts_time: string }[];
   const p = packets[0];
-  let first: Made["first"] = null;
-  if (p !== undefined) {
-    const pts = Number(p.pts_time);
-    const match = keys.reduce<(typeof keys)[number] | null>(
-      (best, k) =>
-        best === null || Math.abs(k.time - pts) < Math.abs(best.time - pts)
-          ? k
-          : best,
-      null,
-    );
-    const near = match !== null && Math.abs(match.time - pts) < 0.1;
-    first = {
-      pts,
-      dts: Number(p.dts_time),
-      type: near ? match.type : null,
-      clean: near ? match.clean : null,
-    };
+  if (p === undefined) return null;
+  const pts = Number(p.pts_time);
+  const match = keys.reduce<(typeof keys)[number] | null>(
+    (best, k) =>
+      best === null || Math.abs(k.time - pts) < Math.abs(best.time - pts)
+        ? k
+        : best,
+    null,
+  );
+  const near = match !== null && Math.abs(match.time - pts) < 0.1;
+  return {
+    pts,
+    dts: Number(p.dts_time),
+    type: near ? match.type : null,
+    clean: near ? match.clean : null,
+  };
+}
+
+async function make(pos: number, version: Made["version"]): Promise<void> {
+  const name = `${String(pos).replace(".", "_")}-${version}.mp4`;
+  let from = pos;
+  let how: Made["how"] = "copy";
+  let cleared = 0;
+  if (version === "copy") {
+    await produce(copyArgs(mkv, pos, 0, spec!.codec), name, null);
+  } else {
+    const start = await cleanFrom(mkv, pos);
+    if (start.missing && spec!.codec === "h264") {
+      how = "transcode";
+      from = start.decodeFrom;
+      await produce(
+        fileTranscodeArgs(mkv, start.decodeFrom, 0, spec!.codec, null),
+        name,
+        null,
+      );
+    } else {
+      from = start.from;
+      const marks = start.missing ? null : start.marks;
+      how = marks === null ? "copy" : "marked";
+      cleared = await produce(
+        copyArgs(mkv, start.from, 0, spec!.codec),
+        name,
+        marks,
+      );
+    }
   }
+  const size = statSync(`${out}/${name}`).size;
+  const first = await firstFrame(name);
   made.push({
     variant: variant!,
     codec: spec!.codec,
     codecs,
     pos,
     version,
+    how,
     from,
     file: `${variant}/${name}`,
     bytes: size,
     first,
   });
   console.log(
-    `${variant} ${pos} ${version}: -ss ${from} → 先頭 ${JSON.stringify(first)} ${size} バイト`,
+    `${variant} ${pos} ${version} (${how}): -ss ${from} → 先頭 ${JSON.stringify(first)} ${size} バイト、印を ${cleared} 個外した`,
   );
-}
-
-/** IDR (H.265 は IRAP) か。WebKit に「ここから始めてよい」と伝えてよいコマ */
-function startable(frame: Uint8Array): boolean {
-  const type = sliceType(spec!.codec, frame, lengthSize);
-  if (type === null) return false;
-  return spec!.codec === "h264" ? type === 5 : type >= 16 && type <= 21;
-}
-
-/**
- * **fMP4 の映像の sync の印を、IDR (IRAP) にだけ残す。** 直し方の候補を確かめるためのもの。
- * moof > traf > trun の sample_flags を書き換えるだけで、大きさは変わらない。映像はトラック 1 (`copyArgs` の `-map 0:v:0`)
- */
-function fixSync(src: Uint8Array): { data: Uint8Array; cleared: number } {
-  const data = src.slice();
-  const view = new DataView(data.buffer);
-  const type = (at: number) =>
-    String.fromCharCode(...data.subarray(at + 4, at + 8));
-  let cleared = 0;
-  const children = (
-    start: number,
-    end: number,
-    each: (at: number, size: number) => void,
-  ) => {
-    for (let at = start; at + 8 <= end;) {
-      const size = view.getUint32(at);
-      if (size < 8 || at + size > end) return;
-      each(at, size);
-      at += size;
-    }
-  };
-  children(0, data.length, (moof, moofSize) => {
-    if (type(moof) !== "moof") return;
-    children(moof + 8, moof + moofSize, (traf, trafSize) => {
-      if (type(traf) !== "traf") return;
-      let track = 0;
-      let defaultSize = 0;
-      let defaultFlagsAt = -1;
-      children(traf + 8, traf + trafSize, (box) => {
-        if (type(box) !== "tfhd") return;
-        const flags = view.getUint32(box + 8) & 0xffffff;
-        track = view.getUint32(box + 12);
-        let p = box + 16;
-        if (flags & 0x01) p += 8;
-        if (flags & 0x02) p += 4;
-        if (flags & 0x08) p += 4;
-        if (flags & 0x10) {
-          defaultSize = view.getUint32(p);
-          p += 4;
-        }
-        if (flags & 0x20) defaultFlagsAt = p;
-      });
-      if (track !== 1) return;
-      children(traf + 8, traf + trafSize, (box) => {
-        if (type(box) !== "trun") return;
-        const flags = view.getUint32(box + 8) & 0xffffff;
-        const count = view.getUint32(box + 12);
-        let p = box + 16;
-        let offset = 0;
-        if (flags & 0x01) {
-          offset = view.getInt32(p);
-          p += 4;
-        }
-        let firstFlagsAt = -1;
-        if (flags & 0x04) {
-          firstFlagsAt = p;
-          p += 4;
-        }
-        let dataAt = moof + offset;
-        for (let i = 0; i < count; i++) {
-          if (flags & 0x100) p += 4;
-          let size = defaultSize;
-          if (flags & 0x200) {
-            size = view.getUint32(p);
-            p += 4;
-          }
-          // 既定値 (tfhd の default_sample_flags) を書き換えると、同じ traf の全部のサンプルに効く。ffmpeg は
-          // trun にサンプルごと (か先頭だけ) の flags を書くので、既定値に落ちるのは flags が全部同じときだけ
-          let flagsAt =
-            i === 0 && firstFlagsAt >= 0 ? firstFlagsAt : defaultFlagsAt;
-          if (flags & 0x400) {
-            flagsAt = p;
-            p += 4;
-          }
-          if (flags & 0x800) p += 4;
-          if (flagsAt >= 0 && dataAt + size <= data.length) {
-            const sampleFlags = view.getUint32(flagsAt);
-            const sync = (sampleFlags & 0x10000) === 0;
-            if (sync && !startable(data.subarray(dataAt, dataAt + size))) {
-              // sample_is_non_sync_sample を立て、sample_depends_on を「ほかを参照する」(1) にする
-              view.setUint32(
-                flagsAt,
-                ((sampleFlags | 0x10000) & ~0x03000000) | 0x01000000,
-              );
-              cleared++;
-            }
-          }
-          dataAt += size;
-        }
-      });
-    });
-  });
-  return { data, cleared };
 }
 
 for (const pos of POSITIONS) {
   if (pos === 0) {
-    await remux(pos, "both", 0);
+    await make(pos, "both");
     continue;
   }
-  await remux(pos, "v2.50.0", pos);
-  await remux(pos, "v2.51.0", await cleanFrom(mkv, pos));
-}
-
-// 直し方の候補: sync の印を IDR にだけ残したもの。外した印が無ければ同じ中身なので作らない
-for (const base of [...made]) {
-  const { data, cleared } = fixSync(
-    new Uint8Array(readFileSync(`${outRoot}/${base.file}`)),
-  );
-  console.log(`${base.file}: sync の印を ${cleared} 個外しました`);
-  if (cleared === 0) continue;
-  const file = base.file.replace(/\.mp4$/, "+sync.mp4");
-  writeFileSync(`${outRoot}/${file}`, data);
-  made.push({
-    ...base,
-    version: `${base.version}+sync` as Made["version"],
-    file,
-  });
+  await make(pos, "copy");
+  await make(pos, "fixed");
 }
 
 writeFileSync(

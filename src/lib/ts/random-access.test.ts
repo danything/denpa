@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { cleanStart, nalLengthSize, sliceType } from "./random-access";
+import {
+  avcSliceType,
+  nalLengthSize,
+  sliceType,
+  startable,
+} from "./random-access";
 
 /** 長さ 4 バイトの NAL を並べたコマ。NAL は先頭のバイトだけ意味を持たせる */
 function frame(...heads: number[][]): Uint8Array {
@@ -50,23 +55,49 @@ describe("sliceType", () => {
   });
 });
 
-describe("cleanStart", () => {
-  test("H.264 は IDR だけ。印の付いた IDR でない I (回復点の SEI 付き) からは始めない", () => {
-    expect(cleanStart("h264", 4, frame(avc(6), avc(5)), null)).toBe(true);
-    expect(cleanStart("h264", 4, frame(avc(6), avc(1)), frame(avc(1)))).toBe(
-      false,
-    );
+/** H.264 の P のスライス (first_mb_in_slice 0・slice_type 5) */
+const avcP = (type: number): number[] => [0x40 | type, 0x9a];
+
+describe("avcSliceType", () => {
+  test("first_mb_in_slice の後ろの slice_type を読む", () => {
+    // 1 0001000 → first_mb 0・slice_type 7 (I)
+    expect(avcSliceType(Uint8Array.from([0x65, 0x88]))).toBe(7);
+    // 1 00110 10 → slice_type 5 (P)
+    expect(avcSliceType(Uint8Array.from([0x41, 0x9a]))).toBe(5);
+    expect(avcSliceType(Uint8Array.from([0x41]))).toBeNull();
   });
 
-  test("H.265 は IDR と、後ろに RASL が続かない CRA", () => {
-    expect(cleanStart("hevc", 4, frame(hevc(19)), frame(hevc(8)))).toBe(true);
-    expect(cleanStart("hevc", 4, frame(hevc(20)), null)).toBe(true);
-    expect(cleanStart("hevc", 4, frame(hevc(21)), frame(hevc(1)))).toBe(true);
-    expect(cleanStart("hevc", 4, frame(hevc(21)), frame(hevc(8)))).toBe(false);
-    expect(cleanStart("hevc", 4, frame(hevc(1)), frame(hevc(1)))).toBe(false);
+  test("エミュレーション防止の 0x03 を飛ばす", () => {
+    // first_mb_in_slice が 65535 (先頭に 0 が 16 ビット続く) と、そこに挟まる 0x00 0x00 0x03
+    expect(
+      avcSliceType(
+        Uint8Array.from([0x41, 0x00, 0x00, 0x03, 0x80, 0x00, 0x08, 0x80]),
+      ),
+    ).toBe(7);
+  });
+});
+
+describe("startable", () => {
+  test("H.264 は IDR と、スライスが全部 I のコマ (open GOP の回復点)", () => {
+    expect(startable("h264", 4, frame(avc(6), avc(5)))).toBe(true);
+    expect(startable("h264", 4, frame(avc(6), avc(1)))).toBe(true);
+  });
+
+  test("H.264 の P のコマ (intra-refresh の回復点) からは始めない", () => {
+    expect(startable("h264", 4, frame(avc(6), avcP(1)))).toBe(false);
+    // I と P が混ざったコマも始めない
+    expect(startable("h264", 4, frame(avc(1), avcP(1)))).toBe(false);
+  });
+
+  test("H.265 は IRAP (後ろに RASL が続く CRA も)", () => {
+    expect(startable("hevc", 4, frame(hevc(19)))).toBe(true);
+    expect(startable("hevc", 4, frame(hevc(20)))).toBe(true);
+    expect(startable("hevc", 4, frame(hevc(21)))).toBe(true);
+    expect(startable("hevc", 4, frame(hevc(16)))).toBe(true);
+    expect(startable("hevc", 4, frame(hevc(1)))).toBe(false);
   });
 
   test("読めないコマからは始めない", () => {
-    expect(cleanStart("h264", 4, new Uint8Array(0), null)).toBe(false);
+    expect(startable("h264", 4, new Uint8Array(0))).toBe(false);
   });
 });
