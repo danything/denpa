@@ -35,9 +35,20 @@ public static class RawProbe
             return Failed(400, $"読めるのは元の TS の保存先の {Dir}/ の下だけです");
         var file = new FileInfo(full);
         if (!file.Exists) return Failed(404, $"{full} が見つかりません。エージェントにも denpa と同じ保存先 (RAW_DIR) を見せてください");
-        // リンクは辿らない (置き場の外のファイルの手がかりを返さない)
-        if (file.LinkTarget is not null) return Failed(400, "リンクは読みません");
+        // リンクは辿らない (置き場の外のファイルの手がかりを返さない)。.denpa/ とその下のディレクトリがリンクでも置き場の外を指せるので、同じく断る
+        if (file.LinkTarget is not null || Linked(file.Directory, root)) return Failed(400, "リンクは読みません");
         if (file.Length > MaxBytes) return Failed(400, $"{MaxBytes} バイトより大きいファイルは読みません");
         return (200, new JsonObject { ["sha256"] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(full))) });
+    }
+
+    /// <summary><paramref name="directory"/> から <paramref name="root"/> (置き場の <c>.denpa/</c>) までのディレクトリに、リンクがあるか</summary>
+    private static bool Linked(DirectoryInfo? directory, string root)
+    {
+        for (var at = directory; at is not null; at = at.Parent)
+        {
+            if (at.LinkTarget is not null) return true;
+            if (Path.TrimEndingDirectorySeparator(at.FullName) == Path.TrimEndingDirectorySeparator(root)) return false;
+        }
+        return false;
     }
 }

@@ -3,7 +3,7 @@ using System.Threading.Channels;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 起きたことを知らせるエンドポイント (SSE)。denpa の画面がチューナーの様子を追うのに使う。
+/// 起きたことを知らせるエンドポイント (SSE)。denpa がチューナーの様子・局の入れ替わり・カードの契約の更新を受け取るのに使う。
 ///
 /// <para>
 /// 流すのは**こちらが持っている事実だけ**。

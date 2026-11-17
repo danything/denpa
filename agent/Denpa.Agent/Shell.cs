@@ -19,7 +19,7 @@ public static class Shell
 
     /// <summary>
     /// 子プロセスを最後まで回して、出力をまとめて受け取る (asicend --list-json・asicenctl・defaults・scutil)。
-    /// 上限を過ぎたら子ごと落とす。起動できなかった・落とした、は exit -1 と理由で返す
+    /// 上限を過ぎたら子プロセスごと止める。起動できなかった・止めた、は exit -1 と理由で返す
     /// </summary>
     public static (int Code, string Output) Run(string file, IEnumerable<string> args, TimeSpan timeout)
     {

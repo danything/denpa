@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 /// **選局コマンドそのものは持たない。** 画面から書き換えられるようにした以上、
 /// 自由な文字列を受けると「denpa に入れた人がチューナー側で好きなコマンドを
 /// 走らせられる」ことになる (しかもあちらは機材に触れる。Helm では privileged)。持つのは
-/// **デバイスと種別と LNB**だけ。選局は自分でやる (Tuning.cs)。
+/// **デバイスと種別と LNB** だけ。選局は自分でやる (Tuning.cs)。
 /// </para>
 /// </summary>
 public sealed record TunerSpec(
@@ -72,7 +72,7 @@ public sealed record TunerSpec(
 }
 
 /// <summary>
-/// 設定ファイル 2 つ。**どちらも JSON で、どちらも denpa が書く。**
+/// 設定ファイル 2 つ。**どちらも JSON。** channels.json は denpa が書き、tuners.json は denpa の画面と、挿した機材を書き足すエージェントが書く。
 ///
 /// <list type="bullet">
 /// <item><c>tuners.json</c> … 繋いである機材。画面から編集する</item>
@@ -84,7 +84,7 @@ public sealed record TunerSpec(
 /// </para>
 ///
 /// <para>
-/// 中身を作るのはどちらもこちらではない。総当たりの選局こそ任されるが、NIT も
+/// channels.json の中身を作るのはこちらではない。総当たりの選局こそ任されるが、NIT も
 /// SDT も解析しないので「何があったか」は分からない。それでも控えを持つのはこちら側
 /// にする。アンテナに何が映るかも、何台挿さっているかも、機材ごとの話だから。
 /// </para>

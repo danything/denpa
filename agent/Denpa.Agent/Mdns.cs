@@ -19,7 +19,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 知らせ方は OS ごと。Mac は <c>DNSServiceRegister</c> (mDNSResponder)、Windows は <c>DnsServiceRegister</c> (Windows 10 1809 から)、
+/// 知らせる方法は OS ごと。Mac は <c>DNSServiceRegister</c> (mDNSResponder)、Windows は <c>DnsServiceRegister</c> (Windows 10 1809 から)、
 /// Linux は自前の応答 (<see cref="MdnsResponder"/>)。Android は Wi-Fi でマルチキャストを受けるのにアプリの MulticastLock が要るので、アプリが <c>NsdManager</c> で知らせる。
 /// 待ち受けをループバックに絞ったとき (<c>AGENT_HOST</c>) は、LAN から繋げないので知らせない
 /// </para>

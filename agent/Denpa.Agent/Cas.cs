@@ -45,7 +45,7 @@ public interface IKeySource
 
     /// <summary>
     /// 契約の更新 (EMM 受信、<c>90 36</c>)。渡すのは EMM セクションの中のペイロード 1 つ (カード ID から MAC まで)。
-    /// 返すのはカードの返り値 (<c>0x2100</c> が正常終了)。カードと通信できなければ例外を送出する (<see cref="Emm"/>)
+    /// 返すのはカードの返り値 (<c>0x2100</c> が正常終了)。カードと通信できなければ例外を送出する。配る側が古く EMM を受け付けなければ <see cref="NotSupportedException"/> を送出する (<see cref="RemoteCard.Emm"/>・<see cref="Emm"/>)
     /// </summary>
     int Emm(ReadOnlySpan<byte> payload);
 }

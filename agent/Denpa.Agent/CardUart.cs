@@ -137,7 +137,7 @@ internal sealed class CardUart(Func<uint, uint> read32, Action<uint, uint> write
     }
 
     /// <summary>
-    /// 送ったブロックの応答を 1 つ受ける。受けは「受けた数が 0 でなくなる」だけを合図に先頭の 3 バイトを読み、
+    /// 送ったブロックの応答を 1 つ受ける。「受けた数が 0 でなくなる」だけを合図に先頭の 3 バイトを読み、
     /// 長さぶんと LRC を読む。<paramref name="limitMs"/> の間に揃わなければ null (T1Protocol が送り直す)
     /// </summary>
     internal static byte[]? ReceiveBlock(Func<int, byte[]> read, Action<int> delay, int limitMs)

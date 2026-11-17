@@ -92,7 +92,7 @@ public static class UsbHost
         : OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("USB_BROKER") is { Length: > 0 } broker ? new BrokerUsbHost(broker)
         : new SysfsUsbHost(UsbSysfs.Devices, UsbSysfs.DevUsb);
 
-    /// <summary>アプリから USB を受け取っているか (Android で動いている印。About.Os と Config の既定の置き場が使う)</summary>
+    /// <summary>アプリから USB を受け取っているか (Android で動いている印)</summary>
     public static bool Brokered => Current is BrokerUsbHost;
 
     /// <summary>

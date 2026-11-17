@@ -3,7 +3,7 @@ using System.Buffers;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 実機で選局を確かめるコマンド。**サーバを立てずに 1 本だけ試す。**
+/// 実機で選局を確かめるコマンド。**サーバを立てずに試す。**
 ///
 /// <para>
 /// デバイスを確保したままの選局は、値が 1 つ違っても「ioctl は通るが同期しない」という
@@ -163,7 +163,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// カードリーダーを並べて、カードを開いてみる。**pcscd を通さなくなったので、
+    /// カードリーダーを並べて、カードを開いてみる。**Linux では pcscd を通さないので、
     /// 実機でリーダーと通信できているかはここで確かめる。**
     /// </summary>
     public static int Card(string[] args)

@@ -102,7 +102,7 @@ public sealed record CxdPreviousTune(string Mode, uint Khz, bool Locked, long Be
 /// <param name="IfAgc">復調器の IF の AGC の出力 (<c>49</c>〜<c>4A</c> の 12 ビット。仕様書 9.5)。読めなければ null</param>
 /// <param name="CarrierOffsetKhz">搬送波のずれ (kHz。仕様書 9.5)。自動の探索がロックしていなければ null</param>
 /// <param name="SinceInitMs">受信機を初期化してから、この選局を始めるまで (ms)</param>
-/// <param name="TunesSinceInit">初期化してから何回目の選局か (1 から数える。どの方式も数え、地上波のプリセットを外した選局し直しと、ずらした周波数の試し直しも 1 回と数える)</param>
+/// <param name="TunesSinceInit">初期化してから何回目の選局か (1 から数える。どの方式も数え、地上波のプリセットを外した選局し直しと、ずらした周波数で選局し直したときも 1 回と数える)</param>
 /// <param name="Previous">この受信機の前の選局。受信機を作ってから初めての選局なら null</param>
 /// <param name="Modulation">復調器が見分けた変調 (<c>64QAM</c> など。バンク <c>40</c> の <c>19</c>。仕様書 9.4)。自動の探索がロックしていないか、読めなければ null</param>
 /// <param name="CnDb">C/N (dB。仕様書 9.4)。自動の探索がロックしていないか、読めなければ null</param>

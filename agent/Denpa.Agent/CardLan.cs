@@ -202,7 +202,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
 /// <summary>断った理由。<paramref name="Rule"/> はどの決まりか (設定の名前)</summary>
 public sealed record CardRefusal(string Rule, string Message);
 
-/// <summary>鍵をやり取りするソケットの細工。TTL と往復時間</summary>
+/// <summary>鍵をやり取りするソケットに TTL を付け、往復時間を読む</summary>
 public static class CardLan
 {
     /// <summary>

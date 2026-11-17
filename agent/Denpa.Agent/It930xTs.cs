@@ -14,7 +14,7 @@ namespace Denpa.Agent;
 /// 揃っていないときは、位置 i と i + 188 の両方が決めた同期バイトなら i をパケットの先頭とみなし、そうでなければ 1 バイト進める
 /// (飛ばしたバイトは <see cref="Skipped"/>)。揃ったあとも 188 バイトごとに確かめる。先頭が決めた値でなくても、188 バイト先が決めた値なら
 /// 知らない同期バイトのパケットとして 1 つ捨て (<see cref="Unknown"/>)、188 バイト先も違えば揃いが外れたとみなして揃え直す (<see cref="Lost"/>)。
-/// TS の中身にたまたま同じ値が並ぶと 1 パケットぶん誤って揃うことがあるが、次の確かめで外れて揃え直す。
+/// TS の中身にたまたま同じ値が並ぶと 1 パケットぶん誤って揃うことがあるが、次のパケットで確かめたときに外れて揃え直す。
 /// </para>
 ///
 /// <para>
@@ -270,7 +270,7 @@ internal sealed class It930xTsOutput
     }
 
     /// <summary>
-    /// 前の <see cref="Commit"/> の渡しがまだ済んでいない (Pipe が溢れている) か。済んでいれば結果を受け取る。ロックの中で呼ぶ
+    /// 前の <see cref="Commit"/> の FlushAsync がまだ済んでいない (Pipe が溢れている) か。済んでいれば結果を受け取る。ロックの中で呼ぶ
     /// </summary>
     private bool Full()
     {
@@ -281,7 +281,7 @@ internal sealed class It930xTsOutput
         return _closed;
     }
 
-    /// <summary>渡しの結果。読む側が閉じていれば、この出口を閉じる</summary>
+    /// <summary>FlushAsync の結果。読む側が閉じていれば、この出口を閉じる</summary>
     private void Finished(FlushResult result)
     {
         if (!result.IsCompleted) return;

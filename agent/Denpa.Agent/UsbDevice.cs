@@ -44,7 +44,7 @@ public interface IUsbDevice : IDisposable
     }
 }
 
-/// <summary>出しっぱなしの IN の読み</summary>
+/// <summary>IN の転送要求を出しっぱなしにして読む</summary>
 public interface IUsbInStream : IDisposable
 {
     /// <summary>済んだ転送から順に詰めて返す。<paramref name="timeoutMs"/> の間に何も来なければ 0</summary>

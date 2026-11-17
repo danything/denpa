@@ -112,7 +112,7 @@ public static class Zd1j
 /// <para>
 /// **エージェントが動いている間ずっと開いたまま。** ブリッジの起動と DiB8096 の初期化は開くときの 1 回だけ (DiB8096 はチューナーが初めて使うとき)。
 /// PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱いで、開き直すとブリッジの起動と DiB8096 の初期化で 1 秒ほどかかる。
-/// 閉じるのは、定義が変わってチューナーが捨てられたとき (<see cref="CloseIfIdle"/>)・止めるとき (<see cref="CloseAll"/>)・USB が抜けたとき。
+/// 閉じるのは、定義が変わってチューナーが捨てられたときと、設定で差し込み口のカードリーダーを無効にしたとき (どちらも使っている側がいなければ。<see cref="CloseIfIdle"/>)・止めるとき (<see cref="CloseAll"/>)・USB が抜けたとき。
 /// </para>
 /// </summary>
 public sealed class Zd1jBoard : IDibTime
@@ -424,6 +424,8 @@ public sealed class Zd1jTuner : ITuneDevice
         lock (_gate)
         {
             Stop(keepLed: true);
+            // 抜けた・ブリッジが応答しなくなったボードは返して開き直す (返さないと、この選局が古いボードに書いて 1 回失敗する)
+            if (_board is { Faulted: true }) Stop(keepLed: false);
             var started = Stopwatch.StartNew();
             try
             {

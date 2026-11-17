@@ -223,7 +223,7 @@ public sealed class Dt295NativeLink
 
     private void Guard(uint address)
     {
-        // カードの端子の向き・極性 (0xF00222〜0xF0022E。仕様書 10 章の設定確認) は、仕様書の常駐イメージも読んで確かめるだけ。書かない
+        // カードの端子の向き・極性 (0xF00200〜0xF002FF。仕様書 10 章の設定確認で読む 0xF00222〜0xF0022E を含む) は、仕様書の常駐イメージも読んで確かめるだけ。書かない
         if (address is >= 0xF00200 and <= 0xF002FF)
         {
             throw new Dt295NativeException($"0x{address:X} はカードの端子の向きのレジスタで、読むだけです。書きません");

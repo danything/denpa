@@ -1210,7 +1210,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     {
         /*
          * **断られても続ける。** 大きくできなくても選局は通るので、
-         * 例外にすると「溢れにくくする」ために選局を落とすことになる (古いカーネルや別のドライバが断る目もある)
+         * 例外にすると「溢れにくくする」ために選局を落とすことになる (古いカーネルや別のドライバが断ることもある)
          */
         if (Sys.Ioctl((int)_dvr.Handle.DangerousGetHandle(), DmxSetBufferSize, DvrBuffer) < 0)
         {

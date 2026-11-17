@@ -481,6 +481,31 @@ public class It930xDeviceTests
     }
 
     /// <summary>
+    /// **先に別の受信機で届かないと確かめて断るようにしても、並べて確かめていた受信機に同じ溢れのまま TS が届けば、断るのをやめる** (確かめ終わる順が逆のとき)
+    /// </summary>
+    [Test]
+    public async Task あとから_TS_が届いた受信機があれば_断るのをやめる()
+    {
+        var (usb, _, _) = Fake();
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        var device = Open(usb, "9-57", new FakeClock());
+        try
+        {
+            var suspect = device.Unconfirmed!;
+            await Assert.That(device.Confirm(1, suspect, flowing: false, 1000)).IsTrue();
+            await Assert.That(device.Jammed).IsNotNull();
+            await Assert.That(device.Confirm(0, suspect, flowing: true, 1000)).IsFalse();
+            await Assert.That(device.Jammed).IsNull();
+            await Assert.That(device.Unconfirmed).IsNull();
+        }
+        finally
+        {
+            device.Release();
+            It930xDevice.CloseIfIdle("9-57", TimeSpan.Zero);
+        }
+    }
+
+    /// <summary>
     /// **流している間に全体の溢れが立ち、次の選局を断るときは、前の選局で開いた受信機を閉じて LNB の給電を切ってから機材を返す** (捨てるときと同じ手順)。
     /// ほかの受信機が流していて機材が開いたままでも、断った受信機のために給電を入れたままにしない
     /// </summary>

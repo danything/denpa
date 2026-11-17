@@ -10,7 +10,7 @@ namespace Denpa.Agent;
  *
  * クリーンルームで、仕様書 (denpa-spec の siano/spec.md) だけから書いた。Linux カーネルの Siano のドライバと siano-userland のコードは読んでいない。
  * 機材を動かす手順は SianoDevice.cs。ここは、対象の機材の表 (仕様書 1.1)、自動検出、チューナー (ITuneDevice)、TS を読む側へ渡すバッファ。
- * **実機では確かめていない** (docs/tuner-px-s1ud.md)。
+ * **実機の報告は macOS の 1 件だけ** (docs/tuner-px-s1ud.md)。
  *
  * **カーネルが使っている機材には触らない。** PX-S1UD は mainline の smsusb + smsdvb で Linux DVB になり、そちらで使える (DvbTuner)。
  * 自動検出ではどのドライバにも繋がっていない機材だけを並べる (blacklist の手順は docs/tuner-px-s1ud.md)。

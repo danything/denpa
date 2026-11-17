@@ -521,7 +521,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
     }
 
     /// <summary>
-    /// <c>ReadPipeAsync</c> を何本も出しておく読み。完了は CFRunLoop を回す専用のスレッドで受け、その場で中身を写して同じバッファで
+    /// <c>ReadPipeAsync</c> を何本も出しておいて読む。完了は CFRunLoop を回す専用のスレッドで受け、その場で中身を写して同じバッファで
     /// 出し直す (1 本の端点の転送要求は出した順に済むので、写した順がそのまま届いた順)
     /// </summary>
     private sealed class InStream : IUsbInStream
