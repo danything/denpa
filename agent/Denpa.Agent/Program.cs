@@ -53,7 +53,7 @@ if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
 
 // 読めない値は既定に戻さずに止める (打ち間違えたまま別のポートで立たないように。CARD_* と同じ)
 var port = 25252;
-if (Environment.GetEnvironmentVariable("AGENT_PORT") is { Length: > 0 } portText && !(int.TryParse(portText, out port) && port is > 0 and < 65536))
+if (Config.Given("AGENT_PORT") is { } portText && !(int.TryParse(portText, out port) && port is > 0 and < 65536))
 {
     Log.Write($"AGENT_PORT は 1〜65535 の数で書きます (いまは「{portText}」)");
     return 2;
@@ -86,7 +86,7 @@ if (args is ["--pair"])
  */
 if (args is ["--status"])
 {
-    var target = Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } bound
+    var target = Config.Given("AGENT_HOST") is { } bound
         && IPAddress.TryParse(bound, out var address)
         && !address.Equals(IPAddress.Any) && !address.Equals(IPAddress.IPv6Any)
         ? bound
@@ -126,10 +126,17 @@ if (args.Length > 0)
  * 鍵を配るポート (CARD_SHARE_PORT) はこれに従わない (LAN の別の拠点に配るので。CardShareServer.cs)
  */
 IPAddress? host = null;
-if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText
+if (Config.Given("AGENT_HOST") is { } hostText
     && !IPAddress.TryParse(hostText, out host))
 {
     Log.Write($"AGENT_HOST は IP アドレスで書きます (いまは「{hostText}」)");
+    return 2;
+}
+// 録画が終わるまで待つ上限 (下の Drain)。読めない値は AGENT_PORT と同じく、既定に戻さずに止める (打ち間違えたまま、録画を待たずに止まらないように)
+var shutdownWaitText = Config.Given("SHUTDOWN_WAIT");
+if (!Config.TryShutdownWait(shutdownWaitText, out var shutdownWait))
+{
+    Log.Write($"SHUTDOWN_WAIT は 0 以上のミリ秒の数で書きます (いまは「{shutdownWaitText}」)");
     return 2;
 }
 /*
@@ -296,9 +303,6 @@ builder.Logging.ClearProviders();
  * Kubernetes には `terminationGracePeriodSeconds` を一緒に伸ばしておくこと
  * (足りないと待っている途中で SIGKILL される)。
  */
-var shutdownWait = long.TryParse(Environment.GetEnvironmentVariable("SHUTDOWN_WAIT"), out var waitMs)
-    ? Math.Max(0, waitMs)
-    : 6 * 60 * 60 * 1000;
 builder.Services.AddSingleton<IHostLifetime>(services =>
     new Drain(pool, shutdownWait, services.GetRequiredService<IHostApplicationLifetime>()));
 

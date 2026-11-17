@@ -822,3 +822,22 @@ public class TunerPoolTests
         public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd) => throw new InvalidOperationException("カードに問い合わせました");
     }
 }
+
+public class UnacceptedTests
+{
+    /// <summary>
+    /// **受け付けない方式を断る文は、チャンネルの名前を受け取ったときだけ名前で書き、受け取らないとき (DvbTuner) は種別で書く**。
+    /// 種別をチャンネルの名前として渡すと「CATV (ISDB-C) を選局できるのは…」になっていた
+    /// </summary>
+    [Test]
+    public async Task 名前を渡さなければ種別で書く()
+    {
+        var isdbc = ChannelTable.Parse("QF246500")!;
+        var j83b = ChannelTable.Parse("H01")!;
+        var gr = ChannelTable.Parse("T27")!;
+        await Assert.That(TunerPool.Unaccepted("QF246500", isdbc)).StartsWith("QF246500 (ISDB-C) を選局できるのは");
+        await Assert.That(TunerPool.Unaccepted(null, isdbc)).StartsWith("ケーブルのチャンネル (ISDB-C) を選局できるのは");
+        await Assert.That(TunerPool.Unaccepted(null, j83b)).StartsWith("スカパー！プレミアムのチャンネル (J.83B) を選局できるのは");
+        await Assert.That(TunerPool.Unaccepted(null, gr)).IsEqualTo("このチャンネル (GR) はこの機材では選局できません");
+    }
+}

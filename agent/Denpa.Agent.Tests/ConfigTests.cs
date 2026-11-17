@@ -280,3 +280,40 @@ public class ConfigEnvironmentTests
         }
     }
 }
+
+public class EnvironmentValueTests
+{
+    /// <summary>**空か空白だけの値は書いていないのと同じにし、前後の空白は落とす** (エージェントのどの変数も、CARD_* も同じ)</summary>
+    [Test]
+    [Arguments(null, null)]
+    [Arguments("", null)]
+    [Arguments("  ", null)]
+    [Arguments(" 25252 ", "25252")]
+    [Arguments("/config/tuners.json", "/config/tuners.json")]
+    public async Task 空白だけの値は書いていないのと同じ(string? value, string? expected)
+    {
+        await Assert.That(Config.Present(value)).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task 空白だけの_CARD_の値も既定のまま()
+    {
+        var policy = CardLanPolicy.Parse(name => name == "CARD_TTL" ? "  " : null);
+        await Assert.That(policy.Hops).IsEqualTo(1);
+    }
+
+    /// <summary>**SHUTDOWN_WAIT は書いていなければ 6 時間、0 以上の整数でなければ読めない** (呼ぶ側は AGENT_PORT と同じく止まる)</summary>
+    [Test]
+    [Arguments(null, true, Config.DefaultShutdownWaitMs)]
+    [Arguments("0", true, 0L)]
+    [Arguments("60000", true, 60000L)]
+    [Arguments("-1", false, 0L)]
+    [Arguments("6h", false, 0L)]
+    [Arguments("1.5", false, 0L)]
+    public async Task SHUTDOWN_WAIT_は読めない値を既定に戻さない(string? text, bool ok, long expected)
+    {
+        var read = Config.TryShutdownWait(text, out var ms);
+        await Assert.That(read).IsEqualTo(ok);
+        if (ok) await Assert.That(ms).IsEqualTo(expected);
+    }
+}
