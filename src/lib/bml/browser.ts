@@ -170,6 +170,7 @@ function browserSupport(
   ip: BmlIp,
   app: boolean,
   xml: boolean,
+  ird: (type: number) => boolean,
 ): number {
   if (provider !== "ARIB") return 0;
   const [a, b] = info;
@@ -202,8 +203,11 @@ function browserSupport(
       return (a === "XML" ? xml : app) ? 1 : 0;
     case "AITTransferMethod":
       return app ? 1 : 0;
+    case "IRDID":
+      // getIRDID が番号を返せるときだけ 1。種別を添えなければ、返せる唯一の種別 5 で訊く
+      return ird(a === undefined ? 5 : Number(a)) ? 1 : 0;
   }
-  // ほか (IRDID・ResidentApp・ExtraBrowserFunction など) は無いと答える
+  // ほか (ResidentApp・ExtraBrowserFunction など) は無いと答える
   return 0;
 }
 
@@ -458,6 +462,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
       host.ip,
       canStartApp(),
       canFetchAit(),
+      (type) => (host.irdId?.(type) ?? null) !== null,
     );
     if (
       AIT_QUERIES.has(name) ||

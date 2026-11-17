@@ -881,6 +881,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /** 字幕を貼り直し続けている映像。**1 つにつき 1 本** */
   let following: HTMLVideoElement | null = null;
+  /** `seeking` を聞いている映像。同じ映像に戻ってきてもリスナーを重ねない */
+  const seekWatched = new WeakSet<HTMLVideoElement>();
 
   /**
    * 字幕を映した 1 枚ごとに貼り直す ([frames.ts](components/player/frames.ts))。塊が届いたとき (`pace`) だけだと
@@ -890,7 +892,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (following === video) return;
     following = video;
     // 飛んだ直後の 1 コマは測らない (`unslipper`)。選局し直しの追いつき (`pacing` の `seek`) も含む
-    video.addEventListener("seeking", () => unslipping.seeked());
+    if (!seekWatched.has(video)) {
+      seekWatched.add(video);
+      video.addEventListener("seeking", () => {
+        if (following === video) unslipping.seeked();
+      });
+    }
     eachFrame(video, (frame) => {
       // 別の映像に移ったら、こちらは閉じる
       if (following !== video) return false;

@@ -106,9 +106,11 @@ export function tokenize(source: string): Token[] {
     if (source.startsWith("/*", at)) {
       const end = source.indexOf("*/", at + 2);
       if (end === -1) fail("注釈が閉じていません");
+      // 行の数え方は上の改行と同じ (CR LF は 1 行、CR だけ・LS・PS も 1 行)
       for (let i = at; i < end; i++) {
-        if (source[i] === "\n") {
-          line++;
+        const d = source[i]!;
+        if (d === "\n" || d === "\r" || d === " " || d === " ") {
+          if (d === "\n" || source[i + 1] !== "\n") line++;
           newline = true;
         }
       }

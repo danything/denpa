@@ -135,6 +135,8 @@ function reserve(
   station: Station,
   options: {
     startsIn?: number;
+    /** 始まりの時刻。あれば `startsIn` より先に使う */
+    at?: number;
     minutes?: number;
     manual?: boolean;
     state?: "scheduled" | "conflict" | "skipped" | "canceled";
@@ -146,7 +148,7 @@ function reserve(
 ): number {
   const s = STATIONS[station];
   const event = options.event ?? eventSerial++;
-  const start = now() + (options.startsIn ?? 2 * HOUR);
+  const start = options.at ?? now() + (options.startsIn ?? 2 * HOUR);
   const end = start + (options.minutes ?? 30) * MINUTE;
   const id = programKey(s.network, s.service, event, s.type);
   orm()
@@ -228,9 +230,10 @@ describe("送る中身", () => {
   });
 
   test("1 件の形は hub の add と同じ。家のアドレスやルールの中身は入らない", () => {
+    // 期待値と同じ時刻を渡す。now() を読み直すと、その間に秒が進んで start_at がずれることがある
     const start = now() + 3 * HOUR;
     const event = reserve("bs11", {
-      startsIn: start - now(),
+      at: start,
       minutes: 30,
       manual: false,
       name: "  [字]アニメ\n例の番組  ",
@@ -643,6 +646,8 @@ describe("順位を見る", () => {
       service_id: number;
       event_id: number;
       startsIn?: number;
+      /** 始まりの時刻。あれば `startsIn` より先に使う */
+      at?: number;
       service_name?: string;
       region?: string | null;
     }[],
@@ -657,7 +662,7 @@ describe("順位を見る", () => {
         network_id: a.network_id,
         service_id: a.service_id,
         event_id: a.event_id,
-        start_at: isoJst(now() + (a.startsIn ?? 2 * HOUR)),
+        start_at: isoJst(a.at ?? now() + (a.startsIn ?? 2 * HOUR)),
         service_name: a.service_name ?? "hub の局",
         region: a.region ?? null,
       })),
@@ -681,6 +686,8 @@ describe("順位を見る", () => {
 
   test("受信できる局の放送は手元の番組の行に、受信できない局の放送は hub の局名と地域のまま出す", async () => {
     const local = addProgram("bs11", 501);
+    // hub が返す始まりと期待値に同じ時刻を使う。now() を読み直すと、その間に秒が進むことがある
+    const awayAt = now() + 3 * HOUR;
     rankingBody = {
       v: 1,
       generated_at: isoJst(now()),
@@ -692,7 +699,7 @@ describe("順位を見る", () => {
             event_id: 777,
             service_name: "NHK総合1・東京",
             region: "関東広域",
-            startsIn: 3 * HOUR,
+            at: awayAt,
           },
         ]),
         entry(2, 60, [{ network_id: 4, service_id: 211, event_id: 501 }]),
@@ -713,7 +720,7 @@ describe("順位を見る", () => {
       name: "hub の番組 1",
       service_name: "NHK総合1・東京",
       region: "関東広域",
-      start_at: Math.floor((now() + 3 * HOUR) / 1000) * 1000,
+      start_at: Math.floor(awayAt / 1000) * 1000,
     });
     expect(mine!.away).toBeNull();
     expect(mine!.votes).toBe(60);
