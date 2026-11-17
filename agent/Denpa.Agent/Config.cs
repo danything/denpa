@@ -113,8 +113,31 @@ public sealed class Config(string tunersFile, string channelsFile)
         Given("TUNERS_FILE") ?? Path.Combine(DefaultDir(), "tuners.json"),
         Given("CHANNELS_FILE") ?? Path.Combine(DefaultDir(), "channels.json"));
 
-    /// <summary>環境変数。空は書いていないのと同じ (空のパスは開けず、起動ごと落ちる)</summary>
-    internal static string? Given(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
+    /// <summary>環境変数 (<see cref="Present"/>)</summary>
+    internal static string? Given(string name) => Present(Environment.GetEnvironmentVariable(name));
+
+    /// <summary>
+    /// 環境変数の値。**空か空白だけなら書いていないのと同じにし、前後の空白は落とす** (空のパスは開けず、起動ごと落ちる。
+    /// .env や values の行末の空白で読めない値にしない)。<see cref="CardLanPolicy.Parse"/> も同じ扱いで読む
+    /// </summary>
+    internal static string? Present(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>止められたときに録画が終わるまで待つ上限の既定 (ms。6 時間。denpa の <c>SHUTDOWN_WAIT</c> と同じ)</summary>
+    internal const long DefaultShutdownWaitMs = 6 * 60 * 60 * 1000;
+
+    /// <summary>
+    /// <c>SHUTDOWN_WAIT</c> (ms) を読む。書いていなければ <see cref="DefaultShutdownWaitMs"/>。
+    /// 0 以上の整数でなければ false (呼ぶ側は既定に戻さずに止まる。<c>AGENT_PORT</c> と同じ)
+    /// </summary>
+    internal static bool TryShutdownWait(string? text, out long ms)
+    {
+        if (text is null)
+        {
+            ms = DefaultShutdownWaitMs;
+            return true;
+        }
+        return long.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out ms);
+    }
 
     /// <summary>
     /// 変数が無いときの置き場。Linux はコンテナの <c>/config</c>。Mac と Windows はインストーラと同じ

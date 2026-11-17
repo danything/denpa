@@ -75,3 +75,18 @@ public class ProbeTests
         await Assert.That(Dt295NativeProbe.Parse(["--channel", "T27"])?.Trace).IsFalse();
     }
 }
+
+public class TuneResultsTests
+{
+    /// <summary>**--tune は、途中でやめたときと、ロックしなかったチャンネルが 1 つでもあるときに 1 で終わる**。ロックして TS が届かなかっただけなら失敗にしない</summary>
+    [Test]
+    public async Task ロックしなかったチャンネルがあれば失敗()
+    {
+        var locked = new Probe.ChannelResult("T27", true, "16.8", 1024, null);
+        var empty = new Probe.ChannelResult("T28", true, null, 0, "TS が届かない");
+        var unlocked = new Probe.ChannelResult("T29", false, null, 0, "同期しませんでした");
+        await Assert.That(new Probe.TuneResults([locked, empty], false).Failed).IsFalse();
+        await Assert.That(new Probe.TuneResults([locked, unlocked], false).Failed).IsTrue();
+        await Assert.That(new Probe.TuneResults([locked], true).Failed).IsTrue();
+    }
+}

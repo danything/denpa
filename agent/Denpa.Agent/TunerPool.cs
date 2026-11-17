@@ -258,11 +258,14 @@ public sealed class TunerPool(
     /// <summary>同期しなかったときの失敗か (どの方式も <see cref="ITuneDevice.SyncFailed"/> の文言で例外を送出する)</summary>
     private static bool IsUnsynced(Exception error) => error.Message.Contains(ITuneDevice.SyncFailed, StringComparison.Ordinal);
 
-    /// <summary>機材が受け付けない方式のチャンネルを断る文 (<see cref="ITuneDevice.Accepts"/>。<c>--tune</c> も使う)</summary>
-    internal static string Unaccepted(string channel, ChannelTable.Tuning tuning) => tuning.IsdbC
-        ? $"{channel} (ISDB-C) を選局できるのは {It930x.Scheme} の受信機と、DVB-C に対応した DVB の機材だけです"
-        : tuning.Cable ? $"{channel} (J.83B) を選局できるのは {It930x.Scheme} の受信機だけです"
-        : $"{channel} ({tuning.Type}) はこの機材では選局できません";
+    /// <summary>
+    /// 機材が受け付けない方式のチャンネルを断る文 (<see cref="ITuneDevice.Accepts"/>。<c>--tune</c> も使う)。
+    /// <paramref name="channel"/> はチャンネルの名前 (<c>C13</c>)。名前を持たない機材のコード (選局表から作った <see cref="ChannelTable.Tuning"/> だけを受ける) は null を渡し、「ケーブルのチャンネル」のように種別で書く
+    /// </summary>
+    internal static string Unaccepted(string? channel, ChannelTable.Tuning tuning) => tuning.IsdbC
+        ? $"{channel ?? "ケーブルのチャンネル"} (ISDB-C) を選局できるのは {It930x.Scheme} の受信機と、DVB-C に対応した DVB の機材だけです"
+        : tuning.Cable ? $"{channel ?? "スカパー！プレミアムのチャンネル"} (J.83B) を選局できるのは {It930x.Scheme} の受信機だけです"
+        : $"{channel ?? "このチャンネル"} ({tuning.Type}) はこの機材では選局できません";
 
     /// <summary>1 回の選局で試して失敗したチューナー (番号と名前)。<paramref name="Unsynced"/> は同期しなかったか (偽なら、その受信機だけ TS が届かなかった。<see cref="TunerStalledException"/>)</summary>
     private readonly record struct Attempt(int Index, string Name, bool Unsynced);

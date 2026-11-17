@@ -93,6 +93,8 @@ public static class Probe
         }
 
         if (CardHops() is not { } hops) return 2;
+        // 画面で「使わない」にしたカードリーダーは、常駐のときと同じく使わない (cards.json。CardChoice.cs)
+        CardChoice.Load(Config.FromEnvironment().CardsFile);
         Keys.Configure(Environment.GetEnvironmentVariable("CARD_URL"), hops);
         var b25 = new Descrambler(Keys.Source);
         using var input = File.OpenRead(source);
@@ -240,6 +242,8 @@ public static class Probe
         var cardAt = Array.IndexOf(args, "--card-url");
         // 鍵を受け取る接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
         if (CardHops() is not { } hops) return 2;
+        // 画面で「使わない」にしたカードリーダーは、常駐のときと同じく使わない (cards.json。CardChoice.cs)。機材を名指ししたときのその機材のリーダーは別 (KeysFor)
+        CardChoice.Load(Config.FromEnvironment().CardsFile);
         Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : Environment.GetEnvironmentVariable("CARD_URL"), hops);
 
         var secondsAt = Array.IndexOf(args, "--seconds");
@@ -281,7 +285,7 @@ public static class Probe
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
-        return TuneChannels(tuner, channels, options, source, seconds, Console.Out, Console.Error, null).Error ? 1 : 0;
+        return TuneChannels(tuner, channels, options, source, seconds, Console.Out, Console.Error, null).Failed ? 1 : 0;
     }
 
     /// <summary>その機材の鍵の出どころ。PIX-DT295 と IT930x の機材は、その機材のカードリーダーだけ (試験でほかのリーダーに触らない)。--card-url があればそちら</summary>
@@ -307,10 +311,14 @@ public static class Probe
     }
 
     /// <summary>1 つのチャンネルの結果 (<see cref="RunTogether"/> の終わりのまとめに使う)</summary>
-    private sealed record ChannelResult(string Channel, bool Locked, string? Rate, long Bytes, string? Failure);
+    internal sealed record ChannelResult(string Channel, bool Locked, string? Rate, long Bytes, string? Failure);
 
     /// <summary>チャンネルの並びを選局した結果。<see cref="Error"/> は選局表に無いなどで途中でやめたとき</summary>
-    private sealed record TuneResults(List<ChannelResult> Channels, bool Error);
+    internal sealed record TuneResults(List<ChannelResult> Channels, bool Error)
+    {
+        /// <summary>**途中でやめたか、ロックしなかったチャンネルが 1 つでもあれば失敗** (<c>--tune</c> は 1 で終わる)。ロックして TS が届かなかったチャンネルは、出力で分かるので失敗にしない</summary>
+        public bool Failed => Error || Channels.Any(channel => !channel.Locked);
+    }
 
     /// <summary>
     /// <c>--tune it930x:3-1:0+it930x:3-1:1 …</c>: 並べた受信機ごとにスレッドを立て、そろって始めてから、それぞれがチャンネルの並びを順に選局する。
@@ -367,7 +375,7 @@ public static class Probe
                 Console.WriteLine($"{devices[index]}  {row.Channel}  {(row.Locked ? "ロック" : "失敗")}  {row.Rate ?? "-"} Mbps  {row.Bytes / 1024} KiB{(row.Failure is { } why ? $"  {why}" : "")}");
             }
         }
-        return results.Any(result => result is null or { Error: true }) ? 1 : 0;
+        return results.Any(result => result is null or { Failed: true }) ? 1 : 0;
     }
 
     /// <summary>

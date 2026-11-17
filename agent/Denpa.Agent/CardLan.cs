@@ -67,7 +67,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     public static CardLanPolicy Parse(Func<string, string?> env)
     {
         int? port = null;
-        if (Given(env("CARD_SHARE_PORT")) is { } portText)
+        if (Config.Present(env("CARD_SHARE_PORT")) is { } portText)
         {
             if (!int.TryParse(portText, CultureInfo.InvariantCulture, out var value) || value is < 1 or > 65535)
             {
@@ -77,7 +77,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         }
 
         var networks = DefaultNetworks;
-        if (Given(env("CARD_SHARE_NETWORKS")) is { } networksText)
+        if (Config.Present(env("CARD_SHARE_NETWORKS")) is { } networksText)
         {
             networks = [.. networksText.Split([',', ' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(Network)];
             if (networks.Count == 0) throw new ArgumentException("CARD_SHARE_NETWORKS に範囲が 1 つもありません");
@@ -91,7 +91,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         }
 
         var hops = DefaultHops;
-        if (Given(env("CARD_TTL")) is { } hopsText)
+        if (Config.Present(env("CARD_TTL")) is { } hopsText)
         {
             if (!int.TryParse(hopsText, CultureInfo.InvariantCulture, out hops) || hops is < 1 or > MaxHops)
             {
@@ -100,7 +100,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         }
 
         TimeSpan? maxRoundTrip = null;
-        if (Given(env("CARD_SHARE_MAX_RTT")) is { } rttText)
+        if (Config.Present(env("CARD_SHARE_MAX_RTT")) is { } rttText)
         {
             if (!double.TryParse(rttText, NumberStyles.Float, CultureInfo.InvariantCulture, out var ms) || ms < 0 || !double.IsFinite(ms))
             {
@@ -111,8 +111,6 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
 
         return new CardLanPolicy(port, networks, hops, maxRoundTrip);
     }
-
-    private static string? Given(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// 範囲がまるごと既定の範囲 (<see cref="DefaultNetworks"/>) のどれかに収まるか。同じ種類のアドレスで、

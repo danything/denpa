@@ -864,7 +864,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     public void Tune(ChannelTable.Tuning tuning)
     {
-        if (!Accepts(tuning)) throw new IOException(TunerPool.Unaccepted(tuning.Type, tuning));
+        if (!Accepts(tuning)) throw new IOException(TunerPool.Unaccepted(null, tuning));
         var streamId = tuning.StreamId;
         // ISDB-C の TS を流す処理は、demux を止める前に止める (dvr を読んでいる間に捨てない)
         StopCable();
@@ -934,7 +934,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// </summary>
     private void LockCable(ChannelTable.Tuning tuning)
     {
-        var system = _cableSystem ?? throw new IOException(TunerPool.Unaccepted(tuning.Type, tuning));
+        var system = _cableSystem ?? throw new IOException(TunerPool.Unaccepted(null, tuning));
         uint[] frequencies = tuning.ShiftedFrequency is { } shifted ? [tuning.Frequency, shifted] : [tuning.Frequency];
         var modulations = CableModulations(_caps);
         if (_lockedModulation.TryGetValue(tuning.Frequency, out var last))
