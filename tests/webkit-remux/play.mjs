@@ -3,7 +3,7 @@
 //
 //     node play.mjs <make.ts の出力先> <結果の JSON>
 //
-// 流し方は src/lib/remux-player.ts と同じ (mode = "segments"、尺を先に渡す、開く位置を足す前に currentTime へ入れる、
+// 流し方は src/lib/remux-player.ts と同じ (mode = "segments"、尺を先に渡す、開く位置まで溜まってから currentTime へ入れる (`PLAY_ORDERS`)、
 // 飛ぶときは abort → remove(0, ∞) → 足し直す)。
 //
 // - open: 新しい <video> で、その位置の fMP4 を足して再生する
@@ -33,7 +33,8 @@ const manifests = readdirSync(root, { withFileTypes: true })
  * - `PLAY_VARIANTS`: 録画の種類 (`h264-closed` など)
  * - `PLAY_VERSIONS`: 作り方 (`both`・`copy`・`fixed`・`silent`)
  * - `PLAY_KINDS`: 流し方 (`open`・`seek`)
- * - `PLAY_ORDERS`: 開く位置を currentTime に入れる時 (`before` は足す前。remux-player.ts と同じ。`after` は足し終えてから)
+ * - `PLAY_ORDERS`: 開く位置を currentTime に入れる時。`before` は足す前 (直す前の remux-player.ts)、`metadata` は先頭を読んだとき、
+ *   `covered` は開く位置まで溜まったとき (直したあとの remux-player.ts)、`after` は足し終えてから
  * - `PLAY_ROUNDS`: open を何回ずつ流すか (既定 2)
  */
 const pick = (name, all) => {
@@ -43,7 +44,7 @@ const pick = (name, all) => {
 const VARIANTS = pick("PLAY_VARIANTS", null);
 const VERSIONS = pick("PLAY_VERSIONS", null);
 const KINDS = pick("PLAY_KINDS", ["open", "seek"]);
-const ORDERS = pick("PLAY_ORDERS", ["before"]);
+const ORDERS = pick("PLAY_ORDERS", ["covered"]);
 const ROUNDS = Number(process.env.PLAY_ROUNDS || 2);
 const versionOf = (x) =>
   x.file
@@ -174,6 +175,16 @@ async function inPage({ source, codecs, steps, watch, first, order }) {
         await idle();
       }
       if (at > 0 && order === "before") video.currentTime = at;
+      // metadata: 先頭 (init segment) を読んだところで入れる (観る画面の `resume` が loadedmetadata で入れるのと同じ)
+      if (at > 0 && order === "metadata")
+        video.addEventListener(
+          "loadedmetadata",
+          () => {
+            video.currentTime = at;
+          },
+          { once: true },
+        );
+      let placed = false;
       const stepStart = performance.now();
       state.stage = `step ${i} fetch`;
       const data = new Uint8Array(
@@ -195,6 +206,16 @@ async function inPage({ source, codecs, steps, watch, first, order }) {
           if ((await wait(appended, 5000, `append ${i} ${o}`)) === "timeout") {
             appendError = `append が ${o} バイト目で 5 秒返りませんでした`;
             break;
+          }
+          // covered: 足したもので開く位置まで溜まったところで入れる (remux-player.ts の直し方)
+          if (at > 0 && order === "covered" && !placed) {
+            const ranges = buffer.buffered;
+            for (let r = 0; r < ranges.length; r++)
+              if (ranges.end(r) > at) {
+                video.currentTime = Math.max(at, ranges.start(r));
+                placed = true;
+                break;
+              }
           }
         } catch (error) {
           appendError = String(error);

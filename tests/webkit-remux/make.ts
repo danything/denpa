@@ -8,8 +8,8 @@
  * 3. 開く位置ごとに、2 通りで fMP4 を作り、先頭 `LIMIT` バイトを残す
  *    - copy: `cleanFrom` を通さずに `copyArgs` で詰め替える (v2.50.0 までの動き)
  *    - fixed: サーバと同じ。`cleanFrom` で始める位置を決め、`ts/fmp4-marks.ts` で sync の印を直す。
- *      手前に始められるキーフレームが無ければ `fileTranscodeArgs` で変換する (GPU の無いランナーなので H.264 はソフトウェア。
- *      H.265 は変換できないので、サーバと同じく印を直さずに詰め替える)
+ *      手前に始められるキーフレームが無ければ `fileTranscodeArgs` で変換する (GPU の無いランナーなので、ソフトウェアで。
+ *      H.265 は libx265 に替える。`transcodeArgs`)
  */
 
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -63,7 +63,14 @@ const x265 = [
   "250",
 ];
 
-const VARIANTS: Record<string, { codec: "h264" | "hevc"; args: string[] }> = {
+/**
+ * `keysEvery` があれば、エンコードしたあとで映像のこれだけのコマごとにキーフレームの印を付け直す (`markKeys`)。
+ * MediaCodec が P のコマ (TRAIL) に印を付けた録画のふり
+ */
+const VARIANTS: Record<
+  string,
+  { codec: "h264" | "hevc"; args: string[]; keysEvery?: number }
+> = {
   "h264-closed": {
     codec: "h264",
     args: [...x264, "-x264-params", "scenecut=0"],
@@ -98,6 +105,12 @@ const VARIANTS: Record<string, { codec: "h264" | "hevc"; args: string[] }> = {
       ...forcedIdr,
     ],
   },
+  // 先頭のほかに IRAP が無く、途中の印は TRAIL (P) に付いている H.265 (#2884 の報告者の録画の見立て)
+  "hevc-trail-keys": {
+    codec: "hevc",
+    args: [...x265, "-x265-params", "intra-refresh=1:scenecut=0"],
+    keysEvery: 250,
+  },
 };
 
 const spec = VARIANTS[variant];
@@ -114,6 +127,78 @@ async function run(cmd: string[]): Promise<string> {
   return text;
 }
 
+/** EBML の可変長整数。`id` なら印のビットを残す。読めなければ null */
+function vint(
+  bytes: Uint8Array,
+  at: number,
+  id: boolean,
+): { value: number; next: number } | null {
+  const first = bytes[at];
+  if (first === undefined || first === 0) return null;
+  let length = 1;
+  while (!(first & (0x80 >> (length - 1)))) length++;
+  let value = id ? first : first & (0xff >> length);
+  for (let i = 1; i < length; i++) value = value * 256 + bytes[at + i]!;
+  // 大きさが「不明」(全部 1) なら、親の終わりまで
+  const unknown = !id && value === 2 ** (7 * length) - 1;
+  return {
+    value: unknown ? Number.POSITIVE_INFINITY : value,
+    next: at + length,
+  };
+}
+
+/**
+ * **映像の `every` コマごとにキーフレームの印を付けた Matroska を作る** (MediaCodec が P のコマに印を付けた録画のふり)。
+ * SimpleBlock の印のビットを書き換えてから、ffmpeg で写し直す (Cues と Cluster の区切りを印に合わせて作り直させる)
+ */
+async function markKeys(raw: string, every: number): Promise<void> {
+  const bytes = new Uint8Array(readFileSync(raw));
+  const head = await loadMkvHead(async (offset, length) =>
+    bytes.subarray(offset, offset + length),
+  );
+  const track = head?.tracks.find((t) => t.kind === "video")?.number;
+  if (track === undefined) throw new Error("映像のトラックがありません");
+  let frame = 0;
+  let marked = 0;
+  const walk = (start: number, end: number): void => {
+    for (let at = start; at < end;) {
+      const id = vint(bytes, at, true);
+      const size = id === null ? null : vint(bytes, id.next, false);
+      if (id === null || size === null) return;
+      const bodyEnd = Math.min(end, size.next + size.value);
+      if (id.value === 0x18538067 || id.value === 0x1f43b675)
+        walk(size.next, bodyEnd);
+      else if (id.value === 0xa3) {
+        const number = vint(bytes, size.next, false);
+        if (number !== null && number.value === track) {
+          if (frame % every === 0 && frame > 0) {
+            bytes[number.next + 2]! |= 0x80;
+            marked++;
+          }
+          frame++;
+        }
+      }
+      at = bodyEnd;
+    }
+  };
+  walk(0, bytes.length);
+  writeFileSync(`${raw}.marked.mkv`, bytes);
+  await run([
+    "ffmpeg",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    "-i",
+    `${raw}.marked.mkv`,
+    "-map",
+    "0",
+    "-c",
+    "copy",
+    mkv,
+  ]);
+  console.log(`${variant}: ${frame} コマのうち ${marked} コマに印を付けました`);
+}
 // 1. エンコード
 const started = performance.now();
 await run([
@@ -139,8 +224,10 @@ await run([
   "192k",
   "-ac",
   "2",
-  mkv,
+  spec.keysEvery === undefined ? mkv : `${out}/raw.mkv`,
 ]);
+if (spec.keysEvery !== undefined)
+  await markKeys(`${out}/raw.mkv`, spec.keysEvery);
 console.log(
   `${variant}: エンコード ${((performance.now() - started) / 1000).toFixed(0)} 秒`,
 );
@@ -284,6 +371,41 @@ async function firstFrame(name: string): Promise<Made["first"]> {
   };
 }
 
+/**
+ * サーバが変換するときと同じ引数 (`fileTranscodeArgs`)。H.265 はサーバでは GPU (報告者の端末なら MediaCodec) で
+ * エンコードするが、ランナーには GPU が無いので、H.264 のソフトウェアの引数のエンコーダだけを libx265 に替える
+ */
+function transcodeArgs(from: number): string[] {
+  const args = fileTranscodeArgs(
+    mkv,
+    from,
+    0,
+    "h264",
+    null,
+    0,
+    null,
+    false,
+    true,
+  );
+  if (spec!.codec === "h264") return args;
+  const at = args.indexOf("libx264");
+  if (at < 1 || args[at - 1] !== "-c:v")
+    throw new Error("fileTranscodeArgs に libx264 がありません");
+  // -c:v libx264 -preset ultrafast -tune zerolatency を、libx265 の同じ速さの設定に替える
+  const end = args.indexOf("-g", at);
+  return [
+    ...args.slice(0, at - 1),
+    "-c:v",
+    "libx265",
+    "-preset",
+    "ultrafast",
+    "-x265-params",
+    "log-level=error",
+    "-tag:v",
+    "hvc1",
+    ...args.slice(end),
+  ];
+}
 async function make(pos: number, version: Made["version"]): Promise<void> {
   const name = `${String(pos).replace(".", "_")}-${version}.mp4`;
   let from = pos;
@@ -296,14 +418,10 @@ async function make(pos: number, version: Made["version"]): Promise<void> {
     await produce(copyArgs(mkv, pos, 99, spec!.codec), name, null);
   } else {
     const start = await cleanFrom(mkv, pos);
-    if (start.missing && spec!.codec === "h264") {
+    if (start.missing) {
       how = "transcode";
       from = start.decodeFrom;
-      await produce(
-        fileTranscodeArgs(mkv, start.decodeFrom, 0, spec!.codec, null),
-        name,
-        null,
-      );
+      await produce(transcodeArgs(start.decodeFrom), name, null);
     } else {
       from = start.from;
       const marks = start.missing ? null : start.marks;

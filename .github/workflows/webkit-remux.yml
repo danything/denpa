@@ -31,9 +31,9 @@ on:
         type: string
         default: "open,seek"
       orders:
-        description: "開く位置を currentTime に入れる時 (before・after)"
+        description: "開く位置を currentTime に入れる時 (before・metadata・covered・after)"
         type: string
-        default: "before"
+        default: "covered"
       rounds:
         description: "open を何回ずつ流すか"
         type: string
@@ -62,6 +62,7 @@ jobs:
           - hevc-closed
           - hevc-cra-rasl
           - hevc-cra-norasl
+          - hevc-trail-keys
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
