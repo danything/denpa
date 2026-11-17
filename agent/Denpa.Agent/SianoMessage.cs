@@ -180,7 +180,7 @@ internal sealed record SianoVersion(ushort Chip, byte Mode, byte Modes, byte[] F
 /// <param name="Locked">復調のロック (0 以外ならロックしている)</param>
 /// <param name="SnrDb">SNR (dB、整数)</param>
 /// <param name="PowerDbm">帯域の中の受信電力 (dBm、整数)</param>
-/// <param name="Length">届いた中身の長さ</param>
+/// <param name="Length">届いた中身の長さ。エージェントは使わない (テストが、どちらの形式の応答を読んだかを見る)</param>
 internal sealed record SianoStats(bool Locked, int? SnrDb, int? PowerDbm, int Length)
 {
     /// <summary>

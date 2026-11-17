@@ -58,7 +58,7 @@ public sealed class TsObservation
     private long _packets, _eitActual, _eitOther, _eitScrambled, _cdt, _cdtScrambled;
 
     /// <summary>PMT と CAT で見た CA_system_id (重なりなし・小さい順)</summary>
-    public IReadOnlyList<int> CaSystemIds =>
+    private IReadOnlyList<int> CaSystemIds =>
         _ecms.Values.SelectMany(set => set).Concat(_emms).Select(ca => ca.System).Distinct().Order().ToList();
 
     /// <summary>188 バイトのパケットを 1 つ。同期バイトの無いものと誤りの印が立っているものは読まない</summary>

@@ -5,7 +5,7 @@ namespace Denpa.Agent;
  *
  * クリーンルームで、仕様書 (denpa-spec の siano/spec.md) だけから書いた。Linux カーネルの Siano のドライバと siano-userland のコードは読んでいない。
  * 仕様書 6.1 は「1 つのメッセージの中身が 188 の倍数とは限らないものとして扱い、余りを次のメッセージの先頭につなげ、0x47 で同期を取る」としている。
- * 同期の取り方の細部 (0x47 が 188 バイトおきに 2 つ続くところで揃える) は仕様書に無く、B25.cs の揃え直しと同じにした。
+ * 同期の取り方の細部 (0x47 が 188 バイトおきに 2 つ続くところで揃える) は仕様書に無く、B25.cs の揃え直しと同じにした (どちらも TsSync.cs で探す)。
  */
 
 /// <summary>
@@ -14,18 +14,11 @@ namespace Denpa.Agent;
 /// </summary>
 internal sealed class SianoTsAligner
 {
-    private const int Packet = 188;
-    private const byte Sync = 0x47;
+    private const int Packet = TsSync.Packet;
 
     private byte[] _store = new byte[SianoDevice.TransferSize + Packet];
     private int _used;
     private bool _synced;
-
-    /// <summary>揃っていない間に捨てたバイト数</summary>
-    public long Skipped { get; private set; }
-
-    /// <summary>揃っていたのに、パケットの先頭が 0x47 でなくなった回数</summary>
-    public int Lost { get; private set; }
 
     /// <summary>渡したパケットの数</summary>
     public long Packets { get; private set; }
@@ -62,7 +55,7 @@ internal sealed class SianoTsAligner
             if (_synced)
             {
                 var start = at;
-                while (data.Length - at >= Packet && data[at] == Sync) at += Packet;
+                at = TsSync.RunEnd(data, at);
                 if (at > start)
                 {
                     Packets += (at - start) / Packet;
@@ -70,14 +63,9 @@ internal sealed class SianoTsAligner
                 }
                 if (data.Length - at < Packet) return at;
                 _synced = false;
-                Lost++;
             }
             // 最後の 188 バイトの中の 0x47 は、次が届くまで同期バイトか決まらない
-            while (data.Length - at > Packet && !(data[at] == Sync && data[at + Packet] == Sync))
-            {
-                at++;
-                Skipped++;
-            }
+            at = TsSync.FindPair(data, at, Packet);
             if (data.Length - at <= Packet) return at;
             _synced = true;
         }

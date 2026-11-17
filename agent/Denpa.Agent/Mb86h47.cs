@@ -766,21 +766,8 @@ public sealed class Mb86h47Framer
             if (!_locked)
             {
                 // 先頭の候補: そこと 192 バイト先の両方の TS の先頭が 0x47。192 バイト先がまだ来ていなければ次を待つ
-                var found = -1;
-                for (var i = at; i + Unit + Stamp < length; i++)
-                {
-                    if (_work[i + Stamp] == 0x47 && _work[i + Unit + Stamp] == 0x47)
-                    {
-                        found = i;
-                        break;
-                    }
-                }
-                if (found < 0)
-                {
-                    at = Math.Max(at, length - Unit - Stamp);
-                    break;
-                }
-                at = found;
+                at = TsSync.FindPair(_work.AsSpan(0, length), at, Unit, Stamp);
+                if (at + Stamp + Unit >= length) break;
                 _locked = true;
             }
             if (length - at < Unit) break;

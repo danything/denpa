@@ -170,11 +170,11 @@ internal static unsafe partial class Sys
 
     public static void Call(SafeFileHandle handle, nuint request, nint argument, string what)
     {
-        if (Ioctl((int)handle.DangerousGetHandle(), request, argument) < 0)
-        {
-            throw new IOException($"{what} に失敗しました ({Marshal.GetLastPInvokeErrorMessage()})");
-        }
+        if (Ioctl((int)handle.DangerousGetHandle(), request, argument) < 0) throw Failed(what);
     }
+
+    /// <summary>失敗した ioctl の errno を添えた例外。ioctl の直後に作る</summary>
+    public static IOException Failed(string what) => new($"{what} に失敗しました ({Marshal.GetLastPInvokeErrorMessage()})");
 }
 
 /// <summary>
@@ -969,15 +969,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         if (_frontend.IsClosed) return null;
         var property = new byte[PropertySize];
         BitConverter.TryWriteBytes(property.AsSpan(0), DtvModulation);
-        // struct dtv_properties { u32 num; struct dtv_property *props; } (SetProperties と同じ)
-        var header = new byte[16];
-        BitConverter.TryWriteBytes(header.AsSpan(0), 1u);
-        fixed (byte* props = property)
-        fixed (byte* headerAt = header)
-        {
-            BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
-            if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeGetProperty, (nint)headerAt) < 0) return null;
-        }
+        if (PropertiesIoctl((int)_frontend.DangerousGetHandle(), FeGetProperty, property, 1) < 0) return null;
         return BitConverter.ToUInt32(property.AsSpan(PropertyDataAt));
     }
 
@@ -1109,15 +1101,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         var properties = new byte[PropertySize * 2];
         BitConverter.TryWriteBytes(properties.AsSpan(0), DtvStatCnr);
         BitConverter.TryWriteBytes(properties.AsSpan(PropertySize), DtvStatSignalStrength);
-        // struct dtv_properties { u32 num; struct dtv_property *props; } (SetProperties と同じ)
-        var header = new byte[16];
-        BitConverter.TryWriteBytes(header.AsSpan(0), 2u);
-        fixed (byte* props = properties)
-        fixed (byte* headerAt = header)
-        {
-            BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
-            if (Sys.Ioctl(fd, FeGetProperty, (nint)headerAt) < 0) return new TunerSignal(locked, null, TunerSignal.Db);
-        }
+        if (PropertiesIoctl(fd, FeGetProperty, properties, 2) < 0) return new TunerSignal(locked, null, TunerSignal.Db);
         return Stats(locked, properties);
     }
 
@@ -1163,15 +1147,22 @@ public sealed unsafe class DvbTuner : ITuneDevice
             BitConverter.TryWriteBytes(payload.AsSpan(at), properties[index].Command);
             BitConverter.TryWriteBytes(payload.AsSpan(at + PropertyDataAt), properties[index].Value);
         }
+        if (PropertiesIoctl((int)_frontend.DangerousGetHandle(), FeSetProperty, payload, (uint)properties.Count) < 0) throw Sys.Failed("選局");
+    }
 
-        // struct dtv_properties { u32 num; struct dtv_property *props; }
+    /// <summary>
+    /// <c>struct dtv_properties { u32 num; struct dtv_property *props; }</c> を組んで、<c>FE_SET_PROPERTY</c> か <c>FE_GET_PROPERTY</c> の ioctl を呼ぶ。
+    /// <paramref name="properties"/> は struct dtv_property (packed) を <paramref name="count"/> 個並べたもの。ioctl の戻り値を返す
+    /// </summary>
+    private static int PropertiesIoctl(int fd, uint request, byte[] properties, uint count)
+    {
         var header = new byte[16];
-        BitConverter.TryWriteBytes(header.AsSpan(0), (uint)properties.Count);
-        fixed (byte* props = payload)
+        BitConverter.TryWriteBytes(header.AsSpan(0), count);
+        fixed (byte* props = properties)
         fixed (byte* headerAt = header)
         {
             BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
-            Sys.Call(_frontend, FeSetProperty, (nint)headerAt, "選局");
+            return Sys.Ioctl(fd, request, (nint)headerAt);
         }
     }
 

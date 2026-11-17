@@ -168,14 +168,15 @@ public sealed class T1Protocol
     private const byte SAbort = 0x02;
     private const byte SWtx = 0x03;
 
-    public static byte Lrc(ReadOnlySpan<byte> data)
+    private static byte Lrc(ReadOnlySpan<byte> data)
     {
         byte sum = 0;
         foreach (var b in data) sum ^= b;
         return sum;
     }
 
-    public static byte[] Block(byte pcb, ReadOnlySpan<byte> inf)
+    /// <summary>NAD 0 のブロックを LRC まで含めて組む。テストが偽のカードの応答を組むのにも使う</summary>
+    internal static byte[] Block(byte pcb, ReadOnlySpan<byte> inf)
     {
         var block = new byte[inf.Length + 4];
         block[1] = pcb;

@@ -209,6 +209,7 @@ public class T1Tests
     public async Task CRC_のカードは断る()
     {
         Assert.Throws<IOException>(() => new T1Protocol(Atr.Parse(BcasAtr) with { Crc = true }, (_, _) => null));
-        await Assert.That(T1Protocol.Lrc([0x00, 0x40, 0x01, 0x90])).IsEqualTo((byte)0xD1);
+        // 誤りの検出は LRC (NAD・PCB・LEN・INF の XOR を最後に付ける)
+        await Assert.That(Convert.ToHexString(T1Protocol.Block(0x40, [0x90]))).IsEqualTo("00400190D1");
     }
 }

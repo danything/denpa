@@ -115,7 +115,7 @@ public static class Zd1j
 /// 閉じるのは、定義が変わってチューナーが捨てられたときと、設定で差し込み口のカードリーダーを無効にしたとき (どちらも使っている側がいなければ。<see cref="CloseIfIdle"/>)・止めるとき (<see cref="CloseAll"/>)・USB が抜けたとき。
 /// </para>
 /// </summary>
-public sealed class Zd1jBoard : IDibTime
+public sealed class Zd1jBoard : PortOwner<Zd1jBoard>, IDibTime
 {
     /// <summary>
     /// 起動の様子と、選局のたびのロックまでの内訳 (段ごとの時間と待ち) を渡す先。<c>--tune</c> (試験用のコマンド) だけが決め、
@@ -129,12 +129,7 @@ public sealed class Zd1jBoard : IDibTime
     /// </summary>
     public static Zd1jLocks Locks { get; set; } = new(null);
 
-    private static readonly Lock Registry = new();
-    private static readonly Dictionary<string, Zd1jBoard> Boards = [];
-
-    private readonly Lock _gate = new();
     private Dib8096? _demod;
-    private int _users;
     private bool _closed;
     public string Port { get; }
     public IUsbDevice Usb { get; }
@@ -146,10 +141,8 @@ public sealed class Zd1jBoard : IDibTime
     /// <summary>DiB8096 の初期化にかかった時間 (まだなら -1)</summary>
     public long DemodMs { get; private set; } = -1;
 
-    /// <summary>USB が抜けた・ブリッジのコア 1 が応答しなくなったなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
-    public bool Faulted => _faulted || Bridge.Dead;
-
-    private bool _faulted;
+    /// <summary>ブリッジのコア 1 が応答しなくなった (<see cref="PortOwner{TSelf}.Faulted"/> の印の 1 つ)</summary>
+    private protected override bool Dead => Bridge.Dead;
 
     internal Zd1jBoard(string port, IUsbDevice usb)
     {
@@ -167,14 +160,10 @@ public sealed class Zd1jBoard : IDibTime
     {
         lock (Registry)
         {
-            if (Boards.TryGetValue(port, out var board) && !board.Faulted)
-            {
-                lock (board._gate) board._users++;
-                return board;
-            }
+            if (TryReuse(port, out var board)) return board;
             // 使えなくなったものは閉じてから開き直す (コア 1 が応答しないだけなら、古い USB がインターフェースを確保したまま)
             board?.Close();
-            Boards.Remove(port);
+            Owners.Remove(port);
 
             var started = Stopwatch.StartNew();
             var stage = OpeningUsb;
@@ -193,7 +182,7 @@ public sealed class Zd1jBoard : IDibTime
             }
             board.OpenMs = started.ElapsedMilliseconds;
             board._users = 1;
-            Boards[port] = board;
+            Owners[port] = board;
             LastFailure.Remove(port);
             Log.Write($"[{Zd1j.Model} {port}] 開きました ({board.OpenMs}ms)");
             return board;
@@ -234,27 +223,7 @@ public sealed class Zd1jBoard : IDibTime
     /// <summary>
     /// 誰も使っていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)。カードが使っていれば開いたまま
     /// </summary>
-    public static void CloseIfIdle(string port)
-    {
-        Zd1jBoard? board;
-        lock (Registry)
-        {
-            if (!Boards.TryGetValue(port, out board)) return;
-            lock (board._gate)
-            {
-                if (board._users > 0) return;
-            }
-            Boards.Remove(port);
-            // 閉じ終えるまで Registry を持つ。同じポートを開き直す Acquire が、閉じる前の USB とぶつからないように
-            board.Close();
-        }
-    }
-
-    /// <summary>失敗が USB の抜けなら使えないものとする (次に取る側は開き直す)</summary>
-    public void Fail(Exception error)
-    {
-        if (error is UsbGoneException) _faulted = true;
-    }
+    public static void CloseIfIdle(string port) => CloseIdle(port, closeInRegistry: true);
 
     /// <summary>DiB8096。初めてのときに電源を入れて初期化する (仕様書 4.6・4.7・6)</summary>
     public Dib8096 Demod
@@ -293,7 +262,7 @@ public sealed class Zd1jBoard : IDibTime
     }
 
     /// <summary>スリープさせて (DiB8096 を初期化していれば。LED は緑に)、USB を閉じる</summary>
-    private void Close()
+    private protected override void Close()
     {
         lock (_gate)
         {
@@ -316,18 +285,6 @@ public sealed class Zd1jBoard : IDibTime
             Usb.Dispose();
             Log.Write($"[{Zd1j.Model} {Port}] 閉じました");
         }
-    }
-
-    /// <summary>全部閉じる (エージェントを止めるとき。<c>--tune</c> の終わり)。使っている側がいても閉じる</summary>
-    public static void CloseAll()
-    {
-        List<Zd1jBoard> boards;
-        lock (Registry)
-        {
-            boards = [.. Boards.Values];
-            Boards.Clear();
-        }
-        foreach (var board in boards) board.Close();
     }
 }
 
@@ -610,12 +567,11 @@ internal sealed class Zd1jStream
     public void Stop()
     {
         _stopped = true;
-        var stopped = Stopwatch.StartNew();
-        Output.Stop();
-        _pump.Join(TimeSpan.FromSeconds(2));
-        _in.Dispose();
-        Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
-        Output.Dispose();
+        ChildTs.Close(Output, () =>
+        {
+            _pump.Join(TimeSpan.FromSeconds(2));
+            _in.Dispose();
+        });
         _ended = true;
     }
 }
