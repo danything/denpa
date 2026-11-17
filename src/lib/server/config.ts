@@ -189,7 +189,8 @@ export const config = {
     "https://api.github.com/repos/danything/denpa",
   ).replace(/\/+$/, ""),
   /**
-   * ニコニコの OAuth を中継する denpa-hub (danything/denpa-hub)。連携の入口、トークンの更新、公式の実況の接続先の受け取りに使う (niconico.ts・niconico-live.ts)。
+   * Doa が動かす denpa-hub (danything/denpa-hub)。ニコニコの OAuth の中継 (連携の入口、トークンの更新、公式の実況の接続先の受け取り。niconico.ts・niconico-live.ts) と、
+   * 予約数ランキングへの送信 (ranking.ts) に使う。
    * テストでは偽物を指す
    */
   hubUrl: str("DENPA_HUB", "https://dh.doany.io").replace(/\/+$/, ""),
