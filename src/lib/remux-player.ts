@@ -166,6 +166,8 @@ export function remuxPlayer(
    * `.github/workflows/webkit-remux.yml` で確かめた。#2884)。入れたら null
    */
   let startAt: number | null = null;
+  /** 入れた開く位置。そのストリームを読み終えるまで覚えておく (開く位置まで届かずに終わったら、届いた末尾へ直す) */
+  let placed: number | null = null;
   /** いまの位置。開く位置をまだ入れていなければ、その位置 */
   const position = (): number => startAt ?? video.currentTime;
 
@@ -305,6 +307,7 @@ export function remuxPlayer(
   ): number {
     const mine = ++run;
     controller?.abort();
+    placed = null;
     controller = abort;
     nudge();
     retry.cancel();
@@ -384,12 +387,20 @@ export function remuxPlayer(
     if (mine !== run) return;
     loadingFrom = null;
     // 開く位置まで届かずに終わった (尺の端より後ろを開いた)。届いた末尾に入れる
+    const last = buffered().at(-1);
     if (startAt !== null) {
-      const last = buffered().at(-1);
       const at = last === undefined ? startAt : Math.min(startAt, last[1]);
       startAt = null;
       video.currentTime = at;
+    } else if (
+      placed !== null &&
+      last !== undefined &&
+      video.currentTime > last[1]
+    ) {
+      // 入れた開く位置が、届いた末尾より後ろだった
+      video.currentTime = last[1];
     }
+    placed = null;
     // 末尾まで届いた。終わりを伝えない (`endOfStream`) と、最後で止まったまま `ended` が来ない
     await idle();
     if (mine === run && media.readyState === "open") media.endOfStream();
@@ -504,15 +515,18 @@ export function remuxPlayer(
   }
 
   /**
-   * 開く位置まで溜まったら、currentTime に入れる (`startAt`)。届いたものが開く位置より後ろから始まっていれば
+   * 映像が足されたら、開く位置を currentTime に入れる (`startAt`)。届いたものが開く位置より後ろから始まっていれば
    * (変換は印の付いたコマの都合で少し後ろから出ることがある)、その始まりに入れる
    */
   function place(): void {
     if (startAt === null) return;
-    const range = buffered().find(([, end]) => end > startAt!);
-    if (range === undefined) return;
-    const at = Math.max(startAt, range[0]);
+    const ranges = buffered();
+    // 映像が 1 つでも足されたら入れる。開く位置まで待つと、手前のキーフレームから送ったときに、その間だけ先頭から映る
+    if (ranges.length === 0) return;
+    const range = ranges.find(([, end]) => end > startAt!);
+    const at = range === undefined ? startAt : Math.max(startAt, range[0]);
     startAt = null;
+    placed = at;
     video.currentTime = at;
   }
 

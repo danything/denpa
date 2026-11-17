@@ -180,7 +180,7 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     expect(media().readyState).toBe("ended");
   });
 
-  test("開く位置は、溜まってから currentTime に入れる。それまでの詰まりでは先頭からリクエストし直さない", async () => {
+  test("開く位置は、映像が足されてから currentTime に入れる。それまでの詰まりでは先頭からリクエストし直さない", async () => {
     // 応答を止めておき、2 つ目のチャンクから先も止める
     let respond!: () => void;
     const held = new Promise<void>((resolve) => {
@@ -222,6 +222,17 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     await settle();
     expect(video.currentTime).toBe(300);
     expect(requests).toContain("remux?from=300&audio=0");
+    player.destroy();
+  });
+
+  test("手前から送られてきたら、映像が 1 つ足されたところで開く位置に入れる (先頭から映さない)", async () => {
+    // 100 秒を開いたが、サーバは 90 秒の始められるキーフレームから送る
+    globalThis.fetch = (async (url: string, init?: RequestInit) =>
+      fakeFetch(url.replace("from=100", "from=90"), init)) as typeof fetch;
+    gate = new Promise(() => {});
+    const { video, player } = start(100);
+    await settle();
+    expect(video.currentTime).toBe(100);
     player.destroy();
   });
 

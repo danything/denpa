@@ -533,6 +533,17 @@ async function inPlayer({ codecs, steps, files, watch, first, kind, rechunk }) {
     video.addEventListener(name, () =>
       state.events.push(`${name}@${video.currentTime.toFixed(2)}`),
     );
+  // 開く位置を入れる前に、手前 (先頭) から映ったか。映った位置のうち、いちばん後ろ
+  let early = null;
+  const target = steps.at(-1).pos;
+  video.addEventListener("timeupdate", () => {
+    if (
+      kind === "player-open" &&
+      video.currentTime > 0.05 &&
+      video.currentTime < target - 0.5
+    )
+      early = Math.max(early ?? 0, +video.currentTime.toFixed(3));
+  });
   const positions = Object.keys(files).map(Number);
   // 飛んだ先に近い位置の fMP4 を返す (どれも開く位置から先が入っている)
   const url = (from) => {
@@ -642,6 +653,7 @@ async function inPlayer({ codecs, steps, files, watch, first, kind, rechunk }) {
     origin: player.origin(),
     received,
     largest,
+    early,
     streaming: made?.streaming ?? null,
     msState: made?.readyState ?? null,
     end,
