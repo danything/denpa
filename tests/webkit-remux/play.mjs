@@ -296,7 +296,8 @@ async function inPage({ source, codecs, steps, watch, first, order, nudge }) {
         ) {
           nudged = true;
           state.events.push(`nudge@${video.currentTime.toFixed(2)}`);
-          video.currentTime = video.currentTime;
+          const here = video.currentTime;
+          video.currentTime = here;
         }
         if (i === steps.length - 1 && video.currentTime > t0 + 2) break;
         await new Promise((resolve) => setTimeout(resolve, 50));
