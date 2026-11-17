@@ -206,7 +206,7 @@ public sealed class Dib8096
     }
 
     /// <summary>
-    /// DiB0090 の DC オフセットの較正 (7.3.1) を、開くときに済ませる。仕様書では「宿題」として最初の選局の始めに走る
+    /// DiB0090 の DC オフセットの較正 (7.3.1) を、開くときに済ませる。仕様書では、残りの較正として最初の選局の始めに走る
     /// (6.8 の 5) が、周波数に依らない較正で、再び立つことも無いので、選局の経路から外した (選局の始めの条件と同じく、
     /// チューナーを初期化して起動したあと)。WBD と温度は周波数や選局ごとに立つので、今までどおり選局で走る
     /// </summary>
@@ -451,7 +451,7 @@ public sealed class Dib8096
         if ((TunerVersion & 0x1F) >= 3) Fuses();
         // 水晶 12 MHz
         T(0x14, 2);
-        // 残っている較正 (仕様書の「宿題」)。DC は開くときに (CalibrateDc)、WBD と温度は最初の選局で走る
+        // 残っている較正。DC は開くときに (CalibrateDc)、WBD と温度は最初の選局で走る
         _dcPending = _wbdPending = _tempPending = true;
         _tunerState = TunerStart;
     }

@@ -14,7 +14,7 @@ public static class CardLinks
     /// </para>
     ///
     /// <para>
-    /// USB のリーダーは、Linux なら usbfs を直に (Ccid.cs)、macOS と Windows なら OS の PC/SC 越しに
+    /// USB のリーダーは、Linux と Android なら usbfs を直に (Ccid.cs)、macOS と Windows なら OS の PC/SC 越しに
     /// (Pcsc.cs)。どちらにするかは <see cref="IUsbHost.Readers"/> が null かで決める (**macOS と Windows には usbfs が無い**)。
     /// IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) の内蔵カードリーダーはそのすぐ後ろ (It930xCard.cs)。
     /// asicen-userland の機材の内蔵カードリーダーは扱わない。カードの操作 (CARD_CONNECT・CARD_TRANSMIT など) は形式が契約の文書に無く、

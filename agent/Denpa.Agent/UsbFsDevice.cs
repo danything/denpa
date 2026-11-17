@@ -247,7 +247,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     }
 
     /// <summary>
-    /// URB を出しっぱなしにする読み。URB とバッファはアンマネージドのメモリに置く (カーネルが書き込むあいだ動かないように)。
+    /// URB を出しっぱなしにして読む。URB とバッファはアンマネージドのメモリに置く (カーネルが書き込むあいだ動かないように)。
     /// 1 本の端点の URB は出した順に済むので、先頭の URB から順に詰めて出し直す
     /// </summary>
     private sealed class InStream : IUsbInStream

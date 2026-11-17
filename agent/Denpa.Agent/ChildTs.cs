@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// 機材から受けた TS のバッファ (AsicenStream・Zd1jStream・Dt295NativeStream・SianoStream・It930xTsOutput。OS の pipe ではなく Pipelines) を閉じるときの決まり。
+/// 機材から受けた TS のバッファ (AsicenStream・Zd1jStream・Dt295NativeStream・SianoStream。OS の pipe ではなく Pipelines) を閉じるときの決まり。
 /// 読み出し側はどれも <see cref="DeviceStream"/> に載せる
 /// </summary>
 internal static class ChildTs

@@ -175,7 +175,7 @@ public sealed class BCas : IKeySource, IDisposable
     /// ECM を 1 つ復号して鍵を返す。
     ///
     /// <para>
-    /// 渡すのは **ECM セクションの中身**: 8 バイトの見出しの後ろから、末尾の CRC32 の
+    /// 渡すのは **ECM セクションの中身**で、8 バイトの見出しの後ろから、末尾の CRC32 の
     /// 手前まで (libaribb25 が <c>proc_ecm</c> に渡していたのと同じ切り方)。
     /// </para>
     ///

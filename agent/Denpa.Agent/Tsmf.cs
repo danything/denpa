@@ -123,7 +123,7 @@ public delegate void TsmfEmit(ReadOnlySpan<byte> packet);
 /// 選局のたびに作り直すので、仕様書 8.7 の「受信を止めて始め直したときに判定を保つ」場面は無い。
 /// NULL パケットは除かない (ほかの方式と同じく、選んだ TS をそのまま流す)。選んだ TS が分割 TLV のときも 188 バイトの単位のまま出力し、
 /// TLV パケットに組み立てるのは受け取る側 (<see cref="SplitTlv"/>。仕様書 13 の範囲の外)。受け取る側は <see cref="Format"/> で形式を、
-/// <see cref="Gaps"/> で出力が前と続いていない所を知る
+/// <see cref="Gaps"/> で出力が前と続いていない所を見分ける
 /// </para>
 /// </summary>
 public sealed class TsmfSelector

@@ -750,7 +750,7 @@ public sealed class It930xDevice
     /// <summary>最後に読んだ溢れ (変わったときだけ記録に出すため)</summary>
     private volatile It930xOverflow? _overflow;
 
-    /// <summary>全体の溢れが立ったままで、ロックしたあとに TS が届かなかったときの溢れ (<see cref="Confirm"/>)。閉じるまで下ろさない</summary>
+    /// <summary>全体の溢れが立ったままで、ロックしたあとに TS が届かなかったときの溢れ (<see cref="Confirm"/>)。同じ溢れのままほかの受信機に TS が届いたときのほかは、閉じるまで下ろさない</summary>
     private volatile It930xOverflow? _blocked;
 
     /// <summary>全体の溢れが立ったままでも、ロックしたあとに TS が届いたときの溢れ (<see cref="Confirm"/>)。溢れが変わったら確かめ直す</summary>
@@ -777,20 +777,26 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 全体の溢れが立ったままの機材で、受信機 <paramref name="receiver"/> がロックしたあとに TS が届いたか (<paramref name="flowing"/>) を記録に出し、覚える。
-    /// 届かなければ、閉じるまでどの受信機の選局も断る (<see cref="Jammed"/>)
+    /// 届かなければ、閉じるまでどの受信機の選局も断る (<see cref="Jammed"/>)。
+    /// 並べて選局した受信機が前後して確かめても食い違わないよう、<c>_gate</c> の中で読み書きする
     /// </summary>
     /// <returns>この機材の選局を断るようにしたか。同じ溢れのまま、並べて選局したほかの受信機で TS が届いたと確かめてあれば、断らずに false を返す</returns>
     internal bool Confirm(int receiver, It930xOverflow overflow, bool flowing, long waitedMs)
     {
-        if (flowing)
+        lock (_gate)
         {
-            _flowing = overflow;
-            Log.Write($"[{Label}] 全体の溢れは立ったままですが ({overflow})、受信機 {receiver} の TS が届きました。この機材の受信機で選局を続けます");
-            return false;
+            if (flowing)
+            {
+                _flowing = overflow;
+                // 先にほかの受信機が届かないと確かめて断るようにしていても、同じ溢れのまま TS が届いたなら、ブリッジからは TS が出ている。断るのをやめる
+                if (overflow.SameAs(_blocked)) _blocked = null;
+                Log.Write($"[{Label}] 全体の溢れは立ったままですが ({overflow})、受信機 {receiver} の TS が届きました。この機材の受信機で選局を続けます");
+                return false;
+            }
+            // ほかの受信機に TS が届いたなら、ブリッジからは TS が出ている。この受信機だけの失敗にする
+            if (overflow.SameAs(_flowing)) return false;
+            _blocked = overflow;
         }
-        // ほかの受信機に TS が届いたなら、ブリッジからは TS が出ている。この受信機だけの失敗にする
-        if (overflow.SameAs(_flowing)) return false;
-        _blocked = overflow;
         Log.Write(
             $"[{Label}] 全体の溢れが立ったままで ({overflow})、受信機 {receiver} がロックしてから {waitedMs} ms 待っても TS が届きませんでした。"
             + "機材の電源を抜いて入れ直すまで、この機材の受信機では選局しません (REBOOT や受信機の電源の入れ直しでは戻りません)");
@@ -1598,7 +1604,7 @@ public sealed class It930xTuner : ITuneDevice
                     Check(tuning, _model);
                 }
                 // 全体の溢れが立ったまま TS が届かないと確かめた機材は、受信機に触らずに断り、30 秒待たせずにほかのチューナーへ回させる (TunerPool)。
-                // 次に取るときに開き直して溢れを読み直す
+                // 使っている側 (ほかの受信機・カード) がいなくなって閉じたあとに取るときは、開き直して溢れを読み直す
                 if (_device.Jammed is { } jammed) Refuse(jammed);
                 _frontend = _device.Frontend(_receiver);
                 // 給電を入れてから選局する (順は IT930x の仕様書 8。LNB が出力を出すまでの待ちは仕様書に無く、ロックの待ち (3 秒) に含める)

@@ -93,7 +93,7 @@ public static class ChannelTable
     /// ISDB-C は <c>:k</c> を付けて TSMF の TS を指す (<c>QC30:2</c>。有効な TS の 0〜14 本目)。付けなければ 0 本目。
     /// 衛星は <c>:TSID</c> を付けて TS を指す (<c>BS15:16625</c>)。付けなければ中継器の先頭の TS。
     /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない。**
-    /// あそこは 4K/8K (ISDB-S3) で、この構成のチューナーでは復調できない。
+    /// BS-7 と BS-17 は 4K/8K (ISDB-S3) で、この構成のチューナーでは復調できない。
     /// </para>
     /// </summary>
     public static Tuning? Parse(string name)

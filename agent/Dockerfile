@@ -152,7 +152,7 @@ COPY --from=fetch /opt/ /opt/
 COPY agent/Denpa.Agent/firmware/LICENCE.siano /usr/share/doc/denpa-agent/LICENCE.siano
 
 # 設定は PVC (/config) に置く (/config/tuners.json と /config/channels.json はエージェントの既定。Config.cs)。
-# **どちらも denpa の画面が書き、どちらも無くて構わない。** tuners.json が無ければ挿さっている機材を
+# **tuners.json は denpa の画面とエージェント (挿した機材を足す) が、channels.json は denpa が書き、どちらも無くて構わない。** tuners.json が無ければ挿さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
 #
 # denpa と組むための鍵・証明書・合言葉 (/config/tls。AgentTls.cs) も同じ所に置く。

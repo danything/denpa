@@ -49,7 +49,7 @@ public static class CcidMessage
     public const byte ParityError = 0xFD;
     public const byte Overrun = 0xFC;
 
-    /// <summary>スロットはいつも 0 (bMaxSlotIndex が 0 のものしか扱わない)</summary>
+    /// <summary>スロットはいつも 0 (bMaxSlotIndex は読まず、スロット 0 だけを使う)</summary>
     public static byte[] Command(byte type, byte seq, ReadOnlySpan<byte> data, byte p1 = 0, byte p2 = 0, byte p3 = 0)
     {
         var message = new byte[Header + data.Length];
