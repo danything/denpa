@@ -30,7 +30,7 @@
   import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
 
-  import type { Preview, PreviewRow } from "./+page.server";
+  import type { Preview, PreviewRow, RankingView } from "./+page.server";
   import RuleDraft, { SKIP_LABEL } from "./RuleDraft.svelte";
 
   let { data, form } = $props();
@@ -40,9 +40,12 @@
    */
   const q = $derived(data.q);
 
-  /** 節ごとに最初に出す数。「もっと見る」で受け取ったぶん (上限は `+page.server.ts` の `LIMIT`) まで広げる */
+  /**
+   * 節ごとに最初に出す数。「もっと見る」で受け取ったぶん (上限は `+page.server.ts` の `LIMIT`。
+   * 予約の多い番組は `ranking.ts` の `VIEW_LIMIT`) まで広げる
+   */
   const FIRST = 5;
-  type Key = "programs" | "recordings" | "reservations" | "rules";
+  type Key = "programs" | "recordings" | "reservations" | "rules" | "ranking";
   /** 開いた節。言葉が変わったら畳み直す */
   let expanded = $derived.by<Record<Key, boolean>>(() => {
     void q;
@@ -51,6 +54,7 @@
       recordings: false,
       reservations: false,
       rules: false,
+      ranking: false,
     };
   });
   function shown<T>(key: Key, rows: T[]): T[] {
@@ -325,30 +329,40 @@
           (下見の行。予約を立てるときと同じ判定)
         -->
         {@render rulePreview()}
-      {:else if recent.length > 0}
-        <section class="hits-section" aria-labelledby="recent-head">
-          <div class="hits-head">
-            <h2 id="recent-head">最近の検索</h2>
-            <button
-              type="button"
-              class="small ghost"
-              onclick={clearRecent}
-              data-testid="recent-clear">履歴を消す</button
-            >
-          </div>
-          <!-- 1 行の並びなので件の面に乗せず、地に並べる (サイドバーと同じ行。docs/design.md の「3 つの層」) -->
-          <ul class="side-list recent-list" data-testid="recent-searches">
-            {#each recent as word (word)}
-              <li>
-                <a
-                  class="side-item"
-                  href={resolve(`search?q=${encodeURIComponent(word)}`)}
-                  ><span class="truncate">{word}</span></a
-                >
-              </li>
-            {/each}
-          </ul>
-        </section>
+      {:else}
+        {#if recent.length > 0}
+          <section class="hits-section" aria-labelledby="recent-head">
+            <div class="hits-head">
+              <h2 id="recent-head">最近の検索</h2>
+              <button
+                type="button"
+                class="small ghost"
+                onclick={clearRecent}
+                data-testid="recent-clear">履歴を消す</button
+              >
+            </div>
+            <!-- 1 行の並びなので件の面に乗せず、地に並べる (サイドバーと同じ行。docs/design.md の「3 つの層」) -->
+            <ul class="side-list recent-list" data-testid="recent-searches">
+              {#each recent as word (word)}
+                <li>
+                  <a
+                    class="side-item"
+                    href={resolve(`search?q=${encodeURIComponent(word)}`)}
+                    ><span class="truncate">{word}</span></a
+                  >
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
+        <!-- 予約数ランキングに参加している世帯だけ。hub を待つ間も画面は出し、節だけあとから埋める -->
+        {#if data.ranking !== null}
+          {#await data.ranking}
+            {@render rankingSection(null)}
+          {:then view}
+            {@render rankingSection(view)}
+          {/await}
+        {/if}
       {/if}
     {:else}
       <p class="summary muted small" role="status" data-testid="search-summary">
@@ -379,73 +393,7 @@
         {:else}
           <ul class="item-list">
             {#each shown("programs", data.programs.rows) as program (program.id)}
-              {@const verdict = verdictOf(program.id)}
-              <li
-                class="hit item"
-                class:dim={verdict?.kind === "skip" &&
-                  program.reservation_state === null}
-                data-testid="search-program"
-                data-program-id={program.id}
-                data-verdict={verdict?.kind}
-              >
-                <button
-                  type="button"
-                  class="hit-main"
-                  onclick={() => showProgram(program)}
-                  data-testid="search-open"
-                >
-                  <span class="hit-title">
-                    <!-- 立っている予約は本当のこととして状態のバッジで先に出す -->
-                    {#if program.reservation_state !== null}
-                      {@render stateTag(
-                        program.reservation_state,
-                        "search-program-state",
-                      )}
-                    {/if}
-                    <span class="truncate broadcast">{program.name}</span>
-                  </span>
-                  <span class="hit-meta small muted">
-                    {@render service(program)}<span class="num"
-                      >{dateTime(program.start_at)}〜{time(
-                        program.end_at,
-                      )}</span
-                    ><!-- 予約が無ければ、書く欄の条件で録るか。事実なので補足の字で (docs/design.md の「印の意味」) -->{#if program.reservation_state === null && verdict !== null}・<span
-                        data-testid="search-verdict"
-                        >{verdict.kind === "record" ? "録る" : "録らない"}</span
-                      >
-                      {#if verdict.kind === "skip"}
-                        (<span data-testid="search-verdict-reason"
-                          >{SKIP_LABEL[verdict.reason]}</span
-                        >)
-                      {/if}
-                    {/if}
-                  </span>
-                </button>
-                <div class="row-actions">
-                  <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`rowCancelable`) -->
-                  {#if program.reservation_id !== null}
-                    {#if rowCancelable(program.reservation_state, program.end_at)}
-                      <ActionButton
-                        action="?/cancel"
-                        fields={{ reservationId: program.reservation_id }}
-                        class="small outline danger"
-                        testid="search-cancel"
-                      >
-                        取消
-                      </ActionButton>
-                    {/if}
-                  {:else if !program.copy_never && !unwatchable.has(program.service_id)}
-                    <ActionButton
-                      action="?/reserve"
-                      fields={{ programId: program.id }}
-                      class="small outline"
-                      testid="search-reserve"
-                    >
-                      予約
-                    </ActionButton>
-                  {/if}
-                </div>
-              </li>
+              {@render programHit(program, null)}
             {/each}
           </ul>
           {@render more(
@@ -772,6 +720,141 @@
   </section>
 {/snippet}
 
+<!--
+  **予約の多い番組** (予約数ランキング。言葉なしで開いたとき。`server/ranking.ts`)。行は「これからの放送」と同じで、
+  1 段目の先頭に順位、2 段目の最後に「予約 約 120」。受信できない局の番組は予約のボタンを出さず、押しても詳細を開かない
+  (手元の番組表に無い)。`view` が null の間は hub を待っている
+-->
+{#snippet rankingSection(view: RankingView | null)}
+  <section
+    class="hits-section"
+    aria-labelledby="ranking-head"
+    data-testid="search-ranking"
+  >
+    <div class="hits-head">
+      <h2 id="ranking-head">予約の多い番組</h2>
+    </div>
+    {#if view === null}
+      <p class="none small muted">読み込んでいます…</p>
+    {:else if !view.ok}
+      <p class="none small muted" data-testid="search-ranking-error">
+        いまはランキングを読めません
+      </p>
+    {:else if view.rows.length === 0}
+      <p class="none small muted">当てはまるものはありません</p>
+    {:else}
+      <ul class="item-list">
+        {#each shown("ranking", view.rows) as row, i (`${row.rank}:${i}`)}
+          {#if row.program !== null}
+            {@render programHit(row.program, row)}
+          {:else}
+            <li
+              class="hit item"
+              data-testid="search-ranking-away"
+              data-rank={row.rank}
+            >
+              <div class="hit-main">
+                <span class="hit-title">
+                  {@render rank(row.rank)}
+                  <span class="truncate broadcast">{row.away.name}</span>
+                </span>
+                <span class="hit-meta small muted"
+                  >受信できない局・<span class="broadcast"
+                    >{row.away.service_name}</span
+                  >{#if row.away.region !== null}・{row.away.region}{/if}・<span
+                    class="num">{dateTime(row.away.start_at)}</span
+                  >・{@render votes(row.votes)}</span
+                >
+              </div>
+            </li>
+          {/if}
+        {/each}
+      </ul>
+      {@render more("ranking", view.rows.length, view.rows.length)}
+    {/if}
+  </section>
+{/snippet}
+{#snippet rank(value: number)}
+  <span class="rank num" data-testid="search-rank">{value}</span>
+{/snippet}
+{#snippet votes(value: number)}
+  <span class="num" data-testid="search-votes">予約 約 {value}</span>
+{/snippet}
+
+<!--
+  「これからの放送」の 1 行 (予約の多い番組の節も同じ)。行から予約・取消、押すと番組の詳細。
+  `ranked` があれば 1 段目の先頭に順位、2 段目に予約の数を足す
+-->
+{#snippet programHit(
+  program: (typeof data.programs.rows)[number],
+  ranked: { rank: number; votes: number } | null,
+)}
+  {@const verdict = verdictOf(program.id)}
+  <li
+    class="hit item"
+    class:dim={verdict?.kind === "skip" && program.reservation_state === null}
+    data-testid="search-program"
+    data-program-id={program.id}
+    data-verdict={verdict?.kind}
+  >
+    <button
+      type="button"
+      class="hit-main"
+      onclick={() => showProgram(program)}
+      data-testid="search-open"
+    >
+      <span class="hit-title">
+        {#if ranked !== null}{@render rank(ranked.rank)}{/if}
+        <!-- 立っている予約は本当のこととして状態のバッジで先に出す -->
+        {#if program.reservation_state !== null}
+          {@render stateTag(program.reservation_state, "search-program-state")}
+        {/if}
+        <span class="truncate broadcast">{program.name}</span>
+      </span>
+      <span class="hit-meta small muted">
+        {@render service(program)}<span class="num"
+          >{dateTime(program.start_at)}〜{time(program.end_at)}</span
+        >{#if ranked !== null}・{@render votes(
+            ranked.votes,
+          )}{/if}<!-- 予約が無ければ、書く欄の条件で録るか。事実なので補足の字で (docs/design.md の「印の意味」) -->{#if program.reservation_state === null && verdict !== null}・<span
+            data-testid="search-verdict"
+            >{verdict.kind === "record" ? "録る" : "録らない"}</span
+          >
+          {#if verdict.kind === "skip"}
+            (<span data-testid="search-verdict-reason"
+              >{SKIP_LABEL[verdict.reason]}</span
+            >)
+          {/if}
+        {/if}
+      </span>
+    </button>
+    <div class="row-actions">
+      <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`rowCancelable`) -->
+      {#if program.reservation_id !== null}
+        {#if rowCancelable(program.reservation_state, program.end_at)}
+          <ActionButton
+            action="?/cancel"
+            fields={{ reservationId: program.reservation_id }}
+            class="small outline danger"
+            testid="search-cancel"
+          >
+            取消
+          </ActionButton>
+        {/if}
+      {:else if !program.copy_never && !unwatchable.has(program.service_id)}
+        <ActionButton
+          action="?/reserve"
+          fields={{ programId: program.id }}
+          class="small outline"
+          testid="search-reserve"
+        >
+          予約
+        </ActionButton>
+      {/if}
+    </div>
+  </li>
+{/snippet}
+
 <!-- 行の 2 段目の先頭 (局のロゴと名前。ロゴの大きさと間はホームの行の `RowMeta` と同じ) と、状態のバッジ -->
 {#snippet service(row: {
   service_id: number;
@@ -991,6 +1074,13 @@
     align-items: center;
     gap: var(--dp-space-2);
     min-width: 0;
+  }
+  /* 予約の多い番組の順位。数はほかの数と同じく本文の字の太字で、2 桁でもタイトルの始まりがそろう幅 */
+  .rank {
+    flex: none;
+    min-inline-size: 2ch;
+    font-weight: var(--dp-weight-bold);
+    text-align: end;
   }
   .hit-meta {
     overflow: hidden;

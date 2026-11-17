@@ -13,7 +13,7 @@
 <!--
     **予約数ランキング (世帯の設定。既定はオフ)。** オンにすると、サーバが denpa-hub からトークンを受け取り、
     これから放送する予約を 6 時間ごとに送る (`server/ranking.ts`)。何を送り、何を送らないかは説明の 1 行目に出す (隠さない)。
-    順位を出す画面は、まだ無い (docs/screens.md)
+    順位は検索を言葉なしで開いたときの節「予約の多い番組」に出す (`search/+page.svelte`)
 -->
 <div class="sections readable">
   <section class="section">
