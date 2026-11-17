@@ -20,12 +20,6 @@ internal sealed class SianoTsAligner
     private int _used;
     private bool _synced;
 
-    /// <summary>揃っていない間に捨てたバイト数</summary>
-    public long Skipped { get; private set; }
-
-    /// <summary>揃っていたのに、パケットの先頭が 0x47 でなくなった回数</summary>
-    public int Lost { get; private set; }
-
     /// <summary>渡したパケットの数</summary>
     public long Packets { get; private set; }
 
@@ -69,12 +63,9 @@ internal sealed class SianoTsAligner
                 }
                 if (data.Length - at < Packet) return at;
                 _synced = false;
-                Lost++;
             }
             // 最後の 188 バイトの中の 0x47 は、次が届くまで同期バイトか決まらない
-            var found = TsSync.FindPair(data, at, Packet);
-            Skipped += found - at;
-            at = found;
+            at = TsSync.FindPair(data, at, Packet);
             if (data.Length - at <= Packet) return at;
             _synced = true;
         }

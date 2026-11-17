@@ -53,7 +53,6 @@ public class TlvObservationTests
     {
         var observation = Observe(Captured());
 
-        await Assert.That(observation.Package).IsEqualTo(0x00A1);
         await Assert.That(observation.AccessControl.ToList()).IsEquivalentTo(new List<(int, int)> { (0x0005, 0xFFF1) });
         var ecm = observation.Ecm;
         await Assert.That(ecm).IsNotNull();
@@ -61,16 +60,26 @@ public class TlvObservationTests
         await Assert.That(ecm.Value.Section[0]).IsEqualTo((byte)0x82);
         await Assert.That(ecm.Value.Section.Length).IsEqualTo(160);
         await Assert.That(Descrambler.Crc32(ecm.Value.Section)).IsEqualTo(0u);
-        // 映像 (0xF100) はどれも奇数の鍵でスクランブルされている
-        var video = observation.Scrambling[0xF100];
-        await Assert.That(video[3]).IsGreaterThan(0);
-        await Assert.That(video[0] + video[1] + video[2]).IsEqualTo(0);
-        // 信号 (PA メッセージ) はスクランブルされていない
-        await Assert.That(observation.Scrambling[0xFF01][0]).IsGreaterThan(0);
         var lines = observation.Describe().ToList();
         await Assert.That(lines).Contains("MPT  package 0x00A1  CA_system_id 0x0005 ECM 0xFFF1  アセット hev1 0xF100 mp4a 0xF110 stpp 0xF130");
-        await Assert.That(lines.Any(line => line.StartsWith("MMTP 0xF100 hev1  MPU ", StringComparison.Ordinal) && line.Contains("奇数 "))).IsTrue();
+        // 映像 (0xF100) はどれも奇数の鍵でスクランブルされている
+        var video = lines.Single(line => line.StartsWith("MMTP 0xF100 hev1  MPU ", StringComparison.Ordinal));
+        await Assert.That(video).Contains("スクランブル なし 0・偶数 0・奇数 ");
+        await Assert.That(video.Contains("予約の値", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(Count(video, "・奇数 ")).IsGreaterThan(0L);
+        // 信号 (PA メッセージ) はスクランブルされていない
+        var signalling = lines.Single(line => line.StartsWith("MMTP 0xFF01 ", StringComparison.Ordinal));
+        await Assert.That(Count(signalling, "スクランブル なし ")).IsGreaterThan(0L);
         await Assert.That(lines).Contains("ECM 0xFFF1  table_id 0x82 1 セクション (長さ 160)");
+    }
+
+    /// <summary><paramref name="line"/> の中で <paramref name="label"/> のすぐあとに続く数</summary>
+    private static long Count(string line, string label)
+    {
+        var at = line.IndexOf(label, StringComparison.Ordinal) + label.Length;
+        var end = at;
+        while (end < line.Length && char.IsAsciiDigit(line[end])) end++;
+        return long.Parse(line[at..end], System.Globalization.CultureInfo.InvariantCulture);
     }
 
     [Test]

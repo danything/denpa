@@ -527,5 +527,8 @@ public sealed class Dt295NativeLink
 /// <summary>機材の中の I2C の順次実行 (Dt295NativePrograms の操作 2) の応答: 結果・止まった転送の番号・読んだバイト</summary>
 public sealed record I2cReply(uint Code, uint Index, byte[] Read);
 
-/// <summary>機材に置いた body の応答 (Dt295NativePrograms の「応答」)</summary>
+/// <summary>
+/// 機材に置いた body の応答 (Dt295NativePrograms の「応答」)。エージェントが読むのは <see cref="Result"/> と <see cref="WritePosition"/> だけで、
+/// ほかの欄は機材のプログラムの動きをテスト (Dt295NativeProgramsTests) が見るために読む
+/// </summary>
 public sealed record NativeReply(uint Result, uint Sent, uint ReadPosition, uint Alignment, uint PacketPosition, uint WritePosition, uint Aligned);

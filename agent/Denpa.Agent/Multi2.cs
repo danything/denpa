@@ -304,7 +304,7 @@ public sealed class Multi2
     }
 
     /// <summary>暗号化する向き。**放送を作る側の処理**で、ここではテストで TS を作るのに使う</summary>
-    public void Encrypt(bool even, Span<byte> data)
+    internal void Encrypt(bool even, Span<byte> data)
     {
         ref readonly var k = ref even ? ref _even : ref _odd;
         uint cbcLeft = _ivLeft, cbcRight = _ivRight;
