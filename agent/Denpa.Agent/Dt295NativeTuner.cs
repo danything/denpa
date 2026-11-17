@@ -301,14 +301,13 @@ internal sealed class Dt295NativeStream
     public void Stop()
     {
         _stopped = true;
-        var stopped = Stopwatch.StartNew();
-        Output.Stop();
-        if (_kicker.IsAlive) _kicker.Join(TimeSpan.FromSeconds(3));
-        _reader.Join(TimeSpan.FromSeconds(2));
-        EndCapture();
-        _in.Dispose();
-        Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
-        Output.Dispose();
+        ChildTs.Close(Output, () =>
+        {
+            if (_kicker.IsAlive) _kicker.Join(TimeSpan.FromSeconds(3));
+            _reader.Join(TimeSpan.FromSeconds(2));
+            EndCapture();
+            _in.Dispose();
+        });
         _ended = true;
     }
 }

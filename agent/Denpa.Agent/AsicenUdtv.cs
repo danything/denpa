@@ -1008,29 +1008,28 @@ internal sealed class AsicenStream
     public void Stop()
     {
         _stopped = true;
-        var stopped = Stopwatch.StartNew();
-        Output.Stop();
-        try
+        ChildTs.Close(Output, () =>
         {
-            _socket.Shutdown(SocketShutdown.Both);
-        }
-        catch (Exception error) when (error is SocketException or ObjectDisposedException)
-        {
-            // 繋がっていない・もう閉じた
-        }
-        if (_pump is { } pump && !pump.Join(TimeSpan.FromSeconds(1)))
-        {
+            try
+            {
+                _socket.Shutdown(SocketShutdown.Both);
+            }
+            catch (Exception error) when (error is SocketException or ObjectDisposedException)
+            {
+                // 繋がっていない・もう閉じた
+            }
+            if (_pump is { } pump && !pump.Join(TimeSpan.FromSeconds(1)))
+            {
+                _socket.Dispose();
+                pump.Join(TimeSpan.FromSeconds(1));
+            }
             _socket.Dispose();
-            pump.Join(TimeSpan.FromSeconds(1));
-        }
-        _socket.Dispose();
-        if (_pump is not { IsAlive: true })
-        {
-            _first.Dispose();
-            _end.Dispose();
-        }
-        Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
-        Output.Dispose();
+            if (_pump is not { IsAlive: true })
+            {
+                _first.Dispose();
+                _end.Dispose();
+            }
+        });
         _ended = true;
     }
 }

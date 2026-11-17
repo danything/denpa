@@ -13,16 +13,10 @@ namespace Denpa.Agent;
 /// 閉じるときは書いたものを逆順に戻すので、続けて開き直せる (実機で確かめた)。外部メモリーの有効化 (仕様書 3.3) と USB のレジスタ (仕様書 8.4) は戻さない。エージェントが動いている間は開いたまま (Zd1jBoard と同じ)
 /// </para>
 /// </summary>
-public sealed class Dt295NativeDevice
+public sealed class Dt295NativeDevice : PortOwner<Dt295NativeDevice>
 {
-    private static readonly Lock Registry = new();
-    private static readonly Dictionary<string, Dt295NativeDevice> Devices = [];
-
-    private readonly Lock _gate = new();
     private readonly Stack<(string Name, Action Undo)> _undo;
-    private int _users;
     private bool _closed;
-    private bool _faulted;
 
     public string Port { get; }
     public IUsbDevice Usb { get; }
@@ -97,8 +91,8 @@ public sealed class Dt295NativeDevice
         Timeline = timeline;
     }
 
-    /// <summary>USB が抜けた・制御転送が通らなくなったなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
-    public bool Faulted => _faulted || Link.Dead;
+    /// <summary>制御転送が通らなくなった (<see cref="PortOwner{TSelf}.Faulted"/> の印の 1 つ)</summary>
+    private protected override bool Dead => Link.Dead;
 
     /// <summary>
     /// 取る。開いていなければ、そのとき開いて設定する。**返すのは <see cref="Release"/>**。
@@ -120,14 +114,9 @@ public sealed class Dt295NativeDevice
             Dt295NativeDevice? stale;
             lock (Registry)
             {
-                Devices.TryGetValue(port, out var current);
-                if (current is not null && !current.Faulted)
-                {
-                    lock (current._gate) current._users++;
-                    return current;
-                }
+                if (TryReuse(port, out var current)) return current;
                 stale = current;
-                Devices.Remove(port);
+                Owners.Remove(port);
             }
             stale?.Close();
             Dt295NativeDevice device;
@@ -147,7 +136,7 @@ public sealed class Dt295NativeDevice
                 device = Open(port, open, sleep, idlePolls, timeline, trace);
             }
             device._users = 1;
-            lock (Registry) Devices[port] = device;
+            lock (Registry) Owners[port] = device;
             var card = device.Link.CardProgram ? "機材のプログラム" : "ホストが 1 バイトずつ";
             Log.Write($"[{Dt295.Model} {port}] 開きました (設定 {device.SetUp.Time.TotalMilliseconds:F0}ms、制御転送 {device.SetUp.Controls} 回、カードの送受信: {card})");
             return device;
@@ -254,12 +243,6 @@ public sealed class Dt295NativeDevice
         }
     }
 
-    /// <summary>失敗が USB の抜けなら、使えない印を付ける (次に取る側は開き直す)。制御転送が通らなくなったときは <see cref="Dt295NativeLink.Dead"/> が印になる</summary>
-    public void Fail(Exception error)
-    {
-        if (error is UsbGoneException) _faulted = true;
-    }
-
     /// <summary>返す。開いたままにする (使えなくなっていれば閉じる)</summary>
     public void Release()
     {
@@ -270,41 +253,16 @@ public sealed class Dt295NativeDevice
         if (!Faulted) return;
         lock (Registry)
         {
-            if (Devices.TryGetValue(Port, out var current) && current == this) Devices.Remove(Port);
+            if (Owners.TryGetValue(Port, out var current) && current == this) Owners.Remove(Port);
         }
         Close();
     }
 
     /// <summary>誰も使っていなければ閉じる (チューナーが捨てられたとき)。カードが使っていれば開いたまま</summary>
-    public static void CloseIfIdle(string port)
-    {
-        Dt295NativeDevice? device;
-        lock (Registry)
-        {
-            if (!Devices.TryGetValue(port, out device)) return;
-            lock (device._gate)
-            {
-                if (device._users > 0) return;
-            }
-            Devices.Remove(port);
-        }
-        device.Close();
-    }
-
-    /// <summary>全部閉じる (エージェントを止めるとき)。使っている側がいても閉じる</summary>
-    public static void CloseAll()
-    {
-        List<Dt295NativeDevice> devices;
-        lock (Registry)
-        {
-            devices = [.. Devices.Values];
-            Devices.Clear();
-        }
-        foreach (var device in devices) device.Close();
-    }
+    public static void CloseIfIdle(string port) => CloseIdle(port, closeInRegistry: false);
 
     /// <summary>設定を戻して USB を閉じる。機材は起動直後の状態に戻るので、続けて開き直せる</summary>
-    private void Close()
+    private protected override void Close()
     {
         lock (_gate)
         {
