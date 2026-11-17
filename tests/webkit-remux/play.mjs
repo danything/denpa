@@ -9,10 +9,17 @@
 // - open: 新しい <video> で、その位置の fMP4 を足して再生する
 // - seek: 先頭の fMP4 を足して `FIRST` ミリ秒再生したあと、その位置へ飛んで足し直す (H.265 の報告の「飛ぶと止まる」)
 
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  createReadStream,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { createServer } from "node:http";
 import { join } from "node:path";
 
-import { webkit } from "playwright";
+import { chromium, webkit } from "playwright";
 
 const [root, resultPath] = process.argv.slice(2);
 /** 開いた位置から 2 秒進むまで待つ上限 (ms)。手前の IDR からデコードし直すぶん、観はじめまでの時間も測る */
@@ -51,6 +58,75 @@ const versionOf = (x) =>
     .split("/")[1]
     .replace(/^[0-9_]+-/, "")
     .replace(".mp4", "");
+
+/**
+ * fMP4 の最初の映像の塊の時刻 (tfdt。秒)。開く位置との差を見るため。読めなければ null。
+ * 映像のトラックは moov の hdlr が `vide` の trak、時刻の刻みはその mdhd
+ */
+function firstTfdt(path) {
+  const bytes = readFileSync(path).subarray(0, 4 * 1024 * 1024);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const type = (at) => String.fromCharCode(...bytes.subarray(at + 4, at + 8));
+  const kids = (start, end) => {
+    const out = [];
+    for (let at = start; at + 8 <= end;) {
+      const size = view.getUint32(at);
+      if (size < 8 || at + size > end) break;
+      out.push([at, size]);
+      at += size;
+    }
+    return out;
+  };
+  let track = null;
+  let scale = null;
+  for (const [at, size] of kids(0, bytes.length)) {
+    if (type(at) === "moov")
+      for (const [trak, trakSize] of kids(at + 8, at + size)) {
+        if (type(trak) !== "trak") continue;
+        let id = null;
+        let video = false;
+        let timescale = null;
+        for (const [box, boxSize] of kids(trak + 8, trak + trakSize)) {
+          if (type(box) === "tkhd")
+            id = view.getUint32(box + (bytes[box + 8] === 1 ? 28 : 20));
+          if (type(box) === "mdia")
+            for (const [sub] of kids(box + 8, box + boxSize)) {
+              if (type(sub) === "hdlr" && type(sub + 12) === "vide")
+                video = true;
+              if (type(sub) === "mdhd")
+                timescale = view.getUint32(
+                  sub + (bytes[sub + 8] === 1 ? 28 : 20),
+                );
+            }
+        }
+        if (video) {
+          track = id;
+          scale = timescale;
+        }
+      }
+    if (type(at) === "moof" && track !== null && scale)
+      for (const [traf, trafSize] of kids(at + 8, at + size)) {
+        if (type(traf) !== "traf") continue;
+        const parts = kids(traf + 8, traf + trafSize);
+        const tfhd = parts.find(([b]) => type(b) === "tfhd");
+        const tfdt = parts.find(([b]) => type(b) === "tfdt");
+        if (
+          tfhd === undefined ||
+          tfdt === undefined ||
+          view.getUint32(tfhd[0] + 12) !== track
+        )
+          continue;
+        const v1 = bytes[tfdt[0] + 8] === 1;
+        const time = v1
+          ? Number(view.getBigUint64(tfdt[0] + 12))
+          : view.getUint32(tfdt[0] + 12);
+        return +(time / scale).toFixed(3);
+      }
+  }
+  return null;
+}
+for (const m of manifests)
+  for (const x of m.made) x.tfdt = firstTfdt(join(root, x.file));
 
 const cases = [];
 for (const m of manifests) {
@@ -365,43 +441,65 @@ async function inPage({ source, codecs, steps, watch, first, order, nudge }) {
  * 観る画面と同じく、作ってすぐ play() を呼ぶ。player-seek は先頭から `first` ミリ秒流してから飛ぶ
  */
 async function inPlayer({ codecs, steps, files, watch, first, kind }) {
-  const state = { stage: "start", events: [], results: [], states: [] };
+  const state = {
+    stage: "start",
+    events: [],
+    results: [],
+    states: [],
+    timeline: [],
+  };
   window.__state = state;
   const { remuxPlayer } = await import("/remux.js");
-  // 中の様子を残す (MSE の状態と、届いたバイト数)
+  const ranges = (r) => {
+    try {
+      const out = [];
+      for (let i = 0; i < r.length; i++)
+        out.push([+r.start(i).toFixed(3), +r.end(i).toFixed(3)]);
+      return out;
+    } catch (error) {
+      return String(error);
+    }
+  };
+  // iPhone と同じく ManagedMediaSource があればそれ (Chrome には無い)。SourceBuffer を控えて中の範囲を残す
+  const Base = window.ManagedMediaSource ?? window.MediaSource;
+  const managed = Base === window.ManagedMediaSource;
   let made = null;
-  const Base = window.ManagedMediaSource;
+  let sourceBuffer = null;
   class Source extends Base {
     constructor() {
       super();
       made = this;
-      for (const name of ["sourceopen", "startstreaming", "endstreaming"])
+      for (const name of [
+        "sourceopen",
+        "sourceended",
+        "startstreaming",
+        "endstreaming",
+      ])
         this.addEventListener(name, () => state.events.push(name));
     }
+    addSourceBuffer(type) {
+      sourceBuffer = super.addSourceBuffer(type);
+      sourceBuffer.addEventListener("error", () =>
+        state.events.push("sb-error"),
+      );
+      return sourceBuffer;
+    }
   }
+  // 届いたバイト数を数える (中身は変えない)
   const realFetch = window.fetch.bind(window);
   let received = 0;
   window.fetch = async (...args) => {
     state.events.push(`fetch ${String(args[0]).split("/").at(-1)}`);
     const response = await realFetch(...args);
-    state.events.push(`response ${response.status}`);
     const reader = response.body.getReader();
-    // route.fulfill は本文を 1 つの塊で返す。サーバのように小分けにして渡す (大きな塊は QuotaExceededError になる)
-    let rest = new Uint8Array(0);
     const body = new ReadableStream({
       async pull(controller) {
-        if (rest.length === 0) {
-          const { done, value } = await reader.read();
-          if (done) {
-            controller.close();
-            return;
-          }
-          rest = value;
+        const { done, value } = await reader.read();
+        if (done) controller.close();
+        else {
+          received += value.length;
+          controller.enqueue(value);
         }
-        const part = rest.subarray(0, 256 * 1024);
-        rest = rest.subarray(part.length);
-        received += part.length;
-        controller.enqueue(part.slice());
       },
       cancel: (reason) => reader.cancel(reason),
     });
@@ -421,6 +519,8 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
     "playing",
     "seeked",
     "seeking",
+    "loadedmetadata",
+    "canplay",
   ])
     video.addEventListener(name, () =>
       state.events.push(`${name}@${video.currentTime.toFixed(2)}`),
@@ -436,7 +536,7 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
   let failure = null;
   const player = remuxPlayer(
     video,
-    { Source, managed: true },
+    { Source, managed },
     {
       url,
       codecs: `video/mp4; codecs="${codecs}"`,
@@ -449,8 +549,20 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
       },
     },
   );
-  void video.play().catch(() => undefined);
+  void video.play().catch((error) => state.events.push(`play: ${error}`));
   const begin = performance.now();
+  const snapshot = () => ({
+    ms: Math.round(performance.now() - begin),
+    currentTime: +video.currentTime.toFixed(3),
+    readyState: video.readyState,
+    networkState: video.networkState,
+    seeking: video.seeking,
+    paused: video.paused,
+    buffered: ranges(video.buffered),
+    seekable: ranges(video.seekable),
+    sourceBuffer: sourceBuffer === null ? null : ranges(sourceBuffer.buffered),
+    decoded: video.getVideoPlaybackQuality().totalVideoFrames,
+  });
   if (kind === "player-seek") {
     while (performance.now() - begin < first && video.error === null)
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -460,6 +572,7 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
   const stepStart = performance.now();
   const quality0 = video.getVideoPlaybackQuality();
   let startup = null;
+  let next = 0;
   while (
     performance.now() - stepStart < watch &&
     video.error === null &&
@@ -468,22 +581,51 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
     if (startup === null && video.currentTime > at + 0.1)
       startup = performance.now() - stepStart;
     if (video.currentTime > at + 2) break;
+    // 250 ms ごとに様子を残す (始めの 5 秒)
+    if (performance.now() - stepStart >= next && next <= 5000) {
+      state.timeline.push(snapshot());
+      next += 250;
+    }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   const quality = video.getVideoPlaybackQuality();
+  const end = snapshot();
+  const advanced = +(video.currentTime - at).toFixed(3);
+  /*
+   * 止まった段を言う。進んだ・エラーなら null
+   * - data: いまの位置にデータが無い
+   * - seek: seeking のまま
+   * - decode: 位置にデータがあるのに、デコードしたコマがほとんど無い
+   * - clock: デコードはしたが、時刻が進まない
+   */
+  const inRange = (list, t) =>
+    Array.isArray(list) && list.some(([a, b]) => a <= t + 0.05 && t < b);
+  const stuck =
+    video.error !== null || failure !== null || advanced > 1
+      ? null
+      : !inRange(end.buffered, video.currentTime)
+        ? "data"
+        : video.seeking
+          ? "seek"
+          : quality.totalVideoFrames - quality0.totalVideoFrames < 2
+            ? "decode"
+            : "clock";
   state.results.push({
     pos: at,
     file: steps.at(-1).file,
     from: steps.at(-1).from,
     first: steps.at(-1).first,
+    tfdt: steps.at(-1).tfdt ?? null,
     error:
       video.error === null
         ? null
         : { code: video.error.code, message: video.error.message },
     failure,
+    stuck,
+    managed,
     startTime: at,
     currentTime: +video.currentTime.toFixed(3),
-    advanced: +(video.currentTime - at).toFixed(3),
+    advanced,
     decoded: quality.totalVideoFrames - quality0.totalVideoFrames,
     readyState: video.readyState,
     seeking: video.seeking,
@@ -493,44 +635,130 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
     received,
     streaming: made?.streaming ?? null,
     msState: made?.readyState ?? null,
-    sourceBuffers: made?.sourceBuffers.length ?? null,
+    end,
   });
   player.destroy();
   state.stage = "done";
   return state;
 }
 
-const browser = await webkit.launch({ headless: process.env.HEADED !== "1" });
-const out = [];
-console.log(`webkit ${browser.version()}、${cases.length} 件`);
-for (const c of cases) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  page.on("console", (m) => console.log(`  [page] ${m.text()}`));
-  await page.route("http://t.test/**", (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path === "/remux.js")
-      return route.fulfill({
-        path: process.env.REMUX_JS,
-        contentType: "text/javascript",
-      });
-    if (path.startsWith("/files/"))
-      return route.fulfill({
-        path: join(root, path.slice("/files/".length)),
-        contentType: "video/mp4",
-      });
-    return route.fulfill({
-      body: "<!doctype html><title>t</title><body></body>",
-      contentType: "text/html",
+/*
+ * **流す先のブラウザ** (`PLAY_BROWSER`)。確かめ方のせいで止まっていないかを比べるため、3 つから選ぶ。
+ *
+ * - `webkit`: Playwright の WebKit
+ * - `chrome`: Playwright から本物の Google Chrome (`channel: "chrome"`。Playwright の Chromium は H.264 を再生できない)
+ * - `safari`: 本物の Safari を safaridriver (WebDriver) で動かす。先に `sudo safaridriver --enable` と `safaridriver -p 4444` が要る
+ *
+ * どれも同じページを、手元の HTTP サーバから読む (Playwright の route は本文を 1 つの塊で返すので使わない)
+ */
+const BROWSER = process.env.PLAY_BROWSER || "webkit";
+
+const server = createServer((request, response) => {
+  const path = decodeURIComponent(new URL(request.url, "http://x").pathname);
+  if (path === "/remux.js") {
+    response.writeHead(200, { "Content-Type": "text/javascript" });
+    createReadStream(process.env.REMUX_JS).pipe(response);
+    return;
+  }
+  if (path.startsWith("/files/")) {
+    const file = join(root, path.slice("/files/".length));
+    response.writeHead(200, {
+      "Content-Type": "video/mp4",
+      "Content-Length": statSync(file).size,
     });
-  });
-  await page.goto("http://t.test/");
+    createReadStream(file, { highWaterMark: 64 * 1024 }).pipe(response);
+    return;
+  }
+  response.writeHead(200, { "Content-Type": "text/html" });
+  response.end("<!doctype html><title>t</title><body></body>");
+});
+await new Promise((resolve) => server.listen(8765, "127.0.0.1", resolve));
+const BASE = "http://127.0.0.1:8765/";
+
+/** ページを開き直して `fn(args)` を回す。ブラウザごとの違いはここだけ */
+async function driver() {
+  if (BROWSER === "safari") {
+    const at = "http://127.0.0.1:4444";
+    const call = async (method, path, body) => {
+      const response = await fetch(`${at}${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(JSON.stringify(json.value));
+      return json.value;
+    };
+    const session = await call("POST", "/session", {
+      capabilities: { alwaysMatch: { browserName: "safari" } },
+    });
+    const id = session.sessionId;
+    await call("POST", `/session/${id}/timeouts`, {
+      script: CASE_LIMIT + 10_000,
+    });
+    console.log(`safari ${session.capabilities.browserVersion}`);
+    return {
+      async run(fn, args) {
+        await call("POST", `/session/${id}/url`, { url: BASE });
+        return call("POST", `/session/${id}/execute/async`, {
+          script: `const done = arguments[arguments.length - 1];
+            (${fn.toString()})(arguments[0]).then(done, (error) => done({ evaluateError: String(error) }));`,
+          args: [args],
+        });
+      },
+      state: async () => {
+        try {
+          return await call("POST", `/session/${id}/execute/sync`, {
+            script: "return window.__state",
+            args: [],
+          });
+        } catch {
+          return {};
+        }
+      },
+      async close() {
+        await call("DELETE", `/session/${id}`).catch(() => undefined);
+      },
+    };
+  }
+  const browser =
+    BROWSER === "chrome"
+      ? await chromium.launch({
+          channel: "chrome",
+          headless: process.env.HEADED !== "1",
+          args: ["--autoplay-policy=no-user-gesture-required"],
+        })
+      : await webkit.launch({ headless: process.env.HEADED !== "1" });
+  console.log(`${BROWSER} ${browser.version()}`);
+  let page = null;
+  let context = null;
+  return {
+    async run(fn, args) {
+      await context?.close().catch(() => undefined);
+      context = await browser.newContext();
+      page = await context.newPage();
+      page.on("console", (m) => console.log(`  [page] ${m.text()}`));
+      await page.goto(BASE);
+      return page.evaluate(fn, args);
+    },
+    state: async () =>
+      (await page?.evaluate(() => window.__state).catch(() => ({}))) ?? {},
+    async close() {
+      await context?.close().catch(() => undefined);
+      await browser.close();
+    },
+  };
+}
+
+const browser = await driver();
+const out = [];
+console.log(`${BROWSER}、${cases.length} 件`);
+for (const c of cases) {
   let result;
   try {
     result = await Promise.race([
-      // 打ち切ったあとに context を閉じると、この evaluate は失敗する。それで node を落とさない
-      page
-        .evaluate(c.kind.startsWith("player") ? inPlayer : inPage, {
+      browser
+        .run(c.kind.startsWith("player") ? inPlayer : inPage, {
           ...c,
           nudge: process.env.PLAY_NUDGE === "1",
           watch: WATCH,
@@ -540,18 +768,12 @@ for (const c of cases) {
       new Promise((resolve) => setTimeout(() => resolve(null), CASE_LIMIT)),
     ]);
     if (result === null)
-      result = {
-        caseTimeout: true,
-        ...(await page.evaluate(() => window.__state).catch(() => ({}))),
-      };
+      result = { caseTimeout: true, ...(await browser.state()) };
   } catch (error) {
     result = { evaluateError: String(error) };
   }
-  await Promise.race([
-    context.close().catch(() => undefined),
-    new Promise((resolve) => setTimeout(resolve, 10_000)),
-  ]);
   const row = {
+    browser: BROWSER,
     kind: c.kind,
     round: c.round ?? 1,
     order: c.order,
@@ -562,9 +784,9 @@ for (const c of cases) {
     ...result,
   };
   out.push(row);
-  const last = result.results?.at(-1);
+  const last = result?.results?.at(-1);
   console.log(
-    `${c.kind} ${c.source} ${c.variant} ${c.steps.map((s) => s.file.split("/")[1]).join(" → ")}: ` +
+    `${c.kind} ${c.variant} ${c.steps.map((s) => s.file.split("/")[1]).join(" → ")}: ` +
       JSON.stringify(
         last
           ? {
@@ -573,16 +795,14 @@ for (const c of cases) {
               advanced: last.advanced,
               t: last.currentTime,
               rs: last.readyState,
-              append: last.appendError,
-              play: last.playError,
-              timeouts: result.timeouts,
-              stage: result.stage,
+              stuck: last.stuck,
             }
           : result,
       ),
   );
 }
 await browser.close();
+server.close();
 writeFileSync(resultPath, JSON.stringify(out, null, 2));
 
 const lines = [

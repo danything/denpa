@@ -46,6 +46,15 @@ on:
         description: "進まなければ同じ位置へ入れ直す (open・seek)"
         type: boolean
         default: false
+      browser:
+        description: "流す先 (webkit は Playwright の WebKit、chrome は Google Chrome、safari は本物の Safari)"
+        type: choice
+        options: [webkit, chrome, safari]
+        default: webkit
+      remux_ref:
+        description: "player で流す remux-player.ts のコミット (空なら回すコミットのもの)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -135,9 +144,19 @@ jobs:
 
       # 観る画面と同じ流し方 (`player-open`・`player-seek`) のために、remux-player.ts をブラウザ向けに組む
       - name: Build remux-player
+        env:
+          REF: ${{ inputs.remux_ref }}
         run: |
+          set -euo pipefail
           bun install --frozen-lockfile
-          bun build src/lib/remux-player.ts --target browser --format esm --outfile "$RUNNER_TEMP/remux.js"
+          entry=src/lib/remux-player.ts
+          # 前のコミットの remux-player.ts と比べるとき。読み込むほかのファイルは回すコミットのもの
+          if [ -n "$REF" ]; then
+            git fetch --depth=1 origin "$REF"
+            git show FETCH_HEAD:src/lib/remux-player.ts > src/lib/remux-player.under-test.ts
+            entry=src/lib/remux-player.under-test.ts
+          fi
+          bun build "$entry" --target browser --format esm --outfile "$RUNNER_TEMP/remux.js"
 
       - name: Install Playwright WebKit
         run: |
@@ -161,7 +180,13 @@ jobs:
           PLAY_NUDGE: ${{ inputs.nudge && '1' || '0' }}
           HEADED: ${{ inputs.headed && '1' || '0' }}
           REMUX_JS: ${{ runner.temp }}/remux.js
+          PLAY_BROWSER: ${{ inputs.browser }}
         run: |
+          if [ "$PLAY_BROWSER" = safari ]; then
+            sudo safaridriver --enable
+            safaridriver -p 4444 &
+            sleep 3
+          fi
           node "$RUNNER_TEMP/pw/play.mjs" "$PWD/out" "$PWD/result.json"
           cat result.md >> "$GITHUB_STEP_SUMMARY"
 
