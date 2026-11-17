@@ -726,7 +726,10 @@ let held: {
   fetchedAt: number;
   until: number;
 } | null = null;
-let pending: Promise<HubEntry[] | null> | null = null;
+let pending: {
+  joinedAt: number;
+  entries: Promise<HubEntry[] | null>;
+} | null = null;
 
 /** ためた順位を捨てる。参加したとき・やめたとき (と単体テスト) */
 export function dropRankingView(): void {
@@ -734,8 +737,8 @@ export function dropRankingView(): void {
 }
 
 /**
- * hub から順位を受け取る。401 (トークンが hub から消えた)・403 (7 日送っていない) なら、送ってから 1 度だけ見直す
- * (送る処理は 401 を受けるとトークンを取り直す)
+ * hub から順位を受け取る。401 (トークンが hub から消えた)・403 (7 日送っていない) なら、予約の差分を送ってから
+ * もう 1 度だけ `GET /ranking` を呼ぶ (送る処理は 401 を受けるとトークンを取り直す)
  */
 async function fetchEntries(): Promise<HubEntry[] | null> {
   let row = link();
@@ -757,9 +760,11 @@ async function fetchEntries(): Promise<HubEntry[] | null> {
   return readEntries(result.body);
 }
 
-/** hub を呼ぶのは同時に 1 回だけ。受け取ったらためる */
+/** hub を呼ぶのは、同じ参加の間は同時に 1 回だけ。受け取ったらためる */
 function refresh(joinedAt: number): Promise<HubEntry[] | null> {
-  pending ??= fetchEntries()
+  // やめてすぐ参加し直したときは、前のトークンで呼んでいる途中のものを待たない
+  if (pending?.joinedAt === joinedAt) return pending.entries;
+  const entries = fetchEntries()
     .catch((error: unknown) => {
       console.warn("[ranking] 順位を受け取れませんでした", error);
       return null;
@@ -784,21 +789,27 @@ function refresh(joinedAt: number): Promise<HubEntry[] | null> {
       return held.entries;
     })
     .finally(() => {
-      pending = null;
+      if (pending?.entries === entries) pending = null;
     });
-  return pending;
+  pending = { joinedAt, entries };
+  return entries;
 }
 
+/** 突き合わせた行にする。突き合わせで DB の読み出しが失敗しても、節は「読めません」にするだけで画面は止めない */
 function present(entries: HubEntry[] | null, at: number): RankingView {
-  return entries === null
-    ? { ok: false }
-    : { ok: true, rows: matchEntries(entries, at) };
+  if (entries === null) return { ok: false };
+  try {
+    return { ok: true, rows: matchEntries(entries, at) };
+  } catch (error) {
+    console.warn("[ranking] 順位を番組表と突き合わせられませんでした", error);
+    return { ok: false };
+  }
 }
 
 /**
  * **検索を言葉なしで開いたときの節「予約の多い番組」** (docs/screens.md)。参加していなければ null (節を出さない)。
  * ためた順位がまだ新しければその場で返し、古ければ hub を呼ぶ Promise を返す (画面は待たずに出し、節だけあとから埋める)。
- * 突き合わせは毎回し直すので、予約・取消のあとの読み直しでも行の状態はいまのもの
+ * 突き合わせは毎回し直すので、予約・取消のあとに読み込み直しても行の状態はいまのもの
  */
 export function rankingView(
   at = now(),

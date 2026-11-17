@@ -27,7 +27,7 @@ interface Received {
 }
 let received: Received[] = [];
 /** 偽の hub の返事。`path` ごとに差し替える */
-let reply: (request: Received) => Response;
+let reply: (request: Received) => Response | Promise<Response>;
 /** 偽の hub が出すトークン (出すたびに次へ進む) */
 let tokens: string[] = [];
 /** 偽の hub が `GET /ranking` で返す順位 */
@@ -903,6 +903,29 @@ describe("順位を見る", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  test("やめてすぐ参加し直したら、前のトークンで呼んでいる途中の返事を待たない", async () => {
+    await join();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    reply = async (r) => {
+      if (r.path === "/ranking" && r.auth === `Bearer ${TOKEN_A}`) {
+        await gate;
+        return new Response("down", { status: 503 });
+      }
+      return defaultReply(r);
+    };
+    const old = rankingView();
+    await leave();
+    await join();
+    const fresh = await view();
+    expect(fresh).toEqual({ ok: true, rows: [] });
+    expect(views().at(-1)!.auth).toBe(`Bearer ${TOKEN_B}`);
+    release();
+    await old;
+    // 前のトークンの返事は、いまの参加の順位としてためない
+    expect(rankingView()).toEqual({ ok: true, rows: [] });
   });
 
   test("やめたら null に戻り、ためた順位も捨てる", async () => {
