@@ -258,8 +258,11 @@ export function remuxPlayer(
   async function room(mine: number): Promise<void> {
     for (;;) {
       if (mine !== run) return;
+      // 開く位置を入れる前は、ブラウザが止めても読む (`startAt`)。止めている (`held`) 間は 0 秒のままなので、ブラウザは
+      // 0 秒から先が溜まったと見て送り込みを止め (`endstreaming`)、手前のキーフレームが 30 秒より前にあると開く位置まで届かない
       const streaming =
         !picked.managed ||
+        startAt !== null ||
         (media as MediaSource & { streaming?: boolean }).streaming !== false;
       const ahead = aheadOf(buffered(), position());
       if (streaming && ahead < aheadLimit()) return;

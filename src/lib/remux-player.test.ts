@@ -268,6 +268,30 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     player.destroy();
   });
 
+  test("開く位置を入れる前は、ブラウザが送り込みを止めても (ManagedMediaSource) 開く位置まで読む", async () => {
+    class Stopped extends FakeMediaSource {
+      streaming = false;
+    }
+    globalThis.fetch = (async (url: string, init?: RequestInit) =>
+      fakeFetch(url.replace("from=100", "from=96"), init)) as typeof fetch;
+    const video = new FakeVideo();
+    const player = remuxPlayer(
+      video as unknown as HTMLVideoElement,
+      { Source: Stopped as unknown as MediaSourceClass, managed: true },
+      {
+        url: (at, audio) => `remux?from=${at}&audio=${audio}`,
+        codecs: H264,
+        duration: 600,
+        start: 100,
+        audio: "0",
+        state: () => {},
+      },
+    );
+    await settle();
+    expect(video.currentTime).toBe(100);
+    player.destroy();
+  });
+
   test("流すようにリクエストされていなければ、入れたあとも止めたまま", async () => {
     const { video, player } = start(100);
     await settle();
