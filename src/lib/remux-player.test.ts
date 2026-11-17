@@ -180,6 +180,99 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     expect(media().readyState).toBe("ended");
   });
 
+  test("開く位置は、溜まってから currentTime に入れる。それまでの詰まりでは先頭からリクエストし直さない", async () => {
+    // 応答を止めておき、2 つ目のチャンクから先も止める
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      return fakeFetch(url, init);
+    }) as typeof fetch;
+    gate = new Promise(() => {});
+    const { video, media, player } = start(100);
+    await settle();
+    // まだ何も足していない。入れると macOS の WebKit が止まることがある
+    expect(video.currentTime).toBe(0);
+    video.dispatchEvent(new Event("waiting"));
+    respond();
+    await settle();
+    // 1 つ目のチャンク (100〜102 秒) を足したところで入れる
+    expect(video.currentTime).toBe(100);
+    expect(requests).toEqual(["remux?from=100&audio=0"]);
+    expect(media().buffer?.ranges).toEqual([[100, 102]]);
+    expect(player.origin()).toContain("100.0");
+    player.destroy();
+  });
+
+  test("開く位置を入れる前に飛ばれたら、飛んだ先を採る", async () => {
+    let respond!: () => void;
+    const held = new Promise<void>((resolve) => {
+      respond = resolve;
+    });
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      await held;
+      return fakeFetch(url, init);
+    }) as typeof fetch;
+    const { video, player } = start(100);
+    await settle();
+    video.currentTime = 300;
+    respond();
+    await settle();
+    expect(video.currentTime).toBe(300);
+    expect(requests).toContain("remux?from=300&audio=0");
+    player.destroy();
+  });
+
+  test("開く位置まで届かずに終わったら、届いた末尾に入れる", async () => {
+    // 応答は 100〜106 秒。尺の端より後ろの 110 秒を開いた
+    globalThis.fetch = (async (url: string, init?: RequestInit) =>
+      fakeFetch(url.replace("from=110", "from=100"), init)) as typeof fetch;
+    const { video, player } = start(110);
+    await settle();
+    expect(video.currentTime).toBe(106);
+    player.destroy();
+  });
+
+  test("大きな塊は 1 MB ずつに分けて足す (空の SourceBuffer に入りきらない塊で止まらない)", async () => {
+    const big = new Uint8Array(2.5 * 1024 * 1024);
+    big.set(new Uint8Array(new Float64Array([100, 102]).buffer));
+    globalThis.fetch = (async (url: string) => {
+      requests.push(url);
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(big);
+            controller.close();
+          },
+        }),
+      );
+    }) as typeof fetch;
+    const sizes: number[] = [];
+    const original = FakeSourceBuffer.prototype.appendBuffer;
+    FakeSourceBuffer.prototype.appendBuffer = function (data: BufferSource) {
+      const bytes = data as Uint8Array;
+      sizes.push(bytes.byteLength);
+      // 2 つ目からは中身を見ない (範囲は先頭の 16 バイトにだけ書いてある)
+      if (sizes.length === 1) original.call(this, data);
+      else
+        original.call(
+          this,
+          new Uint8Array(new Float64Array([102, 102]).buffer),
+        );
+    };
+    try {
+      const { video, player } = start(100);
+      await settle();
+      expect(sizes).toEqual([1024 * 1024, 1024 * 1024, 0.5 * 1024 * 1024]);
+      expect(video.currentTime).toBe(100);
+      player.destroy();
+    } finally {
+      FakeSourceBuffer.prototype.appendBuffer = original;
+    }
+  });
+
   test("溜まっている所・読んでいるストリームの少し先へはリクエストし直さない。遠くへ飛べばリクエストし直して前を捨てる", async () => {
     const { video, media } = start(100);
     await settle();

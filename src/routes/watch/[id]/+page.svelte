@@ -2230,7 +2230,11 @@
     } else {
       const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
       if (at !== null && resumePoint(at, video.duration) !== null) {
-        video.currentTime = at;
+        /*
+         * その場で流すときは、remux-player が続きの位置からリクエストし、溜まってから入れる (`remux-player.ts` の `startAt`)。
+         * ここで入れ直すと、まだ先頭 (init segment) しか無いうちに飛ぶことになり、macOS の WebKit は seeking のまま止まる
+         */
+        if (remux === null) video.currentTime = at;
         showContinued();
       }
     }

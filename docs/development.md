@@ -122,15 +122,19 @@ CI では 10 組に割って別のランナーに出し、3 ワーカーの 8 �
 済ませてから `E2E_BROWSER=firefox` (か `webkit`) を付けます (`playwright.config.ts`)。`--browser` で替えると、Chromium だけの起動引数が
 WebKit に渡って起動できません。CDP で回線を絞るテストは Chromium だけで流します。
 
-### 詰め替えを macOS の WebKit で確かめる
+### 詰め替えを macOS の Safari で確かめる
 
 **iPhone で詰め替えが止まるかは、Actions の WebKit remux check (`.github/workflows/webkit-remux.yml`) を手で走らせて見ます。**
 Linux の WebKit は H.264 の fMP4 を再生できないので、iPhone の Safari と同じ VideoToolbox でデコードする macOS のランナーで回します。
 
 - Linux のランナーで x264・x265 の作り物の録画を作り、本物の `copyArgs`・`cleanFrom` で詰め替える (`tests/webkit-remux/make.ts`)。
-  H.264 で変換するところは、変換の枠が埋まっていたときに返す詰め替え (`busy`) も作る
-- macOS のランナーで、`remux-player.ts` と同じ足し方で MSE に流し、`MEDIA_ERR_DECODE` になったか、何コマデコードしたか、何秒進んだかを表にする (`tests/webkit-remux/play.mjs`)
-- 録画を作るのに 2 分ほど (make)、流すのに 35 分ほど (play) かかります。`from_run` に前の run の番号を入れると、録画を作り直さずにその run の fMP4 を使います (3 日で消えます)
+  変換するところは、変換の枠が埋まっていたときに返す詰め替え (`busy`) も作る
+- macOS のランナーで、製品の `remux-player.ts` を組んだものをページで動かし、手元の HTTP サーバから流す (`tests/webkit-remux/play.mjs`)。
+  `MEDIA_ERR_DECODE` になったか、何コマデコードしたか、何秒進んだかと、止まった回の `buffered`・`readyState` などを表と JSON に残す
+- **既定は本物の Safari** (safaridriver。`browser` が `safari`)。Playwright の WebKit (`webkit`) は、本物の Safari と Chrome では起きない止まり方
+  (1 コマ映して進まない) をするので、結果は Safari で確かめる。Chrome (`chrome`) は比べるために使う
+- `remux_ref` にコミットを入れると、そのコミットの `remux-player.ts` で流す (直す前と比べるとき)
+- 録画を作るのに 2 分ほど (make)、流すのに 15〜35 分ほど (play) かかります。`from_run` に前の run の番号を入れると、録画を作り直さずにその run の fMP4 を使います (3 日で消えます)
 
 ## CI
 

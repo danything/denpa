@@ -715,6 +715,9 @@ export function copyArgs(
  * 映像のエンコード方法はライブと同じ (`live.videoArgs`)。インタレ解除は済んでいるので挟まない。
  * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`)。段を下げるなら、エンコード済みと同じコーデックにも変換する。
  * `fps` は元のコマ数 (`MediaFile.fps`)。段を下げるとき、30 コマ以下ならそのままのコマ数で縮める
+ * `anywhere` なら、IRAP (IDR) でないコマから読んでもデコーダにコマを出させる (`-flags2 +showall`。`missingStart`)。
+ * 付けないと、ffmpeg の H.265 のデコーダは参照するフレームが無いコマを捨て続け、先頭のほかに IRAP の無い録画では
+ * 映像が 1 コマも出ない。参照するフレームが揃うまでのコマは崩れて出る
  */
 export function fileTranscodeArgs(
   path: string,
@@ -725,6 +728,7 @@ export function fileTranscodeArgs(
   rung: Rung = 0,
   fps: number | null = null,
   hlg = false,
+  anywhere = false,
 ): string[] {
   // HLG (4K の局の録画を AV1 にしたもの) は、縮めて SDR に直す (ライブの 4K の局と同じ)
   const video = hlg
@@ -733,6 +737,7 @@ export function fileTranscodeArgs(
   return [
     ...QUIET,
     ...video.input,
+    ...(anywhere ? ["-flags2", "+showall"] : []),
     ...(from > 0 ? ["-ss", from.toFixed(3)] : []),
     "-copyts",
     ...recordingInput(path),
@@ -1557,7 +1562,7 @@ function withFallback(
  * **手前に始めてよいキーフレームが無い録画を、その位置から同じコーデックに変換して送る** (`cleanFrom` の `missing`)。
  * 詰め替えると、送る中に始めてよいコマが無く、WebKit は目標の手前の印の付いた P のコマからデコーダに渡して
  * MEDIA_ERR_DECODE になる (#2884)。変換すれば先頭は IDR になる。
- * 読み始めるのは `decodeFrom` (`CleanStart` の説明)。
+ * 読み始めるのは `decodeFrom` (`CleanStart` の説明)。IRAP でないコマから読むので、デコーダにコマを出させる (`fileTranscodeArgs` の `anywhere`)。
  *
  * - `owner` (録画と観る画面。`?viewer=`) が同じ前の変換は、先に止めて枠を譲らせる (`transcode.yieldTranscodes`)。
  *   観る画面は飛ぶたびにリクエストし直すので、前の変換は要らない。止めないと、シークを続けて押したぶん枠が埋まる
@@ -1594,7 +1599,7 @@ function missingStart(
   };
   return new Response(
     transcodeBody(
-      fileAttempts(file, decodeFrom, audio, codec, 0),
+      fileAttempts(file, decodeFrom, audio, codec, 0, true),
       `${label} の変換`,
       release,
       undefined,
@@ -1611,6 +1616,7 @@ function fileAttempts(
   audio: number,
   codec: LiveCodec,
   rung: Rung,
+  anywhere = false,
 ): Attempt[] {
   return withFallback(
     codec,
@@ -1627,6 +1633,7 @@ function fileAttempts(
           rung,
           source.media.fps,
           source.media.hlg,
+          anywhere,
         ),
       ],
     }),

@@ -91,8 +91,8 @@ export type CleanStart =
       marks: Marks;
       /**
        * 変換を始める位置 (秒)。`from` の手前のキーフレームの 1 つ前から読ませる。印の付いた P のコマから読むと、
-       * ffmpeg のデコーダは参照するフレームが揃う (回復点の SEI が示すコマ数を過ぎる) まで出さないので、1 つ前のキーフレームから読んで
-       * `from` より前に揃える。`-ss` の位置より前は出さないので、出る映像は `from` の少し手前から始まる
+       * 参照するフレームが揃う (回復点を過ぎる) までのコマは崩れるので、1 つ前のキーフレームから読んで
+       * `from` より前に揃える。出る映像は `decodeFrom` から始まる (`playback.fileTranscodeArgs` の `anywhere`)
        */
       decodeFrom: number;
     };

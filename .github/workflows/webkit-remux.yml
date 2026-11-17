@@ -1,16 +1,16 @@
 name: WebKit remux check
 
-# **詰め替え (`playback.copyArgs`) の fMP4 を、macOS の WebKit の MSE で再生できるかを確かめる** (#2884)。手で回すだけ。
+# **詰め替え (`playback.copyArgs`) の fMP4 を、macOS の Safari の MSE で再生できるかを確かめる** (#2884)。手で回すだけ。
 # iPhone の Safari と同じ VideoToolbox でデコードする。Linux の WebKit は H.264 の fMP4 を再生できないため、macOS で回す。
 #
-# 1. make (Linux): x264・x265 で作り物の録画 (Matroska) を作り、開く位置ごとに `cleanFrom` を通さない・通す の両方で
-#    `copyArgs` の ffmpeg を回す。sync の印を IDR にだけ残したもの (`+sync`) も作る (tests/webkit-remux/make.ts)。
-#    H.264 で変換するところは、変換の枠が埋まっていたときに返す詰め替え (`busy`) も作る
-# 2. play (macOS): Playwright の WebKit で、remux-player.ts と同じ足し方で流す。新しい <video> で開く (open) のと、
-#    先頭を流したあとに飛ぶ (seek) の 2 通り (tests/webkit-remux/play.mjs)。表は Step Summary と artifact の result に出る
+# 1. make (Linux): x264・x265 で作り物の録画 (Matroska) を作り、開く位置ごとに `cleanFrom` を通さない (copy)・通す (fixed) の
+#    両方で fMP4 を作る。変換するところは、変換の枠が埋まっていたときに返す詰め替え (busy) も作る (tests/webkit-remux/make.ts)
+# 2. play (macOS): 製品の remux-player.ts を組んだものをページで動かし、手元の HTTP サーバから流す。新しい <video> で開く
+#    (player-open) のと、先頭を流したあとに飛ぶ (player-seek) の 2 通り (tests/webkit-remux/play.mjs)。
+#    既定は本物の Safari (safaridriver)。表は Step Summary と artifact の result に出る
 #
 # `from_run` に前の run の番号を入れると make を飛ばし、その run の fMP4 を使う (artifact は 3 日で消える)。
-# 録画を作るのに 2 分ほど (make。並べて回す)、流すのに 35 分ほど (play) かかる
+# 録画を作るのに 2 分ほど (make。並べて回す)、流すのに 15〜35 分ほど (play) かかる
 
 on:
   workflow_dispatch:
@@ -19,6 +19,47 @@ on:
         description: "fMP4 をこの run の artifact から取る (空なら作り直す)"
         type: string
         default: ""
+      variants:
+        description: "流す録画の種類 (カンマ区切り。空なら全部)"
+        type: string
+        default: ""
+      versions:
+        description: "流す作り方 (both・copy・fixed・silent。空なら全部)"
+        type: string
+        default: ""
+      kinds:
+        description: "流し方 (player-open・player-seek は remux-player.ts で流す。open・seek は足し方を変えて試すとき)"
+        type: string
+        default: "player-open,player-seek"
+      orders:
+        description: "開く位置を currentTime に入れる時 (before・metadata・covered・after)"
+        type: string
+        default: "covered"
+      rounds:
+        description: "open を何回ずつ流すか"
+        type: string
+        default: "2"
+      headed:
+        description: "画面を出して流す (headless でない)"
+        type: boolean
+        default: false
+      nudge:
+        description: "進まなければ同じ位置へ入れ直す (open・seek)"
+        type: boolean
+        default: false
+      browser:
+        description: "流す先 (webkit は Playwright の WebKit、chrome は Google Chrome、safari は本物の Safari)"
+        type: choice
+        options: [safari, webkit, chrome]
+        default: safari
+      remux_ref:
+        description: "player で流す remux-player.ts のコミット (空なら回すコミットのもの)"
+        type: string
+        default: ""
+      rechunk:
+        description: "player で、届いた塊を 256 KB ずつに分けて渡す"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,6 +80,7 @@ jobs:
           - hevc-closed
           - hevc-cra-rasl
           - hevc-cra-norasl
+          - hevc-trail-keys
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -96,6 +138,31 @@ jobs:
           run-id: ${{ inputs.from_run || github.run_id }}
           github-token: ${{ github.token }}
 
+      # macOS の grep には -P が無いので sed で読む
+      - name: Read bun version from Dockerfile
+        id: bun
+        run: echo "version=$(sed -nE 's/.*oven\/bun:([^-[:space:]]+).*/\1/p' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      # 観る画面と同じ流し方 (`player-open`・`player-seek`) のために、remux-player.ts をブラウザ向けに組む
+      - name: Build remux-player
+        env:
+          REF: ${{ inputs.remux_ref }}
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          entry=src/lib/remux-player.ts
+          # 前のコミットの remux-player.ts と比べるとき。読み込むほかのファイルは回すコミットのもの
+          if [ -n "$REF" ]; then
+            git fetch --depth=1 origin "$REF"
+            git show FETCH_HEAD:src/lib/remux-player.ts > src/lib/remux-player.under-test.ts
+            entry=src/lib/remux-player.under-test.ts
+          fi
+          bun build "$entry" --target browser --format esm --outfile "$RUNNER_TEMP/remux.js"
+
       - name: Install Playwright WebKit
         run: |
           set -euo pipefail
@@ -109,7 +176,23 @@ jobs:
           sysctl -n machdep.cpu.brand_string
 
       - name: Play
+        env:
+          PLAY_VARIANTS: ${{ inputs.variants }}
+          PLAY_VERSIONS: ${{ inputs.versions }}
+          PLAY_KINDS: ${{ inputs.kinds }}
+          PLAY_ORDERS: ${{ inputs.orders }}
+          PLAY_ROUNDS: ${{ inputs.rounds }}
+          PLAY_NUDGE: ${{ inputs.nudge && '1' || '0' }}
+          HEADED: ${{ inputs.headed && '1' || '0' }}
+          REMUX_JS: ${{ runner.temp }}/remux.js
+          PLAY_BROWSER: ${{ inputs.browser }}
+          PLAY_RECHUNK: ${{ inputs.rechunk && '1' || '0' }}
         run: |
+          if [ "$PLAY_BROWSER" = safari ]; then
+            sudo safaridriver --enable
+            safaridriver -p 4444 &
+            sleep 3
+          fi
           node "$RUNNER_TEMP/pw/play.mjs" "$PWD/out" "$PWD/result.json"
           cat result.md >> "$GITHUB_STEP_SUMMARY"
 

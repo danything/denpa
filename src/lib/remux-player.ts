@@ -50,6 +50,12 @@ const BEHIND = 30;
 const SLACK = 15;
 /** 受け取りの速さをこれだけ測れていなければ、先を多めに溜めて測る (ms)。`adapt.ts` の上げるまでの待ちと同じ */
 const PROBE_EVERY = UP_WAIT_WATCH;
+/**
+ * 1 回に足す上限 (バイト)。読むのを止めている間にブラウザが溜めたぶんは 1 回の読み出しでまとめて返る (`aheadLimit`)。
+ * 空の SourceBuffer に溜められる量を超える塊は、後ろを捨てても足せず (`QuotaExceededError`)、観て減るのを待ったまま止まる
+ * (手元から速く届くと、Safari は 1 回で 20〜36 MB を返した。Chrome は 2 MB まで。`.github/workflows/webkit-remux.yml`。#2884)
+ */
+const APPEND_MOST = 1024 * 1024;
 
 /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
 export type StreamUrl = (from: number, audio: string) => string;
@@ -154,6 +160,14 @@ export function remuxPlayer(
   /** 溜めすぎて待っている読み込みを起こす */
   let wake: (() => void) | null = null;
   const meter = new Meter();
+  /**
+   * **開く位置。溜まるまで currentTime に入れない** (`place`)。何も無いうちに入れると、macOS の WebKit は
+   * seeking のまま止まるか、1 コマ映して止まることがある (MediaSource・ManagedMediaSource、headless でも画面を出しても。
+   * `.github/workflows/webkit-remux.yml` で確かめた。#2884)。入れたら null
+   */
+  let startAt: number | null = null;
+  /** いまの位置。開く位置をまだ入れていなければ、その位置 */
+  const position = (): number => startAt ?? video.currentTime;
 
   const nudge = (): void => {
     const resolve = wake;
@@ -228,7 +242,7 @@ export function remuxPlayer(
 
   /** 後ろの捨ててよいぶんを捨てる。捨てたら true */
   async function trim(mine: number): Promise<boolean> {
-    const cut = video.currentTime - BEHIND;
+    const cut = position() - BEHIND;
     const first = buffered()[0];
     if (first === undefined || first[0] >= cut) return false;
     await update((target) => target.remove(0, cut), mine);
@@ -242,7 +256,7 @@ export function remuxPlayer(
       const streaming =
         !picked.managed ||
         (media as MediaSource & { streaming?: boolean }).streaming !== false;
-      const ahead = aheadOf(buffered(), video.currentTime);
+      const ahead = aheadOf(buffered(), position());
       if (streaming && ahead < aheadLimit()) return;
       await sleep();
     }
@@ -303,7 +317,7 @@ export function remuxPlayer(
 
   /** 最後にリクエストしたきっかけと位置、いまの再生位置 (`RemuxPlayer.origin`) */
   function origin(): string {
-    return streamOrigin(cause, causeFrom, video.currentTime);
+    return streamOrigin(cause, causeFrom, position());
   }
 
   /** 前のストリームの読みかけを落とし、`from` 秒から先を捨てる (0 なら全部) */
@@ -358,17 +372,24 @@ export function remuxPlayer(
       if (mine !== run) return;
       if (done) break;
       meter.add(value.byteLength, asked, performance.now());
-      await append(value, mine);
+      // 大きな塊は分けて足す (`APPEND_MOST`)
+      for (let at = 0; at < value.length && mine === run; at += APPEND_MOST)
+        await append(value.subarray(at, at + APPEND_MOST), mine);
+      place();
       retry.flowing();
       // 後ろを捨てるのは足したついでに。捨てる長さが溜まってから (毎回は削らない)
-      if (
-        video.currentTime - (buffered()[0]?.[0] ?? video.currentTime) >
-        BEHIND * 2
-      )
+      if (position() - (buffered()[0]?.[0] ?? position()) > BEHIND * 2)
         await trim(mine);
     }
     if (mine !== run) return;
     loadingFrom = null;
+    // 開く位置まで届かずに終わった (尺の端より後ろを開いた)。届いた末尾に入れる
+    if (startAt !== null) {
+      const last = buffered().at(-1);
+      const at = last === undefined ? startAt : Math.min(startAt, last[1]);
+      startAt = null;
+      video.currentTime = at;
+    }
     // 末尾まで届いた。終わりを伝えない (`endOfStream`) と、最後で止まったまま `ended` が来ない
     await idle();
     if (mine === run && media.readyState === "open") media.endOfStream();
@@ -393,9 +414,8 @@ export function remuxPlayer(
      * 使い切るまでは「繋ぎ直しています」を出さない (`onWaiting`)。継ぎ方は段の切り替え (`switchTo`) と同じ
      */
     retry.schedule(
-      () =>
-        void load(switchPoint(buffered(), video.currentTime), "retry", true),
-      aheadOf(buffered(), video.currentTime) > 0,
+      () => void load(switchPoint(buffered(), position()), "retry", true),
+      aheadOf(buffered(), position()) > 0,
     );
   }
 
@@ -446,7 +466,7 @@ export function remuxPlayer(
     const asking = new AbortController();
     pendingSwitch = asking;
     const before = run;
-    const at = switchPoint(buffered(), video.currentTime);
+    const at = switchPoint(buffered(), position());
     let response: Response;
     try {
       response = await fetch(next(at, audio), { signal: asking.signal });
@@ -483,9 +503,24 @@ export function remuxPlayer(
     return "switched";
   }
 
+  /**
+   * 開く位置まで溜まったら、currentTime に入れる (`startAt`)。届いたものが開く位置より後ろから始まっていれば
+   * (変換は印の付いたコマの都合で少し後ろから出ることがある)、その始まりに入れる
+   */
+  function place(): void {
+    if (startAt === null) return;
+    const range = buffered().find(([, end]) => end > startAt!);
+    if (range === undefined) return;
+    const at = Math.max(startAt, range[0]);
+    startAt = null;
+    video.currentTime = at;
+  }
+
   /** 飛んだ先が溜まっておらず、待っても届かないなら、そこからリクエストし直す */
   const onSeeking = (): void => {
     nudge();
+    // 開く位置を入れる前に飛ばれた。飛んだ先を採る
+    startAt = null;
     if (!opened || retry.waiting) return;
     if (!covers(buffered(), video.currentTime, loadingFrom, SLACK))
       void load(video.currentTime, "seek");
@@ -498,6 +533,8 @@ export function remuxPlayer(
     nudge();
     // 続きを待ちながら溜まっているぶんを再生していて、使い切った。ここから「繋ぎ直しています」を出す
     retry.starved();
+    // 開く位置まで溜まるのを待っている (`place`)
+    if (startAt !== null) return;
     if (buffer === null || retry.waiting || loadingFrom !== null) return;
     if (aheadOf(buffered(), video.currentTime) === 0)
       void load(video.currentTime, "stall");
@@ -525,14 +562,14 @@ export function remuxPlayer(
       // 型が分かっていれば先に作る。分からなければ (段を下げた変換) 応答を受けてから (`prepare`)
       if (wanted !== null) createBuffer(wanted);
       /*
-       * **始める位置を先に入れておく。** まだ何も無いうちに代入した位置は、尺が分かった
-       * ところで効く。入れないと 0 にいると見なされ、詰まり (`waiting`) で先頭からリクエストし直す
+       * **始める位置は、溜まってから入れる** (`startAt`・`place`)。それまでは、いまの位置をその位置とみなす
+       * (`position`)。0 にいると見なすと、詰まり (`waiting`) で先頭からリクエストし直す
        */
       const start = Math.min(
         Math.max(0, options.start),
         Math.max(0, options.duration - 1),
       );
-      if (start > 0) video.currentTime = start;
+      startAt = start > 0 ? start : null;
       void load(start, "open");
     },
     { once: true },
@@ -542,7 +579,7 @@ export function remuxPlayer(
     setAudio(id: string): void {
       if (id === audio) return;
       audio = id;
-      void load(video.currentTime, "audio");
+      void load(position(), "audio");
     },
     switchTo,
     origin,

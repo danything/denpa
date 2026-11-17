@@ -482,6 +482,26 @@ describe("ffmpeg の引数", () => {
     expect(args.join(" ")).toContain("-c:v libx264");
   });
 
+  test("手前に始められるキーフレームが無いときの変換: IRAP でないコマからでもデコーダにコマを出させる", () => {
+    const args = fileTranscodeArgs(
+      "/m/a.mkv",
+      30,
+      0,
+      "h264",
+      null,
+      0,
+      null,
+      false,
+      true,
+    );
+    expect(args.join(" ")).toContain(
+      "-flags2 +showall -ss 30.000 -copyts -i /m/a.mkv",
+    );
+    expect(fileTranscodeArgs("/m/a.mkv", 30, 0, "h264", null)).not.toContain(
+      "-flags2",
+    );
+  });
+
   test("TS の変換: 標準入力から、局を名指しして、出力の時刻をずらす", () => {
     const track = {
       id: "0:sub",
