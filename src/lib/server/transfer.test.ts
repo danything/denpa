@@ -107,6 +107,26 @@ function seedOld(where: ReturnType<typeof machine>): void {
       linked_by: "trusted-network",
     })
     .run();
+  orm()
+    .insert(schema.rankingLink)
+    .values({
+      id: 1,
+      token: "ranking-secret",
+      slot: 0,
+      next_at: now,
+      joined_at: now,
+    })
+    .run();
+  orm()
+    .insert(schema.rankingSent)
+    .values({
+      network_id: 4,
+      service_id: 211,
+      event_id: 1,
+      start_at: now,
+      digest: "x",
+    })
+    .run();
   mkdirSync(join(where.data, "logos", "cm", "1024"), { recursive: true });
   writeFileSync(join(where.data, "logos", "1024.png"), "png");
   writeFileSync(join(where.data, "logos", "1024.png.writing"), "half");
@@ -209,6 +229,9 @@ describe("書き出す", () => {
     expect(n("device_codes")).toBe(0);
     // ニコニコとの連携は移さない (移した先で連携し直す)
     expect(n("niconico_link")).toBe(0);
+    // 予約数ランキングへの参加も移さない (2 台が同じトークンで送り合わないように)
+    expect(n("ranking_link")).toBe(0);
+    expect(n("ranking_sent")).toBe(0);
     // アクセストークン (ハッシュだけ) は持っていく
     expect(n("api_tokens")).toBe(1);
     expect(n("rules")).toBe(1);
