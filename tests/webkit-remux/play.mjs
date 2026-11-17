@@ -344,7 +344,7 @@ for (const row of out) {
   ];
   // エラーの文言に `|` が入ると列がずれる
   lines.push(
-    `| ${cells.map((cell) => String(cell).replace(/\|/g, "\|")).join(" | ")} |`,
+    `| ${cells.map((cell) => String(cell).replace(/\|/g, "\\|")).join(" | ")} |`,
   );
 }
 writeFileSync(resultPath.replace(/\.json$/, ".md"), `${lines.join("\n")}\n`);
