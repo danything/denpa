@@ -359,14 +359,22 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
     const response = await realFetch(...args);
     state.events.push(`response ${response.status}`);
     const reader = response.body.getReader();
+    // route.fulfill は本文を 1 つの塊で返す。サーバのように小分けにして渡す (大きな塊は QuotaExceededError になる)
+    let rest = new Uint8Array(0);
     const body = new ReadableStream({
       async pull(controller) {
-        const { done, value } = await reader.read();
-        if (done) controller.close();
-        else {
-          received += value.length;
-          controller.enqueue(value);
+        if (rest.length === 0) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          rest = value;
         }
+        const part = rest.subarray(0, 256 * 1024);
+        rest = rest.subarray(part.length);
+        received += part.length;
+        controller.enqueue(part.slice());
       },
       cancel: (reason) => reader.cancel(reason),
     });
