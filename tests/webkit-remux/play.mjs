@@ -422,6 +422,10 @@ async function inPlayer({ codecs, steps, files, watch, first, kind }) {
     paused: video.paused,
     startupMs: startup === null ? null : Math.round(startup),
     origin: player.origin(),
+    received,
+    streaming: made?.streaming ?? null,
+    msState: made?.readyState ?? null,
+    sourceBuffers: made?.sourceBuffers.length ?? null,
   });
   player.destroy();
   state.stage = "done";
