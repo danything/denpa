@@ -735,10 +735,16 @@ public sealed class It930xDevice
     {
         var overflow = Bridge.ReadOverflow();
         _overflow = overflow;
-        if (!overflow.Any) return;
+        if (!overflow.Any)
+        {
+            // 電源を入れ直して戻った機材は、また溢れたら denpa に送り直す
+            ForgetFaults();
+            return;
+        }
         FaultOnce("open", $"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。TS の経路をリセットし直します");
         overflow = Bridge.ResetTs();
         _overflow = overflow;
+        if (!overflow.Any) ForgetFaults();
         Log.Write(overflow switch
         {
             { System: true } => $"[{Label}] リセットしても溢れたままです ({overflow})。次の選局で、ロックしたあとに TS が届くかを確かめます",
@@ -760,6 +766,15 @@ public sealed class It930xDevice
         lock (ReportedFaults) first = ReportedFaults.Add($"{kind} {Port}");
         if (first) Log.Fault(message);
         else Log.Write(message);
+    }
+
+    /// <summary>
+    /// この機材の送った印 (<see cref="FaultOnce"/>) を外す。開いたときに溢れていなかった (電源を入れ直して戻った) ときに呼ぶ。
+    /// エージェントを入れ替えないまま同じ機材がまた詰まっても、そのときの行を denpa に残すため
+    /// </summary>
+    private void ForgetFaults()
+    {
+        lock (ReportedFaults) ReportedFaults.RemoveWhere(key => key.EndsWith($" {Port}", StringComparison.Ordinal));
     }
 
     /// <summary>最後に読んだ溢れ (変わったときだけ記録に出すため)</summary>

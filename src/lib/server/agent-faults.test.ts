@@ -74,7 +74,15 @@ describe("エージェントが知らせた機材の異常", () => {
   });
 
   test("古い行と、上限を越えた行を消す", () => {
-    recordAgentFault(1, "main", fault(NOW - (AGENT_FAULT_DAYS + 1) * DAY), NOW);
+    // 期限より古い行は入れない (繋ぎ直すたびに送り直される)
+    expect(
+      recordAgentFault(
+        1,
+        "main",
+        fault(NOW - (AGENT_FAULT_DAYS + 1) * DAY),
+        NOW,
+      ),
+    ).toBe(false);
     for (let i = 0; i < AGENT_FAULT_KEEP + 3; i++)
       recordAgentFault(1, "main", fault(NOW - 1_000_000 + i), NOW);
     const kept = rows();

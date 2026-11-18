@@ -303,11 +303,11 @@ public class It930xDeviceTests
         Log.Faulted += capture;
         try
         {
-            // 溢れたままの機材を、使う側がいなくなって閉じたあとに開き直す
-            for (var i = 0; i < 2; i++)
+            // 溢れたままの機材を、使う側がいなくなって閉じたあとに開き直す。3 回目は電源を入れ直して戻ったところ、4 回目はまた溢れたところ
+            foreach (var overflowed in new[] { true, true, false, true })
             {
                 var (usb, _, _) = Fake();
-                usb.Registers[It930xBridge.SysBufOverflow] = 1;
+                if (overflowed) usb.Registers[It930xBridge.SysBufOverflow] = 1;
                 var device = Open(usb, "9-80", new FakeClock());
                 device.Release();
                 It930xDevice.CloseIfIdle("9-80", TimeSpan.Zero);
@@ -318,9 +318,9 @@ public class It930xDeviceTests
             Log.Faulted -= capture;
         }
         var opened = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-80") && text.Contains("開いたときに TS のバッファが溢れていました")).ToList();
-        // 記録には開くたびに出し、denpa に送るのは最初の 1 回だけ
-        await Assert.That(opened.Count).IsEqualTo(2);
-        await Assert.That(sent.Count(text => text.Contains("開いたときに TS のバッファが溢れていました"))).IsEqualTo(1);
+        // 記録には開くたびに出し、denpa に送るのは溢れたままの間は 1 回だけ。戻ったあとにまた溢れたら送り直す
+        await Assert.That(opened.Count).IsEqualTo(3);
+        await Assert.That(sent.Count(text => text.Contains("開いたときに TS のバッファが溢れていました"))).IsEqualTo(2);
     }
 
     [Test]

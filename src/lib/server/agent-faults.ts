@@ -65,6 +65,8 @@ export function recordAgentFault(
     );
     return false;
   }
+  // 繋ぎ直すたびに送り直される古い行は、入れてすぐ消すことになるので入れない
+  if (fault.at < now - AGENT_FAULT_DAYS * 86_400_000) return false;
   try {
     const inserted = orm()
       .insert(agentFaults)
