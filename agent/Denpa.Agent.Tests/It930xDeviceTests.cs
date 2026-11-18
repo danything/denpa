@@ -293,6 +293,37 @@ public class It930xDeviceTests
     }
 
     [Test]
+    public async Task 開いたときの溢れは_機材ごとに_1_回だけ_denpa_に送る()
+    {
+        var sent = new List<string>();
+        Action<string> capture = text =>
+        {
+            if (text.Contains("9-80")) lock (sent) sent.Add(text);
+        };
+        Log.Faulted += capture;
+        try
+        {
+            // 溢れたままの機材を、使う側がいなくなって閉じたあとに開き直す
+            for (var i = 0; i < 2; i++)
+            {
+                var (usb, _, _) = Fake();
+                usb.Registers[It930xBridge.SysBufOverflow] = 1;
+                var device = Open(usb, "9-80", new FakeClock());
+                device.Release();
+                It930xDevice.CloseIfIdle("9-80", TimeSpan.Zero);
+            }
+        }
+        finally
+        {
+            Log.Faulted -= capture;
+        }
+        var opened = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-80") && text.Contains("開いたときに TS のバッファが溢れていました")).ToList();
+        // 記録には開くたびに出し、denpa に送るのは最初の 1 回だけ
+        await Assert.That(opened.Count).IsEqualTo(2);
+        await Assert.That(sent.Count(text => text.Contains("開いたときに TS のバッファが溢れていました"))).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task 開くときに溢れていなければ読むだけでリセットし直さない()
     {
         var (usb, _, _) = Fake();

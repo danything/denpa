@@ -12,6 +12,7 @@ import {
   real,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 import type { Audio } from "../arib";
@@ -1093,6 +1094,32 @@ export const logoRecords = sqliteTable(
     sdtt: integer("sdtt").notNull(),
   },
   (t) => [index("logo_records_started").on(t.started_at)],
+);
+
+/**
+ * **エージェントが知らせた機材の異常** (`agent-faults.ts`。IT930x のブリッジの TS のバッファの溢れなど)。
+ * エージェントの記録はメモリと標準出力だけで、エージェントを入れ替えると消える。溢れた瞬間に何を選局していたかを
+ * あとから読むために、エージェントが送ってきた行 (`/denpa/events` の `fault`) を、その前の記録と一緒に残す (docs/tuner-it930x.md「TS のバッファの溢れ」)。
+ * 新しい順で `AGENT_FAULT_KEEP` 行・`AGENT_FAULT_DAYS` 日ぶんまで残し、古いものから消す
+ */
+export const agentFaults = sqliteTable(
+  "agent_faults",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** 知らせたエージェント (`agents.id`) */
+    agent_id: integer("agent_id").notNull(),
+    /** エージェントがその行を記録に出した時刻 (unix ms) */
+    at: integer("at").notNull(),
+    /** 記録の行 (「[PLEX PX-MLT8PE 3-1] 受信機 4 を選局したあとに TS のバッファが溢れていました …」) */
+    text: text("text").notNull(),
+    /** その前の記録 (`[{"at":ミリ秒,"text":"…"}]` の JSON。古い順) */
+    context: text("context").notNull().default("[]"),
+  },
+  (t) => [
+    // エージェントは、denpa が繋ぎ直すたびに直近のものを送り直すので、同じ行を重ねない
+    uniqueIndex("agent_faults_line").on(t.agent_id, t.at, t.text),
+    index("agent_faults_at").on(t.at),
+  ],
 );
 
 /**
