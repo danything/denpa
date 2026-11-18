@@ -10,7 +10,13 @@ import { eq, notInArray, type SQL, sql } from "drizzle-orm";
 
 import { parsePlaces, type Place } from "./agent-order";
 import { orm } from "./db";
-import { agentChannels, agents, channelReception, services } from "./schema";
+import {
+  agentChannels,
+  agentFaults,
+  agents,
+  channelReception,
+  services,
+} from "./schema";
 import type { AgentChannel } from "./tuner";
 
 /** 1 台のエージェントが返した控え */
@@ -58,7 +64,7 @@ export function storeAgentChannels(read: AgentChannels): void {
 }
 
 /**
- * **行の無くなったエージェントの写しと受信の記録を消す** (`agents.syncEnvAgents`)。
+ * **行の無くなったエージェントの写しと受信の記録と、知らせた機材の異常を消す** (`agents.syncEnvAgents`)。
  * 外部キーは効かせていないので、エージェントの行を消すところで一緒に消す
  */
 export function forgetMissingAgents(): void {
@@ -75,6 +81,7 @@ export function forgetMissingAgents(): void {
     .delete(channelReception)
     .where(notInArray(channelReception.agent_id, ids))
     .run();
+  orm().delete(agentFaults).where(notInArray(agentFaults.agent_id, ids)).run();
 }
 
 /** `agent_channels` の行が、外側の `services` の行の TS のものか */

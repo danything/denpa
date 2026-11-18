@@ -246,7 +246,7 @@ function busyRecordings(): number {
  * トークンを開く鍵は DB の隣のファイルで写しに入らないうえ、移した先では連携し直す)・予約数ランキングへの参加 (`ranking_link`・`ranking_sent`。
  * 前の機械が動き続けると、同じトークンで 2 台が送り合って票を取り消し合う。移した先ではオンにし直す)・
  * つないだエージェント (`agents`。組んだ相手は `tls/denpa.key` に結び付いていて、移した先では組み直す) と、エージェントごとのチャンネルの写し (`agent_channels`)・
- * 受信の記録 (`channel_reception`。移した先ではエージェントの行の ID が変わる) を消し、`secure_delete` と
+ * 受信の記録 (`channel_reception`)・機材の異常 (`agent_faults`。どちらも移した先ではエージェントの行の ID が変わる) を消し、`secure_delete` と
  * `VACUUM` で消した行の中身もファイルに残さない。
  *
  * **別のプロセスで回す。** 数百 MB の DB だと数秒かかり、その間この (1 本しかない) スレッドが止まると
@@ -271,6 +271,7 @@ copy.exec("DELETE FROM ranking_sent");
 copy.exec("DELETE FROM agents");
 copy.exec("DELETE FROM agent_channels");
 copy.exec("DELETE FROM channel_reception");
+copy.exec("DELETE FROM agent_faults");
 copy.exec("VACUUM");
 copy.close();
 `;

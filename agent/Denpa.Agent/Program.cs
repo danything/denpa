@@ -167,6 +167,8 @@ CardChoice.Load(config.CardsFile);
 var events = new Events();
 // カードが契約の更新 (EMM) を受け入れたら、denpa に契約を確かめ直させる (Emm.cs)
 CardNotice.Shared = new CardNotice(() => events.Emit("card"));
+// 機材の異常の行 (IT930x のブリッジの溢れ) は、直前の記録と一緒に denpa へ送って DB に残させる。denpa が入れ替わっている間のものも、繋ぎ直したときに送る
+Log.Faulted = text => events.Emit("fault", Events.FaultData(text, Log.Recent.Snapshot(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()), retain: true);
 var (tuners, detected) = config.ResolveTuners();
 
 /*

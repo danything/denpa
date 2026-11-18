@@ -21,6 +21,20 @@ public static class Log
         Recent.Add(message);
         Console.WriteLine($"[agent] {message}");
     }
+
+    /// <summary>
+    /// **機材の異常の行** (IT930x のブリッジの溢れ)。記録に出し、<see cref="Faulted"/> にも渡す。
+    /// エージェントはこれを denpa に送り (<c>/denpa/events</c> の <c>fault</c>)、denpa が DB に残す。
+    /// 記録はメモリと標準出力だけで、エージェントを入れ替えると消え、溢れた瞬間に何をしていたかを読めなかった (2026-11-15 の PX-MLT8PE)
+    /// </summary>
+    public static void Fault(string message)
+    {
+        Write(message);
+        Faulted?.Invoke(message);
+    }
+
+    /// <summary><see cref="Fault"/> の行を受け取る (Program.cs が通知につなぐ)。つないでいなければ記録に出すだけ</summary>
+    public static Action<string>? Faulted { get; set; }
 }
 
 /// <summary>直近の行を決まった数だけ持つリングバッファ。いろいろなスレッドから書かれるので、ロックを取って触る</summary>

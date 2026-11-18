@@ -735,16 +735,46 @@ public sealed class It930xDevice
     {
         var overflow = Bridge.ReadOverflow();
         _overflow = overflow;
-        if (!overflow.Any) return;
-        Log.Write($"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。TS の経路をリセットし直します");
+        if (!overflow.Any)
+        {
+            // 電源を入れ直して戻った機材は、また溢れたら denpa に送り直す
+            ForgetFaults();
+            return;
+        }
+        FaultOnce("open", $"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。TS の経路をリセットし直します");
         overflow = Bridge.ResetTs();
         _overflow = overflow;
+        if (!overflow.Any) ForgetFaults();
         Log.Write(overflow switch
         {
             { System: true } => $"[{Label}] リセットしても溢れたままです ({overflow})。次の選局で、ロックしたあとに TS が届くかを確かめます",
             { Any: true } => $"[{Label}] リセットしても溢れたままです ({overflow})。TS が届かなければ、機材の電源を抜いて入れ直してください (REBOOT や受信機の電源の入れ直しでは戻りません)",
             _ => $"[{Label}] 溢れが下りました",
         });
+    }
+
+    /// <summary>denpa に送った機材の異常の種類と機材 (<see cref="FaultOnce"/>)</summary>
+    private static readonly HashSet<string> ReportedFaults = [];
+
+    /// <summary>
+    /// 機材の異常の行を、同じ機材の同じ種類 (<paramref name="kind"/>) ではプロセスで 1 回だけ denpa に送る (<see cref="Log.Fault"/>)。2 回目からは記録に出すだけ。
+    /// 溢れたままの機材は、使う側がいなくなって閉じたあと、次の選局で開き直すたびに同じ行を出すため
+    /// </summary>
+    private void FaultOnce(string kind, string message)
+    {
+        bool first;
+        lock (ReportedFaults) first = ReportedFaults.Add($"{kind} {Port}");
+        if (first) Log.Fault(message);
+        else Log.Write(message);
+    }
+
+    /// <summary>
+    /// この機材の送った印 (<see cref="FaultOnce"/>) を外す。開いたときに溢れていなかった (電源を入れ直して戻った) ときに呼ぶ。
+    /// エージェントを入れ替えないまま同じ機材がまた詰まっても、そのときの行を denpa に残すため
+    /// </summary>
+    private void ForgetFaults()
+    {
+        lock (ReportedFaults) ReportedFaults.RemoveWhere(key => key.EndsWith($" {Port}", StringComparison.Ordinal));
     }
 
     /// <summary>最後に読んだ溢れ (変わったときだけ記録に出すため)</summary>
@@ -797,7 +827,7 @@ public sealed class It930xDevice
             if (overflow.SameAs(_flowing)) return false;
             _blocked = overflow;
         }
-        Log.Write(
+        FaultOnce("jammed",
             $"[{Label}] 全体の溢れが立ったままで ({overflow})、受信機 {receiver} がロックしてから {waitedMs} ms 待っても TS が届きませんでした。"
             + "機材の電源を抜いて入れ直すまで、この機材の受信機では選局しません (REBOOT や受信機の電源の入れ直しでは戻りません)");
         return true;
@@ -828,9 +858,15 @@ public sealed class It930xDevice
             : "EP 0x84 の読み出しが追いつかなかったと推定します";
         // 前に記録に出してから今までに、読み出しのスレッドが Read の外にいたいちばん長い時間。溢れが下りたと出すときも数え直す
         var away = TakeLongestAway();
-        Log.Write(overflow.Any
-            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}。読み出しのスレッドが EP 0x84 の読み出しを離れていた時間は、いちばん長くて {away} ms です"
-            : $"[{Label}] {when}に TS のバッファの溢れが下りていました");
+        if (!overflow.Any)
+        {
+            Log.Write($"[{Label}] {when}に TS のバッファの溢れが下りていました");
+            return overflow;
+        }
+        var line = $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}。読み出しのスレッドが EP 0x84 の読み出しを離れていた時間は、いちばん長くて {away} ms です";
+        // 溢れていなかったところから溢れたときと、全体の溢れが新しく立ったときは denpa に送って残させる (溢れた瞬間の記録)。立ったままの値が変わっただけなら記録に出すだけ
+        if (before is not { Any: true } || (overflow.System && !before.System)) Log.Fault(line);
+        else Log.Write(line);
         return overflow;
     }
 
@@ -907,7 +943,7 @@ public sealed class It930xDevice
             // IOException でない失敗 (受信機ごとに分ける処理の不具合など) も同じく片付ける。スレッドごと落ちると、入力を開けたまま読む側がいなくなる
             // EP 0x84 の読み出しは全部の受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
             _faulted = true;
-            Log.Write($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
+            Log.Fault($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
             // 読む側がいないまま入力を開けておくと、ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなる (It930xOverflow)。
             // 閉じるのは使っている側が返してからなので、それまで待たずにここで入力を閉じる
             if (error is not UsbGoneException) CloseInputs();

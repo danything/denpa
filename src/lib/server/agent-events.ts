@@ -17,12 +17,15 @@ import { chunks } from "./stream";
  * | `tuners` | 設定の「チューナー」を更新し、開いた選局をロゴの取得が共有する |
  * | `channels` | スキャンで局が入れ替わった。取り込み直す |
  * | `card` | カードが契約の更新 (EMM) を受け入れた。10 秒置いて契約を確かめ直す (runtime.ts) |
+ * | `fault` | 機材の異常 (IT930x のブリッジの溢れ)。`data` の行と直前の記録を DB に残す (`agent-faults.ts`) |
  *
  * スキャンの進み具合は流れてこない (走らせているのは denpa 自身。`scan.ts`)。
  */
 
 interface AgentEvent {
   name: string;
+  /** `data:` を JSON として読んだもの。無い・読めなければ null (名前だけの通知は `{}`) */
+  data: unknown;
 }
 
 /** つなぎ直しの待ち。すぐ繋ぎ直すと、相手が落ちている間に呼び続けることになる */
@@ -30,15 +33,28 @@ const RETRY_MIN = 1000;
 const RETRY_MAX = 60_000;
 
 /**
- * SSE の 1 ブロックを解釈する。読むのは `event:` だけ。エージェントの `data:` はいつも `{}` で
- * (agent の `Events.cs`)、どのイベントも名前だけで足りる
+ * SSE の 1 ブロックを解釈する。`event:` と `data:` を読む。`data:` が何行かあれば改行でつなぎ (SSE の決まり)、JSON として読む。
+ * 名前だけの通知の `data:` は `{}` (agent の `Events.cs`)。中身を使うのは `fault` だけ
  */
 export function parseBlock(block: string): AgentEvent | null {
   let name = "";
+  const data: string[] = [];
   for (const line of block.split("\n")) {
     if (line.startsWith("event:")) name = line.slice(6).trim();
+    else if (line.startsWith("data:"))
+      data.push(line.slice(5).replace(/^ /, ""));
   }
-  return name === "" ? null : { name };
+  if (name === "") return null;
+  return { name, data: readData(data.join("\n")) };
+}
+
+function readData(text: string): unknown {
+  if (text === "") return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 /**

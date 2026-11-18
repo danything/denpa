@@ -5,6 +5,7 @@ import { SOCKET_PATH } from "#lib/live.js";
 import { followAgent } from "./agent-admin";
 import { forgetAgentCard } from "./agent-cards";
 import { listen } from "./agent-events";
+import { recordAgentFault } from "./agent-faults";
 import { startDiscovery } from "./agent-mdns";
 import { adoptName } from "./agent-name";
 import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
@@ -395,6 +396,10 @@ function listenToAgent(agent: Agent): () => void {
           );
           forgetAgentCard(agent.id);
           recheckAfterCard();
+          break;
+        case "fault":
+          // 機材の異常 (IT930x のブリッジの溢れ)。エージェントを入れ替えると記録が消えるので、直前の記録と一緒に DB に残す
+          recordAgentFault(agent.id, nameOf(agent), event.data);
           break;
         default:
           break;

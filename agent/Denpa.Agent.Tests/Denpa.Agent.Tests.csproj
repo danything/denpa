@@ -16,6 +16,7 @@
     <ItemGroup>
         <Compile Include="*.cs" />
         <Compile Include="../Denpa.Agent/Json.cs" />
+        <Compile Include="../Denpa.Agent/Events.cs" />
         <Compile Include="../Denpa.Agent/AgentTls.cs" />
         <Compile Include="../Denpa.Agent/Qr.cs" />
         <Compile Include="../Denpa.Agent/Mdns.cs" />
