@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # 依存の解決だけを分ける。ソースを変えてもここは再実行されない
 # ---------------------------------------------------------------------------
-FROM docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS deps
+FROM docker.io/oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
 # ワークスペース (packages/) の package.json も、依存を解くのに要る
@@ -101,7 +101,7 @@ RUN cd /usr/share/denpa-font && \
 # ---------------------------------------------------------------------------
 # 開発用。compose からソースを bind mount して使う
 # ---------------------------------------------------------------------------
-FROM docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS dev
+FROM docker.io/oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 AS dev
 WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
@@ -539,7 +539,7 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
 COPY --from=runtime-libs /rootfs/ /
 
 # bun 本体。SvelteKit (adapter-bun) の出力を bun で動かす
-COPY --from=docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=docker.io/oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 /usr/local/bin/bun /usr/local/bin/bun
 
 # 写したライブラリだけで ffmpeg / ffprobe が起きるかを、本番の中身でも見る (シェルが無いので exec の形で)
 RUN ["/usr/local/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-version"]
