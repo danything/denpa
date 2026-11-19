@@ -19,7 +19,7 @@
 set -euo pipefail
 
 # renovate: datasource=github-releases depName=oven-sh/bun extractVersion=^bun-v(?<version>.*)$
-BUN_VERSION=1.4.4
+BUN_VERSION=1.4.5
 BUN_ARCHIVE_SHA256_ARM64=d72e42c60e895ccbc16144bb1e0e0ad7ee384841c35b5501a7ec28b4d6d759c9
 BUN_ARCHIVE_SHA256_X86_64=a7ee2956033938c14a7fc10ce7cc0c755acd688340c2a218adc75ff6ca767ded
 BUN_LICENSE_SHA256=362fe32c954ec829240bd7429c53d705eef08c6bfa45ffc2d02005f857cba4dd
