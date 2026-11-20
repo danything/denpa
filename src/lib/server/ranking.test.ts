@@ -99,6 +99,8 @@ const STATIONS = {
   bs11: { network: 4, service: 211, type: "BS", name: "BS11イレブン" },
   mx: { network: 32391, service: 23608, type: "GR", name: "TOKYO MX1" },
   cs: { network: 7, service: 333, type: "CS", name: "AT-X" },
+  /** 系列の地方局 (近畿広域の TBS 系) */
+  mbs: { network: 32720, service: 2064, type: "GR", name: "MBS毎日放送" },
   /** ケーブルで再送信している BS (元の放送は BS) */
   catvBs: { network: 4, service: 211, type: "CATV", name: "BS11イレブン" },
   /** ケーブルの自主放送 */
@@ -651,13 +653,14 @@ describe("順位を見る", () => {
       service_name?: string;
       region?: string | null;
     }[],
+    affiliation: string | null = null,
   ) {
     return {
       rank,
       votes,
       name: `hub の番組 ${rank}`,
       genres: [7],
-      affiliation: null,
+      affiliation,
       airings: airings.map((a) => ({
         network_id: a.network_id,
         service_id: a.service_id,
@@ -720,6 +723,8 @@ describe("順位を見る", () => {
       name: "hub の番組 1",
       service_name: "NHK総合1・東京",
       region: "関東広域",
+      affiliation: null,
+      others: 0,
       start_at: Math.floor(awayAt / 1000) * 1000,
     });
     expect(mine!.away).toBeNull();
@@ -780,6 +785,69 @@ describe("順位を見る", () => {
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]!.program).toBeNull();
     expect(result.rows[0]!.away?.service_name).toBe("TOKYO MX1");
+  });
+
+  test("地域をまたいでまとめた番組は、受信できる局の放送があればその行にし、無ければ系列とほかの地域の数を出す", async () => {
+    const at = now() + 2 * HOUR;
+    const local = addProgram("mbs", 601, { at });
+    const tbs = {
+      network_id: 32736,
+      service_id: 1048,
+      service_name: "TBS",
+      region: "関東広域",
+      at,
+    };
+    const cbc = {
+      network_id: 32704,
+      service_id: 3096,
+      service_name: "CBC",
+      region: "中京広域",
+      at: at + 5 * MINUTE,
+    };
+    rankingBody = {
+      v: 1,
+      entries: [
+        entry(
+          1,
+          20,
+          [
+            { ...tbs, event_id: 601 },
+            {
+              network_id: STATIONS.mbs.network,
+              service_id: STATIONS.mbs.service,
+              event_id: 601,
+              service_name: "MBS毎日放送",
+              region: "近畿広域",
+              at,
+            },
+          ],
+          "TBS 系",
+        ),
+        entry(
+          2,
+          15,
+          [
+            { ...tbs, event_id: 602 },
+            { ...cbc, event_id: 602 },
+            { ...tbs, service_id: 1049, event_id: 603 },
+          ],
+          "TBS 系",
+        ),
+      ],
+    };
+    await join();
+    const result = await view();
+    if (!result.ok) throw new Error("読めませんでした");
+    const [mine, away] = result.rows;
+    expect(mine!.program?.id).toBe(local);
+    expect(away!.program).toBeNull();
+    // 始まりの早い関東広域の放送を出し、ほかの地域 (同じ地域の 2 つ目は数えない) の数を添える
+    expect(away!.away).toMatchObject({
+      service_name: "TBS",
+      region: "関東広域",
+      affiliation: "TBS 系",
+      others: 1,
+    });
   });
 
   test("受け取った順位は 10 分ためておき、行の予約の状態はその都度引き直す", async () => {

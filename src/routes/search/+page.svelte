@@ -758,10 +758,14 @@
                   {@render rank(row.rank)}
                   <span class="truncate broadcast">{row.away.name}</span>
                 </span>
+                <!-- 系列のある地上波は系列と地域の数 (「TBS 系・関東広域ほか 12 地域」)、独立局と BS・CS は局名と地域 -->
                 <span class="hit-meta small muted"
-                  >受信できない局・<span class="broadcast"
-                    >{row.away.service_name}</span
-                  >{#if row.away.region !== null}・{row.away.region}{/if}・<span
+                  >受信できない局・{#if row.away.affiliation !== null}{row.away
+                      .affiliation}{:else}<span class="broadcast"
+                      >{row.away.service_name}</span
+                    >{/if}{#if row.away.region !== null}・{row.away
+                      .region}{#if row.away.affiliation !== null && row.away.others > 0}ほか
+                      <span class="num">{row.away.others}</span> 地域{/if}{/if}・<span
                     class="num">{dateTime(row.away.start_at)}</span
                   >・{@render votes(row.votes)}</span
                 >
