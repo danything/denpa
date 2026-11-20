@@ -87,7 +87,7 @@ export function cableChannelOf(hertz: number): string | null {
 }
 
 /** NIT に載っていた TS の 1 つ */
-export interface CableStream {
+interface CableStream {
   transportStreamId: number;
   originalNetworkId: number;
   /** service_list_descriptor に載っていた局の数 */
@@ -97,7 +97,7 @@ export interface CableStream {
 }
 
 /** 1 つの搬送波。同じ周波数に TS がいくつも載っていれば TSMF で束ねている */
-export interface CableCarrier {
+interface CableCarrier {
   /** 選局するチャンネルの名前 (`cableChannelOf`)。TSMF の 2 つ目からは `:k` を足す (`lineupJobs`) */
   channel: string;
   /** 周波数 (Hz) */

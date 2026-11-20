@@ -29,7 +29,7 @@ export interface TunerGroup {
 }
 
 /** 並べるのに要るチューナーの中身。`agent` が無いものは 1 台のエージェントのものとして扱う (単体テスト) */
-export interface RankedTuner {
+interface RankedTuner {
   agent?: number;
   types: readonly string[];
   rank: number | null;
@@ -103,7 +103,7 @@ export function placesKey(places: readonly Place[]): string {
 }
 
 /** 受けられる所の 1 つ。`agent` が null なら、どのエージェントの組にも入る (エージェントを書かない単体テストと、チャンネルの分からない局) */
-export interface LoosePlace {
+interface LoosePlace {
   agent: number | null;
   channel: string;
 }

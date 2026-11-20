@@ -17,7 +17,7 @@ import { createSocket, type Socket } from "node:dgram";
 import { networkInterfaces } from "node:os";
 
 /** 見つけたエージェント 1 台 */
-export interface FoundAgent {
+interface FoundAgent {
   /** 証明書の指紋の先頭 16 字 (TXT の `id`) */
   id: string;
   /** TXT の `name` */
@@ -74,7 +74,7 @@ export function queryPacket(
 }
 
 /** 読んだ記録 1 つ */
-export interface MdnsRecord {
+interface MdnsRecord {
   name: string;
   type: number;
   ttl: number;
