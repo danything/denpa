@@ -541,7 +541,7 @@ interface HubAiring extends AiringId {
   /** 始まり (unix ms) */
   start_at: number;
   service_name: string;
-  /** 地上波の放送の地域の名前。hub が地域の表を持つまでは null */
+  /** 地上波の放送の地域の名前 (「関東広域」)。BS・CS と、hub の地域の表に無い地域は null */
   region: string | null;
 }
 
@@ -551,6 +551,8 @@ interface HubEntry {
   /** 重みを掛けて 5 の倍数に切り下げた数 */
   votes: number;
   name: string;
+  /** 地上波の系列の名前 (「TBS 系」)。独立局と BS・CS は null */
+  affiliation: string | null;
   airings: HubAiring[];
 }
 
@@ -561,7 +563,8 @@ type RankedProgram = Omit<ProgramRow, "service_type" | "service_sid">;
 
 /**
  * 節の 1 行。受信できる局に放送があれば `program` (行から予約・取消・詳細)、
- * 無ければ `away` (hub が返した名前と局名と地域。予約のボタンも詳細も出さない)
+ * 無ければ `away` (hub が返した名前と局名と地域。予約のボタンも詳細も出さない)。
+ * 系列のある地上波の番組は、局名の代わりに系列と、ほかに放送する地域の数 (`others`) を出す (「TBS 系・関東広域ほか 12 地域」)
  */
 type RankedRow = { rank: number; votes: number } & (
   | { program: RankedProgram; away: null }
@@ -571,6 +574,10 @@ type RankedRow = { rank: number; votes: number } & (
         name: string;
         service_name: string;
         region: string | null;
+        /** 地上波の系列の名前。あれば局名の代わりに出す */
+        affiliation: string | null;
+        /** `region` のほかに、この番組をこれから放送する地域の数 (始まった放送の地域は数えない) */
+        others: number;
         start_at: number;
       };
     }
@@ -643,6 +650,8 @@ function readEntries(body: unknown): HubEntry[] | null {
       rank: entry.rank,
       votes: entry.votes,
       name: entry.name,
+      affiliation:
+        typeof entry.affiliation === "string" ? entry.affiliation : null,
       airings,
     });
   }
@@ -712,6 +721,13 @@ function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
         name: entry.name,
         service_name: away.service_name,
         region: away.region,
+        affiliation: entry.affiliation,
+        others: new Set(
+          entry.airings
+            .filter((a) => a.start_at > at)
+            .map((a) => a.region)
+            .filter((r) => r !== null && r !== away.region),
+        ).size,
         start_at: away.start_at,
       },
     });
