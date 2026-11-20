@@ -206,6 +206,75 @@ export function skipTarget(
 }
 
 /**
+ * CM を跨ぐ手前で飛ぶための先読みの基本 (実時間の秒。30 コマ/秒で 3 コマ)。入ってから飛ぶと必ず CM のコマが見え、
+ * コンポジタに渡し済みのコマもあるので 1 コマぶんでは間に合わない。本編の末尾 0.1 秒が静止画になるが、
+ * 境目は場面の切れ目なので分からない
+ */
+const CM_LEAD = 0.1;
+/** 先読みの上限 (実時間の秒)。これより長く本編の末尾を削らない */
+const CM_LEAD_MOST = 0.5;
+/** 1 コマの長さ (秒。30 コマ/秒)。呼び出しの間隔がこれを超えたぶんだけ先読みを伸ばす */
+const FRAME = 1 / 30;
+/** 呼び出しの間隔を見る長さ (ms) */
+const GAP_WINDOW = 5_000;
+/** これより長い間隔は数えない (ms)。止めていた・飛んでいた間で、画面の処理の遅れではない */
+const GAP_IGNORE = 1_000;
+
+/**
+ * **CM を跨ぐ判断をした呼び出しの間隔を測る** (`<video>` は映したコマごと、canvas は刻みごと)。
+ *
+ * 判断は画面の処理 (メインスレッド) で動くので、ほかの処理 (データ放送・実況・字幕を描く) が長く続くと
+ * 呼び出しが遅れ、そのあいだも映像は進む。次の呼び出しが CM に入ってからになると、CM のコマが映る。
+ * 直近 `GAP_WINDOW` のいちばん長い間隔を返し、先読み (`cmLead`) をそのぶん伸ばす
+ */
+export class CallGaps {
+  private last: number | null = null;
+  private gaps: { at: number; gap: number }[] = [];
+
+  /** 呼ばれた (ms。`performance.now()`) */
+  mark(now: number): void {
+    if (this.last !== null) {
+      const gap = now - this.last;
+      if (gap > 0 && gap <= GAP_IGNORE) this.gaps.push({ at: now, gap });
+    }
+    this.last = now;
+    this.prune(now);
+  }
+
+  /** 飛んだ・止めた。次の呼び出しまでの間隔は数えない */
+  pause(): void {
+    this.last = null;
+  }
+
+  /** 直近 `GAP_WINDOW` でいちばん長い間隔 (秒)。測れていなければ 0 */
+  worst(now: number): number {
+    this.prune(now);
+    let most = 0;
+    for (const item of this.gaps) most = Math.max(most, item.gap);
+    return most / 1000;
+  }
+
+  private prune(now: number): void {
+    while (this.gaps.length > 0 && now - this.gaps[0]!.at > GAP_WINDOW)
+      this.gaps.shift();
+  }
+}
+
+/**
+ * CM を跨ぐ手前で飛ぶ先読み (物差しの上の秒。`skipTarget` の `lead`)。
+ *
+ * - **呼び出しが 1 コマより間遠なら、そのぶん伸ばす** (`gap`。`CallGaps`)。上限は `CM_LEAD_MOST`
+ * - **早送りでは速さを掛ける。** 物差しの 0.1 秒のままだと、2 倍速では実時間の 0.05 秒しか先を見ていない
+ *
+ * @param rate 再生の速さ
+ * @param gap 直近の呼び出しの間隔のうち、いちばん長いもの (秒)
+ */
+export function cmLead(rate: number, gap: number): number {
+  const wall = Math.min(CM_LEAD_MOST, CM_LEAD + Math.max(0, gap - FRAME));
+  return wall * Math.max(1, rate);
+}
+
+/**
  * ffprobe の `-show_chapters -print_format json` を読む。
  *
  * **時刻は秒の文字列で来る** (`start_time`)。刻み (`time_base`) から起こす手も
@@ -400,6 +469,16 @@ export function cmSpans(chapters: Chapter[]): Span[] {
     }
   }
   return spans;
+}
+
+/**
+ * `at` より後で次に始まる CM の先頭 (続いている CM はまとめた区間の先頭)。**無ければ null**。
+ *
+ * canvas のプレイヤーに「ここから先のコマは描かない」と渡す (`canvas-player.ts` の `stopAt`)。
+ * 画面の刻みが遅れて飛ぶのが間に合わなくても、CM の 1 コマ目は描かれない
+ */
+export function nextCmStart(chapters: Chapter[], at: number): number | null {
+  return cmSpans(chapters).find((span) => span.start > at)?.start ?? null;
 }
 
 /**

@@ -300,6 +300,14 @@ export class RawEngine {
   }
 
   /**
+   * 録画で、`at` (90 kHz。`reset` の `from` と同じ物差し) から先のコマを描かない。null で外す。`reset` でも外れる
+   * (`canvas-player.ts` の `stopAt`。CM の手前で止める)
+   */
+  stopAt(at: number | null): void {
+    this.send({ type: "stop", at });
+  }
+
+  /**
    * いま出ているフレームを隠す (映像の無い局を開いた)。**次のコマを描いたら (`shown`) また出す**。
    * フレームは worker の canvas にあって画面の側から消せないので、canvas ごと見えなくする
    */

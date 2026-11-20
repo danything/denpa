@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  CallGaps,
   chapterAt,
+  cmLead,
   cmSpans,
   DOUBLE_TAP,
   fromTsTime,
   isCm,
   nextChapterAt,
+  nextCmStart,
   parseChapters,
   plainMarks,
   playbackAt,
@@ -202,6 +205,59 @@ describe("CM を自動で飛ばす", () => {
   /** 先読みしても、CM から遠ければ飛ばない */
   test("先読みしても本編の途中では飛ばない", () => {
     expect(skipTarget(RUN, 10, 0.05)).toBeNull();
+  });
+
+  /**
+   * **先読みは実時間で決めて、速さを掛ける。** 呼び出しが 1 コマごとに来ていれば 0.1 秒、
+   * 画面の処理が詰まって間遠になっていれば、そのぶん伸ばす (上限 0.5 秒)
+   */
+  test("先読みは呼び出しの間隔と速さで伸びる", () => {
+    expect(cmLead(1, 1 / 30)).toBeCloseTo(0.1, 5);
+    expect(cmLead(1, 0)).toBeCloseTo(0.1, 5);
+    expect(cmLead(2, 1 / 30)).toBeCloseTo(0.2, 5);
+    // 速さが 1 より遅くても縮めない
+    expect(cmLead(0.5, 1 / 30)).toBeCloseTo(0.1, 5);
+    // 0.2 秒あいた呼び出しがあった
+    expect(cmLead(1, 0.2 + 1 / 30)).toBeCloseTo(0.3, 5);
+    expect(cmLead(1.5, 0.2 + 1 / 30)).toBeCloseTo(0.45, 5);
+    // 上限
+    expect(cmLead(1, 0.9)).toBeCloseTo(0.5, 5);
+    expect(cmLead(2, 0.9)).toBeCloseTo(1, 5);
+  });
+
+  /** 間隔は直近 5 秒のいちばん長いもの。止めていた・飛んでいた間 (1 秒を超える・`pause` のあと) は数えない */
+  test("呼び出しの間隔を測る", () => {
+    const gaps = new CallGaps();
+    expect(gaps.worst(0)).toBe(0);
+    gaps.mark(0);
+    gaps.mark(33);
+    gaps.mark(200);
+    gaps.mark(233);
+    expect(gaps.worst(233)).toBeCloseTo(0.167, 5);
+    // 5 秒たつと忘れる
+    for (let at = 266; at <= 5300; at += 33) gaps.mark(at);
+    expect(gaps.worst(5300)).toBeCloseTo(0.033, 5);
+    // 止めていた間 (5.7 秒) は数えない
+    gaps.mark(11000);
+    expect(gaps.worst(11000)).toBe(0);
+    gaps.mark(11100);
+    expect(gaps.worst(11100)).toBeCloseTo(0.1, 5);
+    // 飛んだ (`pause`)。次の呼び出しまでの間隔は数えない
+    gaps.pause();
+    gaps.mark(11500);
+    gaps.mark(11533);
+    expect(gaps.worst(11533)).toBeCloseTo(0.1, 5);
+  });
+
+  /** canvas に「ここから先は描かない」と渡す位置。続いている CM はまとめた先頭で、CM の中にいれば次の CM */
+  test("次の CM の先頭", () => {
+    const more = [...RUN, { start: 300, end: 330, title: "CM" }];
+    expect(nextCmStart(more, 10)).toBe(60);
+    expect(nextCmStart(more, 59.99)).toBe(60);
+    expect(nextCmStart(more, 60)).toBe(300);
+    expect(nextCmStart(more, 80)).toBe(300);
+    expect(nextCmStart(more, 300)).toBeNull();
+    expect(nextCmStart([], 10)).toBeNull();
   });
 
   test("チャプターの外・空でも飛ばない", () => {
