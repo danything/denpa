@@ -19,7 +19,7 @@
 # 前のバージョン (本体を wslc のコンテナで動かしていた) からは、DB を写して移る (Move-FromWslc)。
 #
 # 置き場:
-#   %ProgramFiles%\denpa\                 エージェントと通知領域のアイコン (bin\)・本体 (server\。bun・アプリ・ffmpeg・字・デコーダ)・
+#   %ProgramFiles%\denpa\                 エージェントと通知領域のアイコン (bin\)・本体 (server\。bun・アプリ・ffmpeg・フォント・デコーダ)・
 #                                         エージェントを起こす denpa-agent.cmd (管理者しか書けない。SYSTEM で動かすものを、ほかの人に書き換えさせない)
 #   %ProgramData%\denpa\                  DB (denpa.db) とその隣のもの (局ロゴ・鍵)・denpa.env (本体の環境変数。無いときだけ雛形を作る)・本体を起こす denpa.cmd。
 #                                         SYSTEM と管理者だけが読み書きできる
@@ -77,7 +77,7 @@ function Say([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan
 
 # 取ってくる。PowerShell 5.1 の Invoke-WebRequest は遅い (進み具合の表示) ので、Windows 10 から入っている curl.exe で
 # **時間の上限を付ける。** 繋がったまま止まる相手 (落ちかけのサイト) だと、付けなければいつまでも待つ。
-# 時間切れも --retry が試し直す
+# 時間切れも --retry が試し直す。上限は install.sh と同じ 10 分
 function Get-Url([string]$From, [string]$To) {
     & curl.exe -fsSL --retry 3 --connect-timeout 20 --max-time 600 -o $To $From
     if ($LASTEXITCODE -ne 0) { throw "ダウンロードできません: $From" }
@@ -505,11 +505,13 @@ function Get-Payload([string]$Ref, [string]$Work, [switch]$Server) {
     }
     Expand-Zip $agent "$Work\new\bin"
 
-    # --- denpa 本体 (bun・アプリ・ffmpeg・字・デコーダ)。エージェントと同じバージョン ---
+    # --- denpa 本体 (bun・アプリ・ffmpeg・フォント・デコーダ)。エージェントと同じバージョン ---
     if ($Server) {
         $zip = $env:DENPA_SERVER_ZIP
         if (-not $zip) {
             $version = if ($Ref) { $Ref } else { Get-Version }
+            # Register-Server が DENPA_VERSION に書く (取り直すと、その間に出たリリースと食い違う)
+            $script:ServerVersion = $version
             $name = "denpa-$($version -replace '^v', '')-windows-x64.zip"
             $zip = Join-Path $Work $name
             Say "denpa $version"
@@ -529,7 +531,8 @@ function Get-Payload([string]$Ref, [string]$Work, [switch]$Server) {
 }
 
 # エージェントを起こす .cmd とタスク。環境変数はコンテナで既定にしている置き場を Windows の置き場に向け直すものだけ
-# (Mac の plist と同じ。合言葉は環境変数で渡さず、エージェントが tls\pair-token から読む。Get-PairToken)。
+# (合言葉は環境変数で渡さず、エージェントが tls\pair-token から読む。Get-PairToken)。Mac と違い AGENT_HOST は付けない。
+# -AgentOnly と同じく全部のインターフェースで待ち受け、外から届かないようにするのはファイアウォール (docs/install-windows.md)
 # **優先度は普通 (4) に。** 既定の 7 だと、本体のエンコードが CPU を使っている間にエージェントが USB を読みに行けず
 # TS を落としうる (Mac の ProcessType Interactive と同じ理由)
 function Register-Agent {
@@ -567,7 +570,6 @@ function Register-Server([string]$Ref, [string]$Token) {
                 '# denpa 本体の環境変数 (docs/config.md)。install.ps1 は無いときだけ作り、あとは触らない。',
                 '# 直したら、install.ps1 を流し直すか Windows を再起動する。置き場・ffmpeg・エージェントの宛先は install.ps1 が決めるので、書いても効かない',
                 'TZ=Asia/Tokyo',
-                'ENCODE_CONCURRENCY=2',
                 '# 誰を通すか (docs/auth.md)。127.0.0.0/8 と ::1 はこの PC のブラウザ',
                 'TRUSTED_NETWORKS=127.0.0.0/8,::1/128,192.168.0.0/16,10.0.0.0/8'
             ) -join "`n") + "`n")
@@ -704,7 +706,7 @@ function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly) {
 
     Register-Agent
     if (-not $AgentOnly) {
-        Register-Server $(if ($Ref) { $Ref } elseif ($env:DENPA_SERVER_ZIP) { '' } else { Get-Version }) $Token
+        Register-Server $(if ($env:DENPA_SERVER_ZIP) { $Ref } else { $script:ServerVersion }) $Token
     }
     Register-Tray -AgentOnly:$AgentOnly
 }

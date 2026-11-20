@@ -45,8 +45,8 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 手元で回せなければ Actions の **Screenshots** (`.github/workflows/screenshots.yml`) を手で走らせると、
 撮った画像が artifact に上がります。
 
-撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています。画面の BIZ UDPゴシック
-(OFL で配られているもの) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
+撮るイメージ (Dockerfile の `docs` 段) には、本番と同じフォントが入っています。画面の BIZ UDPゴシック
+(OFL で配られているもの) と、放送の文字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
 ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30 fps で組む) は `scripts/capture-docs.ts` の冒頭に
 あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
 
@@ -156,7 +156,7 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
   | e2e     | `e2e (1)`〜`(10)`                                                                | エージェント・通知領域のアプリ・文書・入れ方・配備のほかを触ったとき                          |
   | windows | `agent-windows`・`agent-windows-install`                                         | `agent/`・`tray/Denpa.Tray*`・`install.ps1`・`scripts/build-wdi-simple.ps1`                   |
   | macos   | `agent-macos`・`tray-macos`                                                      | `agent/`・`tray/mac/`・`install.sh`                                                           |
-  | android | `agent-android`                                                                  | `agent/`・android.yml・Android で組む部品・Android の ffmpeg と native-smoke が使うもの                                               |
+  | android | `agent-android`                                                                  | `agent/`・android.yml・Android で組む部品・Android の ffmpeg と native-smoke が使うもの       |
   | bundle  | `server-windows-bundle`・`server-windows`・`server-macos-bundle`・`server-macos` | 配布物の組み方・ffmpeg・入れ方・`tests/native-*`・依存と、OS ごとに扱いが違うサーバのファイル |
 
 - test.yml・ci-changes.sh・global.json を触ったときは全部回します。bundle を回すときは windows・macos・android も回します (配布物を確かめるジョブがそちらで組んだエージェントを使い、Android の APK にも同じ denpa 本体を入れる)
@@ -388,7 +388,7 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
 - アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
 - エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
-- denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・字・デコーダを返すこと。エージェントが全部のインターフェースで待ち受け、
+- denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・フォント・デコーダを返すこと。エージェントが全部のインターフェースで待ち受け、
   denpa が 127.0.0.1 からアプリの作った合言葉でエージェントと組み、設定の「受信」の「チューナー」の一覧 (0 台) を読めること
 - アプリの子プロセスの bun で `.github/android-bun-check.js` を流し (debug の受け口)、JIT が動くこと、`localhost` を引けること、
   `/proc` から読めること、bun が自分を子プロセスで起動できること、`TZ=Asia/Tokyo` のタイムゾーンを読めること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ

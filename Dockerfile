@@ -77,10 +77,10 @@ FROM scratch AS mpeg2wasm-out
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 
 # ---------------------------------------------------------------------------
-# データ放送と字幕、画面の放送の字を描くブラウザに渡す字 (Denpa Font。danything/denpa-font のリリースの woff2 の 2 つ
-# (基本の字と JIS X 0213 で足された漢字) と、後のほうの字の範囲 (CSS の unicode-range)。
+# データ放送と字幕、画面の放送の文字を描くブラウザに渡すフォント (Denpa Font。danything/denpa-font のリリースの woff2 の 2 つ
+# (基本の文字と JIS X 0213 で足された漢字) と、後のほうの文字の範囲 (CSS の unicode-range)。
 # `/api/font/` が配る)。BML は**等幅・丸ゴシック・ARIB 外字**を要求していて、
-# この字が 3 つとも満たす (借りている側は Kosugi を 4.4 MB ぶん抱えているが、外字は入っていない)。
+# このフォントが 3 つとも満たす (借りている側は Kosugi を 4.4 MB ぶん抱えているが、外字は入っていない)。
 # **留めるのはタグだけ** (Renovate はタグだけ上げればよい)。中身は同じリリースの SHA256SUMS で照らす。
 # 画面はこのタグを URL に付けて1 年持たせる (vite.config.ts がこの行を読む)。配る側は VERSION と
 # 照らし、合うときだけ immutable にする (src/lib/server/font.ts)。
@@ -122,13 +122,13 @@ CMD ["bun", "run", "test"]
 
 # ---------------------------------------------------------------------------
 # README・docs の画像を撮る (scripts/capture-docs.ts。docs/development.md「README の画像」)。
-# E2E のイメージに、画像に出る字と、本物の ffmpeg (作り物の録画を組み、撮った画像を WebP にする) を足す
+# E2E のイメージに、画像に出るフォントと、本物の ffmpeg (作り物の録画を組み、撮った画像を WebP にする) を足す
 # ---------------------------------------------------------------------------
 FROM test AS docs
 RUN apt-get update && \
     apt-get -y --no-install-recommends install ffmpeg && \
     rm -rf /var/lib/apt/lists/*
-# 画面の字。app.css が最初に挙げる BIZ UDPゴシックは Windows には入っているが、ここには無い。
+# 画面のフォント。app.css が最初に挙げる BIZ UDPゴシックは Windows には入っているが、ここには無い。
 # OFL で配られているもの (google/fonts) をコミットで留め、中身を照らす
 ARG BIZ_UD_COMMIT=6ce172f74aa355ea43eb964fa4a91570a4d3064d
 ADD --chmod=644 https://raw.githubusercontent.com/google/fonts/${BIZ_UD_COMMIT}/ofl/bizudpgothic/BIZUDPGothic-Regular.ttf \
@@ -139,7 +139,7 @@ RUN cd /usr/share/fonts/truetype/biz-ud && \
       258d7156c165f2ff774b6efee637c22c3b950de0d8a10e501137061bc8085d01 BIZUDPGothic-Regular.ttf \
       30eba52fc837e8b62c97d4b82e6706583149fb7294e3712dd71a655eaea80a90 BIZUDPGothic-Bold.ttf | sha256sum -c - && \
     fc-cache -f
-# 放送の字 (Denpa Font)。本番と同じものを同じ場所に置く (`/api/font/denpa-font.woff2` が読む)
+# 放送の文字のフォント (Denpa Font)。本番と同じものを同じ場所に置く (`/api/font/denpa-font.woff2` が読む)
 COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font
 ENV FFPROBE=/usr/bin/ffprobe
 CMD ["bun", "scripts/capture-docs.ts"]
@@ -403,7 +403,7 @@ COPY --from=build /app/src/lib/server/hold-signals.ts /app/src/lib/server/hold-s
 
 # ---------------------------------------------------------------------------
 # Windows・Mac の配布物 (`denpa-<バージョン>-windows-x64.zip`・`denpa-<バージョン>-darwin-arm64.tar.gz`) に入れる、OS に依らないもの。
-# アプリ (`app-files`)・字 (`denpa-font`)・ブラウザへ配るデコーダ (`mpeg2wasm`) を、本番イメージと同じ段から写す。
+# アプリ (`app-files`)・フォント (`denpa-font`)・ブラウザへ配るデコーダ (`mpeg2wasm`) を、本番イメージと同じ段から写す。
 # bun と ffmpeg は OS ごとに、.github/workflows/windows-server.yml と macos-server.yml が別に用意して足す
 # ---------------------------------------------------------------------------
 FROM scratch AS native-files
@@ -545,7 +545,7 @@ COPY --from=docker.io/oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d522
 RUN ["/usr/local/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-version"]
 RUN ["/usr/local/bin/ffprobe", "-hide_banner", "-loglevel", "error", "-version"]
 
-# データ放送と字幕を描くブラウザに渡す字 (Denpa Font。上の `denpa-font` 段)
+# データ放送と字幕を描くブラウザに渡すフォント (Denpa Font。上の `denpa-font` 段)
 COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font
 
 # ブラウザへ配るデコーダ (MPEG-2・AAC・Opus。`mpeg2wasm` 段)

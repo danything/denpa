@@ -41,8 +41,9 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
   引けないので、LAN のほかの機器 (テレビ・スマホ) からも `http://<IP>:3000` で開きます。Mac と Windows はいつも <http://localhost:3000>
 - 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は更新のたびに上書きするので、
   **変えたいことは同じ場所の `compose.override.yml` に書きます** (Compose が重ねて読み、install.sh は触らない)。
-  Mac は `/Library/Application Support/denpa/data/denpa.env`、Windows は `%ProgramData%\denpa\denpa.env`
-- denpa とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、Linux は `~/denpa/.env` の `AGENT_PAIR_TOKEN` に、
+  Mac と Windows は、変えたいことを `denpa.env` に書きます (Mac は `/Library/Application Support/denpa/data/denpa.env`、Windows は `%ProgramData%\denpa\denpa.env`)
+- denpa とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、Linux は `~/denpa/.env` の `AGENT_PAIR_TOKEN` に
+  (同じファイルにエージェントの名前の元 `AGENT_HOSTNAME` も無いときだけ足す)、
   Mac と Windows は `~/denpa/config/tls/pair-token` (エージェント自身の置き場) に、無いときだけ作って両方へ渡します。上げ直しても変えません
 - もう一度流すと最新のリリースに上がります。`… | bash -s -- --uninstall` (Mac は `… | sudo bash -s -- --uninstall`) で止めて外します
   (`~/denpa`・録画・DB は残す)。ブラウザを開かないなら `--no-open`。Windows は `-Uninstall` / `-NoOpen`
@@ -57,6 +58,8 @@ mkdir denpa && cd denpa
 curl -Lo compose.yml https://raw.githubusercontent.com/danything/denpa/main/compose.prod.yml
 # denpa とエージェントが組むときの合言葉 (agent.md)。一度作ったら変えない
 echo "AGENT_PAIR_TOKEN=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')" > .env
+# denpa の設定に出すエージェントの名前 (書かなければ tuner-agent)
+echo "AGENT_HOSTNAME=$(hostname)" >> .env
 docker compose up -d
 ```
 
@@ -102,10 +105,9 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 ([agent.md](agent.md#エージェントは別イメージ別プロセス))。`TUNER_AGENT_URL` には `#pair=<合言葉>` を付けます。組んだあとも `#pair=` は消しません ([上げるときの注意](config.md#エージェントを-db-に持つようにした-前のバージョンから上げるとき))。
 合言葉は chart が Secret `tuner-agent-pair` に作り、読み方は `helm install` のあとに出ます。
 Pod のネットワークには LAN のマルチキャストが届かない (推定) ので、「エージェントを追加」の候補には出ません ([agent.md](agent.md#lan-で見つける))。
-本体の chart はエージェントと組む合言葉を自分で作って両方に渡すので、何も書かなくて構いません
-(ArgoCD などの GitOps で入れるときは、合言葉を SOPS などで別の Secret に持ち、その名前を `agent.pairSecret` に書きます。
-ArgoCD はクラスタを見ずに描くので chart に作らせると値が変わり続け、Secret を同期しない設定ならそもそも作られません。
-`denpa-agent` の chart も同じで `pairSecret`)。値の一覧と意味は
+本体の chart はエージェントと組む合言葉を自分で作って両方に渡すので、何も書かなくて構いません。
+ArgoCD などの GitOps で入れるときは、合言葉を SOPS などで別の Secret に持ち、その名前を `agent.pairSecret` (`denpa-agent` の chart は `pairSecret`) に書きます。
+ArgoCD はクラスタを見ずに描くので chart に作らせると値が変わり続け、Secret を同期しない設定ならそもそも作られません。値の一覧と意味は
 [charts/denpa/values.yaml](../charts/denpa/values.yaml) のコメントにあります。
 
 #### PVC の名前を変えた (前のバージョンから上げるとき)
@@ -150,7 +152,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.
 
 リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェントと denpa 本体と、Android のアプリ
 (リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`・`denpa-…-darwin-arm64.tar.gz`・`denpa-…-windows-x64.zip`・`denpa-…-android-arm64.apk`) には、
-**出所の証明 (attestation)** を付けています (2.13.0 から)。このリポジトリのリリースの
+**出所の証明 (attestation)** を付けています (2.13.0 から。あとから足した配布物は、足したときから)。このリポジトリのリリースの
 workflow が作ったものかを、[GitHub CLI](https://cli.github.com/) で確かめられます。
 
 ```sh

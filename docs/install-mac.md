@@ -10,7 +10,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 引数は `… | sudo bash -s -- --uninstall` のように渡します (`--no-open` ブラウザを開かない / `--uninstall` 止めて外す / `--agent-only` エージェントだけ)。
 
 **denpa 本体もエージェントも、Mac の上でそのまま動かします。** Docker Desktop・OrbStack・コンテナは使いません。
-本体はリリースに添えた `denpa-<バージョン>-darwin-arm64.tar.gz` (bun・アプリ・ffmpeg・字・ブラウザへ配るデコーダ) で、
+本体はリリースに添えた `denpa-<バージョン>-darwin-arm64.tar.gz` (bun・アプリ・ffmpeg・フォント・ブラウザへ配るデコーダ) で、
 エージェントは `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (.NET の実行ファイル。[メニューバーのアプリ](#メニューバーのアプリ)も入っている) です。どちらも同じバージョンを入れます。
 
 1. **エージェント**: LaunchDaemon (`/Library/LaunchDaemons/io.github.danything.denpa-agent.plist`) に root で載せます。
@@ -90,12 +90,12 @@ IT930x のファームウェアはエージェントに同梱しているので�
 ## 環境変数を足す (`denpa.env`)
 
 **本体の環境変数は `/Library/Application Support/denpa/data/denpa.env` に `KEY=値` で書きます** (変数の一覧は [config.md](config.md))。
-install.sh は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_NETWORKS`) を作り、あとは触りません。
+install.sh は無いときだけ雛形 (`TZ`・`TRUSTED_NETWORKS`) を作り、あとは触りません。
 root でないと書けないので、`sudo nano "/Library/Application Support/denpa/data/denpa.env"` のように開きます。`#` で始まる行は読みません。
 
 - **直したら、install.sh を流し直すか、Mac を再起動します。** `denpa.sh` が本体を起こすたびに読み直すので、
   `sudo launchctl kickstart -k system/io.github.danything.denpa` でも効きます (録画中は流さないこと)
-- 置き場 (`DENPA_DB`・`RAW_DIR`・`ENCODED_DIR`)・ffmpeg・字とデコーダの置き場・エージェントの宛先 (`TUNER_AGENT_URL`)・`DENPA_VERSION` は
+- 置き場 (`DENPA_DB`・`RAW_DIR`・`ENCODED_DIR`)・ffmpeg・フォントとデコーダの置き場・エージェントの宛先 (`TUNER_AGENT_URL`)・`PORT`・`DENPA_VERSION` は
   install.sh が `denpa.sh` で決め、`denpa.env` に書いても効きません
 - `TRUSTED_NETWORKS` の雛形は `127.0.0.0/8,::1/128,192.168.0.0/16,10.0.0.0/8` です。`127.0.0.0/8` と `::1/128` はこの Mac のブラウザです。
   この Mac で cloudflared のような前段を動かすときは、前段越しの人もループバックから来たように見えるので、ループバックを外して OIDC を使います
@@ -169,7 +169,7 @@ Docker Desktop か OrbStack を起動するよう表示します。途中で止�
   配布物の ffprobe で TS・m2ts・mkv・mp4・fMP4 (HEVC Main10・AAC・ARIB 字幕、H.264・AV1・Opus) を denpa と同じ引数で読み (`tests/native-ffprobe.ts`)、VideoToolbox のエンコーダが組み込まれて
   denpa が渡すオプションを持つこと、通れば放送に似せた素材をエンコードできること (ランナーでは通る)、試しのエンコードが落ちればソフトウェアに戻ることを見る。
   進み具合を fd 3 で受け、スリープを止める呼び出しが `pmset -g assertions` に、起こす予約が `pmset -g sched` に出て取り消せることを見る。
-  本体を `bun server.js` で起こして画面・字・デコーダが返ることを見る。install.sh で本体ごと入れて root の LaunchDaemon で動き、
+  本体を `bun server.js` で起こして画面・フォント・デコーダが返ることを見る。install.sh で本体ごと入れて root の LaunchDaemon で動き、
   本体がエージェントと組むところまで。Docker の本体からの移行は偽の docker で流す (`tests/install-mac-migrate.sh`)。メニューバーのアプリは、組んで起こして落ちないこと・
   LaunchAgent に載ること・上げ直すと動いているものを止めること・外すと消えることまで
 - **Mac の実機でチューナーとカードを繋いで確かめたのは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 の報告 (#2218) だけです** ([tuners.md](tuners.md#pixela-pix-dt295))。それも前のバージョン

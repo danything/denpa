@@ -193,7 +193,7 @@ jobs:
           path: ffmpeg-macos.tar.gz
           retention-days: 3
 
-  # アプリ・字・デコーダ (Dockerfile の `native-files` 段)。windows-server.yml と同じ。OS に依らないので、同じキャッシュから組む
+  # アプリ・フォント・デコーダ (Dockerfile の `native-files` 段)。windows-server.yml と同じ。OS に依らないので、同じキャッシュから組む
   files:
     runs-on: ubuntu-latest
     timeout-minutes: 30

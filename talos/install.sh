@@ -57,6 +57,9 @@ die() {
 
 while [ $# -gt 0 ]; do
 	case "$1" in
+	--node | --disk | --trusted) [ $# -ge 2 ] || die "$1 に値を渡してください" ;;
+	esac
+	case "$1" in
 	--node)
 		NODE="${2:-}"
 		shift 2
@@ -83,7 +86,7 @@ umask 077
 # 取ってくる (SRC が URL ならダウンロード、ディレクトリならコピー)
 fetch() {
 	case "$SRC" in
-	http://* | https://*) curl -fsSL "$SRC/$1" -o "$2" ;;
+	http://* | https://*) curl -fsSL --retry 3 --connect-timeout 20 --max-time 300 "$SRC/$1" -o "$2" ;;
 	*) cp "$SRC/$1" "$2" ;;
 	esac
 }
