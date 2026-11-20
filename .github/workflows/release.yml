@@ -238,7 +238,9 @@ jobs:
   # **Mac (Apple Silicon) 用のエージェントをリリースに添える** (install.sh が取りに来る)。
   # Native AOT は Linux から macOS 向けにビルドできないので、ここだけは Mac のランナーで**ビルドする**
   # (イメージのように main でビルドしたものを使い回す先が無い)。中身はタグのコミットそのもの
+  # **リリースを作ったときだけ** (下の server-windows と同じ)。添え損ねたら、その run の失敗したジョブを流し直す
   agent-macos:
+    if: github.event_name == 'release'
     runs-on: macos-26
     permissions:
       # write はリリースに添えるため
@@ -249,7 +251,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.ref || github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -263,7 +265,7 @@ jobs:
         id: build
         run: |
           set -eu
-          tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
+          tag="${{ github.event.release.tag_name }}"
           # バージョンは実行ファイルに入れる (`GET /denpa/about`。agent/Denpa.Agent/About.cs)
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -p:InformationalVersion="$tag" -o out
           swift build -c release --package-path tray/mac
@@ -294,6 +296,7 @@ jobs:
   # **Windows (x64) 用のエージェントも添える** (install.ps1 が取りに来る)。Mac と同じく、
   # Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーでビルドする
   agent-windows:
+    if: github.event_name == 'release'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -303,7 +306,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.ref || github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -324,7 +327,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
+          tag="${{ github.event.release.tag_name }}"
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -p:InformationalVersion="$tag" -o out
           dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
           asset="denpa-agent-${tag#v}-windows-x64.zip"
@@ -518,7 +521,7 @@ jobs:
       # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
       # 素通しにならない)。PR を出し、必須チェックの status を自分で付けて、自分でマージする。
       # 中身は Chart.yaml のバージョンだけで、確かめるものは無い。手順と理由は
-      # .github/bump-pr.sh (build-and-deploy と共通)
+      # .github/bump-pr.sh (ほかの書き戻しと共通)
       - name: Open and self-merge a PR that writes the version back to Chart.yaml
         if: steps.ver.outputs.skip != 'true'
         env:

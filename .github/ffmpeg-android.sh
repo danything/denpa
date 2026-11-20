@@ -90,7 +90,7 @@ cmake_android=(
   -DANDROID_ABI="$jni" -DANDROID_PLATFORM="android-$api" -DANDROID_STL=c++_static
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 )
-# pkg-config は組んだ依存だけを見る (組む機械の .pc を拾わない)
+# pkg-config は組んだ依存だけを見る (組む機械の .pc を読まない)
 export PKG_CONFIG_LIBDIR="$deps/opus/lib/pkgconfig:$deps/svt-av1/lib/pkgconfig:$deps/x264/lib/pkgconfig:$deps/dav1d/lib/pkgconfig:$deps/zimg/lib/pkgconfig"
 
 # ファイルに落としてから開く (パイプで渡すと、途中で切れたダウンロードを curl が最初から取り直しても tar は壊れた入力で落ちる)
@@ -111,7 +111,7 @@ fetch_x264() {
   tar -xf "$work/src.tar" --strip-components=1
   rm -f "$work/src.tar"
 }
-# この依存を組むか (引数で 1 つだけ頼まれたら、それだけ)。組み上がり (`.done`) があれば組まない
+# この依存を組むか (引数で 1 つだけ指定されたら、それだけ)。組み上がり (`.done`) があれば組まない
 want() { { [ -z "$only" ] || [ "$only" = "$1" ]; } && [ ! -e "$deps/$1/.done" ]; }
 
 # recipe:opus:begin

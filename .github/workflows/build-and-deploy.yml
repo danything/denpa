@@ -69,7 +69,7 @@ jobs:
 
   # **arch ごとに、その arch のランナーで組む** (amd64 は ubuntu-latest、arm64 は
   # ubuntu-24.04-arm)。QEMU で arm64 を組むと ffmpeg と Native AOT が何倍も掛かり、
-  # AOT はそもそもエミュレーションの下で転ぶことがある。
+  # AOT はそもそもエミュレーションの下で失敗することがある。
   #
   # ここでは**名前を付けずに digest だけで push する** (push-by-digest)。同じタグへ
   # arch ごとに push すると後に着いたほうが上書きするので、名前は下の merge で
@@ -181,8 +181,8 @@ jobs:
 
       # digest は空のファイルの名前にして merge へ渡す (中身は要らない)。
       # artifact の名前はイメージ名でなく scope (agent / denpa) で付ける。`denpa-agent` は
-      # `denpa` で前方一致するので、merge の `digests-denpa-*` がエージェントの digest まで
-      # 拾ってしまう (レビュー指摘)
+      # `denpa` で前方一致するので、merge の `digests-denpa-*` がエージェントの digest にまで
+      # 当てはまってしまう (レビュー指摘)
       - name: Export digest
         if: steps.built.outputs.skip != 'true'
         env:
@@ -338,7 +338,7 @@ jobs:
   #
   # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
   # 素通しにならない)。印を書き換えた PR を出して、必須チェックの status を自分で付けて、
-  # 自分でマージする。手順と理由は .github/bump-pr.sh (release と共通)
+  # 自分でマージする。手順と理由は .github/bump-pr.sh (ほかの書き戻しと共通)
   bump:
     needs: [tags, merge]
     runs-on: ubuntu-latest

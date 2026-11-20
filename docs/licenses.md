@@ -191,7 +191,7 @@ APK に入る依存は、Kotlin で書くと付いてくる下の 2 つだけで
 Android には OpenSSL が無いので、土台の libssl の代わりに OpenSSL を静的に入れます。
 Siano のファームウェアの許諾の文面 (`LICENCE.siano`) と OpenSSL の `LICENSE.txt` (`LICENSE.openssl` の名前で) は、APK の `assets/licenses/` に入れています。
 
-asicen-userland は、上流の Android 版 (Termux 用の `android-aarch64`・`android-x86_64`) の `asicend`・`asicenctl` を組み直さずに、
+asicen-userland は、上流の Android 向けのビルド (Termux 用の `android-aarch64`・`android-x86_64`) の `asicend`・`asicenctl` を組み直さずに、
 `lib/<ABI>/libasicend.so`・`libasicenctl.so` の名前で入れます (`.github/asicen-android.sh`。アーカイブの SHA-256 を固定して取る)。
 バージョンはイメージと同じ v1.0.0-beta で、上流がコミット `ed215c847979634245fb6a189c582831c462cf44` から組んだものです (模擬のデーモンを組む CI の `ASICEN_USERLAND_REF` と同じ。ずれていれば組むのが止まる)。
 **GPL-2.0 の実行ファイルをそのまま配るので、対応するソースの入手先を添えます。** ソースは上流のリリースの
@@ -202,8 +202,8 @@ asicen-userland は、上流の Android 版 (Termux 用の `android-aarch64`・`
 エージェントは asicend とソケットで通信するだけで、コードは取り込んでいません (イメージと同じ)。ファームウェアは実行しないので `assets/asicen/asicen-loader.bin` に入れ、
 アプリが起動のときに書き出します。扱いはイメージと同じです ([表の上](#asicen-のファームウェアを同梱している判断))。
 
-bun は、公式のリリースの Android 版 (`bun-linux-aarch64-android.zip`) の実行ファイルを組み直さずに、`lib/<ABI>/libbun.so` の名前で入れます
-(`.github/bun-android.sh`。アーカイブと LICENSE.md の SHA-256 を固定して取る)。CI のエミュレータ用の x86_64 の APK には `bun-linux-x64-android-baseline.zip` を入れます。
+bun は、公式のリリースの Android 向けのビルド (`bun-linux-aarch64-android.zip`) の実行ファイルを組み直さずに、`lib/<ABI>/libbun.so` の名前で入れます
+(`.github/bun-android.sh`。アーカイブは同じリリースの SHASUMS256.txt で確かめる)。CI のエミュレータ用の x86_64 の APK には `bun-linux-x64-android-baseline.zip` を入れます。
 bun の `LICENSE.md` (静的に繋いだライブラリの一覧と、JavaScriptCore を組み直す手順がある) を APK の `assets/licenses/bun/` に入れています。
 
 **denpa 本体は `assets/server.zip` に入れます。** Mac・Windows と同じく、上のコンテナイメージ `denpa` と同じものです。アプリ・Denpa Font・ブラウザへ配るデコーダは
@@ -220,8 +220,8 @@ MediaCodec (GPU でのエンコード)・zlib は Android の一部 (`libmediand
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ASP.NET Core (linux の実行時パックの IL を AOT で埋める)                       | エージェントのポートの HTTPS (Kestrel)                                                                       | <https://github.com/dotnet/aspnetcore>                                                               | MIT                                                                                                                                                              |
 | OpenSSL (NDK で組み、静的リンク)                                               | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき                                            | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`)             | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、APK に入れて一緒に配る                                                                              |
-| asicen-userland (上流の Android 版。v1.0.0-beta)                               | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。エージェントが子プロセスで起動する | <https://github.com/Khronos31/asicen-userland> のリリースの `asicen-userland-1.0.0-android-*.tar.gz` | **GPL-2.0**。静的リンクの libusb 1.0.30 は LGPL-2.1+、NDK の libc++ はそれぞれの条件。ソースの入手先と配布物の文書を `assets/licenses/asicen-userland/` に入れる |
-| Bun (`lib/<ABI>/libbun.so`。公式のリリースの Android 版)                       | denpa 本体を動かす                                                                                           | <https://github.com/oven-sh/bun>                                                                     | MIT (中の JavaScriptCore は LGPL-2.1)。`assets/licenses/bun/LICENSE.md`                                                                                          |
+| asicen-userland (上流の Android 向けのビルド。v1.0.0-beta)                               | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。エージェントが子プロセスで起動する | <https://github.com/Khronos31/asicen-userland> のリリースの `asicen-userland-1.0.0-android-*.tar.gz` | **GPL-2.0**。静的リンクの libusb 1.0.30 は LGPL-2.1+、NDK の libc++ はそれぞれの条件。ソースの入手先と配布物の文書を `assets/licenses/asicen-userland/` に入れる |
+| Bun (`lib/<ABI>/libbun.so`。公式のリリースの Android 向けのビルド)                       | denpa 本体を動かす                                                                                           | <https://github.com/oven-sh/bun>                                                                     | MIT (中の JavaScriptCore は LGPL-2.1)。`assets/licenses/bun/LICENSE.md`                                                                                          |
 | FFmpeg (`lib/<ABI>/libffmpeg.so`・`libffprobe.so` と libav*。CI が NDK で組む) | 上のイメージの ffmpeg と同じ                                                                                 | <https://ffmpeg.org>                                                                                 | イメージと同じく `--enable-gpl --enable-version3` で、全体は GPL-3.0-or-later。`assets/licenses/ffmpeg/`                                                         |
 | SVT-AV1・Opus・x264・dav1d・zimg (ソースから組み、libav* に静的リンク)         | 上の Mac の表と同じ                                                                                          | 上の Mac の表と同じ                                                                                  | 上の Mac の表と同じ。`assets/licenses/ffmpeg/<名前>/`                                                                                                            |
 | NDK の libc++ (静的リンク)                                                     | zimg (C++)                                                                                                   | <https://android.googlesource.com/toolchain/llvm-project>                                            | Apache-2.0 WITH LLVM-exception                                                                                                                                   |

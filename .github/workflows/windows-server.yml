@@ -8,9 +8,9 @@ name: Windows server bundle
 # | 置き場         | 中身                                                                                |
 # | -------------- | ----------------------------------------------------------------------------------- |
 # | `bun.exe`      | bun の Windows 用 (公式のリリース。バージョンは Dockerfile の `oven/bun` と同じ)     |
-# | `app/`         | アプリ (Dockerfile の `app-files` 段)                                               |
-# | `font/`        | Denpa Font (`denpa-font` 段)                                                        |
-# | `mpeg2/`       | ブラウザへ配るデコーダ (`mpeg2wasm` 段)                                             |
+# | `app/`         | アプリ (Dockerfile の `native-files` 段)                                            |
+# | `font/`        | Denpa Font (同じ段)                                                                 |
+# | `mpeg2/`       | ブラウザへ配るデコーダ (同じ段)                                                     |
 # | `ffmpeg/`      | ffmpeg.exe・ffprobe.exe と DLL、ライセンスの文書 (.github/ffmpeg-windows.sh)         |
 # | `licenses/`    | denpa と bun のライセンス                                                           |
 #
@@ -80,7 +80,7 @@ jobs:
 
       # x264 は CLI のパッケージ (mingw-w64-ucrt-x86_64-x264) ではなく、ライブラリだけの libx264 を入れる。CLI は ffms2 を通して
       # MSYS2 の ffmpeg を入れ、その依存の opus・svt-av1 も入る。入っていると、ffmpeg を組むときにソースから組んだものではなく
-      # そちらの DLL (libopus-0.dll・libSvtAv1Enc-4.dll) を拾う
+      # そちらの DLL (libopus-0.dll・libSvtAv1Enc-4.dll) に繋がる
       - name: Set up MSYS2
         if: steps.cache.outputs.cache-hit != 'true'
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
