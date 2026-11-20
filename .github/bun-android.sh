@@ -10,7 +10,7 @@
 set -euo pipefail
 
 # renovate: datasource=github-releases depName=oven-sh/bun extractVersion=^bun-v(?<version>.*)$
-BUN_VERSION=1.4.4
+BUN_VERSION=1.4.5
 
 out=$1
 shift
