@@ -251,15 +251,25 @@ public sealed class Dt295NativeDevice : PortOwner<Dt295NativeDevice>
             if (--_users > 0) return;
         }
         if (!Faulted) return;
-        lock (Registry)
+        // 閉じ終わるまでポートのロックを持つ。同じポートを開き直す Acquire が、設定を戻している途中の USB とぶつからないように
+        lock (PortGate(Port))
         {
-            if (Owners.TryGetValue(Port, out var current) && current == this) Owners.Remove(Port);
+            lock (Registry)
+            {
+                if (Owners.TryGetValue(Port, out var current) && current == this) Owners.Remove(Port);
+            }
+            Close();
         }
-        Close();
     }
 
-    /// <summary>誰も使っていなければ閉じる (チューナーが捨てられたとき)。カードが使っていれば開いたまま</summary>
-    public static void CloseIfIdle(string port) => CloseIdle(port, closeInRegistry: false);
+    /// <summary>
+    /// 誰も使っていなければ閉じる (チューナーが捨てられたとき・差し込み口のカードリーダーを使わないにしたとき)。カードが使っていれば開いたまま。
+    /// 閉じ終わるまでポートのロックを持つ (<see cref="Release"/> と同じ)
+    /// </summary>
+    public static void CloseIfIdle(string port)
+    {
+        lock (PortGate(port)) CloseIdle(port, closeInRegistry: false);
+    }
 
     /// <summary>設定を戻して USB を閉じる。機材は起動直後の状態に戻るので、続けて開き直せる</summary>
     private protected override void Close()

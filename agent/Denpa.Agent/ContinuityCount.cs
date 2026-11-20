@@ -32,7 +32,7 @@ public sealed class ContinuityTracker
             Errors++;
             return -1;
         }
-        var pid = ((packet[1] & 0x1F) << 8) | packet[2];
+        var pid = TsSync.Pid(packet);
         if (pid == 0x1FFF) return -1;
         var control = (packet[3] >> 4) & 3;
         if ((control & 1) == 0) return -1;

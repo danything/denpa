@@ -391,7 +391,7 @@ PX-MLT5 系 (PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P)・PX-MLT8PE・DTV02A-4TS-P、P
 
 ## カードリーダー
 
-**USB のリーダーは、Linux なら usbfs を直接扱います** (`/dev/bus/usb` が見えていれば動く)。Mac と Windows は OS の PC/SC 越しです
+**USB のリーダーは、Linux と Android なら usbfs を直接扱います** (Linux は `/sys` と `/dev/bus/usb` が見えていれば動く)。Mac と Windows は OS の PC/SC 越しです
 ([install-mac.md](install-mac.md#カードが読めないとき))。Linux では、ホストや別のコンテナで pcscd が動いていると使えません (「カードリーダーはほかのソフトが使っています」と出る)。
 TPDU 単位のリーダー (Gemalto PC Twin など) には T=1 の枠組みを
 こちらで組み、APDU 単位のリーダーにはそのまま送ります。カードの無いリーダーや INT に
@@ -474,7 +474,7 @@ ATR とカードの番号を出す)。
 エージェントは組んだ denpa (クライアント証明書) にしか応答しないので、curl などで `/denpa/card` を直に呼ぶことはできません
 ([agent.md](agent.md#denpa-とは-tls-で組む))。
 
-- `readers` が空なら、`/dev/bus/usb` がコンテナに見えていません
+- `readers` が空なら、リーダーが挿さっていないか、`/sys` がコンテナに見えていません。`/dev/bus/usb` が見えていなければ、リーダーの行の `error` にそう出ます
 - `card: false` で `error` が無ければ、そのリーダーにカードが挿さっていません
 - 「カードリーダーはほかのソフトが使っています」と出たら、ホストで pcscd が動いています。
   止めるか、リーダーをそちらから外します (`denpa-agent --card` を動いているエージェントの

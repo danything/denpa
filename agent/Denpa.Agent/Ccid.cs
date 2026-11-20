@@ -110,13 +110,19 @@ public static class CcidMessage
 ///
 /// <para>
 /// 失敗はすべて <see cref="IOException"/> (Reset の前に Transmit を呼ぶ誤りだけは <see cref="InvalidOperationException"/>)。抜かれた・カードが抜けたあとは使えないので、
-/// 呼んだ側が捨てて <see cref="Ccid.Find()"/> から開き直す (繋ぎ直しは B-CAS の側)。
+/// 呼んだ側が捨てて開き直す (<see cref="CardLinks.Find"/>。繋ぎ直しは B-CAS の側)。
 /// </para>
 /// </summary>
 public sealed class CcidLink : ICardLink
 {
     /// <summary>番号の合わない応答を、例外にするまでに読み飛ばす数 (前のプロセスが残した応答など)</summary>
     private const int MaxStale = 8;
+
+    /// <summary>
+    /// 時間延長の応答 (カードがまだ処理している) を読み直し続ける上限 (ms)。延長を返し続けるリーダーで、カードのロックを持ったまま戻らなくならないように。
+    /// B-CAS の 1 回の応答の待ち (BWT) は 6.4 秒ほどなので、十分に長い
+    /// </summary>
+    private const long TimeExtensionLimitMs = 30_000;
 
     private readonly IBulkPipe _pipe;
     private byte _seq;
@@ -338,6 +344,7 @@ public sealed class CcidLink : ICardLink
     {
         var seq = _seq++;
         _pipe.Write(CcidMessage.Command(type, seq, data, p1, p2, p3));
+        var sent = Environment.TickCount64;
         for (var stale = 0; ;)
         {
             var reply = CcidMessage.Parse(ReadMessage(timeoutMs));
@@ -346,7 +353,11 @@ public sealed class CcidLink : ICardLink
                 if (++stale > MaxStale) throw new IOException($"{Name} の応答の番号が合いません");
                 continue;
             }
-            if (reply.TimeExtension) continue;
+            if (reply.TimeExtension)
+            {
+                if (Environment.TickCount64 - sent > TimeExtensionLimitMs) throw new IOException($"{Name} が {TimeExtensionLimitMs / 1000} 秒たっても時間延長を返し続けるので打ち切りました");
+                continue;
+            }
             return reply;
         }
     }

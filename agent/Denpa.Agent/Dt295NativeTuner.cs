@@ -163,17 +163,10 @@ internal sealed class Dt295NativeStream
     /// <summary>機材のプログラムの状態を戻し、取り込みを始めて、読み出しと要求を動かす。TS はここから出る (<see cref="Prepare"/> のあと、受信を確認してから)</summary>
     public void Begin()
     {
-        try
-        {
-            _device.Board.ResetPumpState();
-            using (_device.Timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) _device.Board.StartCapture();
-            _capturing = true;
-        }
-        catch
-        {
-            Abort();
-            throw;
-        }
+        // 失敗したら呼んだ側が Abort する (Dt295NativeTuner.Tune)
+        _device.Board.ResetPumpState();
+        using (_device.Timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) _device.Board.StartCapture();
+        _capturing = true;
         _reader.Start();
         _kicker.Start();
     }

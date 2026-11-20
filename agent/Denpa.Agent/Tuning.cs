@@ -578,12 +578,28 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         }
     }
 
+    /// <summary>最後に渡された抜ける合図と、それに止める指示を足したもの (<see cref="Stopper"/>)</summary>
+    private (Func<bool> GiveUp, Func<bool> Combined)? _stopper;
+
+    /// <summary>
+    /// 止める指示が出たか、<paramref name="giveUp"/> が立ったら抜ける合図。**使い回す。** 読むたびに作ると確保が積もる
+    /// (読む側は同じ合図を渡し続ける。TunerPool の Lease)
+    /// </summary>
+    private Func<bool> Stopper(Func<bool>? giveUp)
+    {
+        if (giveUp is null) return _stopped ??= () => _closed;
+        if (_stopper is { } cached && cached.GiveUp == giveUp) return cached.Combined;
+        Func<bool> combined = () => _closed || giveUp();
+        _stopper = (giveUp, combined);
+        return combined;
+    }
+
     private int ReadCore(byte[] buffer, int offset, int count, Func<bool>? giveUp)
     {
         if (_piped is not null)
         {
-            // 抜ける合図を渡されなければ、止める指示が出たかだけを確かめる (使い回す。読むたびに作ると確保が積もる)
-            var read = _piped.Read(buffer.AsSpan(offset, count), giveUp is null ? (_stopped ??= () => _closed) : () => _closed || giveUp());
+            // 抜ける合図を渡されなければ、止める指示が出たかだけを確かめる
+            var read = _piped.Read(buffer.AsSpan(offset, count), Stopper(giveUp));
             if (read is null) return 0;
             if (read > 0) return read.Value;
             if (ended?.Invoke() is { } reason) throw new IOException(reason);
@@ -750,7 +766,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     /// <summary>
     /// **dvr のリングバッファの大きさ。** 全 PID を <c>DMX_OUT_TS_TAP</c> で流すので、溜まるのは demux のフィルタではなく dvr。
-    /// 既定 (≒1.8 MB) は地上波で 0.9 秒ぶんしかなく、8 MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても選局を続ける」)
+    /// 既定 (≒1.8 MB) は地上波で 0.8 秒ぶんしかなく、8 MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても選局を続ける」)
     /// </summary>
     private const int DvrBuffer = 8 * 1024 * 1024;
 
@@ -878,6 +894,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
         if (_streaming)
         {
             Sys.Call(_demux, DmxStop, 0, "demux の停止");
+            // 選局し直しに失敗したら流していないままにする (Tuned と Signal が前のチャンネルのまま答えないように)
+            _streaming = false;
             /*
              * **止めたうえで、dvr に残っている前のチャンネルのぶんを捨てる。** dvr のリングバッファは
              * DMX_START でも空にならず (カーネルが空にするのは開いたときと溢れを読んだときだけ)、
@@ -1154,7 +1172,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// <c>struct dtv_properties { u32 num; struct dtv_property *props; }</c> を組んで、<c>FE_SET_PROPERTY</c> か <c>FE_GET_PROPERTY</c> の ioctl を呼ぶ。
     /// <paramref name="properties"/> は struct dtv_property (packed) を <paramref name="count"/> 個並べたもの。ioctl の戻り値を返す
     /// </summary>
-    private static int PropertiesIoctl(int fd, uint request, byte[] properties, uint count)
+    internal static int PropertiesIoctl(int fd, uint request, byte[] properties, uint count)
     {
         var header = new byte[16];
         BitConverter.TryWriteBytes(header.AsSpan(0), count);
@@ -1179,8 +1197,9 @@ public sealed unsafe class DvbTuner : ITuneDevice
     {
         uint status = 0;
         _seenStatus = 0;
-        var deadline = DateTime.UtcNow + LockTimeout;
-        while (DateTime.UtcNow < deadline)
+        // 時刻ではなく経過時間で測る (待っている間に NTP が時刻を戻しても、待ちが延びない)
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (waited.Elapsed < LockTimeout)
         {
             // 細かく見る。同期は 200 ms ほどで来るので、100 ms 刻みだと
             // その半分が待つだけの時間になる (カーネルは選局のたびに

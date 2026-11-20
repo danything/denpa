@@ -394,7 +394,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         var device = _device is not null ? _device : throw new ObjectDisposedException(Name);
         var call = new DeviceRequest
         {
-            RequestType = requestType, Request = request, Value = value, Index = index, Length = (ushort)length,
+            RequestType = requestType, Request = request, Value = value, Index = index, Length = UsbDevices.ControlLength(length),
             Data = data, NoDataTimeout = (uint)timeoutMs, CompletionTimeout = (uint)timeoutMs,
         };
         Check(Name, "制御転送", ((delegate* unmanaged[Cdecl]<void*, DeviceRequest*, int>)Slot(device, DeviceRequestTO))(device, &call));
@@ -476,7 +476,12 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         }
     }
 
-    public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth) => new InStream(this, Pipe(endpoint).Ref, transferSize, depth);
+    public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
+    {
+        // 閉じた機材では作らない (作ると、受けるスレッドの中で ObjectDisposedException になり、受ける所が無いままプロセスが落ちる)
+        lock (_gate) ObjectDisposedException.ThrowIf(_interface is null, Name);
+        return new InStream(this, Pipe(endpoint).Ref, transferSize, depth);
+    }
 
     /// <summary>開いたときに IOKit から読んだ端点の一覧 (<see cref="MapPipes"/>)</summary>
     public IReadOnlyList<UsbPipe> Pipes() =>

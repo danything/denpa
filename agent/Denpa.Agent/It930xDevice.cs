@@ -380,7 +380,23 @@ public sealed class It930xDevice
     /// 機材を閉じる側 (<see cref="Close"/>) は一覧のロックを持っているので、これを取らない
     /// </summary>
     private readonly Lock _openGate = new();
+    /// <summary>
+    /// 開いている受信機。**それ自身をロックして触る** (<see cref="_openGate"/> を取らない <see cref="Close"/> も、受信機をスリープにするときに外すため)
+    /// </summary>
     private readonly HashSet<int> _openReceivers = [];
+
+    private bool AnyOpen
+    {
+        get
+        {
+            lock (_openReceivers) return _openReceivers.Count > 0;
+        }
+    }
+
+    private bool AddOpen(int receiver)
+    {
+        lock (_openReceivers) return _openReceivers.Add(receiver);
+    }
 
     /// <summary>Q3 のもう片方の側の機材を取る (無ければ null を返す)。Q3 でなければ null</summary>
     private readonly Func<It930xDevice?>? _link;
@@ -393,7 +409,7 @@ public sealed class It930xDevice
     private volatile bool _readerRunning;
 
     /// <summary>開くときに EP 0x84 の転送要求を出し終えるのを待つ長さ</summary>
-    internal static readonly TimeSpan ReaderStartTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ReaderStartTimeout = TimeSpan.FromSeconds(2);
     private volatile bool _stopping;
 
     /// <summary>閉じ始めた (<see cref="Close"/>)。読み出しのスレッドは、閉じる側が入力を閉じるので自分では閉じない (電源を切ったあとにブリッジへ書かない)</summary>
@@ -401,6 +417,9 @@ public sealed class It930xDevice
     private int _users;
     private bool _closed;
     private volatile bool _faulted;
+
+    /// <summary>USB が抜けた (<see cref="UsbGoneException"/>)。閉じるときに何も書かない。抜けていない失敗なら、閉じるときに受信機をスリープにして電源を切る</summary>
+    private volatile bool _gone;
 
     public string Port { get; }
     public It930xModel Model { get; }
@@ -699,7 +718,8 @@ public sealed class It930xDevice
                 _stopping = true;
                 var faulted = _faulted;
                 _faulted = true;
-                if (error is not UsbGoneException) CloseInputs();
+                if (error is UsbGoneException) _gone = true;
+                else CloseInputs();
                 if (!faulted)
                 {
                     for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete(error.Message);
@@ -777,6 +797,8 @@ public sealed class It930xDevice
         lock (ReportedFaults) ReportedFaults.RemoveWhere(key => key.Port == Port);
     }
 
+    private readonly Lock _overflowGate = new();
+
     /// <summary>最後に読んだ溢れ (変わったときだけ記録に出すため)</summary>
     private volatile It930xOverflow? _overflow;
 
@@ -848,6 +870,13 @@ public sealed class It930xDevice
         {
             return null;
         }
+        // 比べて書くまでを 1 つずつ通す (並べて選局した受信機が同時に読むと、同じ溢れを 2 回送ることがあった)
+        lock (_overflowGate) return Note(overflow, when);
+    }
+
+    /// <summary><see cref="WatchOverflow"/> が読んだ溢れを覚え、変わっていれば記録に出す。<see cref="_overflowGate"/> の中で呼ぶ</summary>
+    private It930xOverflow Note(It930xOverflow overflow, string when)
+    {
         var before = _overflow;
         _overflow = overflow;
         if (overflow.SameAs(before)) return overflow;
@@ -943,6 +972,7 @@ public sealed class It930xDevice
             // IOException でない失敗 (受信機ごとに分ける処理の不具合など) も同じく片付ける。スレッドごと落ちると、入力を開けたまま読む側がいなくなる
             // EP 0x84 の読み出しは全部の受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
             _faulted = true;
+            if (error is UsbGoneException) _gone = true;
             Log.Fault($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
             // 読む側がいないまま入力を開けておくと、ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなる (It930xOverflow)。
             // 閉じるのは使っている側が返してからなので、それまで待たずにここで入力を閉じる
@@ -983,7 +1013,7 @@ public sealed class It930xDevice
         Wiring(receiver);
         lock (_openGate)
         {
-            if (_openReceivers.Count == 0) Link();
+            if (!AnyOpen) Link();
             try
             {
                 IIt930xFrontend frontend;
@@ -1008,13 +1038,13 @@ public sealed class It930xDevice
                     frontend = _board.Open(receiver);
                 }
                 OpenInputs();
-                if (_openReceivers.Add(receiver)) Log.Write($"[{Label}] 受信機 {receiver} を開きました ({frontend.Chips})");
+                if (AddOpen(receiver)) Log.Write($"[{Label}] 受信機 {receiver} を開きました ({frontend.Chips})");
                 return frontend;
             }
             catch (IOException error)
             {
                 Fail(error);
-                if (_openReceivers.Count == 0) Unlink();
+                if (!AnyOpen) Unlink();
                 throw new IOException($"{Label} の受信機 {receiver} を初期化できません: {error.Message}", error);
             }
         }
@@ -1053,7 +1083,7 @@ public sealed class It930xDevice
     private bool CanRepower(IOException error)
     {
         if (Model.Demod == It930xDemod.Cxd2856 || error is UsbGoneException || error.InnerException is UsbGoneException) return false;
-        if (_openReceivers.Count > 0) return false;
+        if (AnyOpen) return false;
         lock (_gate) return _users == 1;
     }
 
@@ -1132,14 +1162,14 @@ public sealed class It930xDevice
         }
         finally
         {
-            _openReceivers.Remove(receiver);
+            lock (_openReceivers) _openReceivers.Remove(receiver);
             try
             {
                 if (!lnbFirst) Lnb(receiver, false);
             }
             finally
             {
-                if (linked && _openReceivers.Count == 0) Unlink();
+                if (linked && !AnyOpen) Unlink();
             }
         }
     }
@@ -1200,7 +1230,9 @@ public sealed class It930xDevice
     /// <summary>失敗が USB の抜けなら使えないものとする (次に取る側は開き直す)</summary>
     public void Fail(Exception error)
     {
-        if (error is UsbGoneException || error.InnerException is UsbGoneException) _faulted = true;
+        if (error is not UsbGoneException && error.InnerException is not UsbGoneException) return;
+        _gone = true;
+        _faulted = true;
     }
 
     /// <summary>返す。開いたままにする (USB が抜けていれば閉じる)</summary>
@@ -1355,8 +1387,11 @@ public sealed class It930xDevice
             _closed = true;
         }
         _closing = true;
-        // 読み出しが失敗した機材は、読み出しのスレッドが入力を閉じている (抜けていれば書けない) ので、何も書かない
-        var write = !Faulted;
+        /*
+         * USB が抜けた機材には何も書かない。読み出しが失敗しただけの機材は書く (入力はもう閉じてあるが、閉じ直すだけ)。
+         * 書かずに閉じると、受信機の電源と LNB の給電が入ったまま残る
+         */
+        var write = !_gone;
         // 入力を閉じて EP 0x84 をリセットしてから読み出しを止める (SDK の DRV_ResetRxPort)。読む側がいないまま、ブリッジに TS を溜めない
         var inputsClosed = write && CloseInputs();
         if (inputsClosed)

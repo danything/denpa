@@ -188,7 +188,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     /// <summary>制御転送を 1 回。長さは wLength (16 ビット) に収まるだけ</summary>
     private int ControlTransferOnce(byte requestType, byte request, ushort value, ushort index, byte* data, int length, int timeoutMs, string what)
     {
-        if (length > ushort.MaxValue) throw new ArgumentOutOfRangeException(nameof(length), $"制御転送は {ushort.MaxValue} バイトまでです ({length} バイト)");
+        UsbDevices.ControlLength(length);
         var transfer = new ControlTransfer
         {
             RequestType = requestType, Request = request, Value = value, Index = index,

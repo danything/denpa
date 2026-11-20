@@ -1231,7 +1231,7 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
     private long _queued;
 
     /// <summary>
-    /// 読み出しとデスクランブラの間に溜められる量。**64 MB** は地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほどで、
+    /// 読み出しとデスクランブラの間に溜められる量。**64 MB** は地上波で 28 秒、衛星の中継器まるごとでも 10 秒ほどで、
     /// カードや配る側を待つ上限 (CCID 5 秒・配る側 10 秒・繋ぎ直しの見送り 10 秒) を丸ごと呑める。
     /// **数ではなくバイトで測る。** 読み出し側は溜まっているぶんだけ返すので、1 回の読み出しは小さいこともある
     /// </summary>
@@ -1307,13 +1307,15 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
         ring?.Begin();
         var since = Stopwatch.StartNew();
         var waited = false;
+        // 抜ける合図は 1 つを使い回す (DeviceStream が止める指示と足したものを覚えておく)
+        Func<bool> giveUp = () => _stopped || _drained;
         try
         {
             while (!_stopped && !_drained)
             {
                 var read = ring is null
                     ? tuner.Output.Read(buffer, 0, buffer.Length)
-                    : ring.Read(buffer, 0, buffer.Length, () => _stopped || _drained);
+                    : ring.Read(buffer, 0, buffer.Length, giveUp);
                 if (read <= 0) break;
                 if (_firstReadMs < 0) Volatile.Write(ref _firstReadMs, Clock.ElapsedMilliseconds);
 
