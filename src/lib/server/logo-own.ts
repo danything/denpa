@@ -10,6 +10,7 @@ import { join } from "node:path";
 import type { Rect } from "../ts/logo-area";
 import {
   addFrame,
+  bandHeight,
   cropOrientation,
   decodeModel,
   emptyOrientation,
@@ -144,8 +145,7 @@ async function learn(
   limits: Limits,
 ): Promise<LogoModel | string> {
   const { width, height, duration } = video;
-  // 隅は上下の 1/5 (logo-area の REGION_H)。並べた 2 つの境目が縦の真ん中で揃うよう偶数に
-  const band = Math.round(height / 5) & ~1;
+  const band = bandHeight(height);
   const top = emptyOrientation(width, band);
   const bottom = emptyOrientation(width, band);
   const every = Math.max(

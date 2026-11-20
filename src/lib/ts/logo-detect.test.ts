@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Rect } from "./logo-area";
+import { type Rect, regionOf } from "./logo-area";
 import {
   addFrame,
+  bandHeight,
   coherence,
   cropOrientation,
   decodeModel,
@@ -86,7 +87,7 @@ function frame(rand: () => number, logo: boolean, base?: number): Uint8Array {
 
 /** 上下の帯 (高さ H/5) で向きを足し合わせる。`server/logo-own.ts` の覚え方と同じ */
 function learn(frames: Uint8Array[]) {
-  const band = Math.round(H / 5) & ~1;
+  const band = bandHeight(H);
   const top = emptyOrientation(W, band);
   const bottom = emptyOrientation(W, band);
   for (const data of frames) {
@@ -147,6 +148,18 @@ describe("覚える", () => {
     expect(rect.x + rect.width).toBeGreaterThanOrEqual(LOGO.x + LOGO.width);
     expect(rect.y + rect.height).toBeGreaterThanOrEqual(LOGO.y + LOGO.height);
     expect(rect.width).toBeLessThan(LOGO.width * 2);
+  });
+
+  /** 切り下げて偶数にしていた頃は、576 で 114 行の帯に 115 行の隅が収まらず、どの隅も見なかった */
+  test("帯は隅の範囲が収まる偶数の高さ (1/5 が奇数になる高さでも)", () => {
+    for (const height of [270, 480, 540, 576, 720, 1080]) {
+      const band = bandHeight(height);
+      expect(band % 2).toBe(0);
+      expect(band).toBeGreaterThanOrEqual(
+        regionOf("top-right", 1, height).height,
+      );
+    }
+    expect(bandHeight(1080)).toBe(216);
   });
 
   test("ロゴが無ければ割り出さない", () => {
