@@ -2065,7 +2065,7 @@
   let skipped = $state(false);
   let skipNotice: ReturnType<typeof setTimeout> | null = null;
   /**
-   * 跨いでいる間、最後の本編のコマで覆う面。先読み (`CM_LEAD`) だけでは、コンポジタへ渡し済みの
+   * 跨いでいる間、最後の本編のコマで覆う面。先読み (`ts/watch.ts` の `cmLead`) だけでは、コンポジタへ渡し済みの
    * コマが出てしまう。黒で塗らないのは、止まったコマのほうが飛んだように見えるため
    */
   let cover = $state<HTMLCanvasElement | null>(null);
