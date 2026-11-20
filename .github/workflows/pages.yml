@@ -12,12 +12,14 @@ on:
       - "README.md"
       - "site/**"
       - ".github/workflows/pages.yml"
+      - ".github/actions/setup-bun/**"
   pull_request:
     paths:
       - "docs/**"
       - "README.md"
       - "site/**"
       - ".github/workflows/pages.yml"
+      - ".github/actions/setup-bun/**"
   workflow_dispatch: {}
 
 permissions:
@@ -36,16 +38,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      # bun のバージョンは Dockerfile と食い違わないよう、そこから読む (test.yml と同じ)
-      - name: Read bun version from Dockerfile
-        id: bun
-        working-directory: .
-        run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
-
       - name: Set up bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ steps.bun.outputs.version }}
+        uses: ./.github/actions/setup-bun
 
       # astro は Node で動く。ランナーの既定の Node は古いことがあるので、バージョンを決めて入れる
       - name: Set up Node

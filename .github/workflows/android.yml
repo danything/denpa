@@ -187,102 +187,52 @@ jobs:
           (yes || true) | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
 
-      # 組み上がり (入れ先は .github/ffmpeg-android.sh の `deps`)。ffmpeg が当たらなかったときだけ使う
-      - name: Restore Opus
-        id: opus
+      # 組み上がり (入れ先は .github/ffmpeg-android.sh の `deps`)。ffmpeg が当たらなかったときだけ、戻すか組んで保存する
+      # (.github/actions/ffmpeg-dep)。ffmpeg 本体は成功したときだけ保存する
+      - name: Opus
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: ./.github/actions/ffmpeg-dep
         with:
           path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/opus
           key: ${{ steps.key.outputs.opus }}
+          script: .github/ffmpeg-android.sh
+          args: ffmpeg-out ${{ matrix.abi }} opus
 
-      - name: Restore SVT-AV1
-        id: svtav1
+      - name: SVT-AV1
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: ./.github/actions/ffmpeg-dep
         with:
           path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/svt-av1
           key: ${{ steps.key.outputs.svtav1 }}
+          script: .github/ffmpeg-android.sh
+          args: ffmpeg-out ${{ matrix.abi }} svt-av1
 
-      - name: Restore x264
-        id: x264
+      - name: x264
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: ./.github/actions/ffmpeg-dep
         with:
           path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/x264
           key: ${{ steps.key.outputs.x264 }}
+          script: .github/ffmpeg-android.sh
+          args: ffmpeg-out ${{ matrix.abi }} x264
 
-      - name: Restore dav1d
-        id: dav1d
+      - name: dav1d
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: ./.github/actions/ffmpeg-dep
         with:
           path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/dav1d
           key: ${{ steps.key.outputs.dav1d }}
+          script: .github/ffmpeg-android.sh
+          args: ffmpeg-out ${{ matrix.abi }} dav1d
 
-      - name: Restore zimg
-        id: zimg
+      - name: zimg
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: ./.github/actions/ffmpeg-dep
         with:
           path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/zimg
           key: ${{ steps.key.outputs.zimg }}
-
-      # 依存は組み終えた直後に保存する (ffmpeg のビルドが落ちても残る)。ffmpeg 本体は成功したときだけ保存する
-      - name: Build Opus
-        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
-        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" opus
-
-      - name: Save Opus
-        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/opus
-          key: ${{ steps.key.outputs.opus }}
-
-      - name: Build SVT-AV1
-        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
-        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" svt-av1
-
-      - name: Save SVT-AV1
-        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/svt-av1
-          key: ${{ steps.key.outputs.svtav1 }}
-
-      - name: Build x264
-        if: steps.cache.outputs.cache-hit != 'true' && steps.x264.outputs.cache-hit != 'true'
-        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" x264
-
-      - name: Save x264
-        if: steps.cache.outputs.cache-hit != 'true' && steps.x264.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/x264
-          key: ${{ steps.key.outputs.x264 }}
-
-      - name: Build dav1d
-        if: steps.cache.outputs.cache-hit != 'true' && steps.dav1d.outputs.cache-hit != 'true'
-        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" dav1d
-
-      - name: Save dav1d
-        if: steps.cache.outputs.cache-hit != 'true' && steps.dav1d.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/dav1d
-          key: ${{ steps.key.outputs.dav1d }}
-
-      - name: Build zimg
-        if: steps.cache.outputs.cache-hit != 'true' && steps.zimg.outputs.cache-hit != 'true'
-        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" zimg
-
-      - name: Save zimg
-        if: steps.cache.outputs.cache-hit != 'true' && steps.zimg.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/zimg
-          key: ${{ steps.key.outputs.zimg }}
+          script: .github/ffmpeg-android.sh
+          args: ffmpeg-out ${{ matrix.abi }} zimg
 
       - name: Build ffmpeg
         if: steps.cache.outputs.cache-hit != 'true'
@@ -528,15 +478,8 @@ jobs:
           path: apk
 
       # ffmpeg の確かめ (tests/native-smoke.ts) を 1 つのファイルにまとめ、エミュレータの中の bun で流す (.github/android-app-smoke.sh)。
-      # bun のバージョンは Dockerfile から読む (test.yml と同じ)
-      - name: Read bun version from Dockerfile
-        id: bun
-        run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
-
       - name: Set up bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ steps.bun.outputs.version }}
+        uses: ./.github/actions/setup-bun
 
       - name: Bundle native-smoke
         run: bun build tests/native-smoke.ts --target=bun --outfile=smoke/native-smoke.js

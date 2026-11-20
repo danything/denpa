@@ -120,47 +120,25 @@ jobs:
           test -n "$gcc" || { echo "gcc のパッケージのバージョンを読めません" >&2; exit 1; }
           echo "gcc=$gcc" >> "$(cygpath -u "$GITHUB_OUTPUT")"
 
-      # 組み上がり (入れ先は .github/ffmpeg-windows.sh の `deps`)。ffmpeg が当たらなかったときだけ使う
-      - name: Restore Opus
-        id: opus
+      # 組み上がり (入れ先は .github/ffmpeg-windows.sh の `deps`)。ffmpeg が当たらなかったときだけ、戻すか組んで保存する
+      # (.github/actions/ffmpeg-dep)。ffmpeg 本体は成功したときだけ保存する
+      - name: Opus
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: ./.github/actions/ffmpeg-dep
         with:
           path: ${{ runner.temp }}\ffmpeg-deps\opus
           key: ${{ steps.key.outputs.opus }}-gcc-${{ steps.toolchain.outputs.gcc }}
+          script: .github/ffmpeg-windows.sh
+          args: ffmpeg-out opus
 
-      - name: Restore SVT-AV1
-        id: svtav1
+      - name: SVT-AV1
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: ./.github/actions/ffmpeg-dep
         with:
           path: ${{ runner.temp }}\ffmpeg-deps\svt-av1
           key: ${{ steps.key.outputs.svtav1 }}-gcc-${{ steps.toolchain.outputs.gcc }}
-
-      # 依存は組み終えた直後に保存する (ffmpeg のビルドが落ちても残る)。ffmpeg 本体は成功したときだけ保存する
-      - name: Build Opus
-        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
-        shell: msys2 {0}
-        run: bash .github/ffmpeg-windows.sh ffmpeg-out opus
-
-      - name: Save Opus
-        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}\ffmpeg-deps\opus
-          key: ${{ steps.key.outputs.opus }}-gcc-${{ steps.toolchain.outputs.gcc }}
-
-      - name: Build SVT-AV1
-        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
-        shell: msys2 {0}
-        run: bash .github/ffmpeg-windows.sh ffmpeg-out svt-av1
-
-      - name: Save SVT-AV1
-        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}\ffmpeg-deps\svt-av1
-          key: ${{ steps.key.outputs.svtav1 }}-gcc-${{ steps.toolchain.outputs.gcc }}
+          script: .github/ffmpeg-windows.sh
+          args: ffmpeg-out svt-av1
 
       - name: Build ffmpeg
         if: steps.cache.outputs.cache-hit != 'true'
