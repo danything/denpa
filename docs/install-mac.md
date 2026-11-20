@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
   Gatekeeper に止められません。ブラウザでダウンロードした tar.gz を手で渡したとき (`DENPA_AGENT_TARBALL` など) は、install.sh が印を外します。
   ffmpeg とエージェントは ad-hoc 署名 (`codesign -s -`)、bun は Oven の署名のままです
 - 2 つが組むときの合言葉 ([agent.md](agent.md)) はエージェント自身の置き場 (`~/denpa/config/tls/pair-token`) に無いときだけ作り、エージェントはそこから読み
-  (手で `denpa-agent --pair` を流しても同じ URL が出る)、denpa には `TUNER_AGENT_URL` (`https://127.0.0.1:25252#pair=<合言葉>`) で渡します。上げ直しても変えません
+  (手で `sudo denpa-agent --pair` を流しても同じ URL が出る。合言葉のファイルは root だけが読める)、denpa には `TUNER_AGENT_URL` (`https://127.0.0.1:25252#pair=<合言葉>`) で渡します。上げ直しても変えません
 - エージェントは本体と同じ Mac なので、ループバックでだけ待ち受けます (`AGENT_HOST=127.0.0.1`)
 - genkan (`http://denpa.localhost`) には繋ぎません。この Mac からは <http://localhost:3000>、LAN のほかの機器からは `http://<Mac の名前>.local:3000` で開きます
 - 本体とエージェントの tar.gz は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
