@@ -55,14 +55,14 @@ const HUB_TIMEOUT = 20_000;
 export const CHECK_EVERY = 60_000;
 
 /** 放送の識別。`network_id` は original_network_id */
-export interface AiringId {
+interface AiringId {
   network_id: number;
   service_id: number;
   event_id: number;
 }
 
 /** `add` の 1 件 (hub の `POST /ranking/votes`) */
-export interface Vote extends AiringId {
+interface Vote extends AiringId {
   /** 番組の始まり。日本時間の ISO 8601 */
   start_at: string;
   /** 番組の長さ (秒) */
@@ -81,7 +81,7 @@ export interface Candidate {
 }
 
 /** 前に送った控えの 1 行 */
-export interface SentRow extends AiringId {
+interface SentRow extends AiringId {
   start_at: number;
   digest: string;
 }
@@ -182,7 +182,7 @@ export function currentVotes(at = now()): Candidate[] {
 }
 
 /** 送る差分 */
-export interface Plan {
+interface Plan {
   /** 新しい予約と、中身が変わった予約 (始まりの早い順に `MAX_ADD` 件まで) */
   add: Candidate[];
   /** 前に送ったが、いまは送る条件から外れた予約 (`MAX_REMOVE` 件まで) */
@@ -293,7 +293,7 @@ function link() {
 }
 
 /** 設定の画面に出す状態 */
-export type RankingState =
+type RankingState =
   | { state: "off" }
   | {
       state: "on";
@@ -537,7 +537,7 @@ export const VIEW_STALE = HOUR;
 const VIEW_TIMEOUT = 5_000;
 
 /** hub の順位の放送 1 つ (`GET /ranking` の `airings`) */
-export interface HubAiring extends AiringId {
+interface HubAiring extends AiringId {
   /** 始まり (unix ms) */
   start_at: number;
   service_name: string;
@@ -546,7 +546,7 @@ export interface HubAiring extends AiringId {
 }
 
 /** hub の順位の 1 件 (`GET /ranking` の `entries`) */
-export interface HubEntry {
+interface HubEntry {
   rank: number;
   /** 重みを掛けて 5 の倍数に切り下げた数 */
   votes: number;
@@ -557,13 +557,13 @@ export interface HubEntry {
 type ProgramRow = ReturnType<ReturnType<typeof programRows>["all"]>[number];
 
 /** 画面に渡す番組の行。検索の結果の「これからの放送」と同じ形 */
-export type RankedProgram = Omit<ProgramRow, "service_type" | "service_sid">;
+type RankedProgram = Omit<ProgramRow, "service_type" | "service_sid">;
 
 /**
  * 節の 1 行。受信できる局に放送があれば `program` (行から予約・取消・詳細)、
  * 無ければ `away` (hub が返した名前と局名と地域。予約のボタンも詳細も出さない)
  */
-export type RankedRow = { rank: number; votes: number } & (
+type RankedRow = { rank: number; votes: number } & (
   | { program: RankedProgram; away: null }
   | {
       program: null;

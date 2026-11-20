@@ -64,7 +64,7 @@ export function storeAgentChannels(read: AgentChannels): void {
 }
 
 /**
- * **行の無くなったエージェントの写しと受信の記録と、知らせた機材の異常を消す** (`agents.syncEnvAgents`)。
+ * **行の無くなったエージェントの写しと受信の記録と、知らせた機材の異常を消す** (`agents.syncEnvAgents`・`agent-admin.removeAgent`)。
  * 外部キーは効かせていないので、エージェントの行を消すところで一緒に消す
  */
 export function forgetMissingAgents(): void {

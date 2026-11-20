@@ -271,13 +271,21 @@ type RecordAiring =
     }
   | { ok: false; status: 400 | 404; message: string };
 
+/**
+ * 予約の状態 (`reservationStates`) が、録る予定か録っている最中か。競合・録画しない・取り消しは false。
+ * 録画の API の `reserved` と、局の一覧の API の `now.reserved` で同じものを使う (docs/api.md)
+ */
+export function willRecord(state: ReservationState | undefined): boolean {
+  return state === "scheduled" || state === "recording";
+}
+
 /** 録画の API の答え (`POST /api/services/<id>/record`・`POST /api/programs/<id>/record`。docs/api.md) */
 export function recordedBody(result: Extract<RecordAiring, { ok: true }>) {
   return {
     recorded: result.name,
     programId: result.programId,
     // 競合で弾かれたときは false (チューナーが足りない)。予約そのものは残る
-    reserved: result.state === "scheduled" || result.state === "recording",
+    reserved: willRecord(result.state),
     // 番組表のマスと同じ物差し (`reservationStates`) と、録らない理由
     state: result.state,
     reason: result.reason,

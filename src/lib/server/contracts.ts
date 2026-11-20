@@ -698,13 +698,16 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
     orm()
       .select({
         serviceId: cardContracts.service_id,
+        state: cardContracts.state,
         code: cardContracts.code,
+        decodeOk: cardContracts.decode_ok,
         decodedAt: cardContracts.decoded_at,
       })
       .from(cardContracts)
       .where(eq(cardContracts.state, "subscribed"))
       .all()
-      .filter((row) => row.code !== null || freshDecode(row.decodedAt, now))
+      // ダイアログの「契約中」と同じ決め方 (`contractStatus`)
+      .filter((row) => contractStatus(row, now) === "subscribed")
       .map((row) => row.serviceId),
   );
   return (serviceId) => subscribed.has(serviceId);

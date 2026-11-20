@@ -139,7 +139,7 @@ export function syncEnvAgents(): void {
           ),
         )
         .run();
-      // 外部キーは効かせていないので、そのエージェントのチャンネルの写しと受信の記録もここで消す
+      // 外部キーは効かせていないので、そのエージェントのチャンネルの写し・受信の記録・機材の異常もここで消す
       forgetMissingAgents();
     }
     targets.forEach((target, position) => {
