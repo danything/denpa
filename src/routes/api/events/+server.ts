@@ -33,7 +33,7 @@ export function GET() {
        * 十分だが、**EventSource の API からは見えない。** 遅い回線で TCP が
        * 黙って切れると、画面側は「開いているつもりで何も来ない」接続を
        * 見分けられない。見えるイベントにすれば、画面側の監視が
-       * 「しばらく何も届いていない」で切れた接続に気付ける (`live-updates`)
+       * 「しばらく何も届いていない」で切れた接続を見分けられる (`live-updates`)
        */
       timer = setInterval(() => send("event: ping\ndata: 1\n\n"), HEARTBEAT);
       timer.unref?.();

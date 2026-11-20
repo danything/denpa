@@ -161,7 +161,7 @@ export function start(): void {
   installShutdownHooks();
 
   /*
-   * **新しいバージョンが出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
+   * **新しいバージョンが出ていないか、GitHub に問い合わせる** (update.ts)。起動時に 1 回と
    * `UPDATE_CHECK_INTERVAL` (既定 1 時間) おき。チューナーには行かないので `DENPA_AUTOSTART=0` でも回す
    */
   nowAndEvery(config.updateCheckInterval, "update", checkForUpdate);
@@ -479,8 +479,8 @@ const HELD = "__denpaHeldSignal";
  * エンコードは待たない (再起動でやり直せる)。
  *
  * 待つのをやめる上限が `SHUTDOWN_WAIT`。0 にすると待たずに止まる。
- * **Kubernetes 側の `terminationGracePeriodSeconds` と docker compose の
- * `stop_grace_period` を、これ以上に伸ばしておくこと。** 伸ばさないと、
+ * **Kubernetes の `terminationGracePeriodSeconds`・docker compose の `stop_grace_period`・
+ * Mac の plist の `ExitTimeOut` (install.sh) を、これ以上に伸ばしておくこと。** 伸ばさないと、
  * 待っている途中で SIGKILL され、待った意味が無くなる。
  */
 function installShutdownHooks(): void {
