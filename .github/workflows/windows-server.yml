@@ -68,7 +68,7 @@ jobs:
           for r in opus svt-av1; do
             grep -q "^# recipe:$r:end" .github/ffmpeg-windows.sh || { echo "ffmpeg-windows.sh に recipe:$r がありません" >&2; exit 1; }
           done
-          echo "opus=ffmpeg-windows-x64-opus-$(version OPUS_VERSION)-$(recipe opus)" >> "$GITHUB_OUTPUT"
+          echo "opus=ffmpeg-windows-x64-opus-$(version OPUS_VERSION)-$(recipe opus)-composite-check" >> "$GITHUB_OUTPUT"
           echo "svtav1=ffmpeg-windows-x64-svt-av1-$(version SVT_AV1_VERSION)-$(recipe svt-av1)" >> "$GITHUB_OUTPUT"
 
       - name: Restore ffmpeg

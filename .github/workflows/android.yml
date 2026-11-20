@@ -163,7 +163,7 @@ jobs:
           for r in opus svt-av1 x264 dav1d zimg; do
             grep -q "^# recipe:$r:end" .github/ffmpeg-android.sh || { echo "ffmpeg-android.sh に recipe:$r がありません" >&2; exit 1; }
           done
-          echo "opus=$base-opus-$(version OPUS_VERSION)-$(recipe opus)" >> "$GITHUB_OUTPUT"
+          echo "opus=$base-opus-$(version OPUS_VERSION)-$(recipe opus)-composite-check" >> "$GITHUB_OUTPUT"
           echo "svtav1=$base-svt-av1-$(version SVT_AV1_VERSION)-$(recipe svt-av1)" >> "$GITHUB_OUTPUT"
           echo "x264=$base-x264-$(recipe x264)" >> "$GITHUB_OUTPUT"
           echo "dav1d=$base-dav1d-$(recipe dav1d)" >> "$GITHUB_OUTPUT"
