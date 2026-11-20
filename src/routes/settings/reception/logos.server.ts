@@ -40,7 +40,7 @@ function logoOf(service: Parameters<typeof logoSource>[0] & { id: number }) {
  *
  * - `logo` … 局ロゴの具合 (`logo.logoState`)。取得しない局は `skipped` (`logoOf`)
  * - `cm` … CM 検出のロゴを覚えた時刻 (`logo-data.learnedAt`)。覚えていなければ null。
- *   CM 検出の対象でない局 (テレビでない局・同じ映像を流しているサブチャンネル) もいつも null
+ *   CM 検出の対象でない局 (テレビでない局・復号できない局・同じ映像を流しているサブチャンネル) もいつも null
  */
 function stationLogos() {
   const rows = orm()
@@ -60,13 +60,13 @@ function stationLogos() {
     .orderBy(services.service_id)
     .all();
   /*
-   * CM 検出のロゴを出す局。数え上げ (`logo-data.stats`) と同じく、テレビの局で、同じ映像を流している
+   * CM 検出のロゴを出す局。数え上げ (`logo-data.stats`) と同じく、復号できるテレビの局で、同じ映像を流している
    * サブチャンネルの枠は束ねて 1 局にする (覚えたものは写し合うので、束ねないと同じ画像が 2 つ並ぶ)
    */
   const cmShown = new Set(
-    stations(rows.filter((row) => hasVideo(row.service_type))).map(
-      (row) => row.id,
-    ),
+    stations(
+      rows.filter((row) => row.decodable && hasVideo(row.service_type)),
+    ).map((row) => row.id),
   );
   return rows.map((row) => ({
     id: row.id,
@@ -123,14 +123,14 @@ export const actions = {
   },
 
   /**
-   * 局ロゴを取得する。**チューナー 2 つで、衛星も混ぜて。**
+   * 局ロゴを取得する。**チューナー 2 台までで、衛星も混ぜて** (`logo.sweepNow`)。
    *
-   * ロゴは放送波に数十秒〜数分に一度しか流れてこないので、押してもその場では
+   * ロゴは地上波で数分に一度、衛星はダウンロードの期間中にしか流れてこないので、押してもその場では
    * 出ない。どこまで進んだかを画面に流すので、押した人は待たなくていい。
    *
    * 衛星も対象にする。ロゴを運ぶ中継は 1 つだけで、当たればカルーセルが来たところで
    * BS と CS の全局ぶんが揃い (十数分待つことがある。`config.logoCarouselWait`)、外れは
-   * PAT を見た時点 (1 秒ほど) で次へ行く。当たり外れは覚えるので、二度目からは当たりだけを開く
+   * PAT を見た時点 (1 秒ほど) で次へ行く。当たりと分かっている中継から開く
    */
   logoSweep: async () => {
     const result = await sweepNow();

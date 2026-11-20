@@ -280,7 +280,6 @@ export function stats(): { have: number; total: number } {
         id: services.id,
         network_id: services.network_id,
         name: services.name,
-        type: services.type,
       })
       .from(services)
       // 復号できない局は録れないので、CM のロゴを覚えることも無い (`services.decodable`)。映像の無い局 (ラジオ・データ放送) は CM を検出しないので、テレビの局 (`DIGITAL_TV`) だけ

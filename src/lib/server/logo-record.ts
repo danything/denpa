@@ -118,7 +118,7 @@ const COLUMNS: [string, (r: LogoRecord) => string | number][] = [
   ["sdtt", (r) => r.sdtt],
 ];
 
-/** 記録を CSV にする (見出し付き、古い順)。値に `,` や引用符は入らない (中継の名前・終わり方は英数字と `:`) */
+/** 記録を CSV にする (見出し付き、古い順)。値に `,` や引用符は入らない (中継の名前と終わり方は英数字と `_`・`:` だけ) */
 export function logoRecordCsv(rows: readonly LogoRecord[]): string {
   const lines = [COLUMNS.map(([name]) => name).join(",")];
   for (const row of [...rows].reverse())
