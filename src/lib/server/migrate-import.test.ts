@@ -394,6 +394,15 @@ describe("形式の違う応答", () => {
       ),
     ).toBe(true);
   });
+
+  test("名前の無い録画は空の名前で取り込む", async () => {
+    fake.setMode({ drift: true });
+    await run(apply);
+    expect(status().state).toBe("done");
+    const nameless = imported(7)!;
+    expect(nameless.name).toBe("");
+    expect(content(nameless.ts_path)).toEqual(videoContent(21, SIZE_2));
+  });
 });
 
 describe("ファイルの取り方", () => {
