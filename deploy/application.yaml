@@ -68,20 +68,33 @@ spec:
           pwaNames: dp.doany.io=denpa,dp.l.doany.io=denpa 宅内
           # OIDC。中身は SopsSecret (deploy/secrets.sops.yaml) が作る Secret
           oidcSecretName: denpa-oidc
+          # **メモリの上限は 8Gi。** ノードは 32GB で、Forgejo の CI (dind 10Gi) と CI 以外の実使用 (約 10GiB) と足して収める
+          # (danything/gitops の docs/decisions.md「メモリを 32GB に合わせる」)。平常は 100Mi ほど (2026-11-20)。
+          # ENCODE_CONCURRENCY は既定の 2 のまま。数えるのはジョブではなく ffmpeg の本数で、nice 19 で走る (docs/encode.md)。
+          # GPU (Arc A310) でエンコードするので、ffmpeg 1 本のメモリは小さい。2 本のままでも上限に届かないと見た
+          resources:
+            limits:
+              memory: 8Gi
 
         agent:
           # エージェントと組む合言葉。SopsSecret (deploy/pair.sops.yaml) が作る Secret を使う。
           # chart に作らせないのは、この ArgoCD が Secret を同期しない (resource.exclusions) ため。
           # 2026-11-03 にこれで chart の Secret が作られず、denpa とエージェントが起動できなかった
           pairSecret: denpa-agent-pair
-          # **CPU の requests だけを付ける (limits は付けない)。** 何も付けないと BestEffort になり、cgroup の cpu.weight が 1 (いちばん低い) になる。
+          # **CPU は requests だけを付ける (CPU の limits は付けない)。** 何も付けないと BestEffort になり、cgroup の cpu.weight が 1 (いちばん低い) になる。
           # ノードが混むと、IT930x の EP 0x84 を読むスレッドが後回しにされ、出してある転送要求 (約 4 MB。CATV 5 本で約 220 ms ぶん) が埋まって
           # ブリッジのバッファが溢れるおそれがある (docs/tuner-it930x.md「TS のバッファの溢れ」)。溢れると電源を抜くまで戻らない。
           # 値は 2026-11-18 の実測から決めた。チューナー 9 台で番組表の取得とライブを回した 69 分の平均が約 24m、何もしていないときが約 0.5m。
-          # 全部のチューナーで流すときのピークはその数倍と見て、200m にする。limits を付けないので、使える量は今と変わらない
+          # 全部のチューナーで流すときのピークはその数倍と見て、200m にする。CPU の limits を付けないので、使える CPU は今と変わらない。
+          # **メモリは requests と limits を付ける。** 無いと詰まったときに Talos の OOM コントローラの標的になる
+          # (danything/gitops の docs/decisions.md「メモリを 32GB に合わせる」)。実測はチューナー 9 台で 94〜97Mi (2026-11-20)。
+          # 転送要求のバッファはチューナー 1 台あたり数 MB なので、limits は実測の 5 倍ほどの 512Mi にする。.NET の GC は limits に合わせて動く
           resources:
             requests:
               cpu: 200m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
 
         persistence:
           storageClassName: local-path

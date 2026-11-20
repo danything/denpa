@@ -61,13 +61,16 @@ denpa:
   terminationGracePeriodSeconds: 21900
   # ノードごとフリーズさせないための頭打ち。ffmpeg (エンコード + ライブ視聴) が
   # 積み上がると 46GB + swap を食い潰してノードごと固まった (2026-08 の事故)。
-  # 上限があれば溢れてもこの Pod だけ OOM-kill されて再起動する
+  # 上限があれば溢れてもこの Pod だけ OOM-kill されて再起動する。
+  # 平常は 100Mi ほど。録ったあとのエンコード (ENCODE_CONCURRENCY、既定 2) とその場の変換の ffmpeg を積んでも収まり、
+  # 32GB のノードでほかのものと並べられる大きさにする (2026-11 に 24Gi から下げた)。
+  # 大きいノードで同時に変換する本数を増やすなら、ここも上げる
   resources:
     requests:
       cpu: 500m
       memory: 2Gi
     limits:
-      memory: 24Gi
+      memory: 8Gi
   livenessProbe:
     initialDelaySeconds: 20
     periodSeconds: 30
