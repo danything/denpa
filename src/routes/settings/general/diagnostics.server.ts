@@ -8,7 +8,19 @@ import {
   serverLogLines,
 } from "#lib/server/diagnostics.js";
 import { type CardStatus, cardStatus } from "#lib/server/scramble.js";
-import { getTuners, pinKey } from "#lib/server/tuner.js";
+import { type AgentTuner, getTuners, pinKey } from "#lib/server/tuner.js";
+
+/** 「その他」のライブのチューナーの選択肢の 1 つ (`load` の `tuners`)。名指しは `pin` (`<エージェントの ID>:<pin>`。`pinKey`) */
+type TunerChoice = Pick<
+  AgentTuner,
+  "name" | "agent" | "types" | "disabled" | "error"
+> & { pin: string; agentName: string };
+
+/** チューナーの選択肢と、取れなかったときの理由。取れたときは null */
+interface TunerChoices {
+  list: TunerChoice[];
+  error: string | null;
+}
 
 /**
  * 「バージョンと環境」と「ログ」の節 (前の「診断」)。動いている環境 (denpa とエージェントのバージョン・OS・チューナー・カードリーダー) と、サーバとエージェントのログ。
@@ -51,7 +63,7 @@ export function load(url: URL, locals: { token?: number }) {
     tuners:
       refused === null
         ? getTuners()
-            .then((got) => ({
+            .then((got): TunerChoices => ({
               list: got.map((tuner) => ({
                 name: tuner.name,
                 pin: pinKey(tuner),
@@ -62,10 +74,13 @@ export function load(url: URL, locals: { token?: number }) {
                 disabled: tuner.disabled,
                 error: tuner.error,
               })),
-              error: null as string | null,
+              error: null,
             }))
-            .catch((error: unknown) => ({ list: [], error: String(error) }))
-        : Promise.resolve({ list: [], error: refused }),
+            .catch((error: unknown): TunerChoices => ({
+              list: [],
+              error: String(error),
+            }))
+        : Promise.resolve<TunerChoices>({ list: [], error: refused }),
     card:
       refused === null
         ? cards(all)
