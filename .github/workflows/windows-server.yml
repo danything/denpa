@@ -55,7 +55,7 @@ jobs:
           packages=$(awk '/^ +install: >-$/ { f = 1; next } f && /^ *$/ { exit } f' .github/workflows/windows-server.yml)
           test -n "$packages" || { echo "windows-server.yml から MSYS2 のパッケージの一覧を読めません" >&2; exit 1; }
           hash=$( { awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile; cat .github/ffmpeg-windows.sh patches/*; echo "$packages"; } | sha256sum | cut -c1-16)
-          echo "key=ffmpeg-windows-x64-$hash" >> "$GITHUB_OUTPUT"
+          echo "key=ffmpeg-windows-x64-$hash-composite-check" >> "$GITHUB_OUTPUT"
           # Opus と SVT-AV1 の組み上がりは、ffmpeg とは別のキャッシュ。鍵はバージョンと、スクリプトの
           # `# recipe:<名前>:begin` から `:end` までの組み方 (ffmpeg の configure の引数を変えても組み直さない)
           stage=$(awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile)

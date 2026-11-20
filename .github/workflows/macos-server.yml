@@ -46,7 +46,7 @@ jobs:
           set -euo pipefail
           stage=$(awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile)
           hash=$( { printf '%s\n' "$stage"; cat .github/ffmpeg-macos.sh patches/*; } | shasum -a 256 | cut -c1-16)
-          echo "key=ffmpeg-macos-arm64-$hash" >> "$GITHUB_OUTPUT"
+          echo "key=ffmpeg-macos-arm64-$hash-composite-check" >> "$GITHUB_OUTPUT"
           version() { sed -nE "s/^(ARG|ENV) $1=(.+)$/\2/p" <<< "$stage" | head -1; }
           recipe() { sed -n "/^# recipe:$1:begin/,/^# recipe:$1:end/p" .github/ffmpeg-macos.sh | shasum -a 256 | cut -c1-16; }
           # 読めなかったら止める (空のままだと、バージョンや組み方を変えても鍵が変わらない)

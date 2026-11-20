@@ -153,7 +153,7 @@ jobs:
           stage=$(awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile)
           base="ffmpeg-android-${{ matrix.abi }}-ndk$NDK_VERSION"
           hash=$( { printf '%s\n' "$stage"; cat .github/ffmpeg-android.sh patches/*; } | sha256sum | cut -c1-16)
-          echo "key=$base-$hash" >> "$GITHUB_OUTPUT"
+          echo "key=$base-$hash-composite-check" >> "$GITHUB_OUTPUT"
           version() { sed -nE "s/^(ARG|ENV) $1=(.+)$/\2/p" <<< "$stage" | head -1; }
           recipe() { sed -n "/^# recipe:$1:begin/,/^# recipe:$1:end/p" .github/ffmpeg-android.sh | sha256sum | cut -c1-16; }
           # 読めなかったら止める (空のままだと、バージョンや組み方を変えても鍵が変わらない)
