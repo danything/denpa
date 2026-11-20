@@ -58,7 +58,7 @@ config.agentUrl = fakeAgentUrl(server.port!);
 trustFakeAgent();
 
 const { channelEntry, readTlvServices } = await import("./scan");
-const { nameTlvServices, unnamedService } = await import("./tlv-names");
+const { nameUnnamed, unnamedService } = await import("./tlv-names");
 
 const ONID = 0x000b;
 const TLV_STREAM = 0xb111;
@@ -155,10 +155,11 @@ describe("MH-SDT[actual] を受信できなかった 4K の局 (QC26 の録り)"
     const sdt = reader.transport!;
     expect(sdt.tlvStreamId).toBe(TLV_STREAM);
     expect(
-      await nameTlvServices(
+      await nameUnnamed(
         sdt.originalNetworkId,
         sdt.tlvStreamId,
         sdt.services,
+        "tlv",
       ),
     ).toBe(1);
     expect(puts.map((put) => put.scanned)).toEqual([["CATV"]]);
@@ -176,9 +177,12 @@ describe("MH-SDT[actual] を受信できなかった 4K の局 (QC26 の録り)"
     expect(saved.find((c) => c.channel === "QC30")).toEqual(ts);
     // 仮の名前でなくなった局は書き換えない (もう一度受信しても書き戻さない)
     expect(
-      await nameTlvServices(sdt.originalNetworkId, sdt.tlvStreamId, [
-        { serviceId: SERVICE, name: "別の名前" },
-      ]),
+      await nameUnnamed(
+        sdt.originalNetworkId,
+        sdt.tlvStreamId,
+        [{ serviceId: SERVICE, name: "別の名前" }],
+        "tlv",
+      ),
     ).toBe(0);
     expect(puts).toHaveLength(1);
   });
@@ -208,7 +212,7 @@ describe("ロックしなかった TS を NIT から入れたケーブルのチ�
     saved = [listed, tlv];
     puts.length = 0;
     expect(
-      await nameTlvServices(
+      await nameUnnamed(
         0xfffe,
         0x0011,
         [

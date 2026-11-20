@@ -90,8 +90,6 @@ export function cableChannelOf(hertz: number): string | null {
 interface CableStream {
   transportStreamId: number;
   originalNetworkId: number;
-  /** service_list_descriptor に載っていた局の数 */
-  services: number;
   /** service_list_descriptor に載っていた局 (service_id と種別)。ロックしなかった搬送波の局を入れるのに使う (`listedEntries`) */
   serviceList: { serviceId: number; serviceType: number }[];
 }
@@ -132,12 +130,10 @@ export function cableLineupFrom(network: Network): CableLineup | null {
   if (network.other) return null;
   const carriers = new Map<string, CableCarrier>();
   const skipped: CableLineup["skipped"] = [];
-  let cable = 0;
   let others = false;
   for (const ts of network.transportStreams) {
     const delivery = ts.delivery;
     if (delivery?.kind !== "cable") continue;
-    cable++;
     const channel = cableChannelOf(delivery.frequency);
     const why =
       channel === null
@@ -163,7 +159,6 @@ export function cableLineupFrom(network: Network): CableLineup | null {
     carrier.streams.push({
       transportStreamId: ts.transportStreamId,
       originalNetworkId: ts.originalNetworkId,
-      services: ts.services.length,
       serviceList: ts.services.map((service) => ({
         serviceId: service.serviceId,
         serviceType: service.serviceType,
@@ -171,7 +166,7 @@ export function cableLineupFrom(network: Network): CableLineup | null {
     });
     carriers.set(channel, carrier);
   }
-  if (cable === 0 || carriers.size === 0) return null;
+  if (carriers.size === 0) return null;
   return {
     networkId: network.networkId,
     name: network.name ?? null,
@@ -325,7 +320,7 @@ export function describeLineup(
       `  ${carrier.channel}  ${mhz(carrier.frequency)} MHz  ${MODULATIONS[carrier.modulation] ?? `変調 0x${hex2(carrier.modulation)}`}  ${(carrier.symbolRate / 1_000_000).toFixed(4)} Msps  ${carrier.fecOuter === 0x2 ? "RS(204,188)" : `外符号 0x${carrier.fecOuter.toString(16)}`}  ${tsmf}  ${carrier.streams
         .map(
           (ts) =>
-            `TS ${hex(ts.transportStreamId)} (ONID ${hex(ts.originalNetworkId)}、${ts.services} 局)`,
+            `TS ${hex(ts.transportStreamId)} (ONID ${hex(ts.originalNetworkId)}、${ts.serviceList.length} 局)`,
         )
         .join("・")}`,
     );

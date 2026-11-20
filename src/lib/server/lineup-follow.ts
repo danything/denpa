@@ -316,17 +316,19 @@ export function seenLineupChanges(at = now()): void {
 const WATCH_FOR = 20_000;
 
 /**
- * **番組表の取得のついでに放送の一覧を読む** (`epg-collect.ts`)。開いてから `WATCH_FOR` の間だけ NIT と SDT を読み、
+ * **番組表の取得のついでに放送の一覧を読む** (`epg-collect.ts`)。最初の塊が届いてから `WATCH_FOR` の間だけ NIT と SDT を読み、
  * 閉じたら `followLineup` で今の一覧と比べる
  */
 export class LineupWatch {
   readonly nit = new NitReader();
   readonly sdt = new SdtReader();
-  private readonly until = Date.now() + WATCH_FOR;
+  /** 読むのをやめる時刻。最初の塊が届いた時刻から数える (選局を待つ間は数えない。`ground-watch.GroundWatch` と同じ) */
+  private until: number | null = null;
 
   constructor(private readonly type: SatelliteType) {}
 
   feed(chunk: Uint8Array): void {
+    this.until ??= Date.now() + WATCH_FOR;
     if (Date.now() > this.until) return;
     this.nit.feed(chunk);
     this.sdt.feed(chunk);

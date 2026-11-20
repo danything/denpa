@@ -830,7 +830,7 @@ class Scanner {
       await Promise.all(
         this.live(workers).map((tuner) => this.work(tuner, jobs, false)),
       );
-      this.dropUnusable(workers, jobs);
+      this.dropUnusable(workers, jobs, false);
     }
     if (this.unusable.has("CATV") || this.aborted) return;
     if (cable.lineups.length === 0) return;
@@ -845,7 +845,7 @@ class Scanner {
     await Promise.all(
       this.live(workers).map((tuner) => this.work(tuner, rest, false)),
     );
-    this.dropUnusable(workers, rest);
+    this.dropUnusable(workers, rest, false);
   }
 
   /**
@@ -978,7 +978,8 @@ class Scanner {
       } catch (error) {
         if (!(error instanceof TunerBusyError) || this.aborted) throw error;
         this.onProgress({ line: `${channel}: 空きを待っています` });
-        await Bun.sleep(BUSY_RETRY);
+        await pause(BUSY_RETRY, this.aborter.signal);
+        if (this.aborted) throw error;
       }
     }
   }
@@ -1038,7 +1039,7 @@ class Scanner {
         await Promise.all(
           this.live(workers).map((tuner) => this.work(tuner, retry, false)),
         );
-        this.dropUnusable(workers, retry);
+        this.dropUnusable(workers, retry, false);
       }
       await this.retryCable(workers);
     }
@@ -1072,9 +1073,14 @@ class Scanner {
 
   /**
    * **受けられる並びが全部止まった種別は、残りのチャンネルを回さない。** 列から外して飛ばした数に入れ、エージェントが返した理由を 1 行出す。
-   * 同じ機材のエラーでチャンネルを 1 つずつ落とさないため
+   * 同じ機材のエラーでチャンネルを 1 つずつ落とさないため。
+   * 回し直しの列 (`first` が false で回すもの) は、1 回目に数え終えているので飛ばした数に入れない (`count` を false で渡す)
    */
-  private dropUnusable(workers: AgentTuner[], queue: Job[]): void {
+  private dropUnusable(
+    workers: AgentTuner[],
+    queue: Job[],
+    count = true,
+  ): void {
     for (const [type, reason] of this.pending) {
       // このスキャンで回していない種別は数えない (止めた並びが受けていただけ)
       if (!this.scanning.has(type)) continue;
@@ -1090,7 +1096,7 @@ class Scanner {
       );
       this.onProgress({
         line: `${type}: 選局できるチューナーがありません。${reason}`,
-        skipped: before - queue.length,
+        ...(count ? { skipped: before - queue.length } : {}),
       });
     }
   }
@@ -1171,7 +1177,7 @@ class Scanner {
         if (error instanceof TunerBusyError) {
           this.onProgress({ line: `${channel}: 空きを待っています` });
           queue.unshift(job);
-          await Bun.sleep(BUSY_RETRY);
+          await pause(BUSY_RETRY, this.aborter.signal);
           continue;
         }
         /*
@@ -1309,6 +1315,8 @@ class Scanner {
     );
     closer.abort();
     if (this.aborted) return;
+    // TS と同じく、選局できても何も来なければロックしなかったと数える (`retryCable`・`keepUnlocked`)
+    if (!result.signal) this.cable?.unlocked.add(channel);
     const counts = first ? { scanned: 1 } : {};
     if (first && result.signal)
       this.tuned.set(type, (this.tuned.get(type) ?? 0) + 1);
