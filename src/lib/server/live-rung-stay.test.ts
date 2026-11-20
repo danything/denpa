@@ -191,7 +191,13 @@ describe("段を下げる枠が空かないとき", () => {
     a.connection.onmessage?.(tune(2));
     const answers = a.notices.slice(before);
     expect(answers).toContainEqual(expect.objectContaining({ type: "notice" }));
-    expect(answers[0]).toMatchObject({ type: "tuned", rung: 1 });
+    // 今のセッションの答え (PMT を読んで替えた形式)。新しくエンコードし始めると、まだ PMT を読んでいない答えになる
+    expect(answers[0]).toMatchObject({
+      type: "tuned",
+      codec: "h264",
+      rung: 1,
+      broadcast: "hevc",
+    });
     await Bun.sleep(100);
     expect(tunes).toBe(1);
     expect(used).toBe(1);
