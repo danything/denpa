@@ -352,12 +352,13 @@ public sealed unsafe class UsbFsPipe : ICcidPipe
     private IOException Failure(string what)
     {
         var errno = Marshal.GetLastPInvokeError();
-        return new IOException(errno switch
+        // 抜けたときの分け方は機材の USB の層 (UsbFsDevice) と同じ
+        return errno switch
         {
-            UsbFs.Enodev => "リーダーが抜かれました",
-            UsbFs.Etimedout => "リーダーが応答しません",
-            _ => $"{what} ({Marshal.GetPInvokeErrorMessage(errno)})",
-        });
+            UsbFs.Enodev or UsbFs.Eshutdown => new UsbGoneException("リーダーが抜かれました"),
+            UsbFs.Etimedout => new IOException("リーダーが応答しません"),
+            _ => new IOException($"{what} ({Marshal.GetPInvokeErrorMessage(errno)})"),
+        };
     }
 
     public void Dispose()

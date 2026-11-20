@@ -89,7 +89,7 @@ public sealed class It930xCard : ICardLink
     /// <summary>機材のブリッジ。取っていなければ取り、初めての機材なら UART をカードとやり取りする設定にする</summary>
     private It930xBridge Bridge()
     {
-        if (_device is { Faulted: true }) Drop();
+        if (_device is { Faulted: true } or { Closed: true }) Drop();
         _device ??= _acquire();
         var bridge = _device.Bridge;
         if (_prepared != _device)

@@ -10,7 +10,7 @@ public sealed class TunerAdditionsTests
         var written = new[] { Spec("gr0", "dt295:1-1") };
         var found = new[] { Spec("PIXELA PIX-DT295 1-1", "dt295:1-1"), Spec("old", "zd1j:2-1"), Spec("new", "zd1j:2-2") };
         var added = Config.Additions(written, found, new HashSet<string?> { "dt295:1-1", "zd1j:2-1" });
-        await Assert.That(added.Select(tuner => tuner.Device)).IsEquivalentTo(new[] { "zd1j:2-2" });
+        await Assert.That(added.Select(tuner => tuner.Device)).IsEquivalentTo(new string?[] { "zd1j:2-2" });
     }
 
     [Test]

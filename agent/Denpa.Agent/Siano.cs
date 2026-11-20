@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO.Pipelines;
 
 namespace Denpa.Agent;
@@ -104,16 +103,18 @@ public static class Siano
         var model = Identify(port) ?? throw new IOException($"USB のポート {port} に {Family} が見当たりません (抜けたか、挿し替えた?)");
         bool describe;
         lock (Described) describe = Described.Add(port);
-        var usb = OpenUsb(port, model);
-        var device = new SianoDevice(usb, Name(model.Name, port), SianoFirmware.Default, describe: describe);
+        SianoDevice? device = null;
         try
         {
+            device = new SianoDevice(OpenUsb(port, model), Name(model.Name, port), SianoFirmware.Default, describe: describe);
             device.Start();
             return device;
         }
         catch
         {
-            device.Dispose();
+            device?.Dispose();
+            // 開けなかった・起動できなかったときは、次に開いたときにもう一度出す (ほかのソフトが使っていた初回で、1 回ぶんを使い切らない)
+            if (describe) lock (Described) Described.Remove(port);
             throw;
         }
     }

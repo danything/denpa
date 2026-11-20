@@ -66,7 +66,7 @@ public sealed class TsObservation
     {
         if (packet.Length < PacketSize || packet[0] != 0x47 || (packet[1] & 0x80) != 0) return;
         _packets++;
-        var pid = ((packet[1] & 0x1F) << 8) | packet[2];
+        var pid = TsSync.Pid(packet);
         if (packet[3] >> 6 != 0)
         {
             // スクランブルされている。中身は読めないので、数えるだけ

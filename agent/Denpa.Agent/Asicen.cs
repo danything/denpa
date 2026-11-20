@@ -504,7 +504,7 @@ public static class AsicenUserland
                     loader.Ensure();
                     Log.Write($"[asicend {id}] ファームウェアを流し込みました");
                 }
-                catch (IOException error)
+                catch (Exception error) when (StartFailure(error))
                 {
                     warn($"ASICEN の機材 (USB {where}) にファームウェアを流し込めません ({error.Message})");
                 }
@@ -550,14 +550,33 @@ public static class AsicenUserland
             Log.Write($"[asicend {id}] ファームウェアの流し込みで asicend が終了しました (exit {process.ExitCode}: {output})。"
                 + "流し込めていれば、機材がつながり直してアプリから届きます");
         }
-        catch (IOException error)
+        catch (Exception error) when (StartFailure(error))
         {
             warn($"ASICEN の機材 (USB {where}) にファームウェアを流し込めません ({error.Message})");
         }
     }
 
     /// <summary>挿さっている筐体の受信機を、設定に書くのと同じ形式で返す</summary>
-    public static List<TunerSpec> Detect() => Specs(Enclosures());
+    public static List<TunerSpec> Detect()
+    {
+        try
+        {
+            return Specs(Enclosures());
+        }
+        catch (Exception error) when (StartFailure(error))
+        {
+            // 自動検出のほかの機材 (CECH-ZD1 J・PIX-DT295・IT930x) まで並ばなくならないように、ここで止める
+            Log.Write($"ASICEN の機材を探せませんでした ({error.Message})");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// asicend を起動する・ソケットの置き場を作るときの、機材や配布物の側の失敗 (起動できない実行ファイルは <see cref="System.ComponentModel.Win32Exception"/>、
+    /// 作れない置き場は <see cref="UnauthorizedAccessException"/>)
+    /// </summary>
+    private static bool StartFailure(Exception error) =>
+        error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception;
 
     /// <summary>筐体ごとの受信機を設定の形式に (受けられる方式の無い受信機は除く)</summary>
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
@@ -670,7 +689,22 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
     private Process? _process;
     private volatile string _stderr = "";
 
-    public bool Running => _process is { HasExited: false };
+    public bool Running
+    {
+        get
+        {
+            // 止める側 (Stop) が _gate の中で Dispose するので、読んだあとに破棄されていたら止まったものとする
+            var process = _process;
+            try
+            {
+                return process is { HasExited: false };
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+    }
 
     /// <summary>
     /// asicend に渡す、機材を選ぶ引数。<paramref name="Lend"/> があれば (Android)、起動する直前にそれで fd の複製を作って継がせ、

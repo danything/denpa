@@ -199,26 +199,16 @@ internal sealed class Cxd2858(CxdLink link)
     /// 仕様書 4.5 の手順 1〜10 (周波数を埋めたもの)。4.3 と違うのは、手順 4 (ケーブル用の <c>16 26</c>)、
     /// 手順 6 (基準の分周 <c>10</c> とループフィルタの値 <c>1C 78 08 1C</c>)、手順 8 (IF の帯域通過フィルタの利得 4 など) だけ
     /// </summary>
-    internal static CxdRow[] CableRows(uint khz) =>
-    [
-        CxdRow.W(U, 0x01, 0x00),
-        CxdRow.W(U, 0x74, 0x02),
-        CxdRow.B(U, 0x87, 0xC4, 0x40),
-        CxdRow.B(U, 0x91, 0x16, 0x26),
-        CxdRow.B(U, 0x9C, 0x00, 0x00),
-        CxdRow.B(U, 0x5E, 0xEE, 0x02, 0x1E, 0x67, 0x10, 0x1C, 0x78, 0x08, 0x1C),
-        CxdRow.W(U, 0x67, 0x00, mask: 0x02),
-        CxdRow.B(U, 0x68, 0x00, 0x84, 0x00, 0x02, 0x21, 0x00, 0x1B, 0x02,
-            (byte)khz, (byte)(khz >> 8), (byte)((khz >> 16) & 0x0F), 0xFF, 0x01, 0xD9, 0x0F, 0x24, 0x87) with { WaitMs = 50 },
-        CxdRow.W(U, 0x88, 0x00),
-        CxdRow.W(U, 0x87, 0xC0),
-    ];
+    internal static CxdRow[] CableRows(uint khz) => CableSideRows(khz, ifShift: 0x1B, bandShift: 0x02);
 
     /// <summary>
     /// 仕様書 4.6 の手順 1〜10 (周波数を埋めたもの)。J.83B (<see cref="CableRows"/>) と違うのは、手順 8 の <c>6E</c> (IF のずらし -6 の <c>1A</c>) と
     /// <c>6F</c> (帯域のずらし -4 の <c>1C</c>) だけ。帯域は 6 MHz (<c>6D</c> = <c>00</c>)
     /// </summary>
-    internal static CxdRow[] IsdbcRows(uint khz) =>
+    internal static CxdRow[] IsdbcRows(uint khz) => CableSideRows(khz, ifShift: 0x1A, bandShift: 0x1C);
+
+    /// <summary>J.83B と ISDB-C の手順 1〜10。違うのは手順 8 の <c>6E</c> (<paramref name="ifShift"/>) と <c>6F</c> (<paramref name="bandShift"/>) だけ</summary>
+    private static CxdRow[] CableSideRows(uint khz, byte ifShift, byte bandShift) =>
     [
         CxdRow.W(U, 0x01, 0x00),
         CxdRow.W(U, 0x74, 0x02),
@@ -227,7 +217,7 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.B(U, 0x9C, 0x00, 0x00),
         CxdRow.B(U, 0x5E, 0xEE, 0x02, 0x1E, 0x67, 0x10, 0x1C, 0x78, 0x08, 0x1C),
         CxdRow.W(U, 0x67, 0x00, mask: 0x02),
-        CxdRow.B(U, 0x68, 0x00, 0x84, 0x00, 0x02, 0x21, 0x00, 0x1A, 0x1C,
+        CxdRow.B(U, 0x68, 0x00, 0x84, 0x00, 0x02, 0x21, 0x00, ifShift, bandShift,
             (byte)khz, (byte)(khz >> 8), (byte)((khz >> 16) & 0x0F), 0xFF, 0x01, 0xD9, 0x0F, 0x24, 0x87) with { WaitMs = 50 },
         CxdRow.W(U, 0x88, 0x00),
         CxdRow.W(U, 0x87, 0xC0),

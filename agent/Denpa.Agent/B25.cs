@@ -167,7 +167,7 @@ public sealed class Descrambler(
     /// **溜めている間に来た、どの PMT も挙げていない PID のスクランブルされたパケット。** その番組の PMT がまだ来ていないだけなので、
     /// これがある間は来ていない PMT を待ち続ける (<see cref="PmtsReady"/>)。PMT の来ない番組 (地上波の臨時の番組) は ES も流れていないとみなす
     /// (確かめたのは本番の記録とテストの並びまで)。PMT の無いままスクランブルされた ES が流れ続ける TS でも、待つのは <see cref="HoldLimit"/>
-    /// (地上波で 3 秒ほど) までで、そこで流し始める
+    /// (地上波で 3.5 秒ほど) までで、そこで流し始める
     /// </summary>
     private readonly HashSet<int> _stray = [];
     private readonly Dictionary<int, Ecm> _ecms = [];
@@ -348,7 +348,7 @@ public sealed class Descrambler(
 
     /// <summary>どの PMT も挙げていない PID の、スクランブルされたパケットか</summary>
     private bool Unlisted(ReadOnlySpan<byte> packet) =>
-        (packet[1] & 0x80) == 0 && packet[3] >> 6 != 0 && !_listed[((packet[1] & 0x1F) << 8) | packet[2]];
+        (packet[1] & 0x80) == 0 && packet[3] >> 6 != 0 && !_listed[TsSync.Pid(packet)];
 
     private void FinishCheck(string result)
     {
@@ -400,7 +400,7 @@ public sealed class Descrambler(
         for (var at = 0; at < _held; at++)
         {
             var packet = _hold.AsSpan(at * PacketSize, PacketSize);
-            if ((((packet[1] & 0x1F) << 8) | packet[2]) == pid) return packet[3] & 0x0F;
+            if (TsSync.Pid(packet) == pid) return packet[3] & 0x0F;
         }
         return null;
     }
@@ -515,7 +515,7 @@ public sealed class Descrambler(
             {
                 var ecm = Route(packet);
                 // どの PMT もまだ挙げていない ES。その PMT を待つ (PmtsReady)
-                if (ecm is null) _stray.Add(((packet[1] & 0x1F) << 8) | packet[2]);
+                if (ecm is null) _stray.Add(TsSync.Pid(packet));
                 // ECM のあとで最初に来た、その鍵の ES のパケット (Settle)
                 else if (ecm is { Seen: >= 0, After: int.MaxValue }) ecm.After = _held - 1;
             }
@@ -541,7 +541,7 @@ public sealed class Descrambler(
         output.Advance(PacketSize);
     }
 
-    private Ecm? Route(ReadOnlySpan<byte> packet) => _route[((packet[1] & 0x1F) << 8) | packet[2]] ?? _only;
+    private Ecm? Route(ReadOnlySpan<byte> packet) => _route[TsSync.Pid(packet)] ?? _only;
 
     /// <summary>
     /// スクランブルされていたら復号する。誤りの印が立っているものは触らない。
@@ -573,7 +573,7 @@ public sealed class Descrambler(
         // 契約が無い (同じ TS に入っている有料局)。復号の失敗には数えずにそのまま流す
         if (ecm is { Unentitled: true }) return false;
         if (start < 0 || !usable || ecm?.Cipher is not { HasKeys: true } cipher) return true;
-        var pid = ((packet[1] & 0x1F) << 8) | packet[2];
+        var pid = TsSync.Pid(packet);
         var control = packet[3] >> 6;
         var payload = packet[start..];
         var unitStart = _pes[pid] && (packet[1] & 0x40) != 0;
@@ -722,7 +722,7 @@ public sealed class Descrambler(
     private bool Drain(ReadOnlySpan<byte> packet)
     {
         var drop = _keys && Drops(packet);
-        if (drop && Route(packet) is null) _stray.Add(((packet[1] & 0x1F) << 8) | packet[2]);
+        if (drop && Route(packet) is null) _stray.Add(TsSync.Pid(packet));
         if (!_keys || AllReady())
         {
             StopDraining();
@@ -939,7 +939,7 @@ public sealed class Descrambler(
     {
         var start = PayloadStart(packet);
         if (start is < 0 or PacketSize) return;
-        var pid = ((packet[1] & 0x1F) << 8) | packet[2];
+        var pid = TsSync.Pid(packet);
         var unitStart = (packet[1] & 0x40) != 0;
         var section = pid == 0 ? _pat
             : _pmtSections.TryGetValue(pid, out var pmt) ? pmt

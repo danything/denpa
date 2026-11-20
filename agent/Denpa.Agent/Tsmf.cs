@@ -75,7 +75,7 @@ public sealed record TsmfHeader(
     }
 
     /// <summary>PID が TSMF のヘッダーのもの (<c>0x002F</c>) か。CRC が合わなかったヘッダーを見分ける (仕様書 8.7 の「パケットごとの処理」の 4)</summary>
-    public static bool HasHeaderPid(ReadOnlySpan<byte> packet) => (((packet[1] & 0x1F) << 8) | packet[2]) == 0x002F;
+    public static bool HasHeaderPid(ReadOnlySpan<byte> packet) => TsSync.Pid(packet) == 0x002F;
 
     /// <summary>ヘッダーのパケット (<see cref="IsHeader"/> が true のもの) を読む</summary>
     public static TsmfHeader Parse(ReadOnlySpan<byte> packet)

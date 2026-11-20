@@ -1398,7 +1398,16 @@ public sealed class Cxd2856Frontend
             _ => "",
         };
         _tuneLines.Add($"選局の書き込み {_nowMs() - entered} ms  プリセット {(preset is null ? "使わない" : $"使った ({from}{Hex(preset)})")}");
-        return WaitIsdbt(khz, tuned);
+        try
+        {
+            return WaitIsdbt(khz, tuned);
+        }
+        catch (IOException)
+        {
+            // ロックを待つ間の書き込み (チューナーの手順 9〜10)・TMCC の読み出しで失敗しても、次の選局は初期化からやり直す
+            _state = State.Unknown;
+            throw;
+        }
     }
 
     private static string Hex(byte[] bytes) => string.Join(" ", bytes.Select(value => value.ToString("X2")));

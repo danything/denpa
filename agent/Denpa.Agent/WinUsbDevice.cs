@@ -308,7 +308,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
     private int Control(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
     {
         Timeout(0, timeoutMs);
-        var setup = new SetupPacket { RequestType = requestType, Request = request, Value = value, Index = index, Length = (ushort)data.Length };
+        var setup = new SetupPacket { RequestType = requestType, Request = request, Value = value, Index = index, Length = UsbDevices.ControlLength(data.Length) };
         fixed (byte* start = data)
         {
             uint done = 0;

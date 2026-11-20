@@ -221,7 +221,7 @@ public sealed class Zd1jBoard : PortOwner<Zd1jBoard>, IDibTime
     }
 
     /// <summary>
-    /// 誰も使っていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)。カードが使っていれば開いたまま
+    /// 誰も使っていなければ閉じる (チューナーが捨てられたとき・差し込み口のカードリーダーを使わないにしたとき)。カードが使っていれば開いたまま
     /// </summary>
     public static void CloseIfIdle(string port) => CloseIdle(port, closeInRegistry: true);
 

@@ -9,6 +9,9 @@ internal static class TsSync
     public const byte Byte = 0x47;
     public const int Packet = 188;
 
+    /// <summary>パケットの PID (2・3 バイト目の下位 13 ビット)</summary>
+    public static int Pid(ReadOnlySpan<byte> packet) => ((packet[1] & 0x1F) << 8) | packet[2];
+
     /// <summary>
     /// <paramref name="from"/> から 1 バイトずつ進めて、<c>i + offset</c> と <c>i + offset + stride</c> の両方が 0x47 になる最初の i を返す
     /// (TS の中身の 0x47 は珍しくないので、1 つだけでは先頭とみなさない)。2 つ目の位置がまだ届いていない i は候補にしない。

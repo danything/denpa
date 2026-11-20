@@ -232,32 +232,28 @@ public static class Probe
             return 2;
         }
 
-        var lnbAt = Array.IndexOf(args, "--lnb");
-        var lnb = lnbAt >= 0 ? args.ElementAtOrDefault(lnbAt + 1) : null;
+        // 値を取る引数は、値が無い・読めなければ使い方を出して止める (黙って既定に戻すと、試したつもりの条件と違う結果になる)
+        if (!Option(args, "--lnb", out var lnb) || !Option(args, "--card-url", out var cardUrl)
+            || !Positive(args, "--seconds", out var givenSeconds) || !Positive(args, "--repeat", out var givenRepeat)) return 2;
         var decode = args.Contains("--decode");
         // 選んだ TS が TLV (4K) のとき、MPT が指す ECM を 1 つカードに渡して、鍵を返すかを出す (EcmTestLines)
         var ecmTest = args.Contains("--ecm-test");
         // 手元にカードが無い拠点。鍵だけ受け取る (CardShare.cs)。--card-url が無ければ、--decode-file と同じく CARD_URL を読む
-        var cardAt = Array.IndexOf(args, "--card-url");
+        var remote = cardUrl is not null;
         // 鍵を受け取る接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
         if (CardHops() is not { } hops) return 2;
         // 機材を名指ししたときのその機材のリーダーは、「使わない」でも使う (KeysFor)
         LoadCardChoice(Config.FromEnvironment());
-        Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : Environment.GetEnvironmentVariable("CARD_URL"), hops);
+        Keys.Configure(cardUrl ?? Environment.GetEnvironmentVariable("CARD_URL"), hops);
 
-        var secondsAt = Array.IndexOf(args, "--seconds");
-        var seconds = secondsAt >= 0 && int.TryParse(args.ElementAtOrDefault(secondsAt + 1), out var given) && given > 0
-            ? TimeSpan.FromSeconds(given)
-            : Read;
+        var seconds = givenSeconds is { } given ? TimeSpan.FromSeconds(given) : Read;
         if (Zd1j.Parse(device) is { } zd1j)
         {
             // 保存したロックの値は常駐のときと同じファイルを読み書きする (再起動をまたいで確かめられるように)
             Zd1jBoard.Locks = new Zd1jLocks(Config.FromEnvironment().Zd1jLocksFile);
             // 鍵はそのボードの内蔵の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
-            IKeySource keys = cardAt >= 0 ? Keys.Source : new LocalCard(() => [Zd1j.Card(zd1j)]);
-            var repeatAt = Array.IndexOf(args, "--repeat");
-            var repeat = repeatAt >= 0 && int.TryParse(args.ElementAtOrDefault(repeatAt + 1), out var times) && times > 0 ? times : 1;
-            return RunZd1j(zd1j, channels, decode ? keys : null, seconds, repeat);
+            IKeySource keys = remote ? Keys.Source : new LocalCard(() => [Zd1j.Card(zd1j)]);
+            return RunZd1j(zd1j, channels, decode ? keys : null, seconds, givenRepeat ?? 1);
         }
 
         // CXD2856ER の地上波のプリセットに使う TMCC も、常駐のときと同じファイルを読み書きする
@@ -277,14 +273,52 @@ public static class Probe
             return It930xSteps.Run(devices, channels, lnb, steps, seconds, Console.Out);
         }
         var options = new TuneProbe(decode, ecmTest);
-        if (devices.Length > 1) return RunTogether(devices, channels, lnb, options, cardAt >= 0, seconds);
+        if (devices.Length > 1) return RunTogether(devices, channels, lnb, options, remote, seconds);
 
-        var source = KeysFor(device, options.UsesCard, cardAt >= 0);
+        var source = KeysFor(device, options.UsesCard, remote);
         using var closing = Closer(device);
-        using var tuner = TunerPool.OpenDevice(device, lnb);
+        ITuneDevice tuner;
+        try
+        {
+            tuner = TunerPool.OpenDevice(device, lnb);
+        }
+        catch (Exception error) when (error is IOException or ArgumentException or InvalidOperationException)
+        {
+            // 「+」で並べたとき (RunTogether) と同じく 1 行で出す
+            Console.Error.WriteLine($"{device}: {error.Message}");
+            return 1;
+        }
+        using (tuner)
+        {
+            Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
+            return TuneChannels(tuner, channels, options, source, seconds, Console.Out, Console.Error, null).Failed ? 1 : 0;
+        }
+    }
 
-        Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
-        return TuneChannels(tuner, channels, options, source, seconds, Console.Out, Console.Error, null).Failed ? 1 : 0;
+    /// <summary>値を取る引数 (<c>--lnb 15v</c>)。無ければ null で true、名前だけで値が無ければ理由を出して false</summary>
+    private static bool Option(string[] args, string name, out string? value)
+    {
+        var at = Array.IndexOf(args, name);
+        value = at >= 0 ? args.ElementAtOrDefault(at + 1) : null;
+        if (at < 0 || value is { Length: > 0 } && !value.StartsWith("--", StringComparison.Ordinal)) return true;
+        value = null;
+        Console.Error.WriteLine($"{name} の値がありません (usage: {TuneUsage})");
+        return false;
+    }
+
+    /// <summary>1 以上の数を取る引数 (<c>--seconds 30</c>)。無ければ null で true、読めなければ理由を出して false</summary>
+    private static bool Positive(string[] args, string name, out int? value)
+    {
+        value = null;
+        if (!Option(args, name, out var text)) return false;
+        if (text is null) return true;
+        if (int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) && number > 0)
+        {
+            value = number;
+            return true;
+        }
+        Console.Error.WriteLine($"{name} は 1 以上の数で書きます (いまは「{text}」)");
+        return false;
     }
 
     /// <summary>
@@ -938,7 +972,7 @@ public static class Probe
                 observation.Push(buffer.AsSpan(at, 188));
                 if (!Scrambled(buffer.AsSpan(at))) continue;
                 scrambledIn++;
-                scrambledPids.Add(Pid(buffer.AsSpan(at)));
+                scrambledPids.Add(TsSync.Pid(buffer.AsSpan(at)));
             }
 
             if (b25 is null) continue;
@@ -950,7 +984,7 @@ public static class Probe
                 outPackets++;
                 var packet = decoded.WrittenSpan[at..];
                 if (Scrambled(packet)) scrambledOut++;
-                else if (decodedAt == 0 && (packet[3] & 0x10) != 0 && scrambledPids.Contains(Pid(packet))) decodedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                else if (decodedAt == 0 && (packet[3] & 0x10) != 0 && scrambledPids.Contains(TsSync.Pid(packet))) decodedAt = System.Diagnostics.Stopwatch.GetTimestamp();
             }
         }
 
@@ -1029,8 +1063,6 @@ public static class Probe
     /// 復号できていれば 0 になる
     /// </summary>
     private static bool Scrambled(ReadOnlySpan<byte> packet) => (packet[3] & 0xC0) != 0;
-
-    private static int Pid(ReadOnlySpan<byte> packet) => ((packet[1] & 0x1F) << 8) | packet[2];
 
     /// <summary>抜けるときに 1 回呼ぶ (using で後始末を並べるため)</summary>
     private sealed class Closing(Action action) : IDisposable

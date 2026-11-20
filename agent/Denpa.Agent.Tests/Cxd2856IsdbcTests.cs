@@ -462,7 +462,7 @@ public class Cxd2856IsdbcTests
         await Assert.That(frontend.CableModulation).IsEqualTo("64QAM");
         await Assert.That(frontend.CablePer).IsEqualTo(2 / 1024.0);
         var detail = frontend.IsdbcDetail!;
-        await Assert.That(detail.Inverted).IsEqualTo(true);
+        await Assert.That(detail.Inverted).IsTrue();
         await Assert.That(detail.CarrierOffsetKhz).IsEqualTo(-16 * 48000.0 / 16384);
         await Assert.That(detail.SymbolRateMsps).IsEqualTo(1800.5 * 48 / 16384);
         await Assert.That(detail.PreRsBer).IsEqualTo(16 / (2048.0 * 204 * 8));
@@ -497,7 +497,7 @@ public class Cxd2856IsdbcTests
         // 搬送波のずれは正の値も、シンボルレートの端数は負の値と d も読む (i は 32 ビットの 2 の補数、d は 9F の下位 2 ビット)
         var read = Cxd2856.IsdbcDetail(new CxdIsdbcSignal(0x01, 0x20, 4, 500, null,
             [0x04, 0x00, 0x10, 0x07, 0x08, 0xFF, 0x00, 0x00, 0x00, 0x01], 0x0B, null, null, 0));
-        await Assert.That(read.Inverted).IsEqualTo(false);
+        await Assert.That(read.Inverted).IsFalse();
         await Assert.That(read.CarrierOffsetKhz).IsEqualTo(16 * 48000.0 / 16384);
         await Assert.That(read.SymbolRateMsps).IsEqualTo((1800 - 16777216 / Math.Pow(2, 25)) * 48 / 16384);
     }

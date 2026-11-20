@@ -76,6 +76,12 @@ public sealed record UsbLocation(string Port, string Path);
 /// <summary>OS の名前からポートの名前を作る部品と、記録に出す文言。並べる・開くのは <see cref="IUsbHost"/> (UsbHost.cs)</summary>
 public static class UsbDevices
 {
+    /// <summary>制御転送の長さが wLength (16 ビット) に収まるか。収まらなければ送らずに断る (切り詰めて送らない。どの OS も同じ)</summary>
+    public static ushort ControlLength(int length) =>
+        length is >= 0 and <= ushort.MaxValue
+            ? (ushort)length
+            : throw new ArgumentOutOfRangeException(nameof(length), $"制御転送は {ushort.MaxValue} バイトまでです ({length} バイト)");
+
     /// <summary>
     /// Windows の場所の文字列 (<c>PCIROOT(0)#PCI(1400)#USBROOT(0)#USB(3)#USB(2)</c>) からポートの名前 (<c>1-3.2</c>)。
     /// 先頭の数は、ホストコントローラーの場所の文字列を並べた <paramref name="controllers"/> の何番目か (1 から)。分からなければ null

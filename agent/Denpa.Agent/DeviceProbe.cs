@@ -124,19 +124,11 @@ public static class DeviceProbe
     }
 
     /// <summary>開いたフロントエンドに、受けられる方式を <c>DTV_ENUM_DELSYS</c> で問い合わせる。答えなければ空 (<see cref="DvbTuner"/> も使う)</summary>
-    internal static unsafe int[] Delivery(int fd)
+    internal static int[] Delivery(int fd)
     {
-        // struct dtv_properties { u32 num; struct dtv_property *props; } に、DTV_ENUM_DELSYS を 1 つ
         var property = new byte[DvbTuner.PropertySize];
         BitConverter.TryWriteBytes(property, DtvEnumDelsys);
-        var header = new byte[16];
-        BitConverter.TryWriteBytes(header, 1u);
-        fixed (byte* props = property)
-        fixed (byte* headerAt = header)
-        {
-            BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
-            return Sys.Ioctl(fd, DvbTuner.FeGetProperty, (nint)headerAt) >= 0 ? ParseDelivery(property) : [];
-        }
+        return DvbTuner.PropertiesIoctl(fd, DvbTuner.FeGetProperty, property, 1) >= 0 ? ParseDelivery(property) : [];
     }
 
     /// <summary>見つけたときに選んでおく種別と、受けられる種別</summary>
