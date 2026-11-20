@@ -1,5 +1,3 @@
-import { basename } from "node:path";
-
 import { fail } from "@sveltejs/kit";
 
 import { parseIndoorHosts } from "#lib/host.js";
@@ -27,14 +25,13 @@ import {
 } from "#lib/server/settings.js";
 import { transcodeAuto } from "#lib/server/transcode.js";
 
-/** 画面に渡す形式。GPU ごとの一言 (`summary`) と、testid に使う GPU の名前 (`port`) を添える */
+/** 画面に渡す形式。GPU ごとの一言 (`summary`) を添える */
 function forScreen(hw: HwEncode) {
   return {
     ...hw,
     devices: hw.devices.map((device) => ({
       ...device,
       summary: describeDevice(device),
-      port: basename(device.path),
     })),
   };
 }
@@ -44,8 +41,8 @@ export function load() {
   return {
     recording: settings(),
     /**
-     * GPU でエンコードできるか (server/hwenc.ts)。起動直後の確かめが終わっていなければ
-     * promise のまま渡す。画面は「確認中」を出して待つ
+     * GPU でエンコードできるか (server/hwenc.ts)。起動直後の確認が終わっていなければ
+     * promise のまま渡す。画面は「GPU を確かめています…」を出して待つ
      */
     hw: hw.probed ? forScreen(hw) : probe().then(forScreen),
     /** その場で変換する本数 (`server/transcode.ts`)。自動のときの本数と、選べる本数 */

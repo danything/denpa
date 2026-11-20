@@ -9,7 +9,7 @@ import { takeFlow, who } from "../flow.server";
  * **連携の結果を受け取って保存する** (戻り先の画面 `../return` がフラグメントから読んで送ってくる)。
  * 本文は `{"result":"<hub が暗号化したもの>"}`。返すのは `{"ok":true}` か `{"message":"…"}` (画面にそのまま出す)。
  *
- * JSON の送信には SvelteKit の Origin の確かめが掛からないので、同じサイトからの呼び出しかを自分で見る
+ * JSON の送信には SvelteKit の Origin の確認が掛からないので、同じサイトからの呼び出しかを自分で見る
  */
 export async function POST(event) {
   const { request, cookies, url } = event;

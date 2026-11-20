@@ -558,7 +558,7 @@ describe("washTop (ページの上の端の色 = ブラウザの枠の色)", () 
     expect(washTop(pixels, 4, [0, 0, 0], "dark")).toEqual([128, 0, 0]);
   });
 
-  test("16進とのやりとりと、違いの大きさ", () => {
+  test("16 進との変換と、違いの大きさ", () => {
     expect(toHex([11, 12, 255])).toBe("#0b0cff");
     expect(fromHex("#0B0CFF")).toEqual([11, 12, 255]);
     expect(fromHex("#fff")).toBeNull();

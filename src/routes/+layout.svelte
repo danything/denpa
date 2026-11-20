@@ -19,6 +19,7 @@
   import ChannelAlert from "#lib/components/ChannelAlert.svelte";
   import ChannelAlertDot from "#lib/components/ChannelAlertDot.svelte";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
+  import FreshDot from "#lib/components/FreshDot.svelte";
   import GuidePending, {
     guideNavigation,
   } from "#lib/components/GuidePending.svelte";
@@ -232,7 +233,7 @@
    *
    * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
    * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
-   * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに 2 回押していた。
+   * 420px)。上のハンバーガーにたたんでいた頃は、画面を移るたびに 2 回押していた。
    * 640px 未満はよく開く 3 画面と検索をタブに、残り (切り抜き・ルール・設定) は「その他」の `Menu` (popover) に。
    * 640px からは切り抜き・ルール・設定もタブに出し (`wide`。7 つ並ぶ。並びはヘッダーと同じ)、「その他」は出さない (中身が無くなる)。
    * テーマは設定の「この端末」、新しいバージョンは設定の「バージョンと環境」にあり、設定の入口に点で知らせる (下の `fresh`)。
@@ -550,7 +551,7 @@
             >
               {link.label}
               {#if fresh && link.href === "/settings"}
-                {@render freshDot()}
+                <FreshDot />
               {/if}
             </a>
           </li>
@@ -570,7 +571,7 @@
 
   <!--
     **局が無いときの案内** (録画・番組表・ライブ。`#lib/channel-notice.ts`)。閉じるボタンは無く、
-    元のことが片付けば消える。中身が動いている間に起きたお知らせはここに出さず、ヘッダーの印に畳む (`ChannelAlert`)。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
+    元のことが片付けば消える。中身が動いている間に起きたお知らせはここに出さず、ヘッダーの印にたたむ (`ChannelAlert`)。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
   -->
   {#if notice}
     <div class="notice-slot">
@@ -662,15 +663,6 @@
 {/if}
 
 <!-- 設定の入口に付ける点 (上の `fresh`)。読み上げには何の点かを渡す -->
-{#snippet freshDot()}
-  <span
-    class="fresh-dot"
-    role="img"
-    aria-label="新しいバージョンがあります"
-    data-testid="update-dot"
-  ></span>
-{/snippet}
-
 <!--
   スマホの形で設定の入口に付ける印 (上の `alert`・`fresh`)。チャンネルのお知らせがあればその印 (ヘッダーの印と同じ形を小さく)、
   無くて新しいバージョンがあれば点
@@ -679,7 +671,7 @@
   {#if alert !== null}
     <ChannelAlertDot kind={alert.kind} />
   {:else if fresh}
-    {@render freshDot()}
+    <FreshDot />
   {/if}
 {/snippet}
 
@@ -883,7 +875,6 @@
     border-radius: 2rem;
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   /*
    * テーマを切り替えた下のタブ (テーブルトップの映像の画面。上の `stageTabbar`) は、字の色もそのテーマから取り直す。
@@ -1003,7 +994,7 @@
     padding: 0;
   }
   /*
-   * 設定の入口の点 (`.fresh-dot`。上の `freshDot`)。タブは字の右上に浮かせ、字の真ん中寄せと下線の幅は変えない。
+   * 設定の入口の点 (`FreshDot.svelte`)。タブは字の右上に浮かせ、字の真ん中寄せと下線の幅は変えない。
    * ヘッダーのリンクも字の右上 (押す場所の内側)。メニューの項目は字の後ろに並べる
    */
   .tabbar :global(.tab > span > .fresh-dot) {
@@ -1110,7 +1101,7 @@
   .skip:focus {
     translate: none;
   }
-  /* 本文そのものは押すものではないので、焦点を移しても枠を描かない (次の Tab から本文の中を回る) */
+  /* 本文そのものはボタンではないので、焦点を移しても枠を描かない (次の Tab から本文の中を回る) */
   main:focus {
     outline: none;
   }

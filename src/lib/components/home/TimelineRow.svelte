@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * 時間軸の 1 行 (予約・録画・録り逃し)。どれも同じ形にする。(録れたものは) ポスター、
-   * 時刻と番組名、局と尺、右に押すもの。状態を言うときだけ下に段を足す (`RowActivity`。2 段まで)。
+   * 時刻と番組名、局と尺、右にボタン。状態を言うときだけ下に段を足す (`RowActivity`。2 段まで)。
    * 段に出すのは、いま動いているもの (録画中・エンコード中・端末に保存中) と、出さないと「録れたつもり」になるもの
    * (競合・失敗・欠ける・録画が途中で切れた・ロゴで CM を判定できなかった)
    */
@@ -494,9 +494,7 @@
                     class="menu-item menu-danger"
                     data-testid="row-menu-delete-confirm"
                   >
-                    <Icon icon={Trash} size="size-4" />{offline.entries[
-                      rec.id
-                    ] === undefined
+                    <Icon icon={Trash} size="size-4" />{held === undefined
                       ? "削除を確定"
                       : "端末とサーバから削除"}
                   </button>
@@ -532,8 +530,10 @@
       {/if}
       {#if rec.deleted_at === null}
         {#if rec.job_id !== null}
-          <!-- 動いている間は中断だけ。裏で ffmpeg が元の TS を読んでいるので、削除すると、その ffmpeg も失敗する。
-                        狭い画面はアイコンだけ (3 段目のエンコードの進み具合に幅を回す。字は読み上げに残す) -->
+          <!--
+            動いている間は中断だけ。裏で ffmpeg が元の TS を読んでいるので、削除するとその ffmpeg も失敗する。
+            狭い画面はアイコンだけ (3 段目のエンコードの進み具合に幅を回す。字は読み上げに残す)
+          -->
           {#if rec.job_canceling}
             <button
               type="button"
@@ -564,7 +564,7 @@
               submit={afterDelete(rec)}
               testid="delete-button"
               confirmTestid="delete-confirm"
-              confirmLabel={offline.entries[rec.id] === undefined
+              confirmLabel={held === undefined
                 ? "削除を確定"
                 : "端末とサーバから削除"}
               icon

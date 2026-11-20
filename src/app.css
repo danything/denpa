@@ -21,7 +21,7 @@
  * (`import "@anyblades/blades/components/modal";`)。その画面の CSS にだけ入る。
  * - content/table … `HomeCalendar`・設定の `Channels`・`AgentTuners`・`ContractDialog`
  * - forms/input-range … `player/SeekBar`
- * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Channels`
+ * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Transfer`・`Channels`
  * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`・`AgentDialog`・`ContractDialog`
  * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`・端末に保存した録画 (`offline`)
  *
@@ -286,7 +286,7 @@
   --pico-table-border-color: transparent;
   --pico-muted-border-color: var(--dp-line);
   /*
-   * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
+   * **押せるが主ではないもの** (日送り・選んでいない種別)。Pico の既定の灰色は
    * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにする。ボタンの色はここから採る (下の「ボタン」)
    */
   --pico-secondary: #3d475c; /* slate-700 */
@@ -421,10 +421,11 @@
   vertical-align: -0.125em;
   margin-inline-start: var(--dp-space-1);
 }
-.alert-dot.ground {
+/* 色は大きな印 (ヘッダーの `.alert-mark`) と同じ */
+:is(.alert-dot, .alert-mark).ground {
   color: var(--dp-warn-text);
 }
-.alert-dot.changed {
+:is(.alert-dot, .alert-mark).changed {
   color: var(--dp-info-text);
 }
 
@@ -1244,7 +1245,7 @@ input[type="checkbox"][role="switch"] {
 }
 /*
  * **浮いたものの中** (メニュー・番組の詳細などの `popover`・ダイアログ) **と件の面** (`.item`)。中の主のボタンは面も影も持たず、太字だけ。
- * 狭い画面でだけ浮くものも同じ値を置く (`RuleDraft` の `.draft` はその <style> で、スマホの形の操作の 1 行は上の `.dock` で)
+ * 形によって浮くものも同じ値を置く (`RuleDraft` の `.draft` と切り抜きの選ぶ形の 1 行 `.c-select-wide` はその <style> で、スマホの形の操作の 1 行は上の `.dock` で)
  */
 :where(dialog, [popover], .modal-box, .item) {
   --dp-btn-solid: transparent;
@@ -1556,6 +1557,29 @@ a.button {
 ):focus {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
+}
+
+/*
+ * ---- 行の下端の進み具合 (`.row-bar`。録画の一覧の録画中・エンコード中・端末への保存、端末に保存した録画) ----
+ * 行の面の下端いっぱいに敷く。行は `position: relative` にして、面の角丸で切り落とす (`overflow: clip`) のは使う側
+ */
+.row-bar {
+  position: absolute;
+  inset-inline: 0;
+  /* Pico の `progress` は幅 100%、ブラウザの既定にも固有の幅がある。行の幅を明示する */
+  width: 100%;
+  bottom: 0;
+  height: 3px;
+  margin: 0;
+  border-radius: 0;
+  /* 画面の外では描かない (バーの光が回り続けない)。大きさは上で決めてあるので contain-intrinsic-size は要らない */
+  content-visibility: auto;
+}
+.row-bar.success {
+  --pico-progress-color: var(--dp-ok);
+}
+.row-bar.rec {
+  --pico-progress-color: var(--dp-rec);
 }
 
 /* ---- 行の操作 (`.row-actions`。録画の「詳細」「削除」、予約の「取消」など) ---- */
@@ -2265,12 +2289,12 @@ dialog {
 .modal-box:focus {
   outline: none;
 }
-/* 見出しのすぐ下の説明 (`IssueDialog`・`AgentDialog`・`ContractDialog`)。見出しに寄せ、下の中身とは離す */
+/* 見出しのすぐ下の説明 (`LogoZoom`・`IssueDialog`・`AgentDialog`・`ContractDialog`)。見出しに寄せ、下の中身とは離す */
 .modal-box .intro {
   margin: var(--dp-space-1) 0 var(--dp-space-4);
 }
 /*
- * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`・`AgentDialog`・`ContractDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)
+ * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`・`AgentDialog`・`ContractDialog`・番組の詳細) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)
  */
 .modal-backdrop {
   position: fixed;
@@ -2286,7 +2310,7 @@ dialog {
   cursor: default;
 }
 /*
- * **閉じるのは左下の「閉じる」** (どの窓も同じ。番組の詳細の `.detail-actions` も同じ並べ方)。
+ * **閉じるのは左下の「閉じる」** (どの窓も同じ。番組の詳細も同じ部品を箱の下端に重ねる)。
  * 窓の下の段 (`.modal-foot`) の左端に「閉じる」、右に残りの並び (`.modal-actions`)。
  * 並びが折り返して上の段へ伸びても、「閉じる」は下の段に残る
  */

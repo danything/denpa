@@ -15,7 +15,7 @@
    *
    * 窓は `<dialog>` を `showModal` で開く (左下の「閉じる」・Esc・幕を押すと閉じる)。見た目は `app.css` の `.modal-box`。
    * **閉じても中身は残す**。閉じる動き (`app.css` のダイアログ) の間に空にならないように。
-   * 見せていた CM ロゴが消えたら (「覚え直す」) 閉じる。表の行もその時に消える
+   * 見せていた CM ロゴが消えたら (「再学習」) 閉じる。表の行もその時に消える
    */
   let {
     target,
@@ -117,7 +117,7 @@
   <article class="modal-box" bind:this={box} tabindex="-1">
     {#if shown !== null}
       <h2 id="logo-zoom-title" class="broadcast">{shown.name}</h2>
-      <p class="small muted kind">
+      <p class="small muted intro">
         {#if shown.kind === "cm"}
           CM ロゴ (CM 検出のために録画から覚えたもの)
         {:else}
@@ -155,16 +155,16 @@
                   class="num">・{scale} 倍</span
                 >{/if}
             </span>
-            <!-- 「覚え直す」はこの窓の中だけ (表の行を低く保つ)。消えたら窓も閉じる -->
+            <!-- 「再学習」はこの窓の中だけ (表の行を低く保つ)。消えたら窓も閉じる -->
             <form method="POST" action="?/logoForget" use:submitting>
               <input type="hidden" name="serviceId" value={shown.id} />
               <button
                 type="submit"
                 class="secondary"
-                aria-label={`${shown.name} の CM ロゴを覚え直す`}
+                aria-label={`${shown.name} の CM ロゴを再学習`}
                 data-testid="logo-zoom-forget"
               >
-                覚え直す
+                再学習
               </button>
             </form>
           </div>
@@ -175,9 +175,6 @@
 </dialog>
 
 <style>
-  .kind {
-    margin: var(--dp-space-1) 0 var(--dp-space-4);
-  }
   /* 画像を真ん中に置く台。CM ロゴは白い縁だけの画像なので、暗い地に置く */
   .frame {
     display: flex;

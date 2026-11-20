@@ -356,7 +356,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
     const anime = page.locator(
       '[data-testid="recording-group"][data-zone="past"][data-group="グループ試験アニメ"]',
     );
-    // 閉じている番組には出さない (見出しが並ぶだけの一覧を押すもので埋めない)
+    // 閉じている番組には出さない (見出しが並ぶだけの一覧をボタンで埋めない)
     await expect(page.getByTestId("group-rule")).toHaveCount(0);
     await anime.click();
     await page.getByTestId("group-rule").click();

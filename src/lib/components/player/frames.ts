@@ -7,7 +7,7 @@
  */
 
 /** 映した 1 枚のこと。`requestVideoFrameCallback` を持つブラウザでだけ分かる */
-export interface Frame {
+interface Frame {
   /** **そのフレームの時刻。** 再生位置 (`currentTime`) とは違う。あちらは先に進む */
   mediaTime: number;
 }

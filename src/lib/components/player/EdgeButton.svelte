@@ -28,7 +28,7 @@
   aria-pressed={active}
   data-testid={testid}
 >
-  <span class="dot" class:active></span>
+  <span class="dot"></span>
   <span class="label">{label}</span>
 </button>
 
@@ -42,9 +42,6 @@
     height: 0.5rem;
     border-radius: var(--dp-radius-full);
     background: var(--dp-on-video-danger);
-  }
-  .dot.active {
-    background: currentColor;
   }
   .label {
     font-size: var(--dp-text-xs);

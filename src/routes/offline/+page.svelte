@@ -361,7 +361,7 @@
           {#if item.state === "downloading"}
             <!-- 進み具合は件の面の下端いっぱいに敷く (ホームの行と同じ)。取れないときは動いているだけのバー -->
             <progress
-              class="row-bar"
+              class="row-bar success"
               class:running={progress !== null}
               value={progress ?? undefined}
               max="1"
@@ -487,22 +487,11 @@
     /* 下端のバーを面の角で切り落とす */
     overflow: clip;
   }
-  /* 進み具合のバー。高さと色はホームの行と同じ (`home.css` の `.row-bar.success`) */
-  .row-bar {
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    width: 100%;
-    height: 3px;
-    margin: 0;
-    border-radius: 0;
-    --pico-progress-color: var(--dp-ok);
-    /* 画面の外では描かない (バーの光が回り続けない)。大きさは上で決めてあるので contain-intrinsic-size は要らない */
-    content-visibility: auto;
-  }
+  /* ポスターは 16:9 (ホームの行の `.t-thumb` と同じ形) */
   .thumb {
+    flex-shrink: 0;
     width: 5rem;
-    height: 3rem;
+    aspect-ratio: 16 / 9;
     border-radius: var(--dp-radius-sm);
     object-fit: cover;
   }

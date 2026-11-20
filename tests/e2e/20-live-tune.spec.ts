@@ -353,7 +353,7 @@ test.describe("ライブ視聴", () => {
      * **エンジンが立ち上がったらリモコンを出す。右の列、一覧の上。**
      *
      * 映像の上に重ねない — 放送の作った画面は枠を下まで塗り潰すので、
-     * 重ねると押すものが放送の映像に埋もれる (操作バーで踏んだのと同じ)
+     * 重ねるとボタンが放送の映像に埋もれる (操作バーで踏んだのと同じ)
      */
     await expect(page.getByTestId("live-remote")).toBeVisible();
     await expect(page.getByTestId("live-channels")).toBeVisible();

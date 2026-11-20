@@ -28,7 +28,7 @@ const NOTE_FOR = 1_500;
  *   `video.volume` は 1 より大きくできない。リミッタ・`<audio>` を通すか (バックグラウンド再生・小窓) は
  *   canvas と同じもの (`#lib/sound.ts` の `Outlet`)
  *
- * **AudioContext が鳴らせるようになるまでは通さない** (`tapVideo`)。自動再生の許しが出る前に通すと、
+ * **AudioContext が鳴らせるようになるまでは通さない** (`tapVideo`)。自動再生の許可が出る前に通すと、
  * `<video>` は鳴っているのに何も聞こえない。それまでは直に鳴らし (放送のままの大きさ。下げていれば
  * `video.volume` で下げる)、ページのどこかが押されたら AudioContext を起こして通す。
  * 通している間は Audio Session を `playback` にする (Safari。Web Audio の音を効果音として扱わせない)。
@@ -76,7 +76,7 @@ export function playerVolume(options: Options): Volume {
     level = storedVolume(read(VOLUME_KEY));
   });
 
-  /** 押されたら AudioContext を起こす (自動再生の許しは押したときに出る) */
+  /** 押されたら AudioContext を起こす (自動再生の許可は押したときに出る) */
   const wake = (): void => {
     if (context !== null && context.state !== "running")
       void context.resume().catch(() => undefined);

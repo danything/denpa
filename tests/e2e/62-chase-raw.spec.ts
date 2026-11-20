@@ -146,7 +146,7 @@ test.describe("追っかけを MPEG-2 のまま観る", () => {
 
     /*
      * **戻すとリクエストし直し、戻した先から進む。** 再生位置は届いた PTS から録画の先頭の PTS (`timeline` の
-     * `origin`) を引いて出す。読みものの「m:ss / m:ss」の左で見る
+     * `origin`) を引いて出す。情報の欄の「m:ss / m:ss」の左で見る
      */
     const status = page
       .getByTestId("chase-controls")

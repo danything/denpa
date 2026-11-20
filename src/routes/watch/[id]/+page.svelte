@@ -135,7 +135,7 @@
     type StreamHeard,
     type StreamUrl,
   } from "#lib/remux-player.js";
-  import { keepResume } from "#lib/resume.js";
+  import { keepResume, keepResuming } from "#lib/resume.js";
   import type { Pace } from "#lib/rungs.js";
   import {
     type Cue,
@@ -1570,12 +1570,8 @@
     switchAt = position;
     picked = fresh;
     if (fresh?.way !== "raw") return;
-    // `<video>` で観ていたものは止める (src を外しただけでは読み込んだぶんを鳴らし続ける)
-    if (video !== null) {
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-    }
+    // `<video>` で観ていたものは止める
+    stopVideo();
     canvasCodec = "mpeg2";
   }
 
@@ -2106,8 +2102,6 @@
   /** 覆っておく上限 (ms) */
   const HOP_GIVE_UP = 2_000;
 
-  /** どこまで観たかを書き送る間隔 (ms) */
-  const REMEMBER = 15_000;
   /** 続きから出したか。画面にも言う */
   let continued = $state(false);
 
@@ -2117,7 +2111,7 @@
   const detail = programDetail();
 
   /**
-   * 開いたら、そのまま観はじめる。一覧の行を押した勢い (user activation) がまだ効いているので
+   * 開いたら、そのまま観はじめる。一覧の行を押したことで得た許可 (user activation) がまだ効いているので
    * `play()` も全画面も通る。読み込み直したときだけ通らないので、どちらも失敗しても無視する
    */
   onMount(() => {
@@ -2147,19 +2141,15 @@
     if (window.matchMedia("(pointer: coarse)").matches) fullscreen.enter();
     const onResize = () => place();
     window.addEventListener("resize", onResize);
-    // 閉じ際にも書き送る (15 秒おきだと最後の十数秒が落ちる)。`unload` はスマホで来ないことがある
-    const onLeave = () => remember(true);
-    window.addEventListener("pagehide", onLeave);
-    const ticker = setInterval(() => {
-      if (playing) remember();
-    }, REMEMBER);
+    // 15 秒おきは再生している間だけ。閉じ際はいつも送る
+    const stopResuming = keepResuming((leaving) => {
+      if (leaving || playing) remember(leaving);
+    });
     return () => {
       window.removeEventListener("resize", onResize);
-      window.removeEventListener("pagehide", onLeave);
       // 字幕を貼り直す処理を止める。外さないと画面を離れたあとも回り続ける
       following = null;
-      clearInterval(ticker);
-      remember(true);
+      stopResuming();
       deleting.fire();
       if (skipNotice !== null) clearTimeout(skipNotice);
       if (continuedTimer !== null) clearTimeout(continuedTimer);
@@ -3504,7 +3494,7 @@
   {/if}
 
   <!--
-    右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。番組の中身の下で押すものは、この録画の切り抜きへのリンクだけ
+    右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。番組の中身の下のボタンは、この録画の切り抜きへのリンクだけ
     (閉じる・削除は映像の上の列。全画面のタブレットで映像から出ずに押す)。データ放送のリモコンとコメントの一覧は、出している間だけ先頭に置く
   -->
   {#snippet aside()}

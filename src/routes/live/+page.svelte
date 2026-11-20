@@ -53,7 +53,7 @@
   import SeekBar from "#lib/components/player/SeekBar.svelte";
   import {
     liveAudio,
-    liveCodecs,
+    liveCodec,
     liveSubtitle,
     muteRow,
     speedRow,
@@ -172,17 +172,17 @@
   );
 
   /**
-   * 実況のコメント (docs/watch.md の「実況のコメント」)。世帯の設定 (`data.jikkyo`) と端末の ⚙ の両方がオンで、
+   * 実況のコメント (docs/watch.md の「実況のコメント」)。世帯の設定 (`data.jikkyoAllowed`) と端末の ⚙ の両方がオンで、
    * 局を映している間だけ NX-Jikkyo に繋ぐ。局を替えたら繋ぎ直す
    */
   const jikkyoOn = jikkyoSwitch();
   const jikkyo = new JikkyoFeed(true);
   $effect(() => jikkyo.setNg(data.jikkyoNg));
   const jikkyoChannel = $derived(
-    data.jikkyo ? (current?.jikkyo ?? null) : null,
+    data.jikkyoAllowed ? (current?.jikkyo ?? null) : null,
   );
   const jikkyoActive = $derived(
-    data.jikkyo && jikkyoOn.on && player.tuned !== null,
+    data.jikkyoAllowed && jikkyoOn.on && player.tuned !== null,
   );
   $effect(() => {
     jikkyo.set(jikkyoChannel, jikkyoActive);
@@ -206,7 +206,9 @@
    */
   const JIKKYO_TAB = "jikkyo";
   const jikkyoTab = $derived(
-    data.jikkyo && jikkyoOn.on && channels.some((c) => c.jikkyo !== null),
+    data.jikkyoAllowed &&
+      jikkyoOn.on &&
+      channels.some((c) => c.jikkyo !== null),
   );
   const types = $derived([
     ...GUIDE_TYPES.filter((t) => channels.some((c) => c.type === t)),
@@ -563,7 +565,7 @@
       >
         {#snippet under()}
           <!-- 映像 → 実況 → 字幕。世帯の設定がオンのときだけ置く。データ放送を出している間は重ねない -->
-          {#if data.jikkyo}
+          {#if data.jikkyoAllowed}
             <JikkyoLayer
               feed={jikkyo}
               air={() => player.airTime()}
@@ -667,7 +669,7 @@
             {@render compose(false, true)}
           {/if}
           <!--
-            上に位置、下に押すもの (観る画面と同じ二段)。放送の今にいる間は右端に張り付かせる
+            上に位置、下にボタン (観る画面と同じ二段)。放送の今にいる間は右端に張り付かせる
             (貯めているぶん後ろにいるが、描くとつまみが左へ動いて見える)。canvas に描いている間 (MPEG-2・互換モード) は出さない
             (遡れるほど持っていない)。録画に譲っている間も出さない (戻るのは通知の「ライブに戻る」)
           -->
@@ -757,8 +759,8 @@
                   項目は「・」で区切り、あいだに空白を入れない (docs/writing.md)。空白が入らないよう {#if} どうしを詰めて書く。
                   放送からの遅れ (`live-player` の `fromAir`。隣のテレビとの差)。出るまではバッファだけを「遅延」として出す。
                   手元のバッファ (`buffered.end - currentTime`)。上流は入っていない。
-                  測り直す (`relearn`)。覚えているものがあるときだけ、遅延のすぐ隣に置く。
-                  読みものの行なので丸いボタンにはしない (操作バーが厚くなる)。
+                  再測定 (`relearn`)。覚えているものがあるときだけ、遅延のすぐ隣に置く。
+                  情報の欄の行なので丸いボタンにはしない (操作バーが厚くなる)。
                   途切れは止まったときだけ (`live-player` の `stalls`)。下限は、いま効いている下限と届く間隔のいちばん長いもの。
                   途切れの報告に添えてもらう (#1210)。コマ落ちは描かれずに捨てられたコマで、映像だけ遅れるときの切り分け
                   (`live-player` の `dropped`)。映像だけの遅れは開いたままにせず飛び直す (`unslip`) ので、直した回数も出す。
@@ -853,7 +855,7 @@
               {pip}
               {fullscreen}
               {stage}
-              jikkyo={data.jikkyo
+              jikkyo={data.jikkyoAllowed
                 ? {
                     on: jikkyoOn.on,
                     toggle: jikkyoOn.toggle,
@@ -861,16 +863,7 @@
                     down: jikkyo.down,
                   }
                 : undefined}
-              codec={liveCodecs({
-                icon: CODEC,
-                choice: player.choice,
-                shown: player.shown,
-                format: player.format,
-                step: player.step,
-                broadcast: player.broadcast,
-                unavailable: player.unavailable,
-                onselect: (next) => player.setChoice(next),
-              })}
+              codec={liveCodec(CODEC, player)}
               audio={liveAudio(AUDIO, player)}
               subtitle={liveSubtitle(CAPTION, player)}
             />
@@ -1179,7 +1172,7 @@
       scroll-behavior: smooth;
     }
   }
-  /* 測り直す操作。読みものの行に置くので、ボタンの形にはしない */
+  /* 再測定のボタン。情報の欄の行に置くので、ボタンの形にはしない */
   .relearn {
     margin: 0;
     padding: 0;
@@ -1222,7 +1215,7 @@
   :is(.relearn, .back-live):focus-visible {
     outline-color: var(--dp-video-focus);
   }
-  /* 押すものなので操作バーのボタンと同じ段 (実況のコメントより上。`ControlBar`) */
+  /* ボタンなので操作バーのボタンと同じ段 (実況のコメントより上。`ControlBar`) */
   .unmute {
     --pico-background-color: var(--dp-video-veil);
     position: absolute;

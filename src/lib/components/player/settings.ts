@@ -264,7 +264,7 @@ export interface SettingAction {
 }
 
 /**
- * **操作バーから畳んだもの** (`StageTail` の `fold`。狭い枠か、一段に収まらないとき)。⚙ の上の並びの先頭に、押すもの・切り替え・選ぶものを
+ * **操作バーから畳んだもの** (`StageTail` の `fold`。狭い枠か、一段に収まらないとき)。⚙ の上の並びの先頭に、ボタン・切り替え・選ぶものを
  * 操作バーと同じ順に並べる (`kind` で見分ける)。畳まないときは操作バーに出ているので並べない
  */
 export type SettingRow =
@@ -339,6 +339,31 @@ export function liveAudio(
       active: a.id === player.audio,
     })),
     onselect: (key) => player.setAudio(key),
+  });
+}
+
+/** ライブと追っかけのコーデック。値は `live-player.svelte.ts` のプレイヤーから読む */
+export function liveCodec(
+  icon: IconShape,
+  player: {
+    choice: LiveChoice;
+    shown: LiveCodec | null;
+    format: LiveFormat;
+    step: Step;
+    broadcast: BroadcastCodec;
+    unavailable: LiveCodec[];
+    setChoice: (choice: LiveChoice) => void;
+  },
+): SettingChoice {
+  return liveCodecs({
+    icon,
+    choice: player.choice,
+    shown: player.shown,
+    format: player.format,
+    step: player.step,
+    broadcast: player.broadcast,
+    unavailable: player.unavailable,
+    onselect: (next) => player.setChoice(next),
   });
 }
 

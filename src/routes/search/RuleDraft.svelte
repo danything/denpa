@@ -442,7 +442,6 @@
         <input
           type="checkbox"
           role="switch"
-          aria-checked={dedupe}
           name="dedupe"
           value="1"
           bind:checked={dedupe}
@@ -459,7 +458,6 @@
         <input
           type="checkbox"
           role="switch"
-          aria-checked={skipEarlier}
           name="skipEarlier"
           value="1"
           bind:checked={skipEarlier}

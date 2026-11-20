@@ -65,7 +65,7 @@
         hint="オフのままなら下見だけで、何も変えません"
         detail="何が取り込まれるかを表示するだけで、データベースに触りません。"
       />
-      <div>
+      <div class="cluster">
         <button
           type="submit"
           class="small"

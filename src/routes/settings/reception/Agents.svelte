@@ -137,7 +137,7 @@
               {/if}
               {#if state?.versionDiffers}
                 <div class="small text-warn" data-testid="agent-version">
-                  ⚠ denpa とバージョンが違います ({state.version})。同じバージョンに揃えてください
+                  ⚠ denpa とバージョンが違います。同じバージョンに揃えてください
                 </div>
               {/if}
               {#if state?.rawVisible === false}

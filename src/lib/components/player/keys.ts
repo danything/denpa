@@ -30,7 +30,7 @@ interface PlayerKeys {
   stepVolume?: (direction: number) => void;
   /**
    * Shift+D (データ放送を自動で受信するか。`data-receive.ts`)。データ放送のボタンの長押しと同じ (`hold.ts`)。
-   * データ放送の無い画面・録画は省く
+   * データ放送の無い画面 (追っかけ) は省く
    */
   toggleDataAuto?: () => void;
 }

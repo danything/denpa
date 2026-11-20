@@ -36,7 +36,7 @@
   import SeekBar from "#lib/components/player/SeekBar.svelte";
   import {
     liveAudio,
-    liveCodecs,
+    liveCodec,
     liveSubtitle,
     muteRow,
     speedRow,
@@ -67,7 +67,7 @@
   import { write as remind } from "#lib/keep.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
-  import { keepResume } from "#lib/resume.js";
+  import { keepResume, keepResuming } from "#lib/resume.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
   import { playbackAt } from "#lib/ts/watch.js";
 
@@ -133,14 +133,10 @@
     // 出演者などは番組表の側にある。押させずに、開いた時点で引く (観る画面と同じ)
     void detail.open(data.rec.program_id, facts);
     const ticker = setInterval(() => (clock = Date.now()), 1000);
-    const keeper = setInterval(() => sendResume(), 15_000);
-    const onLeave = () => sendResume(true);
-    window.addEventListener("pagehide", onLeave);
+    const stopResuming = keepResuming(sendResume);
     return () => {
       clearInterval(ticker);
-      clearInterval(keeper);
-      window.removeEventListener("pagehide", onLeave);
-      sendResume(true);
+      stopResuming();
       player.stop();
     };
   });
@@ -418,7 +414,7 @@
             />
           {/if}
 
-          <!-- 読みものは 3 画面共通の二段 (InfoBlock)。上が番組、下が位置 -->
+          <!-- 情報の欄は 3 画面共通の二段 (InfoBlock)。上が番組、下が位置 -->
           <InfoBlock
             range={{ start: data.rec.start_at, end: data.rec.end_at }}
             service={data.rec.service_name}
@@ -469,16 +465,7 @@
             {pip}
             {fullscreen}
             {stage}
-            codec={liveCodecs({
-              icon: CODEC,
-              choice: player.choice,
-              shown: player.shown,
-              format: player.format,
-              step: player.step,
-              broadcast: player.broadcast,
-              unavailable: player.unavailable,
-              onselect: (next) => player.setChoice(next),
-            })}
+            codec={liveCodec(CODEC, player)}
             audio={liveAudio(AUDIO, player)}
             subtitle={liveSubtitle(CAPTION, player)}
             jikkyo={data.jikkyoAllowed

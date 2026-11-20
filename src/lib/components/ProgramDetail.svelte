@@ -36,7 +36,7 @@
     /** エンコードしたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
     fps?: number | null;
     actions?: Snippet | undefined;
-    /** 時刻の行の末尾に添える状態のバッジ (予約済み・放送終了。`ProgramFacts`)。押すものの並びには混ぜない */
+    /** 時刻の行の末尾に添える状態のバッジ (予約済み・放送終了。`ProgramFacts`)。ボタンの並びには混ぜない */
     status?: Snippet | undefined;
   } = $props();
 
@@ -88,13 +88,13 @@
 >
   <button
     type="button"
-    class="detail-backdrop"
+    class="modal-backdrop detail-backdrop"
     onclick={onclose}
     aria-label="閉じる"
     tabindex="-1"
   ></button>
   <!--
-    **巻き取るのは中身だけ。** 押すものは箱の下端に重ねたまま出しておく
+    **巻き取るのは中身だけ。** ボタンは箱の下端に重ねたまま出しておく
     (説明が長くても開いた時点で見える。FactsAside と同じ考え方)。並びの地は塗らず、
     中身はボタンの間と後ろに透けて見える。
     続きがあるときは、ボタンの手前で中身を薄く消していく (下の CSS)
@@ -114,18 +114,18 @@
     </div>
 
     <!--
-      「閉じる」と、開いた画面が渡す並び (`.modal-actions`) を分けて置く。狭い画面で並びが上の段へ
-      折り返しても、「閉じる」は下の段の左端に残る
+      ほかの窓と同じ下の段 (`app.css` の `.modal-foot`)。「閉じる」と、開いた画面が渡す並び (`.modal-actions`) を分けて置く。
+      狭い画面で並びが上の段へ折り返しても、「閉じる」は下の段の左端に残る
     -->
-    <div class="detail-actions" bind:offsetHeight={actionsHeight}>
+    <div class="modal-foot detail-actions" bind:offsetHeight={actionsHeight}>
       <button
         type="button"
-        class="secondary detail-close"
+        class="secondary modal-close"
         onclick={onclose}
         data-testid="detail-close">閉じる</button
       >
       {#if actions}
-        <div class="modal-actions detail-rest">
+        <div class="modal-actions">
           {@render actions()}
         </div>
       {/if}
@@ -160,18 +160,9 @@
   .detail-modal::backdrop {
     background: none;
   }
+  /* 形はほかの窓と同じ (`app.css` の `.modal-backdrop`)。こちらは幕の色も持つ */
   .detail-backdrop {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
     background: var(--dp-backdrop);
-    box-shadow: none;
-    cursor: default;
     transition: opacity var(--dp-duration-enter) var(--dp-ease);
   }
   /*
@@ -235,33 +226,21 @@
   }
   /*
    * 箱の下端に重ね、地は塗らない。ボタンの無い所は押しても中身に届く (字を選ぶ・巻き取る)。
-   * 閉じるは左端、ほかは右に寄せる (並べ方は `app.css` の `.modal-actions`)。
-   * 並びが折り返したら、閉じるは下の段にそろえる
+   * 並べ方 (閉じるは左下、ほかは右に寄せて折り返す) は `app.css` の `.modal-foot`
    */
   .detail-actions {
     position: absolute;
     inset-inline: var(--dp-space-5);
     bottom: var(--dp-space-5);
-    display: flex;
-    align-items: flex-end;
-    gap: var(--dp-space-2);
+    margin: 0;
     pointer-events: none;
   }
-  .detail-close {
-    flex: none;
-    margin: 0;
-    pointer-events: auto;
-  }
-  .detail-rest {
-    flex: 1 1 0%;
-    min-width: 0;
-    margin: 0;
-  }
-  .detail-rest > :global(*) {
+  .detail-actions .modal-close,
+  .detail-actions .modal-actions > :global(*) {
     pointer-events: auto;
   }
   /* 送れなかった理由 (開いた画面が並びに置く `.notice`) は 1 行まるごと使う */
-  .detail-rest > :global(.notice) {
+  .detail-actions .modal-actions > :global(.notice) {
     flex-basis: 100%;
     margin: 0;
   }
