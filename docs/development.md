@@ -299,7 +299,7 @@ denpa が起動するのは ffmpeg / ffprobe だけで、シェルを通しま�
 
 ### 外から持ってくるものはバージョンで固定する
 
-ffmpeg・SVT-AV1・emsdk・Denpa Font・asicen-userland は、どれも
+ffmpeg・SVT-AV1・Opus・Mesa・Rockchip MPP・Denpa Font・asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
 Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
 アプリに入れる ffmpeg は Dockerfile の `ffmpeg` 段からバージョンと部品を読み、x264・dav1d・zimg のバージョンは `.github/ffmpeg-android.sh` に書いています (Mac の `ffmpeg-macos.sh` と同じ)。

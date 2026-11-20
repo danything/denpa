@@ -19,7 +19,7 @@
       ]
     },
     {
-      "description": ".github/openssl-android.sh の `# renovate:` 付きの変数 (`OPENSSL_VERSION=3.5.9`)。Android 向けのエージェントに静的に入れる OpenSSL のバージョン",
+      "description": ".github/openssl-android.sh の `# renovate:` 付きの変数 (`OPENSSL_VERSION=…`)。Android 向けのエージェントに静的に入れる OpenSSL のバージョン",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/openssl-android\\.sh$/"],
       "matchStrings": [
@@ -35,7 +35,7 @@
       ]
     },
     {
-      "description": ".github/bun-android.sh の `# renovate:` 付きの変数 (`BUN_VERSION=1.4.4`)。Android のアプリに入れる bun の公式の Android 版のバージョン。別のグループの PR になる (下の packageRules)",
+      "description": ".github/bun-android.sh の `# renovate:` 付きの変数 (`BUN_VERSION=…`)。Android のアプリに入れる bun の公式の Android 版のバージョン。別のグループの PR になる (下の packageRules)",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/bun-android\\.sh$/"],
       "matchStrings": [
@@ -109,7 +109,7 @@
       "addLabels": ["needs-review"]
     },
     {
-      "description": "bun の Android 版 (.github/bun-android.sh。Android のアプリに入れる) は、スクリプトにアーカイブと LICENSE.md の SHA-256 も固定してあり、バージョンだけ上げると組めない。SHA-256 を人が入れ替えるので、自動ではマージせず、別の PR に分ける。Dockerfile の oven/bun (docker) はこれまでどおり共有の設定で上がるが、ずれている間は Android の CI が落ちる (APK の denpa 本体もコンテナと同じ bun で動かすため)。両方の PR をそろえてからマージする",
+      "description": "bun の Android 版 (.github/bun-android.sh。Android のアプリに入れる) は、スクリプトにアーカイブと LICENSE.md の SHA-256 も固定してあり、バージョンだけ上げると組めない。SHA-256 を人が入れ替えるので、自動ではマージせず、別の PR に分ける。Dockerfile の oven/bun (docker) は共有の設定で上がるが、ずれている間は Android の CI が落ちる (APK の denpa 本体もコンテナと同じ bun で動かすため)。両方の PR をそろえてからマージする",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["oven-sh/bun"],
       "groupName": "bun-android",

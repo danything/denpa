@@ -2,7 +2,7 @@
 #
 # **入口は genkan** (https://github.com/danything/genkan。ホスト名でコンテナに振り分ける
 # リバースプロキシ)。ポートは公開しないので、他のプロジェクトとぶつからない。
-# 先に genkan を1回起こしておく (docs/development.md)。
+# 先に genkan を 1 回起こしておく (docs/development.md)。
 #
 #   docker compose up            … 開発サーバ (http://denpa.localhost) + 偽チューナーエージェント
 #                                  (http://denpa-agent.localhost)
@@ -50,7 +50,7 @@ services:
     depends_on:
       - tuner-agent
 
-  # 実チューナーの代わり。番組表も録画ストリームも、素のTSとしてここが流す
+  # 実チューナーの代わり。番組表も録画ストリームも、素の TS としてここが流す
   tuner-agent:
     build:
       context: .

@@ -1,5 +1,5 @@
 # **PSA は privileged。** Talos は Pod Security Admission の既定が `baseline` で、
-# denpa と tuner-agent の privileged と hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)が
+# denpa と tuner-agent の privileged と hostPath (`/dev/dvb`・`/dev/bus`・`/dev/dri`) が
 # baseline に通らない。namespace 自体は ArgoCD の CreateNamespace が先に作るが、
 # ラベルはこのマニフェストが付ける。k3s では PSA を有効にしていないので効かない。
 apiVersion: v1
@@ -7,7 +7,7 @@ kind: Namespace
 metadata:
   name: denpa
   annotations:
-    # バックアップ(VolSync)の mover を root で動かす。danything/gitops の deploy/volsync/application.yaml
+    # バックアップ (VolSync) の mover を root で動かす。danything/gitops の deploy/volsync/application.yaml
     volsync.backube/privileged-movers: "true"
   labels:
     pod-security.kubernetes.io/enforce: privileged

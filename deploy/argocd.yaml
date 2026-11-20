@@ -1,15 +1,14 @@
-# This repo's ArgoCD配置. The ApplicationSet in danything/bootstrap
-# (argocd/appsets/repos.yaml) scans the org for this file and builds this
-# repo's Application from it -- so everything about how this repo gets
-# deployed is decided here, not in the cluster or in bootstrap.
+# このリポジトリを ArgoCD でどう出すか。danything/bootstrap の ApplicationSet
+# (argocd/appsets/repos.yaml) が org の中からこのファイルを探し、ここに書いたとおりに
+# このリポジトリの Application を作る。出し方はクラスタや bootstrap ではなく、ここで決める。
 name: denpa
 namespace: denpa
 
-# Directory holding the manifests, relative to the repo root.
+# マニフェストを置くディレクトリ (リポジトリの根からのパス)
 sourcePath: deploy
 recurse: false
 
-# autoSync: false leaves the app on manual sync in the UI.
+# autoSync: false にすると、UI から手で同期する
 autoSync: true
 prune: true
 selfHeal: true

@@ -14,15 +14,15 @@ RUN bun install
 # 放送の MPEG-2・AAC と、互換モードの Opus をブラウザでデコードする WebAssembly (docs/stream.md#デコーダ)
 #
 # **ブラウザには MPEG-2 のデコーダが無い**ので、FFmpeg を組んで持ち込む。出てくるのは decoder.mjs と
-# decoder.wasm の2つで (大きさは docs/stream.md#デコーダ)、どの arch で組んでも中身は同じ (wasm なので)。
-# **置き場はアプリの外** (/opt/denpa/mpeg2) — 開発と E2E の compose はソースを /app に被せるので、
+# decoder.wasm の 2 つで (大きさは docs/stream.md#デコーダ)、どの arch で組んでも中身は同じ (wasm なので)。
+# **置き場はアプリの外** (/opt/denpa/mpeg2)。開発と E2E の compose はソースを /app に被せるので、
 # /app の中に置くと隠れる。配るのは `/api/live/mpeg2/<名前>` (MPEG2_DIR を読む)。
 #
-# FFmpeg は下の `ffmpeg` 段と同じバージョンに揃える (Renovate が同じ PR で2か所とも上げる)。
-# 組むのは要るデコーダだけなので、2分ほどで終わる
+# FFmpeg は下の `ffmpeg` 段と同じバージョンに揃える (Renovate が同じ PR で 2 か所とも上げる)。
+# 組むのは要るデコーダだけなので、2 分ほどで終わる
 #
 # **組むのは mpeg2video のデコーダと、フレームの区切りを探す parser と、AAC・Opus のデコーダだけ。**
-# 他は全部切る (`--disable-everything`)。AAC の parser は組まない — ADTS の区切りと時刻は JS
+# 他は全部切る (`--disable-everything`)。AAC の parser は組まない。ADTS の区切りと時刻は JS
 # (packages/arib/src/pes.ts の AdtsSplitter) が付ける。Opus は AV1 と組んで送られてくる fMP4 の音 (互換モード)。
 # Opus のデコーダは swresample を当てにする (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
 #
@@ -34,7 +34,7 @@ RUN bun install
 #   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream-history.md「WASM のデコーダの組み方を決めたときの測定」)。今のブラウザはどれも対応している
 # - **LTO を掛ける** (`-flto`)。デコードが 2〜8% 速くなり、brotli 後はかえって 2 KB ほど縮む (同じ節)
 # - **ローダーは ES の module にして、ワーカーの中からだけ読む** (`ENVIRONMENT=worker`)。
-#   ファイルの読み書き (`FILESYSTEM`) は使わないので外す — それだけで 40KB ほど縮む
+#   ファイルの読み書き (`FILESYSTEM`) は使わないので外す。それだけで 40 KB ほど縮む
 # ---------------------------------------------------------------------------
 FROM docker.io/emscripten/emsdk:7.0.0@sha256:6bd7aef93408b10bf7b36642cb7c91119b302f720b9ec2d20439f73cf07fe894 AS mpeg2wasm
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
@@ -70,21 +70,21 @@ ls -l /opt/denpa/mpeg2
 rm -rf /tmp/ffmpeg /tmp/build
 EOF
 
-# 組んだ2つだけを取り出す段。**CI の E2E はイメージを使わずランナーで回す**ので、
+# 組んだ 2 つだけを取り出す段。**CI の E2E はイメージを使わずランナーで回す**ので、
 # `docker buildx build --target mpeg2wasm-out --output type=local,dest=…` でここだけ手元へ出す
-# (上の段をそのまま出すと emsdk ごと 3GB 出てくる)
+# (上の段をそのまま出すと emsdk ごと 3 GB 出てくる)
 FROM scratch AS mpeg2wasm-out
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 
 # ---------------------------------------------------------------------------
 # データ放送と字幕、画面の放送の字を描くブラウザに渡す字 (Denpa Font。danything/denpa-font のリリースの woff2 の 2 つ
 # (基本の字と JIS X 0213 で足された漢字) と、後のほうの字の範囲 (CSS の unicode-range)。
-# `/api/font/` が配る)。BML は**等幅・丸ゴシック・ARIB外字**を要求していて、
-# この字が3つとも満たす (借りている側は Kosugi を 4.4MB ぶん抱えているが、外字は入っていない)。
+# `/api/font/` が配る)。BML は**等幅・丸ゴシック・ARIB 外字**を要求していて、
+# この字が 3 つとも満たす (借りている側は Kosugi を 4.4 MB ぶん抱えているが、外字は入っていない)。
 # **留めるのはタグだけ** (Renovate はタグだけ上げればよい)。中身は同じリリースの SHA256SUMS で照らす。
-# 画面はこのタグを URL に付けて1年持たせる (vite.config.ts がこの行を読む)。配る側は VERSION と
+# 画面はこのタグを URL に付けて1 年持たせる (vite.config.ts がこの行を読む)。配る側は VERSION と
 # 照らし、合うときだけ immutable にする (src/lib/server/font.ts)。
-# 段を分けてあるのは、本番イメージと画像を撮るイメージ (下の `docs` 段) の両方に同じものを置くため
+# 段を分けてあるのは、本番イメージ・Windows と Mac の配布物 (`native-files` 段)・画像を撮るイメージ (`docs` 段) のどれにも同じものを置くため
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS denpa-font
 # renovate: datasource=github-releases depName=danything/denpa-font
@@ -112,7 +112,7 @@ EXPOSE 5173
 CMD ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "5173"]
 
 # ---------------------------------------------------------------------------
-# E2E用。Playwright のブラウザを入れる
+# E2E 用。Playwright のブラウザを入れる
 # ---------------------------------------------------------------------------
 FROM dev AS test
 ENV CI=1
@@ -147,11 +147,11 @@ CMD ["bun", "scripts/capture-docs.ts"]
 # ---------------------------------------------------------------------------
 # ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel・AMD の GPU (VA-API) + NVIDIA NVENC (amd64) + Rockchip MPP (arm64)。
 # 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
-# デコーダ (libaribcaption) は組み込まない — `-c:s copy` にデコーダは要らない)
+# デコーダ (libaribcaption) は組み込まない。`-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
 # **土台のイメージはどれも digest で固定する** (debian は ffmpeg / runtime-libs / denpa-font で同じもの。
 # agent/Dockerfile も同じ)。タグだけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
-# その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
+# CSS を 1 行直しただけの push でも ffmpeg の組み直し (10 分強) に巻き込まれる。
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
 FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS ffmpeg
 SHELL ["/bin/bash", "-c"]
@@ -175,7 +175,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # **Rockchip の MPP (h264_rkmpp・hevc_rkmpp) は arm64 だけ。** RK3588 / RK3588S のハードウェアエンコーダを
 # FFmpeg 本家のエンコーダ (8.1 から) で使う (docs/encode.md「Rockchip (RK3588) でエンコードする」)。
 # MPP は Debian に無いのでソースから組み、`librockchip_mpp.so.1` を /usr/local/lib に置く
-# (下の runtime-libs 段が ldd で辿って運ぶ)。イメージは分けず、arm64 の全員に入る —
+# (下の runtime-libs 段が ldd で辿って運ぶ)。イメージは分けず、arm64 の全員に入る。
 # /dev/mpp_service が無ければ試しのエンコードが落ちて使わないだけ。
 # FFmpeg の configure は rkmpp を version3 の一覧に入れているので、**両方の arch で
 # `--enable-version3` にそろえる** (出来上がる ffmpeg は GPL-3.0-or-later。docs/licenses.md)。
@@ -184,7 +184,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # **NVIDIA の NVENC (h264_nvenc・av1_nvenc・hevc_nvenc) は amd64 だけ。** NVIDIA の GPU を挿した arm64 の家庭用サーバは
 # まず無い (Jetson はエンコーダの仕組みが別)。組むのに要るのは nv-codec-headers (Debian の
 # libffmpeg-nvenc-dev。MIT のヘッダだけで、nonfree にはならない) で、ドライバのライブラリ (libcuda・
-# libnvidia-encode) は ffmpeg が実行時に dlopen する。**実行イメージには何も足さない** — NVIDIA Container
+# libnvidia-encode) は ffmpeg が実行時に dlopen する。**実行イメージには何も足さない。** NVIDIA Container
 # Toolkit がホストのドライバのライブラリをコンテナに差し込む (docs/encode.md「NVIDIA でエンコードする」)。
 # GPU が無ければ試しのエンコードが落ちて使わないだけなのは VA-API と同じ。
 # デコードとインタレ解除は CPU でするので、NVIDIA のデコーダ (nvdec) と CUDA のフィルタは組まない
@@ -199,8 +199,8 @@ ENV FFMPEG_VERSION=9.1
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
 ARG SVT_AV1_VERSION=v4.3.0
 # Opus も**ソースから組んで libavcodec に静的に繋ぐ**。Debian の libopus (1.5) は、パケットの欠けを AI で補う
-# 機能 (deep PLC・DRED・OSCE) の重みを抱えて 3.5MB あり、そのうち 3MB が重み。denpa は Opus をエンコードする
-# だけで (デコードは FFmpeg 自前の opus デコーダ)、どれも使わないので、既定 (どれも切れている) で組むと 0.6MB ほどで済む。
+# 機能 (deep PLC・DRED・OSCE) の重みを抱えて 3.5 MB あり、そのうち 3 MB が重み。denpa は Opus をエンコードする
+# だけで (デコードは FFmpeg 自前の opus デコーダ)、どれも使わないので、既定 (どれも切れている) で組むと 0.6 MB ほどで済む。
 # 配布物は xiph のもの (GitHub の tar には組むときに生成するファイルが無い)
 # renovate: datasource=github-tags depName=xiph/opus extractVersion=^v(?<version>.*)$
 ARG OPUS_VERSION=1.6.1
@@ -213,18 +213,18 @@ ARG MPP_VERSION=1.1.0
 COPY patches/ /patches/
 
 # **libav* は共有ライブラリで組む** (`--enable-shared --disable-static`)。静的に組むと ffmpeg と
-# ffprobe がそれぞれ libav* と SVT-AV1 を丸ごと抱え、同じ中身 (37MB ずつ) がイメージに2つ入る。
+# ffprobe がそれぞれ libav* と SVT-AV1 を丸ごと抱え、同じ中身 (37 MB ずつ) がイメージに 2 つ入る。
 # ライブラリは /usr/local/lib に置き、`--enable-rpath` で ffmpeg / ffprobe にその場所を書き込む
 # (ld.so の既定の検索先ではないので、ldconfig や LD_LIBRARY_PATH に頼らない)。
 # 実行イメージへ運ぶものは /out にまとめる。.so のバージョン付きの symlink は運ばず、実行時に読まれる
-# SONAME の名前 (libavcodec.so.63 など) の実体だけを置く — COPY で symlink を辿ると同じ中身が並ぶため。
+# SONAME の名前 (libavcodec.so.63 など) の実体だけを置く。COPY で symlink を辿ると同じ中身が並ぶため。
 # 名前の形では見分けない (MPP は実体が `.so.0` で SONAME が `.so.1`)。MPP が一緒に入れる
 # librockchip_vpu (古い API) は ffmpeg が使わないので消す
 #
 # **組むのは denpa が使う部品だけ** (`--disable-everything` のうえで下の一覧を足す)。全部組むと
-# libavcodec だけで 26MB あり、ほとんどは放送にも録画にも出てこないコーデックだった。
+# libavcodec だけで 26 MB あり、ほとんどは放送にも録画にも出てこないコーデックだった。
 # 名前は src/lib/server の ffmpeg の引数から取り出したもの。**引数に新しいフィルタ・コーデック・形式を足したら、
-# ここにも足すこと** — テストは偽の ffmpeg で回るので気づけず、イメージの確かめ (.github/image-smoke.sh) が
+# ここにも足すこと。** テストは偽の ffmpeg で回るので気づけず、イメージの確かめ (.github/image-smoke.sh) が
 # 同じ経路を本物の ffmpeg で通して初めて分かる。名前の出どころ:
 # - デコーダ: 放送 (mpeg2video・h264・aac)、録画 (libdav1d・h264・opus)、切り抜きの画像 (png・mjpeg・webp)。
 #   hevc は GPU で H.265 にエンコードした録画 (その場の変換・CM 検出のやり直し) と、ほかの録画ソフトから移した録画。
@@ -323,9 +323,9 @@ RUN case "${TARGETARCH}" in \
 # AMD の GPU の VA-API ドライバ (radeonsi_drv_video.so。docs/encode.md「GPU でエンコードする」)。amd64 だけ
 #
 # **Debian の mesa-va-drivers は使わず、Mesa をソースから組む。** パッケージは全部の GPU のドライバと
-# LLVM (libLLVM 120MB) を引き込み、イメージが展開後で約 170MB 増える。radeonsi と VA-API だけを
-# LLVM 無しで組むと1ファイルで済む (radeonsi は Mesa 24.0 から LLVM 無しで組め、シェーダは ACO で組む)。
-# **大きさを優先して組む** (`buildtype=minsize`)。release の 18MB が 13MB になる (LTO を足しても 0.4MB しか減らない)。
+# LLVM (libLLVM 120 MB) を引き込み、イメージが展開後で約 170 MB 増える。radeonsi と VA-API だけを
+# LLVM 無しで組むと1 ファイルで済む (radeonsi は Mesa 24.0 から LLVM 無しで組め、シェーダは ACO で組む)。
+# **大きさを優先して組む** (`buildtype=minsize`)。release の 18 MB が 13 MB になる (LTO を足しても 0.4 MB しか減らない)。
 # エンコードは GPU の回路がやり、ドライバの CPU 側は命令を渡すくらいなので、速さへの響きは小さいはず (実機では見ていない)。
 # `video-codecs=all` は、既定では外れる H.264・H.265 のエンコードとデコードを入れるため (AV1 は既定で入る)。
 # ドライバが繋ぐ libdrm_amdgpu・libelf・libexpat・libzstd は Debian のもので、runtime-libs 段が ldd で辿って運ぶ
@@ -362,7 +362,7 @@ RUN mkdir -p /out/dri /out/doc && \
 FROM deps AS build
 WORKDIR /app
 COPY . .
-# ソースマップ (*.map。サーバの分で 6MB ほど) は本番に入れない。サーバのコードは圧縮していないので、
+# ソースマップ (*.map。サーバの分で 6 MB ほど) は本番に入れない。サーバのコードは圧縮していないので、
 # エラーの場所はマップが無くても読める
 RUN bun run build && find build -name "*.map" -delete
 
@@ -374,13 +374,13 @@ RUN bun run build && find build -name "*.map" -delete
 #
 # adapter-bun の出力は要るものを取り込んでいて、外から引くのは `node:*` と
 # bun の組み込み (`bun:sqlite`・`bun:ffi`) だけ。載せていた頃は playwright も vite も
-# typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
+# typescript もイメージに入っていて、**312 MB がまるごと無駄**だった。
 # 置くのは下のものだけ: build/ (アプリ)、server.js (入口) とそれが読む
 # src/lib/server/address.ts・compress.ts・fresh-worker.ts・hold-signals.ts、package.json (`"type": "module"` の宣言)、drizzle/
 # (マイグレーション)。これで起動して /api/health が答えるかは CI で毎回見ている
 # (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy。Windows・Mac は test.yml の server-windows・server-macos)
 #
-# 引き換えに、**外から引くものを増やすなら取り込ませること** — package.json の
+# 引き換えに、**外から引くものを増やすなら取り込ませること。** package.json の
 # `dependencies` に足すと adapter-bun がそれを外に出すので、ここで転ぶ。
 # 依存を全部 devDependencies に置いて `dependencies` を空にしてあるのはそのため
 # ---------------------------------------------------------------------------
@@ -413,8 +413,8 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /mpeg2
 
 # ---------------------------------------------------------------------------
 # 本番イメージの土台 (distroless。Debian 13 = trixie から glibc・ca-certificates・tzdata など
-# 要るものだけを置いたもの)。**libssl の無い base-nossl を使う** — bun は TLS を自分で持ち (BoringSSL を静的に繋ぐ)、
-# ffmpeg も OpenSSL を繋がないので、cc の土台にある libssl・libcrypto・libgomp (8MB ほど) は誰も読まない。
+# 要るものだけを置いたもの)。**libssl の無い base-nossl を使う。** bun は TLS を自分で持ち (BoringSSL を静的に繋ぐ)、
+# ffmpeg も OpenSSL を繋がないので、cc の土台にある libssl・libcrypto・libgomp (8 MB ほど) は誰も読まない。
 # ffmpeg と GPU のドライバが繋ぐ libstdc++・libgcc_s・zlib は、下の `runtime-libs` 段が ldd で辿って写す
 # (エージェントを同じコンテナに入れる denpa-aio は libssl を要るので、あちらで足す。.github/aio.Dockerfile)。
 # その段が「土台にもうあるライブラリ」を見分けるのにも使うので、段に名前を付けておく
@@ -454,7 +454,7 @@ RUN case "${TARGETARCH}" in \
       libva2 libva-drm2 $gpu && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ffmpeg / ffprobe と、2つが共有する libav* (`ffmpeg` 段の説明)
+# ffmpeg / ffprobe と、2 つが共有する libav* (`ffmpeg` 段の説明)
 COPY --from=ffmpeg /out/bin/ /usr/local/bin/
 COPY --from=ffmpeg /out/lib/ /usr/local/lib/
 # AMD の VA-API ドライバ (`mesa` 段。arm64 では空)。Debian のパッケージのものではないので、下で別に扱う
@@ -469,7 +469,7 @@ COPY --from=mesa /out/doc/ /rootfs/usr/share/doc/
 #   ごと写し、それらが繋ぐライブラリも ldd で辿る。`mesa` 段で組んだ AMD のドライバも同じ dri/ に置く
 #   (パッケージの記録は無いので status.d には載らない。ライセンスは /usr/share/doc/mesa)
 # **土台 (distroless) にもうあるもの (glibc など) は写さない** (名前で見分ける)。
-# 写したライブラリのパッケージの記録 (status.d) と copyright も置く — distroless と同じ置き方で、
+# 写したライブラリのパッケージの記録 (status.d) と copyright も置く。distroless と同じ置き方で、
 # 脆弱性の検査やライセンスの確かめが中身を読めるように。
 # 依存が見つからなければここでビルドを止める (起動してからエンコードで落ちるより早く分かる)
 RUN --mount=type=bind,from=distroless,target=/distroless \
@@ -529,13 +529,13 @@ ENV NODE_ENV=production \
     BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 # NVIDIA の GPU を渡されたとき (ffmpeg 段の説明) に、NVIDIA Container Toolkit が差し込むドライバのライブラリ。
 # 既定 (compute,utility) には NVENC の libnvidia-encode が入らないので video を足す。
-# CUDA の GPU の番号は PCI のバスの順にする — 既定 (速い順) だと、`-gpu N` が /dev/nvidiaN の並びと合わない
+# CUDA の GPU の番号は PCI のバスの順にする。既定 (速い順) だと、`-gpu N` が /dev/nvidiaN の並びと合わない
 # (src/lib/server/hwenc.ts はデバイスファイルの並びで番号を決める)
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
     CUDA_DEVICE_ORDER=PCI_BUS_ID
 
-# B-CASカードは触らない。掛かったまま録れたTSの復号はチューナーエージェントに
-# 投げる(カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
+# B-CAS カードは触らない。掛かったまま録れた TS の復号はチューナーエージェントに
+# 任せる (カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
 COPY --from=runtime-libs /rootfs/ /
 
 # bun 本体。SvelteKit (adapter-bun) の出力を bun で動かす
@@ -555,7 +555,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 COPY --from=app-files /app/ ./
 
 EXPOSE 3000
-# 動いているバージョン。ここでは `dev` のまま — リリースのときに、このイメージを土台に
+# 動いているバージョン。ここでは `dev` のまま。リリースのときに、このイメージを土台に
 # バージョンを 1 層足す (.github/release.Dockerfile)。新しいバージョンの通知はそれと GitHub の
 # 最新のリリースを数で比べて出す (src/lib/server/update.ts)。dev では出さない
 ENV DENPA_VERSION=dev
