@@ -81,7 +81,7 @@ spec:
           # chart に作らせないのは、この ArgoCD が Secret を同期しない (resource.exclusions) ため。
           # 2026-11-03 にこれで chart の Secret が作られず、denpa とエージェントが起動できなかった
           pairSecret: denpa-agent-pair
-          # **CPU の requests だけを付ける (limits は付けない)。** 何も付けないと BestEffort になり、cgroup の cpu.weight が 1 (いちばん低い) になる。
+          # **CPU は requests だけを付ける (CPU の limits は付けない)。** 何も付けないと BestEffort になり、cgroup の cpu.weight が 1 (いちばん低い) になる。
           # ノードが混むと、IT930x の EP 0x84 を読むスレッドが後回しにされ、出してある転送要求 (約 4 MB。CATV 5 本で約 220 ms ぶん) が埋まって
           # ブリッジのバッファが溢れるおそれがある (docs/tuner-it930x.md「TS のバッファの溢れ」)。溢れると電源を抜くまで戻らない。
           # 値は 2026-11-18 の実測から決めた。チューナー 9 台で番組表の取得とライブを回した 69 分の平均が約 24m、何もしていないときが約 0.5m。
