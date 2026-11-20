@@ -59,6 +59,9 @@ spec:
     # 録画は大きく、ほかの PVC と違って 1Gi では足りない。最大のメモリ使用量は測っていないので 4Gi にして、走ったあとの使用量を見て下げる
     moverResources:
       { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 4Gi } }
+    # 1Gi で OOMKilled になった mover がロックを残し、forget が「repository is already locked」で止まった (2026-11-20)。
+    # 値を変えると、次の回の始めに restic unlock を 1 回だけ走らせる (更新の止まった古いロックだけを外す)。また要るときは別の値にする
+    unlock: "2026-11-20-oom"
 ---
 # 戻す側 (populator)。PVC agent-config の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
 # (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
