@@ -16,7 +16,7 @@ import { isShiftD } from "./keys";
  */
 
 /** 長押しとみなすまでの長さ (ms)。タッチとペンで押し続けたとき */
-export const HOLD_MS = 500;
+const HOLD_MS = 500;
 
 export function hold(
   onHold: () => void,

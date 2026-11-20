@@ -142,6 +142,8 @@ export function load(locals: { token?: number }, all: Agent[], lists: Lists) {
         ...status,
         // 配る側が登録したエージェントなら、その名前で「<名前> から鍵を受け取っています」と出す
         remoteName: remoteName(status.remote, all),
+        // 契約の窓の見出しに出す、復号に使うカードの番号 (契約の一覧と同じカード)
+        activeId: getActiveCardId(status),
       }));
       return {
         id: agent.id,

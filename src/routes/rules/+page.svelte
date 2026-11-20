@@ -131,7 +131,7 @@
 <!--
   **ホームと同じ作り。** 左に 1 本の一覧 (2 段の件を件の面に乗せて並べる)、広い形では右にサイドバー
   (絞り込み・並び・集計。ドキュメントの目次と同じ行)。スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、
-  絞り込みと並びを細い 1 行にまとめ、画面の下、タブのすぐ上に置く (押すものは指の届く下に)
+  絞り込みと並びを細い 1 行にまとめ、画面の下、タブのすぐ上に置く (ボタンは指の届く下に)
 -->
 <div class="rules-board with-side">
   <div class="rules-list" data-testid="rule-list">
@@ -264,7 +264,6 @@
               <input
                 type="checkbox"
                 role="switch"
-                aria-checked={rule.enabled}
                 checked={rule.enabled}
                 aria-label="「{rule.name}」を有効にする"
                 onchange={(event) => event.currentTarget.form?.requestSubmit()}
@@ -416,8 +415,9 @@
     .rules-board {
       margin: 0 calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
     }
+    /* 余白は録画・切り抜きの一覧と同じ (`home.css` の `.t-list`) */
     .rules-list {
-      padding: 0 var(--dp-gutter) var(--dp-gutter);
+      padding: 0 calc(var(--dp-gutter) - var(--dp-space-2)) var(--dp-space-4);
     }
   }
   /* 一覧と右の列の組み方は録画・切り抜きと同じ (`app.css` の `.with-side`)。広い形 (`#lib/phone-form.ts`) ではスマホの形の 1 行と集計を隠す */
@@ -518,7 +518,7 @@
     margin: 0;
   }
   /*
-   * **スマホの形ではこの 1 行を画面の下、タブのすぐ上に浮かせる** (押すものは指の届く下に。形は `app.css` の `.dock`)。
+   * **スマホの形ではこの 1 行を画面の下、タブのすぐ上に浮かせる** (ボタンは指の届く下に。形は `app.css` の `.dock`)。
    * 一覧の最後の行が隠れないよう、この 1 行の高さぶん下を空ける
    */
   :global(:where(html[data-phone])) .rules-bar {

@@ -1,7 +1,4 @@
 <script module lang="ts">
-  import { resolve } from "$app/paths";
-
-  import { denpaFontUrl } from "#lib/font.js";
   /**
    * **画面の d ボタン。テレビと同じ振る舞い。** 出ている文書が d を受け付けていれば
    * (`pressD` が true) 渡して終わり。局の待機ページはこれでメニューを開く。
@@ -18,7 +15,6 @@
 </script>
 
 <script lang="ts">
-  import type { ResponseMessage } from "@danything/arib/bml-protocol";
   /**
    * データ放送を映像の上に重ねる。**描くのはエンジン** (`src/lib/bml/`)。
    *
@@ -30,12 +26,15 @@
    * エンジンの外でやるのは、d を受け付けている文書へ届ける (`knock`)・映像の入れ物を小窓へ寄せる (`placeVideo`)・
    * 960x540 を枠に合わせて伸ばす (`fit`)・映像の上の通知を知らせる (`note`)・郵便番号を渡す (`receiver`)
    */
+  import { resolve } from "$app/paths";
+  import type { ResponseMessage } from "@danything/arib/bml-protocol";
   import { onDestroy, untrack } from "svelte";
 
   import type { Bml, BmlIp, Rect, Service } from "#lib/bml/engine.js";
   import { irdIdOf } from "#lib/bml/ird.js";
   import { type Plane, planeArea } from "#lib/bml/plane.js";
   import { fetchRelayed } from "#lib/bml/relay.js";
+  import { denpaFontUrl } from "#lib/font.js";
   import {
     type FrameMessage,
     type HcState,
@@ -859,7 +858,7 @@
 />
 
 <!--
-  映像と同じ枠に重ねる。操作バーより下に敷く (`--dp-z-stage-data`。`ControlBar` のボタンは `--dp-z-stage-controls`)。上に載せると
+  映像と同じ枠に重ねる。操作バーより下に敷く (`--dp-z-stage-data`。`ControlBar` のボタンは `--dp-z-stage-controls`)。上に重ねると
   d ボタンごと隠れて、出したら消せなくなる
 -->
 <div

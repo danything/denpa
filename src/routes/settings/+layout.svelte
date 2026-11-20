@@ -6,6 +6,7 @@
   import ArrowLeft from "~icons/lucide/arrow-left";
 
   import ChannelAlertDot from "#lib/components/ChannelAlertDot.svelte";
+  import FreshDot from "#lib/components/FreshDot.svelte";
   import { SECTION_ALIASES, SETTINGS_GROUPS } from "#lib/settings-sections.js";
 
   let { children, data } = $props();
@@ -170,7 +171,7 @@
   **狭い画面では一覧と中身を切り替える。** `/settings` はグループの一覧だけ、押すとその画面と「← 設定」、
   節へ飛ぶ行 (巻いても残る。下のタブの上)。
 
-  **節の操作 (見出しの行の押すもの・絞り込み) は、節の中の `.section-bar` に入れる。** スマホの形では見えている節の
+  **節の操作 (見出しの行のボタン・絞り込み) は、節の中の `.section-bar` に入れる。** スマホの形では見えている節の
   その 1 行だけを下のタブの上 (768px 未満は節へ飛ぶ行のすぐ上) に浮かべ、節を移ると入れ替わる。操作の無い節では出さない。
   広い形 (ヘッダーのある形) は節の中のまま
 -->
@@ -200,12 +201,7 @@
               <ChannelAlertDot kind={alert.kind} />
             {/if}
             {#if freshGroup === g.slug}
-              <span
-                class="fresh-dot"
-                role="img"
-                aria-label="新しいバージョンがあります"
-                data-testid="update-dot"
-              ></span>
+              <FreshDot />
             {/if}
             <!-- 狭い画面の一覧だけ。中に何があるかを 1 行で (節の一覧は出さないので) -->
             <span class="group-hint"
@@ -312,7 +308,7 @@
     display: none;
   }
   /* 新しいバージョンの点 (上の `freshGroup`)。名前の後ろに、チャンネルのお知らせの印 (`.alert-dot`) と同じ間を空けて並べる */
-  .group-link .fresh-dot {
+  .group-link :global(.fresh-dot) {
     margin-inline-start: var(--dp-space-1);
     vertical-align: 0.1em;
   }
@@ -428,7 +424,7 @@
     height: 1.125rem;
   }
   /*
-   * **スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では下のタブのすぐ上に浮かべる** (押すものは下に。
+   * **スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では下のタブのすぐ上に浮かべる** (ボタンは下に。
    * ホームの操作の 1 行と同じ `app.css` の `.dock`)。中身の最後が隠れないよう、そのぶん下を空ける
    */
   :global(:where(html[data-phone])) .page {
@@ -448,7 +444,7 @@
     padding-bottom: 3.5rem;
   }
   /*
-   * **節の操作の 1 行 (`.section-bar`) は、見えている節のものだけを節へ飛ぶ行のすぐ上に浮かべる** (押すものは下に。
+   * **節の操作の 1 行 (`.section-bar`) は、見えている節のものだけを節へ飛ぶ行のすぐ上に浮かべる** (ボタンは下に。
    * 形は `app.css` の `.dock`。節へ飛ぶ行のぶん `--dock-gap` を足して上げる)。ほかの節のものは隠す。はみ出す分は横に巻く (節へ飛ぶ行と同じ)。
    * 読んでいる間は節へ飛ぶ行と一緒に引っ込む
    */

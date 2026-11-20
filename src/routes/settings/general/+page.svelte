@@ -148,7 +148,6 @@
         <input
           type="checkbox"
           role="switch"
-          aria-checked={measure.on}
           checked={measure.on}
           onchange={(event) => measure.set(event.currentTarget.checked)}
           data-testid="measure-toggle"
@@ -257,7 +256,6 @@
             type="checkbox"
             role="switch"
             name="recordLogo"
-            aria-checked={data.recordLogo}
             checked={data.recordLogo}
             onchange={(event) => event.currentTarget.form?.requestSubmit()}
             data-testid="logo-record-toggle"

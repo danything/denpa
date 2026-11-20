@@ -252,10 +252,10 @@ test.describe("衛星の局ロゴ", () => {
  *
  * 覚えるのは録画をエンコードするときで、偽 ffmpeg では覚えられないので、覚えたものは
  * 本物と同じ形式で置いておく (`logo-detect.encodeModel`)。見るのは、覚えた局の行に
- * 画像が開かずに出ていること、押すと大きく見られ、窓の中の「覚え直す」で消すと済んだ色で知らせること
+ * 画像が開かずに出ていること、押すと大きく見られ、窓の中の「再学習」で消すと済んだ色で知らせること
  */
 test.describe("CM 検出のロゴ", () => {
-  test("覚えた局の行に画像を出し、「覚え直す」で消すと済んだ通知で出る", async ({
+  test("覚えた局の行に画像を出し、「再学習」で消すと済んだ通知で出る", async ({
     page,
     request,
     stack,
@@ -299,10 +299,10 @@ test.describe("CM 検出のロゴ", () => {
           .evaluate((img: HTMLImageElement) => img.naturalWidth),
       )
       .toBe(40);
-    // 列の見出しが「CM ロゴ」なので、セルの中では名乗らない。「覚え直す」は窓の中だけ (行を低く保つ)
+    // 列の見出しが「CM ロゴ」なので、セルの中では名乗らない。「再学習」は窓の中だけ (行を低く保つ)
     const cmCell = station.locator("td.logo-col").nth(1);
     await expect(cmCell).toHaveText("");
-    await expect(station.getByRole("button", { name: "覚え直す" })).toHaveCount(
+    await expect(station.getByRole("button", { name: "再学習" })).toHaveCount(
       0,
     );
     // 覚えていない局には何も出さない (「まだ」とも書かない)
@@ -366,9 +366,9 @@ test.describe("CM 検出のロゴ", () => {
     await page.mouse.click(5, 5);
     await expect(zoom).toBeHidden();
 
-    // 窓の中の「覚え直す」。消えたら窓も閉じる
+    // 窓の中の「再学習」。消えたら窓も閉じる
     await thumb.click();
-    await zoom.getByRole("button", { name: "覚え直す" }).click();
+    await zoom.getByRole("button", { name: "再学習" }).click();
     await expect(zoom).toBeHidden();
 
     const done = page.getByTestId("tuner-done");

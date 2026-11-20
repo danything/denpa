@@ -5,7 +5,7 @@
  */
 
 /** 枠の中で中身がどこに出るか (画素) */
-export interface Rect {
+interface Rect {
   left: number;
   top: number;
   width: number;

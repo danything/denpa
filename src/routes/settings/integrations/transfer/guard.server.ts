@@ -10,7 +10,7 @@ import { OffsetMismatch, TransferError } from "#lib/server/transfer.js";
  * - **アクセストークン (テレビのアプリ) では断る** (403)。端末に渡した資格で DB を持ち出したり
  *   入れ替えたりさせない (`/device` と同じ考え方)。ブラウザの人 (信頼するネットワーク・OIDC) は使える
  * - **同じサイトからの呼び出しだけ通す。** フォームの形でない送信 (`PUT` の `application/octet-stream`・JSON) は
- *   SvelteKit の Origin の確かめが掛からないので、`Sec-Fetch-Site` (無ければ `Origin`) を自分で見る
+ *   SvelteKit の Origin の確認が掛からないので、`Sec-Fetch-Site` (無ければ `Origin`) を自分で見る
  */
 export function refuse(event: RequestEvent): Response | null {
   const refused = tokenRefusal(event.locals);

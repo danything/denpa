@@ -8,7 +8,7 @@ import { playerVolume, type Volume } from "./volume.svelte.js";
 
 interface Options {
   player: ReturnType<typeof livePlayer>;
-  /** 映像と字幕の重ね (MediaStack が組む)。開くまでは null */
+  /** 映像の `<video>` と、その上に重ねる字幕の canvas (MediaStack が置く)。開くまでは null */
   video: () => HTMLVideoElement | null;
   overlay: () => HTMLCanvasElement | null;
   /** 裏に回ったので止める・戻ってきたので再開する (`backgroundPlayback`)。省くと止めた所から再開する */

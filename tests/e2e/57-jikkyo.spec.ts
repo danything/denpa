@@ -306,7 +306,7 @@ test.describe("アンビエントの光の上を流れる実況", () => {
       });
       for (const top of rows.outside) expect(rows.inside).toContain(top);
 
-      // 右の列の上を通っている間も、押すのは右の列の中身 (外のコメントは押すものを受けない)
+      // 右の列の上を通っている間も、押すのは右の列の中身 (外のコメントはポインタの操作を受けない)
       await expect
         .poll(
           () =>

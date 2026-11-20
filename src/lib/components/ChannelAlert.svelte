@@ -132,7 +132,7 @@
 <button
   bind:this={button}
   type="button"
-  class="button ghost alert-mark {kind}"
+  class="ghost alert-mark {kind}"
   aria-label={CHANNEL_ALERT_LABEL[kind]}
   aria-expanded={open}
   aria-controls={popId}
@@ -168,7 +168,7 @@
 </div>
 
 <style>
-  /* 押す場所はヘッダーのほかのボタンと同じ高さ (44px)。アイコンは状態の色 */
+  /* 押す場所は 44px (docs/design.md の「通知」)。アイコンの色は `app.css` の `.alert-mark` */
   .alert-mark {
     display: inline-flex;
     align-items: center;
@@ -177,12 +177,6 @@
     min-height: 2.75rem;
     margin: 0;
     padding: 0;
-  }
-  .alert-mark.ground {
-    color: var(--dp-warn-text);
-  }
-  .alert-mark.changed {
-    color: var(--dp-info-text);
   }
   /* 文は読める幅で折り返す。ボタンは右下 (ダイアログと同じ) */
   .alert-pop {

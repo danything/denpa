@@ -86,16 +86,6 @@
     shownTypes(extraTypes(shownTuners.value?.list ?? [])),
   );
 
-  const activeCardId = $derived.by(() => {
-    const card = shownCard.value;
-    if (!card) return null;
-    if (card.source === "remote" && card.ids.length > 0)
-      return card.ids[0] ?? null;
-    const active = card.readers.find((r) => r.state === "active");
-    if (active && active.ids.length > 0) return active.ids[0] ?? null;
-    return card.readers.find((r) => r.ids.length > 0)?.ids[0] ?? null;
-  });
-
   /**
    * 「⋯」で開いている行 (名前・デバイス・LNB・削除)。開くのは 1 行だけ。
    * **閉じていても欄は消さずに隠すだけ**。送る値は全部の行の欄から作るので
@@ -358,7 +348,6 @@
                         role="switch"
                         name={`use.${index}`}
                         checked={!tuner.disabled}
-                        aria-checked={!tuner.disabled}
                         aria-label={`${tuner.name} を使う`}
                         data-testid="tuner-use"
                       />
@@ -670,7 +659,6 @@
                             role="switch"
                             name={`reader-use.${i}`}
                             checked={reader.state !== "disabled"}
-                            aria-checked={reader.state !== "disabled"}
                             aria-label={`${reader.name} を使う`}
                             data-testid="card-reader-use"
                             data-no-autosave={last ? "" : undefined}
@@ -714,7 +702,7 @@
   <ContractDialog
     open={showContractDialog}
     agent={agent.id}
-    cardId={activeCardId}
+    cardId={shownCard.value?.activeId ?? null}
     initialContracts={shownContracts.value ?? []}
     onclose={() => (showContractDialog = false)}
   />

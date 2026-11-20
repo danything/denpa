@@ -198,7 +198,7 @@ export function load(event) {
     prefecture: current.prefecture,
     bmlNetwork: current.bmlNetwork,
     /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
-    jikkyo: current.jikkyo,
+    jikkyoAllowed: current.jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
     jikkyoNg: current.jikkyoNg,
     /** ニコニコと連携しているか (世帯で 1 つ)。しているときは、書き込みを公式のニコニコ実況へ送る (`server/niconico-live.ts`) */

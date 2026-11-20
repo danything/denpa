@@ -595,7 +595,7 @@ test.describe("ホームの 1 本の一覧", () => {
     expect(
       (await page.getByTestId("timeline-toolbar").boundingBox())!.height,
     ).toBeLessThanOrEqual(44);
-    // スマホでは下のタブのすぐ上に貼り付く (押すものは下に)。上には何も被さらない
+    // スマホでは下のタブのすぐ上に貼り付く (ボタンは下に)。上には何も被さらない
     const bar = (await page.getByTestId("timeline-toolbar").boundingBox())!;
     const tabs = (await page.getByTestId("tabbar").boundingBox())!;
     expect(Math.abs(bar.y + bar.height - tabs.y)).toBeLessThanOrEqual(8);
@@ -1300,7 +1300,7 @@ test.describe("ホームの 1 本の一覧", () => {
       viewport: { width: 820, height: 1180 },
     });
 
-    test("行は幅いっぱいで、行と押すものは指の大きさ", async ({ page }) => {
+    test("行は幅いっぱいで、行とボタンは指の大きさ", async ({ page }) => {
       await goto(page, "/");
       await expect(page.getByTestId("sidebar")).toBeHidden();
       const row = rows(page).filter({ hasText: "一覧試験の視聴済み" });

@@ -28,6 +28,7 @@
     time,
   } from "#lib/format.js";
   import { minuteClock } from "#lib/minute-clock.svelte.js";
+  import { offline, removeLocal } from "#lib/offline.svelte.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
 
   import type { Preview, PreviewRow, RankingView } from "./+page.server";
@@ -123,7 +124,7 @@
   const clipsHref = $derived(resolve(`clips?${new URLSearchParams({ q })}`));
 
   /**
-   * 番組の詳細。押すもの (視聴・予約・取消・ルールを作る。`ProgramActions`) を出すのに、開いた行を覚えておく。
+   * 番組の詳細。ボタン (視聴・予約・取消・ルールを作る。`ProgramActions`) を出すのに、開いた行を覚えておく。
    * 中身は番組表から引く (`detail.svelte.ts`。ホームと同じ)
    */
   interface Opened {
@@ -217,6 +218,18 @@
   const deleting = arming(
     '[data-testid="search-delete"], [data-testid="search-delete-confirm"]',
   );
+  /** 消し終えたら、端末に保存したコピーも片付ける (ホームの行の削除と同じ) */
+  function afterDelete(id: number): SubmitFunction {
+    return () => async (options) => {
+      await options.update();
+      if (
+        options.result.type === "success" &&
+        offline.entries[id] !== undefined
+      ) {
+        void removeLocal(id);
+      }
+    };
+  }
 
   /**
    * 録画を観る画面。録り終えたものは `/watch`、録っている最中は `/chase`。
@@ -338,7 +351,7 @@
                 type="button"
                 class="small ghost"
                 onclick={clearRecent}
-                data-testid="recent-clear">履歴を消す</button
+                data-testid="recent-clear">履歴を削除</button
               >
             </div>
             <!-- 1 行の並びなので件の面に乗せず、地に並べる (サイドバーと同じ行。docs/design.md の「3 つの層」) -->
@@ -449,8 +462,12 @@
                       {deleting}
                       armKey={rec.id}
                       fields={{ id: rec.id }}
+                      submit={afterDelete(rec.id)}
                       class="small"
                       testid="search-delete"
+                      confirmLabel={offline.entries[rec.id] === undefined
+                        ? "削除を確定"
+                        : "端末とサーバから削除"}
                     />
                   </div>
                 {/if}

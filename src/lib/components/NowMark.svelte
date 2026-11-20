@@ -80,13 +80,13 @@
     font-weight: var(--dp-weight-bold);
     white-space: nowrap;
   }
-  /* 「いま」の印の赤い点 (カレンダーの今日の点と同じ赤) */
+  /* 「いま」の印の赤い点 (カレンダーの今日の点と同じ赤。大きさは録画中の点 `.rec-dot` と同じで、脈打たない) */
   .now-time::before {
     content: "";
     flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: var(--dp-radius-full);
     background: var(--dp-rec);
   }
 

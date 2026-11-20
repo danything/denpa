@@ -241,7 +241,7 @@
       </div>
     {/if}
 
-    <!-- 押すものは右下 (docs/design.md の「メニュー・ダイアログ・検索の候補」) -->
+    <!-- ボタンは右下 (docs/design.md の「メニュー・ダイアログ・検索の候補」) -->
     <footer class="modal-foot">
       <button
         type="button"

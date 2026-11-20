@@ -46,7 +46,7 @@
      * いまの区間の名前を添える
      */
     valuetext?: string | undefined;
-    /** 止めているか。指の端末では、止めている間つまみを出す (マウスを載せられないので) */
+    /** 止めているか。指の端末では、止めている間つまみを出す (マウスを乗せられないので) */
     paused?: boolean;
     testid?: string;
     /**
@@ -75,6 +75,8 @@
   /** 離したときの `value`。ここから動いたら飛んだ先に着いたとみる */
   let leftAt: number | null = null;
   let settleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 下見の間 (`PREVIEW_GAP`) を空けるタイマー */
+  let gapTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** 押している位置を値にする。刻み (`step`) に揃え、端は超えない */
   function under(event: PointerEvent): number {
@@ -102,6 +104,7 @@
   });
   $effect(() => () => {
     if (settleTimer !== null) clearTimeout(settleTimer);
+    if (gapTimer !== null) clearTimeout(gapTimer);
   });
 
   /*
@@ -131,7 +134,8 @@
     const wait = PREVIEW_GAP - (performance.now() - lastPreview);
     if (wait > 0) {
       busy = true;
-      setTimeout(() => {
+      gapTimer = setTimeout(() => {
+        gapTimer = null;
         busy = false;
         pump();
       }, wait);
@@ -316,7 +320,7 @@
     pointer-events: none;
   }
   /*
-   * 太くなり、つまみが出る: マウスを載せている・キーボードで触っている・つまんでいる間。
+   * 太くなり、つまみが出る: マウスを乗せている・キーボードで触っている・つまんでいる間。
    * 指の端末では止めている間もつまみだけ出す
    */
   @media (hover: hover) {

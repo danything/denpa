@@ -10,7 +10,7 @@
    * - `still` … 切り替えの間、前の映像を貼っておく canvas (`live-player` の freeze)。
    *   映像より上 (黒を隠す)、字幕より下 (切り替え中も字幕は見えていてほしい)
    * - `under` … 前の映像と字幕の間に重ねるもの (実況のコメント。`JikkyoLayer`)。
-   *   実況と字幕は操作バーの影より上に出す (段の数は `ControlBar`)
+   *   実況と字幕は操作バーの影より上に出す (重なりの順は `ControlBar`)
    * - `overlay` … 放送の字幕。放送の位置・背景の箱・外字のまま描くので canvas に重ねる。
    *   `object-fit` は描く処理 (`CaptionPainter`) が `fill` / `contain` に切り替える
    * - 入れ物 (`box`) … データ放送が小窓へ寄せる先 (`DataBroadcast` の `placeVideo`)。

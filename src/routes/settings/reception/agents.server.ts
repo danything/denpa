@@ -20,7 +20,7 @@ import { recordings } from "#lib/server/schema.js";
 
 import type { Lists } from "./tuners.server";
 
-/** 録画 ID → 番組名 (削除の確かめに出す) */
+/** 録画 ID → 番組名 (削除の確認に出す) */
 function recordingName(id: number): string | null {
   return (
     orm()

@@ -367,7 +367,7 @@
     --c-fg: var(--pico-color);
     --c-muted: var(--dp-muted);
     --c-on: var(--dp-primary-text);
-    --c-hover: var(--dp-hover);
+    --c-hover: var(--dp-hover-soft);
     --c-face: transparent;
     --c-field: var(--dp-field);
     --c-shadow: none;
@@ -439,7 +439,7 @@
     color: var(--c-fg);
     font-weight: var(--dp-weight-bold);
   }
-  /* 一覧の下は列の幅しか無いので、先頭の字を 1 行目に、入力欄と押すものを 2 行目に置く */
+  /* 一覧の下は列の幅しか無いので、先頭の字を 1 行目に、入力欄とボタンを 2 行目に置く */
   .in-list .row {
     flex-wrap: wrap;
     padding: 0;

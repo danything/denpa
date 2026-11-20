@@ -146,7 +146,7 @@ async function checkChase(
 
   /*
    * **スマホの縦 (360px・320px) でも、操作バーのボタンは 1 行** (観る画面・ライブと同じ)。
-   * 残すのは再生・最新・読みもの・⚙・全画面だけで、畳んだ音は ⚙ の先頭の行から押せる
+   * 残すのは再生・最新・情報の欄・⚙・全画面だけで、畳んだ音は ⚙ の先頭の行から押せる
    */
   for (const width of [360, 320]) {
     const context = await browser.newContext({

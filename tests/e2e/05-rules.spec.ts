@@ -223,7 +223,7 @@ test.describe("キーワードを当てる範囲", () => {
         .first(),
     ).toBeVisible();
 
-    // 詳細を入れると同じキーワードで当たる (「キーワード」で外れる行が無くなる)。押すものは無く、そのまま数え直す
+    // 詳細を入れると同じキーワードで当たる (「キーワード」で外れる行が無くなる)。押すボタンは無く、そのまま数え直す
     await page
       .getByTestId("rule-search-fields")
       .locator('input[value="extended"]')

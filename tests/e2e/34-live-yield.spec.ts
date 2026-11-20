@@ -222,7 +222,7 @@ for (const mpeg2 of [false, true])
         expect(yielded.serviceId).toBe(watched.id);
         expect(yielded.recording.endAt).toBeGreaterThan(Date.now());
         await expect(note).toContainText(yielded.recording.title);
-        // 観ているのは録画のほう (操作バーの読みものも)
+        // 観ているのは録画のほう (操作バーの情報の欄も)
         await expect(page.getByTestId("live-title")).toHaveText(
           yielded.recording.title,
         );

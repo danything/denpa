@@ -38,3 +38,21 @@ export function keepResume(
     void rememberResume(id, at, length, axis);
   });
 }
+
+/** どこまで観たかを書き送る間隔 (ms) */
+const RESUME_EVERY = 15_000;
+
+/**
+ * 観ている間、`send` を 15 秒おきと閉じ際 (`pagehide`。`unload` はスマホで来ないことがある) に呼ぶ。
+ * 閉じ際の 1 回が無いと最後の十数秒が落ちる。返す関数は後始末で、呼ぶと閉じ際の 1 回も送る
+ */
+export function keepResuming(send: (leaving: boolean) => void): () => void {
+  const onLeave = () => send(true);
+  window.addEventListener("pagehide", onLeave);
+  const timer = setInterval(() => send(false), RESUME_EVERY);
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener("pagehide", onLeave);
+    send(true);
+  };
+}

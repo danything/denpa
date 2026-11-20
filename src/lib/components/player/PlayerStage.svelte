@@ -45,7 +45,7 @@
     pip?: boolean;
   }
   interface StageApi {
-    /** 毎回は使わないものを再生の設定 (⚙) に畳むか。狭い枠か、押すものが一段に収まらないとき */
+    /** 毎回は使わないものを再生の設定 (⚙) に畳むか。狭い枠か、ボタンが一段に収まらないとき */
     fold: boolean;
   }
   let {
@@ -70,7 +70,7 @@
   /**
    * **枠の外で実況のコメントを流す所** (`STAGE_OUTSIDE`)。光を枠の外に出している間だけ置く (テーブルトップの反射・全画面では置かない)。
    * 縦は置き場 (`.room`) の中 (見出しには掛からない)、横は窓の左の端から右の端まで (光と同じく右の列の上も通る)。
-   * 右の列の中身より上に描くが、押すものは何も受けない (`pointer-events: none`)。二段組のときだけ出す (下の style)
+   * 右の列の中身より上に描くが、ポインタの操作は何も受けない (`pointer-events: none`)。二段組のときだけ出す (下の style)
    */
   let glowing = $state(false);
   let room = $state<HTMLElement | null>(null);
@@ -99,9 +99,9 @@
    * 枠の大きさで操作バーの詰め方を変える (操作バーは 48px の丸を横に 9 個並べる作りで、狭い枠では折れて映像を覆った)。
    * 決めるのは媒体の幅ではなく枠の大きさ (二段組かどうかで映像の幅がまるで違う)。
    *
-   * - `compact` (幅 448px 未満・16:9 より低く抑えられて高さ 300px 未満・横にしたスマホ) … 押すものを 40px に縮め、
+   * - `compact` (幅 448px 未満・16:9 より低く抑えられて高さ 300px 未満・横にしたスマホ) … ボタンを 40px に縮め、
    *   毎回は使わないものを ⚙ に畳む。縦の iPad (476px) は入れない
-   * - `narrow` だけ (スマホの縦。全画面は除く) … 読みものの上の段を省く (`InfoBlock` の `data-narrow`)
+   * - `narrow` だけ (スマホの縦。全画面は除く) … 情報の欄の上の段を省く (`InfoBlock` の `data-narrow`)
    */
   let narrow = $state(false);
   let short = $state(false);
@@ -111,7 +111,7 @@
   $effect(() => {
     const target = element;
     if (target === null) return;
-    // 横にしたスマホも畳む (全部並べると読みものが数文字しか残らない)
+    // 横にしたスマホも畳む (全部並べると情報の欄が数文字しか残らない)
     const phone = window.matchMedia(PHONE_LANDSCAPE);
     const measure = () => {
       narrow = target.clientWidth < 448;
@@ -215,7 +215,7 @@
   });
 
   /**
-   * 広い枠でも、押すものが一段に収まらなければ畳む (`crowded`)。並ぶものは番組しだいで幅の線では決められないので、
+   * 広い枠でも、ボタンが一段に収まらなければ畳む (`crowded`)。並ぶものは番組しだいで幅の線では決められないので、
    * 測るときだけ畳んだものを並べ (`data-measuring`)、いちばん右が行の右端を越えるかを読む (同じ処理の中なので画面には出ない)
    */
   let crowded = $state(false);
@@ -245,7 +245,7 @@
     };
     const sizes = new ResizeObserver(measure);
     sizes.observe(target);
-    // 押すものが出入りしたら測り直す。文字だけの入れ替え (毎秒の時計) は見ない
+    // ボタンが出入りしたら測り直す。文字だけの入れ替え (毎秒の時計) は見ない
     const inner = new MutationObserver((records) => {
       const isElement = (node: Node) => node.nodeType === Node.ELEMENT_NODE;
       if (

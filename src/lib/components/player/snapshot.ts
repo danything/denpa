@@ -203,6 +203,12 @@ export function commentSpots(
 const COMMENT_OPACITY = 0.5;
 /** 黒い縁の幅 (CSS px)。`JikkyoLayer` の `text-shadow` と同じく斜め 4 方向にずらして描く */
 const OUTLINE = 1;
+const OUTLINE_SHIFTS = [
+  [-OUTLINE, -OUTLINE],
+  [OUTLINE, -OUTLINE],
+  [-OUTLINE, OUTLINE],
+  [OUTLINE, OUTLINE],
+] as const;
 
 /** 押した瞬間のコメントの枠 (CSS px) と、そこに掛かっているコメント */
 interface CommentScene {
@@ -270,13 +276,6 @@ export function commentLayer(
   layer.ctx.drawImage(solid.canvas, 0, 0);
   return layer.canvas;
 }
-
-const OUTLINE_SHIFTS = [
-  [-OUTLINE, -OUTLINE],
-  [OUTLINE, -OUTLINE],
-  [-OUTLINE, OUTLINE],
-  [OUTLINE, OUTLINE],
-] as const;
 
 export function pngOf(canvas: HTMLCanvasElement): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
@@ -482,9 +481,14 @@ export async function saveOnDevice(
   canvas: HTMLCanvasElement,
   title: string,
   key: string,
-): Promise<Notice | null> {
+): Promise<Notice> {
   const blob = await pngOf(canvas);
-  if (blob === null) return null;
+  if (blob === null)
+    return {
+      key,
+      kind: "error",
+      text: "サーバにも端末にも保存できませんでした",
+    };
   const kept = await keepOnDevice(blob, shotName(title, new Date()));
   return {
     key,

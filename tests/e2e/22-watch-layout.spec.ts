@@ -215,7 +215,7 @@ test.describe("録画を観る", () => {
    * 観ながら使う操作 (再生・音・字幕) とは押す頻度も並べる理由も違う。
    * **削除も映像の上** — タブレットは全画面で観るので、全画面から出ずに消せるように。データ放送 (d) は ⚙ の中。
    *
-   * 1 つの操作バーに混ぜていた頃は押すものが 12 個並び、**番組の名前が入る幅が
+   * 1 つの操作バーに混ぜていた頃はボタンが 12 個並び、**番組の名前が入る幅が
    * 残らなかった** — 実機のタブレットで名前が折り返し、操作バーが二段になっていた。
    * **列は縦に積む** — 車に付けたタブレットでは右の縁がいちばん指が届く (横一行・40px にして戻した)
    */
@@ -328,7 +328,7 @@ test.describe("録画を観る", () => {
         ),
       );
     const before = await rowHeight();
-    // 押すものは一段に収まる (`btn-lg` = 48px。折れると倍になる)
+    // ボタンは一段に収まる (`btn-lg` = 48px。折れると倍になる)
     expect(before).toBeLessThan(60);
     await page
       .getByTestId("watch-clock")
@@ -413,7 +413,7 @@ test.describe("録画を観る", () => {
  * **スマホの縦で、全画面をやめて観る。** 枠は 390x219 (画面の端から端まで、ちょうど 16:9。
  * 余白の内側に置いていた頃は 358x224)。
  *
- * 48px の押すものを全部並べていた頃は、操作バーが折れて映像を覆い、右の縦列 (閉じる・
+ * 48px のボタンを全部並べていた頃は、操作バーが折れて映像を覆い、右の縦列 (閉じる・
  * 切り抜き・削除) がシークバーや再生ボタンに重なっていた (実機の報告)。狭い枠では
  * 40px に縮め、毎回は使わないもの (速さなど) を再生の設定 (⚙) に畳む (`PlayerStage`)
  */
@@ -424,7 +424,7 @@ test.describe("スマホの縦で観る", () => {
     viewport: { width: 390, height: 844 },
   });
 
-  test("押すものは 40px 以上で重ならず、速さは ⚙ に畳まれる", async ({
+  test("ボタンは 40px 以上で重ならず、速さは ⚙ に畳まれる", async ({
     page,
     request,
   }) => {
@@ -522,7 +522,7 @@ test.describe("スマホの縦で観る", () => {
     expect(captions.y + captions.height).toBeLessThanOrEqual(
       picture.y + picture.height + 1,
     );
-    // 押すものは一段 (40px)。折れると倍になる
+    // ボタンは一段 (40px)。折れると倍になる
     const row = await page.getByTestId("watch-play").boundingBox();
     const full = await page.getByTestId("watch-full").boundingBox();
     expect(Math.abs((row?.y ?? 0) - (full?.y ?? -100))).toBeLessThan(2);
@@ -583,7 +583,7 @@ test.describe("スマホの縦で観る", () => {
 
   /*
    * **いちばん狭いスマホ (360px・320px) でも、操作バーのボタンは 1 行。** 折り返していた頃は、
-   * 時刻が押すものの上に一行を取って操作バーが二段になっていた。残すのは再生・チャプター送り・
+   * 時刻がボタンの上に一行を取って操作バーが二段になっていた。残すのは再生・チャプター送り・
    * 時刻・⚙・全画面だけで、時刻は短い形 (残りを省く)。畳んだもの (音など) は ⚙ の先頭の行から押せる
    */
   test("幅 360px・320px でも操作バーのボタンは 1 行で、畳んだ音は ⚙ から押せる", async ({
@@ -683,7 +683,7 @@ test.describe("スマホの横で観る", () => {
       await page.touchscreen.tap(422, 195);
     }
     await expect(bar).toHaveAttribute("data-shown", "true");
-    // 押すものは一段
+    // ボタンは一段
     const play = (await page.getByTestId("watch-play").boundingBox())!;
     const full = (await page.getByTestId("watch-full").boundingBox())!;
     expect(Math.abs(play.y - full.y)).toBeLessThan(2);

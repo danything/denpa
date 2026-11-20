@@ -30,7 +30,7 @@
   let { data }: { data: PageData } = $props();
 
   /**
-   * スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、ログの押すもの (「再読み込み」「Issue にする」) を絞り込みと同じ 1 行に入れる。
+   * スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、ログのボタン (「再読み込み」「Issue にする」) を絞り込みと同じ 1 行に入れる。
    * その 1 行は下のタブの上に浮く (`settings/+layout.svelte` の `.section-bar`)
    */
   const phone = new MediaQuery(PHONE_FORM);
@@ -344,7 +344,7 @@
   </div>
 </div>
 
-<!-- ログの押すもの。広い画面では見出しの行の右、スマホの形では絞り込みの 1 行の先頭 (上の `phone`) -->
+<!-- ログのボタン。広い画面では見出しの行の右、スマホの形では絞り込みの 1 行の先頭 (上の `phone`) -->
 {#snippet logActions()}
   <button
     type="button"
@@ -424,7 +424,6 @@
           <input
             type="checkbox"
             role="switch"
-            aria-checked={problemsOnly}
             bind:checked={problemsOnly}
             data-testid="logs-problems"
           />
