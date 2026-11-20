@@ -15,7 +15,7 @@
   | PT3 ([tuner-pt3.md](tuner-pt3.md))                                                                                                                                                                                                         | Linux DVB                                                       | ドライバ                                                                  |
   | **実機で確かめていない**: PT1 / PT2、PX-BCUD、PX-S1UD、Friio (白)、南米の地デジ (ISDB-Tb) の機材、DiB8096 のリファレンス基板 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))                                                       | Linux DVB                                                       | ドライバ (機材によってはファームウェアも)                                 |
   | **実機で確かめていない** (カーネルに入っていないドライバを自分で入れる): PX-Q3PE、PX-W3PE Rev1.3 ([tuner-pt3.md](tuner-pt3.md#カーネルに入っていないドライバで使う機材))                                                                   | Linux DVB                                                       | ドライバ (PX-W3PE はファームウェアも)                                     |
-  | IT930x の機材: PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P、PX-Q3U4 / PX-Q3PE4 / PX-W3U4 など (Linux の PX-MLT5PE と PX-Q3PE4 の実機で確かめた。Windows・Mac は未確認。[tuner-it930x.md](tuner-it930x.md))                                         | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
+  | IT930x の機材: PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P、PX-Q3U4 / PX-Q3PE4 / PX-W3U4 など (Linux の PX-MLT5PE・PX-Q3PE4・PX-MLT8PE の実機で確かめた。Windows・Mac は未確認。[tuner-it930x.md](tuner-it930x.md))                                | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
   | PX-S1UD と、Siano の Rio 系の USB チューナー (USB `187f:0600`)。Linux は smsusb を blacklist したとき。Mac・Windows も (**実機の報告は Mac の 1 件だけ**。[tuner-px-s1ud.md](tuner-px-s1ud.md)、[下記](#siano-の-rio-系の-usb-チューナー)) | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
   | PX-W3U3・PX-W3U2 など (**実機で確かめていない**。[下記](#px-w3u3-など-asicen-userland試験的))                                                                                                                                              | asicen-userland (試験的。上流のプレリリース v1.0.0-beta に固定) | なし (ファームウェアはエージェントのイメージに同梱)                       |
   | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                                                                                  | エージェントが USB を直に                                       | なし                                                                      |
@@ -72,7 +72,7 @@ Amazon で見る (広告): [PT3](https://www.amazon.co.jp/dp/B00857CQAM?tag=doa0
 | CECH-ZD1 J                          | 受信の状態と C/N (dB)                                         | DiB8000 の仕様書の式                                                      |
 | IT930x の機材                       | 受信の状態と C/N (dB)                                         | CXD2856ER の仕様書の式と表。TC90522 の機種は PIX-DT295 と同じ換算式       |
 | PIX-DT295                           | 受信の状態と C/N (dB)                                         | TC90522 系の換算式 (下記)                                                 |
-| PX-S1UD (エージェントが USB を直に) | 受信の状態と C/N (dB) と強度 (dBm)。実機で確かめていない      | 機材の統計の応答にある SNR と受信電力                                     |
+| PX-S1UD (エージェントが USB を直に) | 受信の状態と C/N (dB)。実機で確かめていない                   | 機材の統計の応答にある SNR                                                |
 
 DVB の C/N を画面まで通す流れは、実機では確かめていません (値を読む部分は単体テストで確かめた)。
 
@@ -161,6 +161,7 @@ B-CAS 以外の方式 (0x0006 など) だけでスクランブルされた局は
 
 PX-MLT5PE と J:COM の回線 (2026-11-10・11) で確かめました。1 回の総当たりでロックしたのは 18〜25 の搬送波で、回ごとに顔ぶれが変わりました。
 BS と地上波の再送信と自主放送が入っていて、QC26 は 256QAM でした。自主放送の TS の NIT のネットワーク ID は 0xFFFE (ReMUX の自主放送) でした。
+PX-MLT8PE でも、受信機 5 つで同時に選局できました (2026-11-18)。
 NIT の中身 (ケーブルの分配の記述子の並び) と、TSMF で複数の TS を束ねた搬送波は確かめていません。4K の放送 (分割 TLV) は、エージェントが TLV のまま流し、denpa がスキャンで局として入れます。番組表は「観られません」の列で出ます。ACAS のスクランブルにはまだ対応していないので、スクランブルされた局はライブで観られず、録画もできません。スクランブルしていない 4K の局はライブで観られ、録画もできます ([stream.md](stream.md#4k-の局のライブ)・[tuner-it930x.md](tuner-it930x.md#ケーブルの-4k-を確かめる))。
 
 ## Siano の Rio 系の USB チューナー
