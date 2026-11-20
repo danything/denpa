@@ -5,6 +5,7 @@ import {
   clipParams,
   commentSpots,
   frameRoom,
+  saveOnDevice,
   shotName,
 } from "./snapshot";
 
@@ -144,5 +145,18 @@ describe("重ねと一緒に送るときの映像の大きさ", () => {
   test("重ねが無い・残りが狭すぎれば null (重ねたものを 1 枚で送る)", () => {
     expect(frameRoom([])).toBeNull();
     expect(frameRoom([460 * 1024])).toBeNull();
+  });
+});
+
+describe("端末に保存する", () => {
+  test("PNG にできなかったときも、保存できなかったことを通知に出す", async () => {
+    const canvas = {
+      toBlob: (done: (blob: Blob | null) => void) => done(null),
+    } as unknown as HTMLCanvasElement;
+    expect(await saveOnDevice(canvas, "ニュース7", "shot-1")).toEqual({
+      key: "shot-1",
+      kind: "error",
+      text: "サーバにも端末にも保存できませんでした",
+    });
   });
 });
