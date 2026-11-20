@@ -459,9 +459,9 @@ export function copiesVideo(
  * H.265 と同じ AAC にエンコードする (`audioArgs`)。GPU も、その場で変換する本数の枠も使わない。その局の録画を観る画面 (`playback.tsTranscodeArgs`) も同じ
  */
 export const HEVC_COPY: {
-  input: string[];
-  filter: string;
-  encoder: string[];
+  readonly input: readonly string[];
+  readonly filter: string;
+  readonly encoder: readonly string[];
 } = {
   input: [],
   filter: "",
