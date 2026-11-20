@@ -482,7 +482,9 @@ jobs:
           # install.sh は denpa-agent --status で応答を確かめている (API は組んだ denpa にしか答えない)。
           # 合言葉がエージェント自身の置き場 (config/tls/pair-token) にあり、plist には無く、エージェントがそれを読んで
           # 組むための URL をログに出していること (まだ誰とも組んでいないので出す。docs/agent.md)
-          token=$(cat "$HOME/denpa/config/tls/pair-token")
+          token=$(sudo cat "$HOME/denpa/config/tls/pair-token")
+          # 合言葉は root だけが読める
+          test "$(sudo stat -f '%Su %Lp' "$HOME/denpa/config/tls/pair-token")" = "root 600"
           test "${#token}" = 43
           if grep -q AGENT_PAIR_TOKEN "$plist"; then exit 1; fi
           # --agent-only は別の機械の denpa から繋ぐので、ループバックに絞らない
@@ -496,7 +498,7 @@ jobs:
           test ! -e /Library/LaunchDaemons/io.github.danything.denpa.plist
           # 上げ直しても合言葉は変えない
           sudo -E env PATH="$PATH" bash install.sh --agent-only
-          test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
+          test "$(sudo cat "$HOME/denpa/config/tls/pair-token")" = "$token"
           # Siano と IT930x のファームウェアはエージェントに埋め込んである。Siano の許諾の文面を実行ファイルの隣に置き、
           # siano-userland・px4-userland と px4d のソケットの置き場 (run/) は置かない
           test -f "$prefix/bin/LICENCE.siano"
@@ -1146,7 +1148,7 @@ jobs:
           # 置き場の DB・denpa.env・denpa.sh は root だけのもの。合言葉は denpa.sh にあり、だれでも読める plist には無い
           test "$(sudo stat -f '%Su %Lp' "$prefix/data")" = "root 700"
           sudo test -f "$prefix/data/denpa.env"
-          token=$(cat "$HOME/denpa/config/tls/pair-token")
+          token=$(sudo cat "$HOME/denpa/config/tls/pair-token")
           sudo grep -qF "#pair=$token" "$prefix/data/denpa.sh"
           if grep -qF "$token" /Library/LaunchDaemons/io.github.danything.denpa.plist; then exit 1; fi
           # 本体がエージェントと組む (エージェントの tls/clients に本体の証明書が載る)
