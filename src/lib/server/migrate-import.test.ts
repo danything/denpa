@@ -40,6 +40,7 @@ import {
 const root = mkdtempSync(join(tmpdir(), "denpa-migrate-"));
 const { config } = await import("./config");
 config.dbPath = join(root, "denpa.db");
+config.dataDir = root;
 config.rawDir = join(root, "raw");
 config.encodedDir = join(root, "encoded");
 
