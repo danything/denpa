@@ -403,9 +403,9 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         }
       } else engine.reset(ptsOf(from));
       // `reset` で外れた描かない位置を渡し直す。飛び先より手前のもの (跨いだ CM の先頭) は捨てる
-      if (at === null) {
-        if (stop !== null && stop <= from) stop = null;
-        sendStop();
+      if (at === null && stop !== null) {
+        if (stop <= from) stop = null;
+        else sendStop();
       }
       const splitter = input === "fmp4" ? new Fmp4Splitter() : null;
       reader = response.body.getReader();
