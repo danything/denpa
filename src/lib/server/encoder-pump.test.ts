@@ -25,7 +25,8 @@ config.encodeMaxAttempts = 5;
 
 const { orm } = await import("./db");
 const { encodeJobs, recordings } = await import("./schema");
-const { cancel, isCanceling, pump } = await import("./encoder");
+const { cancel, isCanceling, pump, requeueOrphanedJobs } =
+  await import("./encoder");
 
 const now = Date.now();
 
@@ -106,4 +107,34 @@ test("動き出したジョブの中止は、後始末が終わってから返�
   expect(job(jobId).state).not.toBe("running");
   // 上限 (CANCEL_WAIT_MS) まで待ったのではなく、後始末が終わった通知を受け取って返っている
   expect(Date.now() - at).toBeLessThan(1_000);
+});
+
+test("落ちた時点で動いていたジョブは、前の回の進み具合とログを消して待ちに戻る", () => {
+  reset();
+  const jobId = orm()
+    .insert(encodeJobs)
+    .values({
+      recording_id: 1,
+      state: "running",
+      phase: "cm",
+      percent: 0.5,
+      log: "frame: 100/200",
+      started_at: now,
+      created_at: now,
+    })
+    .returning({ id: encodeJobs.id })
+    .get()!.id;
+  expect(requeueOrphanedJobs()).toBe(1);
+  const row = orm()
+    .select()
+    .from(encodeJobs)
+    .where(eq(encodeJobs.id, jobId))
+    .get()!;
+  expect(row).toMatchObject({
+    state: "queued",
+    phase: "encode",
+    percent: 0,
+    log: "",
+    started_at: null,
+  });
 });
