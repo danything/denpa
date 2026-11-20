@@ -308,7 +308,7 @@ async function collectChannel(
   let received = false;
   /**
    * **衛星は放送の一覧 (NIT) も読み、変わっていればチャンネルを書き換える** (`lineup-follow.ts`)。
-   * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `lineup-follow.ts` の `WATCH_FOR` だけ (SDT[other] がそろうまで)
+   * どの中継器にもネットワークの全部の TS が載っている。読むのは、最初の塊が届いてから `lineup-follow.ts` の `WATCH_FOR` の間だけ (SDT[other] がそろうまで)
    */
   const lineup = isSatellite(channel.type)
     ? new LineupWatch(channel.type)
