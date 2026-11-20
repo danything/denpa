@@ -11,6 +11,9 @@
         <!-- 本体は Web SDK なので、テストからは中身のクラスだけ借りる -->
         <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- TUnit0015: クラスに付けた Timeout は、止まったテストを落とすための上限。テストの中の待ちは打ち切らないので、トークンを受け取らない。
+             TUnitAssertions0005: 定数を確かめるテストは、値の根拠 (転送の大きさ・待つ長さ) を式で書いて、変えたら落ちるように置いている -->
+        <NoWarn>$(NoWarn);TUnit0015;TUnitAssertions0005</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

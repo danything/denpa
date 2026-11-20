@@ -1135,7 +1135,7 @@ public class It930xDeviceTests
         var found = It930x.Specs([("1-2", Pe), ("4-12.1", It930x.Find(0x0511, 0x084E)!)]);
 
         await Assert.That(found.Select(spec => spec.Device)).IsEquivalentTo(
-            new[]
+            new string?[]
             {
                 "it930x:1-2:0", "it930x:1-2:1", "it930x:1-2:2", "it930x:1-2:3", "it930x:1-2:4",
                 "it930x:4-12.1:0", "it930x:4-12.1:1", "it930x:4-12.1:2", "it930x:4-12.1:3", "it930x:4-12.1:4",

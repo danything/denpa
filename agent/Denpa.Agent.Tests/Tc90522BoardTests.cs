@@ -525,7 +525,7 @@ public class Tc90522BoardTests
         var found = new List<(string Port, It930xModel Model)> { ("3-1", Q3), ("3-2", W3), ("3-3", Q3), ("3-4", Q3) };
         var serials = new Dictionary<string, string?> { ["3-1"] = "000012050009602", ["3-3"] = "000099990000011", ["3-4"] = "000012050009601" };
         var specs = It930x.Specs(found, port => serials.GetValueOrDefault(port));
-        await Assert.That(specs.Select(spec => spec.Device)).IsEquivalentTo(new[]
+        await Assert.That(specs.Select(spec => spec.Device)).IsEquivalentTo(new string?[]
         {
             "it930x:3-4:0", "it930x:3-4:1", "it930x:3-4:2", "it930x:3-4:3",
             "it930x:3-1:0", "it930x:3-1:1", "it930x:3-1:2", "it930x:3-1:3",

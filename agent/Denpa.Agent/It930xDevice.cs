@@ -754,7 +754,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>denpa に送った機材の異常の種類と機材 (<see cref="FaultOnce"/>)</summary>
-    private static readonly HashSet<string> ReportedFaults = [];
+    private static readonly HashSet<(string Kind, string Port)> ReportedFaults = [];
 
     /// <summary>
     /// 機材の異常の行を、同じ機材の同じ種類 (<paramref name="kind"/>) ではプロセスで 1 回だけ denpa に送る (<see cref="Log.Fault"/>)。2 回目からは記録に出すだけ。
@@ -763,7 +763,7 @@ public sealed class It930xDevice
     private void FaultOnce(string kind, string message)
     {
         bool first;
-        lock (ReportedFaults) first = ReportedFaults.Add($"{kind} {Port}");
+        lock (ReportedFaults) first = ReportedFaults.Add((kind, Port));
         if (first) Log.Fault(message);
         else Log.Write(message);
     }
@@ -774,7 +774,7 @@ public sealed class It930xDevice
     /// </summary>
     private void ForgetFaults()
     {
-        lock (ReportedFaults) ReportedFaults.RemoveWhere(key => key.EndsWith($" {Port}", StringComparison.Ordinal));
+        lock (ReportedFaults) ReportedFaults.RemoveWhere(key => key.Port == Port);
     }
 
     /// <summary>最後に読んだ溢れ (変わったときだけ記録に出すため)</summary>
