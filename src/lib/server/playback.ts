@@ -103,6 +103,8 @@ import { type EncodedColumns, encodedFile, encodedFiles } from "./library";
 import {
   audioArgs,
   blameLiveHw,
+  HEVC_COPY,
+  liveHwAvailable,
   liveRungCodec,
   panArgs,
   parsePlayable,
@@ -816,7 +818,7 @@ export function tsTranscodeArgs(
 ): string[] {
   const copy = broadcast === "hevc" && codec === "hevc" && rung === 0;
   const video = copy
-    ? { input: [], filter: "", encoder: ["-c:v", "copy", "-tag:v", "hvc1"] }
+    ? HEVC_COPY
     : broadcast === "hevc"
       ? uhdVideoArgs(codec, hw, rung, false)
       : videoArgs(codec, hw, true, rung);
@@ -1579,7 +1581,8 @@ function missingStart(
   label: string,
   owner: string | null,
 ): Response | "encoder" | "busy" {
-  if (pickLiveHw(codec, false) === null && !softwareEncodes(codec, 0))
+  // 見るだけなので GPU の振り分けの順は進めない (`live.liveHwAvailable`。進めると、変換するときに同じ GPU に寄る)
+  if (!softwareEncodes(codec, 0) && liveHwAvailable(codec, false) === null)
     return "encoder";
   if (owner !== null) yieldTranscodes(owner);
   const held = holdTranscode();

@@ -456,9 +456,13 @@ export function copiesVideo(
 /**
  * **TS に HEVC を入れて送る 4K の局の `hevc`。映像はエンコードせずに写す** (docs/stream.md「TS で送る 4K の局」)。
  * コンテナ内のタグは `hvc1` (Safari は `hev1` を受け取らない)。音声は AAC の LATM で、MSE は受け取らないので
- * H.265 と同じ AAC にエンコードする (`audioArgs`)。GPU も、その場で変換する本数の枠も使わない
+ * H.265 と同じ AAC にエンコードする (`audioArgs`)。GPU も、その場で変換する本数の枠も使わない。その局の録画を観る画面 (`playback.tsTranscodeArgs`) も同じ
  */
-const HEVC_COPY: { input: string[]; filter: string; encoder: string[] } = {
+export const HEVC_COPY: {
+  input: string[];
+  filter: string;
+  encoder: string[];
+} = {
   input: [],
   filter: "",
   encoder: ["-c:v", "copy", "-tag:v", "hvc1"],
@@ -1303,10 +1307,10 @@ export function liveRealtime(
 }
 
 /**
- * **GPU でエンコードできるかだけを見る** (段を下げるときのコーデック選び。`rungCodec`)。`pickLiveHw` と同じ決め方だが、
- * 順番 (`liveTurn`) は進めない。選ぶたびに進めると、実際に起こすエンコードの GPU の振り分けがずれる
+ * **GPU でエンコードできるかだけを見る** (段を下げるときのコーデック選び `rungCodec`・観る画面の `playback.missingStart`)。
+ * `pickLiveHw` と同じ決め方だが、順番 (`liveTurn`) は進めない。見るたびに進めると、実際に起こすエンコードの GPU の振り分けがずれる
  */
-function liveHwAvailable(
+export function liveHwAvailable(
   codec: LiveCodec,
   interlaced = true,
   devices: HwDevice[] = hwEncode().devices,
@@ -3339,7 +3343,7 @@ class Session {
   /** 終えたときに呼ぶもの (`whenStopped`) */
   private readonly stopping: (() => void)[] = [];
 
-  /** 終えたら呼ぶ。追っかけが変換の枠を返すのに使う (`openChase`)。もう終えていればその場で */
+  /** 終えたら呼ぶ。取った枠を返す (`watch`・`openChase`) のと、先回りしたものを外す (`warm`) のに使う。もう終えていればその場で */
   whenStopped(fn: () => void): void {
     if (this.stopped) fn();
     else this.stopping.push(fn);
@@ -4769,9 +4773,13 @@ export function attend(connection: Connection): void {
         refused = true;
         release = () => undefined;
         const kept = current;
-        // 音声だけからは段 0 へ戻す。その段の映像を枠なしでエンコードし始めないため
-        if (kept !== null && kept.codec !== "audio" && sameAs()) {
-          codec = kept.codec;
+        /*
+         * 音声だけからは段 0 へ戻す。その段の映像を枠なしでエンコードし始めないため。
+         * 今のセッションのリクエストされた形式 (`asked`) に合わせる。送っている形式 (`codec`) は PMT を読んで替わることがあり
+         * (`hevcTsCodec`)、そちらに合わせると目印が今のセッションと食い違い、枠なしで段を下げた新しいエンコードを始めてしまう
+         */
+        if (kept !== null && kept.asked.codec !== "audio" && sameAs()) {
+          codec = kept.asked.codec;
           rung = kept.rung;
         } else {
           codec = plain;

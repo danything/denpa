@@ -30,7 +30,7 @@ afterAll(() => {
 });
 
 const { saveSettings, settings } = await import("./settings");
-const { blameLiveHw, liveHevc, liveRealtime, pickLiveHw } =
+const { blameLiveHw, liveHevc, liveHwAvailable, liveRealtime, pickLiveHw } =
   await import("./live");
 const { gpuReady } = await import("./transcode");
 const { bootstrap, MIGRATIONS } = await import("./db");
@@ -91,6 +91,18 @@ test("録画の印を外しても、ライブの印が付いていれば GPU に
   expect(pickLiveHw("av1", true, [A])).toBeNull();
   expect(gpuReady([A])).toBe(true);
   expect(settings().hwAllow[A.path]?.vaapi).toEqual([]);
+});
+
+/**
+ * **GPU を 2 枚並べると、エンコードを起こすたびに交互に使う** (`pickLiveHw`)。使えるかを見るだけ (`liveHwAvailable`。
+ * 観る画面の `missingStart`) では順を進めない。進めると、見てから起こす変換がいつも同じ GPU に寄る
+ */
+test("使えるかを見るだけでは、GPU を振り分ける順を進めない", () => {
+  saveSettings({ hwAllow: {}, liveHwAllow: {} });
+  const first = pickLiveHw("h264", false, [A, B])?.way.device;
+  expect(liveHwAvailable("h264", false, [A, B])).not.toBeNull();
+  const second = pickLiveHw("h264", false, [A, B])?.way.device;
+  expect(new Set([first, second])).toEqual(new Set([A.path, B.path]));
 });
 
 /**
