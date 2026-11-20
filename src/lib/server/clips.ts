@@ -14,6 +14,7 @@ import {
   and,
   desc,
   eq,
+  getTableColumns,
   gte,
   inArray,
   isNotNull,
@@ -747,36 +748,11 @@ export function clipOr404(idLike: string): Clip & { file: string } {
 /** 1 枚引く。無ければ undefined */
 function clipById(id: number): (Clip & { file: string }) | undefined {
   const row = orm()
-    .select({ ...clipColumns(), alive: ALIVE })
+    .select({ ...getTableColumns(clips), alive: ALIVE })
     .from(clips)
     .where(and(eq(clips.id, id), ne(clips.file, "")))
     .get();
   return row === undefined ? undefined : { ...toClip(row), file: row.file };
-}
-
-function clipColumns() {
-  return {
-    id: clips.id,
-    taken_at: clips.taken_at,
-    place: clips.place,
-    recording_id: clips.recording_id,
-    service_id: clips.service_id,
-    event_id: clips.event_id,
-    program_start_at: clips.program_start_at,
-    program_name: clips.program_name,
-    service_name: clips.service_name,
-    offset_ms: clips.offset_ms,
-    captions: clips.captions,
-    search_text: clips.search_text,
-    file: clips.file,
-    width: clips.width,
-    height: clips.height,
-    bytes: clips.bytes,
-    has_captions: clips.has_captions,
-    has_comments: clips.has_comments,
-    show_captions: clips.show_captions,
-    show_comments: clips.show_comments,
-  };
 }
 
 /** `YYYY-MM-DD` の日の始めと終わり (サーバの時計) */
@@ -814,7 +790,7 @@ export function findClips(query: ClipQuery): {
   const where = clipConditions(query);
   if (query.before !== undefined) where.push(lt(clips.id, query.before));
   const rows = orm()
-    .select({ ...clipColumns(), alive: ALIVE })
+    .select({ ...getTableColumns(clips), alive: ALIVE })
     .from(clips)
     .where(and(...where))
     .orderBy(desc(clips.id))
