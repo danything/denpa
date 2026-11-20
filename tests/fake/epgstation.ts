@@ -237,13 +237,13 @@ function video(id: keyof typeof VIDEO_FILES, type: "ts" | "encoded") {
   };
 }
 
-function recorded(): unknown[] {
+function recorded(mode: FakeMode): unknown[] {
   const at = (n: number) => ({
     startAt: START + n * 30 * MINUTE,
     endAt: START + (n + 1) * 30 * MINUTE,
   });
   const base = { isProtected: false, isEncoding: false, isRecording: false };
-  return [
+  const list: unknown[] = [
     {
       ...base,
       id: 1,
@@ -300,6 +300,16 @@ function recorded(): unknown[] {
       ],
     },
   ];
+  // 形の崩れたもの: 名前が無い
+  if (mode.drift)
+    list.push({
+      ...base,
+      id: 7,
+      channelId: KNOWN_CHANNEL,
+      ...at(6),
+      videoFiles: [video(21, "ts")],
+    });
+  return list;
 }
 
 const json = (body: unknown, status = 200) =>
@@ -478,7 +488,7 @@ export function startFakeEpgstation(
       }
       if (path === "/api/recorded") {
         state.listRequests.push(`${path}${url.search}`);
-        const { items, total } = page(recorded(), url);
+        const { items, total } = page(recorded(state.mode), url);
         return json({ records: items, total });
       }
       const videoMatch = /^\/api\/videos\/(\d+)$/.exec(path);

@@ -26,7 +26,7 @@ import { etagMatches } from "#lib/server/serve.js";
 
 import type { RequestHandler } from "./$types";
 
-/** 置き場 (リリースのファイルそのまま。`FONT_DIR`。イメージは Dockerfile が、Mac と Windows は配布物の `server/font` に置く) */
+/** 置き場 (`FONT_DIR`。リリースのファイルそのまま。どこに置くかは `config.fontDir`) */
 const DIR = config.fontDir;
 /** 入っているバージョン (`v2.1` など。Dockerfile が `DENPA_FONT_VERSION` を書く) */
 const VERSION = `${DIR}/VERSION`;

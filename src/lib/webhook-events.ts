@@ -15,6 +15,7 @@ export const EVENTS = [
 
 export type WebhookEvent = (typeof EVENTS)[number];
 
+/** 通知の種類の名前 (画面に出す)。全部の種類に付ける。保存した行の文字列でも引けるよう、キーは文字列で受ける */
 export const EVENT_LABEL: Record<string, string> = {
   "recording.started": "録画開始",
   "recording.finished": "録画完了",
@@ -25,4 +26,9 @@ export const EVENT_LABEL: Record<string, string> = {
   "agent.down": "チューナーエージェント切断",
   "agent.up": "チューナーエージェント復帰",
   "channels.changed": "チャンネルの変更",
-};
+} satisfies Record<WebhookEvent, string>;
+
+/** 通知の種類か。画面から来た値を保存する前に確かめる */
+export function webhookEvent(value: string): value is WebhookEvent {
+  return (EVENTS as readonly string[]).includes(value);
+}

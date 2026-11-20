@@ -22,7 +22,7 @@ import * as diagnostics from "./diagnostics.server";
  * **エージェントを待たずに画面を返す。** チューナーの一覧は promise のまま渡し (`diagnostics.server.ts` の `tuners`)、
  * ライブのチューナーの選択肢もそこから作る
  */
-export function load({ cookies, url }) {
+export function load({ cookies, url, locals }) {
   const session = find(cookies.get(COOKIE));
   return {
     /** この端末の控えのほかに生きているログインの数。控えで入っていなければ null */
@@ -30,7 +30,7 @@ export function load({ cookies, url }) {
     /** ロゴの取得を記録するか (開発者向け。`logo-record.ts`) と、新しいものからの記録 */
     recordLogo: settings().recordLogo,
     logoRecords: logoRecordList(50),
-    ...diagnostics.load(url),
+    ...diagnostics.load(url, locals),
   };
 }
 

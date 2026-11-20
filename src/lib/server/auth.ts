@@ -138,9 +138,11 @@ export function sameOrigin(request: Request, url: URL): boolean {
  * - DB を持ち出す・入れ替える (denpa を別の機械へ移す、EPGStation・EDCB からの引き継ぎ)
  * - 録画の通知を送る先 (Webhook) を追加・切り替え・削除・テスト送信する
  * - 世帯のニコニコのアカウントを差し替える
+ * - 予約数ランキングへの参加を切り替える
  * - ほかのテレビのアプリのアクセストークンを取り消す
  * - エージェントを登録・名前の変更・URL の変更・削除する (設定の「受信」)
  * - チューナーの定義・カードリーダーを書き換える、カードの契約と復号を確かめる (設定の「受信」のチューナーの節)
+ * - 設定の「その他」のログと、エージェントごとのバージョン・チューナー・カードリーダーを読む (断った理由だけを返す)
  */
 export function tokenRefusal(locals: { token?: number }): string | null {
   return locals.token === undefined

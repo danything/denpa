@@ -6,7 +6,7 @@ import { tokenRefusal } from "#lib/server/auth.js";
 import { now, orm } from "#lib/server/db.js";
 import { webhooks } from "#lib/server/schema.js";
 import { send, webhookUrl } from "#lib/server/webhook.js";
-import { EVENTS } from "#lib/webhook-events.js";
+import { EVENTS, webhookEvent } from "#lib/webhook-events.js";
 
 /** 通知先の一覧。**アクセストークンには返さない** (URL を読めれば、通知先へ直に送れてしまう) */
 export function load(locals: { token?: number }) {
@@ -30,8 +30,8 @@ export const actions = {
     if (!webhookUrl(url)) {
       return fail(400, { message: "http(s) で始まる URL を入れてください" });
     }
-    // 何も選ばなければ全部の通知を受け取る
-    const events = form.getAll("events").map(String).filter(Boolean);
+    // 何も選ばなければ全部の通知を受け取る。知らない種類は捨てる (それだけが残ると、何も届かない通知先になる)
+    const events = form.getAll("events").map(String).filter(webhookEvent);
 
     orm()
       .insert(webhooks)

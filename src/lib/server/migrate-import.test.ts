@@ -40,6 +40,7 @@ import {
 const root = mkdtempSync(join(tmpdir(), "denpa-migrate-"));
 const { config } = await import("./config");
 config.dbPath = join(root, "denpa.db");
+config.dataDir = root;
 config.rawDir = join(root, "raw");
 config.encodedDir = join(root, "encoded");
 
@@ -353,6 +354,21 @@ describe("バージョン", () => {
     );
     expect(migrate.epgstationUrl()).toBe("http://127.0.0.1:1");
   });
+
+  test("別の機械へ移す取り込みの途中なら、始めずに理由を返す", async () => {
+    const { BUSY_MESSAGE } = await import("./transfer");
+    const meta = join(config.dataDir, "transfer", "upload.json");
+    mkdirSync(join(config.dataDir, "transfer"), { recursive: true });
+    writeFileSync(meta, "{}");
+    try {
+      expect(await start(fake.url, preview)).toEqual({
+        started: false,
+        message: BUSY_MESSAGE,
+      });
+    } finally {
+      rmSync(meta);
+    }
+  });
 });
 
 describe("Basic 認証", () => {
@@ -393,6 +409,15 @@ describe("形式の違う応答", () => {
         line.includes("/api/rules の 1 件に id が無いので飛ばします"),
       ),
     ).toBe(true);
+  });
+
+  test("名前の無い録画は空の名前で取り込む", async () => {
+    fake.setMode({ drift: true });
+    await run(apply);
+    expect(status().state).toBe("done");
+    const nameless = imported(7)!;
+    expect(nameless.name).toBe("");
+    expect(content(nameless.ts_path)).toEqual(videoContent(21, SIZE_2));
   });
 });
 
