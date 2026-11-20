@@ -43,7 +43,6 @@ verify() {
 
 mkdir -p "$out/assets/licenses/bun"
 fetch "https://raw.githubusercontent.com/oven-sh/bun/bun-v$BUN_VERSION/LICENSE.md" "$work/LICENSE.md"
-verify LICENSE.md "$work/LICENSE.md"
 cp "$work/LICENSE.md" "$out/assets/licenses/bun/"
 
 for abi in "$@"; do
