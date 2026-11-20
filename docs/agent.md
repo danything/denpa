@@ -2,13 +2,13 @@
 
 **電波を受けるところ。機材に触るのはここだけです。**
 
-使えるチューナー・B-CASカード・困ったときは [tuners.md](tuners.md)、Mac と Windows は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md)。
+使えるチューナー・B-CAS カード・困ったときは [tuners.md](tuners.md)、Mac と Windows は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md)。
 番組表・スキャン・持ち物は [data.md](data.md)、ファイルは [app.md](app.md)、環境変数は [config.md](config.md)。
 
 次の 3 つは denpa からは触れず、チューナーを挿した機械のエージェントでしか扱えません。
 
 - **チューナーデバイス**: `/dev/dvb/*` と USB の機材に触れるのはあちらだけです
-- **B-CASカード**: USB のリーダーも機材の内蔵リーダーも、あちらが直接扱います
+- **B-CAS カード**: USB のリーダーも機材の内蔵リーダーも、あちらが直接扱います
   ([下記](#b25-の復号もカードリーダーも自前))
 - **選局そのもの**: DVB はデバイスを ioctl で直接操作します
   ([下記](#net-で書き直すまで-経緯と実測))。PX-MLT5 系・PX-Q3U4 などの IT930x の機材と、CECH-ZD1 J と PIX-DT295 はエージェントが USB を直に持ちます
@@ -440,7 +440,7 @@ bun の実装は消し、適合テスト (`agent/conformance.test.ts`) がいま
 
 実機 (PT3・地上波) で denpa と同じ経路で録り、スクランブルされたままのパケットは最初の ECM で鍵が決まるまでの
 0.004% だけでした。**カードが開けなくても選局は続き**、スクランブルされたまま録れて設定の「チューナー」に理由が出ます
-([tuners.md](tuners.md#b-casカードとデスクランブル))。
+([tuners.md](tuners.md#b-cas-カードとスクランブルの復号))。
 
 ### デバイスを開いたままチャンネルを変える
 
@@ -1242,7 +1242,7 @@ CS では 1 秒に 1,200 件ほどのペイロードが流れるので、比べ�
 
 ```text
 拠点B (カード無し)                     拠点A (カードあり)
-  選局 → TS ─┬─ MULTI2 で復号する          B-CASカード
+  選局 → TS ─┬─ MULTI2 で復号する          B-CAS カード
              └─ ECM 200B ──────────→  ECM (0x34)
                 鍵 16B + 返り値 2B  ←──
 ```
@@ -1484,7 +1484,7 @@ denpa の `ServiceFilter` とブラウザの `PesDemuxer` もカウンタを見�
 - **チューナーの挿さったマシンにエージェントだけ置き、denpa は別の所で動かせます**
   (`charts/denpa-agent`)。元の TS の置き場 (`denpa-raw`) は NFS などで両方に見せます (見せられなければ、
   録画中にカードが読めなかったものを後から復号できなくなるだけ)
-  ([tuners.md](tuners.md#b-casカードとデスクランブル))
+  ([tuners.md](tuners.md#b-cas-カードとスクランブルの復号))
 - **選局は、局を受けられるエージェントの中から denpa が 1 台に振り分けます** ([上記](#エージェントが何台もあるとき))。設定の「受信」で画面から登録することもでき ([エージェントを足す](#エージェントを足す))、`TUNER_AGENT_URL` にもカンマで区切って何台でも書けます。
   チャンネルの控え (`/denpa/channels`) は全部のエージェントから読み、どの TS をどのエージェントのどのチャンネルで受けられるかを denpa の DB に写します ([data.md](data.md))。
   通知 (`/denpa/events`)・ログ (`/denpa/logs`)・バージョン (`/denpa/about`) は書いた全部のエージェントから受け取るので、全部のエージェントと組みます。

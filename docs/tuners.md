@@ -1,6 +1,6 @@
 # チューナー
 
-使えるチューナーと、要るもの・B-CASカード・困ったときのことです。
+使えるチューナーと、要るもの・B-CAS カード・困ったときのことです。
 入れ方は [install.md](install.md) (Mac は [install-mac.md](install-mac.md)、Windows は [install-windows.md](install-windows.md)、Android は [install-android.md](install-android.md))、
 エージェントの作りは [agent.md](agent.md)。
 
@@ -27,7 +27,7 @@
   使ってみたら、動いたか動かなかったかを [Issue](https://github.com/danything/denpa/issues) で教えてください
   (設定の「その他」→「ログ」の「Issue にする」から作れます。[tuner-pt3.md](tuner-pt3.md#動いたか教えてください))
 
-- **B-CASカード** と USB のカードリーダー (IT930x の機材・CECH-ZD1 J・PIX-DT295 は内蔵リーダーでもよい。asicen-userland の機材の内蔵リーダーは使えない。[下記](#カードリーダー))
+- **B-CAS カード** と USB のカードリーダー (IT930x の機材・CECH-ZD1 J・PIX-DT295 は内蔵リーダーでもよい。asicen-userland の機材の内蔵リーダーは使えない。[下記](#カードリーダー))
 - **OS**: Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)。Talos Linux の 1 台に OS ごと入れるなら [install-talos.md](install-talos.md) (amd64・PT3。実機で確かめていない)。
   Android (10 以上、arm64) の端末は、1 台で denpa 本体とチューナーエージェントを動かせ、別の機械の denpa のエージェントにもできます。挿せるのはエージェントが USB を直に持つ機材、ASICEN 系 (試験的)、USB のカードリーダーです
   (どれも Android の実機で確かめていない。[install-android.md](install-android.md))
@@ -406,7 +406,7 @@ ATR とカードの番号を出す)。
 と同じことをする。スクランブルされたまま録れてしまったものを救うのにも使える)。
 `<out.ts>` を省くと復号せず、CA_system_id と番組表が来ているかだけを出します ([tuner-it930x.md](tuner-it930x.md#スカパープレミアムでカード無しで分かること))。
 
-## B-CASカードとデスクランブル
+## B-CAS カードとスクランブルの復号
 
 スクランブルは**エージェント自身が復号します** (`B25.cs`)。カードが読めないときは
 スクランブルされたまま流し、理由を状態に出します。理由を出さずに素通しすると「録画は成功してサイズも

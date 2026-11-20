@@ -7,7 +7,7 @@
 # **掛かったまま録れた TS を後から復号するには、denpa と同じ置き場が見えている必要がある**
 # (persistence.raw)。別の機械で動かすなら NFS などで同じ実体を両方に見せる。
 # 見せられなくても録画中はその場で復号するので、困るのは録画中にカードが読めなかった
-# ときだけ (docs/tuners.md「B-CASカードとデスクランブル」)
+# ときだけ (docs/tuners.md「B-CAS カードとスクランブルの復号」)
 
 image:
   repository: ghcr.io/danything/denpa-agent
