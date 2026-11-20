@@ -24,7 +24,7 @@ function hot(n) {
   return sum;
 }
 
-/** `-version` の最初の行。起動できなければ投げる */
+/** `-version` の最初の行。起動できなければ例外にする */
 function version(path) {
   if (path === undefined) throw new Error("環境変数がありません");
   const child = Bun.spawnSync([path, "-hide_banner", "-version"]);

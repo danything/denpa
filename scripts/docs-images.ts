@@ -1,8 +1,8 @@
 /**
  * 撮った画像を docs/images へ置く。どちらもそのままの大きさ (1600×900) で、**静止画は WebP、
- * アニメーションは 30fps の AVIF** にする。アニメーションは画面を巻く・開くといった動きを見せるもので、
+ * アニメーションは 30 fps の AVIF** にする。アニメーションは画面を巻く・開くといった動きを見せるもので、
  * コマを間引いたり縮めたりするとカクカクにぼやける。AV1 は止まっている間のコマがほとんど場所を取らないので、
- * コマを減らさずに WebP の数分の一の大きさで済む (30fps の WebP は巻く画面で 1 枚数 MB になる)。
+ * コマを減らさずに WebP の数分の一の大きさで済む (30 fps の WebP は巻く画面で 1 枚数 MB になる)。
  *
  *     bun scripts/docs-images.ts              # 撮ってあるぶん全部
  *     bun scripts/docs-images.ts guide-anim   # 名前を挙げると、そのぶんだけ
@@ -88,7 +88,7 @@ function anim(name: string): void {
   const tmp = mkdtempSync(join(tmpdir(), "docs-images-"));
   try {
     // 撮ったコマは届いた時刻のまま (間隔はまちまち)。見せる長さをミリ秒の時刻で渡し
-    // (`framerate 1000` で刻みを 1 ミリ秒にする。既定の 1/25 秒では短いコマの時刻が丸まる)、ffmpeg で 30fps に揃える。
+    // (`framerate 1000` で刻みを 1 ミリ秒にする。既定の 1/25 秒では短いコマの時刻が丸まる)、ffmpeg で 30 fps に揃える。
     // concat は最後のコマの長さを読まないので、最後のコマをもう 1 回並べ、全体の長さで切る
     const list = ["ffconcat version 1.0"];
     const entry = (f: string) => [

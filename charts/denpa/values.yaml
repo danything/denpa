@@ -29,10 +29,10 @@ imageMarks:
   agent: ""
 
 denpa:
-  # 同時にエンコードする本数。ffmpeg は 1 本で ~4GB 使う
+  # 同時にエンコードする ffmpeg の本数 (ENCODE_CONCURRENCY。docs/encode.md)
   encodeConcurrency: 2
   timezone: Asia/Tokyo
-  # ログインなしで通すネットワーク (CIDR のカンマ区切り。知っている名前で来たときだけ。下の allowedHosts)。docs/auth.md。
+  # ログインなしで通すネットワーク (CIDR のカンマ区切り。下の allowedHosts などの名前で来たときだけ)。docs/auth.md。
   # 空だと (OIDC も無ければ) 全部 403 で断る。0.0.0.0/0 で全部開くが、
   # それはインターネットに向けて開くのと同じ
   trustedNetworks: ""
@@ -102,7 +102,8 @@ agent:
   pairSecret: ""
   # denpa の設定の「受信」の「エージェント」に出す名前と、mDNS で知らせる名前の元 (エージェントの AGENT_NAME)。空ならノードの名前
   name: ""
-  # チューナーとカードリーダーに触るために特権が要る
+  # チューナーとカードリーダーに触るために特権が要る (Kubernetes には compose の device_cgroup_rules に当たるものが無く、
+  # 挿し直しで増えるデバイスのノードを開くには privileged が要る)
   privileged: true
   # ホストのデバイス。/dev/bus (USB) と /dev/dvb (DVB 型のチューナー)
   hostDevices:
@@ -123,7 +124,7 @@ agent:
     enabled: false
 
 # 新しいイメージを**入れ替える前に**ノードへ引いておく Job (ArgoCD の PreSync)。denpa とエージェントの両方。
-# どちらも新旧2Podを並べられない (Recreate) ので、入れ替えの間は録画が途切れる。
+# どちらも新旧 2 つの Pod を並べられない (Recreate) ので、入れ替えの間は録画が途切れる。
 # その隙間はほぼイメージの取得時間だった (実測 13.6 秒) ので、先に引いておく。
 # ArgoCD 以外で使うなら false に (フックの注釈が効かない)
 prepull:
@@ -176,7 +177,7 @@ service:
 # 入口。**denpa 自身が認証する**ので、前段は名前を届けるだけでよい。
 # Gateway API の HTTPRoute・標準の Ingress・Traefik の IngressRoute のどれか 1 つ
 # (複数を同時に有効にしても壊れはしないが、要らない)。
-# **新しく組むなら httpRoute。** Ingress API は凍結済みで、ingress-nginx も 2026-03 に retire した。
+# **新しく組むなら httpRoute。** Ingress API は凍結済みで、ingress-nginx も 2026-03 に開発を終えた。
 # このリポジトリ自身の本番は httpRoute (Cilium Gateway)。
 httpRoute:
   enabled: false

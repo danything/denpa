@@ -19,7 +19,7 @@
       ]
     },
     {
-      "description": ".github/openssl-android.sh の `# renovate:` 付きの変数 (`OPENSSL_VERSION=3.5.9`)。Android 向けのエージェントに静的に入れる OpenSSL のバージョン",
+      "description": ".github/openssl-android.sh の `# renovate:` 付きの変数 (`OPENSSL_VERSION=…`)。Android 向けのエージェントに静的に入れる OpenSSL のバージョン",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/openssl-android\\.sh$/"],
       "matchStrings": [
@@ -32,14 +32,6 @@
       "managerFilePatterns": ["/^\\.github/asicen-android\\.sh$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?(?: versioning=(?<versioning>\\S+?))?\\s+[A-Z0-9_]+=(?<currentValue>\\S+)"
-      ]
-    },
-    {
-      "description": ".github/bun-android.sh の `# renovate:` 付きの変数 (`BUN_VERSION=1.4.4`)。Android のアプリに入れる bun の公式の Android 版のバージョン。別のグループの PR になる (下の packageRules)",
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/bun-android\\.sh$/"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+[A-Z0-9_]+=(?<currentValue>\\S+)"
       ]
     },
     {
@@ -69,7 +61,7 @@
       "pinDigests": true
     },
     {
-      "description": "asicen-userland (PX-W3U3 など、試験的) は agent/Dockerfile と .github/asicen-android.sh (Android のアプリ) でプレリリースの 1.0.0-beta に固定してある (versioning=semver で、次のプレリリースと正式版を追う)。エージェントは通信の形式の一部をこのバージョンの通信を記録して起こしていて、asicen-userland 1.0.0 でなければ断る。バージョンを上げるときは、通信を記録し直して Asicen.cs・AsicenUdtv.cs と Dockerfile・asicen-android.sh の SHA-256 を合わせる必要があるので、自動ではマージしない (docs/tuners.md。PR は SHA-256 が合わずに CI で落ちる)。共有の設定は非 major を全部「all dependencies」の1つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
+      "description": "asicen-userland (PX-W3U3 など、試験的) は agent/Dockerfile と .github/asicen-android.sh (Android のアプリ) でプレリリースの 1.0.0-beta に固定してある (versioning=semver で、次のプレリリースと正式版を追う)。エージェントは通信の形式の一部をこのバージョンの通信を記録して起こしていて、asicen-userland 1.0.0 でなければ断る。バージョンを上げるときは、通信を記録し直して Asicen.cs・AsicenUdtv.cs と Dockerfile・asicen-android.sh の SHA-256 を合わせる必要があるので、自動ではマージしない (docs/tuners.md。PR は SHA-256 が合わずに CI で落ちる)。共有の設定は非 major を全部「all dependencies」の 1 つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["Khronos31/asicen-userland"],
       "groupName": "asicen-userland",
@@ -105,15 +97,6 @@
       "allowedVersions": "<3.6",
       "groupName": "openssl-android",
       "groupSlug": "openssl-android",
-      "automerge": false,
-      "addLabels": ["needs-review"]
-    },
-    {
-      "description": "bun の Android 版 (.github/bun-android.sh。Android のアプリに入れる) は、スクリプトにアーカイブと LICENSE.md の SHA-256 も固定してあり、バージョンだけ上げると組めない。SHA-256 を人が入れ替えるので、自動ではマージせず、別の PR に分ける。Dockerfile の oven/bun (docker) はこれまでどおり共有の設定で上がるが、ずれている間は Android の CI が落ちる (APK の denpa 本体もコンテナと同じ bun で動かすため)。両方の PR をそろえてからマージする",
-      "matchDatasources": ["github-releases"],
-      "matchPackageNames": ["oven-sh/bun"],
-      "groupName": "bun-android",
-      "groupSlug": "bun-android",
       "automerge": false,
       "addLabels": ["needs-review"]
     }

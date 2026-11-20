@@ -4,7 +4,7 @@
 #
 #   bash .github/asicen-android.sh <入れ先> <arm64 | x86_64>...
 #
-# 上流の Android 版 (Termux 用の android-aarch64・android-x86_64) をそのまま使う。組み直しはしない。入れ先には APK に入れる形で置く
+# 上流の Android 向けのビルド (Termux 用の android-aarch64・android-x86_64) をそのまま使う。組み直しはしない。入れ先には APK に入れる形で置く
 # (android/app/build.gradle.kts の DENPA_ASICEN)。
 #
 #   jniLibs/<ABI>/libasicend.so・libasicenctl.so   実行ファイル。Android は jniLibs の lib*.so しか実行させない

@@ -15,7 +15,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の Windows には無いためです。Windows Server 2016 では install.ps1 が止まります。
 
 **denpa 本体もエージェントも、Windows の上でそのまま動かします。** WSL・Docker Desktop・コンテナは使いません。
-本体はリリースに添えた `denpa-<バージョン>-windows-x64.zip` (bun・アプリ・ffmpeg・字・ブラウザへ配るデコーダ) で、
+本体はリリースに添えた `denpa-<バージョン>-windows-x64.zip` (bun・アプリ・ffmpeg・フォント・ブラウザへ配るデコーダ) で、
 エージェントは `denpa-agent-<バージョン>-windows-x64.zip` (.NET の実行ファイル。[通知領域のアイコン](#通知領域のアイコン)も入っている) です。どちらも同じバージョンを入れます。
 
 1. **エージェント**: タスク スケジューラに「起動したら実行する」タスク (`denpa-agent`) を SYSTEM で載せます。
@@ -33,8 +33,8 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 `-AgentOnly` では、別の機械の denpa に登録する登録用の URL (`https://<この PC の名前>:25252#pair=<合言葉>`) とその QR を最後に出します。denpa の設定の「受信」の「エージェントを追加」に貼るか読ませます。`TUNER_AGENT_URL` に書いても登録できます ([agent.md](agent.md#エージェントを足す))。
 エージェントは LAN に知らせる (mDNS) ので、同じ LAN の denpa なら「エージェントを追加」の入力欄の下にこの PC の名前が出ます (選んだあとも合言葉は要る。[agent.md](agent.md#lan-で見つける))。
 
-- 録画中に上げ直す・外すと、install.ps1 が録画の終わりを待ってから止めます (録画中かは `denpa-agent --status` で確かめる。
-  エージェントの API は組んだ denpa にしか応答しないので、エージェント自身の証明書で呼ぶもの)。エンコードの途中なら、次に起きたときにやり直します
+- 録画中に上げ直す・外すと、install.ps1 が録画の終わりを待ってから止めます。録画中かは `denpa-agent --status` で確かめます。
+  エージェントの API は組んだ denpa にしか応答しないので、エージェント自身の証明書で呼びます。エンコードの途中なら、次に起きたときにやり直します
 - 入れるときにはドライバを替えません (ほかのソフトで使っていた機材を、聞かずに使えなくしない)。挿さっているチューナーのドライバが WinUSB でなければそれを表示し、替える 1 行を案内します
   ([チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える))
 - genkan (`http://denpa.localhost`) には繋ぎません。この PC からは <http://localhost:3000>、LAN のほかの機器からは `http://<この PC の名前か IP>:3000` で開きます。
@@ -121,12 +121,12 @@ install.ps1 は USB ID の表を持ちません。
 ## 環境変数を足す (`denpa.env`)
 
 **本体の環境変数は `%ProgramData%\denpa\denpa.env` に `KEY=値` で書きます** (変数の一覧は [config.md](config.md))。
-install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_NETWORKS`) を作り、あとは触りません。
+install.ps1 は無いときだけ雛形 (`TZ`・`TRUSTED_NETWORKS`) を作り、あとは触りません。
 管理者でないと書けないので、メモ帳を「管理者として実行」して開きます。`#` で始まる行は読みません。
 
 - **直したら、install.ps1 を流し直すか、Windows を再起動します。** `denpa.cmd` が本体を起動するたびに読み直すので、
   タスク マネージャーで `bun.exe` を終了しても効きます (録画中は終了しないこと)
-- 置き場 (`DENPA_DB`・`RAW_DIR`・`ENCODED_DIR`)・ffmpeg・字とデコーダの置き場・エージェントの宛先 (`TUNER_AGENT_URL`)・`DENPA_VERSION` は
+- 置き場 (`DENPA_DB`・`RAW_DIR`・`ENCODED_DIR`)・ffmpeg・フォントとデコーダの置き場・エージェントの宛先 (`TUNER_AGENT_URL`)・`PORT`・`DENPA_VERSION` は
   install.ps1 が `denpa.cmd` で決め、`denpa.env` に書いても効きません
 - `TRUSTED_NETWORKS` の雛形は `127.0.0.0/8,::1/128,192.168.0.0/16,10.0.0.0/8` です。`127.0.0.0/8` と `::1/128` はこの PC のブラウザです。
   この PC で cloudflared のような前段を動かすときは、前段越しの人もループバックから来たように見えるので、ループバックを外して OIDC を使います
@@ -222,7 +222,7 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 - **CI** (test.yml の `server-windows`・`agent-windows`・`agent-windows-install`): 配布物の ffmpeg で denpa が使う経路 (4K の局の HLG を SDR に直すフィルタを含む) を流し、
   配布物の ffprobe で TS・m2ts・mkv・mp4・fMP4 (HEVC Main10・AAC・ARIB 字幕、H.264・AV1・Opus) を denpa と同じ引数で読み (`tests/native-ffprobe.ts`)、
   進み具合を名前付きパイプ (`stream.sideOutput`) で受け、`SetThreadExecutionState` が `powercfg /requests` に出ることを見る。本体を `bun server.js` で起こして
-  画面・字・デコーダが返ることを見る。install.ps1 で本体ごと入れて SYSTEM のタスクで動き、本体がエージェントと組むところまで。
+  画面・フォント・デコーダが返ることを見る。install.ps1 で本体ごと入れて SYSTEM のタスクで動き、本体がエージェントと組むところまで。
   wslc からの移行は偽の wslc で流す (`tests/install-windows-migrate.ps1`)。通知領域のアイコンは、組んで起動して落ちないこと・二重に起動するとすぐ終わること・
   Run に載ること・上げ直すと動いているものを止めること・外すと消えることまで。
   ドライバを WinUSB に替えるところ (`-WinUsb`) は、聞いてから替える分岐と止まるときの表示を偽の機材と偽の wdi-simple で流し (`tests/install-windows-winusb.ps1`)、

@@ -60,7 +60,7 @@ work="$temp/ffmpeg-work"
 deps="$temp/ffmpeg-deps"
 rm -rf "$prefix" "$probe_prefix" "$work"
 mkdir -p "$prefix" "$probe_prefix" "$work" "$deps"
-# pkg-config は組んだ依存だけを見る (Homebrew の .pc を拾わない)
+# pkg-config は組んだ依存だけを見る (Homebrew の .pc を読まない)
 export PKG_CONFIG_LIBDIR="$deps/opus/lib/pkgconfig:$deps/svt-av1/lib/pkgconfig:$deps/x264/lib/pkgconfig:$deps/dav1d/lib/pkgconfig:$deps/zimg/lib/pkgconfig"
 jobs=$(sysctl -n hw.ncpu)
 
@@ -82,7 +82,7 @@ fetch_x264() {
   tar -xf "$work/src.tar" --strip-components=1
   rm -f "$work/src.tar"
 }
-# この依存を組むか (引数で 1 つだけ頼まれたら、それだけ)。組み上がり (`.done`) があれば組まない
+# この依存を組むか (引数で 1 つだけ指定されたら、それだけ)。組み上がり (`.done`) があれば組まない
 want() { { [ -z "$only" ] || [ "$only" = "$1" ]; } && [ ! -e "$deps/$1/.done" ]; }
 
 # recipe:opus:begin

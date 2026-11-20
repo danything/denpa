@@ -1,26 +1,26 @@
 name: Docker build check
 
 # **Dockerfile を壊したまま main へ入れない。** イメージを組むのは main の
-# build-and-deploy だけだったので、Dockerfile の誤りや arm64 だけで転ぶ依存
+# build-and-deploy だけだったので、Dockerfile の誤りや arm64 だけで失敗する依存
 # (Intel の VA-API ドライバは amd64 にしか無い、配布物の名前が arch で違う) は、入れてから
 # デプロイが止まって初めて分かった。PR の間に両方の arch を本物のランナーで組む
 # (push はしない)。
 #
 # **パスで絞る。** denpa のイメージは ffmpeg を組むので重い。ソースだけの PR は
 # test.yml が見ていて、イメージの中身が変わるのは下のパスを触ったときだけ。
-# 配布用の2つ (.github/aio.Dockerfile と release.Dockerfile。どちらも main の
+# 配布用の 2 つ (.github/aio.Dockerfile と release.Dockerfile。どちらも main の
 # イメージに重ねるだけ) もここで組む。workflow の中でも、触ったものに要るジョブだけを
-# 動かす (下の `changes`) — aio だけの PR で ffmpeg まで組まない。
+# 動かす (下の `changes`)。aio だけの PR で ffmpeg まで組まない。
 #
 # **ここで組めても main で落ちないとは限らない。** src だけの PR はここを通らないので、
 # 起きるかどうかは build-and-deploy でも push の前に同じ .github/image-smoke.sh で見ている。
 #
 # **必須チェックにはしない** (ruleset に足さない)。パスで飛ばした workflow の check は
 # 「保留」のまま残る仕様なので、必須にすると docs だけの PR が塞がる。ジョブの名前
-# (`image (…)`) も必須の context (`check` / `agent` / `e2e (n)` / `claude-review`) と
-# 重ならないようにしてある — bump の PR は GITHUB_TOKEN で開くので workflow が動かず、
+# (`image (…)`) も必須の context (ruleset。docs/development.md の「CI」) と
+# 重ならないようにしてある。bump の PR は GITHUB_TOKEN で開くので workflow が動かず、
 # 必須の context は .github/bump-pr.sh が ruleset から引いて自分で付けている。
-# ここがそれと同じ名前を名乗ると、どちらの結果か読めなくなる
+# ここがそれと同じ名前を使うと、どちらの結果か読めなくなる
 on:
   pull_request:
     branches: [main]
@@ -61,7 +61,7 @@ permissions:
   contents: read
 
 jobs:
-  # 触ったファイルから、動かすジョブを決める。上の paths と同じものを2つに分けて並べる
+  # 触ったファイルから、動かすジョブを決める。上の paths と同じものを 2 つに分けて並べる
   # (paths に足したら、ここにも足す)。手で回したとき (workflow_dispatch) は全部
   changes:
     runs-on: ubuntu-latest
@@ -157,14 +157,14 @@ jobs:
           echo "展開後: $(docker image inspect -f '{{.Size}}' "$image" | numfmt --to=si)B"
           echo "gzip: $(docker save "$image" | gzip | wc -c | numfmt --to=si)B"
 
-  # 配布用の2つを、リリースのときと同じ順で重ねる (release.yml): denpa にバージョンを足して
+  # 配布用の 2 つを、リリースのときと同じ順で重ねる (release.yml): denpa にバージョンを足して
   # (release.Dockerfile)、それにエージェントを写す (aio.Dockerfile)。土台は main で組んだ
-  # 公開の `develop` — どちらも RUN の無い写すだけのものなので、引いて重ねるのに数十秒。
+  # 公開の `develop`。どちらも RUN の無い写すだけのものなので、引いて重ねるのに数十秒。
   # Dockerfile も一緒に変えた PR でも土台は develop のまま (組み合わせは main の aio ジョブで見る)。
   #
   # buildx の builder ではなく docker の既定の builder で組む。前の段で組んだ
   # smoke/denpa-release を、レジストリを通さずに次の FROM で使えるのはこちらだけ。
-  # arch ごとに本物のランナーで組む — エージェントの置き場 (/opt/…-userland) が arch で
+  # arch ごとに本物のランナーで組む。エージェントの置き場 (/opt/asicen-userland) が arch で
   # 欠けていないかもここで分かる
   dist:
     needs: changes

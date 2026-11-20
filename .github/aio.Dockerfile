@@ -13,7 +13,7 @@
 #
 # 起こし方と止め方は aio-entrypoint.ts (シェルが無いので、本体のイメージの bun で回す)。
 # 置き場は既定のまま両方で同じ: DB は `/data`、
-# エージェントの設定 (`tuners.json` / `channels.json`) と取ってきた IT930x のファームウェアは `/config`、録画は `/media` の下
+# エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、録画は `/media` の下
 ARG DENPA
 ARG AGENT
 FROM ${AGENT} AS agent

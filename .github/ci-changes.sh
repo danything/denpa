@@ -56,7 +56,7 @@ while IFS= read -r f; do
     docs/* | site/* | *.md | agent/* | android/* | tray/* | install.sh | install.ps1 | talos/* | charts/* | deploy/* | \
       scripts/build-wdi-simple.ps1 | tests/install-* | tests/native-* | compose.prod.yml | renovate.json | LICENSE | \
       .github/ISSUE_TEMPLATE/* | .github/FUNDING.yml) ;;
-    .github/workflows/*.yml | .github/*.sh | .github/*.c | .github/*.Dockerfile | .github/*.ts) ;;
+    .github/workflows/*.yml | .github/*.sh | .github/*.js | .github/*.Dockerfile | .github/*.ts) ;;
     *) e2e=true ;;
   esac
 
@@ -65,7 +65,7 @@ while IFS= read -r f; do
     tray/Denpa.Tray/* | tray/Denpa.Tray.Tests/* | install.ps1 | scripts/build-wdi-simple.ps1) windows=true ;;
     tray/mac/* | install.sh) macos=true ;;
     android/* | .github/workflows/android.yml | .github/openssl-android.sh | .github/asicen-android.sh | .github/bun-android.sh | \
-      .github/ffmpeg-android.sh | .github/android-agent-smoke.sh | .github/android-app-smoke.sh | .github/android-apk-cert.sh | .github/android-bun-check.js | .github/fake-usb-broker.c) android=true ;;
+      .github/ffmpeg-android.sh | .github/android-app-smoke.sh | .github/android-apk-cert.sh | .github/android-bun-check.js) android=true ;;
     # Android の ffmpeg (Dockerfile の ffmpeg 段から組む) と、エミュレータで流す native-smoke が使うもの
     patches/* | Dockerfile | tests/native-* | packages/arib/src/* | src/lib/hw.ts | src/lib/server/config.ts | src/lib/server/awake.ts | \
       src/lib/server/stream.ts | src/lib/server/uhd.ts | src/lib/server/hwenc.ts) android=true ;;
@@ -78,8 +78,8 @@ while IFS= read -r f; do
     .github/workflows/windows-server.yml | .github/workflows/macos-server.yml | .github/ffmpeg-windows.sh | .github/ffmpeg-macos.sh | \
       patches/* | Dockerfile | .dockerignore | install.sh | install.ps1 | tests/native-* | tests/install-mac-migrate.sh | \
       package.json | packages/*/package.json | bun.lock | server.js | vite.config.ts | drizzle/* | wasm/* | packages/arib/src/* | \
-      src/lib/server/awake.ts | src/lib/server/stream.ts | src/lib/server/uhd.ts | src/lib/server/power.ts | src/lib/server/hwenc.ts | \
-      src/lib/server/auth.ts | src/lib/server/address.ts | src/lib/server/compress.ts | src/lib/server/fresh-worker.ts | \
+      src/lib/hw.ts | src/lib/server/config.ts | src/lib/server/awake.ts | src/lib/server/stream.ts | src/lib/server/uhd.ts | \
+      src/lib/server/power.ts | src/lib/server/hwenc.ts | src/lib/server/auth.ts | src/lib/server/address.ts | src/lib/server/compress.ts | src/lib/server/fresh-worker.ts | \
       src/lib/server/hold-signals.ts)
       bundle=true
       ;;

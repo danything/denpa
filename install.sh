@@ -30,7 +30,7 @@
 #                                                     .env (denpa とエージェントが組むときの合言葉 AGENT_PAIR_TOKEN と、
 #                                                     エージェントのコンテナの機械の名前 AGENT_HOSTNAME。無いときだけ足す)
 #   Mac          /Library/Application Support/denpa/  エージェント (bin/)・本体 (server/。bun・アプリ・ffmpeg・
-#                                                     字・デコーダ)・data/ (DB とその隣のもの・denpa.env・
+#                                                     フォント・デコーダ)・data/ (DB とその隣のもの・denpa.env・
 #                                                     本体を起こす denpa.sh。root だけが読み書きできる)
 #                /Library/LaunchDaemons/io.github.danything.{denpa,denpa-agent}.plist  起動したら起こし、落ちたら起こし直す
 #                /Library/LaunchAgents/io.github.danything.denpa-tray.plist          メニューバーのアプリ (bin/denpa-tray) をログインしたら起こす
@@ -70,8 +70,8 @@ done
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[31mエラー:\033[0m %s\n' "$*" >&2; exit 1; }
 # 時間の上限を付ける。繋がったまま止まる相手 (落ちかけのサイト) だと、付けなければいつまでも待つ。
-# 時間切れも --retry が試し直す
-CURL_LIMITS=(--connect-timeout 20 --max-time 300)
+# 時間切れも --retry が試し直す。上限は本体 (ffmpeg 入り) を遅い回線で取る時間に合わせ、install.ps1 と同じ 10 分
+CURL_LIMITS=(--connect-timeout 20 --max-time 600)
 fetch() { curl -fsSL --retry 3 "${CURL_LIMITS[@]}" -o "$2" "$1" || die "ダウンロードできません: $1"; }
 
 # 入れるバージョン。compose ファイルはこのバージョン (git の ref) から取り、イメージは x.y.z の形式のときだけそのバージョンに
@@ -272,7 +272,9 @@ genkan_left() {
 
 # 止める (コンテナを止めるだけ。~/denpa も録画もボリュームも残す)
 stop_denpa() {
-  if [ -f "$DENPA_DIR/compose.yml" ] && docker_ready "" ""; then compose down; fi
+  [ -f "$DENPA_DIR/compose.yml" ] || return 0
+  docker_ready "コンテナは止めていません。" "コンテナは止めていません。Docker を起こしてから、もう一度流してください" || return 1
+  compose down
 }
 
 # 答えるまで待って、開けるなら開く。LAN から入るときの住所も出す
@@ -311,8 +313,8 @@ wait_and_open() {
 # ---------------------------------------------------------------------------
 linux_main() {
   if [ "$uninstall" = yes ]; then
-    stop_denpa
-    say "止めました。残してあるもの (要らなければ手で消してください):"
+    if stop_denpa; then say "止めました。"; fi
+    say "残してあるもの (要らなければ手で消してください):"
     say "  compose と設定 $DENPA_DIR / 録画と DB は docker volume rm denpa_denpa-data denpa_denpa-recorded denpa_denpa-library"
     genkan_left
     return 0
@@ -378,11 +380,14 @@ mac_pair_token() {
   file="$DENPA_DIR/config/tls/pair-token"
   pair=""
   if [ -s "$file" ]; then pair=$(tr -d '\r\n' < "$file"); fi
-  [ -z "$pair" ] || return 0
-  pair=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
-  mkdir -p "$(dirname "$file")"
-  (umask 077 && printf '%s' "$pair" > "$file.new" && mv "$file.new" "$file")
-  chown "$USER_NAME" "$file"
+  if [ -z "$pair" ]; then
+    pair=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
+    mkdir -p "$(dirname "$file")"
+    (umask 077 && printf '%s' "$pair" > "$file.new" && mv "$file.new" "$file")
+  fi
+  # 読めるのは root だけ (エージェントも denpa も LaunchDaemon で動く)。前のバージョンはその人の持ち物にしていた
+  chown root:wheel "$file"
+  chmod 600 "$file"
 }
 
 # 前のバージョン (本体が Docker) の compose.yml が残っているか (1 行目が install.sh の印)
@@ -558,7 +563,6 @@ mac_register_server() {
       '# denpa 本体の環境変数 (docs/config.md)。install.sh は無いときだけ作り、あとは触らない。' \
       '# 直したら、install.sh を流し直すか Mac を再起動する。置き場・ffmpeg・エージェントの宛先は install.sh が決めるので、書いても効かない' \
       'TZ=Asia/Tokyo' \
-      'ENCODE_CONCURRENCY=2' \
       '# 誰を通すか (docs/auth.md)。127.0.0.0/8 と ::1 はこの Mac のブラウザ' \
       'TRUSTED_NETWORKS=127.0.0.0/8,::1/128,192.168.0.0/16,10.0.0.0/8' > "$env_file"
     chmod 600 "$env_file"
@@ -643,7 +647,7 @@ mac_payload() {
   fi
   mkdir -p new/bin && tar -xzf "$agent" -C new/bin
 
-  # --- denpa 本体 (bun・アプリ・ffmpeg・字・デコーダ)。エージェントと同じバージョン ---
+  # --- denpa 本体 (bun・アプリ・ffmpeg・フォント・デコーダ)。エージェントと同じバージョン ---
   # 本体のバージョン (denpa.sh の DENPA_VERSION)。手元の tar.gz なら空 (dev)
   server_version=""
   if [ "$agent_only" = no ]; then

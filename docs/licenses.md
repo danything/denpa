@@ -8,12 +8,12 @@ denpa のリリースといっしょに出す) は **MIT** ([packages/arib/LICEN
 
 書き方の約束: 「根拠」はリポジトリの中で確かめられるもの (LICENSE ファイル・
 Dockerfile の行・`package.json`) を優先し、上流の表示に拠るものは (上流) と添えます。
-**バージョンはここに書きません。** Renovate が Dockerfile の `ARG` / `ENV` を上げるたびに食い違うので、
+**バージョンは、上げるときに人が確かめるもの (.NET のメジャー・asicen-userland のプレリリースなど) のほかは書きません。** Renovate が Dockerfile の `ARG` / `ENV` を上げるたびに食い違うので、
 いま入っているバージョンは Dockerfile を見てください。
 
 ## コンテナイメージ `denpa` に入るもの
 
-[Dockerfile](../Dockerfile) の `runtime` 段。土台は distroless (`gcr.io/distroless/base-nossl-debian13`。libssl を持たない)。libstdc++・zlib は ffmpeg と GPU のドライバが繋ぐので Debian のパッケージから写す。
+[Dockerfile](../Dockerfile) の `runtime` 段。土台は distroless (`gcr.io/distroless/base-nossl-debian13`。libssl を持たない)。libstdc++・libgcc_s・zlib は ffmpeg と GPU のドライバが繋ぐので Debian のパッケージから写す。
 Debian のパッケージ (libva・ドライバなど) は要るファイルだけを写し、そのパッケージの copyright を
 `/usr/share/doc/<パッケージ>/copyright` に置いています。ソースから組む Rockchip MPP (arm64 だけ) と Mesa (amd64 だけ) は、
 ライセンスの文を `/usr/share/doc/rockchip-mpp/`・`/usr/share/doc/mesa/` に置いています。
@@ -57,10 +57,10 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 
 ### ランタイム
 
-| 名前                                                             | 何に                                 | 出どころ                                                                          | ライセンス                                                                                                                                                                                  |
-| ---------------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bun (実行バイナリだけ `oven/bun` から写す)                       | denpa 本体を動かす                   | <https://github.com/oven-sh/bun>                                                  | MIT (中の JavaScriptCore は LGPL-2.1)                                                                                                                                                       |
-| 土台 (glibc・ca-certificates・tzdata) と、写した libstdc++・zlib | bun と ffmpeg を動かす・証明書・時刻 | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ) | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、zlib は zlib、ca-certificates は MPL-2.0、tzdata はパブリックドメイン |
+| 名前                                                                       | 何に                                 | 出どころ                                                                          | ライセンス                                                                                                                                                                                  |
+| -------------------------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bun (実行バイナリだけ `oven/bun` から写す)                                 | denpa 本体を動かす                   | <https://github.com/oven-sh/bun>                                                  | MIT (中の JavaScriptCore は LGPL-2.1)                                                                                                                                                       |
+| 土台 (glibc・ca-certificates・tzdata) と、写した libstdc++・libgcc_s・zlib | bun と ffmpeg を動かす・証明書・時刻 | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ) | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、zlib は zlib、ca-certificates は MPL-2.0、tzdata はパブリックドメイン |
 
 ## コンテナイメージ `denpa-agent` に入るもの
 
@@ -70,7 +70,7 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 
 | 名前                                                                                              | 何に                                                                                                                                                                                                                                                                                             | 出どころ                                                                                                          | ライセンス                                                                                                                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| .NET 11 ランタイム (AOT でバイナリに埋まる)                                                       | エージェント本体                                                                                                                                                                                                                                                                                 | <https://github.com/dotnet/runtime>                                                                               | MIT                                                                                                                                                                                                                                                                                     |
+| .NET 11 ランタイムと ASP.NET Core (Kestrel。AOT でバイナリに埋まる)                               | エージェント本体                                                                                                                                                                                                                                                                                 | <https://github.com/dotnet/runtime>・<https://github.com/dotnet/aspnetcore>                                       | MIT                                                                                                                                                                                                                                                                                     |
 | asicen-userland (`/opt/asicen-userland`。上流のプレリリース v1.0.0-beta。Linux の amd64 と arm64) | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。`asicend` / `asicenctl` を子プロセスで起動する (配布物に入っている `asicen-ts` は使わない。pcscd 用 IFD ハンドラと mdev の設定は入れない)。エージェントは asicend とソケットで通信するだけで、コードは取り込んでいない | <https://github.com/Khronos31/asicen-userland>                                                                    | **GPL-2.0** (px4-userland 由来の GPL-2.0-only と GPL-2.0-or-later の組み合わせ。静的リンクの libusb は LGPL-2.1+、musl と GCC ランタイムもそれぞれの条件。配布物の `LICENSE`・`THIRD_PARTY_NOTICES.md`・`DEPENDENCY-NOTICE.txt`・`licenses/`・`libusb/`・`toolchain/` を同梱のまま置く) |
 | ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト)          | 挿した直後の PX-W3U3 などに asicend が流し込む                                                                                                                                                                                                                                                   | asicen-userland の配布アーカイブに入っているものをそのまま ([表の下](#asicen-のファームウェアを同梱している判断)) | **ライセンス無し・再配布の許諾は確かめられていない。** 上流と同じ判断で同梱している                                                                                                                                                                                                     |
 | 土台 (glibc・libssl・ca-certificates・libstdc++・tzdata)                                          | エージェントを動かす。libssl はエージェントのポートの HTTPS (denpa と証明書で確かめ合う) で常に使い、`CARD_URL` を https で指したときにも使う。ca-certificates はその相手の証明書の検証                                                                                                          | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ)                                 | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、OpenSSL は Apache-2.0、ca-certificates は MPL-2.0、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、tzdata はパブリックドメイン                                                                                    |
@@ -191,7 +191,7 @@ APK に入る依存は、Kotlin で書くと付いてくる下の 2 つだけで
 Android には OpenSSL が無いので、土台の libssl の代わりに OpenSSL を静的に入れます。
 Siano のファームウェアの許諾の文面 (`LICENCE.siano`) と OpenSSL の `LICENSE.txt` (`LICENSE.openssl` の名前で) は、APK の `assets/licenses/` に入れています。
 
-asicen-userland は、上流の Android 版 (Termux 用の `android-aarch64`・`android-x86_64`) の `asicend`・`asicenctl` を組み直さずに、
+asicen-userland は、上流の Android 向けのビルド (Termux 用の `android-aarch64`・`android-x86_64`) の `asicend`・`asicenctl` を組み直さずに、
 `lib/<ABI>/libasicend.so`・`libasicenctl.so` の名前で入れます (`.github/asicen-android.sh`。アーカイブの SHA-256 を固定して取る)。
 バージョンはイメージと同じ v1.0.0-beta で、上流がコミット `ed215c847979634245fb6a189c582831c462cf44` から組んだものです (模擬のデーモンを組む CI の `ASICEN_USERLAND_REF` と同じ。ずれていれば組むのが止まる)。
 **GPL-2.0 の実行ファイルをそのまま配るので、対応するソースの入手先を添えます。** ソースは上流のリリースの
@@ -202,8 +202,8 @@ asicen-userland は、上流の Android 版 (Termux 用の `android-aarch64`・`
 エージェントは asicend とソケットで通信するだけで、コードは取り込んでいません (イメージと同じ)。ファームウェアは実行しないので `assets/asicen/asicen-loader.bin` に入れ、
 アプリが起動のときに書き出します。扱いはイメージと同じです ([表の上](#asicen-のファームウェアを同梱している判断))。
 
-bun は、公式のリリースの Android 版 (`bun-linux-aarch64-android.zip`) の実行ファイルを組み直さずに、`lib/<ABI>/libbun.so` の名前で入れます
-(`.github/bun-android.sh`。アーカイブと LICENSE.md の SHA-256 を固定して取る)。CI のエミュレータ用の x86_64 の APK には `bun-linux-x64-android-baseline.zip` を入れます。
+bun は、公式のリリースの Android 向けのビルド (`bun-linux-aarch64-android.zip`) の実行ファイルを組み直さずに、`lib/<ABI>/libbun.so` の名前で入れます
+(`.github/bun-android.sh`。アーカイブは同じリリースの SHASUMS256.txt で確かめる)。CI のエミュレータ用の x86_64 の APK には `bun-linux-x64-android-baseline.zip` を入れます。
 bun の `LICENSE.md` (静的に繋いだライブラリの一覧と、JavaScriptCore を組み直す手順がある) を APK の `assets/licenses/bun/` に入れています。
 
 **denpa 本体は `assets/server.zip` に入れます。** Mac・Windows と同じく、上のコンテナイメージ `denpa` と同じものです。アプリ・Denpa Font・ブラウザへ配るデコーダは
@@ -220,8 +220,8 @@ MediaCodec (GPU でのエンコード)・zlib は Android の一部 (`libmediand
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ASP.NET Core (linux の実行時パックの IL を AOT で埋める)                       | エージェントのポートの HTTPS (Kestrel)                                                                       | <https://github.com/dotnet/aspnetcore>                                                               | MIT                                                                                                                                                              |
 | OpenSSL (NDK で組み、静的リンク)                                               | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき                                            | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`)             | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、APK に入れて一緒に配る                                                                              |
-| asicen-userland (上流の Android 版。v1.0.0-beta)                               | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。エージェントが子プロセスで起動する | <https://github.com/Khronos31/asicen-userland> のリリースの `asicen-userland-1.0.0-android-*.tar.gz` | **GPL-2.0**。静的リンクの libusb 1.0.30 は LGPL-2.1+、NDK の libc++ はそれぞれの条件。ソースの入手先と配布物の文書を `assets/licenses/asicen-userland/` に入れる |
-| Bun (`lib/<ABI>/libbun.so`。公式のリリースの Android 版)                       | denpa 本体を動かす                                                                                           | <https://github.com/oven-sh/bun>                                                                     | MIT (中の JavaScriptCore は LGPL-2.1)。`assets/licenses/bun/LICENSE.md`                                                                                          |
+| asicen-userland (上流の Android 向けのビルド。v1.0.0-beta)                     | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。エージェントが子プロセスで起動する | <https://github.com/Khronos31/asicen-userland> のリリースの `asicen-userland-1.0.0-android-*.tar.gz` | **GPL-2.0**。静的リンクの libusb 1.0.30 は LGPL-2.1+、NDK の libc++ はそれぞれの条件。ソースの入手先と配布物の文書を `assets/licenses/asicen-userland/` に入れる |
+| Bun (`lib/<ABI>/libbun.so`。公式のリリースの Android 向けのビルド)             | denpa 本体を動かす                                                                                           | <https://github.com/oven-sh/bun>                                                                     | MIT (中の JavaScriptCore は LGPL-2.1)。`assets/licenses/bun/LICENSE.md`                                                                                          |
 | FFmpeg (`lib/<ABI>/libffmpeg.so`・`libffprobe.so` と libav*。CI が NDK で組む) | 上のイメージの ffmpeg と同じ                                                                                 | <https://ffmpeg.org>                                                                                 | イメージと同じく `--enable-gpl --enable-version3` で、全体は GPL-3.0-or-later。`assets/licenses/ffmpeg/`                                                         |
 | SVT-AV1・Opus・x264・dav1d・zimg (ソースから組み、libav* に静的リンク)         | 上の Mac の表と同じ                                                                                          | 上の Mac の表と同じ                                                                                  | 上の Mac の表と同じ。`assets/licenses/ffmpeg/<名前>/`                                                                                                            |
 | NDK の libc++ (静的リンク)                                                     | zimg (C++)                                                                                                   | <https://android.googlesource.com/toolchain/llvm-project>                                            | Apache-2.0 WITH LLVM-exception                                                                                                                                   |
@@ -229,8 +229,9 @@ MediaCodec (GPU でのエンコード)・zlib は Android の一部 (`libmediand
 
 ### `denpa-aio`
 
-上の `denpa` に、`denpa-agent` の実行ファイルと `/opt/asicen-userland`・Siano の許諾の文面 (`/usr/share/doc/denpa-agent/`) を
-写しただけのもの (`.github/aio.Dockerfile`)。中身もライセンスも上の 2 つと同じです。
+上の `denpa` に、`denpa-agent` の実行ファイルと `/opt/asicen-userland`・Siano の許諾の文面 (`/usr/share/doc/denpa-agent/`)
+と、エージェントの土台の libssl・libcrypto・libzstd (それぞれの status.d と copyright も) を写しただけのもの (`.github/aio.Dockerfile`)。
+中身もライセンスも上の 2 つと同じです (OpenSSL は Apache-2.0、zstd は BSD)。
 
 ## リポジトリに写してあるもの・借りた表
 

@@ -5,8 +5,8 @@ existingClaim を渡したものは作らない
 */ -}}
 {{- $root := . -}}
 {{- /*
-バックアップは PVC ごとのスナップショット (VolSync) で、どれを取るかは chart ではなく
-クラスタ側が決める (danything/gitops の deploy/volsync/application.yaml)。
+バックアップは chart に入れない。どの PVC をどう取るかは入れる側が決める
+(このリポジトリ自身の本番は deploy/volsync.yaml の VolSync)。
 DB の SQLite は WAL なので、スナップショットから自分で立ち直る
 */ -}}
 {{- range $item := list

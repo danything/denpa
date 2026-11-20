@@ -7,7 +7,7 @@
 # Android には OpenSSL が無い (端末の libssl は BoringSSL で、名前も中身も違う)。エージェントは `StaticOpenSslLinking` で
 # 入れ先の lib/libssl.a・libcrypto.a を実行ファイルに入れる (agent/Denpa.Agent/Denpa.Agent.csproj)。入れ先は `OPENSSL_ROOT_DIR` に渡す。
 #
-# **3.5 系 (LTS) に留める。** .NET 11 の暗号の部品は 3.x で確かめられている。4.x に上げるときは、Android の CI で TLS を確かめ直す
+# **3.5 系 (LTS) に留める。** .NET 11 の暗号の部品は 3.x で確かめられている。3.6 以降に上げるときは、Android の CI で TLS を確かめ直す
 # (renovate.json の packageRules)。API レベルは NDK の targets と同じ 24 (.NET 11 の bionic の下限)。
 #
 # 要らないもの (コマンド・テスト・文書・共有ライブラリ・読み込むモジュール) は組まない。入れ先に `.done` があれば組まない。

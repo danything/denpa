@@ -16,7 +16,7 @@ denpa の部品は、チューナーを扱う**チューナーエージェント
 | EDCB               | チューナー・番組表・予約・録画                         | チューナーはエージェント、ほかは denpa 本体                              |
 | テレビで観るアプリ | テレビでライブと録画を観る                             | [denpa-tv](https://github.com/danything/denpa-tv) (Android TV / Fire TV) |
 
-スクランブルの復号 (B25) もエージェントがします ([tuners.md](tuners.md#b-casカードとデスクランブル))。
+スクランブルの復号 (B25) もエージェントがします ([tuners.md](tuners.md#b-cas-カードとスクランブルの復号))。
 
 ## 要らなくなるもの
 

@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # Windows (x64) 用の ffmpeg / ffprobe を組む。MSYS2 の UCRT64 の中で流す (.github/workflows/windows-server.yml)。
 #
-#   bash .github/ffmpeg-windows.sh <出力先>
+#   bash .github/ffmpeg-windows.sh <出力先> [opus | svt-av1]
 #
 # **バージョンと組む部品は Dockerfile の `ffmpeg` 段から読む** (Renovate が上げるのはそちらだけ。
 # 部品の一覧を 2 か所に書くと、片方に足し忘れる)。読むのは FFMPEG_VERSION・SVT_AV1_VERSION・OPUS_VERSION と、

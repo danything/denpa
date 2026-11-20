@@ -12,14 +12,14 @@ metadata:
     #
     # 入れ替えは strategy: Recreate と grace period 21900s に従うので、
     # 録画中は古い Pod が録画を終えるまで残り、そのあと切り替わる。
-    # 入れ替えるのは、クラスタに入っているほう(Reloader か Infisical の operator)。入っていなければ何もしない
+    # 入れ替えるのは、クラスタに入っているほう (Reloader か Infisical の operator)。入っていなければ何もしない
     reloader.stakater.com/auto: "true"
     secrets.infisical.com/auto-reload: "true"
   labels:
     {{- include "denpa.labels" . | nindent 4 }}
 spec:
   replicas: 1
-  # 録画とエンコードを抱えるので、新旧2Podが同時に走らないようにする
+  # 録画とエンコードを抱えるので、新旧 2 つの Pod が同時に走らないようにする
   strategy:
     type: Recreate
   selector:

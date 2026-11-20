@@ -7,7 +7,7 @@
 # **掛かったまま録れた TS を後から復号するには、denpa と同じ置き場が見えている必要がある**
 # (persistence.raw)。別の機械で動かすなら NFS などで同じ実体を両方に見せる。
 # 見せられなくても録画中はその場で復号するので、困るのは録画中にカードが読めなかった
-# ときだけ (docs/tuners.md「B-CASカードとデスクランブル」)
+# ときだけ (docs/tuners.md「B-CAS カードとスクランブルの復号」)
 
 image:
   repository: ghcr.io/danything/denpa-agent
@@ -20,7 +20,8 @@ imageMark: ""
 # denpa の設定の「受信」の「エージェント」に出す名前の元 (エージェントの AGENT_NAME)。空ならノードの名前
 name: ""
 
-# チューナーとカードリーダーに触るために特権が要る。PX-Q3U4・PX-S1UD・CECH-ZD1 J などの
+# チューナーとカードリーダーに触るために特権が要る (Kubernetes には compose の device_cgroup_rules に当たるものが無く、
+# 挿し直しで増えるデバイスのノードを開くには privileged が要る)。PX-Q3U4・PX-S1UD・CECH-ZD1 J などの
 # USB の機材はホストにドライバを入れず、/dev/bus (USB) が見えればエージェントが扱う (docs/tuners.md「要るもの」)
 privileged: true
 hostDevices:

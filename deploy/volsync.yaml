@@ -1,6 +1,6 @@
-# このアプリの PVC を VolSync で R2 に取る(リポジトリは PVC ごとに `<bucket>/volsync/denpa/<pvc>`)。
-# その Secret(volsync-<pvc>)は secrets.sops.yaml。取り方・時刻は danything/gitops の deploy/volsync/application.yaml。アプリと一緒に置くので、
-# アプリを消せばこれも消える(R2 のリポジトリは残る。要らなければ gitops の deploy/backup/README.md「やめる」)。
+# このアプリの PVC を VolSync で R2 に取る (リポジトリは PVC ごとに `<bucket>/volsync/denpa/<pvc>`)。
+# その Secret (volsync-<pvc>) は secrets.sops.yaml。時刻はここの trigger で、VolSync そのものの設定は danything/gitops の deploy/volsync/application.yaml。アプリと一緒に置くので、
+# アプリを消せばこれも消える (R2 のリポジトリは残る。要らなければ gitops の deploy/backup/README.md「やめる」)。
 # PVC を足したら、ReplicationSource と secrets.sops.yaml の volsync-<pvc> を 1 組足す。
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
@@ -52,7 +52,7 @@ spec:
   restic:
     repository: volsync-denpa-encoded
     copyMethod: Snapshot
-    # 録画は 1 世代だけ(docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
+    # 録画は 1 世代だけ (danything/gitops の docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
     retain: { last: "1" }
     moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
     # restic は 1Gi だと、走り始めて 12 秒で OOMKilled になった (2026-11-20。上限を付ける前は 2 分 40 秒で終わっていた)。
@@ -60,7 +60,7 @@ spec:
     moverResources:
       { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 4Gi } }
 ---
-# 戻す側(populator)。PVC agent-config の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
+# 戻す側 (populator)。PVC agent-config の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
 # (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationDestination
@@ -81,7 +81,7 @@ spec:
     cleanupTempPVC: true
     cleanupCachePVC: true
 ---
-# 戻す側(populator)。PVC denpa-data の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
+# 戻す側 (populator)。PVC denpa-data の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
 # (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationDestination
@@ -102,7 +102,7 @@ spec:
     cleanupTempPVC: true
     cleanupCachePVC: true
 ---
-# 戻す側(populator)。PVC denpa-encoded の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
+# 戻す側 (populator)。PVC denpa-encoded の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
 # (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationDestination

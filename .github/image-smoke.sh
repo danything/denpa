@@ -36,7 +36,7 @@ denpa)
     # 放送と同じ形 (MPEG-2 のインターレース + AAC の TS) を作り、denpa が使う経路
     # (エンコード・CM 検出・サムネイル・ffprobe) を一通り通す。GPU はランナーに無いので、
     # エンコーダが組み込まれていることと、ドライバの依存が揃っていることまでを見る。
-    # **イメージにはシェルが無い** (土台は distroless) ので、コマンドは1つずつ直に起こし、
+    # **イメージにはシェルが無い** (土台は distroless) ので、コマンドは 1 つずつ直に起こし、
     # 作ったファイルはボリュームで受け渡す
     work="denpa-smoke-$$"
     docker volume create "$work" > /dev/null
@@ -53,7 +53,7 @@ denpa)
     }
 
     # ライブラリの欠け。dlopen で読むもの (libva のドライバ) は ldd に出ず、
-    # ffmpeg が起きるだけでは分からないので、ld.so に1つずつ依存を解かせる (ldd も無いので bun で回す)
+    # ffmpeg が起きるだけでは分からないので、ld.so に 1 つずつ依存を解かせる (ldd も無いので bun で回す)
     run /usr/local/bin/bun -e '
         const x64 = process.arch === "x64";
         const lib = x64 ? "/usr/lib/x86_64-linux-gnu" : "/usr/lib/aarch64-linux-gnu";
@@ -99,10 +99,10 @@ denpa)
         -f lavfi -i sine=frequency=1000:duration=3 \
         -c:v mpeg2video -flags +ilme+ildct -b:v 8M -c:a aac -ac 2 -f mpegts in.ts
     # **ffmpeg は denpa が使う部品だけで組んである** (Dockerfile の ffmpeg 段)。下は src/lib/server の
-    # 経路を1つずつなぞったもので、部品が欠けていればここで落ちる。経路を足したら、ここにも足す
+    # 経路を 1 つずつなぞったもので、部品が欠けていればここで落ちる。経路を足したら、ここにも足す
     run /usr/local/bin/ffprobe -v error -show_format -show_streams -of json in.ts > /dev/null
     run /usr/local/bin/ffprobe -v error -select_streams v -show_frames -read_intervals %+1 -of json in.ts > /dev/null
-    # 録画のエンコード (encoder.ts)。H.264 は2ヶ国語の音声の分け方も通す
+    # 録画のエンコード (encoder.ts)。H.264 は 2 ヶ国語の音声の分け方も通す
     ff -i in.ts -vf bwdif,scale=-2:720,setsar=1,format=yuv420p -c:v libx264 -preset ultrafast \
         -filter_complex "channelsplit[FL][FR];[FL]aformat=channel_layouts=mono[FLm];[FR]aformat=channel_layouts=mono[FRm]" \
         -map 0:v -map "[FLm]" -map "[FRm]" -c:a libopus -b:a 96k -f matroska h264.mkv
@@ -138,7 +138,7 @@ denpa)
         -map "[full]" -frames:v 1 -c:v libsvtav1 -preset 8 -crf 30 -svtav1-params avif=1 -f avif full.avif \
         -map "[small]" -frames:v 1 -c:v libsvtav1 -preset 8 -crf 30 -svtav1-params avif=1 -f avif small.avif
     # 字幕・コメントを重ねた切り抜き (clips.ts の overlay)。本番の重ねは透明な PNG だが、イメージには PNG の
-    # エンコーダが無いので、lavfi の RGBA の1枚を重ねに見立てる
+    # エンコーダが無いので、lavfi の RGBA の 1 枚を重ねに見立てる
     ff -i thumb.jpg -f lavfi -i testsrc2=size=320x180,format=rgba -map_metadata -1 \
         -filter_complex "[0:v:0][1:v:0]overlay=format=rgb[l1];[l1]split[a][b];[a]scale=w=trunc(iw/2)*2:h=trunc(ih/2)*2:out_color_matrix=bt709:out_range=full,format=yuv420p[full];[b]scale=w='min(160,trunc(iw/2)*2)':h=-2:out_color_matrix=bt709:out_range=full,format=yuv420p[small]" \
         -map "[full]" -frames:v 1 -c:v libsvtav1 -preset 8 -crf 30 -svtav1-params avif=1 -f avif layered.avif \

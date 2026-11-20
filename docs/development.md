@@ -45,8 +45,8 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 手元で回せなければ Actions の **Screenshots** (`.github/workflows/screenshots.yml`) を手で走らせると、
 撮った画像が artifact に上がります。
 
-撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています。画面の BIZ UDPゴシック
-(OFL で配られているもの) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
+撮るイメージ (Dockerfile の `docs` 段) には、本番と同じフォントが入っています。画面の BIZ UDPゴシック
+(OFL で配られているもの) と、放送の文字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
 ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30 fps で組む) は `scripts/capture-docs.ts` の冒頭に
 あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
 
@@ -82,7 +82,7 @@ PR を出して自分でマージします。急ぐときは Actions から手�
 - ファイルをまたいでは当てにできない。実体のある録画が要るテストは `recordOne()` で自分のぶんを録る
 - アプリは開発サーバではなく組んだもの (`bun run build` → `adapter-bun`) をワーカーの数だけ
   動かす。開発サーバを 4 つ立てるより軽く、本番と同じ出力を試せる
-- API へ直接投げるときは `Origin` を付ける。SvelteKit は Origin の無いフォーム形式の POST を
+- API を直接呼ぶときは `Origin` を付ける。SvelteKit は Origin の無いフォーム形式の POST を
   別サイトからの送信として断る (3 からは Content-Type の無い POST/PUT/PATCH/DELETE も)。
   `tests/stack.ts` が付けている。`x-forwarded-proto` は付けない。前段の無い平文の接続には
   server.js が `http` を入れるので、本番の `http://<IP>:3000` と同じ経路を試せる
@@ -95,7 +95,7 @@ CI では 10 組に割って別のランナーに出し、3 ワーカーの 8 �
 1 組から 8 組は、テストの秒数の和がどれも 320 秒ほど (1 ワーカー 110 秒ほど) になるように割ります。
 8 組の秒数の和を 24 ワーカーで割った値が、組の時間の下限です。ジョブの時間は、これにチェックアウト・ビルド・ワーカーの立ち上がりの約 20 秒を足したものです。
 
-- **1 本のスペックは 50 秒以下にします。** 組の時間の下限は、いちばん長いファイル 1 本の時間です。1 本で 60 秒を超えたら、確かめる中身はそのままで、describe やテストの切れ目で
+- **1 本のスペックは 50 秒以下にします。** 組の時間の下限は、いちばん長いファイル 1 本の時間です。50 秒を超えたら、確かめる中身はそのままで、describe やテストの切れ目で
   ファイルを分けます。いまは 03-recording・15-scramble・20-live・22-watch・23-watch-data・26-hwenc・28-live-raw・
   39-watch-stream・40-watch-compat・57-jikkyo・57-jikkyo-recorded をそうして分けてあり、いちばん長いのは 50 秒ほどです
 - 分けた先のファイルは、ほかのファイルの後でも前でも、単独でも通るようにします。同じファイルの前のテストが録った録画を
@@ -112,7 +112,7 @@ CI では 10 組に割って別のランナーに出し、3 ワーカーの 8 �
   50-live-pacing は 20 秒、録画を待つテストはすぐ次の番組 (`reserveSoon` の `skip` を付けない) を録ります
 - どの組にも入れていない新しいスペックは **5 組で流れます** (CI に注記が出る)。あとで所要時間を見て割り直してください
 - shards.json にあるのにファイルが無い・2 つの組に入っている、は CI の「組分けの検算」が落とします
-- 組を増やしたら、test.yml の `shard` の並びと検算の組の名前、main の ruleset の必須チェックにも `e2e (n)` を足します
+- 組を増やしたら、test.yml の `shard` の並びと検算の `range(1; 11)`、main の ruleset の必須チェックにも `e2e (n)` を足します
 
 ワーカー数は**手元では CPU の数そのまま (下限 2・上限 6)、CI (`CI=1`。`docker compose run e2e` も
 そう) では 3 で固定**です (4 つ並べるとチューナー待ちで落ちる。実測は `playwright.config.ts` の冒頭)。
@@ -156,15 +156,15 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
   | e2e     | `e2e (1)`〜`(10)`                                                                | エージェント・通知領域のアプリ・文書・入れ方・配備のほかを触ったとき                          |
   | windows | `agent-windows`・`agent-windows-install`                                         | `agent/`・`tray/Denpa.Tray*`・`install.ps1`・`scripts/build-wdi-simple.ps1`                   |
   | macos   | `agent-macos`・`tray-macos`                                                      | `agent/`・`tray/mac/`・`install.sh`                                                           |
-  | android | `agent-android`                                                                  | `agent/` と、android.yml・Android で組む部品                                                  |
+  | android | `agent-android`                                                                  | `agent/`・android.yml・Android で組む部品・Android の ffmpeg と native-smoke が使うもの       |
   | bundle  | `server-windows-bundle`・`server-windows`・`server-macos-bundle`・`server-macos` | 配布物の組み方・ffmpeg・入れ方・`tests/native-*`・依存と、OS ごとに扱いが違うサーバのファイル |
 
-- test.yml・ci-changes.sh・global.json を触ったときは全部回します。bundle を回すときは windows と macos も回します (配布物を確かめるジョブが、そちらで組んだエージェントを使う)
+- test.yml・ci-changes.sh・global.json を触ったときは全部回します。bundle を回すときは windows・macos・android も回します (配布物を確かめるジョブがそちらで組んだエージェントを使い、Android の APK にも同じ denpa 本体を入れる)
 - 回したか飛ばしたかは `changes` ジョブの Summary に出ます。`changes` が落ちたときも、必須チェックのジョブは回します
 - e2e だけはジョブを走らせ、`changes` を待たずにそれぞれのジョブの最初の段で決めて、中身の段を飛ばします。E2E がいちばん長いので、始まりを遅らせないためです
-- CodeQL の C# の解析は、PR が `agent/`・`tray/`・C# のファイル・global.json を触っていなければ飛ばします (codeql.yml の `language-paths`。中身は 5ym/repo-config の共有の workflow)。
+- CodeQL の C# の解析は、PR が `agent/`・`tray/`・C# のファイル・global.json・codeql.yml を触っていなければ飛ばします (codeql.yml の `language-paths`。中身は 5ym/repo-config の共有の workflow)。
   matrix の 1 つだけはジョブの `if` で飛ばせないので、ジョブは走らせて解析の段を飛ばします。main への push と週 1 回の実行では全部解析します
-- `check`・`agent`・`agent-asicen-mock`・`install-linux`・`talos` はいつも回します。どれも ubuntu のランナーで 2 分かかりません
+- `check`・`agent`・`agent-asicen-mock`・`install-linux`・`talos` はいつも回します。どれも ubuntu のランナーで 2 分ほどです
 - ジョブが読むファイルを足したら、ci-changes.sh の一覧にも足します。足さないと、そのファイルだけを触った PR でジョブの中身が回りません
 
 ### キャッシュ
@@ -174,7 +174,7 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
 - .NET の SDK と NuGet は別のキャッシュに置き、置くのは main だけです。PR が置いたキャッシュはその PR でしか使えず、
   PR ごとに置くと (SDK と NuGet で 840 MB) リポジトリの上限 (10 GB) を超え、ffmpeg や Playwright のキャッシュが古いものから消されるためです
 - csproj を変えた PR は main の前の NuGet を戻し、足りないぶんだけを取ります (`restore-keys`)
-- ffmpeg (Windows・Mac) の鍵は、Dockerfile の ffmpeg 段と組むスクリプトから作ります。そこを変えた PR と、それが main に入った直後の 1 回は組み直します (Windows で 15 分ほど)
+- ffmpeg (Windows・Mac) の鍵は、Dockerfile の ffmpeg 段・`patches/`・組むスクリプト (Windows は MSYS2 のパッケージの一覧も) から作ります。そこを変えた PR と、それが main に入った直後の 1 回は組み直します (Windows で 15 分ほど)
 - Windows で別に置く Opus と SVT-AV1 の組み上がりは、MSYS2 の gcc のパッケージのバージョンも鍵に入れます。SVT-AV1 の静的ライブラリは LTO の中間表現で、
   組んだ gcc と ffmpeg を繋ぐ gcc がずれると壊れるためです (16.2.0-6 で組んだものを 16.2.0-7 で繋いだら、SVT-AV1 のスレッドが Segmentation fault で落ちた)
 - wdi-simple の鍵は、組むスクリプトとランナーのイメージのバージョンです。イメージが上がるたびに組み直し、新しい MSVC で組めるかを見ます。置くのは main だけです
@@ -299,11 +299,11 @@ denpa が起動するのは ffmpeg / ffprobe だけで、シェルを通しま�
 
 ### 外から持ってくるものはバージョンで固定する
 
-ffmpeg・SVT-AV1・emsdk・Denpa Font・asicen-userland は、どれも
+ffmpeg・SVT-AV1・Opus・Mesa・Rockchip MPP・Denpa Font・asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
 Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
 アプリに入れる ffmpeg は Dockerfile の `ffmpeg` 段からバージョンと部品を読み、x264・dav1d・zimg のバージョンは `.github/ffmpeg-android.sh` に書いています (Mac の `ffmpeg-macos.sh` と同じ)。
-`bun-android.sh` のバージョンは Dockerfile の `oven/bun` と別に Renovate が上げます。APK の denpa 本体もコンテナと同じ bun で動かすので、ずれている間は Android の CI が落ちます。両方の PR をそろえてからマージします。
+`bun-android.sh` は Dockerfile の `oven/bun` からバージョンを読みます。APK の denpa 本体もコンテナと同じ bun で動かすためで、Renovate が Dockerfile を上げれば APK の bun も上がります。
 
 **土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は
 `名前:タグ@sha256:…`、ワークフローの `uses:` は `@<コミットの SHA> # vX.Y.Z` の形にします。
@@ -343,10 +343,10 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 - エージェントは `android/agent-libs/<ABI>/libdenpa_agent.so` に置くと APK に入ります (`DENPA_AGENT_LIBS` で別の置き場も渡せます)。
   入れるときに `nativeLibraryDir` へ展開させ (`useLegacyPackaging`)、そこから exec します。Android 10 からは、アプリのデータの置き場のファイルは実行できません
 - asicen-userland は `android/asicen-userland/` に置くと APK に入ります (`DENPA_ASICEN` で別の置き場も渡せます)。`bash .github/asicen-android.sh android/asicen-userland arm64 x86_64` が、
-  上流の Android 版を SHA-256 で確かめて取り、`jniLibs/<ABI>/libasicend.so`・`libasicenctl.so`、ファームウェア、ライセンスの文書を並べます。
+  上流の Android 向けのビルドを SHA-256 で確かめて取り、`jniLibs/<ABI>/libasicend.so`・`libasicenctl.so`、ファームウェア、ライセンスの文書を並べます。
   バージョンが `agent/Dockerfile` と、組んだコミットが test.yml の `ASICEN_USERLAND_REF` と違えば止まります。置かなければ asicen-userland の無い APK になります
 - bun は `android/bun/` に置くと APK に入ります (`DENPA_BUN` で別の置き場も渡せます)。`bash .github/bun-android.sh android/bun arm64 x86_64` が、
-  公式の Android 版を SHA-256 で確かめて取り、`jniLibs/<ABI>/libbun.so` とライセンスの文書を並べます。x86_64 は CI のエミュレータ用で、AVX2 を使わない baseline を入れます。
+  公式の Android 向けのビルドを、同じリリースの SHASUMS256.txt の SHA-256 で確かめて取り、`jniLibs/<ABI>/libbun.so` とライセンスの文書を並べます。x86_64 は CI のエミュレータ用で、AVX2 を使わない baseline を入れます。
   bun は配布物のまま入れます (`keepDebugSymbols`)。jniLibs は APK の中では圧縮されるので、増えるのは arm64 で約 53 MB です。端末には展開した 113 MB が置かれます
 - denpa 本体は `android/server/assets/server.zip` に置くと APK に入ります (`DENPA_SERVER` で別の置き場も渡せます)。中身は Dockerfile の `native-files` 段 (`app/`・`font/`・`mpeg2/`) を
   1 つの zip にしたものです。zip にするのは、AGP が assets の `_` で始まるディレクトリ (SvelteKit の `_app/`) を APK に入れないためです。
@@ -355,7 +355,7 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
   出力は logcat の `denpa-server` に出ます。置かなければ、エージェントだけが動く APK になります
 - ffmpeg は `android/ffmpeg/` に置くと APK に入ります (`DENPA_FFMPEG` で別の置き場も渡せます)。`.github/ffmpeg-android.sh` が NDK で組み、
   `jniLibs/<ABI>/libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリ、ライセンスの文書とソースの入手先を並べます ([encode.md](encode.md#android-でエンコードする))。
-  CI は組み上がりを actions/cache に置き、Dockerfile の `ffmpeg` 段・組むスクリプト・NDK が変わるまで使い回します (依存は別のキャッシュ。Mac と同じ作り)。
+  CI は組み上がりを actions/cache に置き、Dockerfile の `ffmpeg` 段・`patches/`・組むスクリプト・NDK が変わるまで使い回します (依存は別のキャッシュ。Mac と同じ作り)。
   常駐サービスは、APK に入っていれば `FFMPEG`・`FFPROBE` にそのパスを入れてサーバに渡します。APK の中で増えるのは arm64 で約 7 MB、端末には展開した 14 MB が置かれます
 - 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と asicen-userland の機材
   (`AsicenUserland.UsbIds`) と食い違わないことを、エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
@@ -388,7 +388,7 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
 - アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
 - エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
-- denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・字・デコーダを返すこと。エージェントが全部のインターフェースで待ち受け、
+- denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・フォント・デコーダを返すこと。エージェントが全部のインターフェースで待ち受け、
   denpa が 127.0.0.1 からアプリの作った合言葉でエージェントと組み、設定の「受信」の「チューナー」の一覧 (0 台) を読めること
 - アプリの子プロセスの bun で `.github/android-bun-check.js` を流し (debug の受け口)、JIT が動くこと、`localhost` を引けること、
   `/proc` から読めること、bun が自分を子プロセスで起動できること、`TZ=Asia/Tokyo` のタイムゾーンを読めること、`bun:sqlite` で置き場に書けることを見る。外の名前を引けるかと HTTPS は、ランナーのネットワークに左右されるので結果を残すだけ

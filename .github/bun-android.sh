@@ -1,28 +1,23 @@
-
 #!/usr/bin/env bash
-# Android 用 Bun を公式リリースから取得して APK 用に配置する。
-# Usage: bash .github/bun-android.sh <出力先> <arm64 | x86_64>...
+# ---------------------------------------------------------------------------
+# Android のアプリに入れる bun を、bun の公式リリースから取って並べる (.github/workflows/android.yml)。
 #
-# Android 公式版 (bionic / API 28 / 16 KB LOAD) をそのまま使用。
-# x86_64 は AVX2 非依存の baseline 版。
-# SHA-256 は公式 SHASUMS256.txt から取得して検証する。
-# Dockerfile の oven/bun とバージョンが異なる場合は停止する。
+#   bash .github/bun-android.sh <入れ先> <arm64 | x86_64>...
+#
+# 公式の Android 向けのビルド (bionic・API 28・LOAD は 16 KB) をそのまま使う。x86_64 は CI のエミュレータ用で、
+# AVX2 を使わない baseline のビルドを入れる。
+# **バージョンは Dockerfile の oven/bun から読む。** APK の denpa 本体もコンテナと同じ bun で動かすため、
+# 別に書かず、Renovate が Dockerfile を上げればここも上がる。zip は同じリリースの SHASUMS256.txt で照らす
+# ---------------------------------------------------------------------------
 set -euo pipefail
-
-# renovate: datasource=github-releases depName=oven-sh/bun extractVersion=^bun-v(?<version>.*)$
-BUN_VERSION=1.4.5
 
 out=$1
 shift
 [ "$#" -gt 0 ] || { echo "ABI を 1 つ以上渡してください (arm64・x86_64)" >&2; exit 1; }
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-docker=$(grep -oP 'oven/bun:\K[^-\s@]+' "$root/Dockerfile" | head -1)
-
-[ "$docker" = "$BUN_VERSION" ] || {
-  echo "::error::Dockerfile の bun ($docker) と Android Bun ($BUN_VERSION) のバージョンが違います"
-  exit 1
-}
+BUN_VERSION=$(grep -oP 'oven/bun:\K[^-\s@]+' "$root/Dockerfile" | head -1)
+[ -n "$BUN_VERSION" ] || { echo "::error::Dockerfile から bun のバージョンを読めません"; exit 1; }
 
 base="https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION"
 work=$(mktemp -d)

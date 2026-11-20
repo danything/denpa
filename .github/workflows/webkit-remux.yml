@@ -170,11 +170,14 @@ jobs:
       - name: Install Playwright WebKit
         run: |
           set -euo pipefail
+          # テストと同じ Playwright のバージョン (bun.lock) を入れる
+          pw=$(sed -nE 's/.*"playwright": \["playwright@([0-9.]+)".*/\1/p' bun.lock)
+          [ -n "$pw" ] || { echo "bun.lock から Playwright のバージョンを読めません" >&2; exit 1; }
           mkdir -p "$RUNNER_TEMP/pw"
           cp tests/webkit-remux/play.mjs "$RUNNER_TEMP/pw/"
           cd "$RUNNER_TEMP/pw"
           echo '{"type":"module"}' > package.json
-          npm install --no-audit --no-fund playwright@1.65.1
+          npm install --no-audit --no-fund "playwright@$pw"
           npx playwright install webkit
           sw_vers
           sysctl -n machdep.cpu.brand_string

@@ -7,10 +7,10 @@ name: Android
 # 1. OpenSSL を NDK で静的ライブラリに組む (.github/openssl-android.sh)。**組んだものは actions/cache に置き、バージョン・組み方・NDK が
 #    変わるまで使い回す**
 # 2. エージェントを NDK の clang で組む。ASP.NET Core は linux の実行時パックの IL を使わせる (csproj の説明)
-# 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。asicen-userland の上流の Android 版も
+# 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。asicen-userland の上流の Android 向けのビルドも
 #    `libasicend.so`・`libasicenctl.so` の名前で入れる (.github/asicen-android.sh。SHA-256 を固定して取る)。CI は両方の ABI を入れ、
 #    lint と単体テストも流し、R8 で縮める release も debug の鍵で組む。リリースは arm64 だけを入れ、リリースの鍵で署名する。
-#    bun の公式の Android 版も `libbun.so` の名前で入れる (.github/bun-android.sh。SHA-256 を固定して取る)。x86_64 は CI のエミュレータ用。
+#    bun の公式の Android 向けのビルドも `libbun.so` の名前で入れる (.github/bun-android.sh。バージョンは Dockerfile の oven/bun)。x86_64 は CI のエミュレータ用。
 #    ffmpeg・ffprobe は NDK で組み (.github/ffmpeg-android.sh。2 と並べて流す)、`libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリを入れる。
 #    denpa 本体 (Dockerfile の native-files 段) を `assets/server.zip` に入れる。常駐サービスが書き出して bun で起動する
 # 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・asicend の起動・
@@ -45,6 +45,7 @@ env:
   NDK_VERSION: "29.0.14206865"
 
 jobs:
+  # エージェントを ABI ごとに組む。リリースでも x86_64 を組むが、APK には入れない (ffmpeg と同じ。matrix を入力で絞るより単純なため)
   agent:
     name: agent (${{ matrix.abi }})
     runs-on: ubuntu-latest
@@ -128,7 +129,7 @@ jobs:
             out/LICENSE.openssl
           retention-days: 3
 
-  # ffmpeg・ffprobe と libav* を NDK で組む (.github/ffmpeg-android.sh)。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段と
+  # ffmpeg・ffprobe と libav* を NDK で組む (.github/ffmpeg-android.sh)。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段・patches/・
   # 組むスクリプトと NDK が変わるまで使い回す**。依存 (Opus・SVT-AV1・x264・dav1d・zimg) の組み上がりはそれぞれ別のキャッシュに置き、
   # バージョンと組み方が変わるまで使い回す (macos-server.yml の ffmpeg と同じ作り)。リリースでも x86_64 を組むが、APK には入れない
   ffmpeg:

@@ -8,13 +8,13 @@ name: Windows server bundle
 # | 置き場         | 中身                                                                                |
 # | -------------- | ----------------------------------------------------------------------------------- |
 # | `bun.exe`      | bun の Windows 用 (公式のリリース。バージョンは Dockerfile の `oven/bun` と同じ)     |
-# | `app/`         | アプリ (Dockerfile の `app-files` 段)                                               |
-# | `font/`        | Denpa Font (`denpa-font` 段)                                                        |
-# | `mpeg2/`       | ブラウザへ配るデコーダ (`mpeg2wasm` 段)                                             |
+# | `app/`         | アプリ (Dockerfile の `native-files` 段)                                            |
+# | `font/`        | Denpa Font (同じ段)                                                                 |
+# | `mpeg2/`       | ブラウザへ配るデコーダ (同じ段)                                                     |
 # | `ffmpeg/`      | ffmpeg.exe・ffprobe.exe と DLL、ライセンスの文書 (.github/ffmpeg-windows.sh)         |
 # | `licenses/`    | denpa と bun のライセンス                                                           |
 #
-# OS に依らないもの (アプリ・字・デコーダ) は Linux のイメージと同じ段を buildx で組んで取り出す (組み方を 2 か所に書かない)。
+# OS に依らないもの (アプリ・フォント・デコーダ) は Linux のイメージと同じ段を buildx で組んで取り出す (組み方を 2 か所に書かない)。
 # ffmpeg は Windows のランナーの MSYS2 で組む。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段と組む
 # スクリプトが変わるまで使い回す** (組み直すと 20 分を超える)。Opus と SVT-AV1 の組み上がりは ffmpeg とは別のキャッシュに置き、
 # バージョンと組み方と gcc が変わるまで使い回す (ffmpeg の configure の引数だけを変えたときに、この 2 つを組み直さないため)。
@@ -80,7 +80,7 @@ jobs:
 
       # x264 は CLI のパッケージ (mingw-w64-ucrt-x86_64-x264) ではなく、ライブラリだけの libx264 を入れる。CLI は ffms2 を通して
       # MSYS2 の ffmpeg を入れ、その依存の opus・svt-av1 も入る。入っていると、ffmpeg を組むときにソースから組んだものではなく
-      # そちらの DLL (libopus-0.dll・libSvtAv1Enc-4.dll) を拾う
+      # そちらの DLL (libopus-0.dll・libSvtAv1Enc-4.dll) に繋がる
       - name: Set up MSYS2
         if: steps.cache.outputs.cache-hit != 'true'
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
@@ -181,7 +181,7 @@ jobs:
           path: ffmpeg-out
           retention-days: 3
 
-  # アプリ・字・デコーダ (Dockerfile の `native-files` 段)。main のビルドが置いたキャッシュ (amd64、mode=max) から組む
+  # アプリ・フォント・デコーダ (Dockerfile の `native-files` 段)。main のビルドが置いたキャッシュ (amd64、mode=max) から組む
   files:
     runs-on: ubuntu-latest
     timeout-minutes: 30

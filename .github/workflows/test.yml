@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 # 本番コンテナは TZ=Asia/Tokyo で動く。放送日や番組表の日付はローカル時刻で
-# 組み立てるので、ランナー既定のUTCのままだとテストが本番と違う値を見ることになる
+# 組み立てるので、ランナー既定の UTC のままだとテストが本番と違う値を見ることになる
 env:
   TZ: Asia/Tokyo
 
@@ -28,8 +28,8 @@ permissions:
 
 # **ジョブに割って同時に流します。**
 #
-# 1本に並べていた頃は 4分37秒 で、そのうち 181秒 が E2E でした。他は全部
-# 合わせても1分ありません。待っているのは**いちばん遅い1つ**だけでよいので、
+# 1 本に並べていた頃は 4 分 37 秒で、そのうち 181 秒が E2E でした。他は全部
+# 合わせても 1 分ありません。待っているのは**いちばん遅い 1 つ**だけでよいので、
 # 中身の関係ないものを、それぞれ別のランナーに出しています。
 #
 # E2E はさらに 10 組に割ります (組分けは tests/e2e/shards.json)。ランナーは 4 コアで
@@ -93,7 +93,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # 開発は compose 前提だが、CIでイメージを組むと数分かかるうえ
+      # 開発は compose 前提だが、CI でイメージを組むと数分かかるうえ
       # ffmpeg も実チューナーも要らない(テストは全部偽物を使う)ので、
       # ランナーに直接 bun を入れて回す。
       # bun のバージョンは Dockerfile と食い違わないよう、そこから読む
@@ -482,7 +482,9 @@ jobs:
           # install.sh は denpa-agent --status で応答を確かめている (API は組んだ denpa にしか答えない)。
           # 合言葉がエージェント自身の置き場 (config/tls/pair-token) にあり、plist には無く、エージェントがそれを読んで
           # 組むための URL をログに出していること (まだ誰とも組んでいないので出す。docs/agent.md)
-          token=$(cat "$HOME/denpa/config/tls/pair-token")
+          token=$(sudo cat "$HOME/denpa/config/tls/pair-token")
+          # 合言葉は root だけが読める
+          test "$(sudo stat -f '%Su %Lp' "$HOME/denpa/config/tls/pair-token")" = "root 600"
           test "${#token}" = 43
           if grep -q AGENT_PAIR_TOKEN "$plist"; then exit 1; fi
           # --agent-only は別の機械の denpa から繋ぐので、ループバックに絞らない
@@ -496,7 +498,7 @@ jobs:
           test ! -e /Library/LaunchDaemons/io.github.danything.denpa.plist
           # 上げ直しても合言葉は変えない
           sudo -E env PATH="$PATH" bash install.sh --agent-only
-          test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
+          test "$(sudo cat "$HOME/denpa/config/tls/pair-token")" = "$token"
           # Siano と IT930x のファームウェアはエージェントに埋め込んである。Siano の許諾の文面を実行ファイルの隣に置き、
           # siano-userland・px4-userland と px4d のソケットの置き場 (run/) は置かない
           test -f "$prefix/bin/LICENCE.siano"
@@ -573,11 +575,11 @@ jobs:
   # agent-macos と同じく、if で飛ばしたジョブは必須チェックで成功として数えられる
   #
   # **SDK と NuGet は D: に置き、actions/cache で戻す。** setup-dotnet で入れる SDK はランナーの
-  # イメージに入っていないので毎回 300MB を落として展開していて、C: への展開だけで 20 秒かかっていた
+  # イメージに入っていないので毎回 300 MB を落として展開していて、C: への展開だけで 20 秒かかっていた
   # (D: なら 8 秒。ビルドと restore も C: より速い)。キャッシュに当たれば SDK の用意は 10 秒ほどで済む。
   # SDK と NuGet は別のキャッシュに置く。SDK の鍵はバージョンだけ (下の setup-dotnet の行から読む。Renovate が書き換えるのはそこ)、
-  # NuGet の鍵は csproj。**置くのは main だけ** (PR が置いたキャッシュはその PR でしか使えず、1 回で 300〜500MB あって、
-  # 10GB の上限を超えるたびに ffmpeg や Playwright のキャッシュが追い出されていた)。csproj を変えた PR は、
+  # NuGet の鍵は csproj。**置くのは main だけ** (PR が置いたキャッシュはその PR でしか使えず、1 回で 300〜500 MB あって、
+  # 10 GB の上限を超えるたびに ffmpeg や Playwright のキャッシュが追い出されていた)。csproj を変えた PR は、
   # main の前の NuGet を戻して足りないぶんだけを取る (restore-keys)
   agent-windows:
     needs: changes
@@ -1146,7 +1148,7 @@ jobs:
           # 置き場の DB・denpa.env・denpa.sh は root だけのもの。合言葉は denpa.sh にあり、だれでも読める plist には無い
           test "$(sudo stat -f '%Su %Lp' "$prefix/data")" = "root 700"
           sudo test -f "$prefix/data/denpa.env"
-          token=$(cat "$HOME/denpa/config/tls/pair-token")
+          token=$(sudo cat "$HOME/denpa/config/tls/pair-token")
           sudo grep -qF "#pair=$token" "$prefix/data/denpa.sh"
           if grep -qF "$token" /Library/LaunchDaemons/io.github.danything.denpa.plist; then exit 1; fi
           # 本体がエージェントと組む (エージェントの tls/clients に本体の証明書が載る)
@@ -1195,15 +1197,15 @@ jobs:
   # 予約から録画・エンコード・保存先への配置まで、偽の放送で通しで流す
   e2e:
     runs-on: ubuntu-latest
-    # 中身は3分もかからない。ここに引っかかるのは待ちぼうけしているとき
+    # 中身は 3 分もかからない。ここに引っかかるのは待ちぼうけしているとき
     timeout-minutes: 12
     strategy:
-      # 1つ落ちても残りは最後まで流す。落ち方を全部まとめて見たい
+      # 1 つ落ちても残りは最後まで流す。落ち方を全部まとめて見たい
       fail-fast: false
       matrix:
         # 組の中身は tests/e2e/shards.json (実測の所要時間で人が割る)。
         # playwright の --shard はテスト数で機械的に割るので、重いスペックが
-        # 同じ組に固まり、28秒の組と3.6分の組ができていた
+        # 同じ組に固まり、28 秒の組と 3.6 分の組ができていた
         # **組を増やしたら、main の ruleset の必須チェックにも `e2e (n)` を足すこと** (足さないと
         # 増やした組が落ちていてもマージできてしまう。bump の PR は ruleset から引くので直さなくてよい)
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -1245,9 +1247,9 @@ jobs:
         if: env.RUN == 'true'
         run: bun install --frozen-lockfile
 
-      # ブラウザは 270MB ほどあり、毎回落とすと1分近く持っていかれる。
+      # ブラウザは 270 MB ほどあり、毎回落とすと 1 分近く持っていかれる。
       # 中身は Playwright のバージョンでしか変わらないので、それを鍵にする。
-      # **割った先どうしで使い回せている** (実測で 269MB を7秒で復元)
+      # **割った先どうしで使い回せている** (実測で 269 MB を 7 秒で復元)
       - name: Read Playwright version
         if: env.RUN == 'true'
         id: playwright
@@ -1262,13 +1264,13 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       # **`--with-deps` は使わない。** apt を使うところで、キャッシュに乗らないので
-      # 毎回走る。そして**ここだけが詰まる** — 9分24秒 掛かった回があり、上限を
-      # 4分に切ったら今度はそこで打ち切られた (ブラウザ自体はキャッシュから
-      # 7秒で戻っていて、落としてすらいない)。
+      # 毎回走る。そして**ここだけが詰まる。** 9 分 24 秒掛かった回があり、上限を
+      # 4 分に切ったら今度はそこで打ち切られた (ブラウザ自体はキャッシュから
+      # 7 秒で戻っていて、落としてすらいない)。
       #
-      # 何を入れているのか数えたら、**ライブラリは1つも要らなかった**。
+      # 何を入れているのか数えたら、**ライブラリは 1 つも要らなかった**。
       # ubuntu-latest には chromium の依存 (libnss3, libgbm1, libasound2t64…) が
-      # 全部入っていて、新しく入るのは**フォント9つだけ**
+      # 全部入っていて、新しく入るのは**フォント 9 つだけ**
       # (fonts-ipafont-gothic, xfonts-* など)。E2E は DOM の文字を見るだけで
       # 画像は比べていないので、字が豆腐でも結果は変わらない。
       #
@@ -1280,8 +1282,8 @@ jobs:
         run: bunx playwright install chromium
 
       # **組分けの検算と、この組で流すスペック。** shards.json に書いた名前のファイルが無い
-      # (消した・名前を変えた)、2つの組に入っている、は落とす。**どの組にも入っていない
-      # スペックは 5 組で流す** — 落とすと、同じ日に e2e を足す PR どうしが shards.json の
+      # (消した・名前を変えた)、2 つの組に入っている、は落とす。**どの組にも入っていない
+      # スペックは 5 組で流す。** 落とすと、同じ日に e2e を足す PR どうしが shards.json の
       # 同じ行を取り合ってぶつかる。足した PR では 5 組に寄るだけなので、所要時間を見て
       # あとで割り直せばよい (どれが寄ったかは注記に出す)
       - name: 組分けの検算
@@ -1311,12 +1313,12 @@ jobs:
       # イメージを使わずランナーで回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
       #
       # **組んだものは actions/cache に置いて使い回す。** 中身が変わるのは段の書き方
-      # (emsdk・FFmpeg のバージョン) か wasm/decoder.c を変えたときだけなので、その2つを鍵にする。
+      # (emsdk・FFmpeg のバージョン) か wasm/decoder.c を変えたときだけなので、その 2 つを鍵にする。
       # 当たれば 1〜2 秒で戻る (前は buildx を立てて層のキャッシュから組み直すのに 15 秒ほど)。
-      # **どの組でも戻す** — 要るスペック (28-live-raw・38-live-compat…) がどの組にあっても、
+      # **どの組でも戻す。** 要るスペック (28-live-raw・38-live-compat…) がどの組にあっても、
       # 組分けを気にせず足せるように。外れたときだけ、その組で組んで置く (外れるのは
-      # 上の2つを変えた PR と、それが main に入った直後の1回だけ。組が同時に組んでも
-      # 置けるのは1つで、残りは「もうある」と言って置かずに進む)
+      # 上の 2 つを変えた PR と、それが main に入った直後の 1 回だけ。組が同時に組んでも
+      # 置けるのは 1 つで、残りは「もうある」と言って置かずに進む)
       - name: Key for the MPEG-2 decoder (WASM)
         if: env.RUN == 'true'
         id: mpeg2
@@ -1344,8 +1346,8 @@ jobs:
           path: ${{ runner.temp }}/mpeg2
           key: ${{ steps.mpeg2-cache.outputs.cache-primary-key }}
 
-      # アプリを1度だけ組んでから、ワーカーの数だけ立てる。
-      # 偽エージェント・偽通知先もワーカーごとに1式ずつ (tests/stack.ts)。
+      # アプリを 1 度だけ組んでから、ワーカーの数だけ立てる。
+      # 偽エージェント・偽通知先もワーカーごとに 1 式ずつ (tests/stack.ts)。
       # **9 組と 10 組は 1 ワーカー。** ライブの貯め方 (50-live-pacing・51-live-gaps) は、ほかのワーカーが動くと届く間隔が乱れて
       # 落ちるので、1 本ずつ別の組で流す (shards.json の注記)
       - name: E2E tests
