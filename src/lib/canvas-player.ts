@@ -140,6 +140,11 @@ export interface CanvasPlayer {
   setAudio(id: string): void;
   /** 「再生する音」として鳴らすか */
   background(on: boolean): void;
+  /**
+   * `at` 秒 (物差しの上) から先のコマを描かない。null で外す。CM を飛ばすとき、次の CM の先頭を渡す
+   * (画面の刻みが遅れて飛ぶのが間に合わなくても、CM の 1 コマ目を描かない)。飛んだあとも、飛び先より後ろなら持ち越す
+   */
+  stopAt(at: number | null): void;
   /** いまのコマ。`size` を付けると縮めたもの (`RawEngine.grab`) */
   grab(size?: GrabSize): Promise<ImageBitmap | null>;
   pipStream(): MediaStream | null;
@@ -192,6 +197,10 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   let time = Math.max(0, options.start);
   /** 元の TS の物差しの 0 (PTS)。ストリームごとに応答で知る */
   let origin = 0;
+  /** 元の TS の物差しの 0 を応答で知ったか。知るまでは PTS に直せない (`stopAt`) */
+  let heardOrigin = input !== "ts-mpeg2";
+  /** ここから先のコマを描かない位置 (秒。`stopAt`) */
+  let stop: number | null = null;
   let audio = options.audio;
   let run = 0;
   let controller: AbortController | null = null;
@@ -268,6 +277,17 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
       input === "ts-mpeg2" ? sinceHead(pts, origin) : pts / CLOCK,
     );
     return time;
+  }
+
+  /** 物差しの上の秒を、届くものの PTS (90 kHz。元の TS なら一周の中) に。`reset` の `from` と同じ */
+  function ptsOf(seconds: number): number {
+    const pts = Math.round(seconds * CLOCK);
+    return input === "ts-mpeg2" ? inWrap(origin + pts) : pts;
+  }
+
+  /** 描かない位置 (`stop`) をエンジンへ渡す。PTS に直せないうちは渡さず、物差しの 0 を知ったところで渡す (`read`) */
+  function sendStop(): void {
+    if (heardOrigin) engine.stopAt(stop === null ? null : ptsOf(stop));
   }
 
   /**
@@ -378,9 +398,15 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         }
         if (at === null) {
           origin = heard.origin;
-          engine.reset(inWrap(origin + Math.round(from * CLOCK)));
+          heardOrigin = true;
+          engine.reset(ptsOf(from));
         }
-      } else engine.reset(Math.round(from * CLOCK));
+      } else engine.reset(ptsOf(from));
+      // `reset` で外れた描かない位置を渡し直す。飛び先より手前のもの (跨いだ CM の先頭) は捨てる
+      if (at === null && stop !== null) {
+        if (stop <= from) stop = null;
+        else sendStop();
+      }
       const splitter = input === "fmp4" ? new Fmp4Splitter() : null;
       reader = response.body.getReader();
       for (;;) {
@@ -460,6 +486,11 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
       ended = false;
       unstarve();
       void load(Math.max(0, to));
+    },
+    stopAt(at: number | null): void {
+      if (closed || at === stop) return;
+      stop = at;
+      sendStop();
     },
     play(): void {
       if (closed || !paused) return;

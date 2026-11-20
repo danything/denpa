@@ -170,6 +170,12 @@ let pendingBytes = 0;
  */
 let floorRaw: number | null = null;
 let floor: number | null = null;
+/**
+ * ここから先のコマは描かない (`stop`。次の CM の先頭)。`floor` と同じく、届いたものの近くに伸ばすまでは
+ * 一周の中の値 (`ceilingRaw`) で持つ。`reset` で外す
+ */
+let ceilingRaw: number | null = null;
+let ceiling: number | null = null;
 
 /** いま開いている音の形式 (`標本化周波数/チャンネル数`)。変わったら開き直す */
 let audioConfig = "";
@@ -312,6 +318,15 @@ function under(pts: number): boolean {
     floorRaw = null;
   }
   return floor !== null && pts < floor;
+}
+
+/** 描かない所 (`ceiling`) のコマか。比べ方は `under` と同じ */
+function beyond(pts: number): boolean {
+  if (ceilingRaw !== null && near !== null) {
+    ceiling = unwrap(ceilingRaw, near);
+    ceilingRaw = null;
+  }
+  return ceiling !== null && pts >= ceiling;
 }
 
 /** デコードできたフレームのうち、飛び先より前のものを捨てる (描かない。参照には使い終えている) */
@@ -600,9 +615,9 @@ function tick(): void {
     present(decoder, at);
   }
 
-  // 映像が時計からどれだけ遅れているか。**デコードできたフレームが無いまま番を過ぎている**ぶん
+  // 映像が時計からどれだけ遅れているか。**デコードできたフレームが無いまま番を過ぎている**ぶん。描かない所 (`beyond`) で止めているぶんは数えない
   const behind =
-    current === null || decoder._dec_count() > 0
+    current === null || decoder._dec_count() > 0 || beyond(at)
       ? 0
       : Math.max(0, (at - current.pts - frameTicks) / CLOCK);
   /*
@@ -711,12 +726,19 @@ function thin(decoder: Decoder, late: number): void {
 
 /** 番が来たコマを上げ、`at` に出すフィールドを描く。描いたら true */
 function present(decoder: Decoder, at: number): boolean {
-  // 次のフレームがもう番を迎えているなら、手前のフレームは上げずに捨てる
+  // 次のフレームがもう番を迎えているなら、手前のフレームは上げずに捨てる。描かない所 (`beyond`) のコマは数えない
   while (decoder._dec_count() >= 2 && decoder._dec_pts_at(1) <= at) {
+    const held = beyond(decoder._dec_pts_at(0));
     decoder._dec_pop();
-    dropped++;
+    if (!held) dropped++;
   }
-  if (decoder._dec_count() >= 1 && decoder._dec_pts_at(0) <= at) take();
+  // 描かない所のコマは上げない。いま出ているコマ (本編の最後のコマ) のまま
+  if (
+    decoder._dec_count() >= 1 &&
+    decoder._dec_pts_at(0) <= at &&
+    !beyond(decoder._dec_pts_at(0))
+  )
+    take();
   if (current === null) return false;
   const before = shown;
   draw(fieldAt(current, at, frameTicks));
@@ -728,8 +750,9 @@ function tickFmp4(video: Fmp4Video): void {
   const at = now();
   video.tick(at);
   if (at === null) return;
+  // 描かない所 (`stopAt`) で止めているぶんは遅れに数えない
   const late =
-    video.current === null || video.waiting > 0
+    video.current === null || video.waiting > 0 || video.held
       ? 0
       : Math.max(0, (at - video.current - video.frameTicks) / CLOCK);
   dropped = video.dropped;
@@ -786,6 +809,8 @@ function reset(from: number | null): void {
   overflowed = false;
   floorRaw = from;
   floor = null;
+  ceilingRaw = null;
+  ceiling = null;
   started = false;
   near = null;
   clock.clear();
@@ -1004,6 +1029,13 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
         // ここより前に出した音は前の局のもの。画面はこの返事まで捨てる (`engine.ts` の `resetting`)。
         // 失敗しても返す。返さないと、画面はこのあとの音をずっと捨て続ける
         post({ type: "reset" });
+      }
+      break;
+    case "stop":
+      if (fmp4 !== null) fmp4.stopAt(message.at);
+      else {
+        ceilingRaw = message.at;
+        ceiling = null;
       }
       break;
     case "end":

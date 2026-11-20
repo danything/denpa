@@ -30,6 +30,10 @@ class FakeEngine {
   reset(from: number | null = null): void {
     this.resets.push(from);
   }
+  stops: (number | null)[] = [];
+  stopAt(at: number | null): void {
+    this.stops.push(at);
+  }
   finish(): void {
     this.finished = true;
   }
@@ -218,5 +222,35 @@ describe("元の TS が途中で切れたら (canvasPlayer)", () => {
     playing = player;
     await until(() => engine.finished);
     expect(asked.map((a) => a.offset)).toEqual([undefined, undefined]);
+  });
+});
+
+/**
+ * **CM の先頭から先のコマを描かせない** (`stopAt`)。元の TS は応答で物差しの 0 (`X-Denpa-Origin`) を知るまで PTS に直せないので、
+ * 知ってから渡す。飛んで worker が空になったら渡し直し、飛び先より手前のもの (跨いだ CM の先頭) は捨てる
+ */
+describe("描かない位置 (canvasPlayer)", () => {
+  test("物差しの 0 を知ってから PTS で渡し、飛んだら渡し直す。跨いだものは捨てる", async () => {
+    const { player, asked, engine } = open(() => stream(DATA, START, false));
+    playing = player;
+    // 応答の前に頼まれた。まだ PTS に直せない
+    player.stopAt(60);
+    expect(engine.stops).toEqual([]);
+    await until(() => engine.finished);
+    expect(engine.stops).toEqual([ORIGIN + 60 * 90_000]);
+    // 手前へ飛んだ。worker は空になるので渡し直す
+    player.seek(30);
+    await until(() => asked.length === 2 && engine.resets.length === 4);
+    expect(engine.stops.at(-1)).toBe(ORIGIN + 60 * 90_000);
+    // CM の先へ飛んだ。跨いだものは渡さない
+    const before = engine.stops.length;
+    player.seek(90);
+    await until(() => asked.length === 3 && engine.resets.length === 6);
+    expect(engine.stops).toHaveLength(before);
+    // 次の CM を渡し、外す
+    player.stopAt(120);
+    expect(engine.stops.at(-1)).toBe(ORIGIN + 120 * 90_000);
+    player.stopAt(null);
+    expect(engine.stops.at(-1)).toBeNull();
   });
 });

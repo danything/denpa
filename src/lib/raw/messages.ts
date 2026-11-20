@@ -61,6 +61,11 @@ export type ToWorker =
    * (キーフレーム・1 秒前) から流すので、手前の映像 (CM を飛ばしたなら CM の映像) を出さないため
    */
   | { type: "reset"; from?: number | null }
+  /**
+   * 録画で、`at` (90 kHz。`reset` の `from` と同じ物差し) から先のコマを描かない。**null で外す。** `reset` でも外れる。
+   * CM を飛ばすとき、次の CM の先頭を渡す。画面が飛ぶのが遅れても、CM の 1 コマ目は描かずに本編の最後のコマを出したままにする
+   */
+  | { type: "stop"; at: number | null }
   /** もう届かない (録画の末尾まで読んだ。`engine.ts` の `finish`)。Matroska は待たせているコマを出しきり (`mkv.ts`)、fMP4 と Matroska の映像はデコーダに残ったフレームを出させる (`fmp4.ts` の `finish`) */
   | { type: "end" }
   /** 何本目の音声をデコードするか (`AudioTrack.stream`) */

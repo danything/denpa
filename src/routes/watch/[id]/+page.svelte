@@ -177,11 +177,14 @@
     transcodes,
   } from "#lib/ts/playback.js";
   import {
+    CallGaps,
     type Chapter,
     chapterAt,
+    cmLead,
     cmSpans,
     isCm,
     nextChapterAt,
+    nextCmStart,
     plainMarks,
     playbackAt,
     prevChapterAt,
@@ -636,6 +639,8 @@
     // 作り直したプレイヤーが流れ出した (描き始めた)
     if (canvas.flowing) release(now);
     paint();
+    guardCm();
+    markCall(canvas.flowing);
     hopCm();
     feedData();
   }
@@ -2060,7 +2065,7 @@
   let skipped = $state(false);
   let skipNotice: ReturnType<typeof setTimeout> | null = null;
   /**
-   * 跨いでいる間、最後の本編のコマで覆う面。先読み (`CM_LEAD`) だけでは、コンポジタへ渡し済みの
+   * 跨いでいる間、最後の本編のコマで覆う面。先読み (`ts/watch.ts` の `cmLead`) だけでは、コンポジタへ渡し済みの
    * コマが出てしまう。黒で塗らないのは、止まったコマのほうが飛んだように見えるため
    */
   let cover = $state<HTMLCanvasElement | null>(null);
@@ -2508,25 +2513,59 @@
   }
 
   /**
-   * CM を跨ぐ手前で飛ぶための先読み (秒。30 コマ/秒で 3 コマ)。入ってから飛ぶと必ず CM のコマが見え、
-   * コンポジタに渡し済みのコマもあるので 1 コマぶんでは間に合わない。本編の末尾 0.1 秒が静止画になるが、
-   * 境目は場面の切れ目なので分からない
+   * CM を跨ぐ判断をした呼び出しの間隔 (`ts/watch.ts` の `CallGaps`)。`<video>` は映したコマごと (`follow`)、
+   * canvas は刻みごと (`canvasTick`) に測る。画面の処理が詰まって間遠になっていれば、先読み (`cmLead`) を伸ばす
    */
-  const CM_LEAD = 0.1;
+  const callGaps = new CallGaps();
 
-  /** CM の中にいたら、その終わりまで飛ぶ (続いている CM はまとめて。判断は `ts/watch.ts`) */
-  function hopCm(): void {
+  /** CM の手前で飛ぶ判断をする呼び出しが来た。流れている間だけ間隔を測り、止めた・飛んでいる間は数えない */
+  function markCall(flowing: boolean): void {
+    if (flowing && !waiting) callGaps.mark(performance.now());
+    else callGaps.pause();
+  }
+
+  /**
+   * 次の CM の先頭を、canvas のプレイヤーに「ここから先は描かない」と渡す (`canvas-player.ts` の `stopAt`)。
+   * 画面の刻み (40 ms) が遅れて飛ぶのが間に合わなくても、CM の 1 コマ目は描かれず、本編の最後のコマのまま飛ぶ。
+   * 飛ばさないとき (オフ・つまんでいる最中・作り直している最中) は外す
+   */
+  function guardCm(): void {
+    if (canvas === null) return;
+    canvas.stopAt(
+      skipCm && scrub === null && !holding
+        ? nextCmStart(chapters, canvas.currentTime)
+        : null,
+    );
+  }
+
+  /**
+   * CM の中にいたら、その終わりまで飛ぶ (続いている CM はまとめて。判断は `ts/watch.ts`)。
+   * `shown` は `<video>` が映したばかりのコマの時刻 (`follow`)。位置 (`currentTime`) より先にいることがある
+   * (Chromium は次の画面の切り替わりに出すコマを先に渡す) ので、先にいるほうで決める
+   */
+  function hopCm(shown?: number): void {
     // 飛んだ先を待っている最中と、シークバーをつまんでいる最中 (離したら着いた先で決める) は飛ばない
     if (waiting || !skipCm || (video === null && canvas === null)) return;
     // 段を替えるために作り直している最中も飛ばない。位置はまだ観ていた所に戻っていない (`hold`)
     if (scrub !== null || holding) return;
-    const to = skipTarget(chapters, mediaTime(), CM_LEAD);
+    const now = mediaTime();
+    // 飛んだ直後のコマは飛ぶ前の時刻を持っていることがある (`unslip`)。離れていれば使わない
+    const here =
+      shown !== undefined && Math.abs(shown - now) < 1
+        ? Math.max(now, shown)
+        : now;
+    // canvas は早送りしない (`setSpeed`)
+    const lead = cmLead(
+      canvas === null ? speed : 1,
+      callGaps.worst(performance.now()),
+    );
+    const to = skipTarget(chapters, here, lead);
     if (to === null) return;
     /*
-     * canvas は覆わない。プレイヤーは飛び先より前のフレームを捨て、描けるまで本編の最後のコマを
-     * 出したままにする (`raw/worker.ts` の `floor`)。字幕だけ消す
+     * canvas は覆わない。プレイヤーは CM の先頭から先を描かず (`guardCm`)、飛んだあとも飛び先より前のフレームを捨て、
+     * 描けるまで本編の最後のコマを出したままにする (`raw/worker.ts` の `floor`)。字幕だけ消す
      */
-    if (canvas === null) shut();
+    if (canvas === null) shut(here);
     else clearCaptions();
     hopTo = to;
     waiting = true;
@@ -2541,10 +2580,11 @@
   /**
    * いま映っているコマを写して覆う (飛ぶ前に呼ぶ)。写すのは本編にいるときだけ。CM の中
    * (チャプターがまだ無いときも) で写すと覆いが CM の 1 コマになる。写せないときは黒で塗って枠ごと覆う。
-   * CM の字幕も一緒に消す
+   * CM の字幕も一緒に消す。`at` は映っているコマの位置 (`hopCm`。省けば `currentTime`)
    */
-  function shut(): void {
-    const here = video === null ? null : chapterAt(chapters, video.currentTime);
+  function shut(at?: number): void {
+    const here =
+      video === null ? null : chapterAt(chapters, at ?? video.currentTime);
     const source =
       video !== null &&
       here !== null &&
@@ -2784,7 +2824,8 @@
       if (!hopping && target.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA)
         askCaptions();
       paint();
-      hopCm();
+      markCall(!target.paused && !target.seeking);
+      hopCm(meta?.mediaTime);
       return true;
     });
   }

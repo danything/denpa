@@ -180,6 +180,10 @@ export class Fmp4Video {
    * 飛び先の手前のキーフレームから流してくる。最初の 1 枚を描いたら外す
    */
   private floor: number | null = null;
+  /** ここから先 (µs。`stopAt`) のフレームは描かない。次の CM の先頭。`reset` で外す */
+  private ceiling: number | null = null;
+  /** 最後の刻みの時計 (µs)。`held` が使う */
+  private clockAt: number | null = null;
   private lastPts: number | null = null;
   /** もう届かない (`finish`)。デコーダに渡す前のチャンクをすべて渡したら、デコーダに残ったフレームを出させる */
   private ending = false;
@@ -481,14 +485,36 @@ export class Fmp4Video {
     }
 
     const now = micros(at);
-    // 次のフレームがもう表示時刻を迎えているなら、手前のフレームは描かずに捨てる
+    this.clockAt = now;
+    // 次のフレームがもう表示時刻を迎えているなら、手前のフレームは描かずに捨てる。描かない所 (`beyond`) のフレームは数えない
     while (this.frames.length >= 2 && this.frames[1]!.timestamp <= now) {
-      this.frames.shift()?.close();
-      this.dropped++;
+      const frame = this.frames.shift()!;
+      if (!this.beyond(frame.timestamp)) this.dropped++;
+      frame.close();
     }
     const next = this.frames[0];
-    if (next !== undefined && next.timestamp <= now)
+    // 描かない所のフレームは描かない。いま出ているフレーム (本編の最後のコマ) のまま
+    if (
+      next !== undefined &&
+      next.timestamp <= now &&
+      !this.beyond(next.timestamp)
+    )
       this.draw(this.frames.shift() as VideoFrame);
+  }
+
+  /** 描かない所 (`stopAt`) のフレームか */
+  private beyond(timestamp: number): boolean {
+    return this.ceiling !== null && timestamp >= this.ceiling;
+  }
+
+  /** 時計が描かない所に入っていて、前のフレームのまま止めているか。止めているぶんは遅れに数えない (`worker.ts` の `tickFmp4`) */
+  get held(): boolean {
+    return this.clockAt !== null && this.beyond(this.clockAt);
+  }
+
+  /** `at` (90 kHz) から先のフレームを描かない。null で外す (`messages.ts` の `stop`) */
+  stopAt(at: number | null): void {
+    this.ceiling = at === null ? null : micros(at);
   }
 
   /**
@@ -544,6 +570,8 @@ export class Fmp4Video {
    */
   reset(from: number | null = null): void {
     this.floor = from === null ? null : micros(from);
+    this.ceiling = null;
+    this.clockAt = null;
     this.keep([]);
     this.overflowed = false;
     this.ending = false;
