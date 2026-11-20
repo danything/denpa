@@ -38,7 +38,7 @@ RUN bun install
 # ---------------------------------------------------------------------------
 FROM docker.io/emscripten/emsdk:7.0.0@sha256:6bd7aef93408b10bf7b36642cb7c91119b302f720b9ec2d20439f73cf07fe894 AS mpeg2wasm
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
-ARG FFMPEG_VERSION=9.0.2
+ARG FFMPEG_VERSION=9.1
 COPY wasm/decoder.c /src/decoder.c
 RUN <<'EOF'
 #!/bin/bash
@@ -192,7 +192,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libx264-dev libdav1d-dev libva-dev libzimg-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
-ENV FFMPEG_VERSION=9.0.2
+ENV FFMPEG_VERSION=9.1
 # SVT-AV1 は**上流の最新をソースから組む** (Debian trixie のパッケージは 2 系で古い。
 # 3 系以降は速度も画質も別物)。libavcodec の .so に静的に繋ぐので、SVT-AV1 の共有ライブラリは要らない
 # (そのために `-DCMAKE_POSITION_INDEPENDENT_CODE=ON` で組む)
