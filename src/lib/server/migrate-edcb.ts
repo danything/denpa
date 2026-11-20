@@ -452,6 +452,7 @@ export async function startEdcb(
 ): Promise<{ started: boolean; message: string }> {
   if (running() || starting)
     return { started: false, message: "すでに実行中です" };
+  if (transferBusy()) return { started: false, message: BUSY_MESSAGE };
   const trimmed = input.trim();
   if (trimmed === "")
     return {

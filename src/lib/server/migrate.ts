@@ -300,7 +300,7 @@ function placement(
   file: VideoChoice,
   existing: Recording | undefined,
 ) {
-  const parsed = parseTitle(recorded.name);
+  const parsed = parseTitle(text(recorded.name));
   /*
    * 元の TS は保存先ではなく作業領域へ置く。
    *
@@ -362,14 +362,14 @@ async function importOne(
   const existing = importedRow(recorded.id);
   if (alreadyImported(existing)) return "skipped";
 
+  // 番組名は EPGStation が持っていたまま (半角に寄せない。保存先の名前は `sanitizeFileName` が寄せる)
+  const name = text(recorded.name);
   const file = chooseFile(recorded);
   if (file === null) {
-    record(`ファイルが無い: ${recorded.name}`);
+    record(`ファイルが無い: ${name}`);
     return "missing";
   }
 
-  // 番組名は EPGStation が持っていたまま (半角に寄せない。保存先の名前は `sanitizeFileName` が寄せる)
-  const name = recorded.name;
   recordPlan(
     options,
     existing === undefined ? "取り込む" : "取り込み直す",
@@ -999,7 +999,7 @@ async function importRecordings(
   const entries = list_.filter((item) => {
     if (!flag(item.isRecording) && !flag(item.isEncoding)) return true;
     record(
-      `録画中かエンコード中なので飛ばします (次の実行で入ります): ${item.name}`,
+      `録画中かエンコード中なので飛ばします (次の実行で入ります): ${text(item.name)}`,
     );
     return false;
   });
@@ -1050,7 +1050,7 @@ async function importRecordings(
   }
 
   for (const item of entries) {
-    status_.current = item.name;
+    status_.current = text(item.name);
     emit("migrate");
     try {
       const result = await importOne(item, options, context);
@@ -1059,7 +1059,7 @@ async function importRecordings(
       if (context.signal.aborted) throw error;
       status_.failed++;
       record(
-        `取り込めませんでした: ${item.name} (${error instanceof Error ? error.message : String(error)})`,
+        `取り込めませんでした: ${text(item.name)} (${error instanceof Error ? error.message : String(error)})`,
       );
     }
     status_.currentDone = 0;
@@ -1187,7 +1187,7 @@ function warn(message: string): void {
 /**
  * 設定画面から呼ぶ入口。**先に `/version` を訊いて、繋がらなければその場で理由を返す**
  * (裏で走らせてから失敗にしない)。繋がれば走り出したことだけ返し、終わるのは待たない。
- * どちらかの引き継ぎが走っている間は断る (進み具合を 1 つしか持たないため)
+ * どちらかの引き継ぎが走っている間は断る (進み具合を 1 つしか持たないため)。denpa の書き出し・取り込みの間も断る
  */
 export async function start(
   input: string,
@@ -1195,6 +1195,7 @@ export async function start(
 ): Promise<{ started: boolean; message: string }> {
   if (running() || starting)
     return { started: false, message: "すでに実行中です" };
+  if (transferBusy()) return { started: false, message: BUSY_MESSAGE };
   const trimmed = input.trim();
   if (trimmed === "")
     return { started: false, message: "EPGStation の URL を入れてください" };
