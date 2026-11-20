@@ -1169,7 +1169,7 @@ async function run(): Promise<number> {
     settle();
     await resolveConflicts();
     console.log(
-      `[epg] ${total} チャンネルから ${programs} 件の番組を取り込みました`,
+      `[epg] ${state.total} チャンネルから ${programs} 件の番組を取り込みました`,
     );
   }
   return programs;
