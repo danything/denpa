@@ -576,7 +576,7 @@ export type RankedRow = { rank: number; votes: number } & (
         region: string | null;
         /** 地上波の系列の名前。あれば局名の代わりに出す */
         affiliation: string | null;
-        /** `region` のほかに、この番組を放送する地域の数 */
+        /** `region` のほかに、この番組をこれから放送する地域の数 (始まった放送の地域は数えない) */
         others: number;
         start_at: number;
       };
@@ -724,6 +724,7 @@ function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
         affiliation: entry.affiliation,
         others: new Set(
           entry.airings
+            .filter((a) => a.start_at > at)
             .map((a) => a.region)
             .filter((r) => r !== null && r !== away.region),
         ).size,
