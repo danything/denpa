@@ -787,20 +787,20 @@ async function claim(request: RouteRequest, use: string): Promise<Pending> {
 }
 
 /** 振り分けに要るチューナーの中身 */
-export type RoutedTuner = Pick<
+type RoutedTuner = Pick<
   AgentTuner,
   "disabled" | "rank" | "types" | "channel" | "users" | "pin"
 >;
 
 /** 1 台のエージェントの一覧。`up` が false なら今は返さない (順を決めるのにだけ使う。最後に返した一覧か空) */
-export interface RoutedList {
+interface RoutedList {
   agent: number;
   up: boolean;
   tuners: readonly RoutedTuner[];
 }
 
 /** 振り分ける選局 */
-export interface RouteRequest {
+interface RouteRequest {
   type: string;
   places: readonly Place[];
   priority: number;

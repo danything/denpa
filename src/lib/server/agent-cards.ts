@@ -11,7 +11,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { parsePlaces } from "./agent-order";
 import { type Agent, listAgents } from "./agents";
-import { contractStatus } from "./contract-status";
+import { type ContractStatus, contractStatus } from "./contract-status";
 import { orm } from "./db";
 import { cardContracts } from "./schema";
 import { type CardStatus, cardStatus, getActiveCardId } from "./scramble";
@@ -135,7 +135,7 @@ export const NO_KEY = 3;
  */
 export function cardRanks(
   cards: Iterable<AgentCard>,
-  statusOf: (card: string) => ReturnType<typeof contractStatus> | null,
+  statusOf: (card: string) => ContractStatus | null,
 ): Map<number, number> {
   const ranks = new Map<number, number>();
   for (const entry of cards) {
@@ -160,7 +160,7 @@ export function cardRanks(
 function contractsOf(
   service: number,
   cards: readonly string[],
-): Map<string, ReturnType<typeof contractStatus>> {
+): Map<string, ContractStatus> {
   if (cards.length === 0) return new Map();
   const now = Date.now();
   return new Map(
@@ -236,7 +236,7 @@ export async function cardNarrower(
 export function narrowPlaces(
   places: string,
   cards: ReadonlyMap<number, AgentCard>,
-  statusOf: (card: string) => ReturnType<typeof contractStatus> | null,
+  statusOf: (card: string) => ContractStatus | null,
 ): string {
   const lines = places.split("\n");
   // `parsePlaces` は行ごとに 1 つ返すので、`lines` と同じ添え字で引ける

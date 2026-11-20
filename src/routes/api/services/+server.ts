@@ -10,7 +10,7 @@ import {
   SERVICE_TYPE_ORDER,
   watchableServices,
 } from "#lib/server/epg.js";
-import { reservationStates } from "#lib/server/reservations.js";
+import { reservationStates, willRecord } from "#lib/server/reservations.js";
 import { hasVideo, programs, services } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 
@@ -79,7 +79,7 @@ export function GET() {
           startAt: p.startAt,
           endAt: p.endAt,
           audios: audioTracks(parseAudios(p)),
-          reserved: state === "scheduled" || state === "recording",
+          reserved: willRecord(state),
           recording: state === "recording",
         },
       ];

@@ -308,6 +308,7 @@ export function getActiveCardId(card: CardStatus): string | null {
     card.readers.find((r) => r.ids.length > 0);
   return reader?.ids[0] ?? null;
 }
+
 function strings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((v): v is string => typeof v === "string")
@@ -537,7 +538,7 @@ export async function probeRaw(agent: Agent): Promise<boolean | null> {
   // 同じエージェントを同時に確かめても、互いのファイルを消さないよう名前に乱数を足す
   const nonce = randomBytes(8).toString("hex");
   const name = `.denpa/probe-${agent.id}-${nonce}`;
-  const path = join(config.rawDir, ".denpa", `probe-${agent.id}-${nonce}`);
+  const path = join(config.rawDir, name);
   const content = randomBytes(32).toString("hex");
   try {
     mkdirSync(dirname(path), { recursive: true });

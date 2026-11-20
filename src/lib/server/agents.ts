@@ -16,7 +16,7 @@ import { orm } from "./db";
 import { agents } from "./schema";
 
 /** `TUNER_AGENT_URL` の 1 台ぶんを、送る先 (`origin`) と合言葉に分けたもの */
-export interface AgentTarget {
+interface AgentTarget {
   /** `https://host:port` (ホスト名は小文字。末尾の `/` と `#` から後ろは除く) */
   origin: string;
   /** `#pair=` の値。無ければ null */
@@ -139,7 +139,7 @@ export function syncEnvAgents(): void {
           ),
         )
         .run();
-      // 外部キーは効かせていないので、そのエージェントのチャンネルの写しと受信の記録もここで消す
+      // 外部キーは効かせていないので、そのエージェントのチャンネルの写し・受信の記録・機材の異常もここで消す
       forgetMissingAgents();
     }
     targets.forEach((target, position) => {

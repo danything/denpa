@@ -253,7 +253,7 @@ export async function moveAgent(id: number, raw: string): Promise<Agent> {
 }
 
 /** 削除の結果。`reached` が false なら、エージェントの側にこの denpa の登録が残っている */
-export interface Removed {
+interface Removed {
   name: string;
   reached: boolean;
 }
@@ -285,7 +285,7 @@ export async function removeAgent(id: number): Promise<Removed> {
   unwatchAgent(id);
   orm().transaction((tx) => {
     tx.delete(agents).where(eq(agents.id, id)).run();
-    // 外部キーは効かせていないので、チャンネルの写しと受信の記録も一緒に消す (`agents.syncEnvAgents` と同じ)
+    // 外部キーは効かせていないので、チャンネルの写し・受信の記録・機材の異常も一緒に消す (`agents.syncEnvAgents` と同じ)
     forgetMissingAgents();
   });
   forgetAgentCard(id);
@@ -304,7 +304,7 @@ export async function removeAgent(id: number): Promise<Removed> {
 }
 
 /** 設定の「エージェント」の 1 行 (すぐ返せるもの) */
-export interface AgentEntry {
+interface AgentEntry {
   id: number;
   name: string;
   /** 宛先のホスト (ポートを付けるのは既定の 25252 でないときだけ) */

@@ -26,6 +26,7 @@ import {
 } from "../types";
 import type { Range } from "./cm";
 import { config } from "./config";
+import type { ContractState } from "./contract-status";
 
 /**
  * **テーブルの定義はここにしか無い** (drizzle)。
@@ -346,7 +347,7 @@ export const channelReception = sqliteTable(
  *
  * 局 (`services`) は局の ID で 1 行のまま。同じ TS を複数のエージェントが受けられれば、ここに台数ぶんの行がある。
  * 中継局の違いで、同じ TS を別の物理チャンネルで受けることもある。
- * エージェントの行を消したら、ここの行もコードで消す (`agents.syncEnvAgents`。外部キーは効かせていない)
+ * エージェントの行を消したら、ここの行もコードで消す (`agent-channels.forgetMissingAgents`。外部キーは効かせていない)
  */
 export const agentChannels = sqliteTable(
   "agent_channels",
@@ -394,9 +395,7 @@ export const cardContracts = sqliteTable(
     /** 局の内部 ID (services.id) */
     service_id: integer("service_id").notNull(),
     /** 契約状態: subscribed (契約中) / unsubscribed (未契約) / expired (期限切れ) */
-    state: text("state")
-      .$type<"subscribed" | "unsubscribed" | "expired">()
-      .notNull(),
+    state: text("state").$type<ContractState>().notNull(),
     /** B-CAS 契約確認コマンド (0x90 0x3C) の返り値コード (0x0800 等) */
     code: integer("code"),
     /** 契約の有効期限 (epoch ms)。判定できた場合 */
