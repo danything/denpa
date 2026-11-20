@@ -7,7 +7,7 @@
  *   局名は SDT にしか無い
  *
  * どちらも仮の名前 (`unnamedService`) を付けてエージェントの控えに書き込む。番組表の取得がそのチャンネルで MH-SDT[actual] か
- * SDT[actual] を受信したら、エージェントの控えの仮の名前を放送の局名に書き換える (`nameTlvServices`)。
+ * SDT[actual] を受信したら、エージェントの控えの仮の名前を放送の局名に書き換える (`nameUnnamed`)。
  * エージェントは控えを書き換えると通知 (`channels`) を出し、denpa はそれを合図に局を取り込み直す
  */
 import type { Transport } from "../types";
@@ -24,7 +24,7 @@ let queue: Promise<unknown> = Promise.resolve();
 
 /**
  * 仮の名前 (`unnamedService`) の局を、MH-SDT[actual] か SDT[actual] で受信した局名にする。対象は全部のエージェントの、
- * original_network_id と tlv_stream_id (TS なら transport_stream_id) と形式 (`transport`) が同じ CATV のチャンネル。
+ * original_network_id と `streamId` (TLV なら tlv_stream_id、TS なら transport_stream_id) と形式 (`transport`) が同じ CATV のチャンネル。
  * 仮の名前でない局 (スキャンで局名を受信した局) は変えない。
  * 書き換えたチャンネルのあるエージェントにだけ、そのエージェントの CATV の控えを書き戻す (`PUT /denpa/channels` は種別ごとに置き換える)。
  *
@@ -33,22 +33,20 @@ let queue: Promise<unknown> = Promise.resolve();
  *
  * @returns 書き換えた局の数
  */
-export function nameTlvServices(
+export function nameUnnamed(
   networkId: number,
-  tlvStreamId: number,
+  streamId: number,
   found: readonly { serviceId: number; name: string }[],
-  transport: Transport = "tlv",
+  transport: Transport,
 ): Promise<number> {
-  const run = queue.then(() =>
-    rename(networkId, tlvStreamId, found, transport),
-  );
+  const run = queue.then(() => rename(networkId, streamId, found, transport));
   queue = run.catch(() => undefined);
   return run;
 }
 
 async function rename(
   networkId: number,
-  tlvStreamId: number,
+  streamId: number,
   found: readonly { serviceId: number; name: string }[],
   transport: Transport,
 ): Promise<number> {
@@ -69,7 +67,7 @@ async function rename(
         channel.type !== "CATV" ||
         (channel.transport ?? "ts") !== transport ||
         channel.networkId !== networkId ||
-        channel.transportStreamId !== tlvStreamId
+        channel.transportStreamId !== streamId
       )
         return channel;
       return {

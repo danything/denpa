@@ -14,8 +14,8 @@
 
 import { EpgReader } from "@danything/arib/eit";
 import { MmtEpgReader } from "@danything/arib/mh-eit";
-import { type MhSdt, TlvServiceReader } from "@danything/arib/mmt-si";
-import { ServiceReader, type TransportInfo } from "@danything/arib/psi";
+import { TlvServiceReader } from "@danything/arib/mmt-si";
+import { ServiceReader } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
 import { isSatellite } from "../types";
@@ -37,15 +37,13 @@ import { checkedAt, recordFailed } from "./reception";
 import { resolveConflicts } from "./scheduler";
 import { programs, services } from "./schema";
 import { chunks } from "./stream";
-import { hasUnnamed, nameTlvServices } from "./tlv-names";
+import { hasUnnamed, nameUnnamed } from "./tlv-names";
 import {
   type AgentChannel,
   type AgentTuner,
   epgReadableChannel,
-  expectTransport,
   getTuners,
-  openChannel,
-  retryWhileBusy,
+  openWhenFree,
   serviceKey,
   TransportChangedError,
   TuneError,
@@ -308,8 +306,13 @@ async function collectChannel(
   let opened = false;
   /** TS が 1 バイトでも来たか。受信できたかの印 (`reception.ts`) */
   let received = false;
-  /** 衛星なら、ついでに読む放送の一覧 (`lineup-follow.ts`) */
-  let lineup: LineupWatch | null = null;
+  /**
+   * **衛星は放送の一覧 (NIT) も読み、変わっていればチャンネルを書き換える** (`lineup-follow.ts`)。
+   * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `lineup-follow.ts` の `WATCH_FOR` だけ (SDT[other] がそろうまで)
+   */
+  const lineup = isSatellite(channel.type)
+    ? new LineupWatch(channel.type)
+    : null;
   /** 地上波なら、ついでに読む SDT (局の顔ぶれをスキャンの結果と比べる。`ground-watch.ts`) */
   const ground = channel.type === "GR" ? new GroundWatch(channel) : null;
   /** エージェントが「選局できない」と返したか (空き待ちやエージェントに繋がらないのは入れない) */
@@ -324,10 +327,14 @@ async function collectChannel(
   let changed = false;
   /** 選局を送った所。受信できなかった記録はここに付ける */
   let sentTo: Place | null = null;
-  /** 仮の名前の局がある TLV のチャンネルで受信した MH-SDT[actual] (`tlv-names.ts`) */
-  let named: MhSdt | null = null;
-  /** 仮の名前の局がある TS のチャンネルで受信した SDT[actual] (`tlv-names.ts`) */
-  let sdtNamed: TransportInfo | null = null;
+  /** スキャンで局名を受信できず、仮の名前の局があるチャンネルか (`tlv-names.ts`) */
+  const unnamed = hasUnnamed(channel);
+  /** 仮の名前の局があるチャンネルで受信した局名の表。TLV は MH-SDT[actual]、TS は SDT[actual] (`tlv-names.ts`) */
+  let heard: {
+    networkId: number;
+    streamId: number;
+    services: readonly { serviceId: number; name: string }[];
+  } | null = null;
   /*
    * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
    * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
@@ -354,24 +361,22 @@ async function collectChannel(
   };
   try {
     /*
-     * **空きが無ければ少し待って掛け直す** (`retryWhileBusy`)。前のチャンネルを閉じたことがエージェントに
+     * **空きが無ければ少し待って掛け直す** (`openWhenFree`)。前のチャンネルを閉じたことがエージェントに
      * 届くのは非同期なので、閉じた直後に次を開くと、自分が使っていたチューナーがまだ塞がって見える。
      * **選局の答えの形式が控えと違えば読まない** (`expectTransport`)。TS の読み方で TLV を読んでも、その逆でも、何も取れない
      */
-    const answer = await retryWhileBusy(
-      () =>
-        openChannel(
-          channel.type,
-          places,
-          controller.signal,
-          `epg ${channel.channel}`,
-          // 押されている間は、開くたびに取り合いで先になる順で取る
-          boosted ? config.priority.epgNow : config.priority.epg,
-        ),
+    const answer = await openWhenFree(
+      channel.type,
+      places,
+      controller.signal,
+      `epg ${channel.channel}`,
+      // 押されている間は、開くたびに取り合いで先になる順で取る
+      boosted ? config.priority.epgNow : config.priority.epg,
       () => controller.signal.aborted,
+      channel.transport ?? "ts",
     );
     sentTo = answer.place;
-    const stream = await expectTransport(answer, channel.transport ?? "ts");
+    const stream = answer.stream;
     opened = true;
     /*
      * **局の名前の幅も放送から取り直す** (`epg.widenServices`)。SDT は 1 秒足らずで来るので、
@@ -380,24 +385,24 @@ async function collectChannel(
     let sdt: ServiceReader | null = tlv ? null : new ServiceReader();
     let sdtBytes = 0;
     /*
-     * **衛星は放送の一覧 (NIT) も読み、変わっていればチャンネルを書き換える** (`lineup-follow.ts`)。
-     * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `lineup-follow.ts` の `WATCH_FOR` だけ (SDT[other] がそろうまで)
-     */
-    lineup = isSatellite(channel.type) ? new LineupWatch(channel.type) : null;
-    /*
      * **スキャンで局名を受信できなかった TLV の局は、MH-SDT[actual] も読む** (`tlv-names.ts`)。何秒おきに来るか分からないので、
      * 来るまで読み続ける (表を 2 度パースするのは、仮の名前の局があるチャンネルだけ)
      */
     let names: TlvServiceReader | null =
-      tlv && hasUnnamed(channel) ? new TlvServiceReader() : null;
+      tlv && unnamed ? new TlvServiceReader() : null;
     for await (const chunk of chunks(stream)) {
       received ||= chunk.length > 0;
       lineup?.feed(chunk);
       ground?.feed(chunk);
       if (names !== null) {
         names.feed(chunk);
-        if (names.transport !== null) {
-          named = names.transport;
+        const table = names.transport;
+        if (table !== null) {
+          heard = {
+            networkId: table.originalNetworkId,
+            streamId: table.tlvStreamId,
+            services: table.services,
+          };
           names = null;
         }
       }
@@ -408,7 +413,12 @@ async function collectChannel(
           sdt = null;
         } else if (sdt.transport !== null) {
           // 仮の名前の局があるチャンネル (ロックしなかった TS を NIT から入れた) なら、あとで局名を書き換える (`tlv-names.ts`)
-          if (hasUnnamed(channel)) sdtNamed = sdt.transport;
+          if (unnamed)
+            heard = {
+              networkId: sdt.transport.originalNetworkId,
+              streamId: sdt.transport.transportStreamId,
+              services: sdt.transport.services,
+            };
           try {
             widenServices(
               sdt.transport.originalNetworkId,
@@ -452,43 +462,25 @@ async function collectChannel(
     update({ active: state.active.filter((name) => name !== label) });
   }
 
-  // 自分の TLV ストリームの MH-SDT[actual] なら、仮の局名を放送の局名にする (`tlv-names.ts`)
+  /*
+   * 自分の TS (TLV ストリーム) の表なら、仮の局名を放送の局名にする (`tlv-names.ts`)。
+   * 仮の名前の局は、MH-SDT[actual] が来なかった 4K の局と、ロックしなかった TS を NIT から入れたチャンネルの局
+   */
   if (
-    named !== null &&
-    named.originalNetworkId === channel.networkId &&
-    named.tlvStreamId === channel.transportStreamId
+    heard !== null &&
+    heard.networkId === channel.networkId &&
+    heard.streamId === channel.transportStreamId
   ) {
     try {
-      const renamed = await nameTlvServices(
-        named.originalNetworkId,
-        named.tlvStreamId,
-        named.services,
+      const renamed = await nameUnnamed(
+        heard.networkId,
+        heard.streamId,
+        heard.services,
+        tlv ? "tlv" : "ts",
       );
       if (renamed > 0)
         console.log(
-          `[epg] ${label}: MH-SDT で ${renamed} 局の局名を受信したので、仮の名前から書き換えました`,
-        );
-    } catch (error) {
-      console.warn(`[epg] ${label} の局名を書けませんでした: ${error}`);
-    }
-  }
-
-  // ロックしなかった TS を NIT から入れたチャンネルの SDT[actual] なら、仮の局名を放送の局名にする (`tlv-names.ts`)
-  if (
-    sdtNamed !== null &&
-    sdtNamed.originalNetworkId === channel.networkId &&
-    sdtNamed.transportStreamId === channel.transportStreamId
-  ) {
-    try {
-      const renamed = await nameTlvServices(
-        sdtNamed.originalNetworkId,
-        sdtNamed.transportStreamId,
-        sdtNamed.services,
-        "ts",
-      );
-      if (renamed > 0)
-        console.log(
-          `[epg] ${label}: SDT で ${renamed} 局の局名を受信したので、仮の名前から書き換えました`,
+          `[epg] ${label}: ${tlv ? "MH-SDT" : "SDT"} で ${renamed} 局の局名を受信したので、仮の名前から書き換えました`,
         );
     } catch (error) {
       console.warn(`[epg] ${label} の局名を書けませんでした: ${error}`);
