@@ -4,9 +4,9 @@
 # 全部を HEAD で揃えると、denpa を直しただけの push でエージェントのタグまで
 # 変わり、録画中に選局が落ちる。
 #
-# **2つのワークフローが同じ答えを要る。** main の build-and-deploy と、
+# **2 つのワークフローが同じ答えを要る。** main の build-and-deploy と、
 # リリースのときに latest を貼り替える release で、指す先が違ったら意味が無い。
-# 書き写すと片方だけ直したときに食い違うので、ここ1つに置く。
+# 書き写すと片方だけ直したときに食い違うので、ここ 1 つに置く。
 #
 # 使い方: . .github/image-tags.sh  → $AGENT_TAG と $DENPA_TAG が入る
 set -eu

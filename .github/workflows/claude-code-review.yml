@@ -7,7 +7,7 @@ on:
 jobs:
   claude-review:
     # Draft PR と bot (renovate/dependabot) の PR はスキップ。
-    # fork からの PR も対象外 (secrets が渡らないため) —
+    # fork からの PR も対象外 (secrets が渡らないため)。
     # そちらは claude-code-review-fork.yml がラベル起動で処理する。
     if: >-
       github.event.pull_request.draft == false &&

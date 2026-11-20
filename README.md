@@ -118,7 +118,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 **乗り換え**
 
-- [docs/switch.md](docs/switch.md) — **ほかの録画ソフトから乗り換える** (Mirakurun・EPGStation・KonomiTV・EDCB)
+- [docs/switch.md](docs/switch.md) — **ほかの録画ソフトから乗り換える** (Mirakurun・EPGStation・EDCB など)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation・EDCB からの引き継ぎ**と、**別の機械へ移す**
 
 **使う**

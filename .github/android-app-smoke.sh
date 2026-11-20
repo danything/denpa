@@ -91,7 +91,7 @@ wait_until() {
 no_agent() { [ -z "$(agent_pid)" ]; }
 # grep -q はパイプの後ろに置かず、一度ファイルに書いてから探す (wait_log と同じ)。grep -q が見つけて先に閉じると、前のコマンドが
 # 残りを書くときに SIGPIPE で終わり、pipefail で見つかったのに失敗になる。API 29 の通知の記録は、アプリの記録のあとに
-# post_frequency の行にもアプリの名前が出るので grep -A60 の出力が 4KB を超え、「チューナー 0 台」を待つ所が 4 回に 3 回ほど落ちていた
+# post_frequency の行にもアプリの名前が出るので grep -A60 の出力が 4 KB を超え、「チューナー 0 台」を待つ所が 4 回に 3 回ほど落ちていた
 service_gone() {
   adb shell dumpsys activity services "$pkg" | tr -d '\r' > "$host/services.txt"
   ! grep -q "ServiceRecord.*$pkg/.DenpaService" "$host/services.txt"

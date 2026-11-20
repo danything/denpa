@@ -6,18 +6,18 @@
 # bypass に入れられない仕様)。
 #
 # そこで、**書き換えた PR を出して、自分でマージする。** PR は GITHUB_TOKEN で開くので、
-# GitHub はそこから workflow を1つも動かさない (これも仕様) — 放っておくと必須チェックが
+# GitHub はそこから workflow を 1 つも動かさない (これも仕様)。放っておくと必須チェックが
 # 永遠に付かず、PR が塞がったままになる。書き換えるのは印/バージョンだけで、指す先のイメージや
 # chart は呼び出した run が出したものなので、**確かめるものは残っていない**。必須チェックの
 # status はここから付ける (保護は context を GitHub Actions app に固定してあるので、
 # この token で付けないと数えられない)。
 #
-# **付ける context は ruleset から引く。** `check` 1つを決め打ちにしていた頃、ruleset に
+# **付ける context は ruleset から引く。** `check` 1 つを決め打ちにしていた頃、ruleset に
 # 必須チェックが足された途端に bump の PR が「Expected」のまま塞がった (#99、2026-09-11)。
 # ruleset で足したものにここが自動で追いつくようにする。引けなければ `check` だけ (以前の方式) に落ちる。
 #
-# **3つのワークフローが同じ手を要る** (build-and-deploy の deploy の印と、release の
-# Chart.yaml のバージョンと、thanks の README の謝辞の一覧)。書き写すと1つだけ直したときに食い違うので、ここ1つに置く
+# **3 つのワークフローが同じ手を要る** (build-and-deploy の deploy の印と、release の
+# Chart.yaml のバージョンと、thanks の README の謝辞の一覧)。書き写すと 1 つだけ直したときに食い違うので、ここ 1 つに置く
 # (image-tags.sh と同じ)。
 #
 # 使い方 (GH_TOKEN が要る):
@@ -28,7 +28,7 @@
 #   bump_finish <ブランチ> <タイトル> <本文> <status の説明> <ファイル>...  # 書き換えが無ければ何もしない
 #
 # 枝は毎回 **いまの origin/main** から切る。actions/checkout が取るのは「トリガーした
-# コミット」で、2つの run が重なると後発は先発の bump を知らないまま同じ行を書き換え、
+# コミット」で、2 つの run が重なると後発は先発の bump を知らないまま同じ行を書き換え、
 # GitHub には衝突に見えて誰もマージできない (書き換えは入力から一意に決まるので、
 # 何度やっても同じ結果になる)。
 #
@@ -62,15 +62,15 @@ bump_finish() {
     || gh pr edit "$branch" --title "$title" --body "$body"
 
   # main に効いている規則から、必須チェックの context を全部引く。
-  # **引けなかったら `check` だけに落ちる** — `set -e` の下では `$(...)` の中の
+  # **引けなかったら `check` だけにする。** `set -e` の下では `$(...)` の中の
   # 失敗でここごと止まるので、`|| true` で受けてから空を見る (レビュー指摘)
   contexts=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/main" \
     -q '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context' \
     2>/dev/null || true)
   [ -n "$contexts" ] || contexts=check
   sha=$(git rev-parse HEAD)
-  # 1つ付け損ねても残りは付けて、マージまで進む。ただし**落ちたことは隠さない** —
-  # 付いていない context があれば PR は塞がったままなので、最後に非0で返して
+  # 1 つ付け損ねても残りは付けて、マージまで進む。ただし**落ちたことは隠さない。**
+  # 付いていない context があれば PR は塞がったままなので、最後に 0 以外で返して
   # run を赤くし、人が見に来られるようにする (レビュー指摘)。
   # パイプに流すとループがサブシェルになって `failed` が外に出ないので、
   # リダイレクトで回す

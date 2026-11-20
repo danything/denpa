@@ -10,7 +10,7 @@ name: Publish release tags
 # (`sha-…`) は main への push のときにビルドしてあるので、そのイメージに名前を
 # 貼り足すだけです。ビルドし直すと「試したものとリリースしたものが別」になります。
 #
-# 貼る名前は3つ。
+# 貼る名前は 3 つ。
 #
 # | 名前 | 例 | 動くか |
 # | --- | --- | --- |
@@ -22,7 +22,7 @@ name: Publish release tags
 # イメージのタグには付けないのが習わしなので、そのまま写さない。
 #
 # バージョンの名前を貼らずに `latest` だけ動かしていた頃は、**入れた人がバージョンを固定できません
-# でした** — 「いま動いているもの」を指す名前しか無く、戻したいときの戻し先が
+# でした。** 「いま動いているもの」を指す名前しか無く、戻したいときの戻し先が
 # `sha-…` (中身を最後に変えたコミット) しか無かった。
 on:
   release:
@@ -46,9 +46,9 @@ permissions:
 env:
   REGISTRY: ghcr.io
 
-# **出したものには出所の証明 (attestation) を付けます** (actions/attest)。イメージ3つと、Windows・Mac の denpa 本体の zip・tar.gz と、Android の APK と、
+# **出したものには出所の証明 (attestation) を付けます** (actions/attest)。イメージ 3 つと、Windows・Mac の denpa 本体の zip・tar.gz と、Android の APK と、
 # リリースに添えるエージェントの tar.gz / zip。.sha256 は同じリリースに置くので、壊れた
-# ファイルは見分けられても、すり替えまでは防げない — 証明はこのリポジトリのこの workflow が
+# ファイルは見分けられても、すり替えまでは防げない。証明はこのリポジトリのこの workflow が
 # 作ったことを Sigstore の署名で示すので、`gh attestation verify <ファイル> -R danything/denpa`
 # で確かめられる (docs/install.md の「配布物を確かめる」)。
 # 証明を作るジョブには `id-token` (署名の証明書を取る) と `attestations` (証明を置く) を足す。
@@ -82,7 +82,7 @@ jobs:
           echo "agent=$AGENT_TAG" >> "$GITHUB_OUTPUT"
           echo "denpa=$DENPA_TAG" >> "$GITHUB_OUTPUT"
 
-      # 貼る名前を決める。**x.y.z の形式でないタグにはバージョンの名前を貼らない** —
+      # 貼る名前を決める。**x.y.z の形式でないタグにはバージョンの名前を貼らない。**
       # `nightly` のような名前をそのままイメージに貼ると、バージョンだと思って固定されてしまう。
       #
       # **プレリリース (prerelease) には `latest` を貼りません。** compose.prod.yml が
@@ -144,7 +144,7 @@ jobs:
       #
       # **どちらも multi-arch のまま名前を付ける** (main は amd64 と arm64 を束ねた索引を
       # 出している)。土台の索引にある arch を全部並べて `--platform` に渡す。release.Dockerfile
-      # には RUN が無いので、このランナー (amd64) で arm64 も組める — FROM で arch ごとの
+      # には RUN が無いので、このランナー (amd64) で arm64 も組める。FROM で arch ごとの
       # 土台を引いて ENV を足すだけで、何も実行しない (QEMU は要らない。エージェントの土台は
       # distroless でシェルも無いが、何も実行しないので構わない)。arch を土台から
       # 読むのは、arm64 を出す前の `sha-…` を手で貼り直すとき (workflow_dispatch) に
@@ -165,7 +165,7 @@ jobs:
             agent_args="$agent_args --tag ${base}/denpa-agent:${alias}"
             denpa_args="$denpa_args --tag ${base}/denpa:${alias}"
           done
-          # 土台の索引にある arch。索引でなく1枚のイメージなら manifests が無い — 以前の amd64 だけのもの
+          # 土台の索引にある arch。索引でなく 1 枚のイメージなら manifests が無い (以前の amd64 だけのもの)
           arches() {
             found=$(docker buildx imagetools inspect --raw "$1" \
               | jq -r '[.manifests[]? | .platform | select(.os == "linux") | "linux/\(.architecture)"] | unique | join(",")')
@@ -194,7 +194,7 @@ jobs:
           echo "denpa=$(digest denpa.json)" >> "$GITHUB_OUTPUT"
           echo "denpa: ${{ steps.tag.outputs.denpa }} ($platforms) + DENPA_VERSION → $names"
 
-          # 本体とエージェントを1つにしたもの (.github/aio.Dockerfile)。本体は、いまバージョンを
+          # 本体とエージェントを 1 つにしたもの (.github/aio.Dockerfile)。本体は、いまバージョンを
           # 足したほう (DENPA_VERSION 入り) から写す。これも写すだけなので数秒で終わる
           aio_args=""
           for alias in $names; do aio_args="$aio_args --tag ${base}/denpa-aio:${alias}"; done
@@ -513,7 +513,7 @@ jobs:
 
       # main の先頭にバージョンを書く。タグを付けたコミットではなく **いまの main** から枝を
       # 切る (その間に進んでいても、バージョンはリリースしたものが最新なので同じ)。
-      # 手で回した (workflow_dispatch) ときも同じ — 貼り直しならバージョンも同じ。
+      # 手で回した (workflow_dispatch) ときも同じ。貼り直しならバージョンも同じ。
       #
       # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
       # 素通しにならない)。PR を出し、必須チェックの status を自分で付けて、自分でマージする。
