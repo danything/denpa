@@ -454,8 +454,10 @@ export class Fmp4Video {
       ) {
         this.decode(this.take());
       }
-      const first = this.frames.shift();
-      if (first !== undefined) this.draw(first);
+      // 描かない所 (`beyond`) のフレームは 1 枚目でも描かない
+      const first = this.frames[0];
+      if (first !== undefined && !this.beyond(first.timestamp))
+        this.draw(this.frames.shift() as VideoFrame);
     }
     if (at === null) return;
 

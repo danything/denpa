@@ -51,7 +51,7 @@ const DESC_STREAM_IDENTIFIER = 0x8011;
 
 const utf8 = new TextDecoder();
 
-/** 局名・番組名の文字 (UTF-8)。壊れた並びは U+FFFD になる */
+/** MMT の文字 (UTF-8。局名・番組名・字幕の文書)。壊れた並びは U+FFFD になる */
 export function mmtText(data: Uint8Array): string {
   return utf8.decode(data);
 }
@@ -589,7 +589,7 @@ export class TlvServiceReader {
     return null;
   }
 
-  /** 録画の対象になる種類の局だけ (`psi.SERVICE_TYPES`)。揃うまでは空 */
+  /** スキャンで残す種別の局だけ (`psi.SERVICE_TYPES`)。揃うまでは空 */
   services(): FoundService[] {
     const transport = this.transport;
     if (this.network === null || transport === null) return [];

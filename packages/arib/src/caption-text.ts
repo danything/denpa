@@ -48,7 +48,7 @@ export interface CaptionRun {
   /** 字の大きさ (em)。字の枠の高さでもある */
   size: number;
   /**
-   * 横の縮め方。字の枠の幅は `size * scaleX`。中くらい (MSZ) の全角は 0.5 で縮めて描き、
+   * 横の縮め方。字の枠の幅は `size * scaleX`。中型 (MSZ) の全角は 0.5 で縮めて描き、
    * 半角の字 (英数・半角カナ) は 1 のまま (もともと半分の幅なので)
    */
   scaleX: number;

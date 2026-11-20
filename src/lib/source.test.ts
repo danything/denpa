@@ -15,7 +15,7 @@ describe("エンコードの元", () => {
   });
 });
 
-describe("CM 検出のやり直し", () => {
+describe("CM の再検出", () => {
   const ts = "/recorded/a.m2ts";
   const mkv = "/encoded/a.mkv";
 

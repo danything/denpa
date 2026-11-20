@@ -120,7 +120,7 @@ export const AUDIO_FRAMES = 13;
 export const TIMESCALE = 180000;
 /** 映像の 1 コマ (180000 の単位。59.94 コマ) */
 const FRAME = 3003;
-/** 音声の 1 フレーム (1024 標本 @48kHz を 180000 の単位で) */
+/** 音声の 1 フレーム (1024 サンプル @48kHz を 180000 の単位で) */
 const AUDIO_FRAME = 3840;
 /** 音声の 1 MPU のフレーム数 (実機の BS4K と同じ) */
 const AUDIO_PER_MPU = 4;

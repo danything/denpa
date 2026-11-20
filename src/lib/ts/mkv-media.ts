@@ -24,8 +24,6 @@ import { concatBytes, u16 } from "@danything/arib/bytes";
 import { aacCodec, av1Codec, avcCodec, type Fmp4Track } from "./fmp4";
 import type { ReadAt } from "./seek";
 
-export type { ReadAt };
-
 const EBML = 0x1a45dfa3;
 const SEGMENT = 0x18538067;
 const SEEK_HEAD = 0x114d9b74;

@@ -22,7 +22,7 @@ describe("DecodeBudget", () => {
     expect(budget.p95).toBe(10);
   });
 
-  test("デコードが重く、映像が遅れていくのが 3 秒続いたら打ち切る。**1 回の重さでは戻さない**", () => {
+  test("デコードが重く、映像が遅れていくのが 3 秒続いたら打ち切る。1 回の重さでは戻さない", () => {
     const budget = new DecodeBudget();
     budget.tick(0, 33.4, 0);
     const results = [1, 2, 3].map((s) =>

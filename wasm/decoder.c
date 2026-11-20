@@ -3,12 +3,12 @@
  *
  * **ブラウザには MPEG-2 のデコーダが無い** (MSE も WebCodecs も mp2v を受け取らない)
  * ので、FFmpeg の mpeg2video を WebAssembly に組んで持ち込む。ここはその
- * 薄いラッパーで、JS (src/lib/raw/worker.ts) から呼ぶ。
+ * 薄いラッパーで、JS (src/lib/raw/worker.ts。音は wasm-audio.ts) から呼ぶ。
  *
  * 音 (AAC) も同じ FFmpeg の `aac` でデコードする (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
  * https でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
- * それに頼ると LAN の http と古い iPhone で元の TS をそのまま再生する経路が使えない。画面の canvas で描く経路 (fMP4) の
- * Opus も同じ API でデコードする (`opus_open`)。
+ * それに頼ると LAN の http と古い iPhone で元の TS をそのまま再生する経路が使えない。fMP4 の音 (互換モードと、
+ * WebKit のライブで音だけ別に鳴らすとき) も同じ API でデコードする (Opus は `opus_open`)。
  *
  * - `dec_push` … PES の中身 (ES) を渡す。**区切りは FFmpeg の parser に任せる**。
  *   放送はふつう 1 PES = 1 枚だが、決まりではない。PTS も一緒に渡し、
@@ -290,7 +290,7 @@ EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
  *
  * - AAC (`aac_open`) … 放送の ADTS をそのまま渡す (packages/arib/src/pes.ts の AdtsSplitter が切る)。
  *   ADTS のヘッダはデコーダが自分で読む (extradata 無しで開くと ADTS として読む決まり)。
- *   画面の canvas で描く経路の fMP4 の AAC は、JS がヘッダを組んで付けてから渡す
+ *   fMP4 の AAC は、JS がヘッダを組んで付けてから渡す
  *   (ts/fmp4.ts の `adtsHeader`)
  * - Opus (`opus_open`) … AV1 と組んで送られてくる fMP4 の Opus。設定 (OpusHead) を
  *   extradata として渡して開く (ts/fmp4.ts の `opusHead` が dOps から書き換える)

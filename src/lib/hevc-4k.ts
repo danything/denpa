@@ -22,7 +22,7 @@ export const BROADCAST_HEVC_VIDEO = {
 } as const;
 
 /** 調べるのに使うもの。ブラウザでは `MediaSource.isTypeSupported` と `navigator.mediaCapabilities.decodingInfo` */
-export interface HevcProbe {
+interface HevcProbe {
   isTypeSupported: (type: string) => boolean;
   decodingInfo?: (config: {
     type: "media-source";

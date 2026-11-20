@@ -526,7 +526,7 @@ export function readEitSection(
 }
 
 /**
- * EIT のセクションを 1 本読む。自局のもの以外は null。
+ * EIT のセクションを 1 本読む。自局のもの以外は null (`other` なら、ほかの TS の局の schedule も読む)。
  *
  * 壊れたセクションは `SectionAssembler` が CRC で落としているので、ここに来るのは
  * 中身が揃っているものだけ。それでも長さの辻褄が合わないことはあるので、
@@ -552,7 +552,7 @@ export function parseEit(
     section,
     raw - shift,
     section[13]! - shift,
-    // シリーズもコピー制御と同じ。載っていなければ「シリーズではない」、詳細の表なら「言っていない」
+    // シリーズと CA 契約情報もコピー制御と同じ。載っていなければ「無い」(null)、詳細の表なら「言っていない」(項目ごと無い)
     { series: null, contractVerification: null },
     readDescriptors,
   );

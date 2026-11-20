@@ -134,10 +134,10 @@ export function pictureInPicture(options: Options): Pip {
   /** 小窓をリクエストしている最中か (`toggle`) */
   let entering = false;
   /**
-   * 変換した映像に字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** ある。
-   * `$state.raw` にする (`$state` は proxy に包むので `composeBaked` の `===` が外れ、字幕の無い元の `<video>` に落ちる)
+   * 変換した映像に字幕を重ねたもの (`composeEncoded`)。**小窓に出している間だけ** ある。
+   * `$state.raw` にする (`$state` は proxy に包むので `composeEncoded` の `===` が外れ、字幕の無い元の `<video>` に落ちる)
    */
-  let baked = $state.raw<Composed | null>(null);
+  let composedVideo = $state.raw<Composed | null>(null);
   /**
    * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない**。Firefox は canvas の
    * 映像ストリームを取れず、押せても必ず断られる
@@ -151,7 +151,7 @@ export function pictureInPicture(options: Options): Pip {
     "captureStream" in HTMLCanvasElement.prototype;
   const raw = (): boolean => options.raw?.() ?? false;
   /** いま小窓に出すのは代わりの video か (canvas で描いているもの、または字幕を重ねた変換映像) */
-  const proxied = (): boolean => raw() || baked !== null;
+  const proxied = (): boolean => raw() || composedVideo !== null;
 
   $effect(() => {
     able = supported();
@@ -172,7 +172,7 @@ export function pictureInPicture(options: Options): Pip {
         if (video === proxy && on !== proxy) {
           flowing(false);
           // 変換した映像に重ねていたなら破棄する。小窓に出していない間まで重ねない
-          dropBaked();
+          dropComposed();
         }
       },
     );
@@ -209,7 +209,7 @@ export function pictureInPicture(options: Options): Pip {
     const unmirror = listenAll(video, ["pause", "play"], () => {
       if (
         options.paused === undefined &&
-        baked !== null &&
+        composedVideo !== null &&
         proxy !== null &&
         on === proxy
       )
@@ -231,7 +231,7 @@ export function pictureInPicture(options: Options): Pip {
     const isRaw = raw();
     if (on === null) return;
     // 字幕を重ねた小窓は `<video>` の映像なので、canvas のものではない
-    if ((on === proxy && baked === null) !== isRaw) leave();
+    if ((on === proxy && composedVideo === null) !== isRaw) leave();
   });
 
   /** canvas に移ったら代わりの video を用意しておく。出たら破棄する (canvas ごと無くなる) */
@@ -335,7 +335,7 @@ export function pictureInPicture(options: Options): Pip {
   function release(): void {
     rawComposed?.stop();
     rawComposed = null;
-    dropBaked();
+    dropComposed();
     if (proxy === null) return;
     const stream = proxy.srcObject;
     if (stream instanceof MediaStream)
@@ -365,7 +365,7 @@ export function pictureInPicture(options: Options): Pip {
    * 待っても断られない)。小窓に出していない間まで重ね続けないため。
    * 作れなければ null (元の video をそのまま出す)
    */
-  async function composeBaked(
+  async function composeEncoded(
     video: HTMLVideoElement,
   ): Promise<HTMLVideoElement | null> {
     let track: MediaStreamTrack | undefined;
@@ -380,9 +380,9 @@ export function pictureInPicture(options: Options): Pip {
       track.stop();
       return null;
     }
-    dropBaked();
+    dropComposed();
     const target = makeProxy();
-    baked = composed;
+    composedVideo = composed;
     target.srcObject = composed.stream;
     const ready = new Promise<boolean>((done) => {
       if (target.readyState >= HTMLMediaElement.HAVE_METADATA)
@@ -398,18 +398,18 @@ export function pictureInPicture(options: Options): Pip {
       );
     });
     void target.play().catch(() => undefined);
-    if (!(await ready) || baked !== composed) {
-      if (baked === composed) dropBaked();
+    if (!(await ready) || composedVideo !== composed) {
+      if (composedVideo === composed) dropComposed();
       return null;
     }
     return target;
   }
 
   /** 変換した映像に重ねていたら破棄する。**元のストリーム (`captureStream`) も止める** */
-  function dropBaked(): void {
-    const composed = baked;
+  function dropComposed(): void {
+    const composed = composedVideo;
     if (composed === null) return;
-    baked = null;
+    composedVideo = null;
     composed.stop();
     if (proxy !== null && proxy.srcObject === composed.stream)
       proxy.srcObject = null;
@@ -418,7 +418,7 @@ export function pictureInPicture(options: Options): Pip {
   /**
    * 小窓に出す。**リクエストするまでに `await` を挟まない**。挟むと Safari は「押された直後」と
    * 見なさなくなって断る (`NotAllowedError`)。字幕を重ねるときだけ 1 枚目を待つ
-   * (`composeBaked`。そこへ来るのは待っても断られない Chrome・Edge だけ)
+   * (`composeEncoded`。そこへ来るのは待っても断られない Chrome・Edge だけ)
    */
   async function enter(): Promise<void> {
     let video: WebkitVideo | null = options.video();
@@ -434,7 +434,7 @@ export function pictureInPicture(options: Options): Pip {
       flowing(true);
       playOrPause(video, options.paused?.() === true);
     } else if (video !== null && composable(video))
-      video = (await composeBaked(video)) ?? video;
+      video = (await composeEncoded(video)) ?? video;
     if (video === null) return;
     // 押して開くものは止めない (勝手に開かせないための印。上の説明)
     video.disablePictureInPicture = false;
@@ -474,7 +474,7 @@ export function pictureInPicture(options: Options): Pip {
     };
     flowing(false);
     // 字幕を重ねて用意したものは、出せなかったなら破棄する
-    if (on === null) dropBaked();
+    if (on === null) dropComposed();
     // リクエストする前に下ろした印を戻す (`enter`)
     guard();
   }

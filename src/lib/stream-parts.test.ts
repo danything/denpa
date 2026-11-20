@@ -97,7 +97,7 @@ describe("streamParts", () => {
     expect(readWhileWriting).toBe(true);
   });
 
-  test("書けなかったら投げて、受け取りもやめる", async () => {
+  test("書けなかったら例外を投げ、受け取りもやめる", async () => {
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
       pull(controller) {
@@ -133,7 +133,7 @@ describe("streamParts", () => {
     expect(told.at(-1)).toBe(1);
   });
 
-  test("受け取りが失敗したら、書きかけの塊が終わってから投げる", async () => {
+  test("受け取りが失敗したら、書きかけの塊が終わってから例外を投げる", async () => {
     let pulls = 0;
     const body = new ReadableStream<Uint8Array>({
       pull(controller) {

@@ -13,7 +13,7 @@
 import { OFFSET_HEADER, ORIGIN_HEADER } from "./playback";
 
 /** 元の TS を流す応答のヘッダで分かること */
-export interface RawHeard {
+interface RawHeard {
   /** 物差しの 0 にあたる PTS (`ORIGIN_HEADER`) */
   origin: number;
   /** 流し始めたバイト位置 (`OFFSET_HEADER`)。無ければ null (続きはリクエストできない) */

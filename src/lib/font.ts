@@ -2,13 +2,13 @@
  * Denpa Font (放送の字。`/api/font/`) の置き場。**URL はここだけで作る。**
  *
  * 字は 2 つの woff2 に分かれている (基本の字と、JIS X 0213 で足された漢字)。画面の放送の字 (`app.css` の
- * `.broadcast`) と字幕は、2 つを `unicode-range` で名乗らせる CSS (`denpaFontCssUrl`) を読み、
- * 後のほうはその字が出たときだけ落ちてくる。データ放送は基本の字だけで足りる (`denpaFontUrl`)。
+ * `.broadcast`) と字幕は、2 つを同じファミリ名にまとめる CSS (`denpaFontCssUrl`) を読む。後のほうは
+ * `unicode-range` 付きなので、その字が出たときだけブラウザが取得する。データ放送は基本の字だけで足りる (`denpaFontUrl`)。
  *
  * **バージョンを付けて、1 年持たせる。** バージョンは Dockerfile の `DENPA_FONT_VERSION`
  * (組むときに `vite.config.ts` が読んで埋める)。字が変わるのはリリースを上げたときだけで、
- * そのとき URL も変わるので、古い字が残らない。バージョンの合わない問い合わせは配る側が
- * 毎回確かめさせる (`api/font/[file]/+server.ts`)
+ * そのとき URL も変わるので、古い字が残らない。バージョンの合わないリクエストには、サーバが
+ * 毎回確かめさせる `cache-control` を返す (`api/font/[file]/+server.ts`)
  */
 
 import { resolve } from "$app/paths";
@@ -29,7 +29,7 @@ export function denpaFontUrl(): string {
   return versioned("denpa-font.woff2");
 }
 
-/** 2 つの woff2 を `"Denpa Font"` の名前で名乗らせる CSS (画面の放送の字と字幕) */
+/** 2 つの woff2 を `"Denpa Font"` のファミリ名にまとめる CSS (画面の放送の字と字幕) */
 export function denpaFontCssUrl(): string {
   return versioned("denpa-font.css");
 }

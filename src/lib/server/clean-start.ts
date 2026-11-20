@@ -23,13 +23,13 @@ import {
   loadMkvHead,
   type MkvCue,
   MkvDemuxer,
-  type ReadAt,
 } from "#lib/ts/mkv-media.js";
 import {
   type NalCodec,
   nalLengthSize,
   startable,
 } from "#lib/ts/random-access.js";
+import type { ReadAt } from "#lib/ts/seek.js";
 
 import { readRecording } from "./recording-io";
 

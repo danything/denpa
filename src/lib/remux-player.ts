@@ -450,7 +450,7 @@ export function remuxPlayer(
       });
       /*
        * **混んでいて断られたらリクエストし直さない** (その場の変換の枠が埋まっている)。デプロイの最中の 503
-       * (前段が返すもの) とは言い分で見分ける
+       * (前段が返すもの) とは理由の文で見分ける (`busyAnswer`)
        */
       if (response.status === 503 && (await busyAnswer(response))) {
         if (mine !== run) return;

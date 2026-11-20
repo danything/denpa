@@ -103,7 +103,7 @@ export class PesDemuxer {
   streams: Streams = { video: null, audio: [] };
   /** デコードする音声の PID。**選ばれた 1 本だけ**組み立てる (他は捨てる) */
   audioPid: number | null = null;
-  /** 何本目の音声を取り出すか (`AudioTrack.stream`)。無ければ先頭に落とす */
+  /** 何本目の音声を取り出すか (`AudioTrack.stream`)。無ければ先頭の音声にする */
   audioIndex = 0;
 
   feed(chunk: Uint8Array): { pes: Pes[]; changed: boolean } {
@@ -216,7 +216,7 @@ export class PesDemuxer {
   }
 }
 
-/** ADTS の標本化周波数の表 (ISO/IEC 14496-3 表 1.18) */
+/** ADTS のサンプリング周波数の表 (ISO/IEC 14496-3 表 1.18) */
 export const ADTS_RATES = [
   96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025,
   8000, 7350,
@@ -229,22 +229,22 @@ export interface AdtsFrame {
   pts: number;
   sampleRate: number;
   channels: number;
-  /** このコマの長さ (90kHz)。AAC は 1 コマ 1024 標本 */
+  /** このフレームの長さ (90kHz)。AAC は 1 フレーム 1024 サンプル */
   duration: number;
 }
 
 /**
- * PES の中身を ADTS のコマに割る。**コマは PES をまたぐことがある**ので、余りは持ち越す。
+ * PES の中身を ADTS のフレームに割る。**フレームは PES をまたぐことがある**ので、余りは持ち越す。
  *
- * 時刻は PES の PTS を先頭のコマに付け、続くコマには 1 コマぶんずつ足す。持ち越した
- * 余りから始まるコマは、前の続きの時刻になる
+ * 時刻は PES の PTS を先頭のフレームに付け、続くフレームには 1 フレームぶんずつ足す。持ち越した
+ * 余りから始まるフレームは、前の続きの時刻になる
  */
 export class AdtsSplitter {
   private rest = new Uint8Array(0);
   private next: number | null = null;
 
   feed(data: Uint8Array, pts: number | null): AdtsFrame[] {
-    // 余りが無いときだけ PES の時刻に合わせ直す (余りがあれば先頭のコマはその続き)
+    // 余りが無いときだけ PES の時刻に合わせ直す (余りがあれば先頭のフレームはその続き)
     if (pts !== null && this.rest.length === 0) this.next = pts;
     const buffer =
       this.rest.length === 0 ? data : concatBytes([this.rest, data]);
@@ -295,14 +295,14 @@ export class AdtsSplitter {
 }
 
 /**
- * **33 ビットで一周する時刻を、手元の物差しの近くへ伸ばす。**
+ * **33 ビットで一周する時刻を、基準の時刻にいちばん近い周に置き直す。**
  *
  * PTS は 26.5 時間で 0 に戻る。受け側は「いま鳴らしている時刻」を一周をまたいでも
- * 増え続ける数で持つので、届いた時刻は**それにいちばん近い周**に置き直して比べる
- * (字幕・時計の通知・次の PES)
+ * 増え続ける数で持つので、届いた時刻 (字幕・時計の通知・次の PES) は**それにいちばん近い周**に
+ * 置き直して比べる
  *
  * @param pts 届いた時刻 (90kHz。一周の中)
- * @param near 手元の物差し (90kHz。伸ばしたもの)
+ * @param near 基準の時刻 (90kHz。一周をまたいでも増え続ける数)
  */
 export function unwrap(pts: number, near: number): number {
   return pts + Math.round((near - pts) / WRAP) * WRAP;

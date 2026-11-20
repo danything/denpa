@@ -1,6 +1,6 @@
 /**
  * 置き場の名前 (`… [H265].mkv`・`… [H264].mkv`) からコーデックを見分ける (`server/library.ts` の `encodedPath` の逆)。
- * サーバと画面の両方で使う (画面は「端末に保存」でどれを落とすか決めるのに使う。`offline-db.ts` の `offlineSource`)
+ * サーバと画面の両方で使う (画面は「端末に保存」でどのファイルを保存するか決めるのに使う。`offline-db.ts` の `offlineSource`)
  */
 export function encodedCodec(path: string): "av1" | "hevc" | "h264" | "mpeg2" {
   /*

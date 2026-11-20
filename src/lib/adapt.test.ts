@@ -588,7 +588,7 @@ describe("上げる", () => {
     ).toEqual({ step: 0, reason: "restored" });
   });
 
-  test("ライブは、バッファが無い状態が 30 秒続き、測った回線の速さが次の段の 1.2 倍あれば 1 段上げる", () => {
+  test("ライブは、足りない兆しが無い状態が 30 秒続き、測った回線の速さが次の段の 1.2 倍あれば 1 段上げる", () => {
     const a = new RungAdapter();
     const clear = paces(() => ({ backlog: 0, dropped: 0, speed: null }));
     expect(

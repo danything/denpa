@@ -4,7 +4,7 @@
  * libaribcaption の「デコードする (decoder)」側を写したもの。置き場所・大きさ・色・外字の置き換えまでは
  * 同じ計算で、描く (renderer) 手前で止める。描くのは受け側 (ブラウザ・アプリ)。
  *
- * 写したのは日本の放送で要るところだけ: 8 単位符号 (JIS)・Profile A (フルセグ)。言語は 1 つを選んで読む
+ * 写したのは日本の放送で要るところだけで、8 単位符号 (JIS) と Profile A (フルセグ)。言語は 1 つを選んで読む
  * (既定は第 1 言語。`new B24CaptionDecoder(2)` で第 2 言語)。
  * ブラジルの Latin・UTF-8・ワンセグ (Profile C) は持たない。
  *
@@ -188,7 +188,7 @@ function section(size: number, spacing: number, scale: number): number {
   return Math.floor((size + spacing) * scale);
 }
 
-/** 半角の字 (libaribcaption の IsHalfwidthCharacter)。中くらいでも縮めずに描く */
+/** 半角の字 (libaribcaption の IsHalfwidthCharacter)。中型でも縮めずに描く */
 function isHalfwidth(code: number): boolean {
   return (
     (code !== 0 && code <= 0xff) ||
@@ -821,7 +821,7 @@ export class B24CaptionDecoder {
     return offset + 1;
   }
 
-  /** 中くらい (MSZ) か。半角へ寄せる見分けに使う */
+  /** 中型 (MSZ) か。半角の字にするかの見分けに使う */
   private msz(): boolean {
     return this.hScale * 2 === this.vScale;
   }
@@ -997,7 +997,7 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
     const h = section(char.charHeight, char.vSpacing, char.vScale);
     const size = char.charHeight * char.vScale;
     const glyphWidth = char.charWidth * char.hScale;
-    // 中くらいの半角の字は縮めない (もともと半分の幅。libaribcaption の DrawChar と同じ)
+    // 中型の半角の字は縮めない (もともと半分の幅。libaribcaption の DrawChar と同じ)
     const halfAsked = Math.abs(glyphWidth / size - 0.5) < 0.05;
     const scaleX = halfAsked && isHalfwidth(char.code) ? 1 : glyphWidth / size;
     const run: CaptionRun = {

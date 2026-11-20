@@ -16,14 +16,14 @@ import {
 } from "./synth.js";
 
 /*
- * **Hybridcast の在り処だけを読む。**
+ * **Hybridcast の在りかだけを読む。**
  *
  * データ放送と違って、アプリの中身は放送では送られていない。送られているのは
  * 「どこにあるか」だけなので、ここで確かめるのは**アドレス (URL) を正しく組み立てられるか**。
  * 開くのはデータ放送が求めたときで、ここでは読むだけ ([docs/stream.md](https://github.com/danything/denpa/blob/main/docs/stream.md#hybridcast))。
  */
 
-describe("AIT の在り処", () => {
+describe("AIT の在りか", () => {
   test("PMT の印が付いた ES の PID を読み取る", () => {
     const pmt = programMap(1024, 0x0100, [
       [0x02, 0x0100], // 映像

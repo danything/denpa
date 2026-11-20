@@ -201,7 +201,7 @@ const u33 = (data: Uint8Array, at: number) =>
   (data[at]! & 1) * 0x100000000 + u32(data, at + 1);
 
 /**
- * いまの NPT (90kHz)。TR-B14 第二分冊の NPT 値の算出に従う。
+ * いまの NPT (90 kHz)。TR-B14 第二分冊の NPT 値の算出に従う。
  * 進む (scale 1/1) か止まっている (scale 0/1) ときだけ求め、ほかの速さ (運用されない) は null
  */
 function nptAt(reference: NPTReference, stc: number): number | null {
@@ -221,7 +221,7 @@ function reached(reference: NPTReference, stc: number): boolean {
   return (stc - reference.STCReference + WRAP) % WRAP < WRAP / 2;
 }
 
-/** ストリーム記述子 (table_id 0x3D)。NPT と イベントメッセージが載っている */
+/** ストリーム記述子 (table_id 0x3D)。NPT とイベントメッセージが載っている */
 function parseEsEvents(section: Uint8Array): ESEvent[] {
   const events: ESEvent[] = [];
   const length = u16(section, 1) & 0x0fff;
@@ -286,7 +286,7 @@ interface Building {
 const GIVE_UP_ROUNDS = 4;
 
 /**
- * 1 つの `BmlDecoder` で同時に組み立てるモジュールの大きさの合計の上限 (64MiB)。
+ * 1 つの `BmlDecoder` で同時に組み立てるモジュールの大きさの合計の上限 (64 MiB)。
  * 1 つずつは `MAX_MODULE_SIZE` に収まっても、たくさん並べた DII や ES でメモリを使い切らせられる。
  * 実際のカルーセルは全部で数 MB に収まる
  */
@@ -341,7 +341,7 @@ export class BmlDecoder {
   private sent: string | null = null;
   /** PMT の PCR_PID。読むまでは null */
   private pcrPid: number | null = null;
-  /** 最後に読んだ PCR の基準部 (90kHz)。**放送の STC**。時刻指定のイベントメッセージに使う (`dueEvents`) */
+  /** 最後に読んだ PCR の基準部 (90 kHz)。**放送の STC**。時刻指定のイベントメッセージに使う (`dueEvents`) */
   private stc: number | null = null;
 
   constructor(private readonly send: (message: ResponseMessage) => void) {}
@@ -374,7 +374,7 @@ export class BmlDecoder {
     }
   }
 
-  /** 適応フィールドの PCR の基準部 (90kHz)。拡張部 (27MHz の端数) は使わない */
+  /** 適応フィールドの PCR の基準部 (90 kHz)。拡張部 (27 MHz の端数) は使わない */
   private readPcr(packet: Uint8Array): void {
     if (
       (packet[3]! & 0x20) === 0 ||

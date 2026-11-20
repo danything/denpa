@@ -494,7 +494,7 @@ describe("BmlDecoder", () => {
 
   /**
    * **放送の中身は外から作れる。** moduleSize は 32 ビットで、言われるままに確保すると
-   * DII 1 つで 4GB になる。大きすぎるモジュールは組み立てず、来ないものとして一覧から外す
+   * DII 1 つで 4 GB になる。大きすぎるモジュールは組み立てず、来ないものとして一覧から外す
    */
   test("大きすぎると言うモジュールは組み立てず、一覧から外す", () => {
     const here = multipart([["/startup.bml", "text/X-arib-bml", "<bml/>"]]);
@@ -531,7 +531,7 @@ describe("BmlDecoder", () => {
   });
 
   test("同時に組み立てるモジュールは合計の大きさを限る", () => {
-    // 1 つずつは上限に収まるが、5 つ並べると合計の上限 (64MiB) を超える
+    // 1 つずつは上限に収まるが、5 つ並べると合計の上限 (64 MiB) を超える
     const modules = Array.from({ length: 5 }, (_, i) => ({
       moduleId: i + 1,
       moduleSize: MAX_MODULE_SIZE,

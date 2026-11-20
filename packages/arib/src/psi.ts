@@ -1004,7 +1004,7 @@ export class ServiceReader {
     return this.complete;
   }
 
-  /** 録画の対象になる種類の局だけ (`SERVICE_TYPES`)。リモコン番号と部分受信の局は NIT から付ける */
+  /** スキャンで残す種別の局だけ (`SERVICE_TYPES`)。リモコン番号と部分受信の局は NIT から付ける */
   services(): FoundService[] {
     const transport = this.transport;
     if (transport === null) return [];

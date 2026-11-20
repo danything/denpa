@@ -156,7 +156,7 @@ describe("SyncMarks", () => {
     ]);
   });
 
-  test("途中で切れた箱は、終わりにそのまま返す", () => {
+  test("途中で切れたボックスは、終わりにそのまま返す", () => {
     const marks = new SyncMarks("h264", 4);
     const cut = whole.slice(0, whole.length - 3);
     const out = [...marks.push(cut), ...marks.end()];

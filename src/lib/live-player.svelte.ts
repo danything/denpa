@@ -143,7 +143,7 @@ type LiveState = "idle" | "connecting" | "playing" | "error";
 /**
  * 遅れて見られる長さ (秒)。**止めている間も受け取り続けるので、上限が要る。**
  *
- * ブラウザが抱えられる量には上限があり、超えると `appendBuffer` が落ちる。
+ * ブラウザが抱えられる量には上限があり、超えると `appendBuffer` が失敗する。
  * 5 分あれば、電話に出て戻ってくるくらいは追いつける。
  */
 const KEEP = 300;
@@ -228,7 +228,7 @@ const UNDO_BEFORE_CLOSE = 10_000;
 const tenth = (value: number): number => Math.round(value * 10) / 10;
 
 /**
- * データ放送の通知を、受け取る側ができるまでに取っておく数 (`heldData`)。待つのは 700 KB を落とす間だけで
+ * データ放送の通知を、受け取る側ができるまでに取っておく数 (`heldData`)。待つのは 700 KB を読み込む間だけで
  * 数十で足りるが、モジュールは 1 通が 100 KB を超えることがあるので、立たなかったときに際限なく抱え込ませない
  */
 const HOLD_DATA = 300;
@@ -542,7 +542,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let onData: ((message: ResponseMessage) => void) | null = null;
   /**
    * 受け取る側ができるまでの控え。サーバは押された瞬間に番組・PMT・モジュールをまとめて送るが、描く側は
-   * 700 KB を落としてから立ち上がる。番組 (`programInfo`) は一度きりなので、捨てると押しても何も出なかった
+   * 700 KB を読み込んでから立ち上がる。番組 (`programInfo`) は一度きりなので、捨てると押しても何も出なかった
    */
   let heldData: ResponseMessage[] = [];
   /** 字幕を出すか。**押して切り替えられる** (テレビの字幕ボタン)。端末ごとに覚える (`caption-pref.ts`) */
@@ -742,15 +742,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let broadcast = $state<{ at: number; unixMs: number } | null>(null);
   /** サーバの時計 − 端末の時計 (ms)。**端末の時計を当てにしないため** */
   let skew = 0;
+  /** 物差しの上の位置 `at` (秒) の放送時刻 (unix ms、サーバの時計)。`clock` が届くまでは null */
+  function airAt(at: number): number | null {
+    return broadcast === null
+      ? null
+      : broadcast.unixMs + (at - broadcast.at) * 1000;
+  }
   /** 放送との本当の差 (秒。0.1 秒刻み)。`at` は物差しの上の再生位置。`clock` が届くまでは null */
   function airLag(at: number): number | null {
-    if (broadcast === null) return null;
-    return (
-      Math.round(
-        (Date.now() + skew - (broadcast.unixMs + (at - broadcast.at) * 1000)) /
-          100,
-      ) / 10
-    );
+    const air = airAt(at);
+    return air === null ? null : tenth((Date.now() + skew - air) / 1000);
   }
   /**
    * 放送からどれだけ遅れて観ているか (秒)。隣に置いたテレビとの差で、上流 (選局・エンコード・回線) も入る。
@@ -768,7 +769,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   const decodeLag = new DecodeLag();
   /*
    * 映像の遅れは JS から見えないことがある (Windows のブラウザは映像を DOM と別の面に出す)。
-   * そういう端末 (`slipHidden`) では、起きる条件の途切れ (`stalled`) で飛び直す (`settle`)。コマ落ちを合図にしない理由は `unslip.ts` の `UNSLIP_EVERY` の下
+   * そういう端末 (`slipHidden`) では、途切れ (`stalled`) のたびに飛び直す (`settle`)。コマ落ちを合図にしない理由は `unslip.ts` の `UNSLIP_EVERY` の下
    */
   const hidesSlip = slipHidden();
   /** バッファが足りた最初の時刻。**映像を待ちきりにしないため** (`canStart`) */
@@ -1058,13 +1059,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 放送に対する遅れ (`LagMeter`)。追っかけは録画を実時間より速く読むので測らない
     const edge = edgeNow();
     if (edge !== null && chase === null) lagMeter.push(now, edge);
-    const rate = throughput.rate(now);
+    const bps = throughput.rate(now);
     const decision = adapter.tick({
       now,
       route: "live",
       current: served,
       manual: inUse() !== "auto",
-      throughput: rate,
+      throughput: bps,
       ahead,
       waiting: stuckNow(now),
       pace: lastPace,
@@ -1079,7 +1080,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (canvas) stuck = false;
     act(decision, now);
     const want = adapter.wantProbe();
-    if (want !== null) void probeLink(want, rate ?? 0);
+    if (want !== null) void probeLink(want, bps ?? 0);
   }
 
   /**
@@ -1185,14 +1186,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (probing === control) probing = null;
     }
     if (left || control.signal.reason === LEFT) return;
-    const rate = probeRate({
+    const probed = probeRate({
       startAt,
       firstAt,
       firstBytes,
       lastAt,
       bytes: got,
     });
-    capacity = { bps: stream + (rate ?? 0), at: Date.now() };
+    capacity = { bps: stream + (probed ?? 0), at: Date.now() };
   }
 
   /**
@@ -2140,10 +2141,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   function menuCodec(): LiveCodec | null {
     const noHevc = compat || chase !== null || broadcastKind() === "hevc";
-    const live = (options.liveCodecs ?? ["h264"]).filter(
+    const codecs = (options.liveCodecs ?? ["h264"]).filter(
       (id) => !(noHevc && id === "hevc"),
     );
-    return shownCodec(live, (id) => (compat ? canvasCan(id) : mseCan(id)));
+    return shownCodec(codecs, (id) => (compat ? canvasCan(id) : mseCan(id)));
   }
 
   /** いま使う選択。覚えていたエンコードするものは、メニューに並んでいるもの (`menuCodec`) と同じときだけ (`keptChoice`) */
@@ -2237,10 +2238,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     syncData();
   }
 
-  /** いまサーバにリクエストしたいか (`wantsData`) */
-  function wantData(): boolean {
+  /** いまサーバにリクエストしたいか (`wantsData`)。`open` はデータ放送を開いているか */
+  function wantData(open = showData): boolean {
     return wantsData({
-      open: showData,
+      open,
       auto: receiveData,
       tuned: tuned !== null,
       autoStart,
@@ -2285,6 +2286,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    *
    * @param frozen 切り替えの間、前のフレームを貼っておく先 (`freeze`)
    * @param subtitles 字幕を重ねる先 (`paint`)
+   * @param box canvas で描くとき、RawEngine の canvas を差し込む先 (`host`)。省くと `<video>` の親
    */
   function attach(
     frozen: HTMLCanvasElement,
@@ -3073,13 +3075,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * その形式をやめて次の形式へ切り替え、そう言う。この画面を開いている間は、自動でもその形式を選ばない (`decideFormat`)。
    * 次の形式が無ければ、リクエストし直した先 (`pickFormat`) が理由を出して止まる
    */
-  function giveUpCodec(baked: Exclude<LiveCodec, "h264">): void {
-    if (baked === "av1") av1GaveUp = true;
+  function giveUpCodec(encoded: Exclude<LiveCodec, "h264">): void {
+    if (encoded === "av1") av1GaveUp = true;
     else hevcGaveUp = true;
     const next = decideFormat();
     if (next !== null)
       note(
-        `${formatLabel(baked)} を再生できないため、${formatLabel(next)} に切り替えました`,
+        `${formatLabel(encoded)} を再生できないため、${formatLabel(next)} に切り替えました`,
       );
     requestAgain();
   }
@@ -3107,7 +3109,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function start(
     video: HTMLVideoElement,
     codecs: string,
-    baked: LiveCodec,
+    encoded: LiveCodec,
   ): void {
     // canvas で描いていたものからエンコードしたものへ戻るとき (打ち切った・選び直した)。canvas を破棄して <video> を出す
     stopRaw();
@@ -3119,8 +3121,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         ? codecs
         : mseType(codecs, (t) => picked.Source.isTypeSupported(t));
     if (picked === null || !picked.Source.isTypeSupported(type)) {
-      if (baked !== "h264") {
-        giveUpCodec(baked);
+      if (encoded !== "h264") {
+        giveUpCodec(encoded);
         return;
       }
       fail("再生できない形式です");
@@ -3128,7 +3130,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
     // 前の MediaSource の名残を落とす (音声の選び直しは繋ぎ直さないので `reset` を挟まない)
     clear();
-    mseCodec = baked;
+    mseCodec = encoded;
     // 受け取れると答えたのに、流すと断る形式がある (`onMediaError`)。同じ関数なので何度足しても 1 つ
     video.addEventListener("error", onMediaError);
     // エンコード方式が変われば太さも変わる。数え直す
@@ -3221,9 +3223,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * RawEngine へ流して canvas に描く。**サーバが別の形式に切り替えてきて** (AV1 をエンコードできなかった) それが
    * 描けない形式なら、MPEG-2 か理由へ (`fallBack`)
    */
-  function startCompat(video: HTMLVideoElement, baked: LiveCodec): void {
-    if (!canvasCan(baked)) {
-      fallBack(`${formatLabel(baked)} を再生できません`, "fmp4");
+  function startCompat(video: HTMLVideoElement, encoded: LiveCodec): void {
+    if (!canvasCan(encoded)) {
+      fallBack(`${formatLabel(encoded)} を再生できません`, "fmp4");
       return;
     }
     openEngine(video, "fmp4");
@@ -3366,7 +3368,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       fail("MPEG-2 の再生を続けられませんでした");
       return;
     }
-    note(reason);
+    note(`${reason}。変換した映像に切り替えました`);
     requestAgain();
   }
 
@@ -3583,11 +3585,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * (実況のコメントを合わせる。`JikkyoLayer`)。`clock` がまだ届いていなければ null
      */
     airTime(): number | null {
-      if (broadcast === null) return null;
       const at =
         engine !== null ? engine.position : (element?.currentTime ?? null);
-      if (at === null) return null;
-      return broadcast.unixMs + (at - broadcast.at) * 1000;
+      return at === null ? null : airAt(at);
     },
     /** 押して止めているか */
     get paused() {
@@ -3665,13 +3665,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * その局の入口に自動起動の指定があるとき
      */
     get receivingData() {
-      return wantsData({
-        open: false,
-        auto: receiveData,
-        tuned: tuned !== null,
-        autoStart,
-        switching: closing !== null,
-      });
+      return wantData(false);
     },
     /**
      * データ放送のエンジンが受け持つ局 (`DataBroadcast` の `channel`)。局を映していなければ null。

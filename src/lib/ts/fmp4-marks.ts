@@ -17,6 +17,8 @@
  * DOM も worker も触らない (`fmp4-marks.test.ts`)
  */
 
+import { ascii, joinBytes } from "@danything/arib/bytes";
+
 import { type NalCodec, startable } from "./random-access";
 
 /** sample_flags の sample_is_non_sync_sample */
@@ -38,15 +40,10 @@ const TFHD_DURATION = 0x08;
 const TFHD_SIZE = 0x10;
 
 function boxType(bytes: Uint8Array, at: number): string {
-  return String.fromCharCode(
-    bytes[at + 4]!,
-    bytes[at + 5]!,
-    bytes[at + 6]!,
-    bytes[at + 7]!,
-  );
+  return ascii(bytes, at + 4, 4);
 }
 
-/** `start` から `end` までの子の箱 (位置と大きさ)。大きさが壊れていれば、そこまで */
+/** `start` から `end` までの子のボックス (位置と大きさ)。大きさが壊れていれば、そこまで */
 function children(
   view: DataView,
   start: number,
@@ -195,7 +192,7 @@ export class SyncMarks {
     for (;;) {
       if (at + 8 > joined.length) break;
       const size = view.getUint32(at);
-      // 64 ビットの大きさ・末尾までの箱は ffmpeg の fMP4 に出てこない。読めないものはそのまま流す
+      // 64 ビットの大きさ・末尾までのボックスは ffmpeg の fMP4 に出てこない。読めないものはそのまま流す
       if (size < 8) {
         out.push(joined.slice(at));
         at = joined.length;
@@ -244,21 +241,13 @@ export class SyncMarks {
 
   /** 溜めたものを 1 つに繋いで空にする */
   private take(): Uint8Array {
-    const joined =
-      this.parts.length === 1 ? this.parts[0]! : new Uint8Array(this.have);
-    if (this.parts.length > 1) {
-      let at = 0;
-      for (const part of this.parts) {
-        joined.set(part, at);
-        at += part.length;
-      }
-    }
+    const joined = joinBytes(this.parts);
     this.parts = [];
     this.have = 0;
     return joined;
   }
 
-  /** 残り (途中で切れた箱) をそのまま返す */
+  /** 残り (途中で切れたボックス) をそのまま返す */
   end(): Uint8Array[] {
     if (this.have === 0) return [];
     return [this.take().slice()];

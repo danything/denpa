@@ -9,13 +9,13 @@
 import { resolve } from "$app/paths";
 
 /** 送るもの。無ければ GET */
-export interface RelayPost {
+interface RelayPost {
   contentType: string | null;
   body: BodyInit;
 }
 
 /** 中継のレスポンス。`relayed` が false なら中継が断った (403/502) */
-export interface Relayed {
+interface Relayed {
   relayed: boolean;
   response: Response;
 }

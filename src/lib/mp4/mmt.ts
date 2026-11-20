@@ -239,7 +239,7 @@ export class MmtFmp4 {
           mediaSegment(
             this.sequence++,
             trackId,
-            taken[0]!.dts - (this.base ?? this.origin!),
+            taken[0]!.dts - this.zero!,
             taken.map((p) => p.sample),
           ),
         );

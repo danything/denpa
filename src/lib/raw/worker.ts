@@ -362,7 +362,7 @@ function onAudio(pes: Pes): void {
     const config = `${frame.sampleRate}/${frame.channels}`;
     if (config !== audioConfig) {
       if (!audio.open("aac", null)) {
-        fail("音声を再生できませんでした");
+        fail("音声を再生できません");
         return;
       }
       audioConfig = config;
@@ -378,7 +378,7 @@ function onAudio(pes: Pes): void {
 function decodeAudio(audio: WasmAudio, data: Uint8Array, pts: number): void {
   const pcm = audio.decode(data);
   if (pcm === "broken") {
-    if (++audioErrors > BROKEN_MOST) fail("音声を再生できませんでした");
+    if (++audioErrors > BROKEN_MOST) fail("音声を再生できません");
     return;
   }
   if (pcm === null) return;
@@ -564,7 +564,8 @@ function tick(): void {
       // 飛び先より前の I は描かないので、先に出させない
       if (item.key && !seeking && decoder._dec_count() === 0) still(item);
     }
-    if (decoder._dec_count() > 0) {
+    // 描かない所 (`beyond`) のコマは 1 枚目でも描かない (飛び先が CM の先頭の手前 1 コマ未満だったとき)
+    if (decoder._dec_count() > 0 && !beyond(decoder._dec_pts_at(0))) {
       take();
       draw(current?.interlaced === true ? (current.topFirst ? 0 : 1) : -1);
     }
@@ -630,13 +631,7 @@ function tick(): void {
   if (starved) starve();
   const late = starved ? 0 : behind;
   thin(decoder, late);
-  watch(
-    late,
-    frameTicks,
-    0,
-    "再生が追いつかないため、変換した映像に切り替えました",
-    thinning ? 2 : 1,
-  );
+  watch(late, frameTicks, 0, "再生が追いつきません", thinning ? 2 : 1);
 }
 
 /*

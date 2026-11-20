@@ -212,7 +212,7 @@ export class MmtPresentFollowing extends PresentFollowing {
   feed(chunk: Uint8Array): boolean {
     let changed = false;
     for (const { table } of this.tables.feed(chunk)) {
-      // 予定 (0x8C〜) は読まずに捨てる。同じ並びに流れてくる
+      // 予定 (0x8C〜) は読まずに捨てる。同じストリームに流れてくる
       if (table[0] !== MH_PF_ACTUAL || table.length < 18) continue;
       if (u16(table, 3) !== this.serviceId) continue;
       if (this.hold(parseMhEit(table))) changed = true;

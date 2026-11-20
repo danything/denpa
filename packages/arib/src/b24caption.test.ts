@@ -67,7 +67,7 @@ describe("B24CaptionDecoder", () => {
     });
   });
 
-  test("中くらい (MSZ): 英数は半角の字にして縮めない、漢字は横を半分に縮める", () => {
+  test("中型 (MSZ) では英数を半角の字にして縮めず、漢字は横を半分に縮める", () => {
     const page = decoder().decode(
       text([...HEAD, ...aps(0, 0), 0x89, ...encodeAribText("AB字")]),
     );
@@ -239,7 +239,7 @@ describe("B24CaptionDecoder", () => {
       0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01,
     ]);
     expect(drcs?.md5).toBe(createHash("md5").update(raw).digest("hex"));
-    // 8 倍にした斜めの線: 線の上は濃く、離れたところは空く
+    // 8 倍にした斜めの線。線の上は濃く、離れたところは空く
     const g = decodeGrey(
       64,
       64,
@@ -264,7 +264,7 @@ describe("B24CaptionDecoder", () => {
   });
 
   test("追加記号 (90 区〜) は Unicode の字にする", () => {
-    // 90 区 48 点 は「[字]」の囲み文字 (U+1F228 ではなく libaribcaption の表のとおり)
+    // 90 区 48 点は「[字]」の囲み文字 (U+1F228 ではなく libaribcaption の表のとおり)
     const page = decoder().decode(
       text([...HEAD, ...aps(0, 0), 0x1b, 0x24, 0x3b, 0x7a, 0x50]),
     );
