@@ -2607,6 +2607,7 @@ export function requeueOrphanedJobs(): number {
         percent: 0,
         eta_ms: null,
         started_at: null,
+        log: "",
       })
       .where(eq(encodeJobs.state, "running")),
   );

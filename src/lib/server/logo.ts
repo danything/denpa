@@ -620,7 +620,7 @@ function needsLogo(service: { id: number; source: LogoSource }): boolean {
 }
 
 /**
- * CDT のチャンネルを上限いっぱいまで開けて、なお足りない局を控える。
+ * CDT のチャンネルを上限いっぱいまで開け、`NO_CDT_WINDOW` 以上読んでも足りない局を控える。
  * **ロゴを 1 つも持っていない局は控えない。** そちらは今までどおり毎回取得する
  */
 function markGaveUp(channel: string): void {
@@ -950,20 +950,24 @@ async function collect(
   if (carrier && outcome === "ranOut" && !received)
     carouselWatch.ranOutAt = Date.now();
   else if (carrier && (received || sdtt)) carouselWatch.seenAt = Date.now();
-  // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
-  if (!satellite && ranOut && timeout >= SWEEP_TIMEOUT)
+  /*
+   * 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない。上限のタイマーは選局を待つ間も進むので、
+   * 実際に `NO_CDT_WINDOW` 以上読めた回だけを証拠にする (ケーブルの `cdtVerdict` と同じ)
+   */
+  const readMs = openedAt === null ? 0 : Date.now() - openedAt;
+  if (
+    !satellite &&
+    ranOut &&
+    timeout >= SWEEP_TIMEOUT &&
+    readMs >= NO_CDT_WINDOW
+  )
     markGaveUp(target.channel);
   /*
    * ケーブルの TS は CDT を流しているかが分かっていない (`NO_CDT_RETRY`)。6 分開いて 1 つも来なければ控え、
    * その間は取得しない。共有でも 1 つ来れば控えを消す
    */
   if (!satellite && target.type === "CATV") {
-    const seen = cdtVerdict(
-      feed?.cdtSections ?? 0,
-      ranOut,
-      timeout,
-      openedAt === null ? 0 : Date.now() - openedAt,
-    );
+    const seen = cdtVerdict(feed?.cdtSections ?? 0, ranOut, timeout, readMs);
     if (seen !== null) markNoCdt(target.ts, seen);
   }
   return {
@@ -971,7 +975,7 @@ async function collect(
     outcome,
     carrier,
     received,
-    openedMs: openedAt === null ? 0 : Date.now() - openedAt,
+    openedMs: readMs,
     counts: feed?.counts ?? null,
   };
 }
