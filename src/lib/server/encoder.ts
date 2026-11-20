@@ -1984,7 +1984,6 @@ async function runJob(jobId: number): Promise<void> {
       );
       if (detection.material !== undefined)
         saveMaterial(recording.id, detection.material);
-      saveVideoLoss(recording.id, detection.material);
       saveCm(recording.id, detection);
       setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
     }
@@ -2111,6 +2110,11 @@ async function runJob(jobId: number): Promise<void> {
       `[bml] データ放送の取り出しに失敗しました (録画 ${recording.id}): ${error}`,
     );
   }
+  /*
+   * **映像の欠けた長さは、データ放送を取り出したあとに測る** (`video-loss.ts`)。取り出すときに元の TS の先頭の
+   * 放送時刻 (`ts_head`) が埋まることがあり (再起動をまたいで録った録画)、測るときはそれを読み直して使う
+   */
+  saveVideoLoss(recording.id, detection?.material);
 
   /*
    * **サムネイルは元の TS から取る** (復号した TS を消す前に)。エンコードした AV1 をデコードし直すと
