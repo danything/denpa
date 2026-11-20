@@ -353,6 +353,21 @@ describe("バージョン", () => {
     );
     expect(migrate.epgstationUrl()).toBe("http://127.0.0.1:1");
   });
+
+  test("別の機械へ移す取り込みの途中なら、始めずに理由を返す", async () => {
+    const { BUSY_MESSAGE } = await import("./transfer");
+    const meta = join(config.dataDir, "transfer", "upload.json");
+    mkdirSync(join(config.dataDir, "transfer"), { recursive: true });
+    writeFileSync(meta, "{}");
+    try {
+      expect(await start(fake.url, preview)).toEqual({
+        started: false,
+        message: BUSY_MESSAGE,
+      });
+    } finally {
+      rmSync(meta);
+    }
+  });
 });
 
 describe("Basic 認証", () => {
