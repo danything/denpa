@@ -10,12 +10,14 @@ metadata:
 spec:
   sourcePVC: agent-config
   trigger:
-    schedule: "0 19 * * *"
+    schedule: "5 19 * * *"
   restic:
     repository: volsync-agent-config
     copyMethod: Snapshot
     retain: { daily: 7, weekly: 4, monthly: 6 }
     moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
+    moverResources:
+      { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 1Gi } }
 ---
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
@@ -25,12 +27,14 @@ metadata:
 spec:
   sourcePVC: denpa-data
   trigger:
-    schedule: "0 19 * * *"
+    schedule: "10 19 * * *"
   restic:
     repository: volsync-denpa-data
     copyMethod: Snapshot
     retain: { daily: 7, weekly: 4, monthly: 6 }
     moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
+    moverResources:
+      { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 1Gi } }
 ---
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
@@ -44,13 +48,15 @@ metadata:
 spec:
   sourcePVC: denpa-encoded
   trigger:
-    schedule: "0 19 * * *"
+    schedule: "15 19 * * *"
   restic:
     repository: volsync-denpa-encoded
     copyMethod: Snapshot
     # 録画は 1 世代だけ(docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
     retain: { last: "1" }
     moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
+    moverResources:
+      { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 1Gi } }
 ---
 # 戻す側(populator)。PVC agent-config の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
 # (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
