@@ -9,8 +9,8 @@
 
 import type { ComponentPMT } from "@danything/arib/bml-protocol";
 
-/** 入口の部品の部品タグ (地上波 A プロファイル・BS/CS とも 0x40。`bml/resources.ts` の `STARTUP_COMPONENT`) */
-const ENTRY_COMPONENT = 0x40;
+/** 入口の部品の部品タグ (地上波 A プロファイル・BS/CS とも 0x40。エンジンは `bml/resources.ts` の `STARTUP_COMPONENT` で使う) */
+export const ENTRY_COMPONENT = 0x40;
 
 /** PMT の部品の並び (`ComponentPMT`) から、入口の部品に自動起動の指定があるかを返す。入口の部品が無ければ false */
 export function autoStarts(components: Iterable<ComponentPMT>): boolean {

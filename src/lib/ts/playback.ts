@@ -137,13 +137,13 @@ export function typeOfCodec(codec: string | null): string | null {
   return codec === "audio" ? AUDIO_TYPE : null;
 }
 
-/** `codec=auto` で、端末が再生できる形式 (`?playable=`) から選べるものが無かったときの言い分 (406) */
+/** `codec=auto` で、端末が再生できる形式 (`?playable=`) から選べるものが無かったときに返す理由 (406) */
 export const NO_FORMAT = "再生できる形式がありません";
 
-/** 混んでいて断ったときの言い分 (503) */
+/** 混んでいて断ったときに返す理由 (503) */
 export const BUSY = "サーバが混んでいます";
 
-/** サーバが「混んでいます」と断ったか (`server/playback.ts` の 503)。デプロイの最中の 503 (前段が返すもの) とは言い分で見分ける */
+/** サーバが「混んでいます」と断ったか (`server/playback.ts` の 503)。デプロイの最中の 503 (前段が返すもの) とは理由の文で見分ける */
 export async function busyAnswer(response: Response): Promise<boolean> {
   try {
     return ((await response.json()) as { message?: unknown }).message === BUSY;
@@ -749,6 +749,12 @@ export function transcodes(
 /** `TimeRanges` を配列にしたもの (`[始まり, 終わり]` 秒) */
 export type Ranges = readonly (readonly [number, number])[];
 
+/**
+ * 区間どうしの小さな隙間は無いものと見る (秒)。映像と音声の先頭が数十 ms ずれるぶん
+ * (音声の先頭は AAC の前置きぶん早い) と、ブラウザが跨いで再生する程度の隙間
+ */
+const GAP = 0.5;
+
 /** `t` を含む区間の終わり (秒)。含む区間が無ければ null */
 function endAround(ranges: Ranges, t: number): number | null {
   for (const [start, end] of ranges) {
@@ -762,12 +768,6 @@ export function aheadOf(ranges: Ranges, t: number): number {
   const end = endAround(ranges, t);
   return end === null ? 0 : end - t;
 }
-
-/**
- * 区間どうしの小さな隙間は無いものと見る (秒)。映像と音声の先頭が数十 ms ずれるぶん
- * (音声の先頭は AAC の前置きぶん早い) と、ブラウザが跨いで再生する程度の隙間
- */
-const GAP = 0.5;
 
 /** `t` が溜まっている区間に入っているか。始まりは `GAP` だけ手前も、終わりはちょうど (読み終えた所) も入れる */
 export function holds(ranges: Ranges, t: number): boolean {

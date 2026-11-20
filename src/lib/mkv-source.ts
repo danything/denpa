@@ -17,8 +17,8 @@ import {
   loadCues,
   loadMkvHead,
   type MkvTrack,
-  type ReadAt,
 } from "#lib/ts/mkv-media.js";
+import type { ReadAt } from "#lib/ts/seek.js";
 
 export interface MkvSource {
   /** 尺 (秒)。書いていなければ null */

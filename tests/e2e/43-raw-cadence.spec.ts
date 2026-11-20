@@ -303,8 +303,8 @@ test.describe("元の TS を出す間合い", () => {
     await setRecording(request, { codecs: [] });
     const { id } = await recordOne(page, request);
     /*
-     * **互換モードで MPEG-2 を選ぶ** (canvas に描く経路)。ふだんの観る画面は元の TS をサーバが変換して
-     * `<video>` に流し、出す間合いはブラウザが決める (40-watch-compat と同じ入れ方)
+     * **互換モードで開く** (canvas に描く経路。40-watch-compat と同じ入れ方)。エンコード済みの無い録画を MPEG-2 で
+     * 観るときは、互換モードでなくても同じ経路で描く
      */
     await page.addInitScript(() => {
       localStorage.setItem("canvas-video", "on");

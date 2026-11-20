@@ -1,10 +1,10 @@
 /**
- * 録画を観るときの、**押したことの読み方**。DOM を触らない。
+ * 録画を観るときの決まり。**押したことの読み方**と、チャプター (CM 飛ばし)・続きの位置・物差しの換算。DOM を触らない。
  *
  * 画面 (`routes/watch/[id]/+page.svelte`・`components/player/stage-tap.ts`) から切り離してあるのは、ここが
  * **指の癖に合わせて何度も直すところ**だからで、テストで確かめられる形にしておきたい。
  *
- * 決まりは動画アプリの通例に合わせる。
+ * 押したことの読み方は動画アプリの通例に合わせる。
  *
  * - **どこを押しても再生/一時停止** (マウスのとき)。指のときは操作バーの出し入れ
  * - **左右の端を素早く 2 回**で 10 秒戻す/送る。続けて押せばそのぶん重なる
@@ -189,9 +189,8 @@ export function skipTarget(
   /*
    * **`lead` のぶん先を見る。** CM に入ってから飛ぶと、飛ぶまでのコマが必ず
    * 見える (画面は飛ぶまで今の映像を出し続けるため)。**跨ぐ直前に飛べば、
-   * 最後に映っているのは本編の 1 コマ**で、CM のコマは 1 枚も出ない。
-   * 早く飛んだぶん本編の末尾が欠けるが、境目は場面の切れ目なので
-   * 1 コマぶんなら分からない
+   * 最後に映っているのは本編のコマ**で、CM のコマは 1 枚も出ない。
+   * 早く飛んだぶん (`cmLead`) 本編の末尾が欠けるが、境目は場面の切れ目なので分からない
    */
   const now = chapterAt(chapters, at + lead);
   if (now === null || !isCm(now.title)) return null;
@@ -472,13 +471,14 @@ export function cmSpans(chapters: Chapter[]): Span[] {
 }
 
 /**
- * `at` より後で次に始まる CM の先頭 (続いている CM はまとめた区間の先頭)。**無ければ null**。
+ * `at` から先で次に映る CM の先頭 (続いている CM はまとめた区間の先頭)。**CM の中にいれば、その CM の先頭。** 無ければ null。
  *
  * canvas のプレイヤーに「ここから先のコマは描かない」と渡す (`canvas-player.ts` の `stopAt`)。
- * 画面の刻みが遅れて飛ぶのが間に合わなくても、CM の 1 コマ目は描かれない
+ * 画面の刻みが遅れて飛ぶのが間に合わなくても、CM の 1 コマ目は描かれない。**CM に入ってもその先頭を渡したままにする。**
+ * 次の CM に替えると、飛ぶまでの間に CM のコマが描かれる
  */
 export function nextCmStart(chapters: Chapter[], at: number): number | null {
-  return cmSpans(chapters).find((span) => span.start > at)?.start ?? null;
+  return cmSpans(chapters).find((span) => span.end > at)?.start ?? null;
 }
 
 /**

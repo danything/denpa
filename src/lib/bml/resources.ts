@@ -19,6 +19,8 @@ import type {
 } from "@danything/arib/bml-protocol";
 import { parseMediaType } from "@danything/arib/multipart";
 
+import { ENTRY_COMPONENT } from "#lib/ts/data-auto-start.js";
+
 import type { ImageSource } from "./render";
 
 /**
@@ -113,8 +115,8 @@ interface Pending {
   kind: LockKind | null;
 }
 
-/** 入口の部品 (地上波 A プロファイル・BS/CS は 0x40) とモジュール */
-export const STARTUP_COMPONENT = 0x40;
+/** 入口の部品 (地上波 A プロファイル・BS/CS は 0x40。自動起動の指定を見る `ts/data-auto-start.ts` と同じ値) とモジュール */
+export const STARTUP_COMPONENT = ENTRY_COMPONENT;
 export const STARTUP_MODULE = 0;
 
 /** 0x0d はデータカルーセル */

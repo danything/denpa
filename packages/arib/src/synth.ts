@@ -53,7 +53,7 @@ export function putPcr(packet: Uint8Array, pcr: number): void {
  * Unicode → JIS X 0208 の区点。**読む側の裏返し。**
  *
  * 表を抱え込まずに、EUC-JP のデコーダを 1 回だけ総当たりして作る
- * (84 区 × 94 点 = 7896 文字)。テストと偽放送局からしか呼ばないので、
+ * (84 区 × 94 点 = 7896 文字)。テストと偽エージェントからしか呼ばないので、
  * 最初に使うときまで作らない。
  */
 let jis: Map<string, number> | null = null;
@@ -309,7 +309,7 @@ function eventDescriptors(event: SynthEvent): number[] {
      * stream_content / component_type / component_tag / stream_type /
      * simulcast_group_tag / フラグ / 言語 / **放送が付けた名前**。
      *
-     * フラグは 多言語(1) 主音声(1) 品質(2) 標本化周波数(3) reserved(1)。
+     * フラグは 多言語(1) 主音声(1) 品質(2) サンプリング周波数(3) reserved(1)。
      * 名前は、種別も言語も同じ音声が 2 本あるとき**唯一の見分け**になる
      */
     const lang = [...(audio.lang ?? "jpn")].map((c) => c.charCodeAt(0));
@@ -619,7 +619,7 @@ export function programMap(
 /**
  * データ符号化方式記述子 (0xFD)。**BML が載っている ES の目印。**
  *
- * 中身は「入口かどうか」と、自動起動の指定 (`autoStart`。入口のときだけ)、カルーセルの回 (dataEventId)。
+ * 中身は「入口かどうか」と、自動起動の指定 (`autoStart`。入口のときだけ)。dataEventId は 0xF に固定する。
  * 既定は地上波 (0x0C) の入口つき・自動起動つき・960x540
  */
 export function bxmlDescriptor(
@@ -835,7 +835,7 @@ export function logoModule(
 /*
  * --- データ放送のテストで使う定番の割り振り ---
  * denpa の databroadcast・data-timeline・recorded-bml・ts-head のテストが、同じ表と同じ組み立てを使う。
- * 番号そのものに意味は無く、揃っていることに意味がある。
+ * どのテストも同じ番号を使う。
  */
 export const BML_TS = {
   service: 1024,

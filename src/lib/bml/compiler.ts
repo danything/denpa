@@ -326,7 +326,7 @@ class FunctionCompiler {
   }
 
   private landAll(list: number[]): void {
-    for (const at of list) this.land(at);
+    this.patch(list, this.code.ops.length);
   }
 
   /** 関数 (または大域のコード) の本体を組む */

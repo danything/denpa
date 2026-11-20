@@ -31,23 +31,8 @@ export function sliceType(
   frame: Uint8Array,
   lengthSize: number,
 ): number | null {
-  let at = 0;
-  while (at + lengthSize < frame.length) {
-    let size = 0;
-    for (let i = 0; i < lengthSize; i++) size = size * 256 + frame[at + i]!;
-    const start = at + lengthSize;
-    if (size === 0 || start + size > frame.length) return null;
-    const head = frame[start]!;
-    if (codec === "h264") {
-      const type = head & 0x1f;
-      if (type >= 1 && type <= 5) return type;
-    } else {
-      const type = (head >> 1) & 0x3f;
-      if (type <= 31) return type;
-    }
-    at = start + size;
-  }
-  return null;
+  const first = slices(codec, frame, lengthSize).next();
+  return first.done === true ? null : nalType(codec, first.value);
 }
 
 /** H.264 の IDR */
@@ -101,25 +86,28 @@ export function avcSliceType(nal: Uint8Array): number | null {
   return ue();
 }
 
+/** NAL の種類 (nal_unit_type) */
+function nalType(codec: NalCodec, nal: Uint8Array): number {
+  return codec === "h264" ? nal[0]! & 0x1f : (nal[0]! >> 1) & 0x3f;
+}
+
 /** コマの中のスライスの NAL を順に返す。長さが壊れていれば、そこまで */
-function slices(
+function* slices(
   codec: NalCodec,
   frame: Uint8Array,
   lengthSize: number,
-): Uint8Array[] {
-  const out: Uint8Array[] = [];
+): Generator<Uint8Array> {
   let at = 0;
   while (at + lengthSize < frame.length) {
     let size = 0;
     for (let i = 0; i < lengthSize; i++) size = size * 256 + frame[at + i]!;
     const start = at + lengthSize;
-    if (size === 0 || start + size > frame.length) break;
+    if (size === 0 || start + size > frame.length) return;
     const nal = frame.subarray(start, start + size);
-    const type = codec === "h264" ? nal[0]! & 0x1f : (nal[0]! >> 1) & 0x3f;
-    if (codec === "h264" ? type >= 1 && type <= 5 : type <= 31) out.push(nal);
+    const type = nalType(codec, nal);
+    if (codec === "h264" ? type >= 1 && type <= 5 : type <= 31) yield nal;
     at = start + size;
   }
-  return out;
 }
 
 /**
@@ -133,13 +121,13 @@ export function startable(
   lengthSize: number,
   frame: Uint8Array,
 ): boolean {
-  const nals = slices(codec, frame, lengthSize);
+  const nals = [...slices(codec, frame, lengthSize)];
   if (nals.length === 0) return false;
   if (codec === "hevc") {
-    const type = (nals[0]![0]! >> 1) & 0x3f;
+    const type = nalType(codec, nals[0]!);
     return type >= HEVC_IRAP_FIRST && type <= HEVC_IRAP_LAST;
   }
-  if (nals.some((nal) => (nal[0]! & 0x1f) === AVC_IDR)) return true;
+  if (nals.some((nal) => nalType(codec, nal) === AVC_IDR)) return true;
   return nals.every((nal) => {
     const type = avcSliceType(nal);
     return type !== null && AVC_INTRA.includes(type % 5);

@@ -17,7 +17,7 @@
  * - **CAT / NIT / SDT / EIT / TDT** … 局の情報と番組表。EIT は放送の延長を
  *   追うのに使い、録画に残す番組情報の元にもなる
  *
- * 落とすもの: 他局の PMT と ES、そして詰め物 (PID 0x1FFF)。
+ * 落とすのは、他局の PMT と ES と、詰め物 (PID 0x1FFF)。
  */
 
 import { concatBytes, u16 } from "./bytes.js";

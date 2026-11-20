@@ -1,5 +1,5 @@
 /**
- * **字の表の字が、取ってくるフォント (Denpa Font) に全部入っているか。**
+ * **字の表の字が、配るフォント (Denpa Font) に全部入っているか。**
  *
  * 字幕と番組表 (`b24-tables.ts`。JIS X 0213 の 1 面・2 面も)・番組表などの外字 (`aribtext-gaiji.ts`)・DRCS の置き換え先・データ放送
  * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めているバージョンのリリースの woff2 の 2 つ (基本の字と JIS X 0213 で足された漢字) の cmap と突き合わせる。
@@ -8,8 +8,8 @@
  * 失敗したら、danything/denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) リリースを出し、
  * ここの Dockerfile の `DENPA_FONT_VERSION` を上げる (docs/licenses.md)。
  *
- * フォントはイメージに入れたものと同じリリースのファイルをここで取ってくる (同じリリースの SHA256SUMS と照合する)。
- * CI では必ず確かめ、手元で取れないとき (オフライン) は飛ばす。
+ * * フォントはイメージに入れたものと同じリリースのファイルをここで取得する (同じリリースの SHA256SUMS と照合する)。
+ * CI では必ず確かめ、手元で取得できないとき (オフライン) は飛ばす。
  */
 
 import { describe, expect, test } from "bun:test";
@@ -173,7 +173,7 @@ const FILES = [
   "denpa-font-jisx0213.txt",
 ] as const;
 
-/** リリースのファイルを取り、同じリリースの SHA256SUMS と照合する。手元で取れなければ null */
+/** リリースのファイルを取得し、同じリリースの SHA256SUMS と照合する。手元で取得できなければ null */
 async function fetchFiles(): Promise<Uint8Array[] | null> {
   let sums: string;
   let files: Uint8Array[];
@@ -182,7 +182,7 @@ async function fetchFiles(): Promise<Uint8Array[] | null> {
     files = await Promise.all(FILES.map(get));
   } catch (e) {
     if (process.env["CI"]) throw e;
-    console.warn(`フォントを取れないので飛ばす (オフライン?): ${e}`);
+    console.warn(`フォントを取得できないため飛ばします (オフライン?): ${e}`);
     return null;
   }
   FILES.forEach((name, i) => {

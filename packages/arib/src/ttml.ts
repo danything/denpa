@@ -263,7 +263,7 @@ function lines(p: XmlElement, style: Style, context: Context): Glyph[][] {
     }
     if (node.name !== "span") return;
     const own = styleOf(node, inherited, context);
-    // ルビの入れ物: 親字 (base) の並びと、ルビ (text) を組にする
+    // ルビの入れ物。親字 (base) の並びと、ルビ (text) を組にする
     if (own["ruby"] === "container") {
       const parts = node.children.filter(
         (c): c is XmlElement => typeof c !== "string",

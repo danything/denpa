@@ -13,7 +13,7 @@ import { packetize, patSection, programMap } from "./synth.js";
 
 /**
  * 変換せずに送る経路の受け側。**ffmpeg がやっていた「TS を PES に戻す」を自前でやる**ので、
- * 組み立てた放送 (`synth-av.ts`) を渡して、映像の 1 枚・音声の 1 コマが時刻ごと
+ * 組み立てた放送 (`synth-av.ts`) を渡して、映像の 1 枚・音声の 1 フレームが時刻ごと
  * そのまま戻ってくるかを見る。
  */
 
@@ -106,7 +106,7 @@ describe("PesDemuxer", () => {
     expect(again.map((p) => [p.pid, p.pts])).toEqual([[AUDIO[1], 7000]]);
   });
 
-  test("無い番号の音声を指定されたら先頭に落とす (番組が変わって減ったとき)", () => {
+  test("無い番号の音声を指定されたら先頭の音声にする (番組が変わって減ったとき)", () => {
     const demuxer = new PesDemuxer();
     demuxer.audioIndex = 5;
     demuxer.feed(head());
@@ -195,7 +195,7 @@ describe("parsePes", () => {
 });
 
 describe("AdtsSplitter", () => {
-  test("コマごとに割り、続くコマには 1 コマぶんずつ時刻を足す", () => {
+  test("フレームごとに割り、続くフレームには 1 フレームぶんずつ時刻を足す", () => {
     const splitter = new AdtsSplitter();
     const frame = silentAac();
     const out = splitter.feed(
@@ -214,7 +214,7 @@ describe("AdtsSplitter", () => {
     });
   });
 
-  test("PES をまたいだコマは、前の続きの時刻で出る", () => {
+  test("PES をまたいだフレームは、前の続きの時刻で出る", () => {
     const splitter = new AdtsSplitter();
     const frame = silentAac();
     const joined = Uint8Array.from([...frame, ...frame]);
@@ -222,7 +222,7 @@ describe("AdtsSplitter", () => {
     expect(
       splitter.feed(joined.subarray(0, cut), 1000).map((f) => f.pts),
     ).toEqual([1000]);
-    // 次の PES の時刻は、余りから始まるコマには使わない
+    // 次の PES の時刻は、余りから始まるフレームには使わない
     expect(
       splitter.feed(joined.subarray(cut), 99_999).map((f) => f.pts),
     ).toEqual([1000 + AUDIO_TICKS]);
@@ -230,7 +230,7 @@ describe("AdtsSplitter", () => {
 });
 
 describe("unwrap", () => {
-  test("一周をまたいでも手元の物差しの近くに置く", () => {
+  test("一周をまたいでも基準の時刻にいちばん近い周に置く", () => {
     expect(unwrap(100, WRAP + 50)).toBe(WRAP + 100);
     expect(unwrap(WRAP - 100, WRAP + 50)).toBe(WRAP - 100);
     expect(unwrap(500, 400)).toBe(500);

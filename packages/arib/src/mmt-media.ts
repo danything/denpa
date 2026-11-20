@@ -23,7 +23,13 @@
 
 import { BitReader } from "./bits.js";
 import { concatBytes, u16, u32 } from "./bytes.js";
-import { mmtDescriptors, type Mpt, parseMpt, TABLE_MPT } from "./mmt-si.js";
+import {
+  mmtDescriptors,
+  mmtText,
+  type Mpt,
+  parseMpt,
+  TABLE_MPT,
+} from "./mmt-si.js";
 import {
   MESSAGE_PA,
   messageTables,
@@ -415,8 +421,6 @@ function irap(nal: Uint8Array): boolean {
   return type >= 16 && type <= 23;
 }
 
-const utf8 = new TextDecoder();
-
 /**
  * 1 局に絞った TLV のバイト列 (`mmt-service-filter.ts`) から、映像・音声・字幕のアクセスユニットを時刻つきで取り出す。
  *
@@ -660,7 +664,7 @@ export class MmtMediaReader {
         yield {
           ...base,
           kind: "caption",
-          document: utf8.decode(concatBytes(units)),
+          document: mmtText(concatBytes(units)),
         };
         return;
     }

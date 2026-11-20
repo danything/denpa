@@ -152,19 +152,26 @@ export function shim(init: ShimInit): void {
   ];
   const watched = ["src", "href", "data", "poster"];
   /**
+   * 読み込む URL を、解決してから中継へ (`/common/…` はそのままでは denpa の先頭を指す)。
+   * 空は解決しない (<base> の URL になってしまう)。読めない URL はそのまま
+   */
+  const toLoad = (value: string): string => {
+    if (value === "") return value;
+    try {
+      return toRelay(new URL(value, document.baseURI).href);
+    } catch {
+      return value;
+    }
+  };
+  /**
    * style の中の `url(…)` も中継へ (NHK は `style="background:url(/hc-data/…)"` と書く。`/` から始まる URL は
    * denpa の先頭に解決されて 404 になる)
    */
   const styleUrls = (css: string): string =>
     css.replace(
       /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi,
-      (whole: string, quote: string, url: string) => {
-        try {
-          return `url(${quote}${toRelay(new URL(url, document.baseURI).href)}${quote})`;
-        } catch {
-          return whole;
-        }
-      },
+      (_: string, quote: string, url: string) =>
+        `url(${quote}${toLoad(url)}${quote})`,
     );
   const setAttribute = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function (
@@ -177,17 +184,11 @@ export function shim(init: ShimInit): void {
     const rewrite =
       loads.includes(this.tagName.toUpperCase()) &&
       watched.includes(String(name).toLowerCase());
-    if (!rewrite) return setAttribute.call(this, name, value);
-    // `/common/…` のような URL は、解決してから中継へ (そのままでは denpa の先頭を指す)
-    let resolved = String(value);
-    // 空は解決しない (<base> の URL になってしまう)
-    if (resolved === "") return setAttribute.call(this, name, value);
-    try {
-      resolved = new URL(resolved, document.baseURI).href;
-    } catch {
-      // 読めない URL はそのまま
-    }
-    return setAttribute.call(this, name, toRelay(resolved));
+    return setAttribute.call(
+      this,
+      name,
+      rewrite ? toLoad(String(value)) : value,
+    );
   };
   for (const [Kind, name] of [
     [w.HTMLScriptElement, "src"],
@@ -207,7 +208,7 @@ export function shim(init: ShimInit): void {
         return toOrigin(String(get.call(this)));
       },
       set(this: object, value: unknown) {
-        set.call(this, toRelay(new URL(String(value), document.baseURI).href));
+        set.call(this, toLoad(String(value)));
       },
     });
   }

@@ -77,8 +77,8 @@ interface RawEvents {
    * リクエストし直してもらう**
    */
   full(): void;
-  /** 終わりまで鳴らした (`finish` のあと。録画) */
-  ended?(): void;
+  /** 終わりまで鳴らした (`finish` のあと。録画・追っかけ) */
+  ended(): void;
 }
 
 export class RawEngine {
@@ -513,7 +513,7 @@ export class RawEngine {
         this.events.shown();
         break;
       case "size":
-        // 映像の形。枠 (`PlayerStage`) がこれを読んで、同じ形になる
+        // 映像の縦横比。枠 (`PlayerStage`) がこれを読んで、同じ縦横比になる
         this.canvas.dataset["aspect"] = `${message.width} / ${message.height}`;
         break;
       case "stats":
@@ -598,7 +598,7 @@ export class RawEngine {
     if (decided.kind === "start" || decided.kind === "jump")
       for (const scheduled of decided.schedule) this.play(scheduled);
     if (kind === "stall") this.events.stalled();
-    else if (kind === "end") this.events.ended?.();
+    else if (kind === "end") this.events.ended();
     this.tellClock();
     // 映像は出ているのに音が来ない。**音の出ない MPEG-2 より、エンコードしたもののほうがいい**
     if (
@@ -606,11 +606,7 @@ export class RawEngine {
       this.heardAt === 0 &&
       Date.now() - this.shownAt > NO_AUDIO
     ) {
-      this.giveUp(
-        this.input !== "ts-mpeg2"
-          ? "音声を再生できません"
-          : "音声を再生できないため、変換した映像に切り替えました",
-      );
+      this.giveUp("音声を再生できません");
     }
   }
 

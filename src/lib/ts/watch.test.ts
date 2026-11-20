@@ -249,14 +249,19 @@ describe("CM を自動で飛ばす", () => {
     expect(gaps.worst(11533)).toBeCloseTo(0.1, 5);
   });
 
-  /** canvas に「ここから先は描かない」と渡す位置。続いている CM はまとめた先頭で、CM の中にいれば次の CM */
+  /**
+   * canvas に「ここから先は描かない」と渡す位置。続いている CM はまとめた先頭。**CM の中にいればその CM の先頭のまま**
+   * (次の CM に替えると、刻みが遅れて飛ぶ前に CM のコマを描く)
+   */
   test("次の CM の先頭", () => {
     const more = [...RUN, { start: 300, end: 330, title: "CM" }];
     expect(nextCmStart(more, 10)).toBe(60);
     expect(nextCmStart(more, 59.99)).toBe(60);
-    expect(nextCmStart(more, 60)).toBe(300);
-    expect(nextCmStart(more, 80)).toBe(300);
-    expect(nextCmStart(more, 300)).toBeNull();
+    expect(nextCmStart(more, 60)).toBe(60);
+    expect(nextCmStart(more, 80)).toBe(60);
+    expect(nextCmStart(more, 105)).toBe(300);
+    expect(nextCmStart(more, 310)).toBe(300);
+    expect(nextCmStart(more, 330)).toBeNull();
     expect(nextCmStart([], 10)).toBeNull();
   });
 
@@ -317,7 +322,7 @@ describe("ffprobe のチャプターを読む", () => {
     expect(parseChapters(JSON.stringify({ chapters: [] }))).toEqual([]);
   });
 
-  test("読めなければ空。落とさない", () => {
+  test("読めなければ空。例外を投げない", () => {
     expect(parseChapters("")).toEqual([]);
     expect(parseChapters("{")).toEqual([]);
     expect(parseChapters(JSON.stringify({ streams: [] }))).toEqual([]);

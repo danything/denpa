@@ -452,7 +452,7 @@ export interface SynthMpt {
   assets: SynthAsset[];
 }
 
-/** MPT。アセットはどれも同じ IP の並びの packet_id (在りかの種類 0) に置く */
+/** MPT。アセットはどれも同じ IP データフローの packet_id (location_type 0) に置く */
 export function mptTable(mpt: SynthMpt): Uint8Array {
   const descriptors =
     mpt.access === undefined
