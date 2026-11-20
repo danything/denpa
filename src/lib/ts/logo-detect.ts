@@ -111,6 +111,15 @@ export function cropOrientation(o: Orientation, rect: Rect): Orientation {
   return out;
 }
 
+/**
+ * 覚えるときに上下から切り出す帯の高さ (`findArea` の `bands`)。隅の範囲 (`logo-area.regionOf`。縦は 1/5) が収まる偶数。
+ * 偶数にするのは、縦に並べた 2 つの境目を真ん中で揃えるため。**切り下げて偶数にすると隅の範囲に 1 行足りず**、
+ * 1/5 が奇数になる高さ (576 なら 115) では `findArea` がどの隅も見ずに、ロゴを覚えられなかった
+ */
+export function bandHeight(frameHeight: number): number {
+  return (regionOf("top-left", 1, frameHeight).height + 1) & ~1;
+}
+
 /** 揃い方の「縁がある」下限。中身だけの所は実測で上位 1% でも 0.07 */
 const AREA_FLOOR = 0.15;
 
@@ -503,12 +512,13 @@ export interface LogoReading {
  * 判断できる後ろの決め方は `byLevel`/`byCell`
  */
 export function readLogo(r: Readings, fps: number): LogoReading {
+  const half = Math.round(PEAK_WINDOW * fps);
   const s = smooth(r.scores);
   const known = flat(r, byLevel(r, fps));
-  const first = spansOf(r.scores, s, known, fps);
+  const first = spansOf(peak(r.scores, known, half, PEAK_RANK), s, half, fps);
   const final = flat(r, byCell(r, first, known, fps));
-  const spans = spansOf(r.scores, s, final, fps);
-  const q = peak(r.scores, final, Math.round(PEAK_WINDOW * fps), PEAK_RANK);
+  const q = peak(r.scores, final, half, PEAK_RANK);
+  const spans = spansOf(q, s, half, fps);
   const inside = new Uint8Array(q.length);
   for (const span of spans) inside.fill(1, span.start, span.end + 1);
   const blind: Span[] = [];
@@ -539,14 +549,13 @@ function flat(r: Readings, known: Uint8Array): Uint8Array {
 /** これより明るいのっぺりは白飛び。白いロゴは溶けるので、のっぺりでも判断しない */
 const FLAT_LEVEL = 200;
 
+/** 窓の中の上位の点 (`q`。`peak`) から区間を出す。`s` はならした点 (`smooth`)、`half` は窓の半分 (コマ数) */
 function spansOf(
-  scores: Float32Array,
+  q: Float32Array,
   s: Float32Array,
-  known: Uint8Array,
+  half: number,
   fps: number,
 ): Span[] {
-  const half = Math.round(PEAK_WINDOW * fps);
-  const q = peak(scores, known, half, PEAK_RANK);
   let runs: [number, number][] = [];
   let on = false;
   let from = 0;

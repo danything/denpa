@@ -79,7 +79,7 @@ export function recordedBroadcast(
     return broadcastCodec(transport);
   }
   undecided.delete(path);
-  const broadcast: BroadcastCodec = media.video === "hevc" ? "hevc" : "mpeg2";
+  const broadcast = codecOf(media);
   remember(decided, path, broadcast);
   remember(contents, path, {
     media: { video: media.video !== null, audio: media.audio },
@@ -89,7 +89,7 @@ export function recordedBroadcast(
 }
 
 /** 録画に映像と音声があるか (`recordedMedia`) */
-export interface RecordedMedia {
+interface RecordedMedia {
   video: boolean;
   audio: boolean;
 }
@@ -129,7 +129,7 @@ export function recordedMedia(path: string, program: number): RecordedMedia {
   // 放送のコーデックも同じ PMT で決まる。まだ覚えていないか、映像の無い答えから読み直したなら覚える
   if (!decided.has(path) || held !== undefined) {
     undecided.delete(path);
-    remember(decided, path, media.video === "hevc" ? "hevc" : "mpeg2");
+    remember(decided, path, codecOf(media));
   }
   return found;
 }
@@ -161,6 +161,11 @@ const MEDIA_SAMPLES = 8;
 interface PmtMedia {
   video: ServiceVideo | null;
   audio: boolean;
+}
+
+/** PMT の映像が HEVC なら `hevc` (TS で送る 4K の局)、ほかは `mpeg2` */
+function codecOf(media: PmtMedia): BroadcastCodec {
+  return media.video === "hevc" ? "hevc" : "mpeg2";
 }
 
 /**

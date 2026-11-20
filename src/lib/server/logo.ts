@@ -115,7 +115,7 @@ function logoPath(serviceId: number): string {
 }
 
 /**
- * ロゴを流していないと分かった中継の控え。
+ * 中継と局の控え (`RelayNotes`)。
  *
  * ロゴの置き場に置く。DB に列を足さないのは、ロゴまわりは**ファイルを正**と
  * 決めてあるため (`reconcile`)。置き場ごと消えたら、また調べ直せばいい。
@@ -140,8 +140,8 @@ interface RelayNotes {
   /** ロゴを積んでいなかった TS と、そう分かった時刻 */
   noCarousel: Record<string, number>;
   /**
-   * ロゴのカルーセルを積んでいた TS と、そう分かった時刻。チューナーが空いているときに
-   * 自分から開くのはここだけ (`awaitCarousel`)。外れを全部当たり直すことはしない
+   * ロゴのカルーセルを積んでいた TS と、そう分かった時刻。チューナーが空いているときに自分から開くのは、
+   * ここに控えがあればここだけ (`awaitCarousel`)。控えが無いときだけ、まだ確かめていない TS を探す
    */
   carriers: Record<string, number>;
   /**
@@ -568,16 +568,16 @@ interface Target {
   ts: string;
 }
 
-/** 局の行から、その局が入っている物理チャンネル */
-function targetOf(service: Target): Target {
-  return {
-    type: service.type,
-    channel: service.channel,
-    places: service.places,
-    network_id: service.network_id,
-    source: service.source,
-    ts: service.ts,
-  };
+/** 局の行を、入っている物理チャンネルにまとめる。並びは各チャンネルの最初の局の順 */
+function channelsOf(rows: readonly Target[]): Target[] {
+  const targets = new Map<string, Target>();
+  for (const row of rows) {
+    const key = `${row.type}:${row.channel}`;
+    if (targets.has(key)) continue;
+    const { type, channel, places, network_id, source, ts } = row;
+    targets.set(key, { type, channel, places, network_id, source, ts });
+  }
+  return [...targets.values()];
 }
 
 /**
@@ -620,7 +620,7 @@ function needsLogo(service: { id: number; source: LogoSource }): boolean {
 }
 
 /**
- * CDT のチャンネルを上限いっぱいまで開けて、なお足りない局を控える。
+ * CDT のチャンネルを上限いっぱいまで開け、`NO_CDT_WINDOW` 以上読んでも足りない局を控える。
  * **ロゴを 1 つも持っていない局は控えない。** そちらは今までどおり毎回取得する
  */
 function markGaveUp(channel: string): void {
@@ -703,16 +703,10 @@ function relayRank(target: Pick<Target, "type" | "network_id">): number {
  */
 function missing(): Target[] {
   const services = tunableServices();
-  const targets = new Map<string, Target>();
-  const add = (service: Target) => {
-    const key = `${service.type}:${service.channel}`;
-    if (!targets.has(key)) targets.set(key, targetOf(service));
-  };
-
   // CDT は中継ごとに入っている局が違う。その中継の局が足りないときだけ開く
-  for (const service of services) {
-    if (service.source === "cdt" && needsLogo(service)) add(service);
-  }
+  const cdt = services.filter(
+    (service) => service.source === "cdt" && needsLogo(service),
+  );
 
   /*
    * **カルーセルは「その中継の局が足りているか」では選べない。**
@@ -730,15 +724,16 @@ function missing(): Target[] {
    * 読み切ってなお来なかった局は行っても来ないので、そこだけを理由に
    * 中継を開き直すと同じことの繰り返しになる
    */
-  if (missingCarousel() > 0) {
-    const relays = services
-      .filter((service) => service.source === "carousel")
-      .sort((a, b) => relayRank(a) - relayRank(b));
-    for (const service of relays) {
-      if (!skipRelay(service.ts)) add(service);
-    }
-  }
-  return [...targets.values()];
+  const relays =
+    missingCarousel() > 0
+      ? services
+          .filter(
+            (service) =>
+              service.source === "carousel" && !skipRelay(service.ts),
+          )
+          .sort((a, b) => relayRank(a) - relayRank(b))
+      : [];
+  return channelsOf([...cdt, ...relays]);
 }
 
 /** その物理チャンネルに入っている局のうち、ロゴを取り直したい数 */
@@ -803,6 +798,21 @@ function markTried(outcome: Outcome, startedAt: number): void {
     carouselWatch.triedAt = startedAt;
 }
 
+/** 1 回開いた結果 (`collect`) */
+interface Collected {
+  /** この回に取れた局の数 */
+  found: number;
+  outcome: Outcome;
+  /** ロゴを積んだ中継だったか */
+  carrier: boolean;
+  /** カルーセルから 1 つでも受け取ったか (`CarouselProgress.received`) */
+  received: boolean;
+  /** 開いていた長さ。開けなかったら 0 */
+  openedMs: number;
+  /** この回に読んだ数。開けなかったら null */
+  counts: Readonly<CarouselCounts> | null;
+}
+
 /**
  * 1 つの物理チャンネルを開いて、そこに入っている局のロゴを取得する。
  *
@@ -817,9 +827,6 @@ function markTried(outcome: Outcome, startedAt: number): void {
  * **衛星のカルーセルは読みかけを残す** (`carousels`)。番組表の取得やライブに譲って切れても、
  * 次に開いたときに続きから読む。**当たりの中継と分かったら、共有でも `config.logoCarouselWait` まで開く。**
  * 十数分に一度しか来ないものを 3 分で切り上げていると、来る時刻に開いている見込みが薄い。
- *
- * 返す `received` は、この回にカルーセルから 1 つでも受け取ったか (`CarouselProgress.received`)。
- * `openedMs` は開いていた長さ (開けなかったら 0)。`counts` はこの回に読んだ数 (開けなかったら null)
  */
 async function collect(
   target: Target,
@@ -829,14 +836,7 @@ async function collect(
   priority: number = SWEEP_PRIORITY,
   /** 開く所。渡さなければ局を受けられる所から振り分ける。共有 (`ride`) は開いている所だけを渡す */
   places: readonly Place[] = strictPlaces(target.places),
-): Promise<{
-  found: number;
-  outcome: Outcome;
-  carrier: boolean;
-  received: boolean;
-  openedMs: number;
-  counts: Readonly<CarouselCounts> | null;
-}> {
+): Promise<Collected> {
   const satellite = target.source === "carousel";
   // 衛星は「開いた中継の局」では見ない。開いた中継以外の局も一緒に取得できる (`missingCarousel`)
   const remaining = () =>
@@ -950,20 +950,24 @@ async function collect(
   if (carrier && outcome === "ranOut" && !received)
     carouselWatch.ranOutAt = Date.now();
   else if (carrier && (received || sdtt)) carouselWatch.seenAt = Date.now();
-  // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
-  if (!satellite && ranOut && timeout >= SWEEP_TIMEOUT)
+  /*
+   * 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない。上限のタイマーは選局を待つ間も進むので、
+   * 実際に `NO_CDT_WINDOW` 以上読めた回だけを証拠にする (ケーブルの `cdtVerdict` と同じ)
+   */
+  const readMs = openedAt === null ? 0 : Date.now() - openedAt;
+  if (
+    !satellite &&
+    ranOut &&
+    timeout >= SWEEP_TIMEOUT &&
+    readMs >= NO_CDT_WINDOW
+  )
     markGaveUp(target.channel);
   /*
    * ケーブルの TS は CDT を流しているかが分かっていない (`NO_CDT_RETRY`)。6 分開いて 1 つも来なければ控え、
    * その間は取得しない。共有でも 1 つ来れば控えを消す
    */
   if (!satellite && target.type === "CATV") {
-    const seen = cdtVerdict(
-      feed?.cdtSections ?? 0,
-      ranOut,
-      timeout,
-      openedAt === null ? 0 : Date.now() - openedAt,
-    );
+    const seen = cdtVerdict(feed?.cdtSections ?? 0, ranOut, timeout, readMs);
     if (seen !== null) markNoCdt(target.ts, seen);
   }
   return {
@@ -971,7 +975,7 @@ async function collect(
     outcome,
     carrier,
     received,
-    openedMs: openedAt === null ? 0 : Date.now() - openedAt,
+    openedMs: readMs,
     counts: feed?.counts ?? null,
   };
 }
@@ -1210,8 +1214,14 @@ async function drain(
       const limit =
         target.source === "cdt" ? SWEEP_TIMEOUT : config.logoCarouselWait;
       const startedAt = Date.now();
-      const { found, outcome, carrier, received, openedMs, counts } =
-        await collect(target, limit, signal, left, carouselPriority(target));
+      const result = await collect(
+        target,
+        limit,
+        signal,
+        left,
+        carouselPriority(target),
+      );
+      const { outcome } = result;
       open.set(target.type, (open.get(target.type) ?? 1) - 1);
       if (
         target.source === "carousel" &&
@@ -1231,27 +1241,11 @@ async function drain(
         });
         continue;
       }
-      // 記録の「7 時間あけて開き直します」と合わせる。「いますぐ」で開けた回も、定期チェックの間合いはここから数える
-      if (carrier) markTried(outcome, startedAt);
-      const note = carrier
-        ? carouselMessage(target.channel, outcome, received)
+      // 「いますぐ」で開けた回も、定期チェックで待ったとき (`awaitCarousel`) と同じく控えて記録に残す
+      if (result.carrier) noteCarrier(target.channel, "now", startedAt, result);
+      const note = result.carrier
+        ? carouselMessage(target.channel, outcome, result.received)
         : "";
-      // 当たりの中継は、定期チェックで待ったとき (`awaitCarousel`) と同じ 1 行を記録に残す
-      const line = carrier
-        ? waitedMessage(target.channel, outcome, received, openedMs, counts)
-        : null;
-      if (line !== null) console.log(`[logo] ${line}`);
-      if (carrier)
-        recordLogoAttempt({
-          startedAt,
-          channel: target.channel,
-          origin: "now",
-          openedMs,
-          outcome,
-          received,
-          found,
-          counts,
-        });
       left = [logoUse(target)];
       update({
         channels: state.channels.filter(
@@ -1290,7 +1284,34 @@ function carouselMessage(
 }
 
 /**
- * 当たりの中継で待ったあと (`awaitCarousel`) の記録の 1 行。どう終わったかを残し、
+ * 当たりの中継を開いた回の後始末。定期チェックの間合いを控え (`markTried`。記録の「7 時間あけて開き直します」と合わせる)、
+ * どう終わったかの 1 行をログに出し (`waitedMessage`)、記録に残す (`recordLogoAttempt`)。
+ * `origin` は、空いたときに自分で開いた (`wait`) か「ロゴをいますぐ集める」(`now`) か
+ */
+function noteCarrier(
+  channel: string,
+  origin: "wait" | "now",
+  startedAt: number,
+  result: Collected,
+): void {
+  const { found, outcome, received, openedMs, counts } = result;
+  markTried(outcome, startedAt);
+  const line = waitedMessage(channel, outcome, received, openedMs, counts);
+  if (line !== null) console.log(`[logo] ${line}`);
+  recordLogoAttempt({
+    startedAt,
+    channel,
+    origin,
+    openedMs,
+    outcome,
+    received,
+    found,
+    counts,
+  });
+}
+
+/**
+ * 当たりの中継を開いたあと (`awaitCarousel` と「いますぐ」) の記録の 1 行。どう終わったかを残し、
  * 2 台の環境で一晩揃わなかったときに、取り上げられ続けたのか来なかったのかを記録から分けられるようにする (#1939)。
  * 外れの中継 (`miss`) と、開けなかった回 (`busy`) は出さない。
  *
@@ -1407,8 +1428,7 @@ let idle: { use: StreamUse; controller: AbortController } | null = null;
  * 流れてこないので、番組表の取得を押しのけてまで待たない (docs/logo.md「衛星はダウンロードの期間にだけ流れてくる」)。
  *
  * 当たりがまだ分からなければ、確かめていない衛星の中継を順に開いて探す。外れは PAT を見た時点
- * (1 秒ほど) で閉じ、1 週間は開き直さない (`RELAY_RETRY`)。当たりを控える前のバージョンから
- * 上げたときも、番組表の取得がその中継を開くのを何時間も待たずに済む
+ * (1 秒ほど) で閉じ、1 週間は開き直さない (`RELAY_RETRY`)
  */
 async function awaitCarousel(): Promise<number> {
   if (missingCarousel() === 0) return 0;
@@ -1434,29 +1454,9 @@ async function awaitCarousel(): Promise<number> {
         attempt.period ? carouselPriority(target) : SWEEP_PRIORITY,
       );
       found += result.found;
-      // 当たりの中継と分かった回だけ控える (`drain` と同じ。外れか、PAT を見る前に切れた回で 7 時間あけない)
-      if (result.carrier) markTried(result.outcome, startedAt);
-      const line = result.carrier
-        ? waitedMessage(
-            target.channel,
-            result.outcome,
-            result.received,
-            result.openedMs,
-            result.counts,
-          )
-        : null;
-      if (line !== null) console.log(`[logo] ${line}`);
+      // 当たりの中継と分かった回だけ控える (外れか、PAT を見る前に切れた回で 7 時間あけない)
       if (result.carrier)
-        recordLogoAttempt({
-          startedAt,
-          channel: target.channel,
-          origin: "wait",
-          openedMs: result.openedMs,
-          outcome: result.outcome,
-          received: result.received,
-          found: result.found,
-          counts: result.counts,
-        });
+        noteCarrier(target.channel, "wait", startedAt, result);
       // 外れなら次の中継へ。それ以外 (読み切った・譲った・来なかった) はここまで
       if (result.outcome !== "miss") return found;
     } finally {
@@ -1488,15 +1488,16 @@ async function freeRelay(left: readonly StreamUse[]): Promise<Target | null> {
  */
 function unprobedRelays(): Target[] {
   const known = notes();
-  return tunableServices()
-    .filter(
-      (s) =>
-        s.source === "carousel" &&
-        known.carriers[s.ts] === undefined &&
-        !skipRelay(s.ts),
-    )
-    .sort((a, b) => relayRank(a) - relayRank(b))
-    .map(targetOf);
+  return channelsOf(
+    tunableServices()
+      .filter(
+        (s) =>
+          s.source === "carousel" &&
+          known.carriers[s.ts] === undefined &&
+          !skipRelay(s.ts),
+      )
+      .sort((a, b) => relayRank(a) - relayRank(b)),
+  );
 }
 
 /**
@@ -1506,18 +1507,15 @@ function unprobedRelays(): Target[] {
 function carrierTargets(): Target[] {
   const tunable = tunableServices();
   const known = Object.entries(notes().carriers).sort(([, a], [, b]) => b - a);
-  const targets = new Map<string, Target>();
-  for (const [ts] of known) {
-    if (skipRelay(ts)) continue;
-    const channels = tunable
-      .filter((s) => s.source === "carousel" && s.ts === ts)
-      .sort((a, b) => relayRank(a) - relayRank(b));
-    for (const service of channels) {
-      const key = `${service.type}:${service.channel}`;
-      if (!targets.has(key)) targets.set(key, targetOf(service));
-    }
-  }
-  return [...targets.values()];
+  return channelsOf(
+    known
+      .filter(([ts]) => !skipRelay(ts))
+      .flatMap(([ts]) =>
+        tunable
+          .filter((s) => s.source === "carousel" && s.ts === ts)
+          .sort((a, b) => relayRank(a) - relayRank(b)),
+      ),
+  );
 }
 
 /**
@@ -1536,11 +1534,11 @@ export async function sweep(): Promise<number> {
 }
 
 /**
- * 画面の「ロゴをいますぐ集める」。残っているぶんを、チューナー 2 台で一気に取得する。
+ * 画面の「ロゴをいますぐ集める」。残っているぶんを、チューナー 2 台 (`SWEEP_TUNERS`) までで一気に取得する。
  *
  * **衛星も混ぜる。** ロゴを運ぶ中継は 1 つだけで、当たれば BS と CS の全局ぶんが
- * まとめて揃い、外れは PAT を見た時点 (1 秒ほど) で次へ行く。当たり外れを
- * 書き留めておくので、二度目からは当たりの中継しか開かない。
+ * まとめて揃い、外れは PAT を見た時点 (1 秒ほど) で次へ行く。外れの控えは押すたびに捨てるが、
+ * 当たりと分かっている中継から開くので、揃えばほかの中継は開かない。
  */
 export async function sweepNow(): Promise<{
   started: boolean;

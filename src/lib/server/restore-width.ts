@@ -36,7 +36,7 @@ const MARK = "widthRestoredThrough";
 
 /**
  * 元の TS の先頭から読む上限。EIT の現在/次 (p/f) は数秒おきに流れるので、先頭の数十秒で足りる。
- * BS の 1 秒はおよそ 3MB
+ * BS の 1 秒はおよそ 3 MB
  */
 const READ_LIMIT = 96 * 1024 * 1024;
 const CHUNK = 1024 * 1024;

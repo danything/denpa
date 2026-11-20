@@ -102,7 +102,7 @@ import { notify } from "./webhook";
  * `bwdif` の既定は `send_field` で、**1 フィールドから 1 コマ作って 59.94p にする**。
  * 放送は 1080i (毎秒 60 フィールド) なので、実写・スポーツ・報道はこれで
  * 撮られたとおりの動きになる。コマ数が倍なのでエンコードの時間もサイズも
- * およそ倍になる (実測・地上波 1 分・AV1: 31.8 秒 26MB ↔ 16.9 秒 15MB)。
+ * およそ倍になる (実測・地上波 1 分・AV1: 31.8 秒 26 MB ↔ 16.9 秒 15 MB)。
  *
  * **24p 系 (アニメ・フィルム) と 30p は倍にしない** (`smooth` が false。見分け方は `fps.ts`)。
  * 24p 系はプルダウンして 60 フィールドに入れているだけ、30p は上下が同じ時刻のコマなので、
@@ -527,7 +527,7 @@ export function buildArgs(
       if (count !== undefined) args.push(`-ac:a:${out}`, String(count));
     });
   }
-  args.push("-c:a", "libopus", "-b:a", "256k"); // 元の放送 (AAC 256kbps) と同じビットレート
+  args.push("-c:a", "libopus", "-b:a", "256k"); // 元の放送 (AAC 256 kbps) と同じビットレート
 
   // 字幕は**映像・音声のあと**に map する (= 最後のトラック)。映像が先頭でないと弱いデマルチプレクサがある
   args.push(...captionArgs());
@@ -624,7 +624,7 @@ const stopping = new Map<number, (() => void)[]>();
 /**
  * 中止を待つ上限。**押した人を待たせすぎない。**
  *
- * ffmpeg は SIGTERM から 1 秒ほどで終わる (実測 923ms / 1078ms)。この待ちは
+ * ffmpeg は SIGTERM から 1 秒ほどで終わる (実測 923 ms / 1078 ms)。この待ちは
  * その 1 秒を待って**後始末の済んだ結果を返す**ためのもので、間に合わなければ待つのをやめて
  * 返す。あとは後始末が終わったときの通知 (SSE) が追いつく
  */
@@ -1984,7 +1984,6 @@ async function runJob(jobId: number): Promise<void> {
       );
       if (detection.material !== undefined)
         saveMaterial(recording.id, detection.material);
-      saveVideoLoss(recording.id, detection.material);
       saveCm(recording.id, detection);
       setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
     }
@@ -2111,6 +2110,11 @@ async function runJob(jobId: number): Promise<void> {
       `[bml] データ放送の取り出しに失敗しました (録画 ${recording.id}): ${error}`,
     );
   }
+  /*
+   * **映像の欠けた長さは、データ放送を取り出したあとに測る** (`video-loss.ts`)。取り出すときに元の TS の先頭の
+   * 放送時刻 (`ts_head`) が埋まることがあり (再起動をまたいで録った録画)、測るときはそれを読み直して使う
+   */
+  saveVideoLoss(recording.id, detection?.material);
 
   /*
    * **サムネイルは元の TS から取る** (復号した TS を消す前に)。エンコードした AV1 をデコードし直すと
@@ -2603,6 +2607,7 @@ export function requeueOrphanedJobs(): number {
         percent: 0,
         eta_ms: null,
         started_at: null,
+        log: "",
       })
       .where(eq(encodeJobs.state, "running")),
   );
