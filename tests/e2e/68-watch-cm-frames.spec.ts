@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 
+import { cmLead } from "../../src/lib/ts/watch";
 import { clipFrom, readClip } from "../fake/fmp4-clip";
 import {
   expect,
@@ -26,6 +27,9 @@ import { playMuted } from "./watch-stream";
  * 映像は作り置きの fMP4 (`fmp4-clip.ts`) をその場の変換に見立てて、リクエストされた位置から返す
  */
 const CM = { start: 3, end: 5 };
+
+/** 映したコマ。`wall` はそのコマを知らせた呼び出しの時刻 (ms。`requestVideoFrameCallback` の `now`) */
+type Shown = { at: number; covered: boolean; wall: number };
 
 test.describe("CM のコマを映さずに飛ぶ", () => {
   /*
@@ -96,7 +100,7 @@ test.describe("CM のコマを映さずに飛ぶ", () => {
          */
         await page.addInitScript(
           ({ busy, start }) => {
-            const frames: { at: number; covered: boolean }[] = [];
+            const frames: Shown[] = [];
             (globalThis as { shownFrames?: typeof frames }).shownFrames =
               frames;
             let block = start - 0.135 - 0.25 * 8;
@@ -110,7 +114,7 @@ test.describe("CM のコマを映さずに飛ぶ", () => {
               }
               let last: { at: number; count: number } | null = null;
               const next = (
-                _: number,
+                wall: number,
                 meta: { mediaTime: number; presentedFrames: number },
               ): void => {
                 const cover = document.querySelector<HTMLCanvasElement>(
@@ -122,9 +126,9 @@ test.describe("CM のコマを映さずに飛ぶ", () => {
                 if (last !== null && skipped > 0 && meta.mediaTime > last.at) {
                   const step = (meta.mediaTime - last.at) / (skipped + 1);
                   for (let i = 1; i <= skipped; i++)
-                    frames.push({ at: last.at + step * i, covered });
+                    frames.push({ at: last.at + step * i, covered, wall });
                 }
-                frames.push({ at: meta.mediaTime, covered });
+                frames.push({ at: meta.mediaTime, covered, wall });
                 last = { at: meta.mediaTime, count: meta.presentedFrames };
                 if (busy && meta.mediaTime >= block && meta.mediaTime < start) {
                   block += 0.25;
@@ -165,7 +169,7 @@ test.describe("CM のコマを映さずに飛ぶ", () => {
             () =>
               (
                 globalThis as {
-                  shownFrames?: { at: number; covered: boolean }[];
+                  shownFrames?: Shown[];
                 }
               ).shownFrames,
           )) ?? [];
@@ -191,14 +195,27 @@ test.describe("CM のコマを映さずに飛ぶ", () => {
         expect(leaked).toEqual([]);
 
         /*
-         * 早く飛びすぎていない。覆う前に映った最後の本編のコマは、先読み (実時間の 0.1 秒に速さを掛けたもの。
-         * 詰まっているときは上限の 0.5 秒) と、呼び出しの間隔ぶんの手前まで
+         * 早く飛びすぎていない。覆う前に映った最後の本編のコマは、先読み (`cmLead`) と呼び出しの間隔ぶんの手前まで。
+         * 先読みは呼び出しの間隔で伸びる (CI の遅い機械では 1 コマより間遠になる) ので、ここで控えた間隔から同じ式で出す。
+         * 控えた間隔には画面が数えない間 (止めていた・飛んでいた) も入るので、画面が使った先読み以上になる。
+         * 詰まっているときは上限の 0.5 秒。開いた直後はチャプターが来るまで覆っている (`shut`) ので、
+         * 最初に覆われたコマではなく、覆いの無い本編のコマのうち最後のものを見る
          */
-        const first = seen.findIndex((f) => f.covered);
-        const before = seen.slice(0, first).filter((f) => f.at < CM.start);
-        expect(before.length).toBeGreaterThan(0);
-        expect(before.at(-1)!.at).toBeGreaterThan(
-          CM.start - (busy ? 0.5 + 0.25 : 0.1 * rate + 0.15),
+        const main = seen.findLastIndex((f) => f.at < CM.start && !f.covered);
+        expect(main).toBeGreaterThanOrEqual(0);
+        const until = seen[main + 1]?.wall ?? seen[main]!.wall;
+        const walls = [
+          ...new Set(seen.filter((f) => f.wall <= until).map((f) => f.wall)),
+        ];
+        let worst = 0;
+        for (let i = 1; i < walls.length; i++) {
+          const gap = walls[i]! - walls[i - 1]!;
+          // 1 秒を超える間隔は画面も数えない (止めていた・飛んでいた間。`ts/watch.ts` の `GAP_IGNORE`)
+          if (gap <= 1_000) worst = Math.max(worst, gap);
+        }
+        const lead = busy ? 0.5 : cmLead(rate, worst / 1000);
+        expect(seen[main]!.at).toBeGreaterThan(
+          CM.start - (lead + (busy ? 0.25 : 0.15)),
         );
       } finally {
         await setRecording(request);

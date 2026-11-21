@@ -27,6 +27,7 @@ import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import java.io.File
+import java.io.IOException
 import kotlin.concurrent.thread
 
 /**
@@ -250,6 +251,7 @@ class DenpaService : Service() {
         val config = File(home, "config").apply { mkdirs() }
         val media = File(home, "media").apply { mkdirs() }
         Server.pairToken(home)
+        copyUserFirmware(config)
         return baseEnvironment() + mapOf(
             "TUNERS_FILE" to File(config, "tuners.json").path,
             "CHANNELS_FILE" to File(config, "channels.json").path,
@@ -259,6 +261,25 @@ class DenpaService : Service() {
             // denpa の設定に出すエージェントの名前の元。エージェントの機械の名前は Android では localhost になるので、端末の名前を渡す
             "AGENT_NAME" to deviceName(),
         ) + Asicen.environment(this, asicenFirmware)
+    }
+
+    /**
+     * 利用者が置くファームウェア (Xbox One Digital TV Tuner の復調のもの。docs/tuner-xbox-one.md) を、エージェントが読む `config/firmware/` に写す。
+     * アプリの置き場には利用者が書けないので、外部ストレージのアプリの置き場の `firmware/` に `adb push` で置いてもらう。
+     * 中身はエージェントが大きさと SHA-256 で確かめる。**Android 10 では写さない** (ほかのアプリも書ける。[Server.userEnvironment] と同じ理由)
+     */
+    private fun copyUserFirmware(config: File) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val source = getExternalFilesDir(null)?.let { File(it, "firmware") } ?: return
+        val files = source.listFiles()?.filter { it.isFile } ?: return
+        val target = File(config, "firmware").apply { mkdirs() }
+        for (file in files) {
+            try {
+                file.copyTo(File(target, file.name), overwrite = true)
+            } catch (error: IOException) {
+                Log.w(TAG, "${file.name} をエージェントの置き場に写せません", error)
+            }
+        }
     }
 
     /** 端末の名前 (設定の「デバイス名」)。無ければ機種の名前 */

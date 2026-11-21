@@ -15,7 +15,7 @@
 # **エージェントは SYSTEM で、本体は初めて入れるときは流した人のユーザーで載せる** (パスワードを聞いて保存する。
 # Enter だけなら SYSTEM。入力を受け付けない窓なら聞かずに SYSTEM。Select-ServerUser)。SYSTEM は NAS の共有に資格情報を持たない (Register-Server)。
 # **上げ直しでは、タスクの実行ユーザーを書き戻さない。** -User か、前に決めたユーザーのまま残す (Register-Loop)。
-# **Windows で使えるチューナーは IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) と Siano の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)**
+# **Windows で使えるチューナーは IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) と Siano の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的) と Xbox One Digital TV Tuner (ケーブルだけ)**
 # (DVB は無い)。**入れるときにはドライバを替えない。** WinUSB にするのは、人が -WinUsb を付けて流したときだけ
 # (エージェントの zip に入っている libwdi の wdi-simple.exe で。Zadig でもよい。docs/install-windows.md)。
 #
@@ -493,7 +493,7 @@ function Get-AgentUsbId {
 }
 
 # Windows でドライバが WinUSB でないと使えない機材の USB ID と名前。エージェントが USB を直に持つ機材 (Get-AgentUsbId。
-# IT930x の機材と、PX-S1UD などの Siano の機材もここに入る)
+# IT930x の機材と、PX-S1UD などの Siano の機材と、Xbox One Digital TV Tuner もここに入る)
 function Get-WinUsbTarget {
     $targets = @()
     foreach ($entry in @(Get-AgentUsbId)) { $targets += [pscustomobject]@{ Usb = [string]$entry.usb; Name = [string]$entry.name } }
@@ -525,7 +525,7 @@ function Show-Tuner {
         return
     }
     if ($devices.Count -eq 0) {
-        Say 'IT930x の機材・Siano・CECH-ZD1 J・PIX-DT295 のチューナーは見当たりません'
+        Say 'WinUSB で使うチューナーは見当たりません'
     }
     Say 'チューナーを挿したあと、次の 1 行でドライバを WinUSB に替えられます (機材ごとに聞いてから替えます。docs/install-windows.md)'
     Say "  $WinUsbCommand"

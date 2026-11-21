@@ -229,6 +229,9 @@ public class XboxOneTests
         {
             var missing = await Assert.That(() => XboxOne.DemodFirmware([dir, "/nowhere"])).Throws<IOException>();
             await Assert.That(missing!.Message).Contains(Mn88472.FirmwareName).And.Contains(dir).And.Contains("/nowhere");
+            // Android はエージェントの置き場に利用者が書けないので、アプリが写す元の場所を出す
+            var android = await Assert.That(() => XboxOne.DemodFirmware([dir], XboxOne.AndroidPlace)).Throws<IOException>();
+            await Assert.That(android!.Message).Contains("Android/data/io.github.danything.denpa/files/firmware/").And.DoesNotContain(dir);
             await File.WriteAllBytesAsync(Path.Combine(dir, Mn88472.FirmwareName), new byte[10]);
             var wrong = await Assert.That(() => XboxOne.DemodFirmware([dir])).Throws<IOException>();
             await Assert.That(wrong!.Message).Contains("10 バイト");
