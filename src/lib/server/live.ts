@@ -1959,7 +1959,9 @@ class Session {
     if (this.data === null) {
       /*
        * NPT 参照の時刻は、時計の通知 (`clockNotice`) と同じ組 (PCR とサーバが受け取った時刻) から出す。画面は映しているコマの
-       * 時刻を同じ組から出すので、NPT がコマに合う。組がまだ無ければ (PCR を読む前) いまの時刻
+       * 時刻を同じ組から出すので、NPT がコマに合う。
+       * 参照を送るとき、組はもうできている。`BmlDecoder` は PCR を読んでから参照を送り、時計も同じパケットから PCR を読む (`tap`)。
+       * いまの時刻を返すのは組が無いときの備えで、組の時刻と物差しが違いうる
        */
       this.data = new DataBroadcast(
         (message) => this.handData(message),

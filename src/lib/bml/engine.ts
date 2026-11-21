@@ -813,6 +813,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     /*
      * **NPT のタイマーは、1 秒の刻みを待たずに達した所で起こす。** NPT は番組の中の場面に合わせて書かれ、
      * 1 秒遅れると映像とずれて見える。次の刻みより前に達するものがあれば、その時刻にもう一度判定する
+     * (待つのは実時間のミリ秒。速く再生していると達したあとに起き、遅れは刻みの 1 秒より短い。遅く再生していると達する前に起き、
+     * そこで判定し直して待ち直す。どちらも達する前にはタイマーを起こさない)
      */
     if (this.nptTimer !== null) clearTimeout(this.nptTimer);
     this.nptTimer =
