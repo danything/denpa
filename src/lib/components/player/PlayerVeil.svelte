@@ -17,7 +17,7 @@
    *   そのままだと下の操作バーを覆って押せなくなる。押せるように戻すのはエラーの箱 (文言と `actions` のボタン) だけ
    */
   interface Props {
-    /** 前のフレームを貼っているか (`live-player` の holding) */
+    /** 前のフレームを貼っているか (`player/core.svelte.ts` の holding) */
     holding: boolean;
     /** 繋いでいる・読み込んでいる最中か。回っているものと「読み込み中」を出す */
     busy: boolean;

@@ -9,13 +9,13 @@
  * ここでは、いま映している側を「表」、用意している側を「裏」と書く。DOM には触らない
  */
 
+import { HANDOFF_SLACK as SLACK } from "#lib/handoff.js";
+
 /**
  * 表の位置から、裏を待たせる先 (秒)。**ライブの裏は表とほぼ同じ所までしか持たない** (どちらも放送の今を実時間で受ける)。
  * 表の手元のバッファは 0.2 秒ほど (`ts/pacing.ts` の `FLOOR`) なので、それより先には待たせられない。裏のシークが終わる間に足りる短さにする
  */
 export const LIVE_HANDOFF_LEAD = 0.1;
-/** 位置のずれを同じとみなす幅 (秒。30 コマ/秒の 1 コマ強。`handoff.ts` と同じ) */
-const SLACK = 0.05;
 
 /** 物差しの位置 `at` (秒) と、そのコマをサーバが受け取った時刻 (unix ms。`clock` の通知) */
 export interface StreamClock {

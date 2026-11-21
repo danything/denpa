@@ -8,10 +8,7 @@
  * - 字幕 (`captions.json`)・データ放送の変化ログ (`databroadcast`)・チャプター (`chapters`) の取得先
  *
  * 読み出し (`fetch`・繋ぎ直し・受け取りの速さ) は MSE で受ける `remux-player.ts` と canvas に描く `canvas-player.ts` が持つ。
- * どれを観るか (`pickOffer`) と、いつ段を替えるかは画面が決める。
- *
- * 単体テストは置いていない。リクエスト先は `$app/paths` (SvelteKit が組むときに入れる) から作り、単体テストの実行環境では読み込めない。
- * 組み立てと段 0 のビットレートは、観る画面の E2E (`39-watch-*`) が通る経路で確かめる
+ * どれを観るか (`pickOffer`) と、いつ段を替えるかは画面が決める
  */
 
 import { resolve } from "$app/paths";

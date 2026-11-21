@@ -29,7 +29,7 @@ export function showing(cue: Cue | null, at: number): CaptionPage | null {
  * 溜めておく上限。**止めて見ている人のぶん。**
  *
  * 押して止めている間も受け取り続けるので、放っておくと際限なく増える。
- * 遅れて見られる長さ (`live-player` の `KEEP` = 5 分) を、字幕の出る間隔
+ * 遅れて見られる長さ (`player/core.svelte.ts` の `KEEP` = 5 分) を、字幕の出る間隔
  * (実機で毎分 18 回) で数えたぶんより多めに採る
  */
 export const KEEP_CUES = 200;

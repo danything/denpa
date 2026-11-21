@@ -26,9 +26,9 @@ interface Options {
   video: () => HTMLVideoElement | null;
   /** canvas で描いているか。立っている間は `capture` のストリームを出す */
   raw: () => boolean;
-  /** canvas の映像ストリーム (`live-player` の `capture`) */
+  /** canvas の映像ストリーム (`player/core.svelte.ts` の `capture`) */
   capture: () => MediaStream | null;
-  /** canvas の映像を流すか (`live-player` の `captureFlow`)。小窓に出していない間は止める */
+  /** canvas の映像を流すか (`player/core.svelte.ts` の `captureFlow`)。小窓に出していない間は止める */
   flow: (on: boolean) => void;
   /** 止めているか。**小窓で押された止める・再開を合わせる先** (`toggle`) */
   paused: () => boolean;

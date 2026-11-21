@@ -9,7 +9,7 @@
    *   再生位置は「持っている範囲」を尺として描くので絶えず動く
    * - `spare` … 段を替えるときに次の段を用意する `<video>` (`twin` のときだけ置く。ライブの `stageStep`)。
    *   透明・消音で、入れ替えたら (`front`) こちらが `video` になる
-   * - `still` … 切り替えの間、前の映像を貼っておく canvas (`live-player` の freeze)。
+   * - `still` … 切り替えの間、前の映像を貼っておく canvas (`player/core.svelte.ts` の freeze)。
    *   映像より上 (黒を隠す)、字幕より下 (切り替え中も字幕は見えていてほしい)
    * - `under` … 前の映像と字幕の間に重ねるもの (実況のコメント。`JikkyoLayer`)。
    *   実況と字幕は操作バーの影より上に出す (重なりの順は `ControlBar`)
@@ -19,16 +19,16 @@
    *   字幕も中にあるので映像と一緒に縮む
    */
   interface Props {
-    /** 前の映像を貼っているか (`live-player` の holding)。still の見せ方 */
+    /** 前の映像を貼っているか (`player/core.svelte.ts` の holding)。still の見せ方 */
     holding: boolean;
-    /** 字幕を出しているか。canvas の data-on に写す (描くのは `live-player` の `paint`) */
+    /** 字幕を出しているか。canvas の data-on に写す (描くのは `player/core.svelte.ts` の `paint`) */
     captionsOn: boolean;
     onclick: (event: MouseEvent) => void;
     /** data-testid の接頭辞。`<prefix>-video` / `-video-spare` / `-still` / `-captions` になる */
     prefix: string;
     /** `<video>` を 2 つ置くか (段を替えるときに裏で用意する。ライブ) */
     twin?: boolean;
-    /** 映している `<video>` (0 か 1。`live-player` の `front`)。入れ替えるとこちらが `video` になる */
+    /** 映している `<video>` (0 か 1。`player/core.svelte.ts` の `front`)。入れ替えるとこちらが `video` になる */
     front?: number;
     video?: HTMLVideoElement | null;
     spare?: HTMLVideoElement | null;

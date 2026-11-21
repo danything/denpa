@@ -225,7 +225,7 @@
 
   /**
    * 選んでいる速さ。端末ごとに覚え (観る画面と同じ `SPEED_KEY`)、プレイヤーを作り直しても当て直す。
-   * シークが読み直し (`openChase`) になると、押した覚えの無いまま等速へ戻る (`live-player` の `clear`)
+   * シークが読み直し (`openChase`) になると、押した覚えの無いまま等速へ戻る (`player/core.svelte.ts` の `clear`)
    */
   let want = $state(1);
 
