@@ -7,8 +7,8 @@
  *
  * 音 (AAC) も同じ FFmpeg の `aac` でデコードする (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
  * https でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
- * それに頼ると LAN の http と古い iPhone で元の TS をそのまま再生する経路が使えない。fMP4 の音 (互換モードと、
- * WebKit のライブで音だけ別に鳴らすとき) も同じ API でデコードする (Opus は `opus_open`)。
+ * それに頼ると LAN の http と古い iPhone で元の TS をそのまま再生する経路が使えない。
+ * fMP4 の音 (互換モード) も同じ API でデコードする (Opus は `opus_open`)。
  *
  * - `dec_push` … PES の中身 (ES) を渡す。**区切りは FFmpeg の parser に任せる**。
  *   放送はふつう 1 PES = 1 枚だが、決まりではない。PTS も一緒に渡し、
