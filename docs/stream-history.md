@@ -229,6 +229,20 @@ WebCodecs の AudioDecoder は安全な繋ぎ (https か localhost) でしか出
 iOS 26 まで無かった。iOS 27 の Safari では出てくるのに ADTS のまま渡すと失敗した (1 枚目の映像のあと「音声を再生できませんでした」)。
 ブラウザごとの癖を追うより、映像と同じ FFmpeg (WASM) でデコードすることにした (AudioDecoder と切り替えない)。
 
+### WebKit のライブの音を `<video>` と別に鳴らしていた頃
+
+2026-11 までは、WebKit のライブだけ、映像は `<video>` のまま、音を同じ fMP4 から WASM でデコードして Web Audio で鳴らしていた
+(`raw/native-audio.ts`)。WebKit の MSE は `<video>` の音を Web Audio に通すと無音になり ([WebKit #266922](https://bugs.webkit.org/show_bug.cgi?id=266922))、
+iPhone・iPad では `video.volume` も変えられないので、ライブで音量のつまみと既定の +6 dB を効かせるためだった。
+今は 3 画面とも `<video>` の音のままで、iPhone・iPad は本体の音量ボタンに任せる ([今の形](stream.md#webkit-の-video-の音))。
+
+- PCM は過去 30 秒・16 MiB までしか持てず、それより前へ戻る・長く止めると音が出なかった。追いつき再生の間は音程が変わった
+- 追っかけと観る画面は戻る・長く止める・倍速があるので、同じ作りにしていなかった。3 画面で音の鳴らし方が分かれていた
+- 3 画面とも別に鳴らしてそろえると、iPhone の実機でしか確かめられない所 (シーク・一時停止・倍速・バックグラウンド) が 3 画面ぶんに広がる。
+  ファイルの直再生は別に鳴らせないので、分かれ目も残る
+- 3 画面を「WebKit の MSE は Web Audio に通さず `video.volume` で下げ、音量を変えられない端末は本体のボタン」の 1 つの決まりにそろえるほうを取った。
+  手放したのは、iPhone・iPad のライブのつまみと既定の +6 dB
+
 ### web-bml を使っていた頃
 
 2026-10 までは描く側を otya128/web-bml から借りていた。web-bml をサイドカーとして起動して iframe で抱えると、web-bml は自前の ffmpeg で

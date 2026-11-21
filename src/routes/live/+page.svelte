@@ -85,7 +85,7 @@
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
-  import { separateLiveAudio } from "#lib/native-audio-choice.js";
+  import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
   import { recordNotice } from "#lib/record-notice.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR, stepSpeed } from "#lib/ts/pacing.js";
@@ -126,7 +126,6 @@
   const drive = driveGate();
   const player = livePlayer({
     confirm: drive.confirm,
-    separateAudio: separateLiveAudio,
     // 選んでいるもの (覚えている選択)、開いた名前が家の中か、H.265 を出せるか、その場でエンコードできるコーデック。どれもサーバが決める (`+page.server.ts`)
     choice: untrack(() => data.choice),
     indoor: untrack(() => data.indoor),
@@ -442,7 +441,11 @@
     target: player,
     video: () => video,
     overlay: () => overlay,
-    separateAudio: separateLiveAudio,
+    // ライブの `<video>` はいつも MSE (`live-player.svelte.ts`)。WebKit では通すと無音になるのでいつも通さない (追っかけと同じ)
+    silentTap: () =>
+      typeof navigator !== "undefined" && tapSilent(navigator.userAgent, true),
+    // iPhone・iPad は `<video>` の音量を変えられない。つまみを出さず、放送のままの大きさで鳴らす
+    fixed: fixedMediaVolume,
     pause: () => {
       wasLive = player.live;
       player.toggle();

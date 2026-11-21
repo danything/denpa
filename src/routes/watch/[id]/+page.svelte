@@ -1994,9 +1994,6 @@
       void playing;
       return mediaPaused();
     },
-    get silenced() {
-      return muted;
-    },
     get captions() {
       return captions;
     },

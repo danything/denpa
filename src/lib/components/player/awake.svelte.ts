@@ -1,4 +1,8 @@
-import { GESTURES } from "#lib/raw/gesture-context.js";
+/**
+ * 押したと見なす出来事 (ブラウザが自動再生と画面のロックを許す、操作の直後)。音量 (`volume.svelte.ts`) も同じものを使う。
+ * 押し始め (`pointerdown`) は Safari では数えないことがあるので、押し終わりで見る
+ */
+export const GESTURES = ["click", "keydown", "touchend"] as const;
 
 /**
  * 観ている間、**画面を暗くさせない**。3 画面 (ライブ・追っかけ・観る画面) で同じもの。

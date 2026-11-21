@@ -42,7 +42,7 @@ test.each([
     "(Windows NT 10.0; rv:140.0) Gecko/20100101 Firefox/140.0",
     false,
   ],
-])("音を別に鳴らすのは WebKit だけ: %s", (_, ua, webkit) => {
+])("WebKit と見るのは Safari と iPhone のブラウザだけ: %s", (_, ua, webkit) => {
   expect(isWebKit(`Mozilla/5.0 ${ua}`)).toBe(webkit);
 });
 
