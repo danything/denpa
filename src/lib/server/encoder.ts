@@ -537,6 +537,8 @@ export function buildArgs(
       const count = channels[index];
       if (count !== undefined) args.push(`-ac:a:${2 + i}`, String(count));
     });
+    // 割った 2 本の名前は番組表の 1 本目 (デュアルモノの音声) のもの。番組表の構成 (`audio_type`) は 1 本目の音声なので、
+    // 割るのも 1 本目と見ている。2 本目からの音声 k の名前は `audioTitles` の k + 1 番目
     titles = [0, 1, ...others.map((index) => index + 1)];
   } else {
     // 音声ストリームを全て使う (多言語放送などで複数トラックある場合に備える)。
@@ -2016,7 +2018,7 @@ async function runJob(jobId: number): Promise<void> {
   };
 
   /*
-   * **途中から現れる音声 (野球中継の副音声など。`late-audio.ts`)。** エンコードと並べて録画全体を読み、
+   * **途中から現れる音声 (野球中継の副音声など。`late-audio.ts`)。** エンコードと並行して録画全体を読み、
    * 先頭の探りで中身の無かった音声を探す。見つけた音声は仕上げ (`finish`) で、本編の物差し (先頭から捨てた長さ) に
    * 合わせて音声だけ Opus にし、チャプターと一緒に足す。4K の局の録画 (`.mmts`) は MP4 に詰め替えたものが入力で、
    * 音声は MPT の 1 本だけなので読まない。失敗しても足さないだけ
@@ -2076,8 +2078,9 @@ async function runJob(jobId: number): Promise<void> {
   };
   /** エンコードしたものに入っている音声の本数 (`buildArgs`)。足す音声はこの後ろに並ぶ */
   const liveCount = encodeOptions.audioStreams?.length ?? 0;
+  // デュアルモノは 1 本目を左右 2 本に割る (中身のある音声が分からなくても 2 本)
   const mainAudios =
-    recording.audio_type === DUAL_MONO ? liveCount + 1 : liveCount;
+    recording.audio_type === DUAL_MONO ? Math.max(liveCount, 1) + 1 : liveCount;
 
   /**
    * 1 本目。CM を一緒に探し、エンコードし終えたら境目を決め、仕上げる。ほかのコーデックはこれが終わるのを待ってから
