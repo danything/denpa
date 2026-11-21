@@ -73,4 +73,32 @@ describe("受け取りの速さ (Meter)", () => {
     expect(meter.bps()!).toBeCloseTo(15_000_000, -5);
     expect(METER_DRAIN_MOST).toBeLessThan(400 * 20);
   });
+
+  test("メインスレッドが時々塞がっても、回線の速さより遅く見えない。塞がっていた間に届いた塊は、明けてからすぐ返る", () => {
+    const meter = new Meter();
+    // 回線は 10 ms ごとに 2,500 バイト = 2 Mbit/s。100 ms ごとに 120 ms 塞がる (データ放送・実況を描く処理など)
+    let now = 0;
+    let net = 0;
+    meter.add(2_500, 0, 10);
+    now = 10;
+    net = 10;
+    for (let round = 0; round < 40; round++) {
+      // 塞がっていない 100 ms は届くのを待って読む
+      for (let i = 0; i < 10; i++) {
+        net += 10;
+        meter.add(2_500, now, net);
+        now = net;
+      }
+      // 120 ms 塞がる。その間に届いた 12 個は、明けてから待たずに 1 ms ずつで返る
+      now += 120;
+      for (let i = 0; i < 12; i++) {
+        net += 10;
+        meter.add(2_500, now, now + 1);
+        now += 1;
+      }
+      // 読み切ったら、また回線から届くのを待つ
+      net = Math.max(net, now);
+    }
+    expect(meter.bps()!).toBeGreaterThan(2_000_000 * 0.9);
+  });
 });
