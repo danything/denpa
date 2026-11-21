@@ -407,7 +407,7 @@ export class Fmp4Video {
       this.needKey = false;
     }
     this.pending.push(item);
-    // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しいキーフレームから持ち直す。追っかけ・録画は捨てない (溢れたら `push` が `full` を返す)
+    // 持ちすぎた (止めている・裏に回っている)。いちばん新しいキーフレームから持ち直す。追っかけ・録画は捨てない (溢れたら `push` が `full` を返す)
     if (!this.follow && this.pending.over(PENDING_MOST))
       this.skipTo(Number.POSITIVE_INFINITY);
   }

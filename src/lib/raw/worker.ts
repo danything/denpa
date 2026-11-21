@@ -126,7 +126,7 @@ let input = { pointer: 0, size: 0 };
 let demuxer = new PesDemuxer();
 const adts = new AdtsSplitter();
 let audioIndex = 0;
-/** 圧縮のまま待たせている映像 (デコードする順) */
+/** 圧縮のまま待たせている映像 (デコードする順)。TS (MPEG-2) だけが使う。fMP4・mkv は `Fmp4Video` が持つ */
 const pending = new PendingQueue<Pending>();
 /** I フレームを見たか。**見るまでは渡さない** */
 let started = false;
@@ -286,7 +286,7 @@ function onVideo(pes: Pes): void {
     }
     return;
   }
-  // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しい I から持ち直す
+  // 持ちすぎた (止めている・裏に回っている)。いちばん新しい I から持ち直す
   if (pending.over(PENDING_MOST)) skipTo(Number.POSITIVE_INFINITY);
 }
 
@@ -792,6 +792,7 @@ function reset(from: number | null): void {
   budget.reset();
   mkv?.reset();
   if (fmp4 !== null) fmp4.reset(from);
+  // fmp4 が無いのは TS (MPEG-2) のときだけ (fMP4・mkv は作れなければ `init` で打ち切る)
   else decoder?._dec_open();
   if (early !== null) {
     early = [];
