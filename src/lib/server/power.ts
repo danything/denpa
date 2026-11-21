@@ -2,7 +2,7 @@
  * **Windows と Mac のスリープ。** 録画・ライブ視聴・エンコードの間はスリープさせず (`awake.ts`)、
  * 次の録画の少し前にスリープから起こす。ほかの OS では何もしない (Linux はサーバとして動かす前提)。
  *
- * - Windows は、denpa 本体 (SYSTEM のタスク) がタスク `denpa-wake` (タスク スケジューラの「スリープを解除して実行」) を
+ * - Windows は、denpa 本体 (install.ps1 を流したユーザーか SYSTEM のタスク) がタスク `denpa-wake` (タスク スケジューラの「スリープを解除して実行」) を
  *   書き直して起こす。中身は何もしないコマンドで、起こすためだけにある。効くのは、電源オプションの
  *   「スリープ解除タイマーの許可」が有効なときだけ (docs/install-windows.md)
  * - Mac は、denpa 本体 (root の LaunchDaemon) が IOKit の `IOPMSchedulePowerEvent` で起こす予約を置く (root が要る)。
