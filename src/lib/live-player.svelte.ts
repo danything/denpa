@@ -3438,7 +3438,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /*
-   * ---- 段を替えるときは、裏の `<video>` で用意してから入れ替える ([stream.md](../../docs/stream.md#段を替えるときは裏の-video-で用意してから入れ替えます)) ----
+   * ---- 段を替えるときは、裏の `<video>` で用意してから入れ替える ([stream.md](../../docs/stream.md#ライブと追っかけの画面)) ----
    *
    * いまの段を映したまま、もう 1 本の WebSocket で次の段をリクエストし、映していない側の `<video>` (透明・消音) の MSE に溜める。
    * 表の少し先で待たせ、表の再生がそこまで来たら入れ替える (決め方は `player/live-handoff.ts`)。前のコマで覆って止まる間を出さない。
