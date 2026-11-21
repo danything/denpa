@@ -27,7 +27,7 @@
 #                                         エージェントを起こす denpa-agent.cmd (管理者しか書けない。SYSTEM で動かすものを、ほかの人に書き換えさせない)
 #   %ProgramData%\denpa\                  DB (denpa.db) とその隣のもの (局ロゴ・鍵)・denpa.env (本体の環境変数。無いときだけ雛形を作る)・本体を起こす denpa.cmd。
 #                                         SYSTEM と管理者 (本体のタスクをユーザーで動かすなら、そのユーザーも) だけが読み書きできる
-#   ~/denpa (DENPA_HOME)                 エージェントの config/ (tls\pair-token は denpa とエージェントが組むときの合言葉。無いときだけ作る)・
+#   ~/denpa (DENPA_HOME)                  エージェントの config/ (tls\pair-token は denpa とエージェントが組むときの合言葉。無いときだけ作る)・
 #                                         ログ (denpa.log・denpa-agent.log)
 #   ~/Videos/denpa/{recorded,library}     元の TS と出来上がった録画
 #
@@ -263,7 +263,9 @@ function Get-TaskUser([string]$Name) {
     return $id
 }
 
+# ユーザーの SID。タスクの UserId が SID で返ったときは、そのまま返す (Test-SystemName と同じく、名前と SID のどちらも受ける)
 function Get-UserSid([string]$Name) {
+    if ($Name -match '^S-1-\d+(-\d+)+$') { return $Name }
     try {
         return (New-Object Security.Principal.NTAccount $Name).Translate([Security.Principal.SecurityIdentifier]).Value
     } catch {

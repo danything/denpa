@@ -63,7 +63,7 @@ const MAX_SERVICE_NAME = 40;
 const MAX_DURATION = 24 * 60 * 60;
 /** hub を待つ上限 (ms) */
 const HUB_TIMEOUT = 20_000;
-/** 予約が始まったかを見る間隔 (ms。runtime.ts が呼ぶ) */
+/** 送る時刻が来たかを見る間隔 (ms。runtime.ts が呼ぶ) */
 export const CHECK_EVERY = 60_000;
 
 /** 放送の識別。`network_id` は original_network_id */
@@ -218,7 +218,7 @@ export function currentVotes(at = now()): Candidate[] {
 
 /** 送る差分 */
 interface Plan {
-  /** 新しい予約と、中身が変わった予約 (始まりの早い順に `MAX_ADD` 件まで) */
+  /** 新しい放送と、中身が変わった放送 (始まりの早い順に `MAX_ADD` 件まで) */
   add: Candidate[];
   /** 前に送ったが、いまは送る条件から外れた放送 (`MAX_REMOVE` 件まで) */
   remove: AiringId[];
@@ -226,7 +226,7 @@ interface Plan {
   drop: AiringId[];
 }
 
-/** いまの予約と控えを比べて、送る差分を作る */
+/** いま送るもの (`currentVotes`) と控えを比べて、送る差分を作る */
 export function plan(current: Candidate[], sent: SentRow[], at = now()): Plan {
   const sentByKey = new Map(sent.map((row) => [keyOf(row), row]));
   const currentKeys = new Set(current.map((c) => keyOf(c.vote)));
@@ -576,7 +576,7 @@ export const VIEW_STALE = HOUR;
 const VIEW_TIMEOUT = 5_000;
 
 /** 一覧に出す、終わった番組の幅。hub と同じ (終わって 24 時間以内)。手元の番組表も終わって 1 日は残る (`config.programRetention`) */
-export const VIEW_AFTER_END = 24 * HOUR;
+const VIEW_AFTER_END = 24 * HOUR;
 
 /** hub の順位の放送 1 つ (`GET /ranking` の `airings`) */
 interface HubAiring extends AiringId {
@@ -864,7 +864,7 @@ export function dropRankingView(): void {
 }
 
 /**
- * hub から順位を受け取る。401 (トークンが hub から消えた)・403 (7 日送っていない) なら、予約の差分を送ってから
+ * hub から順位を受け取る。401 (トークンが hub から消えた)・403 (7 日送っていない) なら、差分を送ってから
  * もう 1 度だけ `GET /ranking` を呼ぶ (送る処理は 401 を受けるとトークンを取り直す)
  */
 async function fetchEntries(): Promise<HubEntry[] | null> {

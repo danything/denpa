@@ -127,6 +127,20 @@ function seedOld(where: ReturnType<typeof machine>): void {
       digest: "x",
     })
     .run();
+  orm()
+    .insert(schema.rankingWatched)
+    .values({
+      network_id: 4,
+      service_id: 211,
+      event_id: 1,
+      start_at: now,
+      end_at: now + 60_000,
+      name: "番組",
+      service_name: "BSでんぱ",
+      genres: [],
+      live_ms: 60_000,
+    })
+    .run();
   mkdirSync(join(where.data, "logos", "cm", "1024"), { recursive: true });
   writeFileSync(join(where.data, "logos", "1024.png"), "png");
   writeFileSync(join(where.data, "logos", "1024.png.writing"), "half");
@@ -232,6 +246,7 @@ describe("書き出す", () => {
     // 番組ランキングへの参加も移さない (2 台が同じトークンで送り合わないように)
     expect(n("ranking_link")).toBe(0);
     expect(n("ranking_sent")).toBe(0);
+    expect(n("ranking_watched")).toBe(0);
     // アクセストークン (ハッシュだけ) は持っていく
     expect(n("api_tokens")).toBe(1);
     expect(n("rules")).toBe(1);
