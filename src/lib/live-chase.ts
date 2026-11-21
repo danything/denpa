@@ -1,5 +1,5 @@
 /**
- * **追っかけを元の TS (MPEG-2) で受けるときの決まり** (`live-player.svelte.ts`)。画面に依らないので分けて試す。
+ * **追っかけを元の TS (MPEG-2) で受けるときの決まり** (`player/core.svelte.ts`)。画面に依らないので分けて試す。
  *
  * - 受信バッファの量でサーバに送るのを止めさせる・続けさせる (`nextHold`。`{ type: 'hold' }`)
  * - 届いた PTS から通しの再生位置を出す (`rawChasePosition`)
@@ -53,7 +53,7 @@ export function rawChasePosition(
  * 繋ぎ直している間 (WebSocket が開く前) は送れないので今のまま返し、繋がってから次の刻みで送り直す。送れなかったのに
  * 送ったつもりになると、`on: true` が届かないままサーバが送り込み続ける
  *
- * @param send 指示を送る。送れたかを返す (`live-player.svelte.ts` の `send`)
+ * @param send 指示を送る。送れたかを返す (`player/core.svelte.ts` の `send`)
  * @returns 送ったあとの向き (サーバに止めさせているか)
  */
 export function holdStep(

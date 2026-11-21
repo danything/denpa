@@ -106,7 +106,7 @@ function shown(video: WebkitVideo): boolean {
 
 /**
  * 小窓で何かを出しているか (`shown`)。映像を描く canvas の代わりの video を小窓にすることがあるので、どの video かは問わない
- * (`live-player.svelte.ts` が、隠れている間の速さの寄せ方を決めるのに使う)
+ * (`player/core.svelte.ts` が、隠れている間の速さの寄せ方を決めるのに使う)
  */
 export function inPictureInPicture(): boolean {
   return (

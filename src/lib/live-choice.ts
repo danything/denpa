@@ -1,7 +1,7 @@
 /**
  * **どの形式で観るか** (コーデックのメニュー)。「自動」の順はライブ・追っかけ・録画の観る画面で同じ関数 (`autoOrder`) から出す。
  * 録画の観る画面の互換モードは、エンコード済みと同じ形式の詰め替えを先にして、そのあとは互換モードの順 (`ts/playback.ts` の `pickCanvas`。下の `autoOrder` の表)。
- * 画面 (`live-player.svelte.ts`・`ts/playback.ts`) とサーバ (`server/viewing.ts` の先回りと、テレビのアプリ向けの `codec=auto`) が同じ決め方をするので、
+ * 画面 (`player/core.svelte.ts`・`ts/playback.ts`) とサーバ (`server/viewing.ts` の先回りと、テレビのアプリ向けの `codec=auto`) が同じ決め方をするので、
  * ここに置く (docs/stream.md「どの形式で流すか」)。
  */
 

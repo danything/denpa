@@ -1,5 +1,5 @@
 /**
- * **canvas に描く先 (`RawEngine`) を作る所と、描けなくなったときの移り先。** ライブ・追っかけ (`live-player.svelte.ts`) と
+ * **canvas に描く先 (`RawEngine`) を作る所と、描けなくなったときの移り先。** ライブ・追っかけ (`player/core.svelte.ts`) と
  * 観る画面 (`canvas-player.ts` と観る画面の `canvasFallBack`) が同じものを使う。
  *
  * - `openCanvas` … `RawEngine` を作る。消音・音量・「再生する音」として鳴らすかは、作るときに入れる。

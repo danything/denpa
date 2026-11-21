@@ -23,7 +23,7 @@ function filled(): Uint8Array<ArrayBuffer> {
 
 /**
  * **回線の速さを測る試しのデータ** (docs/stream.md「ライブと追っかけの画面」)。ライブの画面が段を上げる前に、`?bytes=` だけ取って
- * 届く速さを測る (`live-player.svelte.ts` の `probeLink`)。ライブのストリームは実時間でしか届かないので、それだけでは回線の余裕が
+ * 届く速さを測る (`player/core.svelte.ts` の `probeLink`)。ライブのストリームは実時間でしか届かないので、それだけでは回線の余裕が
  * 分からないため。量は `PROBE_LEAST`〜`PROBE_MOST` に丸める。キャッシュさせない
  */
 export function GET(event) {

@@ -3,7 +3,7 @@
  *
  * MSE が受け取れるか (`isTypeSupported`) に加えて、`mediaCapabilities.decodingInfo` に放送の値 (3840x2160・59.94 コマ・
  * 10 ビット・HLG・BT.2020) を渡して決める。HEVC を受け取れると答えても、4K の 10 ビットをデコードできない端末があるため (推定)。
- * `mediaCapabilities` が無い端末は、受け取れるかだけで決める。画面は 1 回だけ調べて覚える (`live-player.svelte.ts`)。
+ * `mediaCapabilities` が無い端末は、受け取れるかだけで決める。画面は 1 回だけ調べて覚える (`player/core.svelte.ts`)。
  * テレビのアプリの `?playable=` の `hevc` も、4K の局では同じ値で確かめたものを送る (docs/api.md「形式をサーバに選ばせる」)
  */
 
@@ -32,7 +32,7 @@ interface HevcProbe {
 
 /**
  * ブラウザで調べるもの。MSE は `pickMediaSource` の `Source` で調べ、`Source` が無ければ `isTypeSupported` はいつも false を返す。`decodingInfo` は `navigator.mediaCapabilities` にあるときだけ渡す。
- * ライブ (`live-player.svelte.ts`) と観る画面 (4K の局の録画を、放送の HEVC のまま流すとき) で同じものを使う
+ * ライブ (`player/core.svelte.ts`) と観る画面 (4K の局の録画を、放送の HEVC のまま流すとき) で同じものを使う
  */
 export function browserHevcProbe(
   source: { isTypeSupported(type: string): boolean } | undefined,

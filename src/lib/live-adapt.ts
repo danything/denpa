@@ -1,7 +1,7 @@
 /**
  * **ライブと追っかけで、回線に合わせて段を上げ下げするときの組み立て** (段を決めるのは `adapt.ts` の `RungAdapter`)。
  * 指示に足すもの・`tuned` から読む段・受け取りの速さを、DOM に触らずに組むところだけをここに置く
- * (`live-player.svelte.ts` が使う。docs/stream.md「ライブと追っかけの画面」)。
+ * (`player/core.svelte.ts` が使う。docs/stream.md「ライブと追っかけの画面」)。
  *
  * 段 0 は「自動で決まった形式」(家の中なら MPEG-2) のまま。段 1〜3 は変換で、コーデックはサーバが `playable` から選ぶ。
  * 音声だけ (`"audio"`) は `codec: "audio"` で、音声は段 3 と同じ 96k にする (`rung: 3`)
@@ -51,7 +51,7 @@ export function servedStep(notice: Extract<Notice, { type: "tuned" }>): Step {
 export const RESTARTING_MOST = 60_000;
 
 /**
- * **回線が細いとして段を下げるのを、いま見送るか** (`live-player.svelte.ts` の `act`)。見送るのは `slow` だけで、
+ * **回線が細いとして段を下げるのを、いま見送るか** (`player/core.svelte.ts` の `act`)。見送るのは `slow` だけで、
  * サーバが入れ替えで止まると知らせてきてから (`restartingAt`。`RESTARTING_MOST` まで) と、繋ぎ直したあとの `holdUntil` まで。
  * 上げることと、端末のデコードが追いつかずに下げること (`decode`) は見送らない。
  * 上げた段が映らずに戻すとき (`revert`) も見送らない。回線の細さで下げるのではない
@@ -276,7 +276,7 @@ export function retryAfterMs(header: string | null, fallback = 10_000): number {
 }
 
 /**
- * **音は進むのに映像だけ止まっているか** (`live-player.svelte.ts` の `stuckNow`)。最後にコマが映った時刻 (`frameAt`。
+ * **音は進むのに映像だけ止まっているか** (`player/core.svelte.ts` の `stuckNow`)。最後にコマが映った時刻 (`frameAt`。
  * 測れない・まだ映っていなければ 0) から `least` たったら止まっていると見る。鳴らしていない・音声だけ・画面が裏
  * (コマを描かない) のときは見ない。`<video>` は `requestVideoFrameCallback` の時刻、canvas は描いたコマ数が増えた時刻を渡す
  */

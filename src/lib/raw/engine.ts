@@ -5,7 +5,7 @@
  * **音を鳴らすことと、時計** (`playout.ts`)。時計はいま鳴っている音の PTS で、
  * それを worker へ流して映像を合わせさせる。
  *
- * `live-player.svelte.ts` からは、MSE の代わりにこれを使う。`<video>` の代わりに
+ * `player/core.svelte.ts` からは、MSE の代わりにこれを使う。`<video>` の代わりに
  * canvas を 1 枚、映像の入れ物の中に差し込む。字幕・データ放送・操作バーはエンコードする経路と同じもの
  * がそのまま重なる。
  *
@@ -105,7 +105,7 @@ export class RawEngine {
   private shownCount = 0;
   /**
    * 描いたコマ数が最後に増えた時刻 (ms。`stats` は 1 秒ごと)。まだ描いていなければ 0。選局し直したら 0 に戻す。
-   * 画面が「音は進むのに映像だけ止まっている」を詰まりに数えるのに使う (`live-player.svelte.ts` の `stuckNow`)
+   * 画面が「音は進むのに映像だけ止まっている」を詰まりに数えるのに使う (`player/core.svelte.ts` の `stuckNow`)
    */
   frameAt = 0;
   /** デコードできた音のコマ数 (選局からの通しではなく、このエンジンを作ってからの通し) */
