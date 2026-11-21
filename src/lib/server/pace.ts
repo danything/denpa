@@ -9,6 +9,7 @@
  * | HTTP の変換 (`/api/recordings/<id>/stream`) | 0 (送る速さは TCP が決める) | 0 (捨てない) | 出した映像の時刻の進み ÷ ffmpeg が出すのを待った時間 |
  *
  * HTTP はほかに `wait` (ffmpeg が出すのを待っていた時間の割合) を返す。WebSocket は省略する。
+ * ライブの WebSocket はほかに `gap` (チューナーから届くのを待ったいちばん長い間。`InputGaps`) を返す。追っかけと HTTP は省略する。
  *
  * WebSocket は `pace` の通知で 2 秒ごとか変わったときに送る (`PaceMeter`)。HTTP は応答の途中で何かを足せないので、
  * 応答のヘッダで id を返し、画面が `GET /api/playback/pace?id=` で読む (`openPace`)

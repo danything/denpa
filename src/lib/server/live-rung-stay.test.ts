@@ -27,7 +27,7 @@ config.ffmpeg = ffmpeg;
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const PROGRAM = 0x0401;
-/** ケーブルの局 (`types.serviceKey`) */
+/** ケーブルの局 (`tuner.serviceKey`) */
 const SERVICE = (0x10000 + 0x0004) * 100000 + PROGRAM;
 
 /** PAT と、映像が HEVC (0x24) の PMT。TS に HEVC を入れて送る 4K の局 */

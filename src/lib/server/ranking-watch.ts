@@ -30,14 +30,14 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 /** 「観た」とみなす長さ。10 分より短い番組は長さの半分 (決まった。局を次々に変えて通り過ぎた番組を数えないため) */
-export const WATCHED = 5 * MINUTE;
+const WATCHED = 5 * MINUTE;
 /** タイムシフトを数える間 (放送が終わってから)。テレビの視聴率のタイムシフトの数え方 (7 日 = 168 時間) に合わせる */
-export const TIMESHIFT_WITHIN = 7 * DAY;
+const TIMESHIFT_WITHIN = 7 * DAY;
 /**
  * 終わった放送を送る間 (放送が終わってから)。hub は終わって 8 日までを受けるので、時計のずれと送る時刻の揺らぎを見込んで手前で切る。
  * 7 日のタイムシフトを、6 時間ごとの送信で送り切れる幅
  */
-export const SEND_AFTER_END = 8 * DAY - 2 * HOUR;
+const SEND_AFTER_END = 8 * DAY - 2 * HOUR;
 /**
  * 終わったとみなすまでの余裕。hub は終わっていない放送の「観た」を断るので、時計のずれを見込んで少し待つ
  */
@@ -60,11 +60,11 @@ export function countedService(type: string, networkId: number): boolean {
 }
 
 /** 「観た」に要る長さ (ms) */
-export function watchedEnough(durationMs: number): number {
+function watchedEnough(durationMs: number): number {
   return Math.min(WATCHED, durationMs / 2);
 }
 
-/** 番組表の番組 1 つを、`ranking_watched` の行の形にする。数えない局の番組なら null */
+/** `ranking_watched` に写す、番組表の番組 1 つの中身 */
 interface ProgramFacts {
   network_id: number;
   service_id: number;
@@ -93,6 +93,7 @@ type FactsRow = Omit<ProgramFacts, "genres"> & {
   type: string;
 };
 
+/** 番組表の番組 1 つを、`ranking_watched` の行の形にする。数えない局の番組なら null */
 function factsOf(row: FactsRow): ProgramFacts | null {
   if (!countedService(row.type, row.network_id)) return null;
   return {
