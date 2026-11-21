@@ -682,7 +682,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * (`MseSink` の `still`)
    */
   let feedRun = 0;
-  /** 古いほうを捨てるのに失敗した。次の塊を足し終えるまで捨て直さない (`trim`) */
+  /**
+   * 古いほうを捨てるのに失敗した。次の塊を足し終えるまで捨て直さない (`trim`)。塊が届かなくなれば捨て直さないままだが、
+   * 届かない間はバッファも増えないので構わない
+   */
   let trimHeld = false;
   /** いま鳴らしている `<video>`。押して音を出すのに要る */
   let element: HTMLVideoElement | null = null;
