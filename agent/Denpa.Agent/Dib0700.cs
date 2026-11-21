@@ -39,7 +39,7 @@ internal sealed class Dib0700(IUsbDevice usb, Action<int> sleep)
     private const int RunSettleMs = 500;
 
     /// <summary>1 回の I2C の転送の長さの上限 (長さは下位 6 ビット)</summary>
-    public const int I2cMax = 63;
+    private const int I2cMax = 63;
 
     private const byte Out = 0x40;
     private const byte In = 0xC0;
@@ -58,8 +58,6 @@ internal sealed class Dib0700(IUsbDevice usb, Action<int> sleep)
 
     /// <summary>ファームウェアの最後に送る、アドレス 0x70000000 から動かす要求</summary>
     internal static readonly byte[] RunRequest = [0x08, 0x00, 0x00, 0x00, 0x70, 0x00, 0x00, 0x00];
-
-    public IUsbDevice Usb => usb;
 
     /// <summary>書き込みの要求。データの先頭の 1 バイトに bRequest と同じ値を入れる。value と index は 0</summary>
     private void Write(byte request, ReadOnlySpan<byte> rest)
@@ -135,7 +133,7 @@ internal sealed class Dib0700(IUsbDevice usb, Action<int> sleep)
     /// <summary>GPIO を出力にして値を書く。<paramref name="gpio"/> は要求に入れる番号 (仕様書「GPIO の番号」)</summary>
     public void Gpio(byte gpio, bool value) => Write(RequestGpio, [gpio, (byte)(0x80 | (value ? 0x40 : 0))]);
 
-    /// <summary>1 回の bulk 転送に入れる TS パケットの数</summary>
+    /// <summary>1 回の bulk 転送に入れる TS パケットの数を指定する</summary>
     public void TsLength(ushort packets) => Write(RequestTsLength, [(byte)(packets >> 8), (byte)packets]);
 
     /// <summary>TS の出力のオン/オフ (オンはチャンネル 0、マスターモードは使わない)</summary>

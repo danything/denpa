@@ -416,7 +416,7 @@ USB の機材はエミュレータに挿せないので、usbfs の fd (許可�
   その証明書をランナーの debug の鍵と同じ手順で突き合わせられることもここで確かめます
 - release は R8 で縮めます (`isMinifyEnabled`・`isShrinkResources`)。リフレクションで引くクラスが無く、マニフェストの部品は AGP の規則が残すので、規則は足していません。
   エミュレータで確かめるのは debug の APK だけなので、リフレクションを使うコードを足したら規則も足します
-- エージェントに入っているもののライセンスの文書 (Siano のファームウェアの許諾と OpenSSL の LICENSE) を、APK の `assets/licenses/` に入れます
+- エージェントに入っているもののライセンスの文書 (Siano と DiB0700 のファームウェアの許諾と OpenSSL の LICENSE) を、APK の `assets/licenses/` に入れます
   (`licenseAssets`。OpenSSL のものは CI が `android/agent-licenses/` に置く。`DENPA_AGENT_LICENSES` で替えられる)。
   asicen-userland のライセンスの文書とソースの入手先は `assets/licenses/asicen-userland/` に入ります ([licenses.md](licenses.md#android-のアプリ))
 

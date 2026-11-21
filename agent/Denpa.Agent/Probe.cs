@@ -563,10 +563,10 @@ public static class Probe
                     foreach (var line in IsdbcSignalLines(receiver.CableModulation, receiver.CablePer, receiver.IsdbcDetail)) output.WriteLine($"    {line}");
                 }
             }
-            // DVB の機材の ISDB-C も、受け終えたあとの C/N と強度を出す (dB や dBm に直すのはドライバ)
-            if (tuning.IsdbC && tuner is DvbTuner && tuner.Signal() is { } dvbSignal)
+            // DVB の機材と Xbox One Digital TV Tuner の ISDB-C も、受け終えたあとの C/N と強度を出す。DVB は dB や dBm に直すのがドライバで、Xbox は強度を出さない
+            if (tuning.IsdbC && tuner is DvbTuner or XboxOneTuner && tuner.Signal() is { } cableSignal)
             {
-                output.WriteLine($"    {(dvbSignal.Locked ? "ロック中" : "ロックしていない")}  C/N {(dvbSignal.Cn is { } dvbCn ? $"{dvbCn:F1} {dvbSignal.Unit}" : "-")}  強度 {(dvbSignal.StrengthDbm is { } dvbDbm ? $"{dvbDbm:F1} dBm" : "-")}");
+                output.WriteLine($"    {(cableSignal.Locked ? "ロック中" : "ロックしていない")}  C/N {(cableSignal.Cn is { } cableCn ? $"{cableCn:F1} {cableSignal.Unit}" : "-")}  強度 {(cableSignal.StrengthDbm is { } cableDbm ? $"{cableDbm:F1} dBm" : "-")}");
             }
             // ISDB-C は、受け終えたあとの TSMF の数と、出力した TS の PAT の TSID も出す
             if (tuning.IsdbC && tuner.Tsmf is { } tsmf)

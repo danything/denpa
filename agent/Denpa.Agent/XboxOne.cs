@@ -82,7 +82,8 @@ public static class XboxOne
     /// 復調のファームウェア (<see cref="Mn88472.FirmwareName"/>) を <paramref name="dirs"/> の順に探して読む。
     /// 無いか、仕様書のファイルと違えば、どこに何を置けばよいかを理由にして例外を送出する (この機材だけが使えない)
     /// </summary>
-    internal static byte[] DemodFirmware(IReadOnlyList<string> dirs)
+    /// <param name="place">無いときに置き場として出す文。null なら <paramref name="dirs"/> を並べる</param>
+    internal static byte[] DemodFirmware(IReadOnlyList<string> dirs, string? place = null)
     {
         foreach (var dir in dirs)
         {
@@ -93,8 +94,14 @@ public static class XboxOne
             return code;
         }
         throw new IOException(
-            $"復調のファームウェア {Mn88472.FirmwareName} がありません。{string.Join(" か ", dirs)} に置いてください (同梱していません。docs/tuner-xbox-one.md)");
+            $"復調のファームウェア {Mn88472.FirmwareName} がありません。{place ?? string.Join(" か ", dirs)} に置いてください (同梱していません。docs/tuner-xbox-one.md)");
     }
+
+    /// <summary>
+    /// Android で利用者が復調のファームウェアを置く場所。エージェントが読む <c>config/firmware/</c> はアプリの中で利用者が書けないので、
+    /// 外部ストレージのアプリの置き場に置いたものを、アプリがエージェントを起動するときに写す (android/ の DenpaService.copyUserFirmware)
+    /// </summary>
+    internal const string AndroidPlace = "端末の Android/data/io.github.danything.denpa/files/firmware/ (adb push で置き、アプリを「終了」して起動し直す。Android 11 から)";
 
     /// <summary>そのポートの機材を開いて、ブリッジのファームウェアを動かし、チップを初期化する</summary>
     internal static XboxOneDevice OpenDevice(string port, string name)
@@ -103,11 +110,11 @@ public static class XboxOne
         {
             throw new IOException($"USB のポート {port} に {Model} が見当たりません (抜けたか、挿し替えた?)");
         }
-        // 代替設定は選び直さない (元のドライバはインタフェース 0・代替設定 0 のまま使うと仕様書は推定している)
+        // 代替設定は選び直さない (元のドライバはインターフェース 0・代替設定 0 のまま使うと仕様書は推定している)
         var device = new XboxOneDevice(UsbHost.Current.Open(port, Vendor, Product, selectAlternate: false), name);
         try
         {
-            device.Start(BridgeFirmware, () => DemodFirmware(FirmwareDirs()));
+            device.Start(BridgeFirmware, () => DemodFirmware(FirmwareDirs(), UsbHost.Brokered ? AndroidPlace : null));
             return device;
         }
         catch
@@ -250,7 +257,6 @@ internal sealed class XboxOneDevice : IDisposable
                 if (error is UsbGoneException) break;
             }
         }
-        _in?.Dispose();
         _usb.Dispose();
     }
 }
@@ -376,7 +382,7 @@ public sealed class XboxOneTuner : ITuneDevice
 
     /// <summary>受信の状態と C/N (dB)。強度は相対値しか分からないので出さない</summary>
     /// <remarks>
-    /// 選局と同じ `_gate` を取るので、選局し直している間は待つ (Siano と同じ作り)。`TunerPool` は選局が合っているチューナーにだけ
+    /// 選局と同じ <c>_gate</c> を取るので、選局し直している間は待つ (Siano と同じ作り)。<c>TunerPool</c> は選局が合っているチューナーにだけ
     /// これを呼ぶ (選局し直している最中には呼ばない) ので、長く待つことはない
     /// </remarks>
     public TunerSignal? Signal()
