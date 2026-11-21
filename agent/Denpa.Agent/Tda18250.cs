@@ -114,8 +114,8 @@ internal sealed class Tda18250(Dib0700 bridge, Action<int> sleep)
     }
 
     /// <summary>
-    /// AGC に書く (レジスタ, マスク, 値)。**仕様書が勧める「8 MHz 用」の側の値** (帯域が 6,000,000 Hz ちょうどにならないので元のドライバが選ぶ側で、
-    /// 実機で受けられたと報告されている値)。もう一方の 6 MHz 用の値は試した記録が無いので持たない
+    /// AGC に書く (レジスタ, マスク, 値)。**仕様書が勧める「8 MHz 用」の側の値。** 帯域が 6,000,000 Hz ちょうどにならないので元のドライバが選ぶ側で、
+    /// 実機で受けられたと報告されている値。もう一方の 6 MHz 用の値は試した記録が無いので持たない
     /// </summary>
     internal static (byte Register, byte Mask, byte Value)[] AgcRows(uint hertz) =>
     [

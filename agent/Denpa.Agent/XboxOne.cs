@@ -237,15 +237,18 @@ internal sealed class XboxOneDevice : IDisposable
     /// <summary>TS を止め、チューナー、復調の順にスリープにしてから閉じる (仕様書「スリープ」)。機材が抜けていても閉じる</summary>
     public void Dispose()
     {
-        try
+        // 1 つが失敗しても残りは試す。機材が抜けていたら、そこでやめる
+        foreach (var (what, step) in new (string, Action)[] { ("TS を止められませんでした", StopTs), ("チューナーをスリープにできませんでした", Tuner.Sleep), ("復調をスリープにできませんでした", Demod.Sleep) })
         {
-            StopTs();
-            Tuner.Sleep();
-            Demod.Sleep();
-        }
-        catch (Exception error) when (error is IOException or ObjectDisposedException)
-        {
-            Note($"スリープにできませんでした ({error.Message})");
+            try
+            {
+                step();
+            }
+            catch (Exception error) when (error is IOException or ObjectDisposedException)
+            {
+                Note($"{what} ({error.Message})");
+                if (error is UsbGoneException) break;
+            }
         }
         _in?.Dispose();
         _usb.Dispose();

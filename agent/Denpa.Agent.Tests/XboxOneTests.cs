@@ -36,6 +36,9 @@ public class XboxOneTests
         public uint Ram { get; set; } = 0x00010201;
         public bool Disposed { get; private set; }
 
+        /// <summary>この OUT のデータ (16 進) を失敗させる</summary>
+        public Func<string, bool>? FailOut { get; set; }
+
         /// <summary>偽の TS (null パケット) を流す</summary>
         public BlockingCollection<byte[]> Ts { get; } = [];
 
@@ -73,6 +76,7 @@ public class XboxOneTests
         public void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs)
         {
             Log.Add($"out {Convert.ToHexString(data)}");
+            if (FailOut?.Invoke(Convert.ToHexString(data)) == true) throw new IOException("stall");
             if (request != 0x13) return;
             var address = (byte)(data[1] >> 1);
             var payload = data[4..].ToArray();
@@ -343,6 +347,19 @@ public class XboxOneTests
         var device = new XboxOneDevice(usb, "Xbox 1-2", _ => { }, _ => { });
         var error = await Assert.That(() => device.Start(XboxOne.BridgeFirmware, () => DemodCode)).Throws<IOException>();
         await Assert.That(error!.Message).Contains("0x82");
+    }
+
+    [Test]
+    public async Task 閉じるときは_TS_を止められなくてもチューナーと復調をスリープにする()
+    {
+        var usb = new FakeXbox();
+        var device = Started(usb);
+        device.StartTs();
+        usb.FailOut = hex => hex == "0F000000";
+        device.Dispose();
+        await Assert.That(usb.Bank(Mn88472.Bank2)[0x0C]).IsEqualTo((byte)0x30);
+        await Assert.That(usb.Bank(Tda18250.Address)[0x25] & 0xC0).IsEqualTo(0x80);
+        await Assert.That(usb.Disposed).IsTrue();
     }
 
     // ---- チューナー ----

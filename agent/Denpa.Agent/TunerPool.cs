@@ -572,7 +572,7 @@ public sealed class TunerPool(
     public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false, string? name = null)
     {
         /*
-         * **Windows は、エージェントが USB を直に持つ機材 ((Siano・CECH-ZD1 J・PIX-DT295・IT930x・Xbox One Digital TV Tuner)) だけ。** DVB は無く、asicen-userland は Windows を出していない。
+         * **Windows は、エージェントが USB を直に持つ機材 (Siano・CECH-ZD1 J・PIX-DT295・IT930x・Xbox One Digital TV Tuner) だけ。** DVB は無く、asicen-userland は Windows を出していない。
          * 書いてあっても開かない (開けば libc を呼びにいって落ちる)
          */
         if (OperatingSystem.IsWindows() && !Siano.Is(path) && !Zd1j.Is(path) && !Dt295.Is(path) && !It930x.Is(path) && !XboxOne.Is(path))

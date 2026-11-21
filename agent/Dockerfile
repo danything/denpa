@@ -145,7 +145,7 @@ COPY --from=fetch /opt/ /opt/
 # ISDB-T のファームウェア (isdbt_rio.inp) はエージェントの実行ファイルに埋め込んである (SianoFirmware.cs。agent/Denpa.Agent/firmware/README.md)。
 # Siano の許諾は、無改変で再配布するときに著作権表示と免責の文面を添えることを求めるので、文面をここに置く
 COPY agent/Denpa.Agent/firmware/LICENCE.siano /usr/share/doc/denpa-agent/LICENCE.siano
-# Xbox One Digital TV Tuner のブリッジ (DiB0700) のファームウェアも埋め込んである (XboxOneFirmware.cs)。DiBcom の許諾 (ISC) も著作権表示と許諾の文面を添えることを求める
+# Xbox One Digital TV Tuner のブリッジ (DiB0700) のファームウェアも埋め込んである (Dib0700.cs・XboxOne.cs)。DiBcom の許諾 (ISC) も著作権表示と許諾の文面を添えることを求める
 COPY agent/Denpa.Agent/firmware/LICENSE.dib0700 /usr/share/doc/denpa-agent/LICENSE.dib0700
 
 # 設定は PVC (/config) に置く (/config/tuners.json と /config/channels.json はエージェントの既定。Config.cs)。
