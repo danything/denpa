@@ -1,15 +1,17 @@
 /**
  * **MSE (`MediaSource` と SourceBuffer) を開いて、届いたものを足し、古いものを捨てる。** 観る画面のその場で流す録画
- * (`remux-player.ts`) が使う。ライブと追っかけ (`live-player.svelte.ts`) も同じものに替える予定。
+ * (`remux-player.ts`) と、ライブ・追っかけ (`live-player.svelte.ts`) が使う。
  *
  * 何をどこから読むか、どこまで溜めるか、いつ捨てるかは呼ぶ側が決める。ここが受け持つのは次のこと。
  *
  * - **開く。** `ManagedMediaSource` (iPhone の Safari) なら `disableRemotePlayback` を立ててから `<video>` に付ける
  *   (`ts/media-source.ts`)。開いたら尺を入れる (録画は尺、終わりが無ければ `Infinity`)。時刻はストリームのものをそのまま使う (`segments`)
  * - **足す・捨てる・型を替えるのは 1 つずつ。** `appendBuffer`・`remove`・`changeType` は前のものが終わる前に呼ぶと例外になるので、
- *   呼ばれた順に 1 つずつ回す。待たずに続けて呼んでもよい
+ *   呼ばれた順に 1 つずつ回す。待たずに続けて呼んでもよい。開く前に渡されたものは、開いてから回す。
+ *   並んだものを回し終えたら呼ぶ側の関数を呼ぶ (`settled`)
  * - **1 回に足すのは 1 MB まで** (`APPEND_MOST`)。溜めきれなければ (`QuotaExceededError`)、捨ててよい所 (`keepFrom`) より前を捨てて
- *   入れ直す。捨てるものが無ければ、呼ぶ側が待つ処理 (`waitRoom`) が終わってから入れ直す
+ *   入れ直す。捨てるものが無ければ、呼ぶ側が待つ処理 (`waitRoom`) が終わってから入れ直す。待てない呼ぶ側 (ライブ) は
+ *   `waitRoom` を渡さず、例外で受け取る
  * - **`ManagedMediaSource` は送り込んでよい間をブラウザが知らせる** (`startstreaming`・`endstreaming`)。いま送ってよいか
  *   (`streaming`) を返し、送ってよくなったら呼ぶ側の関数を呼ぶ (`onStreaming`)。止められている間に読むのを止めるかは呼ぶ側が決める
  *
@@ -38,10 +40,18 @@ export interface MseSinkOptions {
   duration: number;
   /** この位置 (秒) より前は捨ててよい。`trim` と、溜めきれないとき (`QuotaExceededError`) に読む */
   keepFrom(): number;
-  /** 溜めきれず、捨てられるものも無い。観て減るまで待つ。終わったら入れ直す */
-  waitRoom(): Promise<void>;
+  /**
+   * 溜めきれず、捨てられるものも無い。観て減るまで待つ。終わったら入れ直す。渡さなければ、溜めきれないときは捨ても
+   * 入れ直しもせず、`append` が `QuotaExceededError` を投げる (ライブは放送が待ってくれない)
+   */
+  waitRoom?(): Promise<void>;
   /** MediaSource が開いた (`sourceopen`)。`type` があれば SourceBuffer を作ったあとに呼ぶ */
   opened(): void;
+  /**
+   * 並んだ仕事 (足す・捨てる・型を替える・落とす・閉じる) をすべて終え、SourceBuffer の手が空いた。
+   * 続けて渡されているあいだは、最後のものが終わるまで呼ばない
+   */
+  settled?(): void;
   /** ブラウザが送り込んでよいと知らせた (`ManagedMediaSource` の `startstreaming`) */
   onStreaming?(): void;
 }
@@ -53,6 +63,8 @@ export interface MseSink {
   readonly type: string | null;
   /** MediaSource の状態 (`open`・`ended`・`closed`) */
   readonly readyState: ReadyState;
+  /** 並んでいる仕事か、回している仕事があるか。無くなったところで `settled` を呼ぶ */
+  readonly busy: boolean;
   /** 溜まっている区間 */
   buffered(): Ranges;
   /** ブラウザが送り込んでよいとしているか。`ManagedMediaSource` でなければいつも true */
@@ -95,8 +107,14 @@ export function mseSink(
   let bufferType: string | null = null;
   let opened = false;
   let closed = false;
+  /** 開いた (`sourceopen`) ら解決する。開く前に渡された仕事は、これを待ってから回す */
+  let openNow!: () => void;
   /** 最後に渡された SourceBuffer の仕事が終わる時。次の仕事はこれを待ってから始める */
-  let tail: Promise<void> = Promise.resolve();
+  let tail = new Promise<void>((resolve) => {
+    openNow = resolve;
+  });
+  /** 並んでいる仕事と回している仕事の数 (`busy`・`settled`) */
+  let queued = 0;
 
   /** MSE に渡す型 (MP4 の `Opus` を受け取れるなら小文字に。`live.ts` の `mseType`) */
   const forMse = (type: string): string =>
@@ -121,12 +139,21 @@ export function mseSink(
     );
   }
 
+  /** 回し終えた。ほかに並んでいなければ呼ぶ側に伝える (`settled`) */
+  function finished(): void {
+    queued--;
+    if (queued === 0) options.settled?.();
+  }
+
   /** 前に渡された仕事が終わり、SourceBuffer の手が空いてから `job` を回す */
   function exclusive<T>(job: () => Promise<T>): Promise<T> {
+    queued++;
     const run = tail.then(async () => {
       await idle();
       return job();
     });
+    // 次の仕事 (`tail`) より先に数を減らす。続けて渡されていれば 0 にならず、`settled` は呼ばない
+    void run.then(finished, finished);
     tail = run.then(
       () => undefined,
       () => undefined,
@@ -187,9 +214,12 @@ export function mseSink(
         );
         return;
       } catch (error) {
-        if (!(
-          error instanceof DOMException && error.name === "QuotaExceededError"
-        ))
+        if (
+          options.waitRoom === undefined ||
+          !(
+            error instanceof DOMException && error.name === "QuotaExceededError"
+          )
+        )
           throw error;
         if (!(await trim(still))) await options.waitRoom();
       }
@@ -216,6 +246,7 @@ export function mseSink(
       opened = true;
       if (options.type !== null) create(options.type);
       options.opened();
+      openNow();
     },
     { once: true },
   );
@@ -229,6 +260,9 @@ export function mseSink(
     },
     get readyState() {
       return media.readyState;
+    },
+    get busy() {
+      return queued > 0;
     },
     buffered,
     streaming: () =>
