@@ -163,7 +163,7 @@ export const LAG_LATE = 1_000;
  * `backlog` は 0 のままだった)。
  *
  * 両端 (`LAG_EDGE`) のいちばん小さい遅れどうしを比べる。キーフレームの大きな塊は遅れて届くので、1 回ずつだと揺れる。
- * 前の刻みから `LAG_LATE` より空いた刻みの端は使わない。直近の `LAG_EDGE` に使える端が無ければ、最後に使えた端で比べる。
+ * 前の刻み (端を測れなかった刻みも数える) から `LAG_LATE` より空いた刻みの端は使わない。直近の `LAG_EDGE` に使える端が無ければ、最後に使えた端で比べる。
  * ストリームが替わったら (選局・段の切り替え・作り直し) 物差しが変わるので `reset` する
  */
 export class LagMeter {
@@ -176,11 +176,16 @@ export class LagMeter {
     this.#seenAt = Number.NaN;
   }
 
-  /** `now` (ms) の時点で届いている映像の端 (秒)。測れなければ渡さない */
-  push(now: number, edge: number): void {
+  /**
+   * `now` (ms) の時点で届いている映像の端 (秒)。**端を測れない刻みも null で渡す。** `LAG_LATE` は前の刻みからの間で
+   * 決めるので、渡さないと次の刻みが空いたように見えて使われない。canvas の経路で音を使い切って止まると、端が null の刻みが
+   * 挟まる。渡さなかった頃は、その次の (読み終えた) 端を捨て、さらに次の塞がった直後の古い端だけが直近の端になって、
+   * 遅れが 0.7 秒伸びて見え、E2E で「回線が細いため」と下げていた
+   */
+  push(now: number, edge: number | null): void {
     const late = now - this.#seenAt > LAG_LATE;
     this.#seenAt = now;
-    if (late) return;
+    if (late || edge === null) return;
     const lag = now / 1000 - edge;
     const last = this.#samples.at(-1);
     // 端が戻った (シークで捨てた・別のストリーム)。1 回の刻みで `LAG_JUMP` も伸びることは無いので、前の値とは比べない

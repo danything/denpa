@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { stepOrder } from "./adapt";
+import { LAG_STEADY, stepOrder } from "./adapt";
 import type { Notice } from "./live";
 import {
   holdsDown,
@@ -192,6 +192,17 @@ describe("放送に対する遅れ", () => {
     // 次の刻みは読み終えている
     meter.push(late + 500, (late + 500) / 1000);
     expect(meter.growth(late + 500)).toBeCloseTo(0);
+  });
+
+  test("端を測れない刻み (null) も刻みに数え、その次の読み終えた端を捨てない", () => {
+    // CI で見た並び: 塞がって 1 秒空いた刻みで音を使い切って端が null、次は読み終えた端、その次は塞がった直後の古い端
+    const meter = new LagMeter();
+    const now = feed(meter, 10, 1);
+    meter.push(now + 1_000, null);
+    meter.push(now + 1_500, (now + 1_500) / 1000);
+    const stale = now + 2_490;
+    meter.push(stale, stale / 1000 - 0.7);
+    expect(meter.growth(stale)!).toBeLessThan(LAG_STEADY);
   });
 
   test("端が大きく戻ったら (別のストリーム)、前の値と比べない", () => {

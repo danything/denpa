@@ -941,11 +941,14 @@ export function playbackCore(options: PlaybackCoreOptions) {
      * GPU でエンコードできるものが無ければソフトウェアの H.264 になる (`server/live.ts` の `rungCodec`) ので描けない
      */
     if (compat && !playable().includes("h264")) return;
+    /*
+     * 放送に対する遅れ (`LagMeter`)。追っかけは録画を実時間より速く読むので測らない。端を測れない刻みも渡す
+     * (刻みの間で、メインスレッドが塞がっていたかを見るため)
+     */
+    const edge = edgeNow();
+    if (chase === null) lagMeter.push(now, edge);
     const ahead = aheadNow();
     if (ahead === null) return;
-    // 放送に対する遅れ (`LagMeter`)。追っかけは録画を実時間より速く読むので測らない
-    const edge = edgeNow();
-    if (edge !== null && chase === null) lagMeter.push(now, edge);
     const bps = feed.throughput.rate(now);
     const decision = adapter.tick({
       now,
@@ -2314,7 +2317,12 @@ export function playbackCore(options: PlaybackCoreOptions) {
    *
    * **このリクエストへの `tuned` より前に届いたものは数えない** (`startup.tuned`)。繋がっている接続でリクエストし直すと、
    * サーバが受けるまで前のもの (取り上げられたライブ・追っかけの元の TS) が届き続ける。数えていた頃は、「ライブに戻る」で
-   * 入れなかったのに追っかけの残りで入れたとみなし、追っかけに戻らずに「選局できませんでした」で止まった
+   * 入れなかったのに追っかけの残りで入れたとみなし、追っかけに戻らずに「選局できませんでした」で止まった。
+   *
+   * 単体テストは無い。確かめたいのは WebSocket に届く順 (追っかけの元の TS → `tuned` → 新しい中身) と、それを受ける
+   * `begin`・`applyTuned`・`reportStartup` のつながりで、どれも `playbackCore` の中の変数を使うので、外から組み立てて
+   * 動かす単体の土台が無い。e2e の `34-live-yield.spec.ts` の「別のチャンネルの録画に取り上げられ、入れなければ録画の追っかけに
+   * 切り替える」(MPEG-2) が、「ライブに戻る」で入れずに追っかけに戻るのを確かめる
    */
   function arrived(): void {
     // `startup` は `tuned` が届いて最初のコマを映すまで残る (`reportStartup`)。null なら届いている

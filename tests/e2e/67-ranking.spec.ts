@@ -220,21 +220,31 @@ test.describe("番組ランキング", () => {
   });
 });
 
-/** 検索の結果から、まだ予約の無い先の放送を 1 つ予約する (`46-search.spec.ts` と同じ選び方)。番組の ID を返す */
+/**
+ * 検索の結果から、まだ予約の無い先の放送を 1 つ予約する (`46-search.spec.ts` と同じ選び方)。番組の ID を返す。
+ * 押す行と確かめる行は番組の ID で探す。予約すると一覧を読み直し、「これからの放送」はその時点で終わった番組を外す
+ * (`searchPrograms`) ので、並びが前へずれ、何番目かで探すと別の番組の行を見る。CI では 8 番目の行に「予約済み」が出ないまま 30 秒たった
+ */
 async function reserveLater(page: Page): Promise<string> {
   await goto(page, `/search?q=${encodeURIComponent("テストアニメ")}`);
   const programs = page.getByTestId("search-program");
   await expect(programs.first()).toBeVisible();
   const more = page.getByTestId("search-more-programs");
-  if (await more.isVisible()) await more.click();
+  if (await more.isVisible()) {
+    await more.click();
+    await expect(more).toHaveCount(0);
+  }
   for (const row of await programs.all()) {
     const later =
       searchRowStart((await row.textContent()) ?? "") > Date.now() + 2 * 60_000;
     if (!later || (await row.getByTestId("search-reserve").count()) !== 1)
       continue;
     const id = (await row.getAttribute("data-program-id"))!;
-    await row.getByTestId("search-reserve").click();
-    await expect(row.getByTestId("search-program-state")).toHaveText(
+    const picked = page.locator(
+      `[data-testid="search-program"][data-program-id="${id}"]`,
+    );
+    await picked.getByTestId("search-reserve").click();
+    await expect(picked.getByTestId("search-program-state")).toHaveText(
       "予約済み",
     );
     return id;
