@@ -376,7 +376,7 @@ test.describe("ライブ視聴", () => {
         return {
           字幕: captions?.parentElement === video?.parentElement,
           前のコマ: still?.parentElement === video?.parentElement,
-          // 重なりは 映像 → 前のコマ → 字幕 の順 (DOM の順がそのまま)
+          // 重なりは 映像 (段を替えるときに用意する裏の映像も) → 前のコマ → 字幕 の順 (DOM の順がそのまま)
           順番: [...(video?.parentElement?.children ?? [])].map((e) =>
             e.getAttribute("data-testid"),
           ),
@@ -385,7 +385,7 @@ test.describe("ライブ視聴", () => {
     ).toEqual({
       字幕: true,
       前のコマ: true,
-      順番: ["live-video", "live-still", "live-captions"],
+      順番: ["live-video", "live-video-spare", "live-still", "live-captions"],
     });
     expect(await asked()).toEqual([{ type: "data", on: true }]);
 

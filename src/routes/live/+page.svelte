@@ -136,6 +136,8 @@
   });
   /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
   let video = $state<HTMLVideoElement | null>(null);
+  /** 段を替えるときに次の段を用意する `<video>` (`live-player` の `stageStep`) */
+  let spare = $state<HTMLVideoElement | null>(null);
   let still = $state<HTMLCanvasElement | null>(null);
   let overlay = $state<HTMLCanvasElement | null>(null);
   let mediaBox = $state<HTMLElement | null>(null);
@@ -151,6 +153,11 @@
     player.toggleReceiveData();
     dataReceive.show(player.receiveData);
   }
+
+  // 段を替えるときに次の段を用意する `<video>`。入れ替えるたびに、映していないほうに替わる (`MediaStack` の `spare`)
+  $effect(() => {
+    player.spare = spare;
+  });
 
   /**
    * サーバが決めた局で開く (`+page.server.ts` の `start`)。こちらでも同じ判断をしない。サーバは既に
@@ -561,7 +568,10 @@
         captionsOn={player.captions && player.hasCaptions}
         onclick={stageTap}
         prefix="live"
+        twin
+        front={player.front}
         bind:video
+        bind:spare
         bind:still
         bind:overlay
         bind:box={mediaBox}
