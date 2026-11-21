@@ -870,9 +870,11 @@ public sealed class It930xDevice
             if (overflow.SameAs(_flowing)) return false;
             _blocked = overflow;
         }
-        var what = loss is null ? $"ロックしてから {waitedMs} ms 待っても TS が届きませんでした" : $"TS が欠けて届きました ({loss})";
+        var what = loss is null
+            ? $"受信機 {receiver} がロックしてから {waitedMs} ms 待っても TS が届きませんでした"
+            : $"受信機 {receiver} の TS が欠けて届きました ({loss})";
         FaultOnce("jammed",
-            $"[{Label}] 全体の溢れが立ったままで ({overflow})、受信機 {receiver} の{what}。"
+            $"[{Label}] 全体の溢れが立ったままで ({overflow})、{what}。"
             + "機材の電源を抜いて入れ直すまで、この機材の受信機では選局しません (REBOOT や受信機の電源の入れ直しでは戻りません)");
         return true;
     }

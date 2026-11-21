@@ -405,7 +405,7 @@ public class It930xDeviceTests
             await Assert.That(card.Jammed).IsNotNull();
             var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-50")).ToList();
             await Assert.That(lines.Any(text => text.Contains("次の選局で、ロックしたあとに TS が届くかを確かめます"))).IsTrue();
-            await Assert.That(lines.Any(text => text.Contains("TS が届きませんでした") && text.Contains("この機材の受信機では選局しません"))).IsTrue();
+            await Assert.That(lines.Any(text => text.Contains("受信機 0 がロックしてから") && text.Contains("TS が届きませんでした") && text.Contains("この機材の受信機では選局しません"))).IsTrue();
             // 断る前に、受信を 1 回だけやり直した (開いたときと合わせて、EP 0x84 のリセットは 2 回)
             await Assert.That(lines.Count(text => text.Contains("受信をやり直します"))).IsEqualTo(1);
             int resets;
