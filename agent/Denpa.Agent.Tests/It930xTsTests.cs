@@ -522,4 +522,71 @@ public class It930xTsTests
         await Assert.That(It930xSteps.ParseSteps("2,x", 5)).IsNull();
         await Assert.That(It930xSteps.ParseSteps(null, 5)).IsNull();
     }
+
+    // ---------------------------------------------------------------------
+    // 欠けを数える (It930xTsLoss)
+    // ---------------------------------------------------------------------
+
+    /// <summary>PID <paramref name="pid"/>・continuity_counter <paramref name="counter"/> のパケット。<paramref name="error"/> なら transport_error_indicator を 1 にする</summary>
+    private static byte[] CountedPacket(int pid, int counter, bool error = false) =>
+        [0x47, (byte)((error ? 0x80 : 0) | (pid >> 8)), (byte)pid, (byte)(0x10 | (counter & 0x0F)), .. new byte[184]];
+
+    [Test]
+    public async Task 欠けは_100_ms_ごとの区間で数え_つなぎ目の_1_回は_1_区間で済む()
+    {
+        var loss = new It930xTsLoss();
+        // 前の選局のパケットのあとに、この選局のパケット (PID 0x100 と 0x200 が同じところで飛ぶ)
+        loss.Push(CountedPacket(0x100, 3), 1000);
+        loss.Push(CountedPacket(0x200, 7), 1000);
+        loss.Push(CountedPacket(0x100, 9), 1001);
+        loss.Push(CountedPacket(0x200, 0), 1001);
+        for (var i = 0; i < 50; i++)
+        {
+            loss.Push(CountedPacket(0x100, 10 + i), 1002 + 10 * i);
+            loss.Push(CountedPacket(0x200, 1 + i), 1002 + 10 * i);
+        }
+        await Assert.That(loss.Jumps).IsEqualTo(2);
+        await Assert.That(loss.Slots).IsEqualTo(1);
+        await Assert.That(loss.Span(1500)).IsEqualTo(500);
+
+        // 間を置いてもう一度欠ける
+        loss.Push(CountedPacket(0x100, 5), 1600);
+        await Assert.That(loss.Jumps).IsEqualTo(3);
+        await Assert.That(loss.Slots).IsEqualTo(2);
+        await Assert.That(loss.Describe(600)).Contains("連続性の飛び 3 回 (100 ms ごとに区切って 2 区間)");
+    }
+
+    [Test]
+    public async Task transport_error_indicator_が_1_のパケットのあとの飛びは電波の誤りとして欠けに数えない()
+    {
+        var loss = new It930xTsLoss();
+        loss.Push(CountedPacket(0x100, 0), 0);
+        // 誤りの印のパケット (数を比べない) のあと、同じ PID の次のパケットは飛んで見える
+        loss.Push(CountedPacket(0x100, 1, error: true), 10);
+        loss.Push(CountedPacket(0x100, 2), 20);
+        loss.Push(CountedPacket(0x100, 3), 30);
+        await Assert.That(loss.Jumps).IsEqualTo(0);
+        await Assert.That(loss.Excused).IsEqualTo(1);
+        await Assert.That(loss.Errors).IsEqualTo(1);
+        // 誤りの印の無い飛びは数える
+        loss.Push(CountedPacket(0x100, 5), 400);
+        await Assert.That(loss.Jumps).IsEqualTo(1);
+        await Assert.That(loss.Slots).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ほかの_PID_の誤りでは飛びを許さない()
+    {
+        var loss = new It930xTsLoss();
+        loss.Push(CountedPacket(0x100, 0), 0);
+        loss.Push(CountedPacket(0x200, 0), 0);
+        // PID 0x200 の誤りのあと、PID 0x100 が飛ぶ (間隔の長い PID の本当の欠け)
+        loss.Push(CountedPacket(0x200, 1, error: true), 10);
+        loss.Push(CountedPacket(0x100, 3), 20);
+        await Assert.That(loss.Jumps).IsEqualTo(1);
+        await Assert.That(loss.Excused).IsEqualTo(0);
+        // 印は PID 0x200 に残っていて、その PID の次の飛びだけを許す
+        loss.Push(CountedPacket(0x200, 3), 30);
+        await Assert.That(loss.Excused).IsEqualTo(1);
+    }
 }

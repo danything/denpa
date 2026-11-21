@@ -123,8 +123,8 @@ public class Tc90522BoardTests
             [
                 // 2: チューナーの初期化。受信機 0・1 は RT710 (03 を読む)、2・3 は R850
                 "11 RT710 ?4", "13 RT710 ?4", .. R850Init("10"), .. R850Init("12"),
-                // 3: 開く受信機のほかの 3 つをスリープに。衛星は RT710 の待機と復調器、地上波は復調器だけ
-                .. SleepSatellite("11"), .. SleepSatellite("13"), "12 03=F0",
+                // 3: 開く受信機のほかの 3 つをスリープに。先に TS の端子を止める (仕様書 3.5)。衛星は RT710 の待機と復調器、地上波は復調器だけ
+                "11 1C=80", "11 1F=22", .. SleepSatellite("11"), "13 1C=80", "13 1F=22", .. SleepSatellite("13"), "12 1D=A8", "12 03=F0",
                 // 4: 開く受信機の起動
                 .. WakeTerrestrial("10"),
                 // 5: TS 出力の共通設定 (仕様書 3.4)。受信機 0 の衛星のアドレスと、受信機 2 の地上波のアドレスに書く
@@ -163,6 +163,36 @@ public class Tc90522BoardTests
         {
             device.Release();
             It930xDevice.CloseIfIdle("6-2", TimeSpan.Zero);
+        }
+    }
+
+    /// <summary>
+    /// **最初の受信機を開くときは、スリープにする 3 つの TS の端子も止めてから、ブリッジの入力を開ける** (仕様書 3.5 の「止める」の値)。
+    /// 選局しない復調器から、開けた入力にデータが入らないようにする念のため (PX-Q3PE4 で、初期化していない TC90522 の入力を開けると溢れた。2026-11-11)
+    /// </summary>
+    [Test]
+    public async Task 最初の受信機を開くとスリープにする受信機の_TS_の端子も止めてから入力を開ける()
+    {
+        var (usb, _) = Fake();
+        var device = Open(usb, "6-90", new FakeClock(), W3);
+        try
+        {
+            device.Frontend(2);
+            List<string> log;
+            lock (usb.Log) log = [.. usb.Log];
+            var opened = log.FindIndex(line => line is "W DA4C=01" or "W DA4D=01" or "W DA4E=01" or "W DA4F=01");
+            await Assert.That(opened).IsGreaterThan(-1);
+            var before = log.Take(opened).ToList();
+            // 受信機 0・1 は衛星 (0x11・0x13) の 1C ← 80・1F ← 22、受信機 3 は地上波 (0x12) の 1D ← A8
+            foreach (var row in new[] { "11 1C80", "11 1F22", "13 1C80", "13 1F22", "12 1DA8" })
+            {
+                await Assert.That(before.Contains($"I2C W 2 {row}")).IsTrue();
+            }
+        }
+        finally
+        {
+            device.Release();
+            It930xDevice.CloseIfIdle("6-90", TimeSpan.Zero);
         }
     }
 

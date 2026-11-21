@@ -661,10 +661,17 @@ internal sealed class Tc90522Board : IIt930xBoard
             {
                 // 4 つのチューナーを受信機 0 から 3 の順に初期化する (仕様書 3.1 の 2)
                 foreach (var each in _receivers) each.InitTuner();
-                // これから開く受信機を除く 3 つをスリープにする (仕様書 3.1 の 3)
+                /*
+                 * これから開く受信機を除く 3 つをスリープにする (仕様書 3.1 の 3)。その前に TS の端子を止める (仕様書 3.5 の「止める」の値。3.1 には無い)。
+                 * このあと機材がブリッジの入力を全部開けるので、選局しない復調器が電源を入れたときの端子のままでも、入力にデータが入らないようにする念のため。
+                 * PX-Q3PE4 で、電源を入れただけで初期化していない TC90522 の入力を開けると溢れ、電源を抜くまで TS が出なくなった (2026-11-11。It930xDevice.OpenInputs)。
+                 * 受信機が 1 つの機種 (Tc90522Single) も、開くときに TS の端子を止めてからスリープにしている
+                 */
                 for (var other = 0; other < _receivers.Length; other++)
                 {
-                    if (other != receiver) _receivers[other].Rest();
+                    if (other == receiver) continue;
+                    _receivers[other].Stream(false);
+                    _receivers[other].Rest();
                 }
                 frontend.Wake();
                 // TS 出力の共通設定 (仕様書 3.4)。相手がスリープ中でも書く
