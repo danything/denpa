@@ -203,8 +203,7 @@ function nptAt(reference: NPTReference, stc: number): number | null {
   if (reference.scaleDenominator !== 1) return null;
   if (reference.scaleNumerator === 0) return reference.NPTReference;
   if (reference.scaleNumerator !== 1) return null;
-  const elapsed = (stc - reference.STCReference + WRAP) % WRAP;
-  return (reference.NPTReference + elapsed) % WRAP;
+  return (reference.NPTReference + since(reference.STCReference, stc)) % WRAP;
 }
 
 /**

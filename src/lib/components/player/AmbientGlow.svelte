@@ -220,7 +220,10 @@
     const outer = box;
     if (target === null || outer === null || !visible) return;
     const main = target.closest("main") ?? document.documentElement;
-    const frame = target.closest<HTMLElement>("[data-player-layout]");
+    // 右の列の入れ物 (`PlayerLayout` の `data-player-side`)。入れ替わる aside はこの子
+    const column = target
+      .closest<HTMLElement>("[data-player-layout]")
+      ?.querySelector<HTMLElement>(":scope > [data-player-side]");
     const measure = () => {
       const s = target.getBoundingClientRect();
       const m = main.getBoundingClientRect();
@@ -304,13 +307,13 @@
       sizes.disconnect();
       sizes.observe(target);
       sizes.observe(main);
-      const aside = frame?.querySelector(":scope > [data-player-side] > aside");
+      const aside = column?.querySelector(":scope > aside");
       if (aside) sizes.observe(aside);
       measure();
     };
     watchAside();
     const children = new MutationObserver(watchAside);
-    if (frame) children.observe(frame, { childList: true });
+    if (column) children.observe(column, { childList: true });
     window.addEventListener("resize", measure);
     return () => {
       sizes.disconnect();

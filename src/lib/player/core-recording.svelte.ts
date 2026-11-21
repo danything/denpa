@@ -2187,7 +2187,7 @@ export function recordingPlayback(options: RecordingPlaybackOptions) {
   }
 
   /**
-   * 字幕の貼り直しと CM の跨ぎを、映した 1 枚ごとに追わせる ([frames.ts](../../../lib/components/player/frames.ts)。
+   * 字幕の貼り直しと CM の跨ぎを、映した 1 枚ごとに追わせる ([frames.ts](../components/player/frames.ts)。
    * ライブと同じ作り)。`timeupdate` (250ms ごと) 任せだった頃は字幕が遅れ、CM も数コマ見えていた
    */
   function follow(target: HTMLVideoElement): void {

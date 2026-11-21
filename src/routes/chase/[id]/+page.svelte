@@ -277,7 +277,7 @@
     fixed: fixedMediaVolume,
   });
 
-  /** キーでも動かせるようにする。割り当てはライブ・観る画面と共通 (`player/keys.ts`) */
+  /** キーでも動かせるようにする。割り当てはライブ・観る画面と共通 (`components/player/keys.ts`) */
   const keys = playerKeys({
     togglePlay: () => player.toggle(),
     seekBy,

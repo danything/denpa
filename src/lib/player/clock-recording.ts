@@ -57,8 +57,7 @@ export class RecordingClock {
       this.sceneAt = null;
       return { at, continued: false };
     }
-    const ms = this.resumeMs();
-    if (ms === null || this.resumeAt(duration) === null) return null;
-    return { at: ms / 1000, continued: true };
+    const at = this.resumeAt(duration);
+    return at === null ? null : { at, continued: true };
   }
 }
