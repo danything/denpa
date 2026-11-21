@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { clipFrom, readClip } from "../fake/fmp4-clip";
 import {
+  countBarWakes,
   expect,
   goto,
   openSettings,
@@ -22,6 +23,7 @@ test.describe("観る画面でその場で流す", () => {
    * **回線が細ければ、「自動」は画質の段を下げて流す** (`watch-adapt.ts`)。エンコード済みのファイルが届かない
    * (回線を絞った) まま詰まって 3 秒たつと、ファイルの直再生から段 1 (720p) の変換へ移る (裏の `<video>` で用意して入れ替える)。
    * 段を下げた変換のコーデックはサーバが端末の再生できるもの (`playable`) から選び、応答のヘッダで返す。
+   * 入れ替えても引っ込んだ操作バーは出さない (`controls.svelte.ts` の `stir`。入れ替えた `<video>` の `play` で出していた)。
    *
    * ファイルは届かないままにし、ストリームは作り置きの fMP4 (`fmp4-clip.ts`) をリクエストされた位置から返す
    */
@@ -84,6 +86,7 @@ test.describe("観る画面でその場で流す", () => {
       "src",
       `/api/recordings/${id}/file?source=encoded`,
     );
+    const wakes = await countBarWakes(page, "watch-stage", "watch-controls");
     await playMuted(page);
 
     await expect.poll(() => asked.length, { timeout: 15_000 }).toBe(1);
@@ -95,6 +98,9 @@ test.describe("観る画面でその場で流す", () => {
       "回線が細いため、720p に下げました",
     );
     await expect(video).not.toHaveAttribute("src", /file/);
+    // 入れ替えた `<video>` の `play` が届くまで待つ
+    await page.waitForTimeout(2_000);
+    expect(await wakes()).toBe(0);
 
     // メニューの「自動」の行に、サーバが選んだ形式と高さを添える
     await wakeControls(page, "watch-stage");

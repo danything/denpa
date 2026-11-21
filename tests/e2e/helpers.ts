@@ -659,6 +659,33 @@ export async function wakeControls(page: Page, stage: string): Promise<void> {
 }
 
 /**
+ * **舞台の真ん中にカーソルを置いたまま、操作バーが引っ込むのを待ち、そこから出てきた回数を数え始める**。
+ * 返す関数で数を読む。止まったカーソルの下で映像を入れ替えても出ないことを確かめるため、カーソルは舞台の上に残す
+ */
+export async function countBarWakes(
+  page: Page,
+  stage: string,
+  bar: string,
+): Promise<() => Promise<number>> {
+  await wakeControls(page, stage);
+  const controls = page.getByTestId(bar);
+  await expect(controls).toHaveAttribute("data-shown", "false", {
+    timeout: 6000,
+  });
+  await controls.evaluate((element) => {
+    const seen = window as unknown as { __barWakes: number };
+    seen.__barWakes = 0;
+    new MutationObserver(() => {
+      if (element.getAttribute("data-shown") === "true") seen.__barWakes++;
+    }).observe(element, { attributes: true, attributeFilter: ["data-shown"] });
+  });
+  return () =>
+    page.evaluate(
+      () => (window as unknown as { __barWakes: number }).__barWakes,
+    );
+}
+
+/**
  * GPU で描ける端末として開く。E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`) ので、
  * WebGL のレンダラの名前を差し替える。時間で動き続けるもの (アンビエントの光など) を回したまま見るテストで使う
  */
