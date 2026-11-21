@@ -80,12 +80,16 @@ export class CaptionLayer {
     this.#painter = null;
   }
 
-  /** 位置 `at` (秒) に合う 1 枚を描く。描き替えたら true。消しているなら何も描かない */
-  paint(at: number): boolean {
+  /**
+   * 位置 `at` (秒) に合う 1 枚を描く。描き替えたら true。消しているなら何も描かない。
+   * `before` は描き替えるときだけ、描く前に呼ぶ (観る画面が canvas を映像に重ね直す `place`)
+   */
+  paint(at: number, before?: () => void): boolean {
     if (this.#painter === null) return false;
     const next = this.on ? showing(currentCue(this.#cues, at), at) : null;
     if (next === this.#shown) return false;
     this.#shown = next;
+    before?.();
     this.#painter.show(next);
     return true;
   }

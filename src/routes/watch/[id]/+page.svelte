@@ -104,7 +104,7 @@
   const ready = $derived(data.playable);
 
   /**
-   * **再生の核 (`player/core-recording.svelte.ts`)。** どれで観るか・読み口・段の切り替え・字幕・データ放送・断り書きを持つ。
+   * **再生の核 (`player/core-recording.svelte.ts`)。** どれで観るか・読み出し側・段の切り替え・字幕・データ放送・断り書きを持つ。
    * この画面は CM 飛ばし・チャプター・実況・どこまで観たか・削除を持ち、核がコマを映すたびに CM を跨ぐかを決める (`hooks`)
    */
   const player = recordingPlayback({

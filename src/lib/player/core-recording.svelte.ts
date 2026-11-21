@@ -4,17 +4,17 @@
  * 層は 4 つに分けてある (docs/architecture.md「観る画面の再生の層」)。ライブと追っかけの核 (`player/core.svelte.ts`) とは、
  * 出どころの運び方と段の動かし方だけが違う。
  *
- * - 出どころ (Feed) … `player/feed-recording.ts` の `RecordingFeed` (リクエスト先と段 0 のビットレート)。位置を指定して読む口は
+ * - 出どころ (Feed) … `player/feed-recording.ts` の `RecordingFeed` (リクエスト先と段 0 のビットレート)。位置を指定して読み出す側は
  *   `remux-player.ts` (その場で流すもの。MSE)・`canvas-player.ts` (互換モードと MPEG-2)・`<video src>` (ファイルの直再生)。
  *   **読みに行く**ので、止めている間は読むのも止まり、飛んだら位置からリクエストし直す
  * - 時間の軸 (Clock) … `player/clock-recording.ts` の `RecordingClock`。尺があり、続きの位置・この場面・選び直した所から始める
  * - 描く先 (Sink) … MSE は `remux-player.ts` が `player/mse-sink.ts` に足し、canvas は `player/canvas-sink.ts` (`raw/engine.ts`)
- * - 核 (ここ) … どれで観るか (`pickOffer`・`pickCanvas`)、読み口の作り直し、段の切り替え (`prepareStep`・`switchTo`)、
+ * - 核 (ここ) … どれで観るか (`pickOffer`・`pickCanvas`)、読み出し側 (その場で流すもの・canvas・ファイル) の作り直し、段の切り替え (`prepareStep`・`switchTo`)、
  *   ファイルの繋ぎ直し (`recover`)、音声トラック、速さ。字幕 (`CaptionLayer`)・データ放送 (`DataLayer`)・断り書き (`Note`)・
  *   描けなくなったときの移り先 (`fallBackTo`)・繋ぎ直し (`StreamRetry`)・配線の口 (`PlaybackTarget`) はライブと同じものを使う
  *
  * CM 飛ばしとチャプターは画面が持つ (録画の中身の扱いで、再生の仕組みではない)。核はコマを映すたびに `hooks.frame` を呼び、
- * canvas には CM の先頭から先を描かせない口 (`stopAt`) を渡す
+ * canvas には CM の先頭から先を描かせない (`stopAt`)
  */
 
 import { resolve } from "$app/paths";
@@ -108,7 +108,7 @@ import {
 } from "#lib/watch-adapt.js";
 
 /**
- * 画面が持つもの (CM の跨ぎ・観はじめの判断・どこまで観たか) への口。**核はコマを映すたびに呼ぶ**。
+ * 画面が持つもの (CM の跨ぎ・観はじめの判断・どこまで観たか) を呼ぶフック。**核はコマを映すたびに呼ぶ**。
  * 呼ぶ順は、着いたか (`arrive`) → 覆いを外す・映像の遅れを直す・字幕を描く → 飛ぶかの判断 (`frame`)
  */
 export interface RecordingHooks {
@@ -2293,7 +2293,7 @@ export function recordingPlayback(options: RecordingPlaybackOptions) {
    */
   function paint(): void {
     if (hooks.covering() || !captions.on || overlay === null) return;
-    if (captions.paint(mediaTime())) place();
+    captions.paint(mediaTime(), place);
   }
 
   /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
