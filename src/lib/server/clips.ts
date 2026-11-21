@@ -347,7 +347,8 @@ export function clipPath(file: string, small = false): string {
 
 /** 元の画像の置き場 (`2026-10/12.src`)。重ねを分けて受けたものだけが持つ */
 export function clipSrcDir(file: string): string {
-  // 空の名前だと置き場そのものを指し、`deleteClips` が置き場ごと消してしまう
+  // 空の名前だと置き場そのものを指し、`deleteClips` が置き場ごと消してしまう。
+  // `saveClip` は最初のバージョンから行と名前を 1 つのトランザクションで書くので、空の名前の行は DB に無い
   if (file === "") throw new Error("切り抜きの画像の名前が空です");
   return join(clipsDir(), file.replace(/\.avif$/, ".src"));
 }
