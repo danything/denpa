@@ -1341,7 +1341,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     void sink
       .append(body, () => mine === feedRun && !starved)
       .then(() => {
-        trimHeld = false;
+        // 足せたときだけ下ろす (`still` が false で何もせずに戻ったときは下ろさない)
+        if (mine === feedRun && !starved) trimHeld = false;
       })
       .catch(() => {
         // 追いつけなくなった (溜めきれない `QuotaExceededError` を含む)。並んでいるものは捨て、次に届いたものから足す
