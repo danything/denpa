@@ -156,7 +156,11 @@ export function playerVolume(options: Options): Volume {
       outlet?.hold(true);
       return;
     }
-    // 音量を変えられない端末。通さずに放送のままの大きさで鳴らす (`video.volume` は変わらないが、1 にそろえておく)
+    /*
+     * 音量を変えられない端末。通さずに放送のままの大きさで鳴らす (`video.volume` は変わらないが、1 にそろえておく)。
+     * この端末は Safari なので、通していてもバックグラウンド再生・小窓で `<audio>` は通さない (`throughAudio`)。
+     * 通さない `<video>` はそのまま「再生する音」で、裏でも止まらず、ロック画面の操作も `<video>` に届く
+     */
     if (fixed) {
       if (tapped !== null) sources.get(tapped)?.disconnect();
       tapped = null;
