@@ -934,7 +934,8 @@ export function shim(init: ShimInit): void {
         ? (m["privateDataByte"] as number[])
         : [];
       // ARIB の名前 (記述子のフィールド名) と、データ放送の EventMessageFired の名前の両方で見せる
-      const event = {
+      // リスナーごとに作る (あるリスナーが中身を書き換えても、ほかのリスナーには響かない)
+      const eventFor = () => ({
         type: "GeneralEventMessage",
         es_ref: m["esRef"],
         esRef: m["esRef"],
@@ -949,13 +950,15 @@ export function shim(init: ShimInit): void {
         privateDataByte: Uint8Array.from(bytes),
         private_data: m["privateData"],
         privateData: m["privateData"],
-      };
+      });
       for (const entry of [...messageListeners]) {
         if (entry.esRef !== null && entry.esRef !== m["componentTag"]) continue;
         if (entry.group !== null && entry.group !== m["messageGroupId"])
           continue;
-        // 1 つずつ別に呼ぶ (アプリのリスナーが例外を投げても、ほかのリスナーは止めない)
-        setTimeout(() => entry.listener(event), 0);
+        // 1 つずつ別に呼ぶ (アプリのリスナーが例外を投げても、ほかのリスナーは止めない)。呼ぶまでに外されたものは呼ばない
+        setTimeout(() => {
+          if (messageListeners.includes(entry)) entry.listener(eventFor());
+        }, 0);
       }
     } else if (data["type"] === "key") {
       press(
