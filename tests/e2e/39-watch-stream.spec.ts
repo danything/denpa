@@ -104,7 +104,8 @@ test.describe("観る画面でその場で流す", () => {
   /**
    * **コーデックを選べる** (この端末で観られる方式が 2 つ以上あるとき)。エンコード済みと違うものを選ぶと
    * サーバに変換させて流す。選んだものは端末ごとに覚え、続きの位置からリクエストする。
-   * サーバが混んでいると言えば、変換させずに観られるものを勧める。
+   * サーバが混んでいると言えば、変換させずに観られるものを勧める。観られない幕を出している間は、画面を暗くさせない処理を外す
+   * (`wiring.svelte.ts`。ライブ・追っかけの失敗と同じ)。
    *
    * 何で観られるかはここで決めて渡す (H.264 のエンコード済みと、AV1 への変換と、元の TS)。Playwright の
    * Chromium は H.264 を持たないので、H.264 のファイルは読めることにする。H.264 はメニューに並ばない
@@ -121,7 +122,30 @@ test.describe("観る画面でその場で流す", () => {
       HTMLMediaElement.prototype.canPlayType = function (type: string) {
         return type.includes("avc1") ? "probably" : real.call(this, type);
       };
+      // 画面を暗くさせない処理が、いま掛かっている数 (取ったら 1 足し、外したら 1 引く)
+      const wake = { held: 0 };
+      (window as unknown as { __wake: typeof wake }).__wake = wake;
+      Object.defineProperty(navigator, "wakeLock", {
+        configurable: true,
+        value: {
+          request: () => {
+            wake.held++;
+            const sentinel = new EventTarget() as EventTarget & {
+              release: () => Promise<void>;
+            };
+            sentinel.release = () => {
+              wake.held--;
+              return Promise.resolve();
+            };
+            return Promise.resolve(sentinel);
+          },
+        },
+      });
     });
+    const held = () =>
+      page.evaluate(
+        () => (window as unknown as { __wake: { held: number } }).__wake.held,
+      );
     await page.route(`**/api/recordings/${id}/playback`, (route) =>
       route.fulfill({
         json: {
@@ -207,6 +231,7 @@ test.describe("観る画面でその場で流す", () => {
     await goto(page, `/watch/${id}`);
     const note = page.getByTestId("watch-status");
     await expect(note).toContainText("サーバが混んでいます");
+    await expect.poll(held).toBe(0);
     await note
       .getByTestId("watch-busy-switch")
       .filter({ hasText: "H.264" })
@@ -217,6 +242,7 @@ test.describe("観る画面でその場で流す", () => {
       "src",
       `/api/recordings/${id}/file?source=encoded`,
     );
+    await expect.poll(held).toBe(1);
   });
 
   /**
