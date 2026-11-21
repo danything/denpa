@@ -3561,7 +3561,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (kind === CHANNEL.control) {
       const notice = JSON.parse(new TextDecoder().decode(body)) as Notice;
       if (notice.type === "tuned") {
-        console.info(JSON.stringify(notice), String(asked));
         const step = servedStep(notice);
         /*
          * 変換の枠が空いておらず、サーバが段を下げなかった (`server/live.ts` の `rungPlan`)。これまでどおりいまの接続で
