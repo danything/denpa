@@ -18,7 +18,8 @@ export const u32 = (n: number): number[] => [
 
 /** 2x1 のパレットの PNG のコマ (IHDR・IDAT・IEND)。パレットは持たない (色は CLUT) */
 export function frame(): Uint8Array[] {
-  // 8 ビットのパレット、1 行 = フィルタ 0 + 2 画素。圧縮しない zlib
+  // 8 ビットのパレット、1 行 = フィルタ 0 + 2 画素。圧縮しない zlib。`png.ts` の `storedZlib` を使わず手で組む
+  // (読む側のテストを、書く側の作りに頼らせない)
   const raw = [0, 1, 2];
   const adler = (() => {
     let a = 1;

@@ -163,7 +163,6 @@
          * (`<video>` は消音スイッチでも鳴る)。押して観はじめたものなので、`<video>` と同じに扱う
          */
         background: true,
-        paused: false,
         state: (state) => {
           if (state === "failed") close("録画を読み込めませんでした");
         },

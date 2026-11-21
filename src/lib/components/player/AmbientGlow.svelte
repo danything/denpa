@@ -23,7 +23,6 @@
     toHex,
     toneFrame,
     TOOLBAR_STEP,
-    WASH_LUMINANCE,
     washTop,
   } from "./ambient";
   import type { Ambient } from "./ambient.svelte.js";
@@ -104,7 +103,7 @@
     const context = target.getContext("2d");
     if (context === null) return;
     const frame = Uint8ClampedArray.from(colors);
-    toneFrame(frame, dark ? "dark" : "light", WASH_LUMINANCE);
+    toneFrame(frame, dark ? "dark" : "light");
     const pixels = glowPixels(frame, GLANCE.width, GLANCE.height, at);
     context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
     // ページ上端の色を、ブラウザの枠に塗る (`washTop`)。描いたときだけ測るので、毎フレームの手間は無い

@@ -1539,9 +1539,8 @@ WebKit の MSE / ManagedMediaSource は、`<video>` の音を Web Audio に通�
   追いつき再生の間は音程も変わる。WebKit の端末では CPU・メモリが増える
 - **観る画面は音を別に鳴らさない。** その場で流しているもの (`remux-player.ts`。段を下げたときも) は Web Audio に通さず、`video.volume` で下げる
   (`native-audio-choice.ts` の `tapSilent`)。通すと無音になるためで、ファイルの直再生は通す。
-  iOS・iPadOS は `video.volume` を変えられないので、観る画面と追っかけではつまみを出さず、canvas に描くときもつまみの値を掛けずに放送のままの大きさで鳴らす
-  (`fixedMediaVolume`。`volume` に 0.5 を入れて読み返し、1 のままの端末。UA にしないのは、iPadOS がデスクトップの UA を名乗るため)。
-  MPEG-2 から段を下げて `<video>` に移っても大きさが変わらない。ライブは音を別に鳴らすのでつまみが効く
+  iOS・iPadOS は `video.volume` を変えられないので、観る画面と追っかけではつまみを出さず、どの経路でも放送のままの大きさで鳴らす
+  ([watch.md](watch.md#音量)。`fixedMediaVolume`)。ライブは音を別に鳴らすのでつまみが効く
 - **追っかけも音を別に鳴らさず、WebKit では `<video>` を Web Audio に通さない** (追っかけの `<video>` はいつも MSE)。観る画面のその場で流すものと同じく `video.volume` で下げる
 
 ### 互換モード (エンコードしたものも canvas に描く)

@@ -1,11 +1,11 @@
 /**
  * **WASM のデコーダ (`wasm/decoder.c`) の音の関数。** canvas に描く worker (`worker.ts`) と、ライブの音だけを
- * 鳴らす worker (`native-audio-worker.ts`) で同じものを使う。どちらも AAC は ADTS のヘッダを付けて、
- * Opus は OpusHead を渡して開く (`fmp4.ts` の `audioCodec`・`audioFrame`)
+ * 鳴らす worker (`native-audio-worker.ts`) で同じものを使う。AAC は ADTS で渡す (TS はもとから ADTS。fMP4 から読むときは
+ * ヘッダを付ける)。Opus は OpusHead を渡して開く (`fmp4.ts` の `audioCodec`・`audioFrame`)
  */
 
 /** 壊れたコマ (`"broken"`) がこれより多く続いたら打ち切る。1 つずつなら飛ばす (放送の取りこぼし) */
-export const BROKEN_MOST = 20;
+const BROKEN_MOST = 20;
 
 /** デコーダのうち、音とメモリの関数 */
 export interface AudioDecoder {
@@ -55,18 +55,31 @@ export async function loadDecoder<D>(base: string, origin: string): Promise<D> {
 /** 音を開き直してデコードする係。置き場 (`Slot`) を持ち回る */
 export class WasmAudio {
   private slot: Slot = { pointer: 0, size: 0 };
+  /** 続けて壊れていたコマの数 (`BROKEN_MOST`)。開き直すか、デコードできたら 0 に戻す */
+  private broken = 0;
 
   constructor(private readonly decoder: AudioDecoder) {}
 
   /** 開き直す (前のデコーダは `audio_open` が閉じる)。Opus は OpusHead が要る。**開けなければ false** */
   open(codec: "aac" | "opus", config: Uint8Array | null): boolean {
+    this.broken = 0;
     if (codec === "aac") return this.decoder._aac_open() === 0;
     const at = config === null ? 0 : this.put(config);
     return at !== 0 && this.decoder._opus_open(at, config!.length) === 0;
   }
 
-  /** 1 コマデコードする。**出てこなければ null、壊れたコマ (と置き場を取れない・形式がおかしい) は `"broken"`** */
-  decode(data: Uint8Array): Pcm | null | "broken" {
+  /**
+   * 1 コマデコードする。**出てこなければ null、壊れたコマ (と置き場を取れない・形式がおかしい) は `"broken"`** で、呼ぶ側は飛ばす
+   * (放送の取りこぼし)。`BROKEN_MOST` より多く続いたら `"failed"` で、呼ぶ側は打ち切る
+   */
+  decode(data: Uint8Array): Pcm | null | "broken" | "failed" {
+    const pcm = this.decodeOne(data);
+    if (pcm === "broken") return ++this.broken > BROKEN_MOST ? "failed" : pcm;
+    if (pcm !== null) this.broken = 0;
+    return pcm;
+  }
+
+  private decodeOne(data: Uint8Array): Pcm | null | "broken" {
     const d = this.decoder;
     const at = this.put(data);
     if (at === 0) return "broken";

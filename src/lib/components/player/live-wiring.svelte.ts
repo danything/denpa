@@ -32,7 +32,7 @@ interface LiveWiring {
 /**
  * **ライブと追っかけの共通の配線。** どちらも同じプレイヤー (`live-player.svelte.ts`) なので、
  * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓 (PiP)・音量をここで 1 度だけつなぐ。
- * 画面ごとに違うのは、裏から戻ったときの再開のしかた (`pause`・`resume`) と、音を別に鳴らすか (`separateAudio`)。
+ * 画面ごとに違うのは、裏から戻ったときの再開のしかた (`pause`・`resume`) と、音の掛け方 (ライブは `separateAudio`、追っかけは `silentTap`・`fixed`)。
  * コンポーネントを作るときに呼ぶ (中で `$effect` を使う)
  */
 export function liveWiring(options: Options): LiveWiring {

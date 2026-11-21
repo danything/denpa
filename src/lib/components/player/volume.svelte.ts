@@ -8,7 +8,6 @@ import {
   MAX_LEVEL,
   stepLevel,
   storedVolume,
-  tapVideo,
   VOLUME_KEY,
   volumeGain,
 } from "#lib/volume.js";
@@ -29,8 +28,8 @@ const NOTE_FOR = 1_500;
  *   `video.volume` は 1 より大きくできない。リミッタ・`<audio>` を通すか (バックグラウンド再生・小窓) は
  *   canvas と同じもの (`#lib/sound.ts` の `Outlet`)
  *
- * **AudioContext が鳴らせるようになるまでは通さない** (`tapVideo`)。自動再生の許可が出る前に通すと、
- * `<video>` は鳴っているのに何も聞こえない。それまでは直に鳴らし (放送のままの大きさ。下げていれば
+ * **AudioContext が鳴らせる (`running`) まで通さない。** 一度通した要素の音は Web Audio からしか出ないので、
+ * 自動再生の許可が出る前に通すと、`<video>` は鳴っているのに何も聞こえない。それまでは直に鳴らし (放送のままの大きさ。下げていれば
  * `video.volume` で下げる)、ページのどこかが押されたら AudioContext を起こして通す。
  * 通している間は Audio Session を `playback` にする (Safari。Web Audio の音を効果音として扱わせない)。
  *
@@ -50,7 +49,7 @@ interface Options {
   /** 音を別に鳴らすか (ライブの WebKit。`#lib/native-audio-choice.ts`)。そのときは `<video>` を Web Audio に通さない */
   separateAudio?: () => boolean;
   /**
-   * 通すと無音になるか (観る画面の WebKit の MSE。`#lib/native-audio-choice.ts` の `tapSilent`)。そのときは通さず、
+   * 通すと無音になるか (WebKit の MSE。観る画面のその場で流すものと追っかけ。`#lib/native-audio-choice.ts` の `tapSilent`)。そのときは通さず、
    * 下げるぶんは `video.volume` で掛ける
    */
   silentTap?: () => boolean;
@@ -77,11 +76,10 @@ export interface Volume {
 }
 
 export function playerVolume(options: Options): Volume {
-  /** 開いた端末で決まる。サーバで組むときは無いので、開いてから読む */
+  /** 端末ごとに覚えた値 (`keep.ts`) と、音量を変えられない端末か。どちらもサーバで組むときは読めないので、開いてから読む */
   let level = $state(MAX_LEVEL);
-  let noted = $state(false);
-  /** 音量を変えられない端末か。開いた端末で決まるので、開いてから読む */
   let fixed = $state(false);
+  let noted = $state(false);
   let noteTimer: ReturnType<typeof setTimeout> | null = null;
 
   let context: AudioContext | null = null;
@@ -100,9 +98,13 @@ export function playerVolume(options: Options): Volume {
   });
 
   /**
-   * 押されたら AudioContext を起こす (自動再生の許可は押したときに出る)。**canvas に描いている間に押されたら作っておく。**
-   * iOS の Safari は押したとき以外に作った AudioContext を止めたまま始めるので、`<video>` に移ってから作ると、次に押すまで通せない。
-   * 通さない画面 (`separateAudio`・`silentTap`・`fixed`) では作らない
+   * 押されたら AudioContext を起こす (自動再生の許可は押したときに出る)。**`<video>` がまだ無い間に押されたら作っておく。**
+   * Safari は押したとき以外に作った AudioContext を止めたまま始める (iOS で確かめた)。canvas から段を下げて `<video>` に
+   * 移ってから作ると、次に押すまで通せない。通さない画面 (`separateAudio`・`silentTap`・`fixed`) では作らない。
+   *
+   * 読み込み中 (`<video>` をまだ渡されていない間) に押されても作るので、押した後で作っても鳴らせるブラウザ (Chromium など) でも
+   * 早めに作る。そのまま `<video>` に移れば同じものを通すので、作るのが少し早くなるだけで済む。最後まで canvas に描いたときは、
+   * 何も繋がない AudioContext が画面を離れるまで 1 つ残る。ブラウザで分けると決まりが 2 つになるので、この程度の無駄は受け入れる
    */
   const wake = (): void => {
     if (context === null) {
@@ -146,14 +148,19 @@ export function playerVolume(options: Options): Volume {
     return context;
   }
 
+  /** `<video>` を Web Audio から外し、`<audio>` も止めておく */
+  function untap(): void {
+    if (tapped !== null) sources.get(tapped)?.disconnect();
+    tapped = null;
+    outlet?.hold(true);
+  }
+
   /** 通すか・どこへ鳴らすか・大きさを、いまの状態に合わせる */
   function sync(): void {
     const video = current;
+    // canvas に描いている。`<video>` は空
     if (video === null) {
-      // canvas に描いている。`<video>` は空なので、切り離して `<audio>` も止めておく
-      if (tapped !== null) sources.get(tapped)?.disconnect();
-      tapped = null;
-      outlet?.hold(true);
+      untap();
       return;
     }
     /*
@@ -162,12 +169,12 @@ export function playerVolume(options: Options): Volume {
      * 通さない `<video>` はそのまま「再生する音」で、裏でも止まらず、ロック画面の操作も `<video>` に届く
      */
     if (fixed) {
-      if (tapped !== null) sources.get(tapped)?.disconnect();
-      tapped = null;
-      outlet?.hold(true);
+      untap();
       video.volume = 1;
       return;
     }
+    /** 通さずに直に鳴らすときの大きさ。1 より大きくはできない */
+    const direct = Math.min(1, volumeGain(level));
     /*
      * 音は別に鳴らす (`raw/native-audio.ts`)。`<video>` は通さない。WebKit では通しても無音しか来ない。
      * 別に鳴らせず `<video>` の音に戻ったとき (`live-player.svelte.ts`) のために、下げるぶんは `video.volume` でも掛ける
@@ -177,22 +184,20 @@ export function playerVolume(options: Options): Volume {
      * MSE に移ると無音になる。観る画面は段を替えるとき映していない側の `<video>` に移るので、ふつうはまだ通していない要素になる
      */
     if (options.separateAudio?.() || options.silentTap?.()) {
-      if (tapped !== null) sources.get(tapped)?.disconnect();
-      tapped = null;
-      outlet?.hold(true);
-      video.volume = Math.min(1, volumeGain(level));
+      untap();
+      video.volume = direct;
       return;
     }
     const made = open();
     if (made === null || outlet === null) {
-      video.volume = Math.min(1, volumeGain(level));
+      video.volume = direct;
       return;
     }
     outlet.level = level;
     if (tapped !== video) {
-      if (!tapVideo({ video: true, state: made.state })) {
-        // まだ鳴らせない。直に鳴らしておく (1 より大きくはできない)
-        video.volume = Math.min(1, volumeGain(level));
+      // まだ鳴らせない。直に鳴らしておく
+      if (made.state !== "running") {
+        video.volume = direct;
         return;
       }
       if (tapped !== null) sources.get(tapped)?.disconnect();
@@ -200,7 +205,7 @@ export function playerVolume(options: Options): Volume {
       try {
         source ??= made.createMediaElementSource(video);
       } catch {
-        video.volume = Math.min(1, volumeGain(level));
+        video.volume = direct;
         return;
       }
       sources.set(video, source);

@@ -1122,6 +1122,17 @@ describe("端末のデコードが追いつかない (`behind`)", () => {
     ).toBeNull();
   });
 
+  test("いちばん軽い段で追いつかなくても、あとで音声だけになったら段 3 へは戻す", () => {
+    const adapter = new RungAdapter();
+    first(adapter, 0, 10_000, { current: 3, behind: true });
+    expect(
+      first(adapter, 10_000, 130_000, {
+        current: "audio",
+        throughput: 1_400_000,
+      })?.decision,
+    ).toEqual({ step: 3, reason: "restored" });
+  });
+
   test("断り書きは追いつかない理由と下げた先", () => {
     expect(adaptNote({ step: 2, reason: "decode" }, 1)).toBe(
       "再生が追いつかないため、540p に下げました",

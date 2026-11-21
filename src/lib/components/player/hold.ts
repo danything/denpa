@@ -6,7 +6,7 @@ import { isShiftD } from "./keys";
  * **ボタンの長押しで、押したときとは別の操作をする** (`{@attach}`)。データ放送のボタン (d) で、自動で受信するかを切り替える
  * (`data-receive.ts`)。ライブの右端の列のボタンと、観る画面の ⚙ の「データ放送」の行で同じ。
  *
- * - タッチとペンは、押したまま `ms` たったら `onHold` を呼ぶ。指が 10px より動いたか離したら取り消す。
+ * - タッチとペンは、押したまま `HOLD_MS` たったら `onHold` を呼ぶ。指が 10px より動いたか離したら取り消す。
  *   長押しのあとに来る click は捨てる (開く・閉じるを起こさない)
  * - マウスは右クリック (`contextmenu`)。ブラウザのメニューは出さない。Android の Chrome は長押しでも `contextmenu` を出すので、
  *   タッチの長押しを済ませた直後のものは数えない (2 回切り替えない)
@@ -18,10 +18,7 @@ import { isShiftD } from "./keys";
 /** 長押しとみなすまでの長さ (ms)。タッチとペンで押し続けたとき */
 const HOLD_MS = 500;
 
-export function hold(
-  onHold: () => void,
-  ms = HOLD_MS,
-): Attachment<HTMLElement> {
+export function hold(onHold: () => void): Attachment<HTMLElement> {
   return (node) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let startX = 0;
@@ -47,7 +44,7 @@ export function hold(
         timer = null;
         heldAt = Date.now();
         onHold();
-      }, ms);
+      }, HOLD_MS);
     };
     const move = (event: PointerEvent) => {
       if (timer === null) return;

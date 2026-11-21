@@ -22,7 +22,7 @@ import { u16, u32 } from "./bytes.js";
 import { descriptors } from "./psi.js";
 
 export const TABLE_DII = 0x3b;
-const TABLE_DDB = 0x3c;
+export const TABLE_DDB = 0x3c;
 /** ストリーム記述子。NPT と イベントメッセージが載る (データ放送だけが使う) */
 export const TABLE_STREAM_DESCRIPTOR = 0x3d;
 

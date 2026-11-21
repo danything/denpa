@@ -25,6 +25,24 @@ export const CLOCK = 90_000;
 /** PTS の一周 (33 ビット)。26.5 時間。PCR の基準部とデータ放送の NPT も同じ (`bml.ts`) */
 export const WRAP = 2 ** 33;
 
+/**
+ * 1 パケットの適応フィールドから PCR の基準部 (90 kHz) を読む。無ければ null。
+ * 拡張部 (27 MHz の端数) は使わない。秒に直すと 1/27,000,000 で要らない
+ */
+export function pcrBase(packet: Uint8Array): number | null {
+  if (packet.length < 12 || packet[0] !== 0x47) return null;
+  // 適応フィールドを持つか (2 = 適応のみ、3 = 適応 + 中身)
+  if ((packet[3]! & 0x20) === 0) return null;
+  if (packet[4]! < 7 || (packet[5]! & 0x10) === 0) return null;
+  return (
+    packet[6]! * 2 ** 25 +
+    packet[7]! * 2 ** 17 +
+    packet[8]! * 2 ** 9 +
+    packet[9]! * 2 +
+    (packet[10]! >> 7)
+  );
+}
+
 /** PMT の stream_type。**放送の映像は MPEG-2、音声は ADTS の AAC** (ARIB STD-B32。AAC は psi.ts の `STREAM_AAC`) */
 const STREAM_MPEG2 = 0x02;
 

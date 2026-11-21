@@ -31,11 +31,9 @@ import {
   TABLE_MPT,
 } from "./mmt-si.js";
 import {
-  MESSAGE_PA,
-  messageTables,
-  parseMessage,
   parseMmtp,
   parseMpu,
+  paTables,
   PAYLOAD_MPU,
   PAYLOAD_SIGNALING,
   SignalingAssembler,
@@ -463,9 +461,7 @@ export class MmtMediaReader {
       if (mmtp === null) continue;
       if (mmtp.payloadType === PAYLOAD_SIGNALING) {
         for (const raw of this.signaling.feed(datagram.flow, mmtp)) {
-          const message = parseMessage(raw);
-          if (message?.messageId !== MESSAGE_PA) continue;
-          for (const table of messageTables(message)) {
+          for (const table of paTables(raw)) {
             if (table[0] !== TABLE_MPT) continue;
             const mpt = parseMpt(table);
             if (mpt?.packageId === this.serviceId)
@@ -637,10 +633,18 @@ export class MmtMediaReader {
     }
     const presentation = track.presentations.get(mpu);
     const extended = track.extended.get(mpu);
+    /*
+     * 字幕は MPU に文書が 1 つで、時刻は MPU の最初の提示時刻 (`CaptionUnit`)。拡張タイムスタンプ記述子が無くても、
+     * 提示時刻があれば使う (付くかは実機で確かめていない)
+     */
     const time =
-      presentation === undefined || extended === undefined
+      presentation === undefined
         ? null
-        : unitTime(presentation, extended, index);
+        : extended === undefined
+          ? track.asset.kind === "caption"
+            ? { pts: presentation, dts: presentation, duration: 0 }
+            : null
+          : unitTime(presentation, extended, index);
     if (time === null) {
       this.untimed++;
       return;

@@ -143,6 +143,74 @@ export function newestKey(
   return found;
 }
 
+/**
+ * **デコードを待たせている圧縮のコマ (デコードする順)。** fMP4 (`Fmp4Video`) と MPEG-2 (`worker.ts`) で同じもの。
+ * 持っている長さ (先頭から末尾までの dts) とバイト数を数える。溜まりすぎたら新しいキーフレームから持ち直す (`skipTo`)
+ */
+export class PendingQueue<
+  T extends { dts: number; key: boolean; data: Uint8Array },
+> {
+  private items: T[] = [];
+  private size = 0;
+
+  get length(): number {
+    return this.items.length;
+  }
+  get first(): T | undefined {
+    return this.items[0];
+  }
+  get last(): T | undefined {
+    return this.items.at(-1);
+  }
+
+  push(item: T): void {
+    this.items.push(item);
+    this.size += item.data.length;
+  }
+
+  /** 先頭を 1 つ取り出す。空なら呼ばない */
+  shift(): T {
+    const item = this.items.shift() as T;
+    this.size -= item.data.length;
+    return item;
+  }
+
+  /** 先頭から末尾までの長さ (90 kHz) が `span` を超えたか、バイト数が `bytes` を超えたか */
+  over(span: number, bytes = Number.POSITIVE_INFINITY): boolean {
+    const first = this.items[0];
+    const last = this.items.at(-1);
+    if (first === undefined || last === undefined) return false;
+    return last.dts - first.dts > span || this.size > bytes;
+  }
+
+  /**
+   * `target` より手前でいちばん新しいキーフレームから先だけ残す (`newestKey`)。**捨てたら true**。
+   * 呼ぶ側はデコーダを開き直す (捨てたコマを参照するフレームを出させないため)
+   */
+  skipTo(target: number): boolean {
+    const found = newestKey(this.items, target);
+    if (found <= 0) return false;
+    this.keep(this.items.slice(found));
+    return true;
+  }
+
+  /** 最初のキーフレームから先だけ残す。**キーフレームが無ければ空にして false** */
+  fromFirstKey(): boolean {
+    const key = this.items.findIndex((item) => item.key);
+    this.keep(key < 0 ? [] : this.items.slice(key));
+    return key >= 0;
+  }
+
+  clear(): void {
+    this.keep([]);
+  }
+
+  private keep(items: T[]): void {
+    this.items = items;
+    this.size = items.reduce((sum, item) => sum + item.data.length, 0);
+  }
+}
+
 /** 90 kHz に直す */
 function ticks(value: number, timescale: number): number {
   return Math.round((value * CLOCK) / timescale);
@@ -160,7 +228,7 @@ export class Fmp4Video {
   private decoder: VideoDecoder | null = null;
   private config: VideoDecoderConfig | null = null;
   /** 圧縮のまま待たせている映像 (デコードする順) */
-  private pending: Pending[] = [];
+  private readonly pending = new PendingQueue<Pending>();
   /** デコードできたフレーム (見せる順)。**描いたら閉じる** */
   private frames: VideoFrame[] = [];
   /** キーフレームを待っているか。開き直した・時刻が飛んだ・選局し直した */
@@ -172,8 +240,6 @@ export class Fmp4Video {
   private errors = 0;
   /** 追っかけ・録画で抱えきれなくなったか。**リクエストし直して reset が来るまで、届いたものは捨てる** */
   private overflowed = false;
-  /** 圧縮のまま持っているバイト数 (`FOLLOW_BYTES_MOST`) */
-  private pendingBytes = 0;
   private shownSinceReset = false;
   /**
    * 飛び先 (µs。`reset` の `from`)。**これより前に出てきたフレームは描かずに閉じる**。録画のサーバは
@@ -235,7 +301,10 @@ export class Fmp4Video {
    */
   push(samples: readonly Fmp4Sample[]): void {
     if (this.tracks.length === 0 || this.overflowed) return;
-    if (this.follow && this.overfull()) {
+    if (
+      this.follow &&
+      this.pending.over(FOLLOW_AHEAD_MOST, FOLLOW_BYTES_MOST)
+    ) {
       this.overflowed = true;
       this.host.full();
       return;
@@ -322,9 +391,7 @@ export class Fmp4Video {
      * **待たせている圧縮の先頭も、次のキーフレームまで捨てる。** 開き直したデコーダに差分のコマから
      * 渡すと、また失敗する (`ERRORS_MOST` を使い切って打ち切ってしまう)。キーフレームが無ければこれから来るぶんを待つ
      */
-    const key = this.pending.findIndex((item) => item.key);
-    this.keep(key < 0 ? [] : this.pending.slice(key));
-    this.needKey = key < 0;
+    this.needKey = !this.pending.fromFirstKey();
   }
 
   private queue(item: Pending): void {
@@ -340,15 +407,9 @@ export class Fmp4Video {
       this.needKey = false;
     }
     this.pending.push(item);
-    this.pendingBytes += item.data.length;
-    // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しいキーフレームから持ち直す。追っかけは捨てない (`overfull`)
-    if (
-      !this.follow &&
-      this.pending.length > 1 &&
-      this.pending.at(-1)!.dts - this.pending[0]!.dts > PENDING_MOST
-    ) {
+    // 持ちすぎた (止めている・裏に回っている)。いちばん新しいキーフレームから持ち直す。追っかけ・録画は捨てない (溢れたら `push` が `full` を返す)
+    if (!this.follow && this.pending.over(PENDING_MOST))
       this.skipTo(Number.POSITIVE_INFINITY);
-    }
   }
 
   /**
@@ -356,40 +417,11 @@ export class Fmp4Video {
    * 飛ばしたコマを参照するフレームを出させないため
    */
   private skipTo(target: number): void {
-    const found = newestKey(this.pending, target);
-    if (found <= 0) return;
-    this.keep(this.pending.slice(found));
+    if (!this.pending.skipTo(target)) return;
     this.decoder?.reset();
     this.open();
     // 開き直すとキーフレームを待つ印が立つが、先頭はキーフレームなのでそのまま渡せる
     this.needKey = false;
-  }
-
-  /** 圧縮の待ちを差し替える */
-  private keep(pending: Pending[]): void {
-    this.pending = pending;
-    this.pendingBytes = pending.reduce(
-      (sum, item) => sum + item.data.length,
-      0,
-    );
-  }
-
-  /** 圧縮の待ちの先頭を 1 つ取り出す */
-  private take(): Pending {
-    const item = this.pending.shift() as Pending;
-    this.pendingBytes -= item.data.length;
-    return item;
-  }
-
-  /** 追っかけで抱えきれる量を超えたか (`FOLLOW_AHEAD_MOST` / `FOLLOW_BYTES_MOST`) */
-  private overfull(): boolean {
-    const first = this.pending[0];
-    const last = this.pending.at(-1);
-    if (first === undefined || last === undefined) return false;
-    return (
-      last.dts - first.dts > FOLLOW_AHEAD_MOST ||
-      this.pendingBytes > FOLLOW_BYTES_MOST
-    );
   }
 
   private decode(item: Pending): void {
@@ -445,14 +477,14 @@ export class Fmp4Video {
           this.pending.length > 0 &&
           decoder.decodeQueueSize < DECODED_MOST
         ) {
-          this.decode(this.take());
+          this.decode(this.pending.shift());
         }
       } else if (
         this.frames.length === 0 &&
         decoder.decodeQueueSize === 0 &&
         this.pending.length > 0
       ) {
-        this.decode(this.take());
+        this.decode(this.pending.shift());
       }
       // 描かない所 (`beyond`) のフレームは 1 枚目でも描かない
       const first = this.frames[0];
@@ -462,7 +494,7 @@ export class Fmp4Video {
     if (at === null) return;
 
     // 大きく遅れている (裏から戻った・止めていた)。デコードしながら追うよりキーフレームまで飛ぶ
-    const head = this.pending[0];
+    const head = this.pending.first;
     if (
       head !== undefined &&
       head.dts < at - BEHIND_MOST &&
@@ -473,9 +505,9 @@ export class Fmp4Video {
     while (
       this.pending.length > 0 &&
       this.frames.length + decoder.decodeQueueSize < DECODED_MOST &&
-      this.pending[0]!.dts <= at + AHEAD
+      this.pending.first!.dts <= at + AHEAD
     ) {
-      this.decode(this.take());
+      this.decode(this.pending.shift());
     }
     /*
      * 末尾まで渡しきった。B フレームを並べ替えるデコーダは、最後の数枚を次のコマが来るまで持っている
@@ -574,7 +606,7 @@ export class Fmp4Video {
     this.floor = from === null ? null : micros(from);
     this.ceiling = null;
     this.clockAt = null;
-    this.keep([]);
+    this.pending.clear();
     this.overflowed = false;
     this.ending = false;
     this.flushed = false;

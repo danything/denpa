@@ -167,7 +167,8 @@ export const GENRE_TREE: {
 /**
  * ルールの条件の値を人が読める名前に。`"7-0"` → 「アニメ／特撮 > 国内アニメ」。
  *
- * 中分類が無いときは大分類だけを返す。
+ * 中分類が無いときは大分類だけを返す。引けない中分類は番号のまま添える (条件に何を選んだかを残す。
+ * 番組に付いたものを出す `genreLabel` は、引けなければ大分類だけにする)
  */
 export function genreName(value: string | number): string {
   const parts = String(value).split("-");

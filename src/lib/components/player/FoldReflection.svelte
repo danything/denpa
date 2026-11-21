@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { changed, EVERY, follow, toneFrame, WASH_LUMINANCE } from "./ambient";
+  import { changed, EVERY, follow, toneFrame } from "./ambient";
   import type { Ambient } from "./ambient.svelte.js";
   import { Crossfade, GlowLoop } from "./glow-loop.svelte.js";
   import {
@@ -62,7 +62,7 @@
     const context = target.getContext("2d");
     if (context === null) return;
     const frame = Uint8ClampedArray.from(colors);
-    toneFrame(frame, "dark", WASH_LUMINANCE);
+    toneFrame(frame, "dark");
     const pixels = reflectionPixels(frame, at, STRENGTH);
     context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
   }

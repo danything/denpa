@@ -7,7 +7,6 @@ import {
   MAX_LEVEL,
   stepLevel,
   storedVolume,
-  tapVideo,
   throughAudio,
   volumeGain,
 } from "./volume";
@@ -66,13 +65,5 @@ describe("音量", () => {
     expect(throughAudio({ ...base, wanted: false })).toBe(false);
     expect(throughAudio({ ...base, session: true })).toBe(false);
     expect(throughAudio({ ...base, streamable: false })).toBe(false);
-  });
-
-  test("<video> の音を Web Audio に通すのは、AudioContext が鳴らせるようになってから", () => {
-    expect(tapVideo({ video: true, state: "running" })).toBe(true);
-    expect(tapVideo({ video: true, state: "suspended" })).toBe(false);
-    expect(tapVideo({ video: true, state: "interrupted" })).toBe(false);
-    expect(tapVideo({ video: true, state: null })).toBe(false);
-    expect(tapVideo({ video: false, state: "running" })).toBe(false);
   });
 });

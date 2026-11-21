@@ -31,10 +31,11 @@ import {
   ModuleBuilder,
   parseDdb,
   parseDii,
+  TABLE_DDB,
   TABLE_DII,
 } from "@danything/arib/dsmcc";
 import {
-  descriptors,
+  componentTagOf,
   packetPid,
   parsePat,
   PID_PAT,
@@ -49,9 +50,6 @@ import { announcesCommonData, parseSdtt, PID_SDTT } from "./logo-sdtt";
 /** エンジニアリングサービス。衛星のロゴはこのサービスで運ばれる (ARIB TR-B15) */
 const ESS_SERVICE_ID = 929;
 
-const DESC_STREAM_IDENTIFIER = 0x52;
-/** DDB (ブロック) の table_id。数えるためだけに持つ (読むのは `parseDdb`) */
-const TABLE_DDB = 0x3c;
 /** ロゴのカルーセルが流れる ES の目印。0x79 が BS、0x7A が CS */
 const LOGO_COMPONENT_TAGS = new Set([0x79, 0x7a]);
 
@@ -80,10 +78,8 @@ function parseLogoEsPids(
   if (section[0] !== TABLE_PMT) return null;
   const pids: number[] = [];
   for (const [, pid, info] of pmtStreams(section)) {
-    for (const [tag, descriptor] of descriptors(info)) {
-      if (tag !== DESC_STREAM_IDENTIFIER || descriptor.length < 1) continue;
-      if (LOGO_COMPONENT_TAGS.has(descriptor[0]!)) pids.push(pid);
-    }
+    const tag = componentTagOf(info);
+    if (tag !== null && LOGO_COMPONENT_TAGS.has(tag)) pids.push(pid);
   }
   return { serviceId: u16(section, 3), pids };
 }

@@ -73,9 +73,6 @@ export function autoLabel(step: Step, codec: string | null): string {
   return autoValue(step, name);
 }
 
-/** サーバが混んでいて段を替えられなかったときの文言。ライブのサーバの通知と同じ文なので、段の表 (`rungs.ts`) が持つ */
-export { busyNote } from "./rungs";
-
 /** 呼ぶたびに観る画面が渡すもの。`now`・`route`・`pace` はここで足す */
 export type WatchSample = Omit<AdaptSample, "now" | "route" | "pace"> & {
   /** 送り出しの具合を読む id (`remux-player.ts` の `StreamHeard`)。ファイルの直再生なら null */

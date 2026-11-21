@@ -378,6 +378,19 @@ export function isCopyNever(data: Uint8Array): boolean {
   return data.length >= 1 && data[0]! >> 6 === 0b11;
 }
 
+/** ES の記述子 (`pmtStreams` の 3 つ目) にある部品タグ (stream_identifier_descriptor 0x52 の component_tag)。無ければ null */
+export function componentTagOf(info: Uint8Array): number | null {
+  for (const [tag, data] of descriptors(info))
+    if (tag === 0x52 && data.length >= 1) return data[0]!;
+  return null;
+}
+
+/** PMT の PCR_PID。0x1fff (PCR を運ぶ ES は無い) なら null */
+export function pmtPcrPid(section: Uint8Array): number | null {
+  const pid = u16(section, 8) & 0x1fff;
+  return pid === 0x1fff ? null : pid;
+}
+
 /**
  * PMT の**番組ぜんたいに掛かる記述子** (program_info)。CA (ECM の PID) はここにも入る
  */

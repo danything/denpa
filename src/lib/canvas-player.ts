@@ -37,6 +37,7 @@ import type { AudioSide } from "#lib/arib.js";
 import { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { mayRead } from "#lib/read-ahead.js";
+import { heardOf, type StreamHeard } from "#lib/remux-player.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { Meter } from "#lib/ts/meter.js";
 import {
@@ -100,8 +101,6 @@ interface CanvasOptions {
   audio: string;
   /** 「再生する音」として鳴らすか (バックグラウンド再生・小窓。`RawEngine.background`) */
   background: boolean;
-  /** 止めて始めるか */
-  paused: boolean;
   /** 繋ぎ直している・打ち切った・戻った・混んでいて断られた */
   state(state: StreamState): void;
   /** 描けなくなった (間に合わない・デコーダが失敗し続ける・音が来ない)。**画面がほかの方式へ移す**。`slow` は `RawEvents.gaveUp` と同じ */
@@ -114,8 +113,8 @@ interface CanvasOptions {
   ended(): void;
   /** 刻み (`TICK`)。いまの位置で字幕などを合わせる */
   tick(): void;
-  /** 応答を受けるたびに呼ぶ (中身のコーデック・段・送り出しの具合を読む id のヘッダ。`remux-player.ts` の `heardOf`) */
-  heard?(response: Response): void;
+  /** 応答を受けるたびに、ヘッダから読んだ中身のコーデック・段・送り出しの具合を渡す (`remux-player.ts` と同じ形) */
+  heard?(stream: StreamHeard): void;
 }
 
 export interface CanvasPlayer {
@@ -191,7 +190,7 @@ function own(bytes: Uint8Array): ArrayBuffer {
  */
 export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   const { input } = options;
-  let paused = options.paused;
+  let paused = false;
   let ended = false;
   /** 最後に分かった位置 (秒)。止めている・貯めている間はこれを返す */
   let time = Math.max(0, options.start);
@@ -246,7 +245,6 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     input,
     true,
   );
-  if (paused) engine.pause();
   // 選んでいる音声で始める (選び直して作り直したとき・デュアルモノの片側)。fMP4 はリクエストに載せる
   if (input !== "fmp4") selectIn(engine, input, audio);
 
@@ -386,7 +384,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
       }
       if (!response.ok || response.body === null)
         throw new Error(`HTTP ${response.status}`);
-      options.heard?.(response);
+      options.heard?.(heardOf(response));
       if (input === "ts-mpeg2") {
         const heard = rawHeard(response.headers);
         // 物差しに直せない。何度リクエストしても同じ

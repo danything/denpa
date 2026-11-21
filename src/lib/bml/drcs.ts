@@ -6,6 +6,9 @@
  * (規格では grayscale-color-index の色だが、縁のなめらかさとして見えればよい)。
  *
  * 字は 87・88 区 (中では私用領域。[euc.ts](euc.ts) の `isDrcs`) に入る。
+ *
+ * 字幕の外字 (`@danything/arib/b24caption` の `defineDrcs`) と字の並びは同じだが、あちらは字幕の中で来て画素のまま持ち
+ * (置き換える字を md5 で引く)、こちらはファイルで来て字体ごとに濃さへ直す。持つものが違うので読み方は別に置く
  */
 
 import { isDrcs, PUA_ADDITIONAL } from "./euc";

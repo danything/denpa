@@ -481,6 +481,8 @@ export async function saveOnDevice(
   canvas: HTMLCanvasElement,
   title: string,
   key: string,
+  /** 撮った瞬間 (ファイル名の時刻。`shotName`)。サーバに置けなかったと分かるのは送ったあと */
+  takenAt: Date,
 ): Promise<Notice> {
   const blob = await pngOf(canvas);
   if (blob === null)
@@ -489,7 +491,7 @@ export async function saveOnDevice(
       kind: "error",
       text: "サーバにも端末にも保存できませんでした",
     };
-  const kept = await keepOnDevice(blob, shotName(title, new Date()));
+  const kept = await keepOnDevice(blob, shotName(title, takenAt));
   return {
     key,
     kind: "info",

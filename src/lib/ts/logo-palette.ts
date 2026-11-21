@@ -17,8 +17,10 @@ import { pngChunk } from "./png";
 /**
  * 放送で決まっている色の表。R,G,B,A の順に 129 色ぶん。
  *
- * 前半 128 色が本体で、最後の 1 色は全面の半透明。
- * (@chinachu/aribts の lib/logo_clut.js と同じ並び)
+ * 前半 128 色が本体で、最後の 1 色は全面の半透明 (@chinachu/aribts の lib/logo_clut.js と同じ並び)。
+ *
+ * データ放送の既定の表 (`bml/clut.ts` の `DEFAULT_CLUT`) とは 54・64・118 番が違い、半透明も 1 色多い。
+ * どちらが規格どおりかを確かめていないので、ロゴは長く使われてきたこの並びのまま別に持つ
  */
 // 4 色ずつの並びのまま置いておきたい
 // prettier-ignore

@@ -49,7 +49,7 @@ function parseSelector(text: string): Selector | null {
   return { tag, id, classes, pseudo, specificity };
 }
 
-/** `a: b; c: d !important` を読む。名前は小文字に */
+/** `a: b; c: d !important` を読む。名前は小文字に。インラインの `style` からも呼ぶので、ここでもコメントを外す (スタイルシートは外したあとのものが来るが、外し直しても変わらない) */
 export function parseDeclarations(text: string): Declaration[] {
   const out: Declaration[] = [];
   for (const part of stripComments(text).split(";")) {

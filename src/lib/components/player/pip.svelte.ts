@@ -16,7 +16,7 @@ import { canCompose, compose, type Composed } from "./compose";
  *   1 枚目まで用意しておく (`prepare`)。押されてから待つと iPhone の Safari では「押された直後」が切れて断られる
  * - 字幕はコマごとに重ねたストリームを作って出す (`compose.ts`。Chrome・Edge だけ)。`<video>` の映像は押した時点で
  *   字幕を出して再生しているときだけ、小窓に出している間だけ重ねる
- * - 小窓の再生ボタンは `<video>` を直に止めるので、ライブと追っかけは `paused` / `toggle` で player に合わせる
+ * - 小窓の再生ボタンは `<video>` を直に止めるので、`paused` / `toggle` でプレイヤーに合わせる
  * - バックグラウンド再生を切っている間 (`auto` が false) は `disablePictureInPicture` を立て、OS・ブラウザが
  *   勝手に小窓にするのを止める。押して開く小窓には効かせない (リクエストの直前に下ろす)
  */
@@ -25,20 +25,20 @@ interface Options {
   /** 映像の `<video>` */
   video: () => HTMLVideoElement | null;
   /** canvas で描いているか。立っている間は `capture` のストリームを出す */
-  raw?: () => boolean;
+  raw: () => boolean;
   /** canvas の映像ストリーム (`live-player` の `capture`) */
-  capture?: () => MediaStream | null;
+  capture: () => MediaStream | null;
   /** canvas の映像を流すか (`live-player` の `captureFlow`)。小窓に出していない間は止める */
-  flow?: (on: boolean) => void;
-  /** 止めているか (ライブ・追っかけ)。**小窓で押された止める・再開を合わせる先** */
-  paused?: () => boolean;
-  toggle?: () => void;
-  /** OS・ブラウザが自分で小窓にするのを許すか (バックグラウンド再生)。渡さなければ許す */
-  auto?: () => boolean;
+  flow: (on: boolean) => void;
+  /** 止めているか。**小窓で押された止める・再開を合わせる先** (`toggle`) */
+  paused: () => boolean;
+  toggle: () => void;
+  /** OS・ブラウザが自分で小窓にするのを許すか (バックグラウンド再生) */
+  auto: () => boolean;
   /** 字幕を重ねている canvas。**小窓にも重ねる** (`compose.ts`) */
-  overlay?: () => HTMLCanvasElement | null;
+  overlay: () => HTMLCanvasElement | null;
   /** 字幕を出しているか (持っていて、消していない)。変換した映像を字幕ごと小窓に出すかを決める */
-  captions?: () => boolean;
+  captions: () => boolean;
 }
 
 /** どこで断られたか。**押しても何も起きない、で終わらせない**。端末ごとに失敗する所が違う */
@@ -104,6 +104,17 @@ function shown(video: WebkitVideo): boolean {
   );
 }
 
+/**
+ * 小窓で何かを出しているか (`shown`)。映像を描く canvas の代わりの video を小窓にすることがあるので、どの video かは問わない
+ * (`live-player.svelte.ts` が、隠れている間の速さの寄せ方を決めるのに使う)
+ */
+export function inPictureInPicture(): boolean {
+  return (
+    document.pictureInPictureElement !== null ||
+    [...document.querySelectorAll("video")].some(shown)
+  );
+}
+
 /** `types` のどれかが来たら `listener` を呼ぶ。外す関数を返す */
 function listenAll(
   target: EventTarget,
@@ -149,7 +160,7 @@ export function pictureInPicture(options: Options): Pip {
   const canCapture =
     typeof HTMLCanvasElement !== "undefined" &&
     "captureStream" in HTMLCanvasElement.prototype;
-  const raw = (): boolean => options.raw?.() ?? false;
+  const { raw } = options;
   /** いま小窓に出すのは代わりの video か (canvas で描いているもの、または字幕を重ねた変換映像) */
   const proxied = (): boolean => raw() || composedVideo !== null;
 
@@ -183,17 +194,9 @@ export function pictureInPicture(options: Options): Pip {
    * まだ `on` のまま届くので、`proxied` で見分ける)。player が自分で止めたときは `paused` が既に合っている
    */
   function follow(video: HTMLVideoElement): () => void {
-    const { paused, toggle } = options;
     return listenAll(video, ["pause", "play"], () => {
       if (on !== video || (video === proxy) !== proxied()) return;
-      if (paused !== undefined && toggle !== undefined) {
-        if (video.paused !== paused()) toggle();
-        return;
-      }
-      // 観る画面で、字幕を重ねた小窓 (代わりの video) で押された。元の video を合わせる
-      const main = options.video();
-      if (video === proxy && main !== null && main.paused !== video.paused)
-        playOrPause(main, video.paused);
+      if (video.paused !== options.paused()) options.toggle();
     });
   }
 
@@ -202,23 +205,9 @@ export function pictureInPicture(options: Options): Pip {
     if (video === null) return;
     const unlisten = listen(video);
     const unfollow = follow(video);
-    /*
-     * 観る画面で、字幕を重ねた小窓を出している間に操作バーで止めた・再開した。小窓の
-     * 再生ボタンの見た目を合わせる (ライブと追っかけは下の `paused` の $effect が合わせる)
-     */
-    const unmirror = listenAll(video, ["pause", "play"], () => {
-      if (
-        options.paused === undefined &&
-        composedVideo !== null &&
-        proxy !== null &&
-        on === proxy
-      )
-        playOrPause(proxy, video.paused);
-    });
     return () => {
       unlisten();
       unfollow();
-      unmirror();
     };
   });
 
@@ -236,14 +225,14 @@ export function pictureInPicture(options: Options): Pip {
 
   /** canvas に移ったら代わりの video を用意しておく。出たら破棄する (canvas ごと無くなる) */
   $effect(() => {
-    if (!able || !raw() || !canCapture || options.capture === undefined) return;
+    if (!able || !raw() || !canCapture) return;
     untrack(prepare);
     return release;
   });
 
   /** 押さずに小窓にされないようにする (上の説明)。出している video は下ろしたまま */
   function guard(): void {
-    const allow = options.auto?.() ?? true;
+    const allow = options.auto();
     for (const video of [options.video(), proxy])
       if (video !== null)
         video.disablePictureInPicture = !allow && on !== video;
@@ -252,7 +241,7 @@ export function pictureInPicture(options: Options): Pip {
 
   /** canvas のとき、代わりの video も止める・再開を合わせる (押されたのが操作バーのボタンのとき) */
   $effect(() => {
-    const paused = options.paused?.() ?? false;
+    const paused = options.paused();
     if (proxy !== null && on === proxy) playOrPause(proxy, paused);
   });
 
@@ -291,7 +280,7 @@ export function pictureInPicture(options: Options): Pip {
    */
   function prepare(): void {
     unprepared = null;
-    const stream = options.capture?.() ?? null;
+    const stream = options.capture();
     if (stream === null) {
       unprepared = new Refused(
         "描いている映像を取り出せません (captureStream)",
@@ -306,10 +295,7 @@ export function pictureInPicture(options: Options): Pip {
     // 字幕を重ねられる端末では重ねたものを出す (字幕が出ていないコマは素通し。`compose.ts`)
     const track = stream.getVideoTracks()[0];
     rawComposed?.stop();
-    rawComposed =
-      options.overlay === undefined || track === undefined
-        ? null
-        : compose(track, options.overlay);
+    rawComposed = track === undefined ? null : compose(track, options.overlay);
     video.srcObject = rawComposed?.stream ?? stream;
     video.addEventListener(
       "loadedmetadata",
@@ -328,7 +314,7 @@ export function pictureInPicture(options: Options): Pip {
     const stream = proxy?.srcObject;
     if (stream instanceof MediaStream)
       for (const track of stream.getVideoTracks()) track.enabled = flow;
-    options.flow?.(flow);
+    options.flow(flow);
   }
 
   /** 代わりの video を破棄する。canvas で描くのをやめたとき (canvas ごと無くなる) */
@@ -353,8 +339,7 @@ export function pictureInPicture(options: Options): Pip {
       !video.paused &&
       standard() &&
       canCompose() &&
-      options.overlay !== undefined &&
-      options.captions?.() === true &&
+      options.captions() &&
       typeof (video as CapturableVideo).captureStream === "function"
     );
   }
@@ -374,7 +359,7 @@ export function pictureInPicture(options: Options): Pip {
     } catch {
       return null;
     }
-    if (track === undefined || options.overlay === undefined) return null;
+    if (track === undefined) return null;
     const composed = compose(track, options.overlay);
     if (composed === null) {
       track.stop();
@@ -432,7 +417,7 @@ export function pictureInPicture(options: Options): Pip {
         );
       video = proxy;
       flowing(true);
-      playOrPause(video, options.paused?.() === true);
+      playOrPause(video, options.paused());
     } else if (video !== null && composable(video))
       video = (await composeEncoded(video)) ?? video;
     if (video === null) return;
@@ -491,11 +476,7 @@ export function pictureInPicture(options: Options): Pip {
 
   return {
     get available() {
-      return (
-        able &&
-        (!raw() ||
-          (canCapture && options.capture !== undefined && unprepared === null))
-      );
+      return able && (!raw() || (canCapture && unprepared === null));
     },
     get active() {
       return on !== null;

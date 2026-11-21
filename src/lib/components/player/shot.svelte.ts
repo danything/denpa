@@ -113,6 +113,7 @@ export function snapshotter(controls: PlayerControls) {
       busy = true;
       controls.stir();
       const at = where();
+      const takenAt = new Date();
       // コメントは流れ続けるので、フレームを待つ前に押した瞬間の位置を読んでおく
       const comments = readComments();
       let got: Frame | null = null;
@@ -149,7 +150,7 @@ export function snapshotter(controls: PlayerControls) {
           };
           return;
         }
-        shot = await saveOnDevice(shown, title, key);
+        shot = await saveOnDevice(shown, title, key, takenAt);
       } finally {
         busy = false;
         if (got?.image instanceof ImageBitmap) got.image.close();

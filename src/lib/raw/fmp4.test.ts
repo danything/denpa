@@ -14,6 +14,7 @@ import {
   type Fmp4Host,
   Fmp4Video,
   newestKey,
+  PendingQueue,
 } from "./fmp4";
 
 /**
@@ -303,5 +304,48 @@ describe("newestKey", () => {
     expect(newestKey(items, 15)).toBe(0);
     expect(newestKey([{ dts: 0, key: false }], 10)).toBe(-1);
     expect(newestKey([], 10)).toBe(-1);
+  });
+});
+
+describe("PendingQueue", () => {
+  const item = (dts: number, key: boolean, size: number) => ({
+    dts,
+    key,
+    data: new Uint8Array(size),
+  });
+  const filled = () => {
+    const queue = new PendingQueue<ReturnType<typeof item>>();
+    queue.push(item(0, true, 1));
+    queue.push(item(10, false, 2));
+    queue.push(item(20, true, 4));
+    queue.push(item(30, false, 8));
+    return queue;
+  };
+
+  test("長さかバイト数が上限を超えたら over。1 つだけなら長さは 0", () => {
+    const queue = filled();
+    expect(queue.over(29)).toBe(true);
+    expect(queue.over(30)).toBe(false);
+    expect(queue.over(30, 14)).toBe(true);
+    expect(queue.over(30, 15)).toBe(false);
+    const one = new PendingQueue<ReturnType<typeof item>>();
+    one.push(item(0, true, 1));
+    expect(one.over(0)).toBe(false);
+  });
+
+  test("飛ぶ・取り出す・空にすると、バイト数を数え直す", () => {
+    const queue = filled();
+    expect(queue.skipTo(25)).toBe(true);
+    expect(queue.first?.dts).toBe(20);
+    expect(queue.over(Number.POSITIVE_INFINITY, 11)).toBe(true);
+    expect(queue.over(Number.POSITIVE_INFINITY, 12)).toBe(false);
+    // 先頭がもうキーフレームなら飛ばない
+    expect(queue.skipTo(25)).toBe(false);
+    expect(queue.shift().dts).toBe(20);
+    expect(queue.over(Number.POSITIVE_INFINITY, 7)).toBe(true);
+    // キーフレームが無ければ空にして false
+    expect(queue.fromFirstKey()).toBe(false);
+    expect(queue.length).toBe(0);
+    expect(queue.over(0, 0)).toBe(false);
   });
 });

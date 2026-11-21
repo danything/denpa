@@ -18,9 +18,9 @@
 let answer: string | null | undefined;
 
 /** デコードできない理由。デコードできるなら null。**1 回だけ調べて覚える** */
-export function rawUnsupported(): Promise<string | null> {
+export function rawUnsupported(): string | null {
   if (answer === undefined) answer = probe();
-  return Promise.resolve(answer);
+  return answer;
 }
 
 function probe(): string | null {
