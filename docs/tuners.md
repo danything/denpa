@@ -37,6 +37,13 @@
 
 機材ごとの入れ方は表のリンク先に。
 
+### 表に無い機材・実機で確かめていない機材
+
+**機材を貸していただくか譲っていただければ、実機で確かめて対応します。** 表に無い機材や「実機で確かめていない」機材は、
+公開されている資料とドライバから組み立てたもので、実機が無いと動くところまで詰められないためです。
+提供していただける方は、[Issue](https://github.com/danything/denpa/issues/new?template=feature_request.yml) に機材の名前と USB の ID (分かれば) を書いてください。送り先はそのあとで個別にお知らせします。
+レジスタの資料もドライバも公開されていない機材は、実機があっても対応できないことがあります。
+
 Amazon で見る (広告): [PT3](https://www.amazon.co.jp/dp/B00857CQAM?tag=doa08-22)、[PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=doa08-22)、[DTV02A-1T1S-U](https://www.amazon.co.jp/dp/B08MTGFV39?tag=doa08-22)、[PX-S1UD](https://www.amazon.co.jp/dp/B006RQLNES?tag=doa08-22)、[CECH-ZD1 J](https://www.amazon.co.jp/dp/B0034KZXBO?tag=doa08-22)
 
 ## 設定の画面
