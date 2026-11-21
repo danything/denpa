@@ -369,6 +369,9 @@ async function importOne(
     record(`ファイルが無い: ${name}`);
     return "missing";
   }
+  // ここからの失敗は、取れなかった残り (`currentTotal - currentDone`) を合計から外す (`importRecordings`)
+  status_.currentDone = 0;
+  status_.currentTotal = file.size;
 
   recordPlan(
     options,
@@ -382,8 +385,6 @@ async function importOne(
     file,
     existing,
   );
-  status_.currentDone = 0;
-  status_.currentTotal = file.size;
   mkdirSync(dir, { recursive: true });
   const result = await downloadVideo(
     context.client,
