@@ -5,8 +5,10 @@
  *
  * - 途中で PMT に足された ES は、ffmpeg が開いた後に現れるので `-map` に当たらない
  * - 先頭から PMT にあっても中身の無い ES は、パラメータが分からない (`cm.probeLiveAudio` で外している)。
- *   `-map` すると、ffmpeg はその ES の中身が来るまでエンコーダを開けず、ほかのトラックのパケットを書き出さずに溜める。
- *   短い偽の TS では通った (ffmpeg 9.0.2) が、長い番組では溜める量の上限を超えて失敗すると見ている (推定)
+ *   `-map` すると、ffmpeg はその ES の中身が来るまでエンコーダを開けず、ほかのトラックのパケットを書き出さずにメモリに溜める。
+ *   60 分の偽の TS (45 分目から中身が来る) をイメージの ffmpeg 9.1 でエンコードすると、失敗はしないが、出力は 45 分目まで
+ *   0 バイトのままで、そこで約 530 MB を一度に書いた。溜める量は ES が現れるまでに本編をエンコードした大きさなので、
+ *   放送の画質の長い番組ではメモリが足りなくなりうる。音声も ES が現れた所から始まり、手前は無音で埋まらない
  *
  * そこで、録画全体の PMT と音声の PES を読み (`scanAudioEs`)、先頭の探りで中身の無かった ES を見つける (`lateAudio`)。
  * 見つけた ES は、現れる手前から別の ffmpeg で音声だけを Opus にし (`lateAudioArgs`)、
@@ -226,7 +228,8 @@ export function lateOffset(
  *
  * - 現れる手前の PAT から読む (`-skip_initial_bytes`)。先頭から開くと、途中で PMT に足された ES を ffmpeg が見つけられない
  * - ES は PID で名指しする (`0:i:<PID>`)。途中から開くと、音声の何本目かが録画の先頭と食い違う
- * - 時刻は PTS のまま読み (`-copyts`)、本編の物差しへずらす (`offset`。`lateOffset`)
+ * - 時刻は PTS のまま読み (`-copyts`)、本編の物差しへずらす (`offset`。`lateOffset`)。ずらすのは入力の時刻 (`-itsoffset`) で、
+ *   フィルタ (`asetpts`) は使わない。イメージの ffmpeg は使う部品だけで組んであり、`asetpts` は入っていない (Dockerfile の `--enable-filter`)
  * - **本編の 0 秒から ES が現れるまでは無音で埋める** (`aresample` の `first_pts=0`)。途中で途切れた所も埋める (`async`)。
  *   埋めないと、その音声へ切り替えたときに、現れるまでの間は音声が無く再生が進まない
  * - ビットレートは本編の音声と同じ (`encoder.buildArgs`)。チャンネル数は番組表の構成にそろえる
@@ -238,13 +241,14 @@ export function lateAudioArgs(
   offset: number,
   channels?: number,
 ): string[] {
-  const shift = `${offset < 0 ? "-" : "+"}${Math.abs(offset).toFixed(6)}`;
   return [
     config.ffmpeg,
     "-y",
     "-v",
     "error",
     "-copyts",
+    "-itsoffset",
+    offset.toFixed(6),
     "-skip_initial_bytes",
     String(es.resume),
     ...TS_PROBE,
@@ -252,7 +256,7 @@ export function lateAudioArgs(
     "-map",
     `0:i:${es.pid}`,
     "-af",
-    `asetpts=PTS${shift}/TB,aresample=async=1:first_pts=0`,
+    "aresample=async=1:first_pts=0",
     "-c:a",
     "libopus",
     "-b:a",

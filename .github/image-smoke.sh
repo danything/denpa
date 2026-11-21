@@ -131,6 +131,12 @@ denpa)
         await Bun.write("chapters.txt", ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1000\ntitle=A\n");
     '
     ff -i h264.mkv -i chapters.txt -map 0 -map_chapters 1 -c copy -f matroska chapters.mkv
+    # 途中から現れる音声 (late-audio.ts の lateAudioArgs) を音声だけにし、チャプターと一緒に足す (chapterArgs の extra)。
+    # in.ts の音声の PID は mpegts の muxer の既定の 0x101 (257)、先頭の時刻は 1.4 秒。h264.mkv の音声は左右に割った 2 本なので、足す音声は a:2
+    ff -copyts -itsoffset -1.400000 -skip_initial_bytes 0 -i in.ts -map 0:i:257 \
+        -af aresample=async=1:first_pts=0 -c:a libopus -b:a 256k -ac 2 -f matroska late.mka
+    ff -copyts -i h264.mkv -i chapters.txt -i late.mka -map "0:v?" -map "0:a?" -map 2:a -map "0:s?" \
+        -map_chapters 1 -metadata:s:a:2 title=副音声 -c copy -f matroska late.mkv
     # サムネイル (metadata.ts) と、それを切り抜きに見立てた AVIF (clips.ts)
     ff -ss 1 -i in.ts -vf field=top,thumbnail,scale=320:-2,setsar=1 -frames:v 1 thumb.jpg
     ff -i thumb.jpg -map_metadata -1 \
@@ -148,7 +154,7 @@ denpa)
     docker run --rm -v "$PWD:/src:ro" -v "$work:/work" -w /work --entrypoint /usr/local/bin/bun "$image" \
         /src/scripts/fps-smoke.ts /work
     run /usr/local/bin/bun -e '
-        for (const name of ["in.ts", "h264.mkv", "av1.mkv", "live.mp4", "uhd.mp4", "stream.mp4", "audio.aac", "cuts.txt", "logo.raw", "chapters.mkv", "thumb.jpg", "full.avif", "small.avif", "layered.avif", "layered-small.avif"]) {
+        for (const name of ["in.ts", "h264.mkv", "av1.mkv", "live.mp4", "uhd.mp4", "stream.mp4", "audio.aac", "cuts.txt", "logo.raw", "chapters.mkv", "late.mka", "late.mkv", "thumb.jpg", "full.avif", "small.avif", "layered.avif", "layered-small.avif"]) {
             const size = Bun.file(name).size;
             console.log(`${name}: ${size} バイト`);
             if (size === 0) process.exit(1);
