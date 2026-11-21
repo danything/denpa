@@ -302,13 +302,17 @@ function Get-LogonUser {
 #   「ログオンしているかどうかにかかわらず実行」で載せるのでパスワードを聞く。Enter だけなら SYSTEM (パスワードを渡したくない人向け)
 # - **入力を受け付けない窓 (Test-Interactive) なら聞かずに SYSTEM。** 無人で流す 1 行 (CI・配布の仕組み) を、
 #   入力を待って止めないため。SYSTEM でもこの PC への録画はでき、あとで -User を付けて流せば替えられる
-# 前のバージョン (wslc。denpa-start.ps1 が残っている) の本体のタスクはログオンのタスクで、外して載せ直すので初めてと同じに扱う
+# 前のバージョン (wslc。denpa-start.ps1 が残っている) の本体のタスクはログオンのタスクで、外して載せ直すので初めてと同じに扱う。
+# **パスワードはここでは確かめない。** 正しいかはタスクを登録するときに Windows が確かめ、違えば Register-Loop が止める
+# (初めてなら止める前の本体は無く、流し直せばまた聞く)。ValidateCredentials は Microsoft アカウントにつないだユーザーなどで
+# 正しいパスワードも断ることがあり、それで止めると入れられなくなるため
 function Select-ServerUser([string]$User) {
     if ($User) {
         if (Test-SystemName $User) { return @{ AsSystem = $true } }
         Get-UserSid $User | Out-Null
         if (-not (Test-Interactive)) { throw "入力を受け付けない窓なので、$User のパスワードを聞けません。管理者の PowerShell の窓で流してください" }
-        $password = Read-TaskPassword "$User の Windows のパスワード (タスクに保存します)"
+        try { $password = Read-TaskPassword "$User の Windows のパスワード (タスクに保存します)" }
+        catch { throw "この窓では $User のパスワードを聞けません。管理者の PowerShell の窓で流してください" }
         if (-not $password -or $password.Length -eq 0) { throw 'パスワードが入らなかったので、何も変えずに止めました' }
         return @{ Credential = New-Object Management.Automation.PSCredential ($User, $password) }
     }
@@ -330,7 +334,7 @@ function Select-ServerUser([string]$User) {
     }
     Say "denpa 本体を $me で動かします。録画を NAS やユーザーのフォルダに置け、NAS には $me の資格情報で繋ぎます"
     Say 'SYSTEM で動かすならパスワードは要りませんが、NAS の共有には繋げません'
-    # コンソールの無い窓では Read-Host が例外を返す。入力を受け付けない窓と同じに扱う
+    # コンソールの無い窓では Read-Host が例外になる。入力を受け付けない窓と同じに扱う
     try { $password = Read-TaskPassword "$me の Windows のパスワード (PIN は使えません。タスクに保存します。Enter だけなら SYSTEM)" }
     catch { $password = $null }
     if (-not $password -or $password.Length -eq 0) {
