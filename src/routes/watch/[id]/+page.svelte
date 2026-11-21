@@ -5,7 +5,6 @@
     CAPTION_TEXT_VERSION,
     type CaptionLanguage,
     captionLanguage as languageOf,
-    type CaptionPage,
     type CaptionPages,
   } from "@danything/arib/caption-text";
   import { onMount, untrack } from "svelte";
@@ -24,22 +23,11 @@
   import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
   import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
-  import { CaptionPainter } from "#lib/components/player/caption-draw.js";
-  import {
-    CAPTION_LANGUAGE_KEY,
-    CAPTION_ON_KEY,
-    pickLanguage,
-    storedCaptionsOn,
-  } from "#lib/components/player/caption-pref.js";
   import CloseLink from "#lib/components/player/CloseLink.svelte";
   import ControlBar from "#lib/components/player/ControlBar.svelte";
   import ControlButton from "#lib/components/player/ControlButton.svelte";
   import ControlRow from "#lib/components/player/ControlRow.svelte";
   import { playerControls } from "#lib/components/player/controls.svelte.js";
-  import {
-    DATA_RECEIVE_KEY,
-    storedDataReceive,
-  } from "#lib/components/player/data-receive.js";
   import DataBroadcast, {
     pressD,
   } from "#lib/components/player/DataBroadcast.svelte";
@@ -128,9 +116,12 @@
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
   import { fallBackTo } from "#lib/player/canvas-sink.js";
+  import { CaptionLayer } from "#lib/player/captions.svelte.js";
   import { RecordingClock } from "#lib/player/clock-recording.js";
+  import { DataLayer } from "#lib/player/data.svelte.js";
   import { playable, RecordingFeed } from "#lib/player/feed-recording.js";
   import { rangesOf } from "#lib/player/mse-sink.js";
+  import { Note } from "#lib/player/notes.svelte.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
     type RemuxPlayer,
@@ -139,16 +130,8 @@
   } from "#lib/remux-player.js";
   import { keepResume, keepResuming } from "#lib/resume.js";
   import { busyNote, type Pace } from "#lib/rungs.js";
-  import {
-    type Cue,
-    currentCue,
-    showing as captionShowing,
-  } from "#lib/ts/captions.js";
-  import {
-    feedFor,
-    type PlacedMessage,
-    replayAt,
-  } from "#lib/ts/data-timeline.js";
+  import type { Cue } from "#lib/ts/captions.js";
+  import type { PlacedMessage } from "#lib/ts/data-timeline.js";
   import { pickMediaSource } from "#lib/ts/media-source.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
   import {
@@ -266,9 +249,8 @@
    * `adapt.ts` に「読むのを止めている」(`idle`) と渡す
    */
   let suspendAt = Number.NEGATIVE_INFINITY;
-  /** 段の断り書き。しばらくで引っ込める */
-  let adaptText = $state<string | null>(null);
-  let adaptTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 段の断り書き (`player/notes.svelte.ts`)。`ADAPT_NOTE` で引っ込める */
+  const adaptText = new Note();
   /** 段を替えるために作り直したとき、作り直す前に再生していたか。尺が分かったら続ける (`resume`) */
   let keepPlaying = false;
 
@@ -310,8 +292,7 @@
   /** 互換モードで観られない理由。出したら `<video>` には戻らずに止まる */
   let canvasProblem = $state<string | null>(null);
   /** 映像の上に出しておく断り書き (MPEG-2 に切り替えた、など)。`SWITCH_NOTE` で引っ込める (`note`。ライブと同じ) */
-  let warning = $state<string | null>(null);
-  let warningTimer: ReturnType<typeof setTimeout> | null = null;
+  const warning = new Note();
   /** 運転中の注意 (互換モード。`drive-gate.svelte.ts`)。押すまで再生を始めない */
   const drive = driveGate();
 
@@ -884,22 +865,12 @@
 
   /** 形式を切り替えた断り書きを出す。`SWITCH_NOTE` で引っ込める (ライブの `note` と同じ。切り替えた先はメニューの行に残る) */
   function note(text: string): void {
-    warning = text;
-    if (warningTimer !== null) clearTimeout(warningTimer);
-    warningTimer = setTimeout(() => {
-      warningTimer = null;
-      if (warning === text) warning = null;
-    }, SWITCH_NOTE);
+    warning.show(text, SWITCH_NOTE);
   }
 
   /** 段の断り書きを出す。しばらくで引っ込める */
   function noteAdapt(text: string): void {
-    adaptText = text;
-    if (adaptTimer !== null) clearTimeout(adaptTimer);
-    adaptTimer = setTimeout(() => {
-      adaptTimer = null;
-      adaptText = null;
-    }, ADAPT_NOTE);
+    adaptText.show(text, ADAPT_NOTE);
   }
 
   /**
@@ -1401,8 +1372,8 @@
     const timer = setInterval(() => adapt.tick(), ADAPT_TICK);
     return () => {
       clearInterval(timer);
-      if (adaptTimer !== null) clearTimeout(adaptTimer);
-      if (warningTimer !== null) clearTimeout(warningTimer);
+      adaptText.close();
+      warning.close();
     };
   });
 
@@ -1424,7 +1395,7 @@
     const fresh = pickOffer(info, ability(), next, data.indoor);
     if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy && step === 0)
       return;
-    warning = null;
+    warning.clear();
     // 選び直したら段 0 から (下げた段は「自動」が回線を見て決め直す)
     step = 0;
     stepCodec = null;
@@ -1478,7 +1449,7 @@
     stopCanvas();
     busy = false;
     canvasProblem = null;
-    warning = null;
+    warning.clear();
     if (fresh === null) {
       canvasProblem = "再生できる形式がありません";
       return;
@@ -1571,16 +1542,17 @@
    * エンコードするときに取り出しておいた変化ログを、再生位置に合わせて流し直す (`ts/data-timeline`、
    * `server/recorded-bml.ts`)。描くのはライブと同じ `DataBroadcast`
    */
-  /** d ボタンで出しているか */
-  let showData = $state(false);
   /**
-   * データ放送を自動で受信するか (⚙ の「データ放送」を長押しして切り替える。ライブと同じ 1 つを端末ごとに覚える。`data-receive.ts`)。
+   * データ放送の受け口 (`player/data.svelte.ts`。ライブと同じ)。d ボタンで出しているかと、自動で受信するか
+   * (⚙ の「データ放送」を長押しして切り替える。ライブと同じ 1 つを端末ごとに覚える) と、変化ログを持つ。
    * 録画の入口に自動起動の指定があれば (`data.autoStart`)、開く前から変化ログを取得して流し、入口の文書を裏で動かす
    * (`DataBroadcast` の `receive`)
    */
-  let receiveData = $state(false);
+  const broadcastData = new DataLayer();
   /** 自動で受信していて、この録画にデータ放送があり、入口に自動起動の指定があるか */
-  const receiving = $derived(receiveData && data.hasData && data.autoStart);
+  const receiving = $derived(
+    broadcastData.receive && data.hasData && data.autoStart,
+  );
   /** 自動で受信するかを切り替えたときの通知 (`receive-note.svelte.ts`) */
   const dataReceive = receiveNote();
   /** 映像を入れる箱。BML はこれを動かす (`DataBroadcast` の `placeVideo`) */
@@ -1592,12 +1564,6 @@
   let dataButton = $state<(() => boolean) | null>(null);
   /** データ放送を作り直す合図 (`DataBroadcast` の channel)。戻ったら変えて、その時点まで積み直す */
   let dataChannel = $state<string | null>(null);
-  /** 変化ログ。押されてから取得する */
-  let dataTimeline: PlacedMessage[] = [];
-  /** エンジンへ流す関数。`DataBroadcast` が open のたびに渡してくる */
-  let dataEmit: ((message: ResponseMessage) => void) | null = null;
-  /** どこまで流したか (再生位置 ms)。まだなら -1 */
-  let dataFed = -1;
 
   function nowMs(): number {
     return Math.round(mediaTime() * 1000);
@@ -1605,9 +1571,9 @@
 
   /** データ放送を出す/消す。d ボタンの振る舞いは `pressD` (DataBroadcast) */
   async function setData(on: boolean): Promise<void> {
-    showData = on;
+    broadcastData.show = on;
     // 自動で受信しているなら、閉じてもエンジンは残す (入口から出直すのは `DataBroadcast`)
-    if (showData || receiving) await startData();
+    if (on || receiving) await startData();
     else dataChannel = null;
   }
 
@@ -1616,16 +1582,15 @@
    * 切り替えたら通知を出す
    */
   function toggleReceiveData(): void {
-    receiveData = !receiveData;
-    remind(DATA_RECEIVE_KEY, receiveData ? "1" : "0");
-    dataReceive.show(receiveData);
+    broadcastData.toggleReceive();
+    dataReceive.show(broadcastData.receive);
     if (receiving) void startData();
-    else if (!showData) dataChannel = null;
+    else if (!broadcastData.show) dataChannel = null;
   }
 
   // 開いた端末で決まる。自動で受信する端末は、入口に自動起動の指定がある録画なら開く前から流し始める
   $effect(() => {
-    receiveData = storedDataReceive(stored(DATA_RECEIVE_KEY));
+    broadcastData.restore();
     untrack(() => {
       if (receiving) void startData();
     });
@@ -1641,8 +1606,8 @@
     dataLoading ??= loadTimeline();
     await dataLoading;
     // 取得している間に、閉じて自動で受信もやめていたら作らない
-    if (!showData && !receiving) return;
-    dataFed = -1;
+    if (!broadcastData.show && !receiving) return;
+    broadcastData.rewind();
     // エンジンを作らせる。open のあと listenData が呼ばれて、いまの位置まで積み直す
     dataChannel = `${rec.id}`;
   }
@@ -1658,12 +1623,12 @@
     const copy = await localLookup;
     if (Array.isArray(copy?.databroadcast)) {
       // 端末に保存したものから。オフラインでも d が効く
-      dataTimeline = copy.databroadcast as PlacedMessage[];
+      broadcastData.timeline = copy.databroadcast as PlacedMessage[];
     } else {
       const response = await fetch(recordingFeed.timelineUrl).catch(() => null);
-      dataTimeline = response?.ok ? await response.json() : [];
+      broadcastData.timeline = response?.ok ? await response.json() : [];
     }
-    if (dataTimeline.length === 0) dataLoading = null;
+    if (broadcastData.timeline.length === 0) dataLoading = null;
   }
 
   /**
@@ -1671,11 +1636,7 @@
    * **預かった直後に、いまの再生位置まで積んで追いつく** (`replayAt`)
    */
   function listenData(emit: ((message: ResponseMessage) => void) | null): void {
-    dataEmit = emit;
-    if (emit === null) return;
-    const to = nowMs();
-    for (const message of replayAt(dataTimeline, to)) emit(message);
-    dataFed = to;
+    broadcastData.listenAt(emit, nowMs());
   }
 
   /**
@@ -1683,16 +1644,9 @@
    * 先へ飛んだ (シーク・CM 飛ばし) ときは、その間の変化を足す
    */
   function feedData(): void {
-    if (dataEmit === null) return;
     const to = nowMs();
-    const feed = feedFor(dataTimeline, dataFed, to);
-    if (feed.reset) {
-      // channel を変えると close→open して listenData が積み直す
-      dataChannel = `${rec.id}:${to}`;
-      return;
-    }
-    for (const message of feed.messages) dataEmit(message);
-    dataFed = to;
+    // 戻っていた。channel を変えると close→open して listenData が積み直す
+    if (!broadcastData.follow(to)) dataChannel = `${rec.id}:${to}`;
   }
 
   let playing = $state(false);
@@ -1709,8 +1663,11 @@
    */
   let audios = $state<string[]>([]);
   let audioIndex = $state(0);
-  /** 字幕を出しているか。既定は出す (ライブと同じ)。端末ごとに覚える (`caption-pref.ts`) */
-  let captions = $state(true);
+  /**
+   * 字幕の受け口 (`player/captions.svelte.ts`。ライブと同じ)。出しているか (既定は出す。端末ごとに覚える)・載っている言語・
+   * 出している言語・描く先を持つ
+   */
+  const captions = new CaptionLayer();
   /**
    * 受け取った字幕 (全部の言語。`captions.json`)。持っていなければ null。持っているかは取ってみるまで
    * 分からない (無ければ 404)。持っているときだけボタンを出す (ライブと同じ)
@@ -1720,42 +1677,28 @@
    * 載っている言語。第 1 言語は `pages`、第 2 言語から後ろは `others`。
    * 名前が分からない第 1 言語 (古いサーバ・端末に保存した古いコピー) は「字幕 1」
    */
-  const captionLanguages = $derived<CaptionLanguage[]>(
-    captionText === null
-      ? []
-      : [
-          captionText.language ?? languageOf(1, ""),
-          ...(captionText.others ?? []).filter((o) => o.pages.length > 0),
-        ],
-  );
-  /** 出している言語 (`CaptionLanguage.index`) */
-  let captionLanguage = $state(1);
-  /** 文字の配置。時刻の順 */
-  const cues = $derived<Cue[]>(
-    captionText === null
-      ? []
-      : captionLanguage === 1
-        ? captionText.pages
-        : (captionText.others?.find((o) => o.index === captionLanguage)
-            ?.pages ?? captionText.pages),
-  );
+  function languagesOf(text: CaptionPages): CaptionLanguage[] {
+    return [
+      text.language ?? languageOf(1, ""),
+      ...(text.others ?? []).filter((o) => o.pages.length > 0),
+    ];
+  }
+  /** 言語 `index` の文字の配置。時刻の順 */
+  function cuesOf(text: CaptionPages | null, index: number): Cue[] {
+    if (text === null) return [];
+    if (index === 1) return text.pages;
+    return text.others?.find((o) => o.index === index)?.pages ?? text.pages;
+  }
   const hasCaptions = $derived(
     captionText !== null &&
       (captionText.pages.length > 0 ||
         (captionText.others ?? []).some((o) => o.pages.length > 0)),
   );
-  /** 文字の配置を描くもの (`overlay` ができたら作る) */
-  let painter: CaptionPainter | null = null;
-  /** いま描いている文字の配置。同じものを描き直さない */
-  let shownPage: CaptionPage | null = null;
+  // 文字の配置を描くもの (`overlay` ができたら作る)
   $effect(() => {
     if (overlay === null) return;
-    const made = new CaptionPainter(overlay);
-    painter = made;
-    return () => {
-      made.close();
-      if (painter === made) painter = null;
-    };
+    captions.attach(overlay);
+    return () => captions.close();
   });
   /** 字幕を重ねる先 */
   let overlay = $state<HTMLCanvasElement | null>(null);
@@ -1880,7 +1823,7 @@
       return mediaPaused();
     },
     get captions() {
-      return captions;
+      return captions.on;
     },
     get hasCaptions() {
       return hasCaptions;
@@ -2007,7 +1950,7 @@
     });
     void detail.open(rec.program_id, facts);
     // 字幕は消していても取ってくる (持っているかどうかで ⚙ の字幕の行と字幕ボタンを出す)。観はじめてから (`askCaptions`)
-    captions = storedCaptionsOn(stored(CAPTION_ON_KEY));
+    captions.restore();
     if (video !== null) follow(video);
     if (!ready) {
       askCaptions();
@@ -2552,14 +2495,13 @@
   }
 
   function toggleCaptions(): void {
-    setCaptions(!captions);
+    setCaptions(!captions.on);
     controls.stir();
   }
 
   /** 字幕を出す・消す。端末ごとに覚える (`caption-pref.ts`) */
   function setCaptions(on: boolean): void {
-    captions = on;
-    remind(CAPTION_ON_KEY, on ? "1" : "0");
+    captions.setOn(on);
     if (on) {
       if (captionsFailed) {
         captionsFailed = false;
@@ -2574,9 +2516,9 @@
 
   /** 字幕の言語を選ぶ。言語の名前 (ISO 639) で端末に覚える (`caption-pref.ts`) */
   function setCaptionLanguage(index: number): void {
-    const code = captionLanguages.find((l) => l.index === index)?.code ?? "";
-    if (code !== "") remind(CAPTION_LANGUAGE_KEY, code);
-    captionLanguage = index;
+    captions.remember(index);
+    captions.language = index;
+    captions.load(cuesOf(captionText, index));
     clearCaptions();
     paint();
   }
@@ -2622,10 +2564,9 @@
       if (text?.v === CAPTION_TEXT_VERSION) {
         captionText = text;
         // 覚えている言語が載っていればそれ、無ければ第 1 言語
-        captionLanguage = pickLanguage(
-          captionLanguages,
-          stored(CAPTION_LANGUAGE_KEY),
-        );
+        captions.languages = languagesOf(text);
+        captions.language = captions.preferred(captions.languages);
+        captions.load(cuesOf(text, captions.language));
         paint();
       }
     } catch (error) {
@@ -2649,8 +2590,7 @@
   }
 
   function clearCaptions(): void {
-    shownPage = null;
-    painter?.show(null);
+    captions.hide();
   }
 
   /**
@@ -2750,13 +2690,8 @@
    * 覆いの下では描かない (CM の字幕を仕込むことになる)
    */
   function paint(): void {
-    if (hopping || !captions || overlay === null) return;
-    const at = mediaTime();
-    const page = captionShowing(currentCue(cues, at), at);
-    if (page === shownPage) return;
-    shownPage = page;
-    place();
-    painter?.show(page);
+    if (hopping || !captions.on || overlay === null) return;
+    captions.paint(mediaTime(), place);
   }
 
   /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
@@ -2823,7 +2758,7 @@
     },
   });
   function keys(event: KeyboardEvent): void {
-    if (showData && dataRemoteKey(event)) return;
+    if (broadcastData.show && dataRemoteKey(event)) return;
     playerKey(event);
   }
 
@@ -2872,7 +2807,7 @@
    * canvas に描いているときはプレイヤーから 1 枚もらう (`<video>` は空)
    */
   function snapshot(): void {
-    const drawn = captions && shownPage !== null;
+    const drawn = captions.on && captions.shown !== null;
     void shooter.take(
       () => (canvas !== null ? grabbedFrame(canvas.grab()) : videoFrame(video)),
       drawn ? overlay : null,
@@ -2883,7 +2818,7 @@
         at: mediaTime(),
         source: info?.axis,
       }),
-      drawn ? captionWords(shownPage) : "",
+      drawn ? captionWords(captions.shown) : "",
     );
   }
 </script>
@@ -3017,7 +2952,9 @@
               <JikkyoLayer
                 feed={jikkyo}
                 air={airTime}
-                show={jikkyoActive && data.jikkyo !== null && !showData}
+                show={jikkyoActive &&
+                  data.jikkyo !== null &&
+                  !broadcastData.show}
                 paused={!playing}
                 rate={drawing ? 1 : speed}
                 ahead
@@ -3033,7 +2970,7 @@
             bind:this={overlay}
             style="position:absolute; z-index:var(--dp-z-stage-captions); pointer-events:none;"
             data-testid="watch-captions-canvas"
-            data-on={captions && hasCaptions}
+            data-on={captions.on && hasCaptions}
             aria-hidden="true"
           ></canvas>
           <!--
@@ -3054,7 +2991,7 @@
           (`feedData`/`listenData`)。双方向は使わない (録画した時点の送り先は、もう使えない)
         -->
         <DataBroadcast
-          on={showData}
+          on={broadcastData.show}
           receive={receiving}
           channel={dataChannel}
           media={mediaBox}
@@ -3079,7 +3016,7 @@
                 return w === null ? 0 : jikkyo.force(w);
               }
             : null}
-          hidden={showData}
+          hidden={broadcastData.show}
           testid="watch-new-year"
         />
 
@@ -3206,8 +3143,8 @@
               {#if hasCaptions}
                 <ControlButton
                   icon={CAPTION}
-                  label={captions ? "字幕を消す" : "字幕を出す"}
-                  on={captions}
+                  label={captions.on ? "字幕を消す" : "字幕を出す"}
+                  on={captions.on}
                   testid="watch-captions"
                   onclick={toggleCaptions}
                 />
@@ -3297,10 +3234,14 @@
               cm={hasCm ? { on: skipCm, toggle: toggleSkipCm } : undefined}
               data={data.hasData
                 ? {
-                    on: showData,
+                    on: broadcastData.show,
                     toggle: () =>
-                      pressD(showData, dataButton, (on) => void setData(on)),
-                    auto: receiveData,
+                      pressD(
+                        broadcastData.show,
+                        dataButton,
+                        (on) => void setData(on),
+                      ),
+                    auto: broadcastData.receive,
                     toggleAuto: toggleReceiveData,
                   }
                 : undefined}
@@ -3315,9 +3256,9 @@
               subtitle={hasCaptions
                 ? subtitles({
                     icon: CAPTION,
-                    on: captions,
-                    languages: captionLanguages,
-                    language: captionLanguage,
+                    on: captions.on,
+                    languages: captions.languages,
+                    language: captions.language,
                     onoff: setCaptions,
                     onlanguage: setCaptionLanguage,
                   })
@@ -3367,13 +3308,13 @@
         {#if skipped}
           <StageNote testid="watch-skipped">CM を飛ばしました</StageNote>
         {/if}
-        {#if warning !== null}
+        {#if warning.text !== ""}
           <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
-          <StageNote>{warning}</StageNote>
+          <StageNote>{warning.text}</StageNote>
         {/if}
-        {#if adaptText !== null}
+        {#if adaptText.text !== ""}
           <!-- 回線に合わせて段を替えた理由 (`watch-adapt.ts`) -->
-          <StageNote testid="watch-adapt">{adaptText}</StageNote>
+          <StageNote testid="watch-adapt">{adaptText.text}</StageNote>
         {/if}
         <VolumeNote {volume} testid="watch-volume-note" />
       {/snippet}

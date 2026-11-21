@@ -15,10 +15,7 @@
 
 import { resolve } from "$app/paths";
 import type { ResponseMessage } from "@danything/arib/bml-protocol";
-import {
-  type CaptionLanguage,
-  type CaptionPage,
-} from "@danything/arib/caption-text";
+import type { CaptionPage } from "@danything/arib/caption-text";
 import { CLOCK } from "@danything/arib/pes";
 import { untrack } from "svelte";
 
@@ -36,17 +33,8 @@ import {
 } from "#lib/adapt.js";
 import { type AudioTrack, broadcastTrack } from "#lib/arib.js";
 import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
-import { CaptionPainter } from "#lib/components/player/caption-draw.js";
-import {
-  CAPTION_LANGUAGE_KEY,
-  CAPTION_ON_KEY,
-  pickLanguage,
-  storedCaptionsOn,
-} from "#lib/components/player/caption-pref.js";
 import {
   closingOnTune,
-  DATA_RECEIVE_KEY,
-  storedDataReceive,
   tunedCloses,
   wantsData,
 } from "#lib/components/player/data-receive.js";
@@ -60,7 +48,6 @@ import {
 } from "#lib/components/player/unslip.js";
 import { writeCookie } from "#lib/cookie.js";
 import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
-import { read, write } from "#lib/keep.js";
 import {
   holdsDown,
   LagMeter,
@@ -102,8 +89,10 @@ import {
   type YieldedRecording,
 } from "#lib/live.js";
 import { fallBackTo, openCanvas } from "#lib/player/canvas-sink.js";
+import { CaptionLayer } from "#lib/player/captions.svelte.js";
 import { ChaseClock } from "#lib/player/clock-chase.svelte.js";
 import { LiveClock } from "#lib/player/clock-live.svelte.js";
+import { DataLayer, HOLD_DATA } from "#lib/player/data.svelte.js";
 import {
   LiveFeed,
   type LiveFrame,
@@ -115,6 +104,7 @@ import {
   type StreamClock,
 } from "#lib/player/live-handoff.js";
 import { type MseSink, mseSink, type Still } from "#lib/player/mse-sink.js";
+import { Note } from "#lib/player/notes.svelte.js";
 import type { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import {
@@ -123,13 +113,6 @@ import {
   rawUnsupported,
 } from "#lib/raw/support.js";
 import { LOWEST_RUNG, type Pace } from "#lib/rungs.js";
-import {
-  type Cue,
-  currentCue,
-  insertCue,
-  showing,
-  trimCues,
-} from "#lib/ts/captions.js";
 import { KeyGate } from "#lib/ts/key-gate.js";
 import {
   type PickedMediaSource,
@@ -220,11 +203,6 @@ const UNDO_BEFORE_CLOSE = 10_000;
 /** 0.1 秒刻みに丸める (画面に出す値。細かく書き換えて描き直させない) */
 const tenth = (value: number): number => Math.round(value * 10) / 10;
 
-/**
- * データ放送の通知を、受け取る側ができるまでに取っておく数 (`heldData`)。待つのは 700 KB を読み込む間だけで
- * 数十で足りるが、モジュールは 1 通が 100 KB を超えることがあるので、立たなかったときに際限なく抱え込ませない
- */
-const HOLD_DATA = 300;
 /** 裏で用意している段の様子を見る間隔 (ms。`tickSpare`)。表の 1〜2 コマごと */
 const SPARE_EVERY = 50;
 /**
@@ -350,7 +328,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
    * サーバの `notice`)。`message` と違って選局では消さない。戻した先が映り始めても理由を読めるように。
    * かわりに出してから決まった長さで引っ込める (`note`)。引っ込めたあとも、切り替えた先はメニューの行 (「自動 (H.264)」) に残る
    */
-  let warning = $state("");
+  const warning = new Note();
 
   /*
    * ---- 回線に合わせて段を上げ下げする ([stream.md](../../../docs/stream.md#ライブと追っかけの画面)) ----
@@ -423,8 +401,6 @@ export function playbackCore(options: PlaybackCoreOptions) {
     /** `tuned` のあとで、元の TS の最初の塊が届いた (前の局の残りを数えない) */
     bytes?: number;
   } | null = null;
-  /** 断り書きを引っ込める時計 (`note`) */
-  let noteTimer: ReturnType<typeof setTimeout> | null = null;
   /** 次の選局で繋ぎ直すか (足りなくて下げるとき。`tune`) */
   let freshSocket = false;
   /** 取っている最中の試しのデータを止める (`probeLink`)。取っていなければ null */
@@ -451,10 +427,13 @@ export function playbackCore(options: PlaybackCoreOptions) {
   /** 前のフレームを貼っているか。**次のフレームが出るまでの黒を埋める** */
   let holding = $state(false);
   /**
-   * データ放送を出すか (テレビの d ボタン)。サーバは押されてからデコードする (`server/live.ts` の `wantData`)。
-   * 別の局へ移ったら閉じる (`closesData`)。閉じるのはサーバが選局を受けたとき (`closing`)
+   * データ放送の受け口 (`player/data.svelte.ts`。観る画面と同じ)。出すか (テレビの d ボタン) と、自動で受信するか
+   * (データ放送のボタンの長押し。端末ごとに覚える) を持ち、届いた通知を描く側へ渡す (描く側ができるまで控える)。
+   * サーバは押されてからデコードする (`server/live.ts` の `wantData`)。別の局へ移ったら閉じる (`closesData`)。
+   * 閉じるのはサーバが選局を受けたとき (`closing`)。自動で受信するなら、いまの局の入口に自動起動の指定があれば (`autoStart`)、
+   * 開いていなくてもサーバにリクエストし、入口の文書を裏で動かす (`DataBroadcast` の `receive`)
    */
-  let showData = $state(false);
+  const broadcastData = new DataLayer();
   /**
    * サーバが選局の答え (`tuned`) で受けたと知らせた局。追っかけの間も覚えておき、同じ局へ戻ったら開いたまま。
    * データ放送のエンジンはこの局のもの (`dataChannel`)。リクエストしただけの局 (`tuned`) とは、答えが届くまで違う
@@ -466,43 +445,26 @@ export function playbackCore(options: PlaybackCoreOptions) {
    */
   let closing = $state<number | null>(null);
   /**
-   * データ放送を自動で受信するか (データ放送のボタンの長押し)。**端末ごとに覚える** (`data-receive.ts`)。
-   * いまの局の入口に自動起動の指定があれば (`autoStart`)、開いていなくてもサーバにリクエストし、入口の文書を裏で動かす
-   * (`DataBroadcast` の `receive`)
-   */
-  let receiveData = $state(false);
-  /**
    * いまの局の入口に自動起動の指定があるか (サーバが PMT を読んで知らせる `Notice` の `autoStart`)。
    * 別の局へ移ったら、次の局の通知が来るまで false
    */
   let autoStart = $state(false);
   $effect(() => {
-    receiveData = storedDataReceive(read(DATA_RECEIVE_KEY));
+    broadcastData.restore();
     // 選局の指示より先に送らない (`syncData`)。読んだ値に合わせるだけ
     untrack(syncData);
   });
   /** サーバに受信をリクエストしているか (最後に送ったもの)。繋ぎ直したらリクエストしていないところから */
   let askedData = false;
-  /** データ放送の通知を渡す先。**描いているものがあるときだけ** */
-  let onData: ((message: ResponseMessage) => void) | null = null;
   /**
-   * 受け取る側ができるまでの控え。サーバは押された瞬間に番組・PMT・モジュールをまとめて送るが、描く側は
-   * 700 KB を読み込んでから立ち上がる。番組 (`programInfo`) は一度きりなので、捨てると押しても何も出なかった
+   * 字幕の受け口 (`player/captions.svelte.ts`。3 画面で同じ)。出し入れ・言語・待たせている文字の配置・描く先を持つ。
+   * 載っている言語は `captions` の通知で分かり (字幕管理データが届くまでは空)、出す言語はサーバが視聴者ごとに出し分ける
    */
-  let heldData: ResponseMessage[] = [];
-  /** 字幕を出すか。**押して切り替えられる** (テレビの字幕ボタン)。端末ごとに覚える (`caption-pref.ts`) */
-  let captions = $state(true);
+  const captions = new CaptionLayer();
   // 開いた端末で決まる。サーバで組むときは無いので、開いてから読む
   $effect(() => {
-    captions = storedCaptionsOn(read(CAPTION_ON_KEY));
+    captions.restore();
   });
-  /**
-   * いまの字幕のストリームに載っている言語 (`captions` の通知)。字幕管理データが届くまでは空。
-   * たいていは日本語 1 つで、英語の字幕が付く番組がたまにある
-   */
-  let captionLanguages = $state<CaptionLanguage[]>([]);
-  /** 出している言語 (`CaptionLanguage.index`)。サーバは視聴者ごとに出し分ける */
-  let captionLanguage = $state(1);
   /**
    * 選べる字幕。1 枚も届いていなくても分かる (サーバが入口で読んでいる)。届いてから出していた頃は、
    * 間隔の空く番組でボタンが出なかった
@@ -635,17 +597,8 @@ export function playbackCore(options: PlaybackCoreOptions) {
   let element: HTMLVideoElement | null = null;
   /** 前のフレームの写し先。画面から預かる */
   let still: HTMLCanvasElement | null = null;
-  /** 字幕を描く `CaptionPainter`。重ねる先の canvas は画面から預かる (`attach`) */
-  let painter: CaptionPainter | null = null;
   /** 貼りっぱなしを避けるためのタイマー */
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
-  /**
-   * 待たせている字幕。時刻の順 ([ts/captions.ts](../ts/captions.ts))。時刻は映像と同じ ffmpeg が付けた物差しで、
-   * 字幕のほうが先に届くので、再生位置が追いつくまで持っておく
-   */
-  let cues: Cue[] = [];
-  /** いま描いている 1 枚。同じものを描き直さない */
-  let shown: CaptionPage | null = null;
   /** もう再生を始めたか。始めるまでは貯める */
   let running = false;
   /**
@@ -1120,7 +1073,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
   ): void {
     if (decision === null) {
       if (standing !== null && now - standing.at >= ADAPT_HOLD) {
-        if (warning === standing.text) warning = "";
+        warning.clear(standing.text);
         standing = null;
       }
       return;
@@ -1131,8 +1084,10 @@ export function playbackCore(options: PlaybackCoreOptions) {
       decision.reason === "pinned" ||
       decision.reason === "source"
     ) {
-      if (replacesWarning(decision.reason, warning, standing?.text ?? null))
-        warning = text;
+      if (
+        replacesWarning(decision.reason, warning.text, standing?.text ?? null)
+      )
+        warning.stand(text);
       standing = { text, at: now };
       return;
     }
@@ -1174,12 +1129,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
    * 引っ込めないのは `encode`・`pinned` の文だけで、その状態が来なくなったら消す (`act`)
    */
   function note(text: string, hold = SWITCH_NOTE): void {
-    warning = text;
-    if (noteTimer !== null) clearTimeout(noteTimer);
-    noteTimer = setTimeout(() => {
-      noteTimer = null;
-      if (warning === text) warning = "";
-    }, hold);
+    warning.show(text, hold);
   }
 
   /**
@@ -1214,20 +1164,14 @@ export function playbackCore(options: PlaybackCoreOptions) {
     quiet = Date.now() + GRACE;
   }
 
-  /** 再生位置に合う 1 枚だけ字幕を描く ([ts/captions.ts](../ts/captions.ts) の `currentCue` / `showing`) */
+  /** 再生位置に合う 1 枚だけ字幕を描く (`CaptionLayer.paint`)。字幕は映像より先に届くので、位置が追いつくまで持っておく */
   function paint(at: number): boolean {
-    if (painter === null) return false;
-    const next = captions ? showing(currentCue(cues, at), at) : null;
-    if (next === shown) return false;
-    shown = next;
-    painter.show(next);
-    return true;
+    return captions.paint(at);
   }
 
-  /** `at` より前に出し終えたぶんを片付ける。**`at` で出す 1 枚は残す** (出しっぱなしのため) */
+  /** `at` より前に出し終えたぶんを片付ける (`CaptionLayer.sweep`) */
   function sweep(at: number): void {
-    const kept = trimCues(cues, at);
-    if (kept.length !== cues.length) cues = kept;
+    captions.sweep(at);
   }
 
   /** 足し先がまだ `mine` のものか (`MseSink` の `still`) */
@@ -1636,20 +1580,16 @@ export function playbackCore(options: PlaybackCoreOptions) {
    * @param remember 端末に覚えるか。押して選んだときだけ (番組に合わせて選び直したときは覚えない)
    */
   function setCaptionLanguage(index: number, remember = true): void {
-    if (remember) {
-      const code = captionLanguages.find((l) => l.index === index)?.code ?? "";
-      if (code !== "") write(CAPTION_LANGUAGE_KEY, code);
-    }
-    if (index === captionLanguage) return;
-    captionLanguage = index;
+    if (remember) captions.remember(index);
+    if (index === captions.language) return;
+    captions.language = index;
     clearCaptions();
     feed.send({ type: "language", language: index });
   }
 
   /** 字幕を出す・消す。端末ごとに覚える (`caption-pref.ts`) */
   function setCaptions(on: boolean): void {
-    captions = on;
-    write(CAPTION_ON_KEY, on ? "1" : "0");
+    captions.setOn(on);
     if (element !== null) paint(element.currentTime);
   }
 
@@ -1798,7 +1738,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     if (!keepList) {
       captionTracks = [];
       captionTrack = 0;
-      captionLanguages = [];
+      captions.languages = [];
       // **局ごとのもの。** 局を変えたら、前の局のアプリを出したままにしない
       hybridcast = [];
     }
@@ -1807,9 +1747,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
 
   /** 待たせている字幕を捨てる。**再エンコードのたび** (`forget` の説明) */
   function clearCaptions(): void {
-    cues = [];
-    shown = null;
-    painter?.show(null);
+    captions.reset();
   }
 
   /**
@@ -1864,14 +1802,12 @@ export function playbackCore(options: PlaybackCoreOptions) {
     // 離れたら試しのデータは取り続けず、段の断り書きも書き換えない
     probing?.abort(LEFT);
     probing = null;
-    if (noteTimer !== null) clearTimeout(noteTimer);
-    noteTimer = null;
+    warning.close();
     reset();
     stopRaw();
     thaw();
     // 字幕を描くものも破棄する (canvas の大きさを読む `ResizeObserver` を外す)
-    painter?.close();
-    painter = null;
+    captions.close();
     // コマごとの貼り直し (`follow`) も止める
     following = null;
   }
@@ -1960,7 +1896,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
       return;
     const before: LiveFormat = rawChosen && raw ? "raw" : codec;
     choice = next;
-    warning = "";
+    warning.clear();
     standing = null;
     compatGaveUp = false;
     av1GaveUp = false;
@@ -2114,7 +2050,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     }
     const chosen = inUse();
     const wanted = chosen === "raw" ? broadcastFormat(kind) : chosen;
-    if (chosen !== "auto" && next !== wanted && warning === "")
+    if (chosen !== "auto" && next !== wanted && warning.text === "")
       note(
         `${formatLabel(chosen, kind)} を再生できないため、${formatLabel(next)} に切り替えました`,
       );
@@ -2132,8 +2068,8 @@ export function playbackCore(options: PlaybackCoreOptions) {
    * (`server/databroadcast.ts`)。
    */
   function setData(on: boolean): void {
-    if (showData === on) return;
-    showData = on;
+    if (broadcastData.show === on) return;
+    broadcastData.show = on;
     // 選局の答えを待っている間に押したら、次の局で開く・閉じる。答えが届いても閉じない
     closing = null;
     syncData();
@@ -2141,16 +2077,15 @@ export function playbackCore(options: PlaybackCoreOptions) {
 
   /** データ放送を自動で受信するかを切り替える。端末ごとに覚える (`data-receive.ts`) */
   function toggleReceiveData(): void {
-    receiveData = !receiveData;
-    write(DATA_RECEIVE_KEY, receiveData ? "1" : "0");
+    broadcastData.toggleReceive();
     syncData();
   }
 
   /** いまサーバにリクエストしたいか (`wantsData`)。`open` はデータ放送を開いているか */
-  function wantData(open = showData): boolean {
+  function wantData(open = broadcastData.show): boolean {
     return wantsData({
       open,
-      auto: receiveData,
+      auto: broadcastData.receive,
       tuned: tuned !== null,
       autoStart,
       switching: closing !== null,
@@ -2165,7 +2100,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
   function syncData(): void {
     const want = wantData();
     // 受け取らないなら、待たせてあるぶんも捨てる
-    if (!want) heldData = [];
+    if (!want) broadcastData.drop();
     if (want === askedData || !feed.open) return;
     askedData = want;
     feed.send({ type: "data", on: want });
@@ -2177,16 +2112,12 @@ export function playbackCore(options: PlaybackCoreOptions) {
    * 渡す形式はデコードする側と描く側の取り決め (`ResponseMessage`。`packages/arib/src/bml-protocol.ts`) なので、
    * ここは素通しでいい。
    *
-   * **預かった時点で、待たせてあるぶんを先に流す** (`heldData`)
+   * **預かった時点で、待たせてあるぶんを先に流す** (`DataLayer.listen`)
    */
   function listenData(
     handler: ((message: ResponseMessage) => void) | null,
   ): void {
-    onData = handler;
-    const held = heldData;
-    heldData = [];
-    if (handler === null) return;
-    for (const message of held) handler(message);
+    broadcastData.listen(handler);
   }
 
   /**
@@ -2202,8 +2133,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     box: HTMLElement | null = null,
   ): void {
     still = frozen;
-    painter?.close();
-    painter = new CaptionPainter(subtitles);
+    captions.attach(subtitles);
     host = box;
   }
 
@@ -2353,7 +2283,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
         ...(audio === "" ? {} : { audio }),
         codec,
         caption: captionTrack,
-        language: captionLanguage,
+        language: captions.language,
         raw: wantsRaw(),
         ...lowered,
       };
@@ -2364,7 +2294,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
         type: "tune",
         ...tuned,
         caption: captionTrack,
-        language: captionLanguage,
+        language: captions.language,
         raw: wantsRaw(),
         ...(tuner === null ? {} : { tuner }),
         // 段を下げるなら段と再生できるコーデック (コーデックはサーバが選ぶ)。放送のままは外す
@@ -2719,14 +2649,11 @@ export function playbackCore(options: PlaybackCoreOptions) {
         captionTracks = notice.tracks;
         captionTrack = notice.track;
         // 載っている言語が分かったら、覚えている言語 (ISO 639) に合わせる (`caption-pref.ts`)
-        captionLanguages = notice.languages ?? [];
+        captions.languages = notice.languages ?? [];
         if (notice.languages !== undefined) {
-          const want = pickLanguage(
-            notice.languages,
-            read(CAPTION_LANGUAGE_KEY),
-          );
+          const want = captions.preferred(notice.languages);
           const now = notice.language ?? 1;
-          captionLanguage = now;
+          captions.language = now;
           if (want !== now) setCaptionLanguage(want, false);
         }
       } else if (notice.type === "clock") {
@@ -2789,12 +2716,9 @@ export function playbackCore(options: PlaybackCoreOptions) {
       return;
     }
 
-    // データ放送 (`ResponseMessage`)。受け取る側がまだ無いときは取っておく (`heldData`)
+    // データ放送 (`ResponseMessage`)。受け取る側がまだ無いときは、受け取るつもりがあれば取っておく (`DataLayer.deliver`)
     if (frame.kind === "data") {
-      if (onData !== null) onData(frame.message);
-      // 受け取るつもりが無いなら取っておく意味も無い
-      else if (askedData && heldData.length < HOLD_DATA)
-        heldData.push(frame.message);
+      broadcastData.deliver(frame.message, askedData);
       return;
     }
 
@@ -2839,7 +2763,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
       const at =
         (raw && engine !== null ? engine.unwrap(frame.stamp) : frame.stamp) /
         CLOCK;
-      cues = insertCue(cues, { at, page: frame.page });
+      captions.insert({ at, page: frame.page });
     }
   }
 
@@ -2879,7 +2803,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
       notice.serviceId === tuned.serviceId
     ) {
       if (tunedCloses(closing, notice.serviceId)) {
-        showData = false;
+        broadcastData.show = false;
         autoStart = false;
       }
       closing = null;
@@ -2890,7 +2814,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
        */
       if (videoless && !openedVideoless) {
         // 人が先に開いていても、開いたものとして覚える (閉じたあとに開き直さない)
-        if (!showData) showData = true;
+        if (!broadcastData.show) broadcastData.show = true;
         openedVideoless = true;
       }
       syncData();
@@ -3835,7 +3759,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     },
     /** リクエストされたとおりにできなかったときの断り書き。無ければ空 */
     get warning() {
-      return warning;
+      return warning.text;
     },
     /** コーデックのメニューで選んでいるもの (自動・エンコードするもの・MPEG-2)。並んでいないものを覚えていれば自動 (`inUse`) */
     get choice() {
@@ -3876,12 +3800,12 @@ export function playbackCore(options: PlaybackCoreOptions) {
     },
     /** データ放送を出しているか */
     get showData() {
-      return showData;
+      return broadcastData.show;
     },
     setData,
     /** データ放送を自動で受信するか (端末ごと) */
     get receiveData() {
-      return receiveData;
+      return broadcastData.receive;
     },
     /**
      * 開く前から受信して、入口を裏で動かしているか (`DataBroadcast` の `receive`)。自動で受信していて、局を映していて、
@@ -3903,11 +3827,11 @@ export function playbackCore(options: PlaybackCoreOptions) {
     listenData,
     /** 字幕を出しているか */
     get captions() {
-      return captions;
+      return captions.on;
     },
     /** いま描いている字幕の 1 枚 (切り抜きに文字を添える)。出していなければ null */
     get shownCaption(): CaptionPage | null {
-      return shown;
+      return captions.shown;
     },
     /** 放送が字幕を持っているか。**1 枚も届いていなくても分かる** */
     get hasCaptions() {
@@ -3928,17 +3852,17 @@ export function playbackCore(options: PlaybackCoreOptions) {
     setCaptionTrack,
     /** いまの字幕のストリームに載っている言語。分かるまでは空 */
     get captionLanguages() {
-      return captionLanguages;
+      return captions.languages;
     },
     /** 出している言語 (`CaptionLanguage.index`) */
     get captionLanguage() {
-      return captionLanguage;
+      return captions.language;
     },
     setCaptionLanguage,
     setCaptions,
     /** 字幕の出し入れ。テレビの字幕ボタンと同じ */
     toggleCaptions() {
-      setCaptions(!captions);
+      setCaptions(!captions.on);
     },
     attach,
     seek,
