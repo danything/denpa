@@ -16,6 +16,8 @@ interface Options {
   resume?: () => void;
   /** 音を `<video>` と別に鳴らすか (ライブの WebKit。`#lib/native-audio-choice.ts`)。追っかけは渡さない */
   separateAudio?: () => boolean;
+  /** `<video>` を Web Audio に通すと無音になるか (追っかけの WebKit。`volume.svelte.ts` の `silentTap`) */
+  silentTap?: () => boolean;
 }
 
 interface LiveWiring {
@@ -84,6 +86,9 @@ export function liveWiring(options: Options): LiveWiring {
     ...(options.separateAudio === undefined
       ? {}
       : { separateAudio: options.separateAudio }),
+    ...(options.silentTap === undefined
+      ? {}
+      : { silentTap: options.silentTap }),
     video: () => (player.canvas ? null : options.video()),
     through: () => background.on || pip.active,
     remote: (paused) => {

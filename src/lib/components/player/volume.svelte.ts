@@ -1,6 +1,7 @@
 import { untrack } from "svelte";
 
 import { read, write } from "#lib/keep.js";
+import { GESTURES } from "#lib/raw/gesture-context.js";
 import { Outlet, playbackSession } from "#lib/sound.js";
 import {
   clampLevel,
@@ -81,9 +82,22 @@ export function playerVolume(options: Options): Volume {
     level = storedVolume(read(VOLUME_KEY));
   });
 
-  /** 押されたら AudioContext を起こす (自動再生の許可は押したときに出る) */
+  /**
+   * 押されたら AudioContext を起こす (自動再生の許可は押したときに出る)。**canvas に描いている間に押されたら作っておく。**
+   * iOS の Safari は押したとき以外に作った AudioContext を止めたまま始めるので、`<video>` に移ってから作ると、次に押すまで通せない。
+   * 通さない画面 (`separateAudio`・`silentTap`) では作らない
+   */
   const wake = (): void => {
-    if (context !== null && context.state !== "running")
+    if (context === null) {
+      if (
+        current === null &&
+        !options.separateAudio?.() &&
+        !options.silentTap?.()
+      )
+        open();
+      return;
+    }
+    if (context.state !== "running")
       void context.resume().catch(() => undefined);
   };
 
@@ -110,8 +124,6 @@ export function playerVolume(options: Options): Volume {
     } catch {
       return null;
     }
-    window.addEventListener("pointerdown", wake, true);
-    window.addEventListener("keydown", wake, true);
     wake();
     return context;
   }
@@ -194,10 +206,20 @@ export function playerVolume(options: Options): Volume {
     };
   });
 
+  // 押したと見なす出来事 (`raw/gesture-context.ts`) と押し始め (`pointerdown`) で起こす
+  $effect(() => {
+    const listening = new AbortController();
+    for (const type of ["pointerdown", ...GESTURES])
+      window.addEventListener(type, wake, {
+        capture: true,
+        passive: true,
+        signal: listening.signal,
+      });
+    return () => listening.abort();
+  });
+
   // 画面を離れたら後始末する
   $effect(() => () => {
-    window.removeEventListener("pointerdown", wake, true);
-    window.removeEventListener("keydown", wake, true);
     if (noteTimer !== null) clearTimeout(noteTimer);
     outlet?.destroy();
     void context?.close().catch(() => undefined);

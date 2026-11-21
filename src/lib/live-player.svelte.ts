@@ -103,6 +103,7 @@ import {
 } from "#lib/live.js";
 import { separateLiveAudio } from "#lib/native-audio-choice.js";
 import { decoderBase, RawEngine } from "#lib/raw/engine.js";
+import { GestureContext } from "#lib/raw/gesture-context.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { NativeAudio } from "#lib/raw/native-audio.js";
 import { audioContext } from "#lib/raw/seam.js";
@@ -439,9 +440,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /**
    * 別に鳴らす音の AudioContext。**作り直しても使い回す** (`NativeAudio` の `shared`)。iOS の Safari は、押したとき以外に作った
    * AudioContext を止めたまま始めるので、画質を切り替えるたびに作り直すと、自動再生を断られたとみて消音にしていた (#2728)。
-   * 閉じるのは画面を離れるとき (`stop`)
+   * **押されたときに作っておく** (`GestureContext`)。MPEG-2 (canvas に描く) から段を下げて `<video>` に移る瞬間は押されていないので、
+   * そこで初めて作ると同じく消音になる。閉じるのは画面を離れるとき (`stop`)
    */
-  let audioContextForLive: AudioContext | null = null;
+  const audioContextForLive = new GestureContext(
+    () => audioContext("interactive"),
+    () => options.separateAudio?.() === true,
+  );
 
   /**
    * 最初のコマを映した (`at` は `performance.now()`)。`startup` の内訳を 1 行出す。video の経路は映した 1 枚、canvas の経路は
@@ -1966,8 +1971,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     reset();
     stopRaw();
     thaw();
-    void audioContextForLive?.close().catch(() => undefined);
-    audioContextForLive = null;
+    audioContextForLive.close();
     // 字幕を描くものも破棄する (canvas の大きさを読む `ResizeObserver` を外す)
     painter?.close();
     painter = null;
@@ -2531,6 +2535,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     startup = { at: performance.now() };
     element = video;
     left = false;
+    audioContextForLive.listen(window);
     // リクエストし直すのはこれ。観終えるのを待っていたなら、もう待たない (`resumeChase`)
     stopResuming();
     /*
@@ -3154,7 +3159,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             if (nativeAudio === separate) giveUpAudio(reason);
           },
           decoderBase(),
-          (audioContextForLive ??= audioContext("interactive")),
+          audioContextForLive.get(),
         );
         nativeAudio = separate;
         separate.setVolume(volume);
