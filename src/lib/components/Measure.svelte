@@ -4,11 +4,11 @@
    * 設定画面のオン/オフで出す (`measure.svelte.ts`)。
    *
    * 縦のはみ出しは**端末でしか起きない**ことがある。ブラウザの自動運転には
-   * 引っ込むアドレスバーも、携帯の枠の切り欠きも作れないので、
+   * 引っ込むアドレスバーも、画面の切り欠きも作れないので、
    * 「手元では出ないが実機では出る」を追う手が無かった
    * (実機の PWA で「リロードすると画面全体がスクロールできる」として出た)。
    *
-   * 出すのは**どこがはみ出しているか**まで。数だけ見ても、土台が高いのか
+   * 出すのは**どこがはみ出しているか**まで。数だけ見ても、`.shell` が高いのか
    * 中身が高いのか分からない
    */
 
@@ -33,23 +33,23 @@
   let scroll = $state(0);
   let units = $state<Units | null>(null);
   let mode = $state("");
-  /** 土台に当たっている組み方 (`take`) */
+  /** `.shell` に当たっている組み方 (`take`) */
   let layout = $state("");
   /**
-   * 土台の実際の姿。
+   * `.shell` の実際の姿。
    *
    * **塞いであるはずのものが塞がっていないことがある。** 二段組の画面では
-   * 土台 (`.shell.fill`、+layout.svelte) に 1000px 以上で `height: 100%; overflow: hidden`
+   * `.shell` (`.shell.fill`、+layout.svelte) に 1000px 以上で `height: 100%; overflow: hidden`
    * が当たっていて、当たっていればページごと動きようがない。**はみ出しが出ているのに当たっている**なら、
-   * はみ出させているのは土台の外にいるもの (`position: fixed` は塞ぎを
+   * はみ出させているのは `.shell` の外にいるもの (`position: fixed` は塞ぎを
    * すり抜ける)
    */
   let base = $state("");
-  /** 土台に実際に付いている class。**当たっているかどうかを、結果と別に見る** */
+  /** `.shell` に実際に付いている class。**当たっているかどうかを、結果と別に見る** */
   let rootClass = $state("");
-  /** 決まりが載っている CSS に本当にあるか。**class が付いていることとは別** */
+  /** 規則が載っている CSS に本当にあるか。**class が付いていることとは別** */
   let rules = $state("");
-  /** 土台と同じ置かれ方で `100dvh` を測ったらいくつか。**浮かせた表示との差を見る** */
+  /** `.shell` と同じ置かれ方で `100dvh` を測ったらいくつか。**浮かせた表示との差を見る** */
   let plain = $state(0);
   let culprits = $state<Culprit[]>([]);
 
@@ -75,10 +75,10 @@
   }
 
   /**
-   * **その決まりが本当に届いているか。**
+   * **その規則が本当に届いているか。**
    *
    * 同じ `@media` の中の 3 つのうち 2 つだけ効く、ということは起こらない。
-   * 起きているように見えるなら、**片方の決まりがそこに無い** (配られた
+   * 起きているように見えるなら、**片方の規則がそこに無い** (配られた
    * CSS が古い) を疑う。推測で直す前に、載っている CSS を数える
    */
   function ruleState(): string {
@@ -104,11 +104,11 @@
          */
         if (rule instanceof CSSStyleRule) {
           seen++;
-          // 二段組の土台の決まり。Svelte が `.shell.fill.svelte-xxxx` のように印を足すので部分で見る
+          // 二段組の `.shell` の規則。Svelte が `.shell.fill.svelte-xxxx` のように印を足すので部分で見る
           if (rule.selectorText.includes(".shell.fill")) found = true;
         }
         /*
-         * **入れ子はぜんぶ潜る。** 決まりは `@media (min-width: 1000px)` の中にあり、
+         * **入れ子はぜんぶ潜る。** 規則は `@media (min-width: 1000px)` の中にあり、
          * CSS の組み方によっては `@layer` や入れ子の規則にも入るので、そこで止めない
          */
         const inner = (rule as CSSRule & { cssRules?: CSSRuleList }).cssRules;
@@ -120,14 +120,14 @@
     )
       .map((link) => link.href.split("/").pop())
       .join(" ");
-    return `決まり ${found ? "有" : "無"} / ${seen} 件 / ${href}`;
+    return `.shell.fill ${found ? "有" : "無"} / ${seen} 件 / ${href}`;
   }
 
   /**
    * 単位ごとの高さを実際に測る。
    *
    * `dvh` (いま見えている) と `lvh` (バーが引っ込んだとき) が食い違う端末では、
-   * **片方で組んだ土台にもう片方の中身を入れるとはみ出す**。計算では出せない
+   * **片方で組んだ `.shell` にもう片方の中身を入れるとはみ出す**。計算では出せない
    * ので、その場に置いて測る
    */
   function measureUnits(): Units {
@@ -149,7 +149,7 @@
 
     /*
      * **浮かせずにも測る。** 上のものは `position: absolute` で浮いている。
-     * 土台は流れの中にいるので、置かれ方で答えが変わるならそこが効いている
+     * `.shell` は流れの中にいるので、置かれ方で答えが変わるならそこが効いている
      */
     const flat = document.createElement("div");
     flat.style.cssText =
@@ -164,7 +164,7 @@
   /**
    * ページごとはみ出している要素。**深いものから 3 つ** (浅いものは親の巻き添え)。
    *
-   * **ページが動かないなら何も出さない。** 中で自分だけスクロールする枠
+   * **ページが動かないなら何も出さない。** 中で自分だけスクロールする箱
    * (番組表の表など) の中身は、画面の下より深いところにいるのが正しい。
    * それを並べると、はみ出していない画面にまで要素が出る
    */
@@ -192,7 +192,7 @@
         (m) => matchMedia(`(display-mode: ${m})`).matches,
       ) ?? "?";
     /*
-     * 土台を画面ぴったりにする線。ここを越えているかで、土台に当たる決まりが変わる。
+     * `.shell` を画面ぴったりにする線。ここを越えているかで、`.shell` に当たる規則が変わる。
      * 二段組の幅 (1000px) のほか、横にしたスマホも 768px から当たる (+layout.svelte の `@media` と同じ条件)
      */
     layout = matchMedia("(min-width: 1000px)").matches
@@ -203,14 +203,14 @@
         ? "画面ぴったり (横にしたスマホ・768px 以上)"
         : "一段";
 
-    // 土台は印 (`data-root`) で探す。形で採っていた頃は、別のものの数を土台として出していた
+    // `.shell` は印 (`data-root`) で探す。形で採っていた頃は、別のものの数を `.shell` として出していた
     const root = document.querySelector("[data-root]");
     if (root === null) {
-      base = "土台が見つからない";
+      base = "[data-root] がありません";
     } else {
       const style = getComputedStyle(root);
-      base = `土台 ${Math.round(root.getBoundingClientRect().height)} (h:${style.height} min:${style.minHeight} over:${style.overflowY})`;
-      // **決まりが当たっているかと、当たった結果は別。** class ごと出す
+      base = `.shell ${Math.round(root.getBoundingClientRect().height)} (h:${style.height} min:${style.minHeight} over:${style.overflowY})`;
+      // **規則が当たっているかと、当たった結果は別。** class ごと出す
       rootClass = root.className;
     }
 
@@ -240,7 +240,7 @@
     window.visualViewport?.addEventListener("resize", take);
 
     /*
-     * **測るのは土台の中だけ。** この表示も body の中にあるので、body ごと
+     * **測るのは `.shell` の中だけ。** この表示も body の中にあるので、body ごと
      * 測ると**自分が書き換わったことで測り直しに来る**。コマに束ねても
      * 毎コマ回り続けることになる
      */
@@ -275,14 +275,14 @@
 -->
 <div class="measure" data-testid="measure">
   <div>
-    窓 {width}x{inner} / 枠 {client} / 中身 {scroll} =
+    ウィンドウ {width}x{inner} / 表示 {client} / ページ {scroll} =
     <b class={over > 1 ? "bad" : "good"}>はみ出し {over}</b>
   </div>
   <div>{base} / {layout}</div>
   <div class="wrap">class: {rootClass}</div>
   {#if units !== null}
     <div>
-      dvh {units.dvh} / svh {units.svh} / lvh {units.lvh} / vh {units.vh} / 流れの中
+      dvh {units.dvh} / svh {units.svh} / lvh {units.lvh} / vh {units.vh} / dvh (static)
       {plain} / {mode}
     </div>
   {/if}

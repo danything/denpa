@@ -43,7 +43,10 @@
   /** 最初に入りきらなかった行の数 */
   let omitted = $state(0);
   let sources = $state.raw<LogSource[]>([]);
-  let copied = $state(false);
+  /** コピーの結果を「コピー」の横に出す。失敗したら (権限が無い・安全でない接続) ダウンロードを案内する。失敗はブラウザが返すだけで e2e では作れないので、テストは成功のほうだけ */
+  let copied = $state<
+    "" | "コピーしました" | "コピーできませんでした。ダウンロードしてください"
+  >("");
 
   /** 開くたびに欄を入れ直す。追うのは `report` と `dialog` だけ */
   $effect(() => {
@@ -65,7 +68,7 @@
       );
       logs = fitted.text;
       omitted = fitted.omitted;
-      copied = false;
+      copied = "";
       if (!element.open) {
         element.showModal();
         box?.focus();
@@ -81,9 +84,9 @@
   async function copy(): Promise<void> {
     try {
       await navigator.clipboard.writeText(full);
-      copied = true;
+      copied = "コピーしました";
     } catch {
-      copied = false;
+      copied = "コピーできませんでした。ダウンロードしてください";
     }
   }
 
@@ -163,7 +166,7 @@
         URL に入るぶんだけ、警告とエラーを先に
         (再生とチューナーの記録はさらに先に) 入れました ({omitted} 行を省きました)。全部はコピーかダウンロードして
         Issue に貼ってください。
-      {:else}
+      {:else if link.dropped === 0}
         ログは全部入っています。
       {/if}
       <span class="num"
@@ -180,7 +183,7 @@
       >
       <div class="modal-actions">
         <span class="small muted copied" aria-live="polite">
-          {copied ? "コピーしました" : ""}
+          {copied}
         </span>
         <button
           type="button"

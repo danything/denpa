@@ -33,7 +33,7 @@
    * アンビエントモード。いまのコマの色を、映像の周りの地に薄く敷く (YouTube と同じ見え方。docs/player.md)。
    * 舞台 (`PlayerStage`) が枠の置き場 (`.room`) の前に置く。オン/オフと写し方は `ambient.svelte.ts`、計算は `ambient.ts`。
    *
-   * - 縦に積むときは映像の下の中身に、二段組は窓全体に敷き、枠から離れるほど薄くする (`reach`・`farthest`)。
+   * - 縦に積むときは映像の下の中身に、二段組はウィンドウ全体に敷き、枠から離れるほど薄くする (`reach`・`farthest`)。
    *   明るさを抑えてから敷くので、上の字はどちらのテーマでも 4.5:1 以上で読める (`toneFrame`・`WASH_LUMINANCE`)
    * - 色は小さな canvas で作って CSS で引き伸ばす。`filter: blur` は使わない (GPU の無い端末で重かった)
    * - 写す繰り返しと前の色からの入れ替えは、テーブルトップの反射 (`FoldReflection`) と同じ部品 (`glow-loop.svelte.ts`)。
@@ -225,8 +225,8 @@
       const s = target.getBoundingClientRect();
       const m = main.getBoundingClientRect();
       /*
-       * 二段組は**窓全体** (見出しと右の列の下にも敷き、窓の端へ向かって薄くする)。
-       * 縦に積むときは、横は窓の幅、縦は `<main>` の中
+       * 二段組は**ウィンドウ全体** (見出しと右の列の下にも敷き、ウィンドウの端へ向かって薄くする)。
+       * 縦に積むときは、横はウィンドウの幅、縦は `<main>` の中
        */
       const width = document.documentElement.clientWidth;
       const bounds: Rect = stacked
@@ -238,7 +238,7 @@
       const area = region(s, bounds, spread);
       /*
        * 範囲の座標は入れ物 (いちばん近い位置を持つ祖先。無ければ文書) の内側から。
-       * 文書のときは巻き取ったぶんを足す
+       * 文書のときはスクロールしたぶんを足す
        */
       const parent = outer.offsetParent;
       let baseLeft = -window.scrollX;
@@ -358,7 +358,7 @@
   }
   /*
    * 明るいテーマでは地に掛ける (色の付いた所だけが乗る。`toneFrame` が色の薄い所を透明にしてある)。
-   * 窓全体に敷くので控えめに (白へ寄るだけなので、字の読みやすさは変わらない)
+   * ウィンドウ全体に敷くので控えめに (白へ寄るだけなので、字の読みやすさは変わらない)
    */
   :global(html:not([data-theme="dark"])) .band {
     mix-blend-mode: multiply;

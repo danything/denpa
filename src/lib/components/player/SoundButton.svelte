@@ -24,7 +24,7 @@
    * ⚙ のつまみは、このボタンがつまみを出せないときだけ出す (`StageTail`)。指の端末と、畳むとき (狭い枠か、
    * 一段に収まらないとき。このボタンごと ⚙ に入る) がそれ。
    *
-   * iPhone・iPad (音量を変えられない端末) の観る画面と追っかけでは、つまみを出さない (`volume.svelte.ts` の `fixed`)。
+   * iPhone・iPad (音量を変えられない端末) では、3 画面ともつまみを出さない (`volume.svelte.ts` の `fixed`)。
    *
    * testid: ボタンは `testid`、浮かぶ所は `{testid}-pop`、つまみは `{testid}-volume`
    */

@@ -21,7 +21,7 @@
 
   /** 削除は 2 回押し (ほかの一覧と同じ。`arming`) */
   const deleting = arming('[data-testid^="agent-delete"]');
-  /** 開いている窓 (登録・URL を変える) */
+  /** 開いているダイアログ (登録・URL を変える) */
   let dialog = $state<
     { kind: "add" } | { kind: "move"; id: number; name: string } | null
   >(null);

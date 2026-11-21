@@ -103,7 +103,7 @@ export function placeTimeline(
 
 /**
  * 一覧の見えている所の上端。日付の見出しが貼り付く位置 (広い形は浮いたヘッダーの下端、スマホの形は上の安全域の下)。
- * 貼り付いたときの位置で数える (巻き始めは少し下にいるが、送り先はいつも貼り付いた位置で決める)
+ * 貼り付いたときの位置で数える (スクロールし始めは少し下にいるが、送り先はいつも貼り付いた位置で決める)
  */
 function topEdge(list: HTMLElement): number {
   const day = list.querySelector<HTMLElement>(".t-day");
