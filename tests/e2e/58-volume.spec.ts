@@ -4,7 +4,9 @@ import type { Locator, Page } from "@playwright/test";
 
 import { MX } from "../fake/services";
 import {
+  captureSockets,
   expect,
+  feedNotice,
   flipSetting,
   goto,
   openSettings,
@@ -501,6 +503,123 @@ test.describe("音量", () => {
     // 100% より上には行かない
     for (let i = 0; i < 10; i++) await page.keyboard.press("ArrowUp");
     await expect(page.getByTestId("watch-volume-note")).toHaveText("音量 100%");
+  });
+});
+
+/** AudioContext を作ったときの `latencyHint` を残す (`__hints`)。省いたものは既定の `interactive` */
+async function hookHints(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const hints = new WeakMap<BaseAudioContext, string>();
+    (globalThis as { __hints?: unknown }).__hints = hints;
+    const Original = window.AudioContext;
+    window.AudioContext = class extends Original {
+      constructor(options?: AudioContextOptions) {
+        super(options);
+        const hint = options?.latencyHint;
+        hints.set(this, typeof hint === "string" ? hint : "interactive");
+      }
+    };
+  });
+}
+
+/** `kind` の経路の AudioContext を作ったときの `latencyHint` */
+async function hintOf(
+  page: Page,
+  kind: "element" | "buffer",
+): Promise<string | undefined> {
+  return await page.evaluate((kind) => {
+    const store = globalThis as unknown as {
+      __hubs: Map<BaseAudioContext, { kind: string }>;
+      __hints: WeakMap<BaseAudioContext, string>;
+    };
+    const context = [...store.__hubs.entries()]
+      .filter(([context, h]) => context.state !== "closed" && h.kind === kind)
+      .at(-1)?.[0];
+    return context === undefined ? undefined : store.__hints.get(context);
+  }, kind);
+}
+
+test.describe("段を下げたときの音量", () => {
+  test.use({ liveMpeg2: true });
+  test.beforeEach(async ({ request, stack }) => {
+    await syncEpg(request);
+    writeFileSync(stack.liveFmp4File, "");
+  });
+  test.afterEach(async ({ stack }) => {
+    rmSync(stack.liveFmp4File, { force: true });
+  });
+
+  /*
+   * 家の中の MPEG-2 (canvas の経路) から回線に合わせて段を下げると `<video>` に移る。掛ける大きさも、鳴らす
+   * AudioContext の出力 (`latencyHint`) も変わらないこと。Android の Chrome は `latencyHint` で出力を分ける
+   * (`volume.svelte.ts` の `open`)
+   */
+  test("家の中の MPEG-2 から段を下げて <video> に移っても、掛ける大きさと AudioContext の出力が変わらない", async ({
+    page,
+  }) => {
+    await hookAudio(page);
+    await hookHints(page);
+    await captureSockets(page);
+    await page.context().clearCookies();
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    const canvas = page.getByTestId("live-raw");
+    await expect
+      .poll(
+        async () => Number((await canvas.getAttribute("data-audio")) ?? 0),
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThan(0);
+    await expect(page.getByTestId("live-codec")).toContainText("自動 (MPEG-2)");
+    await letPlay(page);
+    await waitHooked(page, "buffer");
+
+    // つまみを 100% 以外にしておく
+    await setVolume(page, "live", 50);
+    await inject(page, "buffer", 0.1);
+    const before = await measure(page, "buffer");
+    console.log("MPEG-2 50%", JSON.stringify(before));
+    near(before.post.rms - before.pre.rms, 6 - 12.04);
+    await inject(page, "buffer", null);
+    const canvasHint = await hintOf(page, "buffer");
+
+    // 選局の直後 (`adapt.ts` の `GRACE`) は数えないので、下がるまで送り続ける
+    await expect(async () => {
+      await feedNotice(page, [
+        { type: "pace", backlog: 0, dropped: 3, speed: null },
+      ]);
+      await expect(page.getByTestId("live-warning")).toContainText(
+        "回線が細いため",
+        { timeout: 1_000 },
+      );
+    }).toPass({ timeout: 20_000 });
+    await expect(page.getByTestId("live-codec")).toContainText(
+      /自動 \(H\.264 \d+p\)/,
+      { timeout: 30_000 },
+    );
+    await expect(canvas).toHaveCount(0);
+    await expect
+      .poll(
+        () =>
+          page
+            .getByTestId("live-video")
+            .evaluate((v) => (v as HTMLVideoElement).currentTime),
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThan(1);
+    await waitHooked(page, "element");
+
+    const after = await measure(page, "element");
+    console.log("段を下げた 50%", JSON.stringify(after));
+    near(after.post.rms - after.pre.rms, 6 - 12.04);
+    expect(
+      await page
+        .getByTestId("live-video")
+        .evaluate((v) => (v as HTMLVideoElement).volume),
+    ).toBe(1);
+    expect(canvasHint).toBe("playback");
+    expect(await hintOf(page, "element")).toBe(canvasHint);
   });
 });
 

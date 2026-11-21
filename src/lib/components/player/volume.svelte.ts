@@ -2,6 +2,7 @@ import { untrack } from "svelte";
 
 import { read, write } from "#lib/keep.js";
 import { GESTURES } from "#lib/raw/gesture-context.js";
+import { audioContext } from "#lib/raw/seam.js";
 import { Outlet, playbackSession } from "#lib/sound.js";
 import {
   clampLevel,
@@ -124,7 +125,13 @@ export function playerVolume(options: Options): Volume {
   function open(): AudioContext | null {
     if (context !== null) return context;
     try {
-      const made = new AudioContext();
+      /*
+       * **canvas の経路 (`raw/engine.ts`) と同じ `playback` で作る。** Android の Chrome は `interactive` (既定) を
+       * 低遅延の出力 (AAudio の `LOW_LATENCY`) で、`playback` を省電力の出力 (`POWER_SAVING`) で鳴らす。出力が違うと
+       * 端末の音響処理の掛かり方も変わり得る。MPEG-2 から段を下げて `<video>` に移っても聞こえる大きさが変わらないように、
+       * 同じ出力にそろえる。サンプルレートも canvas の経路と同じ 48 kHz にする
+       */
+      const made = audioContext("playback");
       outlet = new Outlet(
         made,
         (audio) => document.body.append(audio),
