@@ -203,6 +203,8 @@ export class LagMeter {
       if (s.at < first.at + LAG_EDGE) old = Math.min(old, s.lag);
       if (s.at > now - LAG_EDGE) recent = Math.min(recent, s.lag);
     }
+    // 直近 `LAG_EDGE` に使える端が無い (塞がりが `LAG_EDGE` より長く続いた) ときは、最後に使えた端で比べる。
+    // 古い端との比べになるので伸びは小さく出て、回線のせいにしない側に倒れる。塞がった間は端末の処理の詰まりなので、それでよい
     return (Number.isFinite(recent) ? recent : last.lag) - old;
   }
 }

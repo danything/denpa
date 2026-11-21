@@ -116,13 +116,13 @@ describe("チューナーから届くのを待った間", () => {
   test("直近 5 秒でいちばん長い待ち。最初の塊までは選局の待ちなので数えない", () => {
     const gaps = new InputGaps();
     expect(gaps.longest(0)).toBeNull();
-    gaps.begin(0);
-    gaps.end(3_000);
+    const b119 = gaps.begin(0);
+    gaps.end(b119, 3_000);
     expect(gaps.longest(3_000)).toBe(0);
-    gaps.begin(3_100);
-    gaps.end(3_900);
-    gaps.begin(4_000);
-    gaps.end(4_050);
+    const b122 = gaps.begin(3_100);
+    gaps.end(b122, 3_900);
+    const b124 = gaps.begin(4_000);
+    gaps.end(b124, 4_050);
     expect(gaps.longest(4_100)).toBe(800);
     // 窓 (5 秒) から外れた
     expect(gaps.longest(9_100)).toBe(0);
@@ -130,21 +130,41 @@ describe("チューナーから届くのを待った間", () => {
 
   test("いま待っている最中の間も入れる", () => {
     const gaps = new InputGaps();
-    gaps.begin(0);
-    gaps.end(10);
+    const b133 = gaps.begin(0);
+    gaps.end(b133, 10);
     gaps.begin(100);
     expect(gaps.longest(1_300)).toBe(1_200);
+  });
+
+  test("例外で終わった読み出しは捨てる。待っている最中と数え続けない", () => {
+    const gaps = new InputGaps();
+    gaps.end(gaps.begin(0), 10);
+    gaps.cancel(gaps.begin(100));
+    expect(gaps.longest(5_000)).toBe(0);
+  });
+
+  test("起こし直しで古い読み出しと新しい読み出しが同時に待っても、それぞれの長さで数える", () => {
+    const seen: number[] = [];
+    const gaps = new InputGaps((ms) => seen.push(ms));
+    gaps.end(gaps.begin(0), 10);
+    const old = gaps.begin(100);
+    const fresh = gaps.begin(600);
+    gaps.end(fresh, 700);
+    expect(gaps.longest(800)).toBe(700);
+    gaps.cancel(old);
+    expect(gaps.longest(800)).toBe(100);
+    expect(seen).toEqual([]);
   });
 
   test("SOURCE_GAP 以上待ったときだけ知らせる", () => {
     const seen: number[] = [];
     const gaps = new InputGaps((ms) => seen.push(ms));
-    gaps.begin(0);
-    gaps.end(10);
-    gaps.begin(100);
-    gaps.end(100 + SOURCE_GAP - 1);
-    gaps.begin(1_000);
-    gaps.end(1_000 + SOURCE_GAP);
+    const b142 = gaps.begin(0);
+    gaps.end(b142, 10);
+    const b144 = gaps.begin(100);
+    gaps.end(b144, 100 + SOURCE_GAP - 1);
+    const b146 = gaps.begin(1_000);
+    gaps.end(b146, 1_000 + SOURCE_GAP);
     expect(seen).toEqual([SOURCE_GAP]);
   });
 

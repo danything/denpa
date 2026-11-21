@@ -141,34 +141,50 @@ export class PaceMeter {
 export class InputGaps {
   /** 窓の中の待ちの、終わった時刻と長さ (ms) */
   private gaps: { at: number; ms: number }[] = [];
-  /** 読みに行った時刻。待っていなければ null */
-  private since: number | null = null;
+  /**
+   * いま待っている読み出しの、読みに行った時刻 (`begin` が返す番号ごと)。起こし直しの直後は、古い読み出しと新しい読み出しが
+   * 同時に待つことがあるので、1 つの時刻で持たない (上書きすると待ちの長さがずれる)
+   */
+  private pending = new Map<number, number>();
+  private nextId = 0;
   /** 1 つでも届いたか。最初の塊までは選局の待ちなので数えない */
   private fed = false;
 
   /** @param onGap 待ちが `SOURCE_GAP` 以上になって届いたときに、待った長さ (ms) を受け取る (ログに出力する) */
   constructor(private readonly onGap: (ms: number) => void = () => {}) {}
 
-  begin(now: number): void {
-    this.since = now;
+  /** 読みに行った。返す番号を `end` か `cancel` に渡す */
+  begin(now: number): number {
+    const id = this.nextId++;
+    this.pending.set(id, now);
+    return id;
   }
 
-  end(now: number): void {
-    if (this.since !== null && this.fed) {
-      const ms = now - this.since;
+  /** 届いた */
+  end(id: number, now: number): void {
+    const since = this.pending.get(id);
+    this.pending.delete(id);
+    if (since !== undefined && this.fed) {
+      const ms = now - since;
       this.gaps.push({ at: now, ms });
       if (ms >= SOURCE_GAP) this.onGap(ms);
     }
-    this.since = null;
     this.fed = true;
     this.drop(now);
   }
 
-  /** 直近の窓でいちばん長い待ち (ms)。まだ 1 つも届いていなければ null */
+  /** 読み出しが例外で終わった。待ちとして数えずに捨てる (残すと、その後ずっと待っている最中と数え続ける) */
+  cancel(id: number): void {
+    this.pending.delete(id);
+  }
+
+  /** 直近の窓でいちばん長い待ち (ms)。いま待っている最中の間も入れる。まだ 1 つも届いていなければ null */
   longest(now: number): number | null {
     if (!this.fed) return null;
     this.drop(now);
-    let most = this.since === null ? 0 : now - this.since;
+    let most = 0;
+    for (const since of this.pending.values())
+      most = Math.max(most, now - since);
     for (const gap of this.gaps) most = Math.max(most, gap.ms);
     return most;
   }
@@ -187,9 +203,15 @@ export async function* timedInput<T>(
   const it = source[Symbol.asyncIterator]();
   try {
     for (;;) {
-      gaps.begin(Date.now());
-      const next = await it.next();
-      gaps.end(Date.now());
+      const id = gaps.begin(Date.now());
+      let next: IteratorResult<T>;
+      try {
+        next = await it.next();
+      } catch (error) {
+        gaps.cancel(id);
+        throw error;
+      }
+      gaps.end(id, Date.now());
       if (next.done === true) return;
       yield next.value;
     }

@@ -2885,11 +2885,13 @@ class Session {
       for (;;) {
         // `for await` にしない。抜けるとリーダーごと閉じてしまう (使い回せなくなる)
         let next: IteratorResult<Uint8Array>;
+        const waiting = this.input.begin(Date.now());
         try {
-          this.input.begin(Date.now());
           next = await stream.next();
-          this.input.end(Date.now());
+          this.input.end(waiting, Date.now());
         } catch (error) {
+          // 待ちとして数え続けないよう捨てる (`InputGaps.cancel`)
+          this.input.cancel(waiting);
           // チューナーのストリームが例外で切れた (エージェントが落ちた・取り上げられた)。追っかけのファイルは数えない
           if (!own) this.cut = true;
           throw error;
