@@ -132,7 +132,7 @@ function pesPts(packet: Uint8Array): number | null {
 const CHUNK = PACKET * 5577;
 
 /**
- * **録画全体を読んで、音声の ES がどこから現れるかを返す。** 読めなければ空。
+ * **録画全体を読んで、音声の ES が現れる位置を返す。** 読めなければ空。
  *
  * 映像も音声もデコードせず、パケットの先頭だけを見るので、読む速さはディスクで決まる。
  * チャンクごとに await してイベントループを止めない (`recorded-bml.ts` の `capture` と同じ考え)。
