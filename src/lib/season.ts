@@ -76,8 +76,8 @@ export function decorated(ms: number): boolean {
 }
 
 /**
- * 「denpa の 1 年」の通知を出す年。1 月 1〜7 日で、その年にまだ出していなければその年、ほかは null。
- * `greeted` は世帯で最後に出した年 (`server/season.ts`)
+ * 「denpa の 1 年」のチップを出す年。1 月 1〜7 日で、その年にまだ閉じていなければその年、ほかは null。チップに書くのはその前の年
+ * `greeted` は世帯で最後にチップを閉じた年 (`server/season.ts`)
  */
 export function greetingYear(
   ms: number,
@@ -85,6 +85,18 @@ export function greetingYear(
 ): number | null {
   const { year, month, day } = jstDate(ms);
   return month === 1 && day <= 7 && greeted !== year ? year : null;
+}
+
+/**
+ * 「denpa の 1 年」のチップ。`year` は閉じたときに覚える年 (いまの年)、`counted` は数えてチップに書く年 (**終わった前の年**。
+ * 2027 年 1 月 1 日なら 2026 年の 1 月 1 日から 12 月 31 日まで)。出さない日は null
+ */
+export function yearChip(
+  ms: number,
+  greeted: number | null,
+): { year: number; counted: number } | null {
+  const year = greetingYear(ms, greeted);
+  return year === null ? null : { year, counted: year - 1 };
 }
 
 /** 勢いが跳ねたか。前の勢い `before` から `SPIKE_RATIO` 倍になり、`SPIKE_MIN` 以上あれば跳ねた */
@@ -139,7 +151,7 @@ export function nearNewYear(ms: number): boolean {
   return from >= -BASE_FROM - 5_000 && from < SPIKE_TO;
 }
 
-/** 「denpa の 1 年」の数 (`POST /api/season/greeting` の返事。`server/season.ts` の `yearSummary`) */
+/** 「denpa の 1 年」の数 (`GET /api/season/year` の返事。`server/season.ts` の `yearSummary`) */
 export interface YearSummary {
   /** 数えた年 (去年) */
   year: number;
@@ -162,28 +174,17 @@ export function spanWords(ms: number): string {
   return `${Math.max(1, Math.round(ms / 60_000))} 分`;
 }
 
-/** 通知の 1 行目 */
+/** 「denpa の 1 年」のダイアログの見出し (新年のあいさつ) */
 export const GREETING =
   "あけましておめでとうございます。今年もよろしくお願いします";
 
-/**
- * 「denpa の 1 年」の通知の文。1 行目はあいさつ、続けて去年の数。**0 のもの・無いものは書かない**
- */
-export function greetingText(summary: YearSummary | null): string {
-  const lines = [GREETING];
-  if (summary === null) return lines.join("\n");
-  if (summary.recorded > 0) {
-    const span =
-      summary.recordedMs > 0 ? `・${spanWords(summary.recordedMs)}` : "";
-    lines.push(
-      `${summary.year} 年は ${summary.recorded.toLocaleString("ja-JP")} 本${span}を録画しました`,
-    );
-  }
-  if (summary.topRecorded !== null)
-    lines.push(`いちばん録った局: ${summary.topRecorded}`);
-  if (summary.watched > 0)
-    lines.push(`観終えた録画: ${summary.watched.toLocaleString("ja-JP")} 本`);
-  if (summary.topWatched !== null)
-    lines.push(`いちばん観た局: ${summary.topWatched}`);
-  return lines.join("\n");
+/** 去年の数が 1 つでもあるか (無ければダイアログに「録画はありませんでした」と出す) */
+export function hasNumbers(summary: YearSummary | null): boolean {
+  return (
+    summary !== null &&
+    (summary.recorded > 0 ||
+      summary.watched > 0 ||
+      summary.topRecorded !== null ||
+      summary.topWatched !== null)
+  );
 }

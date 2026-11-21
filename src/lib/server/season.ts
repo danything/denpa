@@ -2,7 +2,7 @@
  * **季節の演出の、サーバが持つところ** (docs/screens.md「季節の演出」)。
  *
  * - 演出を出すか (`seasonal`) は世帯の設定 (`settings.ts`。既定はオン)
- * - 「denpa の 1 年」を出した年は世帯で 1 つ覚える (設定の表の `greetedYear`)。端末ごとではないので、家族の 1 人が見たらほかの端末には出ない
+ * - 「denpa の 1 年」のチップを閉じた年は世帯で 1 つ覚える (設定の表の `greetedYear`)。端末ごとではないので、家族の 1 人が閉じたらほかの端末にも出ない
  * - 去年の数は手元の DB (録画の行) から集めるだけで、外には何も送らない
  */
 import { and, desc, gte, isNotNull, lt, ne, sql } from "drizzle-orm";
@@ -14,14 +14,14 @@ import { store, stored } from "./settings";
 
 const GREETED_KEY = "greetedYear";
 
-/** 「denpa の 1 年」を最後に出した年。まだ出していなければ null */
+/** 「denpa の 1 年」のチップを最後に閉じた年。まだなら null */
 export function greetedYear(): number | null {
   const value = Number(stored(GREETED_KEY));
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 /**
- * `year` 年の「denpa の 1 年」を出したと覚える。**もう出していたら false** (2 つの端末で同時に開いても 1 回だけにする)。
+ * `year` 年の「denpa の 1 年」のチップを閉じたと覚える。**もう閉じていたら false**。
  * 読んでから書くまでの間に別の呼び出しは入らない (DB の呼び出しは同期で、1 つのプロセスが順に流す)
  */
 export function markGreeted(year: number): boolean {

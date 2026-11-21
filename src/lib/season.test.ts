@@ -4,13 +4,14 @@ import {
   ConfettiTrigger,
   countdown,
   decorated,
-  GREETING,
-  greetingText,
   greetingYear,
+  hasNumbers,
   jstDate,
   nearestNewYear,
   newYearOf,
+  spanWords,
   spiked,
+  yearChip,
 } from "./season";
 
 /** 日本時間の日時 (unix ms) */
@@ -88,12 +89,12 @@ describe("ロゴの飾りは 1 月 1〜3 日", () => {
   });
 });
 
-describe("「denpa の 1 年」は 1 月 1〜7 日に、その年にまだ出していなければ", () => {
-  test("1 月 1〜7 日で、まだ出していない年ならその年", () => {
+describe("「denpa の 1 年」のチップは 1 月 1〜7 日に、その年にまだ閉じていなければ", () => {
+  test("1 月 1〜7 日で、まだ閉じていない年ならその年", () => {
     expect(greetingYear(jst(2027, 1, 1), null)).toBe(2027);
     expect(greetingYear(jst(2027, 1, 7, 23, 59), 2026)).toBe(2027);
   });
-  test("もう出した年・8 日から・12 月は出さない", () => {
+  test("もう閉じた年・8 日から・12 月は出さない", () => {
     expect(greetingYear(jst(2027, 1, 2), 2027)).toBeNull();
     expect(greetingYear(jst(2027, 1, 8), null)).toBeNull();
     expect(greetingYear(jst(2026, 12, 31, 23, 59), null)).toBeNull();
@@ -148,50 +149,39 @@ describe("紙吹雪", () => {
   });
 });
 
-describe("「denpa の 1 年」の文", () => {
-  test("数があれば、あいさつに続けて 1 行ずつ", () => {
-    expect(
-      greetingText({
-        year: 2026,
-        recorded: 1234,
-        recordedMs: 300 * 3_600_000 + 1_000,
-        topRecorded: "でんぱテレビ",
-        watched: 80,
-        topWatched: "BSでんぱ",
-      }),
-    ).toBe(
-      [
-        GREETING,
-        "2026 年は 1,234 本・300 時間を録画しました",
-        "いちばん録った局: でんぱテレビ",
-        "観終えた録画: 80 本",
-        "いちばん観た局: BSでんぱ",
-      ].join("\n"),
-    );
+describe("「denpa の 1 年」の数", () => {
+  const empty = {
+    year: 2026,
+    recorded: 0,
+    recordedMs: 0,
+    topRecorded: null,
+    watched: 0,
+    topWatched: null,
+  };
+  test("数が 1 つも無ければ無いことにする", () => {
+    expect(hasNumbers(empty)).toBe(false);
+    expect(hasNumbers(null)).toBe(false);
+    expect(hasNumbers({ ...empty, watched: 1 })).toBe(true);
+    expect(hasNumbers({ ...empty, topRecorded: "でんぱテレビ" })).toBe(true);
   });
-  test("0 のもの・無いものは書かない", () => {
-    expect(
-      greetingText({
-        year: 2026,
-        recorded: 0,
-        recordedMs: 0,
-        topRecorded: null,
-        watched: 0,
-        topWatched: null,
-      }),
-    ).toBe(GREETING);
-    expect(greetingText(null)).toBe(GREETING);
+  test("長さは 1 時間からは時間、満たなければ分", () => {
+    expect(spanWords(300 * 3_600_000 + 1_000)).toBe("300 時間");
+    expect(spanWords(45 * 60_000)).toBe("45 分");
   });
-  test("1 時間に満たなければ分", () => {
-    expect(
-      greetingText({
-        year: 2026,
-        recorded: 1,
-        recordedMs: 45 * 60_000,
-        topRecorded: "でんぱテレビ",
-        watched: 0,
-        topWatched: null,
-      }),
-    ).toContain("1 本・45 分を録画しました");
+});
+
+describe("「denpa の 1 年」のチップに書く年", () => {
+  test("終わった前の年を数える (2027 年 1 月 1 日なら 2026 年)", () => {
+    expect(yearChip(jst(2027, 1, 1), null)).toEqual({
+      year: 2027,
+      counted: 2026,
+    });
+    // UTC ではまだ 2026 年 12 月 31 日の 15 時
+    expect(yearChip(Date.UTC(2026, 11, 31, 15), null)?.counted).toBe(2026);
+    expect(yearChip(jst(2027, 1, 7, 23, 59), 2026)?.counted).toBe(2026);
+  });
+  test("年越しの前と、閉じた年は出さない", () => {
+    expect(yearChip(jst(2026, 12, 31, 23, 59, 59), null)).toBeNull();
+    expect(yearChip(jst(2027, 1, 2), 2027)).toBeNull();
   });
 });

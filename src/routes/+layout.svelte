@@ -28,7 +28,8 @@
   import NewYearMark from "#lib/components/NewYearMark.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
   import SearchField from "#lib/components/SearchField.svelte";
-  import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
+  import YearChip from "#lib/components/YearChip.svelte";
+  import YearDialog from "#lib/components/YearDialog.svelte";
   import { denpaFontCssUrl } from "#lib/font.js";
   import { markLite } from "#lib/lite.js";
   import { measure } from "#lib/measure.svelte.js";
@@ -36,12 +37,7 @@
   import { startOffline } from "#lib/offline.svelte.js";
   import { TABLETOP } from "#lib/phone-form.js";
   import { followNavigation, reload } from "#lib/reload.svelte.js";
-  import {
-    decorated,
-    greetingText,
-    greetingYear,
-    type YearSummary,
-  } from "#lib/season.js";
+  import { decorated, yearChip, type YearSummary } from "#lib/season.js";
   import { season } from "#lib/season.svelte.js";
   import { groupLabel } from "#lib/settings-sections.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -449,37 +445,42 @@
   );
 
   /**
-   * **「denpa の 1 年」** (1 月 1〜7 日に初めて開いたとき、世帯で 1 回だけ)。サーバに出したと伝え (`POST /api/season/greeting`)、
-   * 先にほかの端末が出していれば (409) 出さない。返ってきた去年の数を添え、読み終えるまで消さない (`stay`)
+   * **「denpa の 1 年」** (1 月 1〜7 日。`YearChip` と `YearDialog`)。録画の一覧の上にチップを出し、押すと去年の数のダイアログを開く
+   * (`GET /api/season/year`。開くたびに読み直す)。✕ で閉じると世帯で覚え (`POST /api/season/greeting`)、その年はどの端末にも出さない
    */
-  let greeting = $state<Notice[]>([]);
-  let greetingAsked = false;
-  $effect(() => {
-    if (!season.ready || greetingAsked) return;
-    const year = greetingYear(season.now(), season.greeted);
-    if (year === null) return;
-    greetingAsked = true;
-    void (async () => {
-      const response = await fetch(resolve("api/season/greeting"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ year }),
-      }).catch(() => null);
-      if (response === null || !response.ok) return;
-      const summary = (await response
-        .json()
-        .catch(() => null)) as YearSummary | null;
-      season.greeted = year;
-      greeting = [
-        {
-          key: "new-year-greeting",
-          kind: "info",
-          text: greetingText(summary),
-          stay: true,
-        },
-      ];
-    })();
-  });
+  const chip = $derived(
+    season.ready
+      ? yearChip(seasonClock.now + (season.skew ?? 0), season.greeted)
+      : null,
+  );
+  let yearShown = $state<YearSummary | "loading" | null>(null);
+  async function openYear(counted: number): Promise<void> {
+    yearShown = "loading";
+    const response = await fetch(
+      resolve(`api/season/year?year=${counted}`),
+    ).catch(() => null);
+    const summary =
+      response !== null && response.ok
+        ? ((await response.json().catch(() => null)) as YearSummary | null)
+        : null;
+    if (yearShown !== "loading") return;
+    yearShown = summary ?? {
+      year: counted,
+      recorded: 0,
+      recordedMs: 0,
+      topRecorded: null,
+      watched: 0,
+      topWatched: null,
+    };
+  }
+  function dismissYear(year: number): void {
+    season.greeted = year;
+    void fetch(resolve("api/season/greeting"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ year }),
+    }).catch(() => undefined);
+  }
 </script>
 
 <svelte:window onkeydown={searchShortcut} />
@@ -633,9 +634,20 @@
     **局が無いときの案内** (録画・番組表・ライブ。`#lib/channel-notice.ts`)。閉じるボタンは無く、
     元のことが片付けば消える。中身が動いている間に起きたお知らせはここに出さず、ヘッダーの印にたたむ (`ChannelAlert`)。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
   -->
-  {#if notice}
+  <!-- 「denpa の 1 年」のチップは録画の一覧 (`/`) の上だけ (上の `chip`。数えるのは終わった前の年) -->
+  {#if notice || (chip !== null && here === "/")}
     <div class="notice-slot">
-      <ChannelNotice kind={notice} />
+      {#if notice}
+        <ChannelNotice kind={notice} />
+      {/if}
+      {#if chip !== null && here === "/"}
+        {@const shown = chip}
+        <YearChip
+          year={shown.counted}
+          onopen={() => void openYear(shown.counted)}
+          ondismiss={() => dismissYear(shown.year)}
+        />
+      {/if}
     </div>
   {/if}
 
@@ -722,8 +734,8 @@
   <Measure />
 {/if}
 
-<!-- 「denpa の 1 年」(上の `greeting`)。閉じたら出し直さない -->
-<Toasts notices={greeting} ondismiss={() => (greeting = [])} />
+<!-- 「denpa の 1 年」のダイアログ (上の `yearShown`) -->
+<YearDialog summary={yearShown} onclose={() => (yearShown = null)} />
 
 <!-- 設定の入口に付ける点 (上の `fresh`)。読み上げには何の点かを渡す -->
 <!--
@@ -1111,6 +1123,10 @@
   :global(:where(html[data-phone])) .shell:has(.tabbar) main {
     padding-top: calc(var(--dp-page-top) + env(safe-area-inset-top));
     padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
+  }
+  /* 「denpa の 1 年」のチップは本文と同じ左の余白から (`YearChip`) */
+  .notice-slot :global(.year-chip) {
+    margin: var(--dp-space-2) var(--dp-gutter) 0;
   }
   /* 局が無いときの案内がいちばん上に来る。安全域はそちらで避け、本文は普通の余白に戻す */
   :global(:where(html[data-phone])) .shell:has(.tabbar) .notice-slot {

@@ -41,7 +41,7 @@ async function pretendNow(page: Page, at: number): Promise<void> {
 }
 
 /**
- * 「denpa の 1 年」は世帯で年に 1 回だけ。やり直し (retries) でも前の回に出した年と重ならないよう、回ごとに違う年を使う
+ * 「denpa の 1 年」のチップは閉じると世帯でその年は出さない。やり直し (retries) でも前の回に閉じた年と重ならないよう、回ごとに違う年を使う
  */
 function freshYear(): number {
   return 2100 + Math.floor(Math.random() * 7000);
@@ -62,7 +62,7 @@ async function setSeasonal(page: Page, on: boolean): Promise<void> {
 }
 
 test.describe("年越しのカウントダウン", () => {
-  test("12/31 23:59:50 からライブの左上に秒を出し、0:00 にあいさつを出して消える。動きを減らす設定では紙吹雪を出さない", async ({
+  test("12/31 23:59:50 からライブの右下に秒を出し、0:00 に真ん中にあいさつを出して消える。動きを減らす設定では紙吹雪を出さない", async ({
     page,
   }) => {
     await pretendNow(page, jst(2026, 12, 31, 23, 59, 38));
@@ -114,41 +114,61 @@ test.describe("年越しの紙吹雪", () => {
 });
 
 test.describe("正月", () => {
-  test("1 月 1 日はヘッダーのロゴに飾りが付き、「denpa の 1 年」は世帯で 1 回だけ出る", async ({
+  test("1 月 1 日はヘッダーのロゴに飾りが付き、録画の一覧の上の「denpa の 1 年」のチップから去年の数を開ける。閉じたらその年は出さない", async ({
     page,
   }) => {
     const year = freshYear();
     await pretendNow(page, jst(year, 1, 1, 10));
     await goto(page, "/");
     await expect(page.getByTestId("new-year-mark")).toBeVisible();
-    const greeting = page.getByTestId("new-year-greeting");
-    await expect(greeting).toContainText(
+    const chip = page.getByTestId("year-chip");
+    await expect(chip).toContainText(`denpa の ${year - 1} 年`);
+
+    await page.getByTestId("year-chip-open").click();
+    const dialog = page.getByTestId("year-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(
       "あけましておめでとうございます。今年もよろしくお願いします",
     );
-    // 自分では消えない (6 秒の後も残る)
-    await page.waitForTimeout(7_000);
-    await expect(greeting).toBeVisible();
-    await page.getByTestId("new-year-greeting-close").click();
-    await expect(greeting).toHaveCount(0);
+    await expect(dialog).toContainText(`denpa の ${year - 1} 年`);
+    await page.getByTestId("year-dialog-close").click();
+    await expect(dialog).toBeHidden();
 
-    // 開き直しても、もう出さない (ロゴの飾りは出たまま)
+    // 開き直しても、期間の間は出たまま
+    await page.reload();
+    await page.locator('[data-hydrated="true"]').waitFor();
+    await expect(chip).toBeVisible();
+
+    // ✕ で閉じると、開き直してももう出さない (ロゴの飾りは出たまま)
+    await page.getByTestId("year-chip-close").click();
+    await expect(chip).toHaveCount(0);
     const asked = page.waitForResponse((r) => r.url().endsWith("/api/season"));
     await page.reload();
     await asked;
     await page.locator('[data-hydrated="true"]').waitFor();
     await expect(page.getByTestId("new-year-mark")).toBeVisible();
     await page.waitForTimeout(2_000);
-    await expect(greeting).toHaveCount(0);
+    await expect(chip).toHaveCount(0);
   });
 
-  test("1 月 4 日からはロゴの飾りを出さない", async ({ page }) => {
-    await pretendNow(page, jst(freshYear(), 1, 4, 10));
+  test("1 月 8 日からはロゴの飾りもチップも出さない", async ({ page }) => {
+    await pretendNow(page, jst(freshYear(), 1, 8, 10));
     await goto(page, "/");
     await page.waitForTimeout(2_000);
     await expect(page.getByTestId("new-year-mark")).toHaveCount(0);
+    await expect(page.getByTestId("year-chip")).toHaveCount(0);
   });
 
-  test("季節の演出をオフにすると、ロゴの飾りも「denpa の 1 年」も出さない", async ({
+  test("1 月 4 日からはロゴの飾りを出さない (チップは 7 日まで)", async ({
+    page,
+  }) => {
+    await pretendNow(page, jst(freshYear(), 1, 4, 10));
+    await goto(page, "/");
+    await expect(page.getByTestId("year-chip")).toBeVisible();
+    await expect(page.getByTestId("new-year-mark")).toHaveCount(0);
+  });
+
+  test("季節の演出をオフにすると、ロゴの飾りもチップも出さない", async ({
     page,
   }) => {
     await setSeasonal(page, false);
@@ -157,7 +177,7 @@ test.describe("正月", () => {
       await goto(page, "/");
       await page.waitForTimeout(3_000);
       await expect(page.getByTestId("new-year-mark")).toHaveCount(0);
-      await expect(page.getByTestId("new-year-greeting")).toHaveCount(0);
+      await expect(page.getByTestId("year-chip")).toHaveCount(0);
     } finally {
       await page.unrouteAll();
       await setSeasonal(page, true);

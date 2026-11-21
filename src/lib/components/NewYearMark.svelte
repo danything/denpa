@@ -3,11 +3,15 @@
   自前で描いた形で、色はロゴの名前と同じ本文の字の色 (`currentColor`)。節と縄は地の色で抜く。明暗どちらのテーマでも読める濃さになる。
   飾りなので読み上げず、押せない
 -->
+<script lang="ts">
+  let { testid = "new-year-mark" }: { testid?: string } = $props();
+</script>
+
 <svg
   class="new-year-mark"
   viewBox="0 0 24 24"
   aria-hidden="true"
-  data-testid="new-year-mark"
+  data-testid={testid}
 >
   <!-- 斜めに切った竹が 3 本。真ん中がいちばん高い -->
   <g class="bamboo">

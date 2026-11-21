@@ -5,8 +5,6 @@
     /** 見た目。error と warning は自分では消えない */
     kind: "error" | "warning" | "info" | "success";
     text: string;
-    /** 自分では消さない (info と success でも)。1 回しか出さない通知 (「denpa の 1 年」) を読み終える前に消さないため */
-    stay?: boolean;
   }
 
   /**
@@ -98,10 +96,7 @@
     void ids;
     const timers = untrack(() => notices)
       // 失敗と注意は自分では消さない。読み終わる前に消えると、何が起きたのか分からなくなる
-      .filter(
-        (notice) =>
-          notice.kind !== "error" && notice.kind !== "warning" && !notice.stay,
-      )
+      .filter((notice) => notice.kind !== "error" && notice.kind !== "warning")
       .map((notice) => setTimeout(() => dismiss(notice.key), AUTO_HIDE));
     return () => {
       for (const timer of timers) clearTimeout(timer);
