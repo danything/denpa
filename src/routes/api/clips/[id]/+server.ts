@@ -17,7 +17,7 @@ export function GET({ params }) {
 
 /**
  * 字幕・コメントを出し入れする。本文は `{ "captions": false }` のように変えたいものだけ (`parseLayerPatch`)。
- * 元の画像から重ね直して `Clip` を返す。持っていない重ねなら 400
+ * 元の画像から重ね直して `Clip` を返す。持っていない重ねなら 400、元の画像が無いか途中で消されたら 404
  */
 export async function PATCH({ params, request }) {
   const clip = clipOr404(params.id);

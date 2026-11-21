@@ -179,7 +179,7 @@ services:
     environment:
       TRUSTED_NETWORKS: 192.168.1.0/24
       OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
-      OIDC_CLIENT_ID: <アプリケーションID>
+      OIDC_CLIENT_ID: <アプリケーション ID>
       OIDC_CLIENT_SECRET: <クライアントシークレット>
 ```
 

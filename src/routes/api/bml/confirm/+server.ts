@@ -3,7 +3,7 @@
  *
  * 「相手まで届くか」を確かめる放送のためのエンドポイント。
  * **NHK の放送はこのエンドポイントを呼ばない。** あちらは送るエンドポイント (`post`) へ一度送って決める
- * (`bml-network.ts` の `confirmReachable`)。
+ * (`bml-network.ts` の `postForBml`)。
  *
  * 中継のエンドポイントと同じく、**設定で双方向を切ってあれば 403**
  * ([bml-network.ts](../../../../lib/server/bml-network.ts))。

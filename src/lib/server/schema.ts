@@ -187,7 +187,10 @@ export function latestReservationRecordingId(reservationId: AnySQLiteColumn) {
   return sql<number>`(SELECT id FROM recordings WHERE reservation_id = ${reservationId} ORDER BY id DESC LIMIT 1)`;
 }
 
-/** 画面から変えられる設定 (settings.ts)。初期値は settings.ts が持ち (コーデックだけ config.ts)、ここに行があればそちらが勝つ */
+/**
+ * 画面から変えられる設定 (settings.ts)。初期値は settings.ts が持ち (コーデックだけ config.ts)、ここに行があればそちらが勝つ。
+ * 画面の設定でない控え (`settings.stored` / `store`) も同じ表に置く
+ */
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
@@ -1059,7 +1062,7 @@ export const rankingSent = sqliteTable(
 );
 
 /**
- * **ロゴを取得した記録** (`logo-record.ts`)。設定の「その他」の「ロゴの取得を記録する」(`recordLogo`) がオンの間だけ、
+ * **ロゴを取得した記録** (`logo-record.ts`)。設定の「その他」の「ロゴを集めた結果を記録する」(`recordLogo`) がオンの間だけ、
  * 当たりの中継で待つたびに 1 行足す。衛星のロゴはダウンロードの期間にしか流れず、期間がいつ来るかは分からないので、
  * その来方 (間隔・長さ) を実測で知るためのもの (docs/logo.md「ロゴの取得を記録する」)。
  * 新しい順で `LOGO_RECORD_KEEP` 行・`LOGO_RECORD_DAYS` 日ぶんまで残し、古いものから消す

@@ -313,7 +313,7 @@ jobs:
         with:
           dotnet-version: "11.0.100"
 
-      # wdi-simple.exe (libwdi。Zadig のコマンドライン版)。install.ps1 -WinUsb がチューナーのドライバを WinUSB に替えるのに使う。
+      # wdi-simple.exe (libwdi。Zadig をコマンドラインで使うもの)。install.ps1 -WinUsb がチューナーのドライバを WinUSB に替えるのに使う。
       # libwdi のリリースには Zadig しか無いので、決めたタグのソースからビルドする (コミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)
       - name: Build wdi-simple (libwdi)
         shell: pwsh

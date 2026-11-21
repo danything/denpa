@@ -7,7 +7,7 @@
  * ルールの「前の回は録らない」(`earlierAirings`) も、同じ回の読み方 (`episodeOf`) を使うのでここに置く。
  *
  * 判定は DB に触らない純粋な計算にしてある (単体テストで固定する)。
- * DB を読むのは呼ぶ側 (`rules.applyRules`・`rules.duplicateAtStart`・ルールの下見の `rule-preview.ts`)。
+ * DB を読むのは呼ぶ側 (`rules.applyRules`・`rules.duplicateAtStart`・ルールの下見の `rules.previewSkips`)。
  */
 import { toHalfWidth } from "../fold";
 import { origin } from "../types";

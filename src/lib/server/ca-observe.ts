@@ -236,7 +236,7 @@ export class CaObserver {
   }
 }
 
-/** CA 記述子 (0x09) の CA_system_id と CA_PID。CA_PID の 0x1FFF は「無い」の意味なので除く */
+/** CA 記述子 (0x09) の CA_system_id と CA_PID。CA_PID が 0 か 0x1FFF のもの (PID を指していない) は除く */
 function caEntries(data: Uint8Array, serviceId: number | null): CaEntry[] {
   const found: CaEntry[] = [];
   for (const [tag, body] of descriptors(data)) {

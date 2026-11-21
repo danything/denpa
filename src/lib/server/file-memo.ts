@@ -24,19 +24,20 @@ export function sharing<T>(): (
   };
 }
 
+interface FileMemo<T> {
+  /** 覚えていればそれを、無ければ `make` で作って返す。ファイルが無ければ覚えずに作る */
+  get(path: string, make: () => Promise<T>): Promise<T>;
+}
+
 /**
  * **ファイルから作ったものを覚えておく。** 同じファイル (パス・大きさ・更新時刻) なら作り直さない。
  * 作っている最中に同じファイルを求められたら、同じ結果を待たせる (2 本目の ffmpeg を起動しない)。
  *
  * 録画の字幕 (`api/recordings/<id>/captions.json`) が使う。字幕を取り出すには動画を先頭から末尾まで読むので
  * (エンコードしたものは ffmpeg が、4K の局の `.mmts` は denpa が)、その間は再生のための読み込みとディスクを取り合う
+ *
+ * @param limit 覚えておく数。超えたら、いちばん前に使ったものから捨てる
  */
-interface FileMemo<T> {
-  /** 覚えていればそれを、無ければ `make` で作って返す。ファイルが無ければ覚えずに作る */
-  get(path: string, make: () => Promise<T>): Promise<T>;
-}
-
-/** @param limit 覚えておく数。超えたら古いものから捨てる */
 export function fileMemo<T>(limit: number): FileMemo<T> {
   const held = new Map<string, { key: string; value: T }>();
   const share = sharing<T>();
