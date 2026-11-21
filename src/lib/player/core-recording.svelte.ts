@@ -1,7 +1,7 @@
 /**
  * **再生の核 (観る画面)。録画を読みに行って、MSE・canvas・`<video src>` で再生する。**
  *
- * 層は 4 つに分けてある (docs/architecture.md「観る画面の再生の層」)。ライブと追っかけの核 (`player/core.svelte.ts`) とは、
+ * 層は 4 つに分けてある (docs/architecture.md「再生の層」)。ライブと追っかけの核 (`player/core.svelte.ts`) とは、
  * 出どころの運び方と段の動かし方だけが違う。
  *
  * - 出どころ (Feed) … `player/feed-recording.ts` の `RecordingFeed` (リクエスト先と段 0 のビットレート)。位置を指定して読み出す側は
@@ -63,7 +63,7 @@ import { CaptionLayer } from "#lib/player/captions.svelte.js";
 import { RecordingClock } from "#lib/player/clock-recording.js";
 import { DataLayer } from "#lib/player/data.svelte.js";
 import { playable, RecordingFeed } from "#lib/player/feed-recording.js";
-import { rangesOf } from "#lib/player/mse-sink.js";
+import { emptyVideo, rangesOf } from "#lib/player/mse-sink.js";
 import { Note } from "#lib/player/notes.svelte.js";
 import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
 import {
@@ -888,14 +888,6 @@ export function recordingPlayback(options: RecordingPlaybackOptions) {
     cancel?.();
   }
 
-  /** 映していないほうの `<video>` を空にする */
-  function empty(target: HTMLVideoElement): void {
-    target.pause();
-    target.muted = true;
-    target.removeAttribute("src");
-    target.load();
-  }
-
   /**
    * いまのプレイヤーが詰まって進んでいないか (止めている間は詰まりではない)。届いたぶんの末尾まで観終えた
    * (`ended`) のも詰まりに数える。人が止めたのではないので、入れ替えたら続ける
@@ -979,7 +971,7 @@ export function recordingPlayback(options: RecordingPlaybackOptions) {
         made?.destroy();
         made = null;
         spareSrc = undefined;
-        empty(spare);
+        emptyVideo(spare, { mute: true });
       };
       const drop = (): void => {
         if (done) return;
@@ -1098,7 +1090,7 @@ export function recordingPlayback(options: RecordingPlaybackOptions) {
     else playing = false;
     unslip.seeked();
     follow(spare);
-    if (old !== null) empty(old);
+    if (old !== null) emptyVideo(old, { mute: true });
     syncAudio();
     place();
   }
@@ -2004,12 +1996,9 @@ export function recordingPlayback(options: RecordingPlaybackOptions) {
     giveUp(`${why}。${nothingToPlay()}`);
   }
 
-  /** `<video>` を止めて空にする (src を外しただけでは読み込んだぶんを鳴らし続ける) */
+  /** いまの `<video>` を止めて空にする */
   function stopVideo(): void {
-    if (video === null) return;
-    video.pause();
-    video.removeAttribute("src");
-    video.load();
+    if (video !== null) emptyVideo(video);
   }
 
   /** 端末に保存した Matroska を canvas に描く (`<video>` が読めなかったとき。`fallBackFromFile`)。描けなければ観られないと出す */

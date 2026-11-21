@@ -96,6 +96,21 @@ export function rangesOf(buffered: TimeRanges): Ranges {
   return out;
 }
 
+/**
+ * `<video>` を止めて空にする。src を外しただけでは読み込んだぶんを鳴らし続けるので、`load()` で捨てさせる。
+ * 映していない側 (裏で用意する `<video>`) は `mute` で音も消す。次に裏で用意するときに音が二重に鳴らないように。
+ * ライブ・追っかけ (`core.svelte.ts`) と観る画面 (`core-recording.svelte.ts`) が使う
+ */
+export function emptyVideo(
+  video: HTMLVideoElement,
+  { mute = false }: { mute?: boolean } = {},
+): void {
+  video.pause();
+  if (mute) video.muted = true;
+  video.removeAttribute("src");
+  video.load();
+}
+
 const always: Still = () => true;
 
 /** `picked` の MediaSource を作って `video` に付ける */

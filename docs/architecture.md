@@ -182,9 +182,9 @@ NVIDIA の NVENC は amd64 に、Rockchip の MPP は arm64 にだけ入れて�
 録画済みのものをテレビで観るには、テレビのアプリ ([denpa-tv](https://github.com/danything/denpa-tv)) を使います
 ([library.md](library.md#テレビのアプリ))。
 
-### 観る画面の再生の層
+### 再生の層
 
-**観る画面の再生は、出どころ・時間の軸・描く先・核の 4 つに分けています** (`src/lib/player/`)。画面ごとに違うのは出どころと時間の軸で、描く先は 3 画面で同じものを使います。
+**ライブ・追っかけ・観る画面の再生は、出どころ・時間の軸・描く先・核の 4 つに分けています** (`src/lib/player/`)。画面ごとに違うのは出どころと時間の軸で、描く先は 3 画面で同じものを使います。
 
 | 層               | 受け持つこと                                                             | ライブ                                                                                            | 追っかけ                                                                            | 観る画面                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -199,7 +199,7 @@ NVIDIA の NVENC は amd64 に、Rockchip の MPP は arm64 にだけ入れて�
 
 **核は、どの画面でも同じことを 1 つの部品で持ち、Feed の運び方の違いだけを 2 つの組み立てに分けています。**
 
-- 3 画面で同じ部品は、字幕 (`captions.svelte.ts` の `CaptionLayer`)、データ放送 (`data.svelte.ts` の `DataLayer`)、断り書き (`notes.svelte.ts` の `Note`)、描く先 (`mse-sink.ts`・`canvas-sink.ts`。描けなくなったときの移り先 `fallBackTo` も)、繋ぎ直し (`ts/playback.ts` の `StreamRetry`)、段を決める `adapt.ts` の `RungAdapter`、配線に渡すものです
+- 3 画面で同じ部品は、字幕 (`captions.svelte.ts` の `CaptionLayer`)、データ放送 (`data.svelte.ts` の `DataLayer`)、断り書き (`notes.svelte.ts` の `Note`)、描く先 (`mse-sink.ts`・`canvas-sink.ts`。描けなくなったときの移り先 `fallBackTo` と、`<video>` を空にする `emptyVideo` も)、繋ぎ直し (`ts/playback.ts` の `StreamRetry`)、段を決める `adapt.ts` の `RungAdapter`、配線に渡すものです
 - 受け取り方は部品のメソッドで分けます。ライブと追っかけは WebSocket で届いたものを 1 つずつ渡し (字幕は `insert`、データ放送は `deliver`)、観る画面は取得したものを全部渡して再生位置で流します (字幕は `load`、データ放送は `listenAt`・`follow`)
 - 組み立てを 2 つに分けるのは、運び方と段の動かし方が違うためです。`core.svelte.ts` は押し込まれる WebSocket の届き方に合わせて、届いた塊の使い方・放送の今への追いつき・選局・指示の出し直しを持ちます。`core-recording.svelte.ts` は位置を指定して読みに行くので、どれで観るか (`pickOffer`・`pickCanvas`)、読み出し側 (`remux-player.ts`・`canvas-player.ts`・`<video src>`) の作り直し、同じ MSE のまま替える段の切り替え、ファイルの繋ぎ直しを持ちます。止めている間は読むのも止まります
 - 観る画面の CM 飛ばしとチャプターは画面 (`routes/watch/[id]/+page.svelte`) が持ちます。録画の中身の扱いで、再生の仕組みではないためです。核はコマを映すたびに画面の `RecordingHooks` (`arrive`・`frame`) を呼び、canvas には CM の先頭から先を描かせません (`stopAt`)

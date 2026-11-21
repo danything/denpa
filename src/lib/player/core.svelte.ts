@@ -1,7 +1,7 @@
 /**
  * **再生の核 (ライブと追っかけ)。WebSocket で受けて MSE へ流す。**
  *
- * 層は 4 つに分けてある (docs/architecture.md「観る画面の再生の層」)。
+ * 層は 4 つに分けてある (docs/architecture.md「再生の層」)。
  *
  * - 出どころ (Feed) … `player/feed-live.ts` の `LiveFeed`。チケット・接続・指示・届いた塊の読み分け・受け取りの速さ
  * - 時間の軸 (Clock) … ライブは `player/clock-live.svelte.ts` の `LiveClock` (放送の今へ寄せる)、追っかけは `player/clock-chase.svelte.ts` の `ChaseClock`
@@ -103,7 +103,12 @@ import {
   spareOffset,
   type StreamClock,
 } from "#lib/player/live-handoff.js";
-import { type MseSink, mseSink, type Still } from "#lib/player/mse-sink.js";
+import {
+  emptyVideo,
+  type MseSink,
+  mseSink,
+  type Still,
+} from "#lib/player/mse-sink.js";
 import { Note } from "#lib/player/notes.svelte.js";
 import type { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
@@ -3028,9 +3033,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
       stopRaw();
     if (engine === null) {
       // エンコードしたものを流していた <video> は止める。音が二重に鳴らないように
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
+      emptyVideo(video);
       const made = openCanvas({
         host: host ?? video.parentElement,
         before: still,
@@ -3445,15 +3448,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     // 繋ぐ前 (チケットを待っている間) なら、繋いだあとに捨てる (`stageStep`)
     if (made.socket !== null) LiveFeed.drop(made.socket);
     made.sink?.destroy();
-    emptyVideo(made.video);
-  }
-
-  /** 映していない `<video>` を空にする */
-  function emptyVideo(video: HTMLVideoElement): void {
-    video.pause();
-    video.muted = true;
-    video.removeAttribute("src");
-    video.load();
+    emptyVideo(made.video, { mute: true });
   }
 
   /**
@@ -3485,7 +3480,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     old.removeEventListener("waiting", onWaiting);
     old.removeEventListener("playing", onPlaying);
     old.removeEventListener("error", onMediaError);
-    emptyVideo(old);
+    emptyVideo(old, { mute: true });
     // 表と裏を替える (`MediaStack` の `front`)。同じコマの間に映す側と音を出す側が替わる
     element = video;
     spareEl = old;
