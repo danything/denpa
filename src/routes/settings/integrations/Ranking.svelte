@@ -3,6 +3,7 @@
   import Lead from "#lib/components/Lead.svelte";
   import SaveNote from "#lib/components/SaveNote.svelte";
   import { dateTime } from "#lib/format.js";
+  import { RANKING_CONSENT } from "#lib/ranking.js";
 
   import type { PageData } from "./$types";
 
@@ -13,8 +14,8 @@
 <!--
   **番組ランキング (世帯の設定。既定はオフ)。** オンにすると、サーバが denpa-hub からトークンを受け取り、
   予約と、終わった番組の録画・ライブ・録画の再生を 6 時間ごとに送る (`server/ranking.ts`・`server/ranking-watch.ts`)。
-  何を送り、何を送らないかと、集計の数を外部に示すことがあることは説明の 1 行目に出す (隠さない。同意の文)。
-  順位は検索を言葉なしで開いたときの節「人気の番組」に出す (`search/+page.svelte`)
+  何を送り、何を送らないかと、集計の数を外部に示すことがあることは説明の 1 行目に出す (隠さない。同意の文。`#lib/ranking.ts`)。
+  順位は検索を言葉なしで開いたときの節「人気の番組」に出す (`search/+page.svelte`)。まだ決めていない家には、同じ場所に参加の案内を出す
 -->
 <div class="sections readable">
   <section class="section">
@@ -40,9 +41,7 @@
           <span>番組ランキングに参加する</span>
         </label>
         <Lead class="indent">
-          予約した番組・録画した番組・観た番組を denpa-hub (Doa が動かすサーバ)
-          に送り、ほかの家と合わせた順位を見られるようにします。家を特定できない集計の数を、外部
-          (放送局など) に示すことがあります。名前や住所は送りません
+          {RANKING_CONSENT}
           {#snippet more()}
             <p>
               送るのは、地上波・BS・CS
