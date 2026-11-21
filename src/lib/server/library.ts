@@ -78,6 +78,27 @@ export function libraryPath(rec: LibraryNameInput, ext: string): string {
 }
 
 /**
+ * **置き場でその録画が使う名前の候補** (素の名前と、ほかの録画と衝突したときの `[録画ID]` 付き。`libraryPath` と同じ組み方)。
+ * 削除済みにした録画のファイルを、置き場で見つけ直すときに使う (`files.restoreFound`)
+ */
+export function libraryCandidates(
+  rec: LibraryNameInput,
+  ext: string,
+): string[] {
+  return [ext, ` [${rec.id}]${ext}`].map((suffix) =>
+    join(config.encodedDir, libraryRelPath(rec, suffix)),
+  );
+}
+
+/** コーデックごとの名前の候補 (`libraryCandidates`) */
+export function encodedCandidates(
+  rec: LibraryNameInput,
+  codec: HwCodec,
+): string[] {
+  return libraryCandidates(rec, CODEC_SUFFIX[codec]);
+}
+
+/**
  * コーデックごとの置き場所。
  *
  * どれも Matroska (`.mkv`)。mp4 は放送の字幕 (ARIB 字幕。Matroska なら `S_ARIBSUB`) を持てない
