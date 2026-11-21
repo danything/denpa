@@ -11,6 +11,7 @@
   import ControlButton from "#lib/components/player/ControlButton.svelte";
   import ControlRow from "#lib/components/player/ControlRow.svelte";
   import { playerControls } from "#lib/components/player/controls.svelte.js";
+  import { dataReceiveNote } from "#lib/components/player/data-receive.js";
   import DataBroadcast, {
     pressD,
   } from "#lib/components/player/DataBroadcast.svelte";
@@ -48,7 +49,6 @@
   } from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
-  import { receiveNote } from "#lib/components/player/receive-note.svelte.js";
   import Remote from "#lib/components/player/Remote.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
   import {
@@ -87,6 +87,7 @@
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
   import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
+  import { BRIEF_NOTE, Note } from "#lib/player/notes.svelte.js";
   import { recordNotice } from "#lib/record-notice.js";
   import { reload } from "#lib/reload.svelte.js";
   import { season } from "#lib/season.svelte.js";
@@ -148,12 +149,12 @@
   /** データ放送が映像の上に出す通知 (`DataBroadcast` の `note`。舞台の通知の列に積む) */
   let dataNote = $state("");
   let dataButton = $state<(() => boolean) | null>(null);
-  /** 自動で受信するかを切り替えたときの通知 (`receive-note.svelte.ts`) */
-  const dataReceive = receiveNote();
+  /** 自動で受信するかを切り替えたときの通知 */
+  const dataReceive = new Note();
   /** データ放送を自動で受信するかを切り替える (データ放送のボタンの長押し・Shift+D)。切り替えたら通知を出す */
   function toggleDataAuto(): void {
     player.toggleReceiveData();
-    dataReceive.show(player.receiveData);
+    dataReceive.show(dataReceiveNote(player.receiveData), BRIEF_NOTE);
   }
 
   // 段を替えるときに次の段を用意する `<video>`。入れ替えるたびに、映していないほうに替わる (`MediaStack` の `spare`)
@@ -195,7 +196,10 @@
   $effect(() => {
     jikkyo.set(jikkyoChannel, jikkyoActive);
   });
-  onMount(() => () => jikkyo.close());
+  onMount(() => () => {
+    jikkyo.close();
+    dataReceive.close();
+  });
 
   /**
    * 実況に書き込む 1 行 (`JikkyoCompose`)。出せるのは流しているときと同じ条件 (世帯と端末の両方がオンで、映している局に
@@ -497,7 +501,7 @@
   }
 
   /**
-   * キーでも動かせるようにする。**割り当ては追っかけ・観る画面と共通** (`player/keys.ts`)。
+   * キーでも動かせるようにする。**割り当ては追っかけ・観る画面と共通** (`components/player/keys.ts`)。
    * ← → はシークバーと同じく、出しているときだけ (canvas に描いている間と、録画に譲っている間は無い)。速さは追っかけ中だけ効く
    * (`player/core.svelte.ts` の `setSpeed`)
    */
@@ -517,7 +521,7 @@
       if (player.tuned !== null) toggleDataAuto();
     },
   });
-  /** データ放送を出している間は、空白・十字キーはあちらのリモコン (`player/keys.ts` の `dataRemoteKey`。観る画面と同じ) */
+  /** データ放送を出している間は、空白・十字キーはあちらのリモコン (`components/player/keys.ts` の `dataRemoteKey`。観る画面と同じ) */
   function keys(event: KeyboardEvent): void {
     if (player.showData && dataRemoteKey(event)) return;
     playerKey(event);

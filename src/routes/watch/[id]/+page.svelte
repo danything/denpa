@@ -10,6 +10,7 @@
   import ControlButton from "#lib/components/player/ControlButton.svelte";
   import ControlRow from "#lib/components/player/ControlRow.svelte";
   import { playerControls } from "#lib/components/player/controls.svelte.js";
+  import { dataReceiveNote } from "#lib/components/player/data-receive.js";
   import DataBroadcast, {
     pressD,
   } from "#lib/components/player/DataBroadcast.svelte";
@@ -39,7 +40,6 @@
   import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
-  import { receiveNote } from "#lib/components/player/receive-note.svelte.js";
   import Remote from "#lib/components/player/Remote.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
   import {
@@ -77,6 +77,7 @@
   import { fixedMediaVolume } from "#lib/native-audio-choice.js";
   import { offline, removeLocal } from "#lib/offline.svelte.js";
   import { recordingPlayback } from "#lib/player/core-recording.svelte.js";
+  import { BRIEF_NOTE, Note } from "#lib/player/notes.svelte.js";
   import { keepResume, keepResuming } from "#lib/resume.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
   import type { CodecChoice, PlaybackInfo } from "#lib/ts/playback.js";
@@ -132,8 +133,8 @@
   /** 全画面の出入り (3 画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
   const fullscreen = stageFullscreen(() => stage);
 
-  /** 自動で受信するかを切り替えたときの通知 (`receive-note.svelte.ts`) */
-  const dataReceive = receiveNote();
+  /** 自動で受信するかを切り替えたときの通知 */
+  const dataReceive = new Note();
   /** リモコンのキーを渡す関数と、d を文書へ渡す関数 (`DataBroadcast` の press / pressD) */
   let dataPress = $state<((code: number) => void) | null>(null);
   /** データ放送が映像の上に出す通知 (`DataBroadcast` の `note`。舞台の通知の列に積む) */
@@ -142,7 +143,7 @@
   /** データ放送を自動で受信するかを切り替える (⚙ の「データ放送」の長押し・Shift+D)。切り替えたら通知を出す (ライブと同じ) */
   function toggleReceiveData(): void {
     player.toggleReceiveData();
-    dataReceive.show(player.receiveData);
+    dataReceive.show(dataReceiveNote(player.receiveData), BRIEF_NOTE);
   }
 
   /**
@@ -226,8 +227,7 @@
   const SKIP_CM_KEY = "watch-skip-cm";
   let skipCm = $state(false);
   /** CM を飛ばしたことを短く出す。何も出さずに飛ぶと壊れたように見える */
-  let skipped = $state(false);
-  let skipNotice: ReturnType<typeof setTimeout> | null = null;
+  const skipNote = new Note();
   /** 跨いでいる間、最後の本編のコマで覆っているか (覆う面は核の `cover`) */
   let hopping = $state(false);
   /**
@@ -278,7 +278,8 @@
     return () => {
       stopResuming();
       deleting.fire();
-      if (skipNotice !== null) clearTimeout(skipNotice);
+      skipNote.close();
+      dataReceive.close();
       if (hopGiveUp !== null) clearTimeout(hopGiveUp);
     };
   });
@@ -434,9 +435,7 @@
     player.seekMedia(to);
     // 続きから始めたばかりなら、そちらだけ言う (CM を跨いだのは中の都合)
     if (player.continued) return;
-    skipped = true;
-    if (skipNotice !== null) clearTimeout(skipNotice);
-    skipNotice = setTimeout(() => (skipped = false), 2500);
+    skipNote.show("CM を飛ばしました", BRIEF_NOTE);
   }
 
   /**
@@ -512,7 +511,7 @@
 
   /**
    * キーでも動かせるようにする。全画面のときはこれがいちばん早い。
-   * **割り当てはライブ・追っかけと共通** (`player/keys.ts`。修飾キーの扱いもあちら)。
+   * **割り当てはライブ・追っかけと共通** (`components/player/keys.ts`。修飾キーの扱いもあちら)。
    * データ放送を出している間の空白・十字キーはあちらのリモコン (`dataRemoteKey`。ライブと同じ)
    */
   const playerKey = playerKeys({
@@ -1028,8 +1027,8 @@
         {#if player.continued}
           <StageNote testid="watch-resumed">続きから再生しています</StageNote>
         {/if}
-        {#if skipped}
-          <StageNote testid="watch-skipped">CM を飛ばしました</StageNote>
+        {#if skipNote.text !== ""}
+          <StageNote testid="watch-skipped">{skipNote.text}</StageNote>
         {/if}
         {#if player.warning !== ""}
           <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
