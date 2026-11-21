@@ -58,7 +58,9 @@ $Log = Join-Path $DenpaDir 'denpa-agent.log'
 $ServerLog = Join-Path $DenpaDir 'denpa.log'
 $TaskName = 'denpa-agent'
 $DenpaTask = 'denpa'
-# 本体が次の録画の前にスリープから起こすタスク (本体が書き直す。src/lib/server/power.ts)
+# 前のバージョンの本体が、次の録画の前にスリープから起こすために書いていたタスクとその XML。
+# いまの本体はタスクを使わず、自分のプロセスの待機可能タイマーで起こす (src/lib/server/power.ts)。
+# SYSTEM で動かすタスクは、ユーザーで動かす本体からは書き換えられないため。残っていると前の時刻で起こすので、入れるときと外すときに消す (Remove-WakeTask)
 $WakeTask = 'denpa-wake'
 $FirewallRule = 'denpa'
 # 通知領域のアイコン (tray/Denpa.Tray)。エージェントと同じ zip に入っていて、サインインしたら HKLM の Run から起きる
@@ -691,6 +693,13 @@ function Register-Agent {
     throw "エージェントが応答しません。ログを見てください: $Log"
 }
 
+# 前のバージョンの本体が書いていた起こすタスク ($WakeTask) とその XML を消す。無ければ何もしない
+function Remove-WakeTask {
+    Unregister-ScheduledTask -TaskName $WakeTask -Confirm:$false -ErrorAction SilentlyContinue
+    $xml = Join-Path $Data 'wake-task.xml'
+    if (Test-Path -LiteralPath $xml) { Remove-Item -Force -LiteralPath $xml }
+}
+
 # denpa 本体を起こす .cmd とタスク。**置き場・ffmpeg・エージェントの宛先はここで決め、denpa.env より勝たせる**
 # (denpa.env は手で直すところで、そこに書いても SYSTEM で動かすものは変えられない)。
 # エージェントは同じ PC なので 127.0.0.1 で繋ぐ (denpa は組んだときの証明書そのもので確かめるので、名前は見ない)。
@@ -699,6 +708,8 @@ function Register-Agent {
 # 本体をユーザーで動かすなら ($Credential。Select-ServerUser)、そのユーザーに置き場とログの権限を足す。-User を付けずに上げ直したら、
 # いまのタスクのユーザーに足し直す (Set-DataDir は毎回 ACL を書き直すので)
 function Register-Server([string]$Ref, [string]$Token, [pscredential]$Credential, [switch]$AsSystem) {
+    # 実行ユーザーによらず消す。いまの本体はタスクを書かないので、SYSTEM とユーザーを行き来しても付け直す権限は無い
+    Remove-WakeTask
     $runAs = if ($Credential) { $Credential.UserName } elseif ($AsSystem) { '' } else { Get-TaskUser $DenpaTask }
     $sid = if ($runAs) { Get-UserSid $runAs } else { '' }
     Set-DataDir $sid
@@ -895,17 +906,16 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [s
         $exe = "$Prefix\bin\denpa-agent.exe"
         if (-not (Test-Path -LiteralPath $exe)) { $exe = "$OldPrefix\bin\denpa-agent.exe" }
         Stop-Denpa $exe -Server
-        foreach ($task in $DenpaTask, $TaskName, $WakeTask) {
+        foreach ($task in $DenpaTask, $TaskName) {
             Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue
         }
+        Remove-WakeTask
         Remove-NetFirewallRule -Name $FirewallRule -ErrorAction SilentlyContinue
         Remove-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue
         foreach ($dir in $Prefix, $OldPrefix) {
             if (Test-Path -LiteralPath $dir) { Remove-Item -Recurse -Force -LiteralPath $dir }
         }
-        foreach ($file in 'denpa.cmd', 'wake-task.xml') {
-            if (Test-Path -LiteralPath "$Data\$file") { Remove-Item -Force -LiteralPath "$Data\$file" }
-        }
+        if (Test-Path -LiteralPath "$Data\denpa.cmd") { Remove-Item -Force -LiteralPath "$Data\denpa.cmd" }
         Remove-Px4Runtime
         Say '外しました。残してあるもの (要らなければ手で消してください):'
         Say "  DB と denpa.env $Data / エージェントの設定とログ $DenpaDir / 録画 $Media"

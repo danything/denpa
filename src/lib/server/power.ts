@@ -2,14 +2,15 @@
  * **Windows と Mac のスリープ。** 録画・ライブ視聴・エンコードの間はスリープさせず (`awake.ts`)、
  * 次の録画の少し前にスリープから起こす。ほかの OS では何もしない (Linux はサーバとして動かす前提)。
  *
- * - Windows は、denpa 本体 (install.ps1 を流したユーザーか SYSTEM のタスク) がタスク `denpa-wake` (タスク スケジューラの「スリープを解除して実行」) を
- *   書き直して起こす。中身は何もしないコマンドで、起こすためだけにある。効くのは、電源オプションの
- *   「スリープ解除タイマーの許可」が有効なときだけ (docs/install-windows.md)
+ * - Windows は、denpa 本体 (install.ps1 を流したユーザーか SYSTEM のタスク) が kernel32 の待機可能タイマーを
+ *   「スリープから起こす」指定で設定する (`awake.windowsWake`。特別な権限は要らない)。タイマーは本体のプロセスが持ち、本体が止まれば OS が消す。
+ *   効くのは、電源オプションの「スリープ解除タイマーの許可」が有効なときだけ (docs/install-windows.md)
  * - Mac は、denpa 本体 (root の LaunchDaemon) が IOKit の `IOPMSchedulePowerEvent` で起こす予約を置く (root が要る)。
  *   予約は OS が覚えていて、本体が起き直しても残るので、置いた時刻をデータの置き場の `wake-at` に書き、
  *   次に置き直すときと起動したときに取り消す (docs/install-mac.md)
  *
- * どちらも、次の録画が変わるたびに時刻を書き直し、録画が無ければ消す。
+ * どちらも、次の録画が変わるたびに時刻を設定し直し、録画が無ければ取り消す。設定できなければ、理由をログと
+ * 設定の「バージョンと環境」に出す (`wakeStatus`)。
  *
  * 外からの視聴の要求ではスリープから起こせない (寝ている機械は要求を受けられない)。外からいつも観るなら、
  * スリープしない設定にする (docs/install-windows.md・docs/install-mac.md)
@@ -20,7 +21,7 @@ import { join } from "node:path";
 
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
 
-import { holdAwake, type MacPower, macPower } from "./awake";
+import { holdAwake, type MacPower, macPower, windowsWake } from "./awake";
 import { config } from "./config";
 import { orm } from "./db";
 import { runningEncodes } from "./encoder";
@@ -39,9 +40,6 @@ export const WAKE_LEAD = 3 * MIN;
  * 起こす時刻 (`WAKE_LEAD`) より長くしておく
  */
 export const HOLD_BEFORE = 5 * MIN;
-
-/** 起こすタスクの名前。install.ps1 が外すときに消す */
-const WAKE_TASK = "denpa-wake";
 
 /**
  * 次に録画を始める時刻 (前のマージン込み)。無ければ null。
@@ -81,96 +79,72 @@ export function shouldHold(o: {
   );
 }
 
-/** 起こすタスクの XML (タスク スケジューラの形式)。`at` はスリープから起こす時刻 (ms)。UTC で書く */
-export function wakeTaskXml(at: number): string {
-  const start = new Date(at).toISOString().replace(/\.\d{3}Z$/, "Z");
-  return `<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>denpa が次の録画の前にスリープから起こすためのタスク (denpa 本体が書き直す)</Description>
-  </RegistrationInfo>
-  <Triggers>
-    <TimeTrigger>
-      <StartBoundary>${start}</StartBoundary>
-      <Enabled>true</Enabled>
-    </TimeTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <UserId>S-1-5-18</UserId>
-      <RunLevel>LeastPrivilege</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <StartWhenAvailable>false</StartWhenAvailable>
-    <WakeToRun>true</WakeToRun>
-    <ExecutionTimeLimit>PT1M</ExecutionTimeLimit>
-    <Enabled>true</Enabled>
-  </Settings>
-  <Actions Context="Author">
-    <Exec>
-      <Command>%SystemRoot%\\System32\\cmd.exe</Command>
-      <Arguments>/d /c exit 0</Arguments>
-    </Exec>
-  </Actions>
-</Task>
-`;
-}
-
-/** タスク (Mac は予約) を書いた時刻 (起こす時刻)。null は消したあと、undefined はまだ何もしていない */
+/** タイマーを設定した (Mac は予約を置いた) 時刻 (起こす時刻)。null は取り消したあと、undefined はまだ何もしていない */
 let written: number | null | undefined;
-/** 書けなかったことは 1 度だけ知らせる */
-let failed = false;
+/** 起こせない理由。起こせていれば null。ログには理由が変わったときだけ出す */
+let problem: string | null = null;
 
-async function schtasks(args: string[]): Promise<boolean> {
-  const proc = Bun.spawn(["schtasks.exe", ...args], {
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "pipe",
-  });
-  const [code, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stderr).text(),
-  ]);
-  if (code === 0) return true;
-  if (!failed) {
-    failed = true;
+function fail(reason: string): void {
+  if (reason !== problem)
     console.warn(
-      `[power] 録画の前にスリープから起こすタスク (${WAKE_TASK}) を書けません。スリープしている間は録画が始まりません: ${stderr.trim()}`,
+      `[power] 録画の前にスリープから起こせません。スリープしている間は録画が始まりません: ${reason}`,
     );
-  }
-  return false;
+  problem = reason;
 }
 
-/** Windows: 起こすタスクを `at` に書き直す (null なら消す)。同じなら何もしない */
-async function scheduleWakeTask(at: number | null, now: number): Promise<void> {
+function scheduled(at: number): void {
+  written = at;
+  problem = null;
+  console.log(
+    `[power] ${new Date(at).toLocaleString("ja-JP")} にスリープから起こします (次の録画の ${WAKE_LEAD / MIN} 分前)`,
+  );
+}
+
+/** 起こす様子 (設定の「バージョンと環境」)。`at` は起こす時刻 (無ければ null)、`problem` は起こせない理由 */
+export interface WakeStatus {
+  at: number | null;
+  problem: string | null;
+}
+
+/** いまの起こす様子。Windows と Mac 以外では null (起こさない) */
+export function wakeStatus(): WakeStatus | null {
+  if (process.platform !== "win32" && process.platform !== "darwin")
+    return null;
+  return { at: typeof written === "number" ? written : null, problem };
+}
+
+/**
+ * Windows: 起こすタイマーを `at` に設定し直す (null なら取り消す)。同じなら何もしない。
+ * **タスク スケジューラのタスク (前の `denpa-wake`) にしないのは、本体をユーザーで動かすと書き換えられないため。**
+ * SYSTEM で動かすタスクは管理者でないと登録し直せず、本体のユーザーで動かすタスクは、ログオンしていなくても動かすのに
+ * そのユーザーのパスワードが要る (本体は持たない)。待機可能タイマーは権限が要らず、どちらのユーザーでも同じに設定できる
+ */
+async function scheduleWakeWindows(
+  at: number | null,
+  now: number,
+): Promise<void> {
   if (at === written) return;
-  if (at === null) {
-    // 無いものは消さない (初めての起動など)。あるのに消せなければ、次に見たときにもう一度消す
-    const exists =
-      (await Bun.spawn(["schtasks.exe", "/Query", "/TN", WAKE_TASK], {
-        stdio: ["ignore", "ignore", "ignore"],
-      }).exited) === 0;
-    if (!exists || (await schtasks(["/Delete", "/TN", WAKE_TASK, "/F"])))
-      written = null;
+  // 一度も設定していなければ、取り消すものは無い
+  if (at === null && written === undefined) {
+    written = null;
     return;
   }
-  // 起こす時刻を過ぎていれば書かない (もう起きている。録画が始まるまで `HOLD_BEFORE` でスリープさせない)
-  if (at <= now) return;
-  const file = join(config.dataDir, "wake-task.xml");
-  mkdirSync(config.dataDir, { recursive: true });
-  // schtasks は UTF-16 (BOM 付き) の XML を読む
-  writeFileSync(file, `﻿${wakeTaskXml(at)}`, "utf16le");
-  if (await schtasks(["/Create", "/TN", WAKE_TASK, "/XML", file, "/F"])) {
-    written = at;
-    failed = false;
-    console.log(
-      `[power] ${new Date(at).toLocaleString("ja-JP")} にスリープから起こします (次の録画の ${WAKE_LEAD / MIN} 分前)`,
-    );
+  // 起こす時刻を過ぎていれば設定しない (もう起きている。録画が始まるまで `HOLD_BEFORE` でスリープさせない)
+  if (at !== null && at <= now) return;
+  const timer = await windowsWake();
+  if (timer === null) {
+    fail("kernel32 の待機可能タイマーを使えません (理由はログにあります)");
+    return;
   }
+  if (at === null) {
+    timer.cancel();
+    written = null;
+    return;
+  }
+  // 設定できなければ written を変えず、次の定期チェックで設定し直す
+  const reason = timer.set(at);
+  if (reason === null) scheduled(at);
+  else fail(reason);
 }
 
 /** Mac で起こす予約に付ける名前 (`pmset -g sched` に出る)。止まるときに本体が取り消す (`forgetWake`) */
@@ -205,7 +179,7 @@ let mac: MacPower | null = null;
 /**
  * **Mac: 止まるときに、置いた予約を取り消す** (`runtime.ts` の後始末)。動いている本体がいなければ、起こしても録画は始まらない。
  * 起き直せば次の定期チェックで置き直す。外したとき (install.sh の `--uninstall`) に予約を残さないためでもある。
- * Windows は何もしない (起こすタスクは install.ps1 が外す)
+ * Windows は何もしない (タイマーは本体のプロセスが終われば OS が消す)
  */
 export function forgetWake(): void {
   if (mac === null || typeof written !== "number") return;
@@ -225,7 +199,10 @@ async function scheduleWakeMac(at: number | null, now: number): Promise<void> {
   // 起こす時刻を過ぎていれば置かない (Windows と同じ)
   if (target !== null && target <= now) return;
   const power = await macPower();
-  if (power === null) return;
+  if (power === null) {
+    fail("IOKit を読めません (理由はログにあります)");
+    return;
+  }
   mac = power;
   const previous = written === undefined ? lastWake() : written;
   if (previous !== null) power.cancel(previous, WAKE_BY);
@@ -237,21 +214,14 @@ async function scheduleWakeMac(at: number | null, now: number): Promise<void> {
   const code = power.schedule(target, WAKE_BY);
   if (code !== 0) {
     rmSync(wakeFile(), { force: true });
-    if (!failed) {
-      failed = true;
-      console.warn(
-        `[power] 録画の前にスリープから起こす予約を置けません (IOPMSchedulePowerEvent が 0x${(code >>> 0).toString(16)} を返しました。root で動いていないと置けません)。スリープしている間は録画が始まりません`,
-      );
-    }
+    fail(
+      `IOPMSchedulePowerEvent が 0x${(code >>> 0).toString(16)} を返しました。root で動いていないと置けません`,
+    );
     return;
   }
   mkdirSync(config.dataDir, { recursive: true });
   writeFileSync(wakeFile(), String(target));
-  written = target;
-  failed = false;
-  console.log(
-    `[power] ${new Date(target).toLocaleString("ja-JP")} にスリープから起こします (次の録画の ${WAKE_LEAD / MIN} 分前)`,
-  );
+  scheduled(target);
 }
 
 /** 定期に呼ぶ (`runtime.ts`)。Windows と Mac 以外では何もしない */
@@ -269,6 +239,6 @@ export async function checkPower(now = Date.now()): Promise<void> {
   );
   const at = next === null ? null : next - WAKE_LEAD;
   await (process.platform === "win32"
-    ? scheduleWakeTask(at, now)
+    ? scheduleWakeWindows(at, now)
     : scheduleWakeMac(at, now));
 }

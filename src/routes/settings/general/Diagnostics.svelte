@@ -6,7 +6,7 @@
 
   import Lead from "#lib/components/Lead.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
-  import { READER_STATE_LABEL, typeNames } from "#lib/format.js";
+  import { dateTime, READER_STATE_LABEL, typeNames } from "#lib/format.js";
   import {
     agentSystem,
     CCID_DRIVER,
@@ -326,6 +326,23 @@
             >{data.environment.gpu}</span
           >
         </div>
+        <!-- 録画の前にスリープから起こすか (Windows と Mac だけ。power.ts の wakeStatus)。起こせなければ理由を出す -->
+        {#if data.wake !== null}
+          <div class="field">
+            <span class="field-label">スリープからの復帰</span>
+            <span class="small" data-testid="diag-wake">
+              {#if data.wake.problem !== null}
+                <span class="mismatch">
+                  ⚠ 録画の前にスリープから起こせません: {data.wake.problem}
+                </span>
+              {:else if data.wake.at !== null}
+                {dateTime(data.wake.at)} に起こします
+              {:else}
+                次の録画が無いので、起こしません
+              {/if}
+            </span>
+          </div>
+        {/if}
         <!-- エージェントは 1 台ずつ、名前を付けた行にする (1 台でも同じ形) -->
         {#if data.agentsError !== null}
           <div class="field">

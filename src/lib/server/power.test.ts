@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { cfAbsoluteTime } from "./awake.js";
-import { HOLD_BEFORE, shouldHold, wakeSecond, wakeTaskXml } from "./power.js";
+import { cfAbsoluteTime, fileTime } from "./awake.js";
+import { HOLD_BEFORE, shouldHold, wakeSecond } from "./power.js";
 
 const idle = {
   recording: false,
@@ -27,15 +27,14 @@ describe("shouldHold", () => {
   });
 });
 
-describe("wakeTaskXml", () => {
-  test("起こす時刻を UTC で書き、スリープを解除して実行する", () => {
-    const xml = wakeTaskXml(Date.UTC(2026, 10, 7, 11, 58, 30, 123));
-    expect(xml).toContain(
-      "<StartBoundary>2026-11-07T11:58:30Z</StartBoundary>",
+describe("Windows の起こすタイマー", () => {
+  test("時刻は 1601-01-01 (UTC) からの 100 ns (SetWaitableTimer に UTC の時刻として渡す)", () => {
+    expect(fileTime(0)).toBe(116_444_736_000_000_000n);
+    // 2026-11-07T11:58:30.123Z。ミリ秒より細かい値は捨てる
+    expect(fileTime(Date.UTC(2026, 10, 7, 11, 58, 30, 123) + 0.9)).toBe(
+      (BigInt(Date.UTC(2026, 10, 7, 11, 58, 30, 123)) + 11_644_473_600_000n) *
+        10_000n,
     );
-    expect(xml).toContain("<WakeToRun>true</WakeToRun>");
-    // SYSTEM で動かす (denpa 本体と同じ)
-    expect(xml).toContain("<UserId>S-1-5-18</UserId>");
   });
 });
 

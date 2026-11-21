@@ -10,10 +10,11 @@
  *
  * どちらもプロセスが落ちれば OS が外すので、伝えたまま残らない。
  *
- * Mac の IOKit と CoreFoundation の呼び出し (`macPower`) は、録画の前に起こす予約 (`power.ts`) でも使う。
+ * 録画の前にスリープから起こす呼び出し (`power.ts` が使う) もここに置く。Windows は kernel32 の待機可能タイマー (`windowsWake`)、
+ * Mac は IOKit と CoreFoundation の呼び出し (`macPower`)。
  *
- * 何も import しない (CI がこのファイルだけを配布物の bun で読み、Windows は `powercfg /requests`、Mac は
- * `pmset -g assertions` に出るかを見る。tests/native-smoke.ts)
+ * 何も import しない (CI がこのファイルだけを配布物の bun で読み、Windows は `powercfg /requests`・`powercfg /waketimers`、Mac は
+ * `pmset -g assertions`・`pmset -g sched` に出るかを見る。tests/native-smoke.ts)
  */
 
 const ES_CONTINUOUS = 0x80000000;
@@ -38,6 +39,88 @@ async function executionState(): Promise<((flags: number) => number) | null> {
     setState = null;
   }
   return setState;
+}
+
+/** Windows の時刻 (`FILETIME`) は 1601-01-01 (UTC) からの 100 ns。1970 年からとの差 (ms) */
+const FILETIME_FROM_1970 = 11_644_473_600_000n;
+/** `SetWaitableTimer` が成功しても、この PC がタイマーでスリープから復帰できなければ、`GetLastError` がこれを返す */
+const ERROR_NOT_SUPPORTED = 50;
+
+/** JS の時刻 (ms) を Windows の時刻 (`FILETIME`。100 ns) に。正の値を `SetWaitableTimer` に渡すと、UTC の時刻と読む */
+export function fileTime(ms: number): bigint {
+  return (BigInt(Math.floor(ms)) + FILETIME_FROM_1970) * 10_000n;
+}
+
+/**
+ * Windows で録画の前にスリープから起こすタイマー (kernel32 の待機可能タイマー)。
+ * **タイマーはこのプロセスが持ち、プロセスが終われば OS が消す** (Mac の予約と違い、取り消し忘れが残らない)。
+ * 特別な権限は要らないので、本体を SYSTEM で動かしてもユーザーで動かしても同じに設定できる
+ */
+export interface WindowsWake {
+  /** `at` (ms) に起こすタイマーを設定する (前の設定は置き換わる)。設定できたら null、できなければ理由 */
+  set(at: number): string | null;
+  /** 設定したタイマーを取り消す */
+  cancel(): void;
+}
+
+let win: WindowsWake | null | undefined;
+
+/** Windows の起こすタイマー。Windows でないか、読めなければ null (1 度だけ試す) */
+export async function windowsWake(): Promise<WindowsWake | null> {
+  if (win !== undefined) return win;
+  if (process.platform !== "win32") return (win = null);
+  try {
+    const { dlopen, FFIType } = await import("bun:ffi");
+    const kernel32 = dlopen("kernel32.dll", {
+      CreateWaitableTimerW: {
+        args: [FFIType.ptr, FFIType.i32, FFIType.ptr],
+        returns: FFIType.ptr,
+      },
+      SetWaitableTimer: {
+        args: [
+          FFIType.ptr,
+          FFIType.ptr,
+          FFIType.i32,
+          FFIType.ptr,
+          FFIType.ptr,
+          FFIType.i32,
+        ],
+        returns: FFIType.i32,
+      },
+      CancelWaitableTimer: { args: [FFIType.ptr], returns: FFIType.i32 },
+      GetLastError: { args: [], returns: FFIType.u32 },
+      SetLastError: { args: [FFIType.u32], returns: FFIType.void },
+    });
+    const k = kernel32.symbols;
+    // 名前を付けない (ほかのプロセスから開かせない)。鳴ったあとに待つ処理は無いので、手で戻すタイマーのままにする
+    const handle = k.CreateWaitableTimerW(null, 1, null);
+    if (handle === null)
+      throw new Error(
+        `CreateWaitableTimerW が失敗しました (エラー ${k.GetLastError()})`,
+      );
+    win = {
+      set: (at) => {
+        const due = BigInt64Array.of(fileTime(at));
+        k.SetLastError(0);
+        // 繰り返さず、鳴ったときに呼ぶ関数も渡さない。最後の 1 がスリープから起こす指定 (fResume)
+        const ok = k.SetWaitableTimer(handle, due, 0, null, null, 1);
+        const code = k.GetLastError();
+        if (ok === 0) return `SetWaitableTimer が失敗しました (エラー ${code})`;
+        if (code === ERROR_NOT_SUPPORTED)
+          return "この PC はタイマーでスリープから復帰できません (SetWaitableTimer が ERROR_NOT_SUPPORTED を返しました)";
+        return null;
+      },
+      cancel: () => {
+        k.CancelWaitableTimer(handle);
+      },
+    };
+  } catch (error) {
+    console.warn(
+      `[power] kernel32 の待機可能タイマーを使えません。録画の前にスリープから起こせません: ${error}`,
+    );
+    win = null;
+  }
+  return win;
 }
 
 /** Mac の電源の呼び出し (IOKit・CoreFoundation)。返す数はどれも IOKit の `IOReturn` で、0 が成功 */
