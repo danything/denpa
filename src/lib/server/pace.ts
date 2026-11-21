@@ -14,7 +14,7 @@
  * 応答のヘッダで id を返し、画面が `GET /api/playback/pace?id=` で読む (`openPace`)
  */
 
-import type { Pace } from "#lib/rungs.js";
+import { type Pace, SOURCE_GAP } from "#lib/rungs.js";
 import {
   Fmp4Splitter,
   type Fmp4Track,
@@ -111,12 +111,16 @@ export class PaceMeter {
   private dropped = 0;
   private backlog = 0;
 
-  /** @param droppedTotal 接続を開いてから捨てた塊の数 (`Connection.dropped`) */
+  /**
+   * @param droppedTotal 接続を開いてから捨てた塊の数 (`Connection.dropped`)
+   * @param gap チューナーから届かなかった間 (`InputGaps.longest`)。測らない経路 (追っかけ) は null で、`pace` に入れない
+   */
   next(
     now: number,
     backlog: number,
     droppedTotal: number,
     speed: number | null,
+    gap: number | null = null,
   ): Pace | null {
     const dropped = droppedTotal - this.dropped;
     const moved = dropped > 0 || Math.abs(backlog - this.backlog) >= PACE_STEP;
@@ -124,7 +128,73 @@ export class PaceMeter {
     this.sentAt = now;
     this.dropped = droppedTotal;
     this.backlog = backlog;
-    return { backlog, dropped, speed };
+    return { backlog, dropped, speed, ...(gap === null ? {} : { gap }) };
+  }
+}
+
+/**
+ * **チューナーから TS が届くのを待っていた間** (`Pace.gap`)。読む前に `begin`、届いたら `end` を呼び、直近 `SPEED_WINDOW` のうち
+ * いちばん長い待ちを返す。いま待っている最中の間も入れる。測るのは読みに行ってから届くまでだけで、受け取ったものを ffmpeg に
+ * 書くのを待った間 (エンコードが遅いとき) は入れない。窓をエンコードの速さと同じにするのは、届かなかった間はエンコードの速さも
+ * 下がるため (`server/live.ts` の `EncodeLag` はこの間を遅れに数えない)
+ */
+export class InputGaps {
+  /** 窓の中の待ちの、終わった時刻と長さ (ms) */
+  private gaps: { at: number; ms: number }[] = [];
+  /** 読みに行った時刻。待っていなければ null */
+  private since: number | null = null;
+  /** 1 つでも届いたか。最初の塊までは選局の待ちなので数えない */
+  private fed = false;
+
+  /** @param onGap 待ちが `SOURCE_GAP` 以上になって届いたときに、待った長さ (ms) を受け取る (ログに出力する) */
+  constructor(private readonly onGap: (ms: number) => void = () => {}) {}
+
+  begin(now: number): void {
+    this.since = now;
+  }
+
+  end(now: number): void {
+    if (this.since !== null && this.fed) {
+      const ms = now - this.since;
+      this.gaps.push({ at: now, ms });
+      if (ms >= SOURCE_GAP) this.onGap(ms);
+    }
+    this.since = null;
+    this.fed = true;
+    this.drop(now);
+  }
+
+  /** 直近の窓でいちばん長い待ち (ms)。まだ 1 つも届いていなければ null */
+  longest(now: number): number | null {
+    if (!this.fed) return null;
+    this.drop(now);
+    let most = this.since === null ? 0 : now - this.since;
+    for (const gap of this.gaps) most = Math.max(most, gap.ms);
+    return most;
+  }
+
+  private drop(now: number): void {
+    while (this.gaps.length > 0 && this.gaps[0]!.at < now - SPEED_WINDOW)
+      this.gaps.shift();
+  }
+}
+
+/** `source` を読み、1 つずつ届くまでの待ちを `gaps` に数える (`InputGaps`)。抜けたら `source` も閉じる */
+export async function* timedInput<T>(
+  source: AsyncIterable<T>,
+  gaps: InputGaps,
+): AsyncGenerator<T> {
+  const it = source[Symbol.asyncIterator]();
+  try {
+    for (;;) {
+      gaps.begin(Date.now());
+      const next = await it.next();
+      gaps.end(Date.now());
+      if (next.done === true) return;
+      yield next.value;
+    }
+  } finally {
+    await it.return?.();
   }
 }
 

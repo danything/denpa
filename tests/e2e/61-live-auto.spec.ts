@@ -96,6 +96,39 @@ test.describe("ライブの自動", () => {
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
   });
 
+  /*
+   * **届いているのに端末の処理で止まったのは、回線のせいにしない** (`adapt.ts` の `LAG_STEADY`)。メインスレッドを 1.5 秒ごとに
+   * 0.7 秒塞ぐ (実況の描画などが重い端末のつもり)。音を使い切って止まるが、届いた端は放送に遅れないので、段は下げない。
+   * 直す前は「回線が細いため、360p に下げました」と出て変換に移っていた。端末のデコードが間に合わずに形式を替えるのは
+   * `raw/budget.ts` の役目で、並べて流すと起きるので、ここでは形式を見ない
+   */
+  test("メインスレッドが塞がって止まっても、家の中の MPEG-2 から段を下げない", async ({
+    page,
+  }) => {
+    await openLive(page);
+    const canvas = page.getByTestId("live-raw");
+    await expect(canvas).toBeVisible({ timeout: 30_000 });
+    await expect
+      .poll(async () => Number((await canvas.getAttribute("data-shown")) ?? 0))
+      .toBeGreaterThan(30);
+    // 放送に対する遅れを測れるまで (選局から 4 秒。`LAG_SPAN`) は、これまでどおり詰まりで下げる。測れてから塞ぎ始める
+    await page.waitForTimeout(5_000);
+    await page.evaluate(() => {
+      setInterval(() => {
+        const end = performance.now() + 700;
+        while (performance.now() < end);
+      }, 1_500);
+    });
+    const seen: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      seen.push(
+        (await page.getByTestId("live-warning").allTextContents()).join(""),
+      );
+      await page.waitForTimeout(1_000);
+    }
+    expect(seen.join("\n")).not.toContain("回線が細いため");
+  });
+
   test("H.264 も受け取れない端末では AV1 で観る", async ({ page }) => {
     await page.addInitScript(() => {
       // oxlint-disable-next-line typescript/no-explicit-any -- 端末に無いことにする

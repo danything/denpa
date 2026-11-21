@@ -13,6 +13,7 @@ import {
   GRACE,
   HOLD,
   LAG_GROW,
+  LAG_STEADY,
   LIVE_UP_MARGIN,
   PROBE,
   PROBE_START,
@@ -23,7 +24,7 @@ import {
   UP_WAIT_MOST,
   UP_WAIT_WATCH,
 } from "./adapt";
-import { ENCODE_SLOW, type Pace } from "./rungs";
+import { ENCODE_SLOW, type Pace, SOURCE_GAP } from "./rungs";
 
 /** HTTP の変換で、ffmpeg を待たずに済んでいるときの `speed` (`server/pace.ts` の `SPEED_MOST`) */
 const SPEED_CAP = 10;
@@ -1136,6 +1137,123 @@ describe("端末のデコードが追いつかない (`behind`)", () => {
   test("断り書きは追いつかない理由と下げた先", () => {
     expect(adaptNote({ step: 2, reason: "decode" }, 1)).toBe(
       "再生が追いつかないため、540p に下げました",
+    );
+  });
+});
+
+/**
+ * **ライブで、届いた端が放送に遅れていないのに詰まったのは、回線のせいにしない** (`LAG_STEADY`)。メインスレッドを 1.5 秒ごとに
+ * 0.7 秒塞いだ E2E では、遅れの伸びは 0.05 秒のまま、音を使い切って止まったのを「回線が細いため」と下げていた
+ */
+describe("届いているのに詰まったとき", () => {
+  const live = { route: "live" as const, current: 0 as const, ahead: 0 };
+
+  test("遅れが伸びていなければ、詰まってもバッファが減っても下げない", () => {
+    const a = new RungAdapter();
+    expect(
+      first(a, 0, 30_000, {
+        ...live,
+        waiting: true,
+        lag: LAG_STEADY - 0.15,
+        throughput: 16_000_000,
+      }),
+    ).toBeNull();
+  });
+
+  test("遅れが少しでも伸びていれば (届く速さが段の 95% ほどを切る)、詰まったら下げる", () => {
+    const a = new RungAdapter();
+    expect(
+      first(a, 0, 30_000, {
+        ...live,
+        waiting: true,
+        lag: LAG_STEADY,
+        throughput: 16_000_000,
+      })?.decision,
+    ).toEqual({ step: 1, reason: "slow" });
+  });
+
+  test("遅れを測れていない間 (選局から 4 秒) は、これまでどおり詰まりで下げる", () => {
+    const a = new RungAdapter();
+    expect(
+      first(a, 0, 30_000, { ...live, waiting: true, lag: null })?.decision,
+    ).toEqual({ step: 1, reason: "slow" });
+  });
+});
+
+/**
+ * **チューナーから届かない間があったら、段を下げず、エンコードの遅れにも数えない** (`Pace.gap`・`SOURCE_GAP`)。
+ * サーバが送る量そのものが減るので、画面からは細い回線と同じに見える
+ */
+describe("チューナーの途切れ", () => {
+  const gapped = (speed: number | null) =>
+    paces(() => ({ backlog: 0, dropped: 0, speed, gap: SOURCE_GAP }));
+
+  test("詰まっても段は下げず、source を返す (段はいまのまま)", () => {
+    const a = new RungAdapter();
+    const pace = gapped(null);
+    expect(
+      first(a, 0, 30_000, (now) => ({
+        route: "live",
+        current: 0,
+        ahead: 0,
+        waiting: true,
+        lag: 2,
+        pace: pace(now),
+      }))?.decision,
+    ).toEqual({ step: 0, reason: "source" });
+  });
+
+  test("足りない兆しが無ければ何も返さない", () => {
+    const a = new RungAdapter();
+    const pace = gapped(null);
+    expect(
+      first(a, 0, 30_000, (now) => ({
+        route: "live",
+        current: 0,
+        ahead: 1,
+        lag: 0,
+        pace: pace(now),
+      })),
+    ).toBeNull();
+  });
+
+  test("届かない間に下がったエンコードの速さは、エンコードの遅れに数えない", () => {
+    const a = new RungAdapter();
+    const pace = gapped(0.8);
+    expect(
+      first(a, 0, 30_000, (now) => ({
+        route: "live",
+        current: 1,
+        ahead: 1,
+        lag: 0,
+        pace: pace(now),
+      })),
+    ).toBeNull();
+  });
+
+  test("途切れが窓から外れたら (gap が SOURCE_GAP 未満)、これまでどおり下げる", () => {
+    const a = new RungAdapter();
+    const pace = paces(() => ({
+      backlog: 0,
+      dropped: 0,
+      speed: null,
+      gap: SOURCE_GAP - 1,
+    }));
+    expect(
+      first(a, 0, 30_000, (now) => ({
+        route: "live",
+        current: 0,
+        ahead: 0,
+        waiting: true,
+        lag: 2,
+        pace: pace(now),
+      }))?.decision,
+    ).toEqual({ step: 1, reason: "slow" });
+  });
+
+  test("断り書きは、チューナーから届かないことと再生が止まることを書く", () => {
+    expect(adaptNote({ step: 0, reason: "source" }, 0)).toBe(
+      "チューナーから放送が届かない間があるため、再生が止まります",
     );
   });
 });

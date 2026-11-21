@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
+import { SOURCE_GAP } from "#lib/rungs.js";
+
 import {
+  InputGaps,
   openPace,
   PACE_EVERY,
   PACE_STEP,
@@ -9,6 +12,7 @@ import {
   SPEED_MOST,
   SpeedMeter,
   StreamPace,
+  timedInput,
 } from "./pace";
 import { Connection } from "./ws";
 
@@ -90,6 +94,70 @@ describe("pace を送る頃合い", () => {
     meter.next(0, 0, 0, 1);
     expect(meter.next(500, PACE_STEP - 1, 0, 1)).toBeNull();
     expect(meter.next(1000, PACE_STEP, 0, 1)?.backlog).toBe(PACE_STEP);
+  });
+
+  test("チューナーから届かなかった間 (gap) を添える。測らない経路 (null) は入れない", () => {
+    const meter = new PaceMeter();
+    expect(meter.next(0, 0, 0, 1, 700)).toEqual({
+      backlog: 0,
+      dropped: 0,
+      speed: 1,
+      gap: 700,
+    });
+    expect(meter.next(PACE_EVERY, 0, 0, 1, null)).not.toHaveProperty("gap");
+  });
+});
+
+/**
+ * **チューナーから届くのを待った間** (`InputGaps`・`timedInput`)。読みに行ってから届くまでだけを数え、
+ * 受け取ったものを書くのを待った間は数えない
+ */
+describe("チューナーから届くのを待った間", () => {
+  test("直近 5 秒でいちばん長い待ち。最初の塊までは選局の待ちなので数えない", () => {
+    const gaps = new InputGaps();
+    expect(gaps.longest(0)).toBeNull();
+    gaps.begin(0);
+    gaps.end(3_000);
+    expect(gaps.longest(3_000)).toBe(0);
+    gaps.begin(3_100);
+    gaps.end(3_900);
+    gaps.begin(4_000);
+    gaps.end(4_050);
+    expect(gaps.longest(4_100)).toBe(800);
+    // 窓 (5 秒) から外れた
+    expect(gaps.longest(9_100)).toBe(0);
+  });
+
+  test("いま待っている最中の間も入れる", () => {
+    const gaps = new InputGaps();
+    gaps.begin(0);
+    gaps.end(10);
+    gaps.begin(100);
+    expect(gaps.longest(1_300)).toBe(1_200);
+  });
+
+  test("SOURCE_GAP 以上待ったときだけ知らせる", () => {
+    const seen: number[] = [];
+    const gaps = new InputGaps((ms) => seen.push(ms));
+    gaps.begin(0);
+    gaps.end(10);
+    gaps.begin(100);
+    gaps.end(100 + SOURCE_GAP - 1);
+    gaps.begin(1_000);
+    gaps.end(1_000 + SOURCE_GAP);
+    expect(seen).toEqual([SOURCE_GAP]);
+  });
+
+  test("読む側が受け取ったあとに待った間 (ffmpeg に書くのを待った) は数えない", async () => {
+    async function* source() {
+      yield 1;
+      yield 2;
+      yield 3;
+    }
+    const gaps = new InputGaps();
+    for await (const _ of timedInput(source(), gaps))
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(gaps.longest(Date.now())!).toBeLessThan(50);
   });
 });
 
