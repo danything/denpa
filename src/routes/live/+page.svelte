@@ -42,6 +42,7 @@
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
+  import NewYear from "#lib/components/player/NewYear.svelte";
   import PlayerLayout, {
     PHONE_LANDSCAPE,
   } from "#lib/components/player/PlayerLayout.svelte";
@@ -88,6 +89,7 @@
   import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
   import { recordNotice } from "#lib/record-notice.js";
   import { reload } from "#lib/reload.svelte.js";
+  import { season } from "#lib/season.svelte.js";
   import { FLOOR, stepSpeed } from "#lib/ts/pacing.js";
   import { GUIDE_TYPES } from "#lib/types.js";
 
@@ -615,6 +617,23 @@
         setCaptions={(on) => {
           if (on !== player.captions) player.toggleCaptions();
         }}
+      />
+
+      <!--
+        年越しのカウントダウンと紙吹雪 (季節の演出)。放送の時刻は、サーバの今から放送からの遅れ (`fromAir`) を引いたもの
+        (= 映しているコマの放送の時刻。テレビの時報とずれない)。遅れが分かるまではサーバの今
+      -->
+      <NewYear
+        at={() =>
+          season.now() - (player.fromAir === null ? 0 : player.fromAir * 1000)}
+        force={jikkyoActive && jikkyoChannel !== null
+          ? () => {
+              const w = player.airTime();
+              return w === null ? 0 : jikkyo.force(w);
+            }
+          : null}
+        hidden={player.showData}
+        testid="live-new-year"
       />
 
       <!--

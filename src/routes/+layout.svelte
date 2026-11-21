@@ -25,14 +25,24 @@
   } from "#lib/components/GuidePending.svelte";
   import Measure from "#lib/components/Measure.svelte";
   import Menu from "#lib/components/Menu.svelte";
+  import NewYearMark from "#lib/components/NewYearMark.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
   import SearchField from "#lib/components/SearchField.svelte";
+  import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
   import { denpaFontCssUrl } from "#lib/font.js";
   import { markLite } from "#lib/lite.js";
   import { measure } from "#lib/measure.svelte.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { startOffline } from "#lib/offline.svelte.js";
   import { TABLETOP } from "#lib/phone-form.js";
   import { followNavigation, reload } from "#lib/reload.svelte.js";
+  import {
+    decorated,
+    greetingText,
+    greetingYear,
+    type YearSummary,
+  } from "#lib/season.js";
+  import { season } from "#lib/season.svelte.js";
   import { groupLabel } from "#lib/settings-sections.js";
   import { theme } from "#lib/theme.svelte.js";
 
@@ -424,6 +434,52 @@
    * どちらも使う字が画面に出たときだけダウンロードされる。届くまでは画面の字で出しておく (`swap`)
    */
   const fontCss = denpaFontCssUrl();
+
+  /*
+   * **季節の演出** (`#lib/season.ts`。docs/screens.md「季節の演出」)。出すかは世帯の設定 (load の `seasonal`)、日付はサーバの時計。
+   * サーバの時刻は開いたときに 1 回だけもらう (`season.load`)。ロゴの飾りは分ごとに見直す
+   */
+  $effect(() => {
+    season.on = data.seasonal;
+    if (data.seasonal) void season.load();
+  });
+  const seasonClock = minuteClock();
+  const newYearMark = $derived(
+    season.ready && decorated(seasonClock.now + (season.skew ?? 0)),
+  );
+
+  /**
+   * **「denpa の 1 年」** (1 月 1〜7 日に初めて開いたとき、世帯で 1 回だけ)。サーバに出したと伝え (`POST /api/season/greeting`)、
+   * 先にほかの端末が出していれば (409) 出さない。返ってきた去年の数を添え、読み終えるまで消さない (`stay`)
+   */
+  let greeting = $state<Notice[]>([]);
+  let greetingAsked = false;
+  $effect(() => {
+    if (!season.ready || greetingAsked) return;
+    const year = greetingYear(season.now(), season.greeted);
+    if (year === null) return;
+    greetingAsked = true;
+    void (async () => {
+      const response = await fetch(resolve("api/season/greeting"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ year }),
+      }).catch(() => null);
+      if (response === null || !response.ok) return;
+      const summary = (await response
+        .json()
+        .catch(() => null)) as YearSummary | null;
+      season.greeted = year;
+      greeting = [
+        {
+          key: "new-year-greeting",
+          kind: "info",
+          text: greetingText(summary),
+          stay: true,
+        },
+      ];
+    })();
+  });
 </script>
 
 <svelte:window onkeydown={searchShortcut} />
@@ -498,6 +554,10 @@
           /></svg
         >
         <span class="visually-hidden">denpa</span>
+        <!-- 正月 (1 月 1〜3 日) の飾り。季節の演出がオフなら出さない (上の `newYearMark`) -->
+        {#if newYearMark}
+          <NewYearMark />
+        {/if}
       </a>
       <!--
         **チャンネルのお知らせの印** (上の `alert`)。乗せるか押すと、文と設定の「チャンネル」へのボタンを印の下に出す
@@ -661,6 +721,9 @@
 {#if measure.on}
   <Measure />
 {/if}
+
+<!-- 「denpa の 1 年」(上の `greeting`)。閉じたら出し直さない -->
+<Toasts notices={greeting} ondismiss={() => (greeting = [])} />
 
 <!-- 設定の入口に付ける点 (上の `fresh`)。読み上げには何の点かを渡す -->
 <!--

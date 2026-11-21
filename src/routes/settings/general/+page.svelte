@@ -135,6 +135,61 @@
       </Lead>
     </section>
     <!--
+      **季節の演出** (`server/season.ts`。docs/screens.md「季節の演出」)。世帯の設定で、既定はオン。
+      送ったあとの戻し方はロゴの記録のスイッチと同じ (断られたらサーバの値に戻す)
+    -->
+    <section class="section" data-testid="seasonal">
+      <div class="section-head">
+        <h2>季節の演出</h2>
+      </div>
+      <form
+        method="POST"
+        action="?/seasonal"
+        use:enhance={({ formElement }) =>
+          async ({ result, update }) => {
+            await update({ reset: false });
+            const box = formElement.querySelector<HTMLInputElement>(
+              'input[role="switch"]',
+            );
+            if (
+              box !== null &&
+              result.type !== "success" &&
+              result.type !== "redirect"
+            )
+              box.checked = data.seasonal;
+          }}
+      >
+        <label class="check">
+          <input
+            type="checkbox"
+            role="switch"
+            name="seasonal"
+            checked={data.seasonal}
+            onchange={(event) => event.currentTarget.form?.requestSubmit()}
+            data-testid="seasonal-toggle"
+          />
+          <span>年越しと正月の演出を出す</span>
+        </label>
+      </form>
+      <Lead class="indent">
+        大晦日の年越しのカウントダウン、1 月 1〜3 日のロゴの飾り、1 月 1〜7
+        日の「denpa の 1 年」の通知を出します。世帯で 1 つの設定です
+        {#snippet more()}
+          <p>
+            カウントダウンは、ライブ・追っかけ・録画の映像の左上に、観ている場面の放送の時刻で
+            23:59:50 から出します。0:00
+            の前後に実況のコメントが急に増えると、映像の上のほうに紙吹雪を少しだけ降らせます。動きを減らす設定の端末では降らせません。
+          </p>
+          <p>
+            「denpa の 1
+            年」は、去年に録画した本数と長さ、いちばん録った局と観た局を、この
+            denpa の中の記録から数えて出します。外には何も送りません。世帯で 1
+            回だけ出し、どれかの端末で出したらほかの端末には出しません。
+          </p>
+        {/snippet}
+      </Lead>
+    </section>
+    <!--
       **端末でしか出ない食い違いを、その端末で読むための入口。** 縦のはみ出しは、引っ込む
       アドレスバーや画面の切り欠きが絡むと**その端末でしか起きない**。入口をここに置くのは、
       PWA にアドレスバーが無いため (`?measure` を打つところがない)。

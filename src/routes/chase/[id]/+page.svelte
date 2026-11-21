@@ -29,6 +29,7 @@
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
+  import NewYear from "#lib/components/player/NewYear.svelte";
   import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
@@ -348,6 +349,18 @@
           {/if}
         {/snippet}
       </MediaStack>
+
+      <!-- 年越しのカウントダウンと紙吹雪 (季節の演出)。いま観ている場面の放送の時刻 (元の TS の先頭の放送時刻 + 再生位置) で数える -->
+      <NewYear
+        at={() => data.head + player.chasePosition * 1000}
+        force={jikkyoActive && data.jikkyo !== null
+          ? () => {
+              const w = airTime();
+              return w === null ? 0 : jikkyo.force(w);
+            }
+          : null}
+        testid="chase-new-year"
+      />
 
       <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き・コメントの一覧。観る画面はその下に削除) -->
       <ControlBar side shown={controls.shown}>
