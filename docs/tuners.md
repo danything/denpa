@@ -10,16 +10,17 @@
 
 - **チューナー**: 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
 
-  | チューナー                                                                                                                                                                                                                                 | 使う仕組み                                                      | ホストに入れるもの                                                        |
-  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-  | PT3 ([tuner-pt3.md](tuner-pt3.md))                                                                                                                                                                                                         | Linux DVB                                                       | ドライバ                                                                  |
-  | **実機で確かめていない**: PT1 / PT2、PX-BCUD、PX-S1UD、Friio (白)、南米の地デジ (ISDB-Tb) の機材、DiB8096 のリファレンス基板 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))                                                       | Linux DVB                                                       | ドライバ (機材によってはファームウェアも)                                 |
-  | **実機で確かめていない** (カーネルに入っていないドライバを自分で入れる): PX-Q3PE、PX-W3PE Rev1.3 ([tuner-pt3.md](tuner-pt3.md#カーネルに入っていないドライバで使う機材))                                                                   | Linux DVB                                                       | ドライバ (PX-W3PE はファームウェアも)                                     |
-  | IT930x の機材: PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P、PX-Q3U4 / PX-Q3PE4 / PX-W3U4 など (Linux の PX-MLT5PE・PX-Q3PE4・PX-MLT8PE の実機で確かめた。Windows・Mac は未確認。[tuner-it930x.md](tuner-it930x.md))                                | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
-  | PX-S1UD と、Siano の Rio 系の USB チューナー (USB `187f:0600`)。Linux は smsusb を blacklist したとき。Mac・Windows も (**実機の報告は Mac の 1 件だけ**。[tuner-px-s1ud.md](tuner-px-s1ud.md)、[下記](#siano-の-rio-系の-usb-チューナー)) | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
-  | PX-W3U3・PX-W3U2 など (**実機で確かめていない**。[下記](#px-w3u3-など-asicen-userland試験的))                                                                                                                                              | asicen-userland (試験的。上流のプレリリース v1.0.0-beta に固定) | なし (ファームウェアはエージェントのイメージに同梱)                       |
-  | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                                                                                  | エージェントが USB を直に                                       | なし                                                                      |
-  | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                                                                          | エージェントが USB を直に                                       | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
+  | チューナー                                                                                                                                                                                                                                 | 使う仕組み                                                      | ホストに入れるもの                                                                                  |
+  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+  | PT3 ([tuner-pt3.md](tuner-pt3.md))                                                                                                                                                                                                         | Linux DVB                                                       | ドライバ                                                                                            |
+  | **実機で確かめていない**: PT1 / PT2、PX-BCUD、PX-S1UD、Friio (白)、南米の地デジ (ISDB-Tb) の機材、DiB8096 のリファレンス基板 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))                                                       | Linux DVB                                                       | ドライバ (機材によってはファームウェアも)                                                           |
+  | **実機で確かめていない** (カーネルに入っていないドライバを自分で入れる): PX-Q3PE、PX-W3PE Rev1.3 ([tuner-pt3.md](tuner-pt3.md#カーネルに入っていないドライバで使う機材))                                                                   | Linux DVB                                                       | ドライバ (PX-W3PE はファームウェアも)                                                               |
+  | IT930x の機材: PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P、PX-Q3U4 / PX-Q3PE4 / PX-W3U4 など (Linux の PX-MLT5PE・PX-Q3PE4・PX-MLT8PE の実機で確かめた。Windows・Mac は未確認。[tuner-it930x.md](tuner-it930x.md))                                | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に)                           |
+  | PX-S1UD と、Siano の Rio 系の USB チューナー (USB `187f:0600`)。Linux は smsusb を blacklist したとき。Mac・Windows も (**実機の報告は Mac の 1 件だけ**。[tuner-px-s1ud.md](tuner-px-s1ud.md)、[下記](#siano-の-rio-系の-usb-チューナー)) | エージェントが USB を直に                                       | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に)                           |
+  | Microsoft Xbox One Digital TV Tuner (USB `045e:02d5`。ケーブル (ISDB-C) だけ。**実機で確かめていない**。[tuner-xbox-one.md](tuner-xbox-one.md))                                                                                            | エージェントが USB を直に                                       | 復調のファームウェア (ブリッジのファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
+  | PX-W3U3・PX-W3U2 など (**実機で確かめていない**。[下記](#px-w3u3-など-asicen-userland試験的))                                                                                                                                              | asicen-userland (試験的。上流のプレリリース v1.0.0-beta に固定) | なし (ファームウェアはエージェントのイメージに同梱)                                                 |
+  | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                                                                                  | エージェントが USB を直に                                       | なし                                                                                                |
+  | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                                                                          | エージェントが USB を直に                                       | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)                                     |
 
   「実機で確かめていない」機材は、ドライバと denpa の選局の手順を照らし合わせて動くはずと見ているものです。
   PX-S1UD を Linux DVB を使わずに動かす実装 (エージェントが USB を直に持つ) は仕様書から書いたものです。実機の報告は Mac の 1 件 (初めて開いたときの選局から TS の受信まで) だけで、Linux と Windows では確かめていません。
@@ -73,6 +74,7 @@ Amazon で見る (広告): [PT3](https://www.amazon.co.jp/dp/B00857CQAM?tag=doa0
 | IT930x の機材                       | 受信の状態と C/N (dB)                                         | CXD2856ER の仕様書の式と表。TC90522 の機種は PIX-DT295 と同じ換算式       |
 | PIX-DT295                           | 受信の状態と C/N (dB)                                         | TC90522 系の換算式 (下記)                                                 |
 | PX-S1UD (エージェントが USB を直に) | 受信の状態と C/N (dB)。実機で確かめていない                   | 機材の統計の応答にある SNR                                                |
+| Xbox One Digital TV Tuner           | 受信の状態と C/N (dB)。実機で確かめていない                   | 仕様書の式 (元のドライバの計算を書き出したもの)                           |
 
 DVB の C/N を画面まで通す流れは、実機では確かめていません (値を読む部分は単体テストで確かめた)。
 
@@ -81,7 +83,7 @@ Linux DVB はドライバが `DTV_STAT_SIGNAL_STRENGTH` を dBm (`FE_SCALE_DECIB
 CECH-ZD1 J は DiB8000 の仕様書 8.2 の表から求めた値です (別の DiB8000 の機材で測った表なので目安)。
 IT930x の機材のうち CXD2856ER の機種 (PX-MLT5 系など) は、地上波・ケーブル (ISDB-C)・スカパー！プレミアムで出ます。チューナーの AGC の値から仕様書の式で求めた値です (衛星は dBm として扱えるかが分からないので出しません)。
 PX-S1UD (エージェントが USB を直に持つとき) は、機材の統計の応答にある受信電力をそのまま出します。
-asicen-userland・PIX-DT295 と、IT930x の機材のうち TC90522 の機種 (PX-Q3・PX-W3 系など) では出ません。
+asicen-userland・PIX-DT295・Xbox One Digital TV Tuner と、IT930x の機材のうち TC90522 の機種 (PX-Q3・PX-W3 系など) では出ません。
 強度に目安の値や判定は付けていません。dBm はドライバや表しだいで校正されておらず、機種どうしでもテレビの「アンテナレベル」とも比べられないためです。
 強度も実機では確かめていません。
 
@@ -133,7 +135,7 @@ BS・CS を衛星の周波数のまま流す「BS・CS パススルー」なら�
 
 ### ケーブル (ISDB-C)
 
-**ケーブルの局 (種別 `CATV`) を受けられるのは、IT930x の機材のうち PX-MLT5 系・PX-MLT8PE・DTV02A-4TS-P と、DVB-C に対応した Linux DVB の機材です** ([tuner-it930x.md](tuner-it930x.md)・[tuner-pt3.md](tuner-pt3.md#ケーブル-isdb-c-を受ける-実機で確かめていない))。
+**ケーブルの局 (種別 `CATV`) を受けられるのは、IT930x の機材のうち PX-MLT5 系・PX-MLT8PE・DTV02A-4TS-P と、DVB-C に対応した Linux DVB の機材と、Xbox One Digital TV Tuner です** ([tuner-it930x.md](tuner-it930x.md)・[tuner-pt3.md](tuner-pt3.md#ケーブル-isdb-c-を受ける-実機で確かめていない)・[tuner-xbox-one.md](tuner-xbox-one.md))。Xbox One Digital TV Tuner は実機で確かめていません。
 BS・地上波をまとめ直して送るトランスモジュレーションと、ケーブルの局の自主放送が、この方式 (64QAM・256QAM) で送られます。
 Linux DVB の機材は、復調器が変調を見分けられれば QAM_AUTO で、見分けられなければ 64QAM と 256QAM を順に試して選局します。DVB-C の機材で受けられるかは、実機で確かめていません。
 ほかのチューナーは QAM を選局できないので、ケーブルの局は受けられません。

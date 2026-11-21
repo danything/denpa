@@ -40,6 +40,11 @@
             実行ファイルに埋め込み、機材を開くたびにそのまま送る (SianoFirmware.cs)。許諾の文面 (firmware/LICENCE.siano) は配布物に添える
         -->
         <EmbeddedResource Include="firmware/isdbt_rio.inp" LogicalName="isdbt_rio.inp" />
+        <!--
+            Xbox One Digital TV Tuner の USB ブリッジ (DiB0700) のファームウェア (linux-firmware のもの。DiBcom の ISC の許諾。firmware/README.md)。
+            実行ファイルに埋め込み、ブリッジにファームウェアが入っていないときにそのまま送る (Dib0700.cs)。許諾の文面 (firmware/LICENSE.dib0700) は配布物に添える
+        -->
+        <EmbeddedResource Include="firmware/dvb-usb-dib0700-1.20.fw" LogicalName="dvb-usb-dib0700-1.20.fw" />
     </ItemGroup>
 
     <!--

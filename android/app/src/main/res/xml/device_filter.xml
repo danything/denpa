@@ -27,6 +27,7 @@
     <usb-device vendor-id="0x0511" product-id="0x0052" /><!-- e-Better DTV03A-1TU -->
     <usb-device vendor-id="0x3275" product-id="0x0080" /><!-- PLEX PX-S1UD -->
     <usb-device vendor-id="0x187f" product-id="0x0600" /><!-- Siano RIO -->
+    <usb-device vendor-id="0x045e" product-id="0x02d5" /><!-- Microsoft Xbox One Digital TV Tuner -->
     <!-- asicen-userland の機材 (ASICEN 系。試験的)。agent/Denpa.Agent/Asicen.cs の機種の表と、ファームウェア待ちの ID -->
     <usb-device vendor-id="0x0b06" product-id="0x0001" /><!-- PLEX PX-S3U -->
     <usb-device vendor-id="0x0b06" product-id="0x0003" /><!-- PLEX PX-S3U2 -->

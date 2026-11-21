@@ -562,6 +562,7 @@ public sealed class TunerPool(
     /// <item><c>zd1j:&lt;USB のポート&gt;</c> … Sony CECH-ZD1 J (Zd1j.cs)。エージェントが USB を直に持つ (Linux・Windows・macOS)</item>
     /// <item><c>dt295:&lt;USB のポート&gt;</c> … PIXELA PIX-DT295 (Dt295NativeTuner.cs)。エージェントが USB を直に持ち、機材のレジスタを直に書いて動かす</item>
     /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など。It930xDevice.cs)。エージェントが USB を直に持つ。受けられる種別は受信機ごとに決まっている (地上波・衛星・ISDB-C (CATV)・J.83B (SKY)。LNB の給電は 15V だけ)</item>
+    /// <item><c>xbox:&lt;USB のポート&gt;</c> … Microsoft Xbox One Digital TV Tuner (XboxOne.cs)。エージェントが USB を直に持ち、ケーブル (ISDB-C) だけを受ける。カーネルが使っていれば開かない</item>
     /// </list>
     ///
     /// <para>それ以外は例外を送出する</para>
@@ -571,22 +572,23 @@ public sealed class TunerPool(
     public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false, string? name = null)
     {
         /*
-         * **Windows は、エージェントが USB を直に持つ機材 (Siano・CECH-ZD1 J・PIX-DT295・IT930x) だけ。** DVB は無く、asicen-userland は Windows を出していない。
+         * **Windows は、エージェントが USB を直に持つ機材 ((Siano・CECH-ZD1 J・PIX-DT295・IT930x・Xbox One Digital TV Tuner)) だけ。** DVB は無く、asicen-userland は Windows を出していない。
          * 書いてあっても開かない (開けば libc を呼びにいって落ちる)
          */
-        if (OperatingSystem.IsWindows() && !Siano.Is(path) && !Zd1j.Is(path) && !Dt295.Is(path) && !It930x.Is(path))
+        if (OperatingSystem.IsWindows() && !Siano.Is(path) && !Zd1j.Is(path) && !Dt295.Is(path) && !It930x.Is(path) && !XboxOne.Is(path))
         {
             throw new IOException(
-                $"{path} は Windows では使えません (Windows で使えるのは {Siano.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> と {Dt295.Scheme}<USB のポート> と {It930x.Scheme}<USB のポート>:<受信機> だけ)");
+                $"{path} は Windows では使えません (Windows で使えるのは {Siano.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> と {Dt295.Scheme}<USB のポート> と {It930x.Scheme}<USB のポート>:<受信機> と {XboxOne.Scheme}<USB のポート> だけ)");
         }
         if (Zd1j.Parse(path) is { } zd1j) return new Zd1jTuner(zd1j, followZd1j, name);
         if (Dt295.Parse(path) is { } dt295) return new Dt295NativeTuner(dt295, name);
         if (It930x.Parse(path) is { } it930x) return new It930xTuner(it930x.Port, it930x.Receiver, lnb, name);
         if (Siano.Parse(path) is { } port) return Siano.Open(port, name);
+        if (XboxOne.Parse(path) is { } xbox) return new XboxOneTuner(xbox, name);
         if (AsicenUserland.Parse(path) is { } asicen) return AsicenUserland.Open(asicen.Id, asicen.Receiver, lnb, name);
         if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb, name);
         throw new IOException(
-            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Siano.Scheme}<USB のポート> か {AsicenUserland.Scheme}<USB のポート>:<受信機> か {Zd1j.Scheme}<USB のポート> か {Dt295.Scheme}<USB のポート> か {It930x.Scheme}<USB のポート>:<受信機>)");
+            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Siano.Scheme}<USB のポート> か {AsicenUserland.Scheme}<USB のポート>:<受信機> か {Zd1j.Scheme}<USB のポート> か {Dt295.Scheme}<USB のポート> か {It930x.Scheme}<USB のポート>:<受信機> か {XboxOne.Scheme}<USB のポート>)");
     }
 
     /// <summary>
