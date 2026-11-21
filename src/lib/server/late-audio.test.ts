@@ -206,11 +206,13 @@ describe("途中から現れる音声をエンコードする引数", () => {
       -10.5,
       2,
     ).join(" ");
-    expect(args).toContain("-copyts -skip_initial_bytes 7520");
-    expect(args).toContain(`-map 0:i:${SUB_PID}`);
     expect(args).toContain(
-      "-af asetpts=PTS-10.500000/TB,aresample=async=1:first_pts=0",
+      "-copyts -itsoffset -10.500000 -skip_initial_bytes 7520",
     );
+    expect(args).toContain(`-map 0:i:${SUB_PID}`);
+    expect(args).toContain("-af aresample=async=1:first_pts=0");
+    // イメージの ffmpeg に組んでいないフィルタは使わない (Dockerfile の --enable-filter)
+    expect(args).not.toContain("asetpts");
     expect(args).toContain("-c:a libopus -b:a 256k -ac 2");
   });
 });
