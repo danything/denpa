@@ -160,8 +160,8 @@
 
     <p class="small muted" data-testid="issue-length">
       {#if omitted > 0}
-        URL に入るぶんだけ、警告とエラーを先に入れました ({omitted} 行を省きました)。全部はコピーかダウンロードして
-        Issue に貼ってください。
+        URL に入るぶんだけ、再生とチューナーの記録、警告とエラーの順に入れました
+        ({omitted} 行を省きました)。全部はコピーかダウンロードして Issue に貼ってください。
       {:else}
         ログは全部入っています。
       {/if}

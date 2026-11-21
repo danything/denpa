@@ -9,6 +9,10 @@ describe("「バージョンと環境」と「ログ」の読み込み", () => {
     });
     expect(data.agentsError).toContain("アクセストークンでは使えません");
     expect(data.serverLogs).toEqual([]);
+    expect(data.faults).toEqual([]);
+    // サーバの機材 (CPU・GPU) はエージェントのある場所に繋がらないので返す
+    expect(typeof data.environment.cpu).toBe("string");
+    expect(typeof data.environment.gpu).toBe("string");
     expect(data.hosts).toEqual([]);
     expect(data.agents).toEqual([]);
     expect(await data.agentLogs).toEqual([]);

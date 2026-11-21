@@ -1,4 +1,6 @@
-import { arch, release, type } from "node:os";
+import { arch, cpus, release, type } from "node:os";
+
+import { desc } from "drizzle-orm";
 
 import { type AgentAbout, guessLevel, type LogLine } from "../issue-report";
 import { type Known, MASK, redact } from "../redact";
@@ -6,9 +8,10 @@ import { fetchAgent } from "./agent-client";
 import { type Agent, agentHostnames, agentSecrets } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
+import { describeDevice, type HwEncode, hwEncode } from "./hwenc";
 import { serverLogs } from "./log-buffer";
 import { pwaNames } from "./manifest";
-import { webhooks } from "./schema";
+import { agentFaults, webhooks } from "./schema";
 
 /**
  * **設定の「その他」の「バージョンと環境」と「ログ」に出すもの。** サーバとエージェントのログ、動いている環境。
@@ -174,16 +177,72 @@ export function serverLogLines(known: Known): LogLine[] {
   return scrub(serverLogs(), known);
 }
 
-/** サーバの動いている環境 */
+/**
+ * サーバの動いている環境。CPU は型番とコア数 (論理コア)、GPU はデバイスごとにエンコードできるもの (`hwenc.ts` の確かめた結果。
+ * 起動直後でまだ確かめ終わっていなければ、そう書く)。どちらもライブで画質を下げた理由を切り分けるのに使う
+ */
 export function serverEnvironment(): {
   version: string;
   os: string;
   runtime: string;
+  cpu: string;
+  gpu: string;
 } {
   const bun = (globalThis as { Bun?: { version: string } }).Bun?.version;
   return {
     version: config.version,
     os: `${type()} ${release()} (${arch()})`,
     runtime: bun === undefined ? `Node ${process.version}` : `Bun ${bun}`,
+    cpu: cpuText(cpus()),
+    gpu: gpuText(hwEncode()),
   };
+}
+
+/** CPU の型番とコア数。型番が読めない (Android の一部など) ときはコア数だけ */
+export function cpuText(list: readonly { model: string }[]): string {
+  if (list.length === 0) return "—";
+  const models = [
+    ...new Set(list.map((cpu) => cpu.model.trim()).filter(Boolean)),
+  ];
+  const cores = `${list.length} コア`;
+  return models.length === 0 ? cores : `${models.join("、")} (${cores})`;
+}
+
+/** GPU ごとのエンコードできるもの (設定の「録画」の GPU の一覧と同じ一言)。見つからなければその理由 */
+export function gpuText(hw: HwEncode): string {
+  if (!hw.probed) return "確かめています…";
+  if (hw.devices.length === 0) return hw.message;
+  return hw.devices
+    .map((device) => `${device.label}: ${describeDevice(device)}`)
+    .join("、");
+}
+
+/** チューナーの記録に入れる、機材の異常 (`agent_faults`) の件数。新しいほうから */
+export const FAULT_LINES = 20;
+
+/** 機材の異常 (`agent-faults.ts`) の新しいほうから `limit` 件を古い順に。秘密の値は消す (ホスト名は Issue に貼るときに伏せる) */
+export function recentFaults(
+  known: Known,
+  limit = FAULT_LINES,
+): { agent: number; at: number; text: string }[] {
+  let rows: { agent: number; at: number; text: string }[];
+  try {
+    rows = orm()
+      .select({
+        agent: agentFaults.agent_id,
+        at: agentFaults.at,
+        text: agentFaults.text,
+      })
+      .from(agentFaults)
+      .orderBy(desc(agentFaults.at), desc(agentFaults.id))
+      .limit(limit)
+      .all();
+  } catch {
+    return [];
+  }
+  const lines = scrub(
+    rows.map((row) => ({ at: row.at, level: "warn" as const, text: row.text })),
+    known,
+  );
+  return rows.map((row, i) => ({ ...row, text: lines[i]!.text })).reverse();
 }

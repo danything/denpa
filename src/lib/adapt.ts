@@ -1,3 +1,4 @@
+import { playbackEvent, rememberPlayback } from "./playback-log";
 import {
   encodeSlow,
   LOWEST_RUNG,
@@ -149,6 +150,8 @@ export interface AdaptSample {
    * その段から上へはもう上げない (`ceiling`)。手で選んだ段は動かさない
    */
   behind?: boolean;
+  /** 受け取っているコーデック (`h264`・`mpeg2` など)。再生の記録 (`playback-log.ts`) にだけ使う。省略は分からない */
+  codec?: string | null;
 }
 
 /**
@@ -352,9 +355,28 @@ export class RungAdapter {
 
   /**
    * 刻むたびに呼ぶ。**段を動かすか、断り書きが要るときだけ返す。** null なら段はそのままで、断り書きも要らない。
-   * `encode` と `pinned` は、その状態が続く間は刻むたびに返す
+   * `encode` と `pinned` は、その状態が続く間は刻むたびに返す。
+   * 返したものは、そのときの様子と一緒に端末に覚える (`playback-log.ts`。「Issue にする」に入れる)
    */
   tick(s: AdaptSample): AdaptDecision | null {
+    const decision = this.decide(s);
+    if (decision !== null) {
+      const need = decision.reason === "restored" ? decision.step : s.current;
+      rememberPlayback(
+        playbackEvent(
+          s,
+          decision,
+          adaptNote(decision, s.current),
+          s.route === "live"
+            ? this.liveBps(need, s.baseKbps)
+            : stepBps(need, s.baseKbps),
+        ),
+      );
+    }
+    return decision;
+  }
+
+  private decide(s: AdaptSample): AdaptDecision | null {
     const { now } = s;
     if (this.last === null) this.reset(now);
     else if (s.current !== this.last) this.switched(now, this.last, s.current);

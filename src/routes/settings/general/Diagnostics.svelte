@@ -10,14 +10,17 @@
   import {
     agentSystem,
     CCID_DRIVER,
+    deviceText,
     environmentText,
     type LogLine,
     type LogSource,
     sameVersion,
     stamp,
+    tunerSource,
   } from "#lib/issue-report.js";
   import { held } from "#lib/live-updates.svelte.js";
   import { PHONE_FORM } from "#lib/phone-form.js";
+  import { loadPlayback, playbackSource } from "#lib/playback-log.js";
   import { redact } from "#lib/redact.js";
 
   import type { PageData } from "./$types";
@@ -42,10 +45,18 @@
   const agentLogs = held(() => data.agentLogs);
   const abouts = held(() => data.agentAbout);
 
-  /** ブラウザ。サーバでは分からないので、開いてから入れる */
+  /** ブラウザと端末 (ブラウザ・OS・画面の大きさ・指で操作するか)。サーバでは分からないので、開いてから入れる */
   let browser = $state("");
+  let device = $state("");
   onMount(() => {
     browser = navigator.userAgent;
+    device = deviceText({
+      userAgent: navigator.userAgent,
+      screen: { width: screen.width, height: screen.height },
+      viewport: { width: innerWidth, height: innerHeight },
+      pixelRatio: devicePixelRatio,
+      coarse: matchMedia("(pointer: coarse)").matches,
+    });
   });
 
   const tunerText = $derived(
@@ -188,6 +199,9 @@
       const environment = environmentText({
         denpaVersion: data.environment.version,
         server: `${data.environment.os}・${data.environment.runtime}`,
+        cpu: data.environment.cpu,
+        gpu: data.environment.gpu,
+        device: device || "—",
         agents: data.agents.map((agent, at) => ({
           name: agent.name,
           about: abouts.value?.[at],
@@ -215,10 +229,30 @@
           lines: [],
           note: `(${redact(data.agentsError, known)})`,
         });
+      // この端末の再生の記録 (`playback-log.ts`) と、チューナーの様子・機材の異常。URL に入りきらないときはこの 2 つを先に選ぶ
+      const playback = playbackSource(loadPlayback());
+      const tuner = tunerSource(
+        tuners.value,
+        data.faults.map((fault) => ({
+          agentName: agentName(fault.agent),
+          at: fault.at,
+          text: fault.text,
+        })),
+        Date.now(),
+      );
+      const scrubSource = (source: LogSource): LogSource => ({
+        ...source,
+        lines: scrub(source.lines),
+        ...(source.note === undefined
+          ? {}
+          : { note: redact(source.note, known) }),
+      });
       report = {
         version: data.environment.version,
         environment: redact(environment, known),
         sources: [
+          scrubSource(playback),
+          scrubSource(tuner),
           {
             label: "サーバ",
             tagged: true,
@@ -238,7 +272,7 @@
   <div class="sections readable">
     <!--
       **動いているバージョンと、バグを報告するときに聞かれるもの。** denpa とエージェントのバージョン・OS・
-      チューナー・カードリーダー・ブラウザ。エージェントのことは `GET /denpa/about` から。macOS のエージェントなら CCID ドライバも。
+      サーバの CPU と GPU・チューナー・カードリーダー・端末 (ブラウザ・OS・画面の大きさ・指で操作するか)・ブラウザ (UA)。エージェントのことは `GET /denpa/about` から。macOS のエージェントなら CCID ドライバも。
       **新しいバージョンのリンクは denpa のバージョンのすぐ下に出す** (`server/update.ts`)。スマホの形ではヘッダーを隠すので、
       ここが置き場になる。出ている間は設定の入口 (下のタブ・ヘッダー・左の一覧の「その他」) に同じ点を付ける (`.fresh-dot`)。
       main のイメージと手元は `dev` で、リリースと見比べない
@@ -279,6 +313,18 @@
           <span class="small" data-testid="diag-server">
             {data.environment.os}・{data.environment.runtime}
           </span>
+        </div>
+        <div class="field">
+          <span class="field-label">CPU</span>
+          <span class="small" data-testid="diag-cpu"
+            >{data.environment.cpu}</span
+          >
+        </div>
+        <div class="field">
+          <span class="field-label">GPU</span>
+          <span class="small" data-testid="diag-gpu"
+            >{data.environment.gpu}</span
+          >
         </div>
         <!-- エージェントは 1 台ずつ、名前を付けた行にする (1 台でも同じ形) -->
         {#if data.agentsError !== null}
@@ -334,6 +380,10 @@
           </span>
         </div>
         <div class="field">
+          <span class="field-label">端末</span>
+          <span class="small" data-testid="diag-device">{device || "—"}</span>
+        </div>
+        <div class="field">
           <span class="field-label">ブラウザ</span>
           <span class="small ua" data-testid="diag-browser"
             >{browser || "—"}</span
@@ -383,6 +433,11 @@
             にする」では、カードの番号・IP
             アドレス・ホスト名・トークンなどを伏せた報告を作り、確かめてから
             GitHub で開きます。denpa からは何も送りません。
+          </p>
+          <p>
+            報告には、ログのほかに、この端末で画質を下げたり上げたりしたときの理由と受け取りの速さ
+            (新しいほうから 40 件。この端末にだけ覚えています)
+            と、チューナーの受信の状態・機材の異常も入ります。
           </p>
           <p>
             エージェントのログにはレベル (警告・エラー)

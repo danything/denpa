@@ -3,7 +3,9 @@ import { describe, expect, test } from "bun:test";
 import {
   type AgentAbout,
   agentSystem,
+  browserAndOs,
   cut,
+  deviceText,
   environmentText,
   fitLogs,
   fullReport,
@@ -14,6 +16,7 @@ import {
   type LogLine,
   type LogSource,
   sameVersion,
+  tunerSource,
   URL_LIMIT,
 } from "./issue-report";
 
@@ -141,6 +144,22 @@ describe("最初に入れるログ", () => {
     expect(dropped).toBe(0);
   });
 
+  test("先に選ぶ見出し (再生とチューナーの記録) は、ほかの見出しの警告とエラーより先に入る", () => {
+    const errors = Array.from({ length: 2000 }, (_, i) =>
+      line(i, "error", `サーバの行 ${i} ${"x".repeat(80)}`),
+    );
+    const playback = Array.from({ length: 10 }, (_, i) =>
+      line(i, "info", `再生の行 ${i}`),
+    );
+    const { text, omitted } = initialLogs(fields, [
+      { label: "この端末の再生", tagged: true, lines: playback, first: true },
+      { label: "サーバ", tagged: true, lines: errors },
+    ]);
+    expect(omitted).toBeGreaterThan(0);
+    for (let i = 0; i < 10; i++) expect(text).toContain(`再生の行 ${i}`);
+    expect(text).toContain("--- この端末の再生のログ (10 行) ---");
+  });
+
   test("取れなかった相手は見出しの下に理由", () => {
     const { text } = fitLogs(
       [
@@ -211,6 +230,10 @@ describe("環境の欄", () => {
   const parts = {
     denpaVersion: "v1.2.3",
     server: "Linux 6.12.0 (x64)・Bun 1.4.4",
+    cpu: "AMD Ryzen 7 5700G (16 コア)",
+    gpu: "renderD128 (AMD): VA-API: H.264",
+    device:
+      "Chrome 131・Android 14・画面 412×915・窓 412×800・倍率 2.63・指で操作",
     tuners: "PX-Q3U4 (GR)",
     card: "Reader (使用中)",
     browser: "Firefox",
@@ -240,11 +263,11 @@ describe("環境の欄", () => {
     about: { about: AgentAbout | null; error: string | null } | undefined,
   ) => [{ name: "tuner-agent", about }];
 
-  test("サーバ・エージェント・チューナー・カードリーダー・ブラウザの順に 1 行で", () => {
+  test("サーバ・CPU・GPU・端末・エージェント・チューナー・カードリーダー・ブラウザの順に 1 行で", () => {
     expect(
       environmentText({ ...parts, agents: one({ about: linux, error: null }) }),
     ).toBe(
-      "サーバ: Linux 6.12.0 (x64)・Bun 1.4.4 / エージェント「tuner-agent」: v1.2.3・Linux 6.12.0 #1 SMP (x64) / チューナー: PX-Q3U4 (GR) / カードリーダー: Reader (使用中) / ブラウザ: Firefox",
+      "サーバ: Linux 6.12.0 (x64)・Bun 1.4.4 / CPU: AMD Ryzen 7 5700G (16 コア) / GPU: renderD128 (AMD): VA-API: H.264 / 端末: Chrome 131・Android 14・画面 412×915・窓 412×800・倍率 2.63・指で操作 / エージェント「tuner-agent」: v1.2.3・Linux 6.12.0 #1 SMP (x64) / チューナー: PX-Q3U4 (GR) / カードリーダー: Reader (使用中) / ブラウザ: Firefox",
     );
   });
 
@@ -307,5 +330,119 @@ describe("環境の欄", () => {
         agents: one({ about: { ...linux, version: null }, error: null }),
       }),
     ).toContain("エージェント「tuner-agent」: 不明・");
+  });
+});
+
+describe("端末", () => {
+  test("UA からブラウザと OS を読む", () => {
+    const cases: [string, string | null, string | null][] = [
+      [
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+        "Chrome 131",
+        "Android 14",
+      ],
+      [
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
+        "Safari 18.1",
+        "iOS 18.1 (iPhone)",
+      ],
+      [
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0.6723.90 Mobile/15E148 Safari/604.1",
+        "Chrome 130",
+        "iOS 17.5 (iPhone)",
+      ],
+      [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+        "Edge 131",
+        "Windows",
+      ],
+      [
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
+        "Firefox 133",
+        "macOS",
+      ],
+      [
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36 Tesla/2024.44.25",
+        "Chrome 79",
+        "Linux (Tesla)",
+      ],
+      ["curl/8.0", null, null],
+    ];
+    for (const [ua, browser, os] of cases)
+      expect(browserAndOs(ua)).toEqual({ browser, os });
+  });
+
+  test("画面と窓の大きさ・倍率・指で操作するかを添える", () => {
+    expect(
+      deviceText({
+        userAgent: "curl/8.0",
+        screen: { width: 1920, height: 1080 },
+        viewport: { width: 1280, height: 720 },
+        pixelRatio: 1.5,
+        coarse: false,
+      }),
+    ).toBe(
+      "ブラウザ不明・OS 不明・画面 1920×1080・窓 1280×720・倍率 1.5・マウスで操作",
+    );
+  });
+});
+
+describe("チューナーの記録", () => {
+  const NOW = BASE + 60_000;
+  const tuner = {
+    name: "PX-Q3U4 1",
+    agentName: "居間",
+    disabled: false,
+    error: null,
+    signal: null,
+    uses: [] as string[],
+  };
+
+  test("使っている用途・受信の状態・機材の異常を並べ、ほかの見出しより先に選ぶ", () => {
+    const source = tunerSource(
+      {
+        list: [
+          {
+            ...tuner,
+            uses: ["rec", "live"],
+            signal: { locked: true, cn: 28.34, unit: "dB", atTune: false },
+          },
+          { ...tuner, name: "PX-Q3U4 2" },
+          {
+            ...tuner,
+            name: "PX-Q3U4 3",
+            uses: ["epg"],
+            signal: { locked: false, cn: null, unit: "dB", atTune: true },
+          },
+          { ...tuner, name: "PX-Q3U4 4", error: "開けません" },
+        ],
+        error: null,
+      },
+      [{ agentName: "居間", at: BASE, text: "TS のバッファが溢れていました" }],
+      NOW,
+    );
+    expect(source.first).toBe(true);
+    expect(source.note).toBeUndefined();
+    expect(source.lines.map((l) => [l.level, l.text])).toEqual([
+      ["warn", "「居間」機材の異常: TS のバッファが溢れていました"],
+      [
+        "info",
+        "「居間」PX-Q3U4 1・録画・ライブ視聴に使用中・同期しています・C/N: 28.3 dB",
+      ],
+      ["info", "「居間」PX-Q3U4 2・空き"],
+      ["warn", "「居間」PX-Q3U4 3・番組表の取得に使用中・同期していません"],
+      ["error", "「居間」PX-Q3U4 4・空き・エラー: 開けません"],
+    ]);
+    expect(source.lines[0]!.at).toBe(BASE);
+    expect(source.lines[1]!.at).toBe(NOW);
+  });
+
+  test("取得できなかったときは理由を見出しの下に", () => {
+    expect(tunerSource({ list: [], error: "繋がりません" }, [], NOW).note).toBe(
+      "(チューナーを取得できません: 繋がりません)",
+    );
+    expect(tunerSource(undefined, [], NOW).note).toBe(
+      "(チューナーを取得できませんでした)",
+    );
   });
 });
