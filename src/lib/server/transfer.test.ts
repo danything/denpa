@@ -52,7 +52,10 @@ function seedOld(where: ReturnType<typeof machine>): void {
   use(where);
   orm()
     .insert(schema.settings)
-    .values({ key: "keepOriginal", value: "true", updated_at: now })
+    .values([
+      { key: "keepOriginal", value: "true", updated_at: now },
+      { key: "rankingDecided", value: "1", updated_at: now },
+    ])
     .run();
   orm()
     .insert(schema.rules)
@@ -247,6 +250,14 @@ describe("書き出す", () => {
     expect(n("ranking_link")).toBe(0);
     expect(n("ranking_sent")).toBe(0);
     expect(n("ranking_watched")).toBe(0);
+    // 参加していたので決めた印も消し、移した先で参加の案内を出す。ほかの設定は持っていく
+    const keys = (
+      db.query("SELECT key FROM settings ORDER BY key").all() as {
+        key: string;
+      }[]
+    ).map((r) => r.key);
+    expect(keys).toContain("keepOriginal");
+    expect(keys).not.toContain("rankingDecided");
     // アクセストークン (ハッシュだけ) は持っていく
     expect(n("api_tokens")).toBe(1);
     expect(n("rules")).toBe(1);

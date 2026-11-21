@@ -78,10 +78,13 @@ const {
   digest,
   dropRankingView,
   isoJst,
+  DECIDED_KEY,
+  decline,
   join,
   leave,
   nextSendAt,
   plan,
+  rankingInvite,
   rankingState,
   rankingView,
   sendIfDue,
@@ -95,6 +98,7 @@ const {
   recordings,
   reservations,
   services,
+  settings,
 } = await import("./schema");
 const watch = await import("./ranking-watch");
 const { programKey, serviceKey } = await import("./tuner");
@@ -634,6 +638,59 @@ describe("オフにする", () => {
     received = [];
     await sendIfDue(now() + 10 * SEND_EVERY);
     expect(received).toHaveLength(0);
+  });
+});
+
+describe("参加するかの案内", () => {
+  beforeEach(() => {
+    orm().delete(settings).where(eq(settings.key, DECIDED_KEY)).run();
+  });
+
+  test("参加しておらず、まだ決めていない家にだけ出す", () => {
+    expect(rankingInvite()).toBe(true);
+  });
+
+  test("印を足す前から参加している家には出さない", () => {
+    orm()
+      .insert(rankingLink)
+      .values({
+        id: 1,
+        token: TOKEN_A,
+        slot: 0,
+        next_at: now(),
+        joined_at: now(),
+      })
+      .run();
+    expect(rankingInvite()).toBe(false);
+  });
+
+  test("参加したら出さず、やめたあとも出さない", async () => {
+    await join();
+    expect(rankingInvite()).toBe(false);
+    await leave();
+    expect(rankingState()).toEqual({ state: "off" });
+    expect(rankingInvite()).toBe(false);
+  });
+
+  test("参加しないを選んだら、何も送らずに出さない", async () => {
+    await decline();
+    expect(received).toHaveLength(0);
+    expect(rankingState()).toEqual({ state: "off" });
+    expect(rankingInvite()).toBe(false);
+  });
+
+  test("参加できなかったときは決めたことにせず、また出す", async () => {
+    reply = () => new Response("boom", { status: 503 });
+    expect((await join()).ok).toBe(false);
+    expect(rankingInvite()).toBe(true);
+  });
+
+  test("参加しないを押すまでにほかの端末で参加していたら、参加したままにする", async () => {
+    await join();
+    received = [];
+    await decline();
+    expect(received).toHaveLength(0);
+    expect(rankingState().state).toBe("on");
   });
 });
 

@@ -2,6 +2,7 @@ import { fail, redirect } from "@sveltejs/kit";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { parseId } from "#lib/id.js";
+import { tokenRefusal } from "#lib/server/auth.js";
 import { countClips, findClips } from "#lib/server/clips.js";
 import { reserveWarning } from "#lib/server/contracts.js";
 import { now, orm } from "#lib/server/db.js";
@@ -14,7 +15,12 @@ import {
 } from "#lib/server/epg.js";
 import { removeRecording } from "#lib/server/files.js";
 import { relative } from "#lib/server/paths.js";
-import { rankingView } from "#lib/server/ranking.js";
+import {
+  decline,
+  join,
+  rankingInvite,
+  rankingView,
+} from "#lib/server/ranking.js";
 import { recordingFromForm } from "#lib/server/recording.js";
 import {
   cancelReservation,
@@ -122,7 +128,7 @@ function ruleById(raw: unknown) {
  * - `?from=program:<ID>` / `?from=recording:<ID>` 詳細の「ルールを作る」から。シリーズ名を言葉にして出直す
  * - `?keyword=` `?serviceIds=` など書く欄の名前。その値で書く欄を始める (前のルールの画面のリンク)
  */
-export function load({ url }) {
+export function load({ url, locals }) {
   const params = url.searchParams;
   const q = searchQuery(params.get("q"));
 
@@ -175,10 +181,15 @@ export function load({ url }) {
    * **人気の番組** (言葉なしで開いて、ルールを書いていないとき)。参加していなければ null で、節を出さない。
    * hub を呼ぶ間は Promise のまま渡し、画面は待たずに出す (`ranking.rankingView`)
    */
-  const ranking =
-    q === "" && editing === undefined && seed === null ? rankingView() : null;
+  const blank = q === "" && editing === undefined && seed === null;
+  const ranking = blank ? rankingView() : null;
   return {
     ranking,
+    /**
+     * **参加の案内** (参加しておらず、まだ決めていない家。`ranking.rankingInvite`)。節「人気の番組」の場所に出す。
+     * 参加は世帯の同意なので、アクセストークン (テレビのアプリ) には出さない (`joinRanking` も断る)
+     */
+    rankingInvite: blank && tokenRefusal(locals) === null && rankingInvite(),
     q,
     programs: searchPrograms(q, options),
     recordings: searchRecordings(q, options),
@@ -226,6 +237,26 @@ export function load({ url }) {
 }
 
 export const actions = {
+  /**
+   * 参加の案内の「参加」。設定のスイッチをオンにしたときと同じく、hub からトークンを受け取ってすぐ送る
+   * (受け取れなければ断り、案内は出したまま)。アクセストークンでは変えられない (設定の `saveRanking` と同じ)
+   */
+  joinRanking: async ({ locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
+    const result = await join();
+    if (!result.ok) return fail(502, { message: result.message });
+    return { success: true };
+  },
+
+  /** 参加の案内の「参加しない」。何も送らず、決めたことだけ残す (ほかの端末にも案内を出さない) */
+  declineRanking: async ({ locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
+    await decline();
+    return { success: true, rankingDeclined: true };
+  },
+
   /** 番組を予約する。録画のしかたは設定画面の 1 箇所で決める (番組表の予約と同じ) */
   reserve: async ({ request }) => {
     const form = await request.formData();
