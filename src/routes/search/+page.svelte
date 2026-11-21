@@ -29,6 +29,7 @@
   } from "#lib/format.js";
   import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { deleteWithLocal, offline } from "#lib/offline.svelte.js";
+  import { RANKING_CONSENT } from "#lib/ranking.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
 
   import type {
@@ -294,6 +295,12 @@
             : "ルールを削除しました",
       });
     }
+    if (form?.rankingDeclined)
+      list.push({
+        key: "ranking-declined",
+        kind: "success",
+        text: "番組ランキングに参加しません。設定の「連携」で変えられます",
+      });
     if (form?.toggled)
       list.push({
         key: "rule-toggled",
@@ -361,13 +368,15 @@
             </ul>
           </section>
         {/if}
-        <!-- 番組ランキングに参加している世帯だけ。hub を待つ間も画面は出し、節だけあとから埋める -->
+        <!-- 番組ランキングに参加している世帯だけ。hub を待つ間も画面は出し、節だけあとから埋める。まだ決めていない世帯には参加の案内 -->
         {#if data.ranking !== null}
           {#await data.ranking}
             {@render rankingSection(null)}
           {:then view}
             {@render rankingSection(view)}
           {/await}
+        {:else if data.rankingInvite}
+          {@render rankingInvite()}
         {/if}
       {/if}
     {:else}
@@ -788,6 +797,48 @@
       </ul>
       {@render more("ranking", view.rows.length, view.rows.length)}
     {/if}
+  </section>
+{/snippet}
+<!--
+  **参加の案内** (参加しておらず、まだ決めていない家。`ranking.rankingInvite`)。節「人気の番組」の場所に出す。
+  文は設定の説明の 1 行目と同じ同意の文 (`#lib/ranking.ts`)。「参加」は設定のスイッチをオンにしたときと同じで、
+  参加できたら順位の節に替わる。「参加しない」を押すと、どの端末にも二度と出さない (世帯の設定)
+-->
+{#snippet rankingInvite()}
+  <section
+    class="hits-section"
+    aria-labelledby="ranking-invite-head"
+    data-testid="search-ranking-invite"
+  >
+    <div class="hits-head">
+      <h2 id="ranking-invite-head">人気の番組</h2>
+    </div>
+    <div class="empty-state glow">
+      <p class="bold">番組ランキングに参加すると、ここに人気の番組が並びます</p>
+      <p class="small muted">
+        {RANKING_CONSENT}
+        <a
+          href={`${resolve("settings/integrations")}#ranking`}
+          data-testid="search-ranking-invite-more">詳しく</a
+        >
+      </p>
+      <div class="actions">
+        <ActionButton
+          action="?/joinRanking"
+          class="small"
+          testid="search-ranking-join"
+        >
+          参加
+        </ActionButton>
+        <ActionButton
+          action="?/declineRanking"
+          class="secondary outline small"
+          testid="search-ranking-decline"
+        >
+          参加しない
+        </ActionButton>
+      </div>
+    </div>
   </section>
 {/snippet}
 {#snippet rank(value: number)}

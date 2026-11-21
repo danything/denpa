@@ -4,6 +4,7 @@ import {
   cancelAllReservations,
   expect,
   goto,
+  pairToken,
   searchRowStart,
   syncEpg,
   test,
@@ -15,6 +16,7 @@ import {
  * 偽の denpa-hub (`tests/fake/denpa-hub.ts`) がトークンを出し、送られた本文を貯めるので、
  * スイッチをオンにする → トークンを受け取ってすぐ送る → 最後に送った時刻が出る → オフにするとトークンを消す、まで画面で通す。
  * 検索を言葉なしで開いたときの節「人気の番組」も、偽の hub が送られた予約をそのまま順位にして返すので画面で通す。
+ * まだ決めていない家に同じ場所で出す参加の案内も、「参加」から画面で通す。
  * 送る中身・差分・送る時刻のずらし方・順位の突き合わせとためておき方は単体テスト (`ranking.test.ts`)
  */
 interface HubState {
@@ -24,6 +26,83 @@ interface HubState {
 test.describe("番組ランキング", () => {
   test.beforeEach(async ({ request, stack }) => {
     await request.post(`${stack.hubUrl}/__control/ranking`, { data: "ok" });
+  });
+
+  /*
+   * **まだ決めていない家にだけ、検索の「人気の番組」の場所に参加の案内を出す。** 参加するかを決めるのはこのファイルだけなので、
+   * 先頭のこのテストだけが「まだ決めていない」を見られる。参加を選んだあとは二度と出ないので、
+   * 「参加しない」は単体テスト (`ranking.test.ts` の「参加するかの案内」) で見る
+   */
+  test("まだ決めていなければ検索に参加の案内を出し、参加したら出さない。オフに決めたあとも出さない", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    const tokens = async () =>
+      (
+        (await (
+          await request.get(`${stack.hubUrl}/__control/state`)
+        ).json()) as HubState
+      ).ranking.tokens;
+    const before = await tokens();
+
+    // アクセストークン (テレビのアプリ) には出さず、参加もさせない
+    const token = await pairToken(request, "ranking-invite");
+    const auth = { authorization: `Bearer ${token}` };
+    const html = await (await request.get("/search", { headers: auth })).text();
+    expect(html).not.toContain('data-testid="search-ranking-invite"');
+    const refused = await request.post("/search?/joinRanking", {
+      headers: {
+        ...auth,
+        origin: stack.appUrl,
+        accept: "application/json",
+        "x-sveltekit-action": "true",
+      },
+      // 画面と同じくフォームで送る。本文が無いと SvelteKit が action を呼ぶ前に断り、`tokenRefusal` まで届かない
+      form: {},
+    });
+    expect(await refused.json()).toMatchObject({
+      type: "failure",
+      status: 403,
+    });
+    expect(await tokens()).toBe(before);
+
+    await goto(page, "/search");
+    const invite = page.getByTestId("search-ranking-invite");
+    await expect(
+      invite.getByRole("heading", { level: 2, name: "人気の番組" }),
+    ).toBeVisible();
+    await expect(invite).toContainText(
+      "予約した番組・録画した番組・観た番組を denpa-hub (Doa が動かすサーバ) に送り",
+    );
+    await expect(
+      invite.getByTestId("search-ranking-invite-more"),
+    ).toHaveAttribute("href", /\/settings\/integrations#ranking$/);
+    await expect(page.getByTestId("search-ranking")).toHaveCount(0);
+
+    // 参加できなければ理由を出し、案内は出したまま (決めたことにしない)
+    await request.post(`${stack.hubUrl}/__control/ranking`, { data: "off" });
+    await invite.getByTestId("search-ranking-join").click();
+    await expect(page.getByTestId("search-error")).toContainText(
+      "denpa-hub が番組ランキングを受け付けていないため、参加できませんでした",
+    );
+    await goto(page, "/search");
+    await expect(invite).toBeVisible();
+
+    // 参加すると、設定でオンにしたときと同じくトークンを受け取り、案内の代わりに順位の節を出す
+    await request.post(`${stack.hubUrl}/__control/ranking`, { data: "ok" });
+    await invite.getByTestId("search-ranking-join").click();
+    await expect(page.getByTestId("search-ranking")).toBeVisible();
+    await expect(invite).toHaveCount(0);
+    expect(await tokens()).toBe(before + 1);
+    await goto(page, "/settings/integrations#ranking");
+    await expect(page.getByTestId("ranking-setting")).toBeChecked();
+
+    // 設定でオフにしたら、決めたことなので案内も順位も出さない
+    await setRanking(page, false);
+    await goto(page, "/search");
+    await expect(page.getByTestId("search-ranking")).toHaveCount(0);
+    await expect(invite).toHaveCount(0);
   });
 
   test("既定はオフ。オンにするとすぐ送り、オフにするとトークンを消す", async ({

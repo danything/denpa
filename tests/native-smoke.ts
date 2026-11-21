@@ -18,12 +18,13 @@
  * - ffmpeg の 4 本目の出口 (stream.sideOutput。Windows では名前付きパイプ、Mac は `pipe:3`) で、進み具合と matroska を受けられるか
  * - スリープを止められるか (awake.ts。Android は常駐サービスが止めるので見ない)。Windows は `powercfg /requests` に bun が出るか (管理者で動くランナーだけで読める)、
  *   Mac は `pmset -g assertions` にこのプロセスの `PreventUserIdleSystemSleep` が出るか
- * - Mac は、録画の前に起こす予約を置いて取り消せるか (awake.macPower。`pmset -g sched` で見る。root が要るので sudo で流す)
+ * - 録画の前に起こすタイマー (Windows) と予約 (Mac) を設定して取り消せるか。Windows は awake.windowsWake を `powercfg /waketimers` で見る
+ *   (スリープから復帰できないランナーでは、その理由を出して進む)。Mac は awake.macPower を `pmset -g sched` で見る (root が要るので sudo で流す)
  */
 
 import { join } from "node:path";
 
-import { holdAwake, macPower } from "../src/lib/server/awake.ts";
+import { holdAwake, macPower, windowsWake } from "../src/lib/server/awake.ts";
 import { sideOutput } from "../src/lib/server/stream.ts";
 import { HLG_TO_SDR } from "../src/lib/server/uhd.ts";
 import { probeSmoke } from "./native-ffprobe.ts";
@@ -615,6 +616,34 @@ if (process.platform === "darwin") {
       `起こす予約を取り消せません (0x${(cancelled >>> 0).toString(16)})`,
     );
   console.log("wake schedule: ok");
+}
+
+/*
+ * Windows: 録画の前に起こすタイマー (power.ts と同じ呼び出し)。1 日先に設定して `powercfg /waketimers` に bun が出ることを見て、取り消す。
+ * スリープから復帰できない PC (S3 の無い仮想マシンなど) では SetWaitableTimer が ERROR_NOT_SUPPORTED を返すので、その理由を出して進む
+ */
+if (windows) {
+  const timer = await windowsWake();
+  if (timer === null)
+    throw new Error("kernel32 の待機可能タイマーを使えません");
+  const timers = () =>
+    Bun.spawnSync(["powercfg.exe", "/waketimers"]).stdout.toString();
+  const reason = timer.set(Date.now() + 86_400_000);
+  if (reason === null) {
+    const listed = timers();
+    console.log(listed);
+    if (!/bun\.exe/i.test(listed))
+      throw new Error("powercfg /waketimers に bun が出ません");
+    timer.cancel();
+    if (/bun\.exe/i.test(timers()))
+      throw new Error("起こすタイマーを取り消せません");
+    console.log("wake timer: ok");
+  } else if (reason.includes("ERROR_NOT_SUPPORTED")) {
+    timer.cancel();
+    console.log(`wake timer: ${reason}`);
+  } else {
+    throw new Error(reason);
+  }
 }
 
 // 4 本目の出口 (stream.sideOutput)。Windows では名前付きパイプ。録画のエンコードの進み具合と同じ渡し方

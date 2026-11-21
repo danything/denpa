@@ -13,6 +13,8 @@ describe("「バージョンと環境」と「ログ」の読み込み", () => {
     // サーバの機材 (CPU・GPU) はエージェントのある場所に繋がらないので返す
     expect(typeof data.environment.cpu).toBe("string");
     expect(typeof data.environment.gpu).toBe("string");
+    // 録画の前にスリープから起こすのは Windows と Mac だけ (単体テストは Linux で流す)
+    if (process.platform === "linux") expect(data.wake).toBeNull();
     expect(data.hosts).toEqual([]);
     expect(data.agents).toEqual([]);
     expect(await data.agentLogs).toEqual([]);

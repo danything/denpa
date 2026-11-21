@@ -7,13 +7,15 @@
  * 2. 6 時間ごとに送る (`sendIfDue`): 終わっていない地上波・BS・CS の予約 (予約済みと競合。録画中も) と、終わった放送の予約・ライブ・録画・
  *    タイムシフトの控え (`ranking_watched`。`ranking-watch.ts`) から作ったいまの中身と、前に送った控え (`ranking_sent`) を比べ、
  *    差分を `POST /ranking/votes` の `add`・`remove` で送る。送る時刻は家ごとにずらし、毎回 ±15 分揺らす
- * 3. オフにする (`leave`): 控えにある放送を全部 `remove` で送ってから `DELETE /ranking/tokens/self` を呼び、手元の行を消す。
+ * 3. 参加するかを聞く (`rankingInvite`): 参加しておらず、まだ決めていない (`rankingDecided` が無い) 家には、検索の節「人気の番組」の場所に
+ *    案内を出す。「参加」は `join`、「参加しない」は `decline`。参加した・参加しないを選んだ・オフにしたら `rankingDecided` を置き、二度と聞かない
+ * 4. オフにする (`leave`): 控えにある放送を全部 `remove` で送ってから `DELETE /ranking/tokens/self` を呼び、手元の行を消す。
  *    hub に届かなくても手元は消す (hub に残った票は数が決まれば消える)
- * 4. 順位を見る (`rankingView`): 検索を言葉なしで開いたときの節「人気の番組」。`GET /ranking` の返事を 10 分ためておき、
+ * 5. 順位を見る (`rankingView`): 検索を言葉なしで開いたときの節「人気の番組」。`GET /ranking` の返事を 10 分ためておき、
  *    番組ごとに手元の番組表の放送と突き合わせる。これから・放送中・終わった番組を混ぜて、hub の順位のまま出す。
  *    受信できる局に無い番組は、hub の局名と地域のまま渡す
  *
- * 送るのは番組の識別・時刻・番組名・局名・ジャンルと、その放送をどうしたか (`kinds`) だけ。家のアドレス・利用者の名前・
+ * 送るのは番組の識別・時刻・番組名・局名・ジャンルと、その放送をどうしたか (`kinds`) だけ。家の住所・利用者の名前・
  * ルールの中身・予約した時刻は送らない。トークンと送った番組の一覧は記録に書かない (書くのは件数だけ)
  */
 import { createHash } from "node:crypto";
@@ -41,6 +43,7 @@ import {
   TO_RECORD_STATES,
 } from "./schema";
 import { programRows, withoutService } from "./search";
+import { store, stored } from "./settings";
 
 const HOUR = 60 * 60_000;
 /** 送る間隔。予約した時刻を 6 時間の幅でしかわからないようにする (docs/ranking.md「送る時刻」) */
@@ -338,6 +341,25 @@ type RankingState =
       failure: "unreachable" | "disabled" | null;
     };
 
+/**
+ * **参加するかを決めた印** (設定の表の `rankingDecided`。値は見ない)。参加した・参加しないを選んだ・オフにしたときに置く。
+ * 参加できなかったとき (hub に届かない・受け付けていない) は置かない。印を足す前のバージョンでオフだった家は、
+ * 既定のオフのままの家と自分でオフにした家を見分けられないので、どちらも「まだ決めていない」とする
+ */
+export const DECIDED_KEY = "rankingDecided";
+
+function decided(): void {
+  store(DECIDED_KEY, "1");
+}
+
+/**
+ * **参加するかの案内を出すか。** 参加しておらず、まだ決めていない家だけ。参加している家には、
+ * 印を足す前に参加した家も含めて出さない (`ranking_link` に行がある)
+ */
+export function rankingInvite(): boolean {
+  return link() === undefined && stored(DECIDED_KEY) === undefined;
+}
+
 export function rankingState(): RankingState {
   const row = link();
   if (row === undefined) return { state: "off" };
@@ -488,7 +510,10 @@ export function join(
   random: () => number = Math.random,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   return serial(async () => {
-    if (link() !== undefined) return { ok: true } as const;
+    if (link() !== undefined) {
+      decided();
+      return { ok: true } as const;
+    }
     const issued = await issueToken();
     if (!("token" in issued)) {
       console.warn(
@@ -516,6 +541,7 @@ export function join(
         })
         .run();
     });
+    decided();
     dropRankingView();
     console.log("[ranking] 番組ランキングに参加しました");
     await sendNow(at);
@@ -529,6 +555,7 @@ export function join(
  */
 export function leave(): Promise<{ reached: boolean }> {
   return serial(async () => {
+    decided();
     const row = link();
     if (row === undefined) return { reached: true };
     const ids = orm().select().from(rankingSent).all().map(idOf);
@@ -559,6 +586,16 @@ export function leave(): Promise<{ reached: boolean }> {
         : "[ranking] 番組ランキングへの参加をやめました。hub に届かなかったため、送った票は数が決まると hub から消えます",
     );
     return { reached };
+  });
+}
+
+/**
+ * **参加しないと決める** (案内の「参加しない」)。何も送らず、決めた印だけ置く。
+ * 押すまでにほかの端末で参加していたら何もしない (やめるのは設定のスイッチから)
+ */
+export function decline(): Promise<void> {
+  return serial(async () => {
+    if (link() === undefined) decided();
   });
 }
 

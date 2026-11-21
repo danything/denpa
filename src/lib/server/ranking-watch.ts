@@ -9,7 +9,7 @@
  * - 予約 (`reserved`) と録った (`recorded`): 放送が終わってから送る前に、予約と録画から写す (`settleEnded`)。番組表から番組が消えても
  *   (終わって 1 日) 送った組を保つため
  *
- * 家のアドレス・観た時刻・観た長さは hub に送らない。送るのは、長さが決まりを超えたかどうか (`kindsOf`) だけ
+ * 家の住所・観た時刻・観た長さは hub に送らない。送るのは、長さが決まりを超えたかどうか (`kindsOf`) だけ
  */
 import { and, eq, gt, inArray, isNotNull, isNull, lt, lte } from "drizzle-orm";
 

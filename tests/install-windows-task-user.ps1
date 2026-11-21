@@ -5,14 +5,15 @@ param([string]$Installer = (Join-Path $PSScriptRoot '../install.ps1'))
 # 見ること: 初めて入れると流した人で載せる (Enter だけか、入力を受け付けない窓なら SYSTEM) / 上げ直しでは聞かずに、
 # SYSTEM のタスクは SYSTEM のまま、人が変えた実行ユーザーのタスクは載せ直さず、
 # そのユーザーに %ProgramData%\denpa と置き場とログの権限を足し直す / -User ならそのユーザーとパスワードで載せる /
-# -User SYSTEM で SYSTEM に戻す / エージェントのタスクも、人が変えた実行ユーザーのまま残す
+# -User SYSTEM で SYSTEM に戻す / エージェントのタスクも、人が変えた実行ユーザーのまま残す /
+# 前のバージョンの本体が書いていた起こすタスク (denpa-wake) と XML を、実行ユーザーをどちらへ替えても消す
 $ErrorActionPreference = 'Stop'
 $tokens = $null
 $parseErrors = $null
 $ast = [Management.Automation.Language.Parser]::ParseInput(
     [IO.File]::ReadAllText((Resolve-Path $Installer)), [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors) { throw ($parseErrors | Out-String) }
-foreach ($name in 'Say', 'Write-Text', 'Write-Loop', 'Set-DataDir', 'Test-SystemName', 'Get-TaskUser', 'Grant-Modify', 'Register-Loop', 'Register-Server', 'Select-ServerUser') {
+foreach ($name in 'Say', 'Write-Text', 'Write-Loop', 'Set-DataDir', 'Test-SystemName', 'Get-TaskUser', 'Grant-Modify', 'Register-Loop', 'Remove-WakeTask', 'Register-Server', 'Select-ServerUser') {
     $definition = $ast.Find({ param($node)
             $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
         }, $true)
@@ -23,6 +24,7 @@ foreach ($name in 'Say', 'Write-Text', 'Write-Loop', 'Set-DataDir', 'Test-System
 $System = 'S-1-5-18'
 $Administrators = 'S-1-5-32-544'
 $DenpaTask = 'denpa'
+$WakeTask = 'denpa-wake'
 $Port = 25252
 $WebPort = 3000
 $Url = 'http://localhost:3000'
@@ -57,6 +59,11 @@ function New-ScheduledTaskSettingsSet {
     return [pscustomobject]@{ Priority = 7 }
 }
 function Start-ScheduledTask { [CmdletBinding()] param([string]$TaskName) }
+function Unregister-ScheduledTask {
+    [CmdletBinding()]
+    param([string]$TaskName, [switch]$Confirm)
+    $script:tasks.Remove($TaskName)
+}
 function Remove-NetFirewallRule { [CmdletBinding()] param([string]$Name) }
 function New-NetFirewallRule { [CmdletBinding()] param($Name, $DisplayName, $Description, $Direction, $Protocol, $LocalPort, $Profile, $Action) }
 function Test-Health { return $true }
@@ -140,6 +147,30 @@ Set-Case @{ 'denpa-agent' = 'NT AUTHORITY\SYSTEM' }
 Register-Loop 'denpa-agent' 'C:\denpa-agent.cmd' 'agent' 4
 if ($registered.Count -ne 1 -or $registered[0][1] -ne 'SYSTEM') { throw "agent: wrong registration: $($registered | Out-String)" }
 Write-Host 'PASS: agent task keeps its user'
+
+# 前のバージョンの本体が SYSTEM で書いていた起こすタスク (denpa-wake) と XML: 初めて・上げ直し・SYSTEM からユーザー・ユーザーから SYSTEM の
+# どれでも消す (いまの本体はタスクを書かず、自分のプロセスのタイマーで起こすので、実行ユーザーに合わせて付け直す権限は無い)
+$cases = @(
+    @{ Name = 'fresh'; Tasks = @{}; Credential = $null; AsSystem = $false; User = 'SYSTEM' },
+    @{ Name = 'keep SYSTEM'; Tasks = @{ denpa = 'SYSTEM' }; Credential = $null; AsSystem = $false; User = 'SYSTEM' },
+    @{ Name = 'keep user'; Tasks = @{ denpa = 'PC\alice' }; Credential = $null; AsSystem = $false; User = 'PC\alice' },
+    @{ Name = 'SYSTEM to user'; Tasks = @{ denpa = 'SYSTEM' }; Credential = $credential; AsSystem = $false; User = 'PC\alice' },
+    @{ Name = 'user to SYSTEM'; Tasks = @{ denpa = 'PC\alice' }; Credential = $null; AsSystem = $true; User = 'SYSTEM' }
+)
+foreach ($c in $cases) {
+    $seed = $c.Tasks.Clone()
+    $seed['denpa-wake'] = 'SYSTEM'
+    Set-Case $seed
+    New-Item -ItemType Directory -Force -Path $Data | Out-Null
+    # Remove-WakeTask と同じく Join-Path で組む (Linux では \ が名前の一部になる)
+    $xml = Join-Path $Data 'wake-task.xml'
+    [IO.File]::WriteAllText($xml, 'old')
+    Register-Server 'v1.0.1' 'token' -Credential $c.Credential -AsSystem:$c.AsSystem
+    if ($tasks.ContainsKey('denpa-wake')) { throw "$($c.Name): denpa-wake left" }
+    if ([IO.File]::Exists($xml)) { throw "$($c.Name): wake-task.xml left" }
+    if ($tasks['denpa'] -ne $c.User) { throw "$($c.Name): task user is $($tasks['denpa'])" }
+}
+Write-Host 'PASS: the old wake task is removed whichever user runs the server'
 
 # 実行ユーザーを決める (Select-ServerUser)。流した人・入力を受け付ける窓か・入れたパスワードは偽物で決める
 $OldPrefix = Join-Path $root 'old'
