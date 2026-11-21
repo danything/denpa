@@ -8,13 +8,16 @@
  * 失敗したら、danything/denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) リリースを出し、
  * ここの Dockerfile の `DENPA_FONT_VERSION` を上げる (docs/licenses.md)。
  *
- * * フォントはイメージに入れたものと同じリリースのファイルをここで取得する (同じリリースの SHA256SUMS と照合する)。
+ * フォントはイメージに入れたものと同じリリースのファイルを使う。`FONT_DIR` に同じバージョンが置いてあれば
+ * (`VERSION` の印。置いた側が SHA256SUMS と照合済み)、そこから読む。CI はテストの前に置き場へ取得しておく
+ * (`.github/workflows/test.yml` の check。取得に失敗したら繰り返す)。テストの中で取得していた頃は、GitHub との
+ * 接続が 1 回切れただけで落ちた。置いていなければここで取得して同じリリースの SHA256SUMS と照合する。
  * CI では必ず確かめ、手元で取得できないとき (オフライン) は飛ばす。
  */
 
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { brotliDecompressSync } from "node:zlib";
 
@@ -173,8 +176,22 @@ const FILES = [
   "denpa-font-jisx0213.txt",
 ] as const;
 
-/** リリースのファイルを取得し、同じリリースの SHA256SUMS と照合する。手元で取得できなければ null */
+/** `FONT_DIR` に置いてある同じバージョンのファイル。置いていない・バージョンが違えば null */
+function placedFiles(): Uint8Array[] | null {
+  const dir = process.env["FONT_DIR"];
+  if (!dir || !existsSync(join(dir, "VERSION"))) return null;
+  if (readFileSync(join(dir, "VERSION"), "utf8").trim() !== VERSION)
+    return null;
+  return FILES.map((name) => new Uint8Array(readFileSync(join(dir, name))));
+}
+
+/**
+ * リリースのファイル。`FONT_DIR` に置いてあればそれを使い、無ければ取得して同じリリースの SHA256SUMS と照合する。
+ * 手元で取得できなければ null
+ */
 async function fetchFiles(): Promise<Uint8Array[] | null> {
+  const placed = placedFiles();
+  if (placed !== null) return placed;
   let sums: string;
   let files: Uint8Array[];
   try {

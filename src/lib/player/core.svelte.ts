@@ -2309,9 +2309,17 @@ export function playbackCore(options: PlaybackCoreOptions) {
     void tune(element, yielded.back);
   }
 
-  /** リクエストし直したライブの中身が届いた。**入れた**ので、譲っていたことは忘れる */
+  /**
+   * リクエストし直したライブの中身が届いた。**入れた**ので、譲っていたことは忘れる。
+   *
+   * **このリクエストへの `tuned` より前に届いたものは数えない** (`startup.tuned`)。繋がっている接続でリクエストし直すと、
+   * サーバが受けるまで前のもの (取り上げられたライブ・追っかけの元の TS) が届き続ける。数えていた頃は、「ライブに戻る」で
+   * 入れなかったのに追っかけの残りで入れたとみなし、追っかけに戻らずに「選局できませんでした」で止まった
+   */
   function arrived(): void {
-    if (tuned === null) return;
+    // `startup` は `tuned` が届いて最初のコマを映すまで残る (`reportStartup`)。null なら届いている
+    if (tuned === null || (startup !== null && startup.tuned === undefined))
+      return;
     fallback = null;
     if (!returning) return;
     returning = false;
