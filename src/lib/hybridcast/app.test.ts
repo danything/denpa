@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   decodeHtml,
+  EventMessagePicker,
   frameMessage,
   prepareApp,
   receiverKey,
@@ -247,4 +248,77 @@ test("記憶の置き場はアプリの配信元 (オリジン) ごと。AIT が
   expect(storageKey("data:text/html,a")).not.toBe(
     storageKey("data:text/html,b"),
   );
+});
+
+describe("アプリへ渡すイベントメッセージ", () => {
+  const message = (
+    events: Parameters<EventMessagePicker["pick"]>[0]["events"],
+    componentId = 0x40,
+  ) => ({
+    type: "esEventUpdated" as const,
+    componentId,
+    dataEventId: 1,
+    events,
+  });
+  const immediate = (id: number, version: number, data: number[] = []) => ({
+    type: "immediateEvent" as const,
+    timeMode: 0 as const,
+    eventMessageGroupId: 1,
+    eventMessageType: 1,
+    eventMessageId: (id << 8) | version,
+    privateDataByte: data,
+  });
+
+  test("すぐ起きるものを、ES・グループ・ID・バージョンと中身の文字にして渡す", () => {
+    const picker = new EventMessagePicker();
+    // 「あ」(EUC-JP の A4 A2)
+    expect(picker.pick(message([immediate(3, 2, [0xa4, 0xa2])]))).toEqual([
+      {
+        esRef: "/40",
+        componentTag: 0x40,
+        messageGroupId: 1,
+        messageId: 3,
+        messageVersion: 2,
+        privateDataByte: [0xa4, 0xa2],
+        privateData: "あ",
+      },
+    ]);
+  });
+
+  test("放送が繰り返し送る同じものは 1 回だけ。バージョンが替われば渡し直す", () => {
+    const picker = new EventMessagePicker();
+    expect(picker.pick(message([immediate(3, 2)]))).toHaveLength(1);
+    expect(picker.pick(message([immediate(3, 2)]))).toEqual([]);
+    expect(picker.pick(message([immediate(3, 3)]))).toHaveLength(1);
+    // 別の ES から来たものは別に数える
+    expect(picker.pick(message([immediate(3, 3)], 0x41))).toHaveLength(1);
+  });
+
+  test("NPT の参照と時刻指定のもの (サーバが時刻に直して送る) は渡さない", () => {
+    const picker = new EventMessagePicker();
+    expect(
+      picker.pick(
+        message([
+          {
+            type: "nptEvent",
+            timeMode: 2,
+            eventMessageNPT: 0,
+            eventMessageGroupId: 1,
+            eventMessageType: 1,
+            eventMessageId: 0x0101,
+            privateDataByte: [],
+          },
+          {
+            type: "nptReference",
+            postDiscontinuityIndicator: false,
+            dsmContentId: 0,
+            STCReference: 0,
+            NPTReference: 0,
+            scaleNumerator: 1,
+            scaleDenominator: 1,
+          },
+        ]),
+      ),
+    ).toEqual([]);
+  });
 });

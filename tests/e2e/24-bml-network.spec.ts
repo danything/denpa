@@ -465,6 +465,98 @@ test.describe("データ放送の双方向", () => {
     await expect(overlay).toHaveAttribute("data-showing", "true");
   });
 
+  /*
+   * **放送のイベントメッセージを Hybridcast のアプリへ渡す** (`streamEvent.addGeneralEventMessageListener`)。
+   * 偽の放送のストリーム記述子 (汎用イベントメッセージ記述子) を流し、アプリのリスナーが呼ばれるのを見る。
+   * 絞り込み (別の message_group_id) に当たらないリスナーは呼ばない。同じメッセージを繰り返し送っても 1 回だけ
+   */
+  test("放送のイベントメッセージを Hybridcast のアプリのリスナーへ渡す", async ({
+    page,
+  }) => {
+    const appUrl = "https://hybridcast.example.jp/app.html";
+    const app = `<!DOCTYPE html><html><head><title>hc</title></head><body>
+<p id="ev">-</p><p id="other">-</p><p id="name">-</p>
+<script>
+var got = [];
+navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 1, function (e) {
+    got.push([e.es_ref, e.message_group_id, e.message_id, e.message_version, e.private_data, e.private_data_byte.length]);
+    document.getElementById('ev').textContent = JSON.stringify(got);
+});
+navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 2, function () {
+    document.getElementById('other').textContent = 'called';
+});
+// /40・0x40 の形でない文字は ES の指定とみなさない (16 進に読める名前でも絞らない)
+navigator.receiverDevice.streamEvent.addGeneralEventMessageListener(function () {
+    document.getElementById('name').textContent = 'called';
+}, 'ab');
+</script></body></html>`;
+    await page.route("**/api/bml/proxy**", (route) => {
+      const target =
+        new URL(route.request().url()).searchParams.get("url") ?? "";
+      if (target === appUrl)
+        return route.fulfill({
+          status: 200,
+          headers: { "x-bml-relayed": "1", "content-type": "text/html" },
+          body: app,
+        });
+      return route.continue();
+    });
+    await captureSockets(page);
+    await goto(page, "/live");
+    await page
+      .locator(`[data-testid=live-channel][data-service="${MX.id}"]`)
+      .click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    await expect(page.getByTestId("live-hybridcast")).toBeVisible({
+      timeout: 15_000,
+    });
+    const overlay = page.getByTestId("live-data");
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-data-button").click();
+    await expect(overlay).toHaveAttribute("data-state", "ready", {
+      timeout: 15_000,
+    });
+    await expect
+      .poll(async () => Number(await overlay.getAttribute("data-handed")))
+      .toBeGreaterThan(0);
+    await feedData(page, fakeDataBroadcast(START_APP));
+    await expect
+      .poll(async () => (await dataElement(page, "span"))?.text, {
+        timeout: 10_000,
+      })
+      .toBe("s1r1");
+    await expect(page.getByTestId("live-hybridcast-app")).toHaveAttribute(
+      "data-state",
+      "ready",
+      { timeout: 10_000 },
+    );
+
+    // 放送は同じストリーム記述子を繰り返し送る。「あ」は EUC-JP の A4 A2
+    const event = {
+      type: "esEventUpdated",
+      componentId: 0x40,
+      dataEventId: 1,
+      events: [
+        {
+          type: "immediateEvent",
+          timeMode: 0,
+          eventMessageGroupId: 1,
+          eventMessageType: 1,
+          eventMessageId: 0x0302,
+          privateDataByte: [0xa4, 0xa2],
+        },
+      ],
+    };
+    await feedData(page, [event, event]);
+    const inApp = page.frameLocator("[data-testid=live-hybridcast-app] iframe");
+    await expect(inApp.locator("#ev")).toHaveText(
+      JSON.stringify([["/40", 1, 3, 2, "あ", 2]]),
+      { timeout: 10_000 },
+    );
+    expect(await inApp.locator("#other").textContent()).toBe("-");
+    await expect(inApp.locator("#name")).toHaveText("called");
+  });
+
   test("双方向を切ってあれば、Hybridcast は起動しない", async ({ page }) => {
     await setNetwork(page, false);
     try {

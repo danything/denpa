@@ -2086,7 +2086,7 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 | 受信機の記憶 (`localStorage`)            | ○     | 配信元のオリジンごとに覚える (`denpa_hybridcast_<オリジン>`。JSON で 256K 字まで。テレビの 256 KB に合わせた)。denpa のほかの記憶とは混ぜない                                                                     |
 | データ放送の Greg と NVRAM               | ○     | `navigator.bmlCompat.browserPseudo` (`Greg`・`readPersistentArray`・`writePersistentArray`・`checkAccessInfoOfPersistentArray`)。データ放送と同じもの。NVRAM は放送の文書と同じ領域で、起動した局から見える分だけ |
 | データ放送へ戻る                         | ○     | `navigator.applicationManager.launchDataBroadcastingBrowser`。アプリを閉じる (戻る先の部品は選べない)                                                                                                             |
-| 番組の変わり目                           | △     | `receiverDevice.streamEvent` の番組が変わったことだけ知らせる。放送のイベントメッセージは届けない                                                                                                                 |
+| 番組の変わり目とイベントメッセージ       | ○     | `receiverDevice.streamEvent`。番組が変わったこと (`addEventIDUpdateListener`) と、放送のイベントメッセージ (`addGeneralEventMessageListener`。下) を知らせる                                                      |
 | アプリの通信 (`fetch`・`XMLHttpRequest`) | ○     | 中継を通す。GET (HEAD も GET で取る) と POST だけ。POST の形式はフォーム・JSON・文字だけ                                                                                                                          |
 | 受信機 ID・証明書・機種                  | ×     | 持たない。`getReceiverId` などは null                                                                                                                                                                             |
 | WebSocket・EventSource・sendBeacon       | ×     | 差し込みで中継へ渡せないので使えない                                                                                                                                                                              |
@@ -2095,6 +2095,21 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 | DRM 付きの動画                           | ×     | ライセンスサーバが受信機を見る                                                                                                                                                                                    |
 | スマホ連携 (Hybridcast Connect)          | ×     | 家の LAN にエンドポイントを開けることになるので作らない                                                                                                                                                           |
 | 録画の再生中                             | ×     | データ放送の通信と同じく放送中だけ                                                                                                                                                                                |
+
+**放送のイベントメッセージは、データ放送のエンジンと同じものをアプリにも渡します** (`addGeneralEventMessageListener`)。
+送られてくるのはストリーム記述子の汎用イベントメッセージ記述子 (ARIB STD-B24 第三編) で、サーバの `BmlDecoder` が読んで
+`esEventUpdated` で画面へ送ります。画面はそれをデータ放送の文書と、開いている Hybridcast のアプリの両方へ渡します
+(`DataBroadcast.svelte` → `HybridcastFrame.svelte` → 差し込み)。
+
+- 渡すのはすぐ起きるもの (time_mode 0) だけ。時刻指定 (NPT) のものは、NPT が達するとサーバがすぐ起きるものに直して送る
+- 放送は同じメッセージを繰り返し送るので、ES・message_group_id・message_id・message_version が同じものはページごとに 1 回だけ渡す
+  (`hybridcast/app.ts` の `EventMessagePicker`)。ページを読み込んでいる間に来たものは渡さない
+- リスナーには `es_ref` (`/40` の形)・`message_group_id`・`message_id`・`message_version`・`private_data_byte` (Uint8Array)・
+  `private_data` (EUC-JP として読んだ文字) を持つものを渡す。データ放送の `EventMessageFired` と同じ名前 (`esRef`・`messageId` など) でも読める
+- 引数は、関数をリスナー、`/40`・`0x40` の形の文字を ES の指定、整数を message_group_id として受け、渡された分だけで絞る (ほかの形の文字では絞らない)。
+  STD-0010・STD-0011 の本文で引数の並びとリスナーに渡すものの名前を確かめていないので、並びを問わずに受ける
+- message_group_id 0 を文書の data_event_id と比べる決まり (データ放送の文書のもの) は、アプリには当てない
+- 録画では Hybridcast のアプリを開かないので (上の表の「録画の再生中」)、アプリへ渡すのはライブだけです
 
 受信機 API の名前は IPTVFJ STD-0010 の本文で確かめていません。差し込みは用意していない名前の呼び出しにも
 null (使えない) を返し、何を呼ばれたかをコンソールに `[hybridcast] … は使えません` で出します。
