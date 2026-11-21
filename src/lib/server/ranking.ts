@@ -1,10 +1,12 @@
 /**
  * **番組ランキングに参加する** (世帯で 1 つ。設定の「連携」の「番組ランキング」)。
- * 家ごとの予約を denpa-hub で家の数として数え、人気の番組の順位を返してもらう。決まりは denpa-hub の docs/ranking.md。
+ * 家ごとの予約とライブの視聴を denpa-hub で家の数として数え、人気の番組の順位を返してもらう。決まりは denpa-hub の docs/ranking.md。
+ * 録画・ライブ・タイムシフトの家の数は、hub が番組ごとの集計として残し、外部に示すことがある (設定の説明に書く)。
  *
  * 1. オンにする (`join`): hub の `POST /ranking/tokens` でトークンを受け取り、DB に置く (`ranking_link`)。すぐ 1 回目を送る
- * 2. 6 時間ごとに送る (`sendIfDue`): 終わっていない地上波・BS・CS の予約 (予約済みと競合。録画中も) と、前に送った控え
- *    (`ranking_sent`) を比べ、差分を `POST /ranking/votes` の `add`・`remove` で送る。送る時刻は家ごとにずらし、毎回 ±15 分揺らす
+ * 2. 6 時間ごとに送る (`sendIfDue`): 終わっていない地上波・BS・CS の予約 (予約済みと競合。録画中も) と、終わった放送の予約・ライブ・録画・
+ *    タイムシフトの控え (`ranking_watched`。`ranking-watch.ts`) から作ったいまの中身と、前に送った控え (`ranking_sent`) を比べ、
+ *    差分を `POST /ranking/votes` の `add`・`remove` で送る。送る時刻は家ごとにずらし、毎回 ±15 分揺らす
  * 3. オフにする (`leave`): 控えにある放送を全部 `remove` で送ってから `DELETE /ranking/tokens/self` を呼び、手元の行を消す。
  *    hub に届かなくても手元は消す (hub に残った票は数が決まれば消える)
  * 4. 順位を見る (`rankingView`): 検索を言葉なしで開いたときの節「人気の番組」。`GET /ranking` の返事を 10 分ためておき、
@@ -18,10 +20,17 @@ import { createHash } from "node:crypto";
 
 import { and, desc, eq, gt, inArray, lte } from "drizzle-orm";
 
-import { origin } from "../types";
 import { config, userAgent } from "./config";
 import { now, orm } from "./db";
 import { typeRank } from "./epg";
+import {
+  countedService,
+  ENDED_MARGIN,
+  endedRows,
+  forgetWatched,
+  kindsOf,
+  settleEnded,
+} from "./ranking-watch";
 import {
   programs,
   rankingLink,
@@ -127,15 +136,44 @@ export function digest(vote: Vote): string {
   return createHash("sha256").update(JSON.stringify(vote)).digest("hex");
 }
 
-/** 地上波・BS・CS の局か。ケーブルは元の放送が地上波・BS・CS のもの (パススルー・再送信) だけ */
-function countedService(type: string, networkId: number): boolean {
-  if (type === "SKY") return false;
-  const from = origin(networkId);
-  return from === "GR" || from === "BS" || from === "CS";
+/** 送る 1 件を作る。長さ・番組名・局名が hub の決まりに合わなければ null */
+function candidateOf(
+  row: {
+    network_id: number;
+    service_id: number;
+    event_id: number;
+    start_at: number;
+    end_at: number;
+    name: string;
+    service_name: string;
+    genres: number[] | null;
+  },
+  kinds: Kind[],
+): Candidate | null {
+  const duration = Math.round((row.end_at - row.start_at) / 1000);
+  if (duration < 1 || duration > MAX_DURATION) return null;
+  const name = clip(row.name, MAX_NAME);
+  const serviceName = clip(row.service_name, MAX_SERVICE_NAME);
+  if (name === "" || serviceName === "") return null;
+  const vote: Vote = {
+    network_id: row.network_id,
+    service_id: row.service_id,
+    event_id: row.event_id,
+    start_at: isoJst(row.start_at),
+    duration,
+    name,
+    service_name: serviceName,
+    genres: [...new Set(row.genres ?? [])]
+      .filter((g) => Number.isInteger(g) && g >= 0 && g <= 15)
+      .slice(0, 16),
+    kinds,
+  };
+  return { vote, startMs: row.start_at, endMs: row.end_at };
 }
 
 /**
- * **いま送る予約。** 終わっていない、予約済みか競合の予約 (録画中も) のうち、地上波・BS・CS の局のもの。有料放送の番組も送る。
+ * **いま送るもの。** 終わっていない予約 (予約済みと競合。録画中も) は `reserved` だけで、終わった放送は予約・ライブ・録画・タイムシフトの
+ * 控え (`ranking_watched`) から種類の組を作る (`ranking-watch.kindsOf`)。どちらも地上波・BS・CS の局のもので、有料放送の番組も送る。
  * 同じ放送を 2 つの局 (BS と、ケーブルの再送信の BS) で予約していたら 1 件にする (hub は家の数で数える)
  */
 export function currentVotes(at = now()): Candidate[] {
@@ -157,7 +195,7 @@ export function currentVotes(at = now()): Candidate[] {
     .where(
       and(
         inArray(reservations.state, TO_RECORD_STATES),
-        gt(programs.end_at, at),
+        gt(programs.end_at, at - ENDED_MARGIN),
         lte(programs.start_at, at + HORIZON),
       ),
     )
@@ -165,27 +203,15 @@ export function currentVotes(at = now()): Candidate[] {
   const votes = new Map<string, Candidate>();
   for (const row of rows) {
     if (!countedService(row.type, row.network_id)) continue;
-    const duration = Math.round((row.end_at - row.start_at) / 1000);
-    if (duration < 1 || duration > MAX_DURATION) continue;
-    const name = clip(row.name, MAX_NAME);
-    const serviceName = clip(row.service_name, MAX_SERVICE_NAME);
-    if (name === "" || serviceName === "") continue;
-    const vote: Vote = {
-      network_id: row.network_id,
-      service_id: row.service_id,
-      event_id: row.event_id,
-      start_at: isoJst(row.start_at),
-      duration,
-      name,
-      service_name: serviceName,
-      genres: [...new Set(row.genres ?? [])]
-        .filter((g) => Number.isInteger(g) && g >= 0 && g <= 15)
-        .slice(0, 16),
-      kinds: ["reserved"],
-    };
-    const key = keyOf(vote);
-    if (votes.has(key)) continue;
-    votes.set(key, { vote, startMs: row.start_at, endMs: row.end_at });
+    const candidate = candidateOf(row, ["reserved"]);
+    if (candidate === null || votes.has(keyOf(candidate.vote))) continue;
+    votes.set(keyOf(candidate.vote), candidate);
+  }
+  for (const row of endedRows(at)) {
+    const kinds = kindsOf(row);
+    if (kinds.length === 0) continue;
+    const candidate = candidateOf(row, kinds);
+    if (candidate !== null) votes.set(keyOf(candidate.vote), candidate);
   }
   return [...votes.values()];
 }
@@ -336,6 +362,8 @@ async function sendNow(at: number): Promise<void> {
   const row = link();
   if (row === undefined) return;
   let token = row.token;
+  // 終わった放送の予約と録画を、番組表から消える前に控えに写す
+  settleEnded(at);
   let sent = orm().select().from(rankingSent).all();
   let current = currentVotes(at);
   let diff = plan(current, sent, at);
@@ -475,6 +503,7 @@ export function join(
       } as const;
     }
     const at = now();
+    forgetWatched();
     orm().transaction((tx) => {
       tx.delete(rankingSent).run();
       tx.insert(rankingLink)
@@ -522,6 +551,7 @@ export function leave(): Promise<{ reached: boolean }> {
       tx.delete(rankingSent).run();
       tx.delete(rankingLink).run();
     });
+    forgetWatched();
     dropRankingView();
     console.log(
       reached

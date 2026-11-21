@@ -1067,6 +1067,45 @@ export const rankingSent = sqliteTable(
 );
 
 /**
+ * **番組ランキングに送る、放送ごとの録った・観たの控え** (`ranking-watch.ts`)。参加している間だけ書き、放送が終わってから送る。
+ *
+ * - ライブで観た長さ (`live_ms`) とタイムシフトで再生した長さ (`timeshift_ms`) を足していき、決まり (合わせて 5 分。短い番組は長さの半分) を
+ *   超えたかだけを hub に送る。長さそのものと観た時刻は送らない
+ * - 終わった放送の予約 (`reserved`) と録画 (`recorded`) も、番組表に番組が残っている間に写す。番組表は終わって 1 日で消えるが、
+ *   そのあとも送った組を保つため。番組名などもここに写して持つ
+ * - 放送が終わって 8 日 (hub が受ける間) を過ぎたら消す。オフにしたら全部消す
+ */
+export const rankingWatched = sqliteTable(
+  "ranking_watched",
+  {
+    network_id: integer("network_id").notNull(),
+    service_id: integer("service_id").notNull(),
+    event_id: integer("event_id").notNull(),
+    /** 番組の始まりと終わり (unix ms) */
+    start_at: integer("start_at").notNull(),
+    end_at: integer("end_at").notNull(),
+    name: text("name").notNull(),
+    service_name: text("service_name").notNull(),
+    /** ジャンルの大分類 (ARIB の lv1) */
+    genres: json("genres", numbers).notNull(),
+    /** タイムシフトの再生を、番組表から番組が消えたあとも放送に戻すための録画 (`recordings.id`) */
+    recording_id: integer("recording_id"),
+    reserved: flag("reserved")
+      .notNull()
+      .default(sql`0`),
+    recorded: flag("recorded")
+      .notNull()
+      .default(sql`0`),
+    live_ms: integer("live_ms").notNull().default(0),
+    timeshift_ms: integer("timeshift_ms").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.network_id, t.service_id, t.event_id] }),
+    index("ranking_watched_recording").on(t.recording_id),
+  ],
+);
+
+/**
  * **ロゴを取得した記録** (`logo-record.ts`)。設定の「その他」の「ロゴを集めた結果を記録する」(`recordLogo`) がオンの間だけ、
  * 当たりの中継で待つたびに 1 行足す。衛星のロゴはダウンロードの期間にしか流れず、期間がいつ来るかは分からないので、
  * その来方 (間隔・長さ) を実測で知るためのもの (docs/logo.md「ロゴの取得を記録する」)。

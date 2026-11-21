@@ -26,6 +26,7 @@ import {
   CHECK_EVERY as RANKING_CHECK,
   sendIfDue as sendRanking,
 } from "./ranking";
+import { flushLive } from "./ranking-watch";
 import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
 import { restoreWidths } from "./restore-width";
 import { fillSatellites } from "./satellite-lineup";
@@ -268,10 +269,14 @@ export function start(): void {
   every(config.logoSweepInterval, "logo", sweep);
 
   /*
-   * **番組ランキングに予約を送る** (ranking.ts)。参加している世帯だけ、6 時間ごとに家ごとにずらした時刻で送る。
-   * ここでは送る時刻が来たかを見るだけで、参加していなければ何もしない
+   * **番組ランキングに予約と観た番組を送る** (ranking.ts)。参加している世帯だけ、6 時間ごとに家ごとにずらした時刻で送る。
+   * ここでは送る時刻が来たかを見るだけで、参加していなければ何もしない。ライブで観ている最中の時間も 1 分ごとに控えに足す
+   * (`ranking-watch.flushLive`。長く観ている間にサーバが止まっても、それまでの分を残す)
    */
-  every(RANKING_CHECK, "ranking", sendRanking);
+  every(RANKING_CHECK, "ranking", () => {
+    flushLive();
+    return sendRanking();
+  });
 }
 
 /**
