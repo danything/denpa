@@ -1213,7 +1213,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     }
     const text = adaptNote(decision, served);
-    if (decision.reason === "encode" || decision.reason === "pinned") {
+    if (
+      decision.reason === "encode" ||
+      decision.reason === "pinned" ||
+      decision.reason === "source"
+    ) {
       if (replacesWarning(decision.reason, warning, standing?.text ?? null))
         warning = text;
       standing = { text, at: now };
@@ -2765,6 +2769,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             backlog: notice.backlog,
             dropped: notice.dropped,
             speed: notice.speed,
+            ...(notice.gap === undefined ? {} : { gap: notice.gap }),
           };
         } else if (notice.type === "audios") {
           /*

@@ -16,6 +16,7 @@ import {
   pickTrack,
 } from "#lib/arib.js";
 import { BROADCAST_HEVC, CHANNEL, codecsFor } from "#lib/live.js";
+import { SOURCE_GAP } from "#lib/rungs.js";
 
 import type { LiveHw } from "./hwenc";
 import {
@@ -959,6 +960,15 @@ describe("エンコードが遅れたときの軽い組み合わせ", () => {
     });
     // 答えは 1 回だけ (セッションはここで終える)
     expect(lag.tick(20_000, 0.5, base)).toBeNull();
+  });
+
+  test("チューナーから届かない間があった (gap が SOURCE_GAP 以上) 間は遅れに数えず、数え直す", () => {
+    const lag = new EncodeLag();
+    expect(lag.tick(0, 0.8, base)).toBeNull();
+    expect(lag.tick(LIGHT_LAG, 0.8, base, SOURCE_GAP)).toBeNull();
+    expect(lag.tick(LIGHT_LAG + 1_000, 0.8, base, 0)).toBeNull();
+    expect(lag.tick(2 * LIGHT_LAG, 0.8, base, 0)).toBeNull();
+    expect(lag.tick(2 * LIGHT_LAG + 1_000, 0.8, base, 0)).not.toBeNull();
   });
 
   test("速さ 0 は測れていない値として数えない (画面の adapt.ts と同じ)", () => {

@@ -7,6 +7,7 @@ import {
   RUNG_AUDIO_KBPS,
   RUNG_SPECS,
   rungLabel,
+  sourceGap,
 } from "./rungs";
 
 /**
@@ -72,6 +73,11 @@ import {
  *   ファイルの終わり際にバッファが減るのと、飛んだ先をデコードし終えるまでの詰まりで、ローカルネットでも 720p に下げていた。
  *   回線が細ければ先が埋まらず、ブラウザは読み続けるので、これまでどおり下げる。いまの位置をまだ読んでいない間
  *   (読み始める前・読んでいない先へ飛んだ直後) と、飛んでいる最中は止めていても足りている印にしない (`watch-adapt.ts` の `fileIdle`)
+ * - ライブで、放送に対する遅れ (`lag`) が `LAG_SPAN` で `LAG_STEADY` (0.2 秒) 未満しか伸びていない間は、詰まりとバッファの減りを
+ *   回線のせいにしない。届く速さは段の 95% 前後以上あり、詰まったのは届いてから映すまでの端末の処理 (メインスレッドが塞がった、など)。
+ *   遅れを測れていない間 (選局から 4 秒) はこれまでどおり数える
+ * - ライブで、チューナーから TS が届かない間があった (`Pace.gap` が `SOURCE_GAP` 以上。`rungs.ts`) ときは、詰まっても段を下げず、
+ *   エンコードの遅れにも数えない。足りないときは `source` を返す (画面は断り書きだけ)。チューナー側の途切れは段を下げても直らない
  * - 形式を手で選んでいる間は段を動かさず、足りないときに `pinned` だけを返す
  */
 
@@ -94,11 +100,13 @@ type AdaptRoute = "watch" | "live";
  * - `encode`: サーバのエンコードが間に合わない。段はそのまま
  * - `pinned`: 回線が細いが、形式を手で選んでいるので段を動かさない
  * - `decode`: 端末のデコードが追いつかないので下げた (`AdaptSample.behind`)
+ * - `source`: チューナーから届かない間があって足りない (`Pace.gap`)。段はそのまま
  */
-type AdaptReason = "slow" | "restored" | "encode" | "pinned" | "decode";
+type AdaptReason =
+  "slow" | "restored" | "encode" | "pinned" | "decode" | "source";
 
 export interface AdaptDecision {
-  /** 次の段。`encode` と `pinned` ではいまの段のまま */
+  /** 次の段。`encode`・`pinned`・`source` ではいまの段のまま */
   step: Step;
   reason: AdaptReason;
 }
@@ -225,6 +233,13 @@ export const LAG_SPAN = 4_000;
 /** `LAG_SPAN` の間に遅れがこれだけ伸びたら足りない (秒) */
 export const LAG_GROW = 0.6;
 /**
+ * ライブで、`LAG_SPAN` の間の遅れの伸びがこれ未満なら、届く速さは流している段に足りている (秒)。届く速さが段の 95% 前後以上で、
+ * 詰まりとバッファの減りを回線のせいにしない。届いてから映すまでの端末の処理 (メインスレッドが塞がる・デコード) で詰まっても、
+ * 届いた端は放送に遅れない。メインスレッドを 1.5 秒ごとに 0.7 秒塞いだ E2E では、遅れの伸びは 0.05 秒のまま、
+ * 音を使い切って止まったのを回線のせいにして「回線が細いため」と下げていた
+ */
+export const LAG_STEADY = 0.2;
+/**
  * ライブで上げるのは、測った回線の速さが次の段の何倍のときか。測るのは短い間なので、揺れのぶん多めに見る。
  * 観る画面の `UP_MARGIN` (2 倍) より小さいのは、こちらは再生中の段のぶんも足した回線全体の値で、余りではないため
  */
@@ -274,13 +289,15 @@ export function autoValue(step: Step, format: string): string {
 }
 
 /**
- * **断り書きに出す文** (docs/writing.md)。段を動かしたときは動かした先、`encode` と `pinned` は段を動かさない理由と、
+ * **断り書きに出す文** (docs/writing.md)。段を動かしたときは動かした先、`encode`・`pinned`・`source` は段を動かさない理由と、
  * 何をすればどうなるか。`from` は切り替える前の段。ライブも観る画面もこれを使う
  */
 export function adaptNote(decision: AdaptDecision, from: Step): string {
   const { step, reason } = decision;
   if (reason === "encode")
     return "サーバのエンコードが追いつかないため、再生が止まります";
+  if (reason === "source")
+    return "チューナーから放送が届かない間があるため、再生が止まります";
   if (reason === "pinned")
     return "回線が細いため、再生が止まります。コーデックを「自動」にすると、画質を下げて再生を続けます";
   // 下げる先は段 1 から下、上げる先は段 3 から上。段 0 へ下げることと、音声だけへ上げることは無い
@@ -400,7 +417,9 @@ export class RungAdapter {
      * `encode` を返し続けて段がいつまでも動かず、断り書きも出し直され続けた。本当に遅れていれば 0 より大きい値が届く
      */
     const speed = s.pace?.speed ?? null;
-    if (encodeSlow(speed)) this.slowSince ??= now;
+    // チューナーから届かない間があった (`sourceGap`)。エンコードの遅れにも回線の細さにも数えない (冒頭の「下げないとき」)
+    const gapped = s.route === "live" && sourceGap(s.pace);
+    if (encodeSlow(speed) && !gapped) this.slowSince ??= now;
     else this.slowSince = null;
     if (this.slowSince !== null) {
       // バッファの減り・詰まり・サーバが捨てた塊 (`dropped`) はエンコードが遅いせい。回線のぶんとして数えない
@@ -418,6 +437,13 @@ export class RungAdapter {
       ? 0
       : Math.min(TICK_MOST, Math.max(0, now - this.prevAt));
     this.remember(s);
+
+    // チューナーから届かない間に足りなくなったのは、段を下げても直らない。段はそのままで、断り書きだけを返す
+    if (gapped) {
+      this.upSince = null;
+      this.clearLow();
+      return short ? { step: s.current, reason: "source" } : null;
+    }
 
     if (s.manual) {
       this.upSince = null;
@@ -622,12 +648,15 @@ export class RungAdapter {
     }
     const watch = s.route === "watch";
     /*
-     * 観る画面で、回線がいまの段に足りているか。分からなければ null。測った速さ `bps` があれば比べ、無ければ
-     * ブラウザがファイルを読むのを止めている (`idle`) ことを足りている印にする
+     * 回線がいまの段に足りているか。分からなければ null。観る画面は、測った速さ `bps` があれば比べ、無ければ
+     * ブラウザがファイルを読むのを止めている (`idle`) ことを足りている印にする。ライブは、放送に対する遅れ (`lag`) が
+     * 伸びていなければ足りている (`LAG_STEADY`)
      */
     const fits = (bps: number | null): boolean | null =>
       !watch
-        ? null
+        ? s.lag !== null && s.lag !== undefined && s.lag < LAG_STEADY
+          ? true
+          : null
         : bps !== null
           ? s.current === "audio" ||
             bps * HEADROOM >= stepBps(s.current, s.baseKbps)
@@ -648,7 +677,7 @@ export class RungAdapter {
     const thin = this.thinSince !== null && now - this.thinSince >= THIN;
     // 放送に対する遅れが伸びている。バッファが外に隠れていても、届く速さが足りなければこれが伸びる
     const lagging = s.route === "live" && (s.lag ?? 0) >= LAG_GROW;
-    // 観る画面で、先にバッファがあるのに詰まったときと、測った速さが段に足りている間は回線のせいにしない (冒頭の「下げないとき」)
+    // 観る画面で先にバッファがあるのに詰まったとき、測った速さが段に足りている間、ライブで遅れが伸びていない間は回線のせいにしない (冒頭の「下げないとき」)
     const stalled = s.waiting && (!watch || s.ahead < LOW);
     const starving = (stalled || falling) && enough !== true;
     this.starving = starving;

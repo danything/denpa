@@ -69,6 +69,7 @@ import {
   type Rung,
   RUNG_AUDIO_KBPS,
   RUNG_SPECS,
+  SOURCE_GAP,
 } from "#lib/rungs.js";
 import { recordedTransport, tsPathOf } from "#lib/source.js";
 import { type Anchor, BroadcastClock, parseStart } from "#lib/ts/clock.js";
@@ -129,7 +130,14 @@ import {
 } from "./hwenc";
 import { MmtLive, type MmtOut } from "./live-mmt";
 import { tunerOf, yieldedTo } from "./live-yield";
-import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
+import {
+  InputGaps,
+  PACE_CHECK,
+  PaceMeter,
+  SpeedMeter,
+  timedInput,
+  VideoLength,
+} from "./pace";
 import { PmtWatch } from "./pmt-watch";
 import { liveWatching } from "./ranking-watch";
 import {
@@ -1151,7 +1159,9 @@ export function encodeSpeed(
 /**
  * **エンコードの遅れを数えて、軽くするかを決める** (`Session.lighten`)。時刻と速さは引数で受け取る (単体で確かめられる)。
  * 速さが `ENCODE_SLOW` (`#lib/rungs.ts`。画面と同じ値) を切ったまま `LIGHT_LAG` 続いたら、1 回だけ答えを返す。
- * 0 は画面 (`adapt.ts`) と同じく測れていない値とみなす (映像のトラックを読めない init では 0 になる)
+ * 0 は画面 (`adapt.ts`) と同じく測れていない値とみなす (映像のトラックを読めない init では 0 になる)。
+ * 速さを測る窓の中でチューナーから届かない間があった (`gap` が `SOURCE_GAP` 以上) ときも数え直す。届かない間は ffmpeg が
+ * 出すものも止まるので速さが下がるが、軽くしても直らない (数えていた頃は、チューナーが途切れても 30 コマへ作り直していた)
  *
  * - `{ step, light }` … 軽くする。`light` は受け継がせるもの (`keepLight`)
  * - `"heavy"` … 遅れているが、これより軽くできない (書き残すだけ)
@@ -1170,9 +1180,10 @@ export class EncodeLag {
     now: number,
     speed: number | null,
     state: Parameters<typeof nextLight>[0],
+    gap: number | null = null,
   ): { step: LightStep; light: Light } | "heavy" | null {
     if (this.decided) return null;
-    if (!encodeSlow(speed)) {
+    if (!encodeSlow(speed) || (gap ?? 0) >= SOURCE_GAP) {
       this.slowSince = null;
       return null;
     }
@@ -1767,6 +1778,21 @@ class Session {
   private meter = new SpeedMeter();
   /** 出した映像の長さの合計 (秒) */
   private media = 0;
+  /**
+   * チューナーから届くのを待った間 (`pace` の `gap`)。チューナーから読むたびに数える。`SOURCE_GAP` 以上待ったら
+   * ライブだけログに出力する (追っかけは録画の書き込みを待つので数えない)
+   */
+  private readonly input = new InputGaps((ms) => {
+    if (this.source === undefined)
+      console.warn(
+        `[live] ${this.channelType}:${this.channel}: チューナーから ${(ms / 1000).toFixed(1)} 秒届きませんでした (USB の電力不足・接続の抜け・チューナーの取りこぼしで起きることがあります)`,
+      );
+  });
+
+  /** チューナーから届かなかったいちばん長い間 (ms。`InputGaps.longest`)。追っかけ・まだ届いていなければ null */
+  get gap(): number | null {
+    return this.source !== undefined ? null : this.input.longest(Date.now());
+  }
 
   /**
    * **エンコードの速さ** (出した映像の時刻の進み ÷ 実時間。`#lib/rungs.ts` の `Pace`)。ライブは実時間で届くので、
@@ -2874,9 +2900,13 @@ class Session {
       for (;;) {
         // `for await` にしない。抜けるとリーダーごと閉じてしまう (使い回せなくなる)
         let next: IteratorResult<Uint8Array>;
+        const waiting = this.input.begin(Date.now());
         try {
           next = await stream.next();
+          this.input.end(waiting, Date.now());
         } catch (error) {
+          // 待ちとして数え続けないよう捨てる (`InputGaps.cancel`)
+          this.input.cancel(waiting);
           // チューナーのストリームが例外で切れた (エージェントが落ちた・取り上げられた)。追っかけのファイルは数えない
           if (!own) this.cut = true;
           throw error;
@@ -2957,17 +2987,24 @@ class Session {
     if (this.source !== undefined || this.stopped) return;
     const speed = this.speed;
     const codec = this.codec;
-    const verdict = this.lag.tick(now, speed, {
-      codec,
-      rung: this.rung,
-      light: this.light,
-      software: this.software,
-      gpuReady: () =>
-        codec !== "audio" &&
-        // 起こすときと同じ経路で引く (`runEncode` の `pickHw`。映像が HEVC ならデコードを GPU に載せない)
-        liveHwAvailable(codec, this.broadcast !== "hevc" && !this.hevcVideo) !==
-          null,
-    });
+    const verdict = this.lag.tick(
+      now,
+      speed,
+      {
+        codec,
+        rung: this.rung,
+        light: this.light,
+        software: this.software,
+        gpuReady: () =>
+          codec !== "audio" &&
+          // 起こすときと同じ経路で引く (`runEncode` の `pickHw`。映像が HEVC ならデコードを GPU に載せない)
+          liveHwAvailable(
+            codec,
+            this.broadcast !== "hevc" && !this.hevcVideo,
+          ) !== null,
+      },
+      this.gap,
+    );
     if (verdict === null) return;
     if (verdict === "heavy") {
       console.warn(
@@ -3442,7 +3479,7 @@ class Session {
       const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
       const streams = new StreamsWatch();
       try {
-        for await (const chunk of input) {
+        for await (const chunk of timedInput(input, this.input)) {
           if (this.stopped) break;
           this.fed = true;
           if (!chase) this.opening.firstByte ??= this.since();
@@ -3557,7 +3594,7 @@ class Session {
     const chase = this.source !== undefined;
     let left = false;
     try {
-      for await (const chunk of chunks(tuned)) {
+      for await (const chunk of timedInput(chunks(tuned), this.input)) {
         if (this.stopped) break;
         this.fed = true;
         this.opening.firstByte ??= this.since();
@@ -4886,6 +4923,7 @@ export function attend(connection: Connection): void {
       connection.backlog,
       connection.dropped,
       current.speed,
+      current.gap,
     );
     if (pace !== null)
       connection.send(

@@ -64,6 +64,25 @@ export interface Pace {
    * 1 に近いほど、届く速さを決めているのは回線ではなくエンコード。測れるまでは null、WebSocket は省略
    */
   wait?: number | null;
+  /**
+   * ライブで、チューナーから TS が届かなかったいちばん長い間 (ms。直近 5 秒。`server/pace.ts` の `InputGaps`)。
+   * 測らない経路 (追っかけ・HTTP) と、まだ届いていない間は省略
+   */
+  gap?: number;
+}
+
+/**
+ * チューナーから TS がこれだけ届かない間があったら (`Pace.gap`。ms)、詰まりも遅れもエンコードの遅れもチューナー側の途切れと読む。
+ * サーバは軽い組み合わせに作り直さず (`server/live.ts` の `EncodeLag`)、画面は段を下げない (`adapt.ts`)。段を下げても、
+ * 変換し直しても直らないため。チューナーから届く TS はチャンネルの全部 (地上波で 1 秒に約 2 MB) なので、1 秒届かないのは
+ * USB の電力不足・機材の取りこぼしのような途切れと見ている (実機の間隔は測っていない)。0.5 秒にしていた頃は、E2E で 4 本並べて
+ * サーバの処理が混んだだけで 0.77 秒と出た。5 秒の窓で 1 秒届かなければ、エンコードの速さは 0.8 まで下がって `ENCODE_SLOW` を切る
+ */
+export const SOURCE_GAP = 1_000;
+
+/** チューナーから届かない間があったか (`SOURCE_GAP`)。省略は無かったと読む */
+export function sourceGap(pace: Pace | null): boolean {
+  return (pace?.gap ?? 0) >= SOURCE_GAP;
 }
 
 /**

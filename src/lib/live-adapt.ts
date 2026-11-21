@@ -123,12 +123,12 @@ export const LIGHT_NOTE = {
 } as const;
 
 /**
- * **`encode`・`pinned` の断り書きを、いま出ている断り書き (`warning`) の代わりに出すか。** ほかの理由の断り書きは上書きしない。
+ * **`encode`・`pinned`・`source` の断り書きを、いま出ている断り書き (`warning`) の代わりに出すか。** ほかの理由の断り書きは上書きしない。
  * 出すのは、何も出ていないときと、前に出したこの種類の文 (`standing`) が残っているとき。
  * `encode` は、サーバが軽くしたときの文 (`LIGHT_NOTE`) も替える。軽くしたあとも遅れているなら、その文はもう当たっていないため
  */
 export function replacesWarning(
-  reason: "encode" | "pinned",
+  reason: "encode" | "pinned" | "source",
   warning: string,
   standing: string | null,
 ): boolean {
@@ -141,8 +141,19 @@ export function replacesWarning(
 
 /** 1 回渡すあいだにこれより遅れが伸びたら、端が戻ったと見る (秒)。刻みは 0.5 秒なので、届かなくても 0.5 秒しか伸びない */
 const LAG_JUMP = 5;
-/** 遅れを比べる両端の幅 (ms)。端どうしの、それぞれの中のいちばん小さい遅れを比べる (届き方の揺れを除く) */
-const LAG_EDGE = 1_000;
+/**
+ * 遅れを比べる両端の幅 (ms)。端どうしの、それぞれの中のいちばん小さい遅れを比べる (届き方の揺れを除く)。メインスレッドが
+ * 1.5 秒ごとに 0.7 秒塞がる E2E では、塞がったあとの数回の刻みは、溜まった受信を読み終える前の古い端を見る。1 秒の幅では
+ * 古い端だけになる刻みがあり、遅れが 0.6 秒伸びて見えたので、塞がる間隔より長い 2 秒にする
+ */
+const LAG_EDGE = 2_000;
+
+/**
+ * 前に渡されてからこれより空いた刻みの端は使わない (ms)。刻みは 0.5 秒ごとなので、空いたのはメインスレッドが塞がっていたとき。
+ * 塞がっていた間に届いたものはまだ読まれておらず (WebSocket の受信が後ろに並ぶ)、端は放送より遅れて見える。メインスレッドを
+ * 0.7 秒塞いだ E2E では、その刻みだけ遅れが 0.7 秒伸びて見え、回線が細いとして下げていた
+ */
+export const LAG_LATE = 1_000;
 
 /**
  * **放送に対する遅れの伸びを測る** (`AdaptSample.lag`)。刻むたびに、届いた映像の端の時刻 (メディアの時刻、秒) を渡す。
@@ -152,17 +163,24 @@ const LAG_EDGE = 1_000;
  * `backlog` は 0 のままだった)。
  *
  * 両端 (`LAG_EDGE`) のいちばん小さい遅れどうしを比べる。キーフレームの大きな塊は遅れて届くので、1 回ずつだと揺れる。
+ * 前の刻みから `LAG_LATE` より空いた刻みの端は使わない。直近の `LAG_EDGE` に使える端が無ければ、最後に使えた端で比べる。
  * ストリームが替わったら (選局・段の切り替え・作り直し) 物差しが変わるので `reset` する
  */
 export class LagMeter {
   #samples: { at: number; lag: number }[] = [];
+  /** 最後に渡された時刻 (ms)。使わなかった端も入れる */
+  #seenAt = Number.NaN;
 
   reset(): void {
     this.#samples = [];
+    this.#seenAt = Number.NaN;
   }
 
   /** `now` (ms) の時点で届いている映像の端 (秒)。測れなければ渡さない */
   push(now: number, edge: number): void {
+    const late = now - this.#seenAt > LAG_LATE;
+    this.#seenAt = now;
+    if (late) return;
     const lag = now / 1000 - edge;
     const last = this.#samples.at(-1);
     // 端が戻った (シークで捨てた・別のストリーム)。1 回の刻みで `LAG_JUMP` も伸びることは無いので、前の値とは比べない
@@ -176,16 +194,18 @@ export class LagMeter {
   /** ここ `LAG_SPAN` で伸びた遅れ (秒)。縮んでいれば負。まだ `LAG_SPAN` ぶん測れていなければ null */
   growth(now: number): number | null {
     const first = this.#samples[0];
-    if (first === undefined || now - first.at < LAG_SPAN) return null;
+    const last = this.#samples.at(-1);
+    if (first === undefined || last === undefined || now - first.at < LAG_SPAN)
+      return null;
     let old = Infinity;
     let recent = Infinity;
     for (const s of this.#samples) {
       if (s.at < first.at + LAG_EDGE) old = Math.min(old, s.lag);
       if (s.at > now - LAG_EDGE) recent = Math.min(recent, s.lag);
     }
-    return Number.isFinite(old) && Number.isFinite(recent)
-      ? recent - old
-      : null;
+    // 直近 `LAG_EDGE` に使える端が無い (塞がりが `LAG_EDGE` より長く続いた) ときは、最後に使えた端で比べる。
+    // 古い端との比べになるので伸びは小さく出て、回線のせいにしない側に倒れる。塞がった間は端末の処理の詰まりなので、それでよい
+    return (Number.isFinite(recent) ? recent : last.lag) - old;
   }
 }
 

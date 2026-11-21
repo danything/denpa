@@ -4,6 +4,7 @@ import { stepOrder } from "./adapt";
 import type { Notice } from "./live";
 import {
   holdsDown,
+  LAG_LATE,
   LagMeter,
   LIGHT_NOTE,
   PROBE_LEAST,
@@ -179,6 +180,18 @@ describe("放送に対する遅れ", () => {
       meter.push(now, now / 1000 - late);
     }
     expect(Math.abs(meter.growth(now - 250)!)).toBeLessThan(0.1);
+  });
+
+  test("前の刻みから LAG_LATE より空いた刻み (メインスレッドが塞がっていた) の端は使わず、最後に使えた端で比べる", () => {
+    const meter = new LagMeter();
+    const now = feed(meter, 10, 1);
+    // 塞がっていた間に届いたものはまだ読まれていない (端は 0.7 秒遅れて見える)
+    const late = now + LAG_LATE + 200;
+    meter.push(late, late / 1000 - 0.7);
+    expect(meter.growth(late)).toBeCloseTo(0);
+    // 次の刻みは読み終えている
+    meter.push(late + 500, (late + 500) / 1000);
+    expect(meter.growth(late + 500)).toBeCloseTo(0);
   });
 
   test("端が大きく戻ったら (別のストリーム)、前の値と比べない", () => {
