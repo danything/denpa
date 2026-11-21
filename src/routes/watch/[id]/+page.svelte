@@ -126,9 +126,9 @@
   import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
+  import { rangesOf } from "#lib/player/mse-sink.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
-    rangesOf,
     type RemuxPlayer,
     remuxPlayer,
     type StreamHeard,

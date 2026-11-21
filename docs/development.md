@@ -129,11 +129,12 @@ Linux の WebKit は H.264 の fMP4 を再生できないので、iPhone の Saf
 
 - Linux のランナーで x264・x265 の作り物の録画を作り、本物の `copyArgs`・`cleanFrom` で詰め替える (`tests/webkit-remux/make.ts`)。
   変換するところは、変換の枠が埋まっていたときに返す詰め替え (`busy`) も作る
-- macOS のランナーで、製品の `remux-player.ts` を組んだものをページで動かし、手元の HTTP サーバから流す (`tests/webkit-remux/play.mjs`)。
+- macOS のランナーで、製品の `remux-player.ts` を、読み込むファイル (MSE を開いて足す `player/mse-sink.ts` など) ごと組んでページで動かし、
+  手元の HTTP サーバから流す (`tests/webkit-remux/play.mjs`)。
   `MEDIA_ERR_DECODE` になったか、何コマデコードしたか、何秒進んだかと、止まった回の `buffered`・`readyState` などを表と JSON に残す
 - **既定は本物の Safari** (safaridriver。`browser` が `safari`)。Playwright の WebKit (`webkit`) は、本物の Safari と Chrome では起きない止まり方
   (1 コマ映して進まない) をするので、結果は Safari で確かめる。Chrome (`chrome`) は比べるために使う
-- `remux_ref` にコミットを入れると、そのコミットの `remux-player.ts` で流す (直す前と比べるとき)
+- `remux_ref` にコミットを入れると、そのコミットの `remux-player.ts` と `player/mse-sink.ts` で流す (直す前と比べるとき)。ほかのファイルは回すコミットのもの
 - 録画を作るのに 2 分ほど (make)、流すのに 15〜35 分ほど (play) かかります。`from_run` に前の run の番号を入れると、録画を作り直さずにその run の fMP4 を使います (3 日で消えます)
 
 ## CI
