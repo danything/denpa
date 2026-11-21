@@ -468,14 +468,14 @@ test.describe("データ放送の双方向", () => {
   /*
    * **放送のイベントメッセージを Hybridcast のアプリへ渡す** (`streamEvent.addGeneralEventMessageListener`)。
    * 偽の放送のストリーム記述子 (汎用イベントメッセージ記述子) を流し、アプリのリスナーが呼ばれるのを見る。
-   * 絞り込み (別の message_group_id) に当たらないリスナーは呼ばない。同じメッセージを繰り返し送っても 1 回だけ
+   * 絞り込み (別の message_group_id) に当たらないリスナーと、呼ぶ前に外されたリスナーは呼ばない。同じメッセージを繰り返し送っても 1 回だけ
    */
   test("放送のイベントメッセージを Hybridcast のアプリのリスナーへ渡す", async ({
     page,
   }) => {
     const appUrl = "https://hybridcast.example.jp/app.html";
     const app = `<!DOCTYPE html><html><head><title>hc</title></head><body>
-<p id="ev">-</p><p id="other">-</p><p id="name">-</p>
+<p id="ev">-</p><p id="other">-</p><p id="gone">-</p><p id="late">-</p><p id="name">-</p>
 <script>
 var got = [];
 navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 1, function (e) {
@@ -485,6 +485,20 @@ navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 1, fu
 navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 2, function () {
     document.getElementById('other').textContent = 'called';
 });
+// 登録した直後に外したものは呼ばない
+var gone = function () {
+    document.getElementById('gone').textContent = 'called';
+};
+navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 1, gone);
+navigator.receiverDevice.streamEvent.removeGeneralEventMessageListener(gone);
+// 先に呼ばれたリスナーが、あとのリスナーを外す。呼ぶ順番が来る前に外されたものも呼ばない
+var late = function () {
+    document.getElementById('late').textContent = 'called';
+};
+navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 1, function () {
+    navigator.receiverDevice.streamEvent.removeGeneralEventMessageListener(late);
+});
+navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 1, late);
 // /40・0x40 の形でない文字は ES の指定とみなさない (16 進に読める名前でも絞らない)
 navigator.receiverDevice.streamEvent.addGeneralEventMessageListener(function () {
     document.getElementById('name').textContent = 'called';
@@ -553,8 +567,11 @@ navigator.receiverDevice.streamEvent.addGeneralEventMessageListener(function () 
       JSON.stringify([["/40", 1, 3, 2, "あ", 2]]),
       { timeout: 10_000 },
     );
-    expect(await inApp.locator("#other").textContent()).toBe("-");
+    // リスナーは登録した順に 1 つずつ呼ぶ (`setTimeout`)。最後の #name が呼ばれたなら、前のものの番は済んでいる
     await expect(inApp.locator("#name")).toHaveText("called");
+    expect(await inApp.locator("#other").textContent()).toBe("-");
+    expect(await inApp.locator("#gone").textContent()).toBe("-");
+    expect(await inApp.locator("#late").textContent()).toBe("-");
   });
 
   test("双方向を切ってあれば、Hybridcast は起動しない", async ({ page }) => {
