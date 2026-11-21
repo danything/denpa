@@ -232,8 +232,8 @@ jobs:
         shell: pwsh
         run: ./tests/install-windows-winusb.ps1
 
-      # 本体のタスクの実行ユーザー (install.ps1 -User と上げ直し)。ランナーのタスクと ACL は変えないので、偽のタスク スケジューラと偽の icacls で。
-      # 見るのは、上げ直しで人が変えた実行ユーザーを SYSTEM に戻さないことと、そのユーザーに置き場の権限を足すこと
+      # 本体のタスクの実行ユーザー (流したユーザー・Enter だけ・入力を受け付けない窓・install.ps1 -User・上げ直し)。ランナーのタスクと ACL は変えないので、偽のタスク スケジューラと偽の icacls で。
+      # 見るのは、初めては流したユーザーで載せ、聞けなければ SYSTEM にすること・上げ直しで実行ユーザーを替えないこと・そのユーザーに置き場の権限を足すこと
       - name: Windows task user with a fake task scheduler
         shell: pwsh
         run: ./tests/install-windows-task-user.ps1
@@ -897,7 +897,7 @@ jobs:
   # 配布物を Windows のランナーで確かめる。**必須チェックにはしない** (Windows のランナーは混むと待たされる)。
   # 1. 同梱の ffmpeg で denpa の経路を流し、同梱の ffprobe で denpa が読む形式を読み、名前付きパイプで受ける進み具合と、スリープを止める呼び出しを見る (tests/native-smoke.ts)
   # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
-  # 3. install.ps1 で本体ごと入れて (タスクは SYSTEM)、本体がエージェントと組めるか。上げ直して、外す
+  # 3. install.ps1 で本体ごと入れて (ランナーの窓は入力を受け付けないので、本体のタスクも SYSTEM。Select-ServerUser)、本体がエージェントと組めるか。上げ直して、外す
   server-windows:
     needs: [changes, server-windows-bundle, agent-windows-install]
     if: needs.changes.outputs.bundle == 'true'

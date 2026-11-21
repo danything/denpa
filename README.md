@@ -71,7 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 ```
 
 ```powershell
-# Windows (PowerShell)
+# Windows (管理者の PowerShell。本体を動かすユーザーの Windows のパスワードを聞かれる。Enter だけなら SYSTEM で動かす)
 irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 ```
 
