@@ -187,7 +187,6 @@
     plainMarks,
     playbackAt,
     prevChapterAt,
-    resumePoint,
     type Ruler,
     skipCmAtStart,
     skipTarget,
@@ -257,12 +256,6 @@
   let stepFrom: Step | null = null;
   /** canvas のプレイヤーがバッファを使い切って止まっているか (`waiting`)。段を決めるのに渡す */
   let canvasStuck = false;
-  /**
-   * 段 0 のビットレート (kbit/s)。ファイル (`?source=`。元の TS は `ts`) ごとに、ファイルの大きさと尺から出す。
-   * 形式を選び直して前のファイルに戻ったときも、そのファイルの値で比べる
-   * キーは録画とファイルの組 (`fileKey`)。別の録画へ移ってもページは作り直されないことがあるため
-   */
-  const base = new Map<string, number>();
   /** 段を切り替えている最中か (応答を待っている間は刻まない) */
   let switching = false;
   /** これより前 (ms) は段を動かさない。混んでいて断られたあと、続けてリクエストしない */
