@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import { eq, sql } from "drizzle-orm";
 
@@ -27,6 +27,7 @@ const { cmMaterials, encodeJobs, recordings, reservations } =
   await import("./schema");
 const { pruneHistory, reconcile, removeRecording } = await import("./files");
 const { subscribe } = await import("./events");
+const { encodedCandidates } = await import("./library");
 
 const DAY = 24 * 60 * 60 * 1000;
 const now = Date.now();
@@ -532,6 +533,134 @@ describe("実体との照合", () => {
     rmSync(av1);
     reconcile();
     expect(row10()).toEqual({ lib: h264, hevc: null, alt: null });
+  });
+
+  /** 置くときと同じ名前で置いた録画。`codecs` に挙げたものだけ実体を置く。返り値は実パス */
+  function placedRecording(id: number, codecs: ("av1" | "h264")[]) {
+    const rec = {
+      id,
+      series: `番組${id}`,
+      subtitle: "",
+      start_at: Date.UTC(2026, 10, 1, 12),
+    };
+    const [av1, h264] = (["av1", "h264"] as const).map((codec) => {
+      const path = encodedCandidates(rec, codec)[0]!;
+      if (codecs.includes(codec))
+        put(config.encodedDir, relative(config.encodedDir, path));
+      return path;
+    });
+    const ts = put(config.rawDir, `番組${id}.m2ts`);
+    orm()
+      .insert(recordings)
+      .values({
+        ...rec,
+        service_id: 1,
+        name: rec.series,
+        end_at: rec.start_at,
+        finished_at: rec.start_at,
+        library_path: av1,
+        alt_path: h264,
+        ts_path: ts,
+        created_at: 0,
+        updated_at: 0,
+      })
+      .run();
+    return { av1: av1!, h264: h264!, ts };
+  }
+  const rowOf = (id: number) =>
+    orm()
+      .select({
+        lib: recordings.library_path,
+        alt: recordings.alt_path,
+        deleted: recordings.deleted_at,
+        error: recordings.error,
+      })
+      .from(recordings)
+      .where(eq(recordings.id, id))
+      .get()!;
+
+  /*
+   * **保存先に 1 本も見つからない回は、行を書き換えない。** NAS に置いた録画を、NAS の資格情報を持たない
+   * ユーザー (Windows の SYSTEM) で動かした denpa が照合すると、全部が消えたように見える。
+   * 削除済みに倒すと一覧から全部消え、手元の元の TS まで消していた
+   */
+  test("保存先に 1 本も見つからない回は、削除済みにせず元の TS も残す", () => {
+    fresh();
+    const one = placedRecording(21, []);
+    placedRecording(22, []);
+    const result = reconcile();
+    expect(result.unreachable).toBe(true);
+    expect(result.removed).toBe(0);
+    expect(rowOf(21).deleted).toBeNull();
+    expect(rowOf(22).deleted).toBeNull();
+    expect(existsSync(one.ts)).toBe(true);
+  });
+
+  test("1 本でも見つかれば、消えたものは削除済みにする", () => {
+    fresh();
+    placedRecording(21, ["av1"]);
+    const gone = placedRecording(22, []);
+    const result = reconcile();
+    expect(result.unreachable).toBe(false);
+    expect(result.removed).toBe(1);
+    expect(rowOf(21).deleted).toBeNull();
+    expect(rowOf(22).deleted).not.toBeNull();
+    expect(existsSync(gone.ts)).toBe(false);
+  });
+
+  /*
+   * **削除済みにした録画のファイルが置き場に戻れば、行を戻す。** 上の決まりより前の照合が削除済みにした録画は、
+   * 行が消える (2 週間) までに保存先に繋がれば一覧に戻る
+   */
+  test("削除済みにした録画のファイルが置き場で見つかれば、行を戻す", () => {
+    fresh();
+    const { av1, h264 } = placedRecording(23, ["av1", "h264"]);
+    orm()
+      .update(recordings)
+      .set({
+        deleted_at: now,
+        library_path: null,
+        alt_path: null,
+        ts_path: null,
+        error: "保存先から消えていました",
+      })
+      .where(eq(recordings.id, 23))
+      .run();
+
+    const result = reconcile();
+    expect(result.restored).toBe(1);
+    expect(rowOf(23)).toEqual({
+      lib: av1,
+      alt: h264,
+      deleted: null,
+      error: null,
+    });
+    expect(reconcile().restored).toBe(0);
+  });
+
+  test("H.264 だけ残っていれば、それを主にして戻す", () => {
+    fresh();
+    const { h264 } = placedRecording(24, ["h264"]);
+    orm()
+      .update(recordings)
+      .set({ deleted_at: now, library_path: null, alt_path: null })
+      .where(eq(recordings.id, 24))
+      .run();
+    expect(reconcile().restored).toBe(1);
+    expect(rowOf(24)).toMatchObject({ lib: h264, alt: null, deleted: null });
+  });
+
+  test("画面から消した録画は戻さない (ファイルも消してある)", () => {
+    fresh();
+    placedRecording(25, ["av1", "h264"]);
+    const row = orm()
+      .select()
+      .from(recordings)
+      .where(eq(recordings.id, 25))
+      .get()!;
+    expect(removeRecording(row, "削除")).toBe(true);
+    expect(reconcile().restored).toBe(0);
+    expect(rowOf(25).deleted).not.toBeNull();
   });
 });
 

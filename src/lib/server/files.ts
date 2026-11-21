@@ -21,12 +21,14 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { HW_CODECS, type HwCodec } from "#lib/hw.js";
+
 import type { Recording } from "../types";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
 import { pruneEmptyDirs, removeIfExists } from "./fsx";
-import { encodedPaths } from "./library";
+import { encodedCandidates, encodedPaths, libraryCandidates } from "./library";
 import { removeSidecars, SIDECAR_SUFFIXES } from "./metadata";
 import {
   clips,
@@ -129,14 +131,22 @@ export function usedByOther(path: string, recordingId: number): boolean {
  *
  * **動画そのものには触らない。** 行の無い動画は、手で置いたものかもしれない。
  * 数だけ数えて、消すかどうかは人が決める。
+ *
+ * **保存先に 1 本も見つからない回は、行を書き換えない** (`unreachable`)。保存先に繋がっていないのを
+ * 「全部消された」と読むと、録画が全部削除済みになり、元の TS まで消す。NAS に置いて、NAS の資格情報を
+ * 持たないユーザー (Windows の SYSTEM) で動かしたときに起きていた。
+ * 削除済みにした録画のファイルが置き場に戻っていれば、行を戻す (`restoreFound`)
  */
 export function reconcile(): {
   checked: number;
   removed: number;
+  restored: number;
+  unreachable: boolean;
   swept: number;
   strays: number;
   pruned: number;
 } {
+  const restored = restoreFound();
   const placed = orm()
     .select()
     .from(recordings)
@@ -144,11 +154,20 @@ export function reconcile(): {
       and(isNotNull(recordings.library_path), isNull(recordings.deleted_at)),
     )
     .all();
+  const unreachable =
+    placed.length > 0 &&
+    !placed.some((recording) =>
+      encodedPaths(recording).some((path) => existsSync(path)),
+    );
+  if (unreachable)
+    console.warn(
+      `[files] 保存先 (${config.encodedDir}) に録画が 1 本も見つかりません。保存先に繋がっていないとみて、削除済みにしません`,
+    );
 
   let removed = 0;
   /** 行を書き換えたか。開いている画面に知らせる (定期チェックでも、押したときでも) */
-  let changed = false;
-  for (const recording of placed) {
+  let changed = restored > 0;
+  for (const recording of unreachable ? [] : placed) {
     // 主でないもの (H.265・H.264) だけが外から消えたら、その控えだけ外す。主は無事なので録画は残る
     let hevc = recording.hevc_path;
     let alt = recording.alt_path;
@@ -192,7 +211,7 @@ export function reconcile(): {
       changed = true;
       continue;
     }
-    deleteRecordingFiles(recording, "保存先から消えていました");
+    deleteRecordingFiles(recording, MISSING);
     removed++;
     changed = true;
     console.log(
@@ -203,7 +222,68 @@ export function reconcile(): {
   if (changed) emit("recordings");
 
   const left = sweepLeftovers();
-  return { checked: placed.length, removed, ...left };
+  return { checked: placed.length, removed, restored, unreachable, ...left };
+}
+
+/** 照合が削除済みにした録画に付ける理由 (戻したら外す) */
+const MISSING = "保存先から消えていました";
+
+/**
+ * **削除済みにした録画のうち、置き場の決まった名前のファイルが在るものを戻す。** 行は消してから 2 週間残る
+ * (`pruneHistory`) ので、その間に保存先に繋がれば一覧に戻る。
+ *
+ * 探すのは置くときと同じ名前 (`libraryCandidates`) で、エンコードしたもの (`encodedCandidates`) が先、無ければ
+ * エンコードせずに置いた元の TS。主は AV1 → H.265 → H.264 の先頭 (`encoder.ts` と同じ)。
+ * 画面から消した録画はファイルも消してあるので当たらない。ほかの録画が使っている名前も取らない。
+ * 引き継いだ録画 (EPGStation・EDCB の名前のまま置いたもの) は名前が違うので戻らない。
+ * 元の TS の置き場 (`ts_path`) と切り抜きの行き先は、削除済みにしたときに外したので戻らない
+ */
+function restoreFound(): number {
+  const rows = orm()
+    .select()
+    .from(recordings)
+    .where(
+      and(
+        isNotNull(recordings.deleted_at),
+        isNull(recordings.library_path),
+        isNotNull(recordings.finished_at),
+      ),
+    )
+    .all();
+  let restored = 0;
+  for (const row of rows) {
+    const find = (paths: string[]) =>
+      paths.find((path) => existsSync(path) && !usedByOther(path, row.id)) ??
+      null;
+    const encoded = HW_CODECS.map((codec) => ({
+      codec,
+      path: find(encodedCandidates(row, codec)),
+    })).filter((found) => found.path !== null);
+    const primary =
+      encoded[0]?.path ??
+      find([".m2ts", ".mmts"].flatMap((ext) => libraryCandidates(row, ext)));
+    if (primary === null) continue;
+    const secondary = (codec: HwCodec) =>
+      encoded.find((found) => found.codec === codec && found.path !== primary)
+        ?.path ?? null;
+    orm()
+      .update(recordings)
+      .set({
+        library_path: primary,
+        hevc_path: secondary("hevc"),
+        alt_path: secondary("h264"),
+        deleted_at: null,
+        error: sql`NULLIF(${recordings.error}, ${MISSING})`,
+        updated_at: now(),
+      })
+      .where(eq(recordings.id, row.id))
+      .run();
+    restored++;
+    console.log(
+      `[files] 削除済みにした録画が保存先で見つかったので戻しました: ${row.name}`,
+    );
+  }
+  return restored;
 }
 
 /** 動画そのものの拡張子。これの隣に置くものが「サイドカー」 */

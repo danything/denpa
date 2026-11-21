@@ -4,13 +4,16 @@
 #   irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall
 #       引数を渡すときはこの書き方。-NoOpen (ブラウザを開かない) / -Uninstall (止めて外す。DB・設定・録画は残す) /
-#       -AgentOnly (エージェントだけ。denpa 本体は別の機械で動かす)
+#       -AgentOnly (エージェントだけ。denpa 本体は別の機械で動かす) /
+#       -User <ユーザー> (本体のタスクをそのユーザーで動かす。録画の置き場を NAS にするとき。パスワードを聞く。-User SYSTEM で戻す)
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -WinUsb
 #       入れたあとで。挿さっているチューナーのドライバを WinUSB に替える (機材ごとに聞いてから。-Yes を足すと聞かずに替える。Invoke-WinUsb)
 #
 # **denpa 本体もエージェントも Windows の上でそのまま動かす** (コンテナは使わない)。本体は配布物の bun と ffmpeg で、
 # エージェントは .NET の実行ファイル。どちらもタスク スケジューラの「起動したら起こす」タスクに **SYSTEM で**載せるので、
 # 誰もログインしていなくても録画でき、外から観られる。そのために管理者で流す。
+# **上げ直しでは、タスクの実行ユーザーを書き戻さない。** -User か、タスク スケジューラで人が変えたユーザーのまま残す
+# (Register-Loop)。SYSTEM は NAS の共有に資格情報を持たない (Register-Server)。
 # **Windows で使えるチューナーは IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) と Siano の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)**
 # (DVB は無い)。**入れるときにはドライバを替えない。** WinUSB にするのは、人が -WinUsb を付けて流したときだけ
 # (エージェントの zip に入っている libwdi の wdi-simple.exe で。Zadig でもよい。docs/install-windows.md)。
@@ -22,8 +25,8 @@
 #   %ProgramFiles%\denpa\                 エージェントと通知領域のアイコン (bin\)・本体 (server\。bun・アプリ・ffmpeg・フォント・デコーダ)・
 #                                         エージェントを起こす denpa-agent.cmd (管理者しか書けない。SYSTEM で動かすものを、ほかの人に書き換えさせない)
 #   %ProgramData%\denpa\                  DB (denpa.db) とその隣のもの (局ロゴ・鍵)・denpa.env (本体の環境変数。無いときだけ雛形を作る)・本体を起こす denpa.cmd。
-#                                         SYSTEM と管理者だけが読み書きできる
-#   ~/denpa (DENPA_HOME)                  エージェントの config/ (tls\pair-token は denpa とエージェントが組むときの合言葉。無いときだけ作る)・
+#                                         SYSTEM と管理者 (本体のタスクを別のユーザーで動かすなら、そのユーザーも) だけが読み書きできる
+#   ~/denpa (DENPA_HOME)                 エージェントの config/ (tls\pair-token は denpa とエージェントが組むときの合言葉。無いときだけ作る)・
 #                                         ログ (denpa.log・denpa-agent.log)
 #   ~/Videos/denpa/{recorded,library}     元の TS と出来上がった録画
 #
@@ -33,7 +36,7 @@
 # Windows に最初から入っている PowerShell 5.1 で動くように書く (pwsh でも動く)。
 # `irm | iex` は呼んだ人のセッションでそのまま走るので、exit は使わない (窓ごと閉じる)。
 # ---------------------------------------------------------------------------
-param([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [switch]$WinUsb, [switch]$Yes)
+param([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [switch]$WinUsb, [switch]$Yes, [string]$User)
 
 # 入れ方の 1 行 (案内に出す)
 $Installer = 'https://raw.githubusercontent.com/danything/denpa/main/install.ps1'
@@ -239,8 +242,46 @@ function Set-Owned([string]$Path, [string[]]$Sids, [string]$Owner) {
 }
 
 # 本体の置き場 (%ProgramData%\denpa)。DB・鍵・denpa.env があるので、SYSTEM と管理者だけにする
-# (既定の ProgramData は Users も読める)
-function Set-DataDir { Set-Owned $Data @($System, $Administrators) $Administrators }
+# (既定の ProgramData は Users も読める)。**本体のタスクを別のユーザーで動かすなら、そのユーザー ($UserSid) も足す。**
+# DB は実行ユーザーによらずここの 1 つで、足さないと、管理者でないユーザーの本体は denpa.cmd も DB も開けない
+function Set-DataDir([string]$UserSid) {
+    $sids = @($System, $Administrators)
+    if ($UserSid) { $sids += $UserSid }
+    Set-Owned $Data $sids $Administrators
+}
+
+# SYSTEM を指す名前か (タスクの UserId は 'SYSTEM'・'NT AUTHORITY\SYSTEM'・SID のどれでも返りうる)
+function Test-SystemName([string]$Name) { return $Name -match '^([^\\]+\\)?SYSTEM$' -or $Name -eq $System }
+
+# タスクを動かしているユーザー。SYSTEM か、タスクが無ければ空
+function Get-TaskUser([string]$Name) {
+    $task = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    if (-not $task) { return '' }
+    $id = [string]$task.Principal.UserId
+    if (-not $id -or (Test-SystemName $id)) { return '' }
+    return $id
+}
+
+function Get-UserSid([string]$Name) {
+    try {
+        return (New-Object Security.Principal.NTAccount $Name).Translate([Security.Principal.SecurityIdentifier]).Value
+    } catch {
+        throw "ユーザー $Name が見つかりません (この PC のユーザーは「PC 名\名前」か「名前」で書きます)"
+    }
+}
+
+# -User のパスワードを聞く。タスクに保存し、誰もログインしていなくても、そのユーザーの資格情報で NAS に繋ぐ
+# (パスワードを保存しないタスクはネットワークの共有に繋げない)
+function Read-TaskCredential([string]$Name) {
+    return Get-Credential -UserName $Name -Message "denpa 本体のタスクを $Name で動かします。$Name の Windows のパスワードを入れてください (タスクに保存します)"
+}
+
+# $Path にユーザーの変更の権限を足す (ほかの権限はそのまま)。フォルダなら、中のフォルダとファイルにも継がせる
+function Grant-Modify([string]$Path, [string]$Sid) {
+    $grant = if (Test-Path -LiteralPath $Path -PathType Container) { "*${Sid}:(OI)(CI)M" } else { "*${Sid}:M" }
+    & icacls.exe $Path /grant $grant /q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "$Path に権限を足せません (icacls /grant)" }
+}
 
 # 起こす .cmd を書く。**落ちたら 5 秒置いて起こし直す** (タスク スケジューラの「失敗したら再起動」は、終了コードでは効かない)。
 # $Vars は .cmd が決める環境変数。$EnvFile があれば、**起こすたびに読み直し**、そのあとで $Vars を書く
@@ -263,14 +304,35 @@ function Write-Loop([string]$Path, [Collections.Specialized.OrderedDictionary]$V
 # 起動したら起こすタスク (SYSTEM。誰もログインしていなくても動く)。時間の上限は外す (既定は 3 日で止められる)。
 # 優先度は普通にする (既定の 7 は「低い」で、CPU も I/O も後回しにされる)。
 # **WinUSB の機材と PC/SC (カードリーダー) を SYSTEM から使えるかは、Windows の実機ではまだ確かめていない**
-# (CI のランナーには機材が無い。docs/install-windows.md)
-function Register-Loop([string]$Name, [string]$Cmd, [string]$Description, [int]$Priority) {
+# (CI のランナーには機材が無い。docs/install-windows.md)。
+# **実行ユーザー**: $Credential があればそのユーザーで、パスワードを保存して載せる (-User)。無ければ、
+# **いまのタスクが SYSTEM 以外で動いていれば触らない** (人がタスク スケジューラで変えたユーザーを、上げ直しで SYSTEM に戻さない。
+# 載せ直すにはそのユーザーのパスワードが要る。.cmd の場所は変わらないので、中身を書き直すだけで足りる)。
+# $AsSystem (-User SYSTEM) なら SYSTEM で載せ直す
+function Register-Loop([string]$Name, [string]$Cmd, [string]$Description, [int]$Priority, [pscredential]$Credential, [switch]$AsSystem) {
+    if (-not $Credential -and -not $AsSystem) {
+        $kept = Get-TaskUser $Name
+        if ($kept) {
+            Say "タスク $Name は $kept で動かしたままにします (SYSTEM に戻すときは -User SYSTEM)"
+            return
+        }
+    }
     $action = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\cmd.exe" -Argument "/d /c `"$Cmd`""
     $trigger = New-ScheduledTaskTrigger -AtStartup
-    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
     $settings.Priority = $Priority
+    if ($Credential) {
+        try {
+            Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest `
+                -User $Credential.UserName -Password $Credential.GetNetworkCredential().Password `
+                -Description $Description -Force | Out-Null
+        } catch {
+            throw "タスク $Name を $($Credential.UserName) で登録できません ($($_.Exception.Message))。パスワードを確かめて、もう一度流してください"
+        }
+        return
+    }
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
         -Description $Description -Force | Out-Null
 }
@@ -560,9 +622,22 @@ function Register-Agent {
 # denpa 本体を起こす .cmd とタスク。**置き場・ffmpeg・エージェントの宛先はここで決め、denpa.env より勝たせる**
 # (denpa.env は手で直すところで、そこに書いても SYSTEM で動かすものは変えられない)。
 # エージェントは同じ PC なので 127.0.0.1 で繋ぐ (denpa は組んだときの証明書そのもので確かめるので、名前は見ない)。
-# ログはエージェントの隣 (~/denpa/denpa.log)。ポートは LAN のプライベートとドメインのネットワークにだけ開ける
-function Register-Server([string]$Ref, [string]$Token) {
-    Set-DataDir
+# ログはエージェントの隣 (~/denpa/denpa.log)。ポートは LAN のプライベートとドメインのネットワークにだけ開ける。
+# **SYSTEM で動かすと、NAS の共有には繋げない** (SMB ではこの PC のコンピューターのアカウントとして繋ぎ、ユーザーの資格情報を持たない)。
+# NAS に置くなら -User でユーザーを決め ($Credential)、そのユーザーに置き場とログの権限を足す。-User を付けずに上げ直したら、
+# いまのタスクのユーザーに足し直す (Set-DataDir は毎回 ACL を書き直すので)
+function Register-Server([string]$Ref, [string]$Token, [pscredential]$Credential, [switch]$AsSystem) {
+    $runAs = if ($Credential) { $Credential.UserName } elseif ($AsSystem) { '' } else { Get-TaskUser $DenpaTask }
+    $sid = if ($runAs) { Get-UserSid $runAs } else { '' }
+    Set-DataDir $sid
+    if ($sid) {
+        if (-not (Test-Path -LiteralPath $ServerLog)) { New-Item -ItemType File -Path $ServerLog | Out-Null }
+        # 置き場がリンク (NAS へ向けた mklink /D) なら触らない。リンク先の権限は NAS の側で決める
+        foreach ($path in "$Media\recorded", "$Media\library", $ServerLog) {
+            if ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+            Grant-Modify $path $sid
+        }
+    }
     # 本体の環境変数。**手で書き足すのはここ** (上げ直しても触らない。最後も改行で終える)
     $envFile = Join-Path $Data 'denpa.env'
     if (-not (Test-Path -LiteralPath $envFile)) {
@@ -595,7 +670,7 @@ function Register-Server([string]$Ref, [string]$Token) {
     $cmd = "$Data\denpa.cmd"
     Write-Loop $cmd $vars $envFile "$server\app" "`"$server\bun.exe`" server.js" $ServerLog
     # 優先度は普通 (6)。エンコードの ffmpeg は denpa が自分でいちばん低くする (src/lib/server/stream.ts の lowerPriority)
-    Register-Loop $DenpaTask $cmd 'denpa 本体 (install.ps1 が入れた)' 6
+    Register-Loop $DenpaTask $cmd 'denpa 本体 (install.ps1 が入れた)' 6 -Credential $Credential -AsSystem:$AsSystem
 
     Remove-NetFirewallRule -Name $FirewallRule -ErrorAction SilentlyContinue
     New-NetFirewallRule -Name $FirewallRule -DisplayName 'denpa' -Description 'denpa の画面 (install.ps1 が足した)' `
@@ -665,7 +740,7 @@ function Remove-Px4Runtime {
     else { Remove-Item -Recurse -Force -LiteralPath $Px4Runtime }
 }
 
-function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly) {
+function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly, [pscredential]$Credential, [switch]$AsSystem) {
     $work = Join-Path ([IO.Path]::GetTempPath()) "denpa-install-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Force -Path "$work\new" | Out-Null
     $parts = @('bin')
@@ -706,12 +781,12 @@ function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly) {
 
     Register-Agent
     if (-not $AgentOnly) {
-        Register-Server $(if ($env:DENPA_SERVER_ZIP) { $Ref } else { $script:ServerVersion }) $Token
+        Register-Server $(if ($env:DENPA_SERVER_ZIP) { $Ref } else { $script:ServerVersion }) $Token -Credential $Credential -AsSystem:$AsSystem
     }
     Register-Tray -AgentOnly:$AgentOnly
 }
 
-function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [switch]$WinUsb, [switch]$Yes) {
+function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [switch]$WinUsb, [switch]$Yes, [string]$User) {
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'
 
@@ -767,10 +842,23 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [s
 
     if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw '対応しているのは x64 の Windows だけです (エージェントの配布物が x64 用だけです)' }
 
+    # 本体のタスクの実行ユーザー (-User)。**止める前に**ユーザーを確かめてパスワードを聞く (間違えても、動いているものに触らない)
+    $credential = $null
+    $asSystem = $false
+    if ($User) {
+        if ($AgentOnly) { throw '-User は denpa 本体のタスクの実行ユーザーを決めます。-AgentOnly とは一緒に使えません' }
+        if (Test-SystemName $User) { $asSystem = $true }
+        else {
+            Get-UserSid $User | Out-Null
+            $credential = Read-TaskCredential $User
+            if (-not $credential) { throw 'パスワードが入らなかったので、何も変えずに止めました' }
+        }
+    }
+
     $ref = if ($env:DENPA_AGENT_ZIP) { '' } else { Get-Version }
     # エージェントを起こす前に置いておく (無ければエージェントが自分で作り、そちらと食い違わないように)
     $token = Get-PairToken
-    Install-Denpa $ref $token -AgentOnly:$AgentOnly
+    Install-Denpa $ref $token -AgentOnly:$AgentOnly -Credential $credential -AsSystem:$asSystem
     Show-Tuner
     if ($AgentOnly) {
         Say 'エージェントだけ入れました。denpa の設定の「受信」にある「エージェントを追加」に、次の URL を貼るか QR を読ませてください (#pair= の後ろは合言葉。人に見せない)。'
@@ -783,4 +871,4 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [s
     if (-not $NoOpen) { Start-Process "$env:WINDIR\explorer.exe" $Url }
 }
 
-Invoke-Main -NoOpen:$NoOpen -Uninstall:$Uninstall -AgentOnly:$AgentOnly -WinUsb:$WinUsb -Yes:$Yes
+Invoke-Main -NoOpen:$NoOpen -Uninstall:$Uninstall -AgentOnly:$AgentOnly -WinUsb:$WinUsb -Yes:$Yes -User $User

@@ -130,17 +130,26 @@
        * 逆向き (行の無いファイル) を見ていないことが画面から分からなかった。
        * 動画そのものには触らないので、その数だけは出しておく
        */
-      const { checked, removed, swept, strays, pruned } = form.reconcile;
+      const { checked, removed, restored, unreachable, swept, strays, pruned } =
+        form.reconcile;
+      /*
+       * 保存先に 1 本も見つからない回は、削除済みにしない (files.reconcile)。
+       * 保存先に繋がっていないことを、件数の代わりに出す
+       */
       const parts = [
         `照合 ${checked} 件`,
-        `ファイルが無いため削除済みにした ${removed} 件`,
+        unreachable
+          ? "保存先に録画が 1 本も見つからないため、削除済みにしていません。保存先に繋がっているか確かめてください"
+          : `ファイルが無いため削除済みにした ${removed} 件`,
       ];
+      if (restored > 0)
+        parts.push(`保存先で見つかった削除済みの録画を戻した ${restored} 件`);
       if (swept > 0) parts.push(`録画の無い付属ファイルを削除 ${swept} 件`);
       if (pruned > 0) parts.push(`空のフォルダを削除 ${pruned} 件`);
       if (strays > 0) parts.push(`DB に無い動画 ${strays} 件 (残してあります)`);
       list.push({
         key: "reconcile-result",
-        kind: "info",
+        kind: unreachable ? "error" : "info",
         text: parts.join(" / "),
       });
     }
