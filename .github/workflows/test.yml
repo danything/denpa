@@ -129,7 +129,8 @@ jobs:
               "https://github.com/danything/denpa-font/releases/download/$version/$name"
           done
           grep -E ' (denpa-font\.woff2|denpa-font-jisx0213\.woff2|denpa-font-jisx0213\.txt)$' SHA256SUMS > want
-          [ "$(wc -l < want)" = 3 ] && sha256sum -c want
+          [ "$(wc -l < want)" = 3 ]
+          sha256sum -c want
           printf '%s\n' "$version" > VERSION
           echo "FONT_DIR=$dir" >> "$GITHUB_ENV"
 
