@@ -5,7 +5,7 @@ name: WebKit remux check
 #
 # 1. make (Linux): x264・x265 で作り物の録画 (Matroska) を作り、開く位置ごとに `cleanFrom` を通さない (copy)・通す (fixed) の
 #    両方で fMP4 を作る。変換するところは、変換の枠が埋まっていたときに返す詰め替え (busy) も作る (tests/webkit-remux/make.ts)
-# 2. play (macOS): 製品の remux-player.ts を組んだものをページで動かし、手元の HTTP サーバから流す。新しい <video> で開く
+# 2. play (macOS): 製品の remux-player.ts (読み込む player/mse-sink.ts ごと) を組んだものをページで動かし、手元の HTTP サーバから流す。新しい <video> で開く
 #    (player-open) のと、先頭を流したあとに飛ぶ (player-seek) の 2 通り (tests/webkit-remux/play.mjs)。
 #    既定は本物の Safari (safaridriver)。表は Step Summary と artifact の result に出る
 #
@@ -53,7 +53,7 @@ on:
         options: [safari, webkit, chrome]
         default: safari
       remux_ref:
-        description: "player で流す remux-player.ts のコミット (空なら回すコミットのもの)"
+        description: "player で流す remux-player.ts と player/mse-sink.ts のコミット (空なら回すコミットのもの)"
         type: string
         default: ""
       rate:
@@ -140,21 +140,25 @@ jobs:
       - name: Set up bun
         uses: ./.github/actions/setup-bun
 
-      # 観る画面と同じ流し方 (`player-open`・`player-seek`) のために、remux-player.ts をブラウザ向けに組む
+      # 観る画面と同じ流し方 (`player-open`・`player-seek`) のために、remux-player.ts をブラウザ向けに組む。
+      # 読み込むファイル (MSE を開いて足す player/mse-sink.ts など) も bun build が一緒に組む
       - name: Build remux-player
         env:
           REF: ${{ inputs.remux_ref }}
         run: |
           set -euo pipefail
           bun install --frozen-lockfile
-          entry=src/lib/remux-player.ts
-          # 前のコミットの remux-player.ts と比べるとき。読み込むほかのファイルは回すコミットのもの
+          # 前のコミットの remux-player.ts と比べるとき。remux-player.ts と player/mse-sink.ts はそのコミットのものに替え、
+          # ほかは回すコミットのものを使う。mse-sink.ts が無いコミット (切り出す前) の remux-player.ts は、それを読み込まない
           if [ -n "$REF" ]; then
             git fetch --depth=1 origin "$REF"
-            git show FETCH_HEAD:src/lib/remux-player.ts > src/lib/remux-player.under-test.ts
-            entry=src/lib/remux-player.under-test.ts
+            for file in src/lib/remux-player.ts src/lib/player/mse-sink.ts; do
+              if git cat-file -e "FETCH_HEAD:$file" 2>/dev/null; then
+                git show "FETCH_HEAD:$file" > "$file"
+              fi
+            done
           fi
-          bun build "$entry" --target browser --format esm --outfile "$RUNNER_TEMP/remux.js"
+          bun build src/lib/remux-player.ts --target browser --format esm --outfile "$RUNNER_TEMP/remux.js"
 
       - name: Install Playwright WebKit
         run: |

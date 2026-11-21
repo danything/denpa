@@ -9,6 +9,7 @@
  * - **尺は先に渡す** (`MediaSource.duration`)。バーは最初から全長で出て、続きの位置へも飛べる
  * - **ストリームの時刻はページの物差しのまま** (`PlayAxis`)。字幕・チャプター・データ放送は
  *   `currentTime` で引いているので、そのまま合う
+ * - MSE を開く・足す・捨てるのは `player/mse-sink.ts`。どこまで溜めて、どこより前を捨てるかはここが決めて渡す
  * - 溜めるのは先 `AHEAD` 秒まで、後ろは `BEHIND` 秒まで。iPhone は溜められる量が小さい
  * - `ManagedMediaSource` (iPhone) は**送り込んでよい間をブラウザが知らせる** (`startstreaming`・`endstreaming`)。止められている間は読まない
  * - 切れたら、溜まっているぶんの続きからリクエストし直す (1 秒→2 秒→…10 秒で頭打ち、続けて 8 回で打ち切る)。
@@ -20,7 +21,7 @@
  */
 
 import { UP_WAIT_WATCH } from "#lib/adapt.js";
-import { mseType } from "#lib/live.js";
+import { mseSink, type Still } from "#lib/player/mse-sink.js";
 import { parseRung, type Rung } from "#lib/rungs.js";
 import type { PickedMediaSource } from "#lib/ts/media-source.js";
 import { Meter } from "#lib/ts/meter.js";
@@ -50,12 +51,6 @@ const BEHIND = 30;
 const SLACK = 15;
 /** 受け取りの速さをこれだけ測れていなければ、先を多めに溜めて測る (ms)。`adapt.ts` の上げるまでの待ちと同じ */
 const PROBE_EVERY = UP_WAIT_WATCH;
-/**
- * 1 回に足す上限 (バイト)。読むのを止めている間にブラウザが溜めたぶんは 1 回の読み出しでまとめて返る (`aheadLimit`)。
- * 空の SourceBuffer に溜められる量を超える塊は、後ろを捨てても足せず (`QuotaExceededError`)、観て減るのを待ったまま止まる
- * (手元から速く届くと、Safari は 1 回で 20〜36 MB を返した。Chrome は 2 MB まで。`.github/workflows/webkit-remux.yml`。#2884)
- */
-const APPEND_MOST = 1024 * 1024;
 
 /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
 export type StreamUrl = (from: number, audio: string) => string;
@@ -114,14 +109,6 @@ export interface RemuxPlayer {
   destroy(): void;
 }
 
-/** `TimeRanges` を配列にする (`ts/playback.ts` の `aheadOf` などに渡す) */
-export function rangesOf(buffered: TimeRanges): Ranges {
-  const out: [number, number][] = [];
-  for (let i = 0; i < buffered.length; i++)
-    out.push([buffered.start(i), buffered.end(i)]);
-  return out;
-}
-
 /** 応答のヘッダを読む。canvas のプレイヤーも同じものを渡す (`canvas-player.ts` の `heard`) */
 export function heardOf(response: Response): StreamHeard {
   return {
@@ -136,10 +123,6 @@ export function remuxPlayer(
   picked: PickedMediaSource,
   options: RemuxOptions,
 ): RemuxPlayer {
-  const media = new picked.Source();
-  let buffer: SourceBuffer | null = null;
-  /** いまの SourceBuffer の型 */
-  let bufferType: string | null = null;
   let url = options.url;
   let wanted = options.codecs;
   /** リクエストし直すたびに増やす。古いストリームの続きを捨てる目印 */
@@ -155,8 +138,6 @@ export function remuxPlayer(
   let audio = options.audio;
   const retry = new StreamRetry((state) => options.state(state));
   let closed = false;
-  /** MediaSource が開いたか (`sourceopen`)。開く前の位置の変更は、開いてから始める位置に入る */
-  let opened = false;
   /** 溜めすぎて待っている読み込みを起こす */
   let wake: (() => void) | null = null;
   const meter = new Meter();
@@ -181,20 +162,6 @@ export function remuxPlayer(
     wake = null;
     resolve?.();
   };
-  const buffered = (): Ranges =>
-    buffer === null ? [] : rangesOf(buffer.buffered);
-
-  /** MSE に渡す型 (MP4 の `Opus` を受け取れるなら小文字に。`live.ts` の `mseType`)。`bufferType` は元の型のまま比べる */
-  const forMse = (type: string): string =>
-    mseType(type, (t) => picked.Source.isTypeSupported(t));
-
-  /** SourceBuffer を作る。ストリームの時刻をそのまま使う (ページの物差し。`server/playback.ts`) */
-  function createBuffer(type: string): void {
-    buffer = media.addSourceBuffer(forMse(type));
-    buffer.mode = "segments";
-    bufferType = type;
-  }
-
   /** 観て減るか、ブラウザが送り込んでよいと知らせるまで待つ (`nudge`)。待つ間は速さを数えない */
   function sleep(): Promise<void> {
     meter.pause();
@@ -203,58 +170,12 @@ export function remuxPlayer(
     });
   }
 
-  /** SourceBuffer の手が空くまで待つ */
-  function idle(): Promise<void> {
-    const target = buffer;
-    if (target === null || !target.updating) return Promise.resolve();
-    return new Promise((resolve) =>
-      target.addEventListener("updateend", () => resolve(), { once: true }),
-    );
-  }
-
-  /**
-   * 1 つリクエストして、終わるまで待つ。読めない中身なら例外を投げる。
-   *
-   * `mine` を渡したら、手が空くのを待つ間にリクエストし直されていれば (`load`) 何もしない。
-   * 古いストリームの残りを、新しいストリームの捨てた後へ足さないため
-   */
-  async function update(
-    job: (target: SourceBuffer) => void,
-    mine?: number,
-  ): Promise<void> {
-    const target = buffer;
-    if (target === null) return;
-    await idle();
-    if (mine !== undefined && mine !== run) return;
-    await new Promise<void>((resolve, reject) => {
-      const done = (): void => {
-        target.removeEventListener("error", fail);
-        resolve();
-      };
-      const fail = (): void => {
-        target.removeEventListener("updateend", done);
-        reject(new Error("SourceBuffer error"));
-      };
-      target.addEventListener("updateend", done, { once: true });
-      target.addEventListener("error", fail, { once: true });
-      try {
-        job(target);
-      } catch (error) {
-        target.removeEventListener("updateend", done);
-        target.removeEventListener("error", fail);
-        reject(error);
-      }
-    });
-  }
-
-  /** 後ろの捨ててよいぶんを捨てる。捨てたら true */
-  async function trim(mine: number): Promise<boolean> {
-    const cut = position() - BEHIND;
-    const first = buffered()[0];
-    if (first === undefined || first[0] >= cut) return false;
-    await update((target) => target.remove(0, cut), mine);
-    return true;
-  }
+  const buffered = (): Ranges => sink.buffered();
+  /** `mine` のストリームをまだ読んでいるか (`MseSink` に渡す) */
+  const still =
+    (mine: number): Still =>
+    () =>
+      mine === run;
 
   /** 先へ溜めすぎていない・ブラウザが送り込んでよいとしている、まで待つ。待つ間は速さを数えない */
   async function room(mine: number): Promise<void> {
@@ -262,10 +183,7 @@ export function remuxPlayer(
       if (mine !== run) return;
       // 開く位置を入れる前は、ブラウザが止めても読む (`startAt`)。止めている (`held`) 間は 0 秒のままなので、ブラウザは
       // 0 秒から先が溜まったと見て送り込みを止め (`endstreaming`)、手前のキーフレームが 30 秒より前にあると開く位置まで届かない
-      const streaming =
-        !picked.managed ||
-        startAt !== null ||
-        (media as MediaSource & { streaming?: boolean }).streaming !== false;
+      const streaming = startAt !== null || sink.streaming();
       const ahead = aheadOf(buffered(), position());
       if (streaming && ahead < aheadLimit()) return;
       await sleep();
@@ -285,26 +203,6 @@ export function remuxPlayer(
       meter.measuredAt === null ||
       performance.now() - meter.measuredAt > PROBE_EVERY;
     return stale ? Number.POSITIVE_INFINITY : AHEAD;
-  }
-
-  async function append(data: Uint8Array, mine: number): Promise<void> {
-    for (;;) {
-      if (mine !== run) return;
-      try {
-        await update(
-          (target) => target.appendBuffer(data as BufferSource),
-          mine,
-        );
-        return;
-      } catch (error) {
-        // 溜めきれない。後ろを捨てて入れ直す。捨てるものが無ければ観て減るのを待つ
-        if (!(
-          error instanceof DOMException && error.name === "QuotaExceededError"
-        ))
-          throw error;
-        if (!(await trim(mine))) await sleep();
-      }
-    }
   }
 
   /** 新しいストリームを読み始める。前のストリームを止めて、`from` から読んでいることにする */
@@ -332,15 +230,10 @@ export function remuxPlayer(
 
   /** 前のストリームの読みかけを落とし、`from` 秒から先を捨てる (0 なら全部) */
   async function cut(from: number, mine: number): Promise<void> {
-    await idle();
-    if (mine !== run || buffer === null) return;
-    // 末尾まで読み終えて閉じていれば、足せば開き直る
-    if (media.readyState === "open") buffer.abort();
+    await sink.abort(still(mine));
+    if (mine !== run) return;
     if (buffered().some(([, end]) => end > from))
-      await update(
-        (target) => target.remove(from, Number.POSITIVE_INFINITY),
-        mine,
-      );
+      await sink.remove(from, Number.POSITIVE_INFINITY, still(mine));
   }
 
   /**
@@ -353,18 +246,8 @@ export function remuxPlayer(
     const type = wanted ?? typeOfCodec(heard.codec);
     if (type === null)
       throw new Error(`中身の型が分かりません: ${heard.codec}`);
-    if (buffer === null) {
-      createBuffer(type);
-      return;
-    }
-    if (type === bufferType) return;
-    // 古いブラウザには無い。何度リクエストし直しても同じなので、読めない中身として扱う (`retryable` で外れる)
-    if (typeof buffer.changeType !== "function")
-      throw new Error(`型を替えられません: ${type}`);
-    await idle();
-    if (mine !== run) return;
-    buffer.changeType(forMse(type));
-    bufferType = type;
+    // `changeType` の無い古いブラウザでは例外になる。何度リクエストし直しても同じなので、読めない中身として扱う (`retryable` で外れる)
+    await sink.use(type, still(mine));
   }
 
   /** 応答を末尾まで読んで足す。読めない中身なら例外を投げる */
@@ -382,14 +265,13 @@ export function remuxPlayer(
       if (mine !== run) return;
       if (done) break;
       meter.add(value.byteLength, asked, performance.now());
-      // 大きな塊は分けて足す (`APPEND_MOST`)
-      for (let at = 0; at < value.length && mine === run; at += APPEND_MOST)
-        await append(value.subarray(at, at + APPEND_MOST), mine);
+      // 大きな塊は 1 MB ずつに分けて足す (`mse-sink.ts` の `APPEND_MOST`)
+      await sink.append(value, still(mine));
       place();
       retry.flowing();
       // 後ろを捨てるのは足したついでに。捨てる長さが溜まってから (毎回は削らない)
       if (position() - (buffered()[0]?.[0] ?? position()) > BEHIND * 2)
-        await trim(mine);
+        await sink.trim(still(mine));
     }
     if (mine !== run) return;
     loadingFrom = null;
@@ -402,8 +284,7 @@ export function remuxPlayer(
       release();
     }
     // 末尾まで届いた。終わりを伝えない (`endOfStream`) と、最後で止まったまま `ended` が来ない
-    await idle();
-    if (mine === run && media.readyState === "open") media.endOfStream();
+    await sink.end(still(mine));
   }
 
   /** 読んでいる途中で切れた・読めなかった */
@@ -472,7 +353,7 @@ export function remuxPlayer(
     codecs: string | null,
     next: StreamUrl,
   ): Promise<SwitchResult> {
-    if (closed || buffer === null) return "failed";
+    if (closed || sink.type === null) return "failed";
     pendingSwitch?.abort();
     const asking = new AbortController();
     pendingSwitch = asking;
@@ -555,7 +436,7 @@ export function remuxPlayer(
     // 開く位置を入れる前に飛ばれた。飛んだ先を採り、止めていたら流す
     startAt = null;
     release();
-    if (!opened || retry.waiting) return;
+    if (!sink.opened || retry.waiting) return;
     if (!covers(buffered(), video.currentTime, loadingFrom, SLACK))
       void load(video.currentTime, "seek");
   };
@@ -569,7 +450,7 @@ export function remuxPlayer(
     retry.starved();
     // 開く位置まで溜まるのを待っている (`place`)
     if (startAt !== null) return;
-    if (buffer === null || retry.waiting || loadingFrom !== null) return;
+    if (sink.type === null || retry.waiting || loadingFrom !== null) return;
     if (aheadOf(buffered(), video.currentTime) === 0)
       void load(video.currentTime, "stall");
   };
@@ -579,39 +460,41 @@ export function remuxPlayer(
   video.addEventListener("pause", onPause);
   video.addEventListener("waiting", onWaiting);
   video.addEventListener("timeupdate", nudge);
-  media.addEventListener("startstreaming", nudge);
+
+  /**
+   * MediaSource が開いた。型が分かっていれば、SourceBuffer はもう作ってある (`MseSinkOptions.type`)。
+   * 分からなければ (段を下げた変換) 応答を受けてから作る (`prepare`)
+   */
+  function onOpen(): void {
+    /*
+     * **始める位置は、溜まってから入れる** (`startAt`・`place`)。それまでは、いまの位置をその位置とみなす
+     * (`position`)。0 にいると見なすと、詰まり (`waiting`) で先頭からリクエストし直す
+     */
+    const start = Math.min(
+      Math.max(0, options.start),
+      Math.max(0, options.duration - 1),
+    );
+    startAt = start > 0 ? start : null;
+    // 開く前に流すようにリクエストされていた (観る画面は作ってすぐ play() を呼ぶ)
+    hold();
+    void load(start, "open");
+  }
 
   /*
-   * **ManagedMediaSource は AirPlay を断らないと開かない** (`ts/media-source.ts`)。
-   * 付ける前に立てておく
+   * MSE を開いて `<video>` に付ける。足す・捨てる・型を替えるときは `still(mine)` を渡し、待つ間にリクエストし直されていれば
+   * (`load`) 何もしない。古いストリームの残りを、新しいストリームの捨てた後へ足さないため
    */
-  if (picked.managed) video.disableRemotePlayback = true;
-  const objectUrl = URL.createObjectURL(media);
-  video.src = objectUrl;
-  media.addEventListener(
-    "sourceopen",
-    () => {
-      URL.revokeObjectURL(objectUrl);
-      if (closed) return;
-      media.duration = options.duration;
-      opened = true;
-      // 型が分かっていれば先に作る。分からなければ (段を下げた変換) 応答を受けてから (`prepare`)
-      if (wanted !== null) createBuffer(wanted);
-      /*
-       * **始める位置は、溜まってから入れる** (`startAt`・`place`)。それまでは、いまの位置をその位置とみなす
-       * (`position`)。0 にいると見なすと、詰まり (`waiting`) で先頭からリクエストし直す
-       */
-      const start = Math.min(
-        Math.max(0, options.start),
-        Math.max(0, options.duration - 1),
-      );
-      startAt = start > 0 ? start : null;
-      // 開く前に流すようにリクエストされていた (観る画面は作ってすぐ play() を呼ぶ)
-      hold();
-      void load(start, "open");
-    },
-    { once: true },
-  );
+  const sink = mseSink(video, picked, {
+    // 型が分かっていれば開いてすぐ作る。分からなければ (段を下げた変換) 応答を受けてから (`prepare`)
+    type: wanted,
+    duration: options.duration,
+    // 後ろに残すのは、いまの位置の `BEHIND` 秒前から
+    keepFrom: () => position() - BEHIND,
+    // 溜めきれず、捨てるものも無い。観て減るのを待つ
+    waitRoom: sleep,
+    opened: onOpen,
+    onStreaming: nudge,
+  });
 
   return {
     setAudio(id: string): void {
@@ -635,9 +518,7 @@ export function remuxPlayer(
       held = false;
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("timeupdate", nudge);
-      media.removeEventListener("startstreaming", nudge);
-      // sourceopen が来る前に閉じると、そこで解放しないまま残る (2 回解放しても害は無い)
-      URL.revokeObjectURL(objectUrl);
+      sink.destroy();
     },
   };
 }
