@@ -847,7 +847,7 @@ test.describe("録画を観る", () => {
       await expect(checkOf(first)).toHaveCSS("opacity", "0");
       await cardOf(first).hover();
       await expect(checkOf(first)).toHaveCSS("opacity", "1");
-      await expect(checkOf(first)).toHaveAttribute("aria-label", /^選ぶ: /);
+      await expect(checkOf(first)).toHaveAttribute("aria-label", /^選択: /);
       await expect(checkOf(first)).toHaveAttribute("aria-pressed", "false");
 
       // 丸を押すと選ぶ形に入り、ほかの 1 枚にも丸が出る

@@ -149,12 +149,16 @@ test.describe("検索からルールを作る", () => {
     await page.reload();
     await expect(page.getByTestId("rule-priority")).toHaveValue("3");
 
-    // 無効化・有効化
+    // 有効のスイッチで無効にして、戻す
+    await expect(page.getByTestId("rule-toggle")).toBeChecked();
     await page.getByTestId("rule-toggle").click();
-    await expect(page.getByTestId("rule-toggle")).toHaveText("有効化");
-    await expect(page.getByTestId("rule-draft")).toContainText("無効");
+    await expect(page.getByTestId("rule-toggle")).not.toBeChecked();
+    await expect(page.getByTestId("rule-mode").locator(".tag")).toHaveText(
+      "無効",
+    );
     await page.getByTestId("rule-toggle").click();
-    await expect(page.getByTestId("rule-toggle")).toHaveText("無効化");
+    await expect(page.getByTestId("rule-toggle")).toBeChecked();
+    await expect(page.getByTestId("rule-mode").locator(".tag")).toHaveCount(0);
 
     // 削除は 2 回押し。消したら `?rule=` を外して出直す
     await page.getByTestId("rule-delete").click();

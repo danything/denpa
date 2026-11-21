@@ -6,7 +6,6 @@
    * (競合・失敗・欠ける・録画が途中で切れた・ロゴで CM を判定できなかった)
    */
   import "@anyblades/blades/components/progress";
-  import type { SubmitFunction } from "$app/forms";
   import { resolve } from "$app/paths";
   import Ellipsis from "~icons/lucide/ellipsis";
   import Info from "~icons/lucide/info";
@@ -38,7 +37,7 @@
     time,
     videoLossNote,
   } from "#lib/format.js";
-  import { offline, removeLocal } from "#lib/offline.svelte.js";
+  import { deleteWithLocal, offline } from "#lib/offline.svelte.js";
   import { type RowStatus, statusLines, toneOf } from "#lib/row-status.js";
 
   import { home, type Item, type Rec, type Res } from "./context";
@@ -64,19 +63,6 @@
     return extra.length === 0
       ? size(rec.ts_size)
       : `${size(rec.ts_size)} (${extra.join("、")})`;
-  }
-
-  /** 消し終えたら、端末に保存したコピーも片付ける (行の削除と「⋯」の削除で同じ) */
-  function afterDelete(rec: Rec): SubmitFunction {
-    return () => async (options) => {
-      await options.update();
-      if (
-        options.result.type === "success" &&
-        offline.entries[rec.id] !== undefined
-      ) {
-        void removeLocal(rec.id);
-      }
-    };
   }
 
   /** 欠けたぶん (チューナー不足)。録れたものは「欠けています」、これからのものは「欠けます」 */
@@ -479,7 +465,7 @@
                 action="?/delete"
                 class="menu-form"
                 use:submitting={(input) => {
-                  const after = afterDelete(rec)(input);
+                  const after = deleteWithLocal(rec.id)(input);
                   return async (options) => {
                     if (typeof after === "function") await after(options);
                     ctx.deleting.fire();
@@ -561,7 +547,7 @@
               deleting={ctx.deleting}
               armKey={rec.id}
               fields={{ id: rec.id }}
-              submit={afterDelete(rec)}
+              submit={deleteWithLocal(rec.id)}
               testid="delete-button"
               confirmTestid="delete-confirm"
               confirmLabel={held === undefined

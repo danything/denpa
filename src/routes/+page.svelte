@@ -229,21 +229,24 @@
   );
 
   /**
-   * その録画を観る画面。**観られないものには無い。**
-   * 消したものと、**録画そのものが失敗したもの**も外す。後者は途中まで書けた
-   * ファイルが残っていることはあるが、先頭からスクランブルが掛かっていたり
-   * 中身が空だったりで、押しても何も映らない
+   * ファイルを持っているか。**観る画面へのリンク・端末に保存・「その他…」を出すかどうか。**
+   * 消したものと、**録画そのものが失敗したもの**は外す。後者は途中まで書けたファイルが残っていることはあるが、
+   * 先頭からスクランブルが掛かっていたり中身が空だったりで、押しても何も映らない。
+   * エンコードの失敗はここに出てこない。失敗したのは再エンコードのほうで、元の TS は無事なので観られる
+   */
+  function hasFile(rec: Rec): boolean {
+    if (rec.deleted_at !== null || rec.state === "failed") return false;
+    return (rec.library_path ?? rec.ts_path) !== null;
+  }
+
+  /**
+   * その録画を観る画面。**観られないもの (`hasFile`) には無い。**
+   * **エンコードが終わる前でも観られる。** 録り終えて CM 検出やエンコードを待っている間 (失敗したときも) は
+   * 観る画面がサーバに元の TS をその場で変換させて流す (`server/playback.ts`)。録っている最中の録画は
+   * 予約の行に出る (追っかけはそちらから)
    */
   function watchLink(rec: Rec): string | null {
-    if (rec.deleted_at !== null || rec.state === "failed") return null;
-    /*
-     * **エンコードが終わる前でも観られる。** 録り終えて CM 検出やエンコードを待っている間 (失敗したときも) は
-     * 観る画面がサーバに元の TS をその場で変換させて流す (`server/playback.ts`)。録っている最中の録画は
-     * 予約の行に出る (追っかけはそちらから)
-     */
-    return (rec.library_path ?? rec.ts_path) === null
-      ? null
-      : resolve(`watch/${rec.id}`);
+    return hasFile(rec) ? resolve(`watch/${rec.id}`) : null;
   }
 
   /**
@@ -261,16 +264,6 @@
   /** 録画・番組からルールを作る入口。検索の画面の「ルールとして保存」へ直接行く (`search/+page.server.ts` の `?from=`) */
   function ruleFrom(kind: "recording" | "program", id: number): string {
     return resolve(`search?${new URLSearchParams({ from: `${kind}:${id}` })}`);
-  }
-
-  /**
-   * ファイルを持っているか。**端末に保存と「その他…」を出すかどうか。**
-   * エンコードの失敗はここに出てこない。落ちたのは再エンコードのほうで、元の TS は無事なので観られる
-   */
-  function hasFile(rec: Rec): boolean {
-    if (rec.deleted_at !== null) return false;
-    if ((rec.library_path ?? rec.ts_path) === null) return false;
-    return rec.state !== "failed";
   }
 
   /**
@@ -951,7 +944,7 @@
         **並べるのはよく使うボタンだけ**。端末に保存・ルールを作る。
         条件が揃うと 10 個のボタンが同じ見た目で並び、狭い画面では文字の
         途中で折り返していた。めったに押さないもの (視聴済みの付け外し・
-        再エンコード) は「その他…」に畳む。
+        再エンコード) は「その他…」にたたむ。
       -->
       {#if offline.usable && rec.library_path?.endsWith(".mkv") === true}
         <!--

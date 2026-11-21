@@ -90,7 +90,6 @@
   }
   .info:hover {
     background: var(--dp-hover-soft);
-    /* `--pico-color` はボタンの中ではボタンの字の色 (app.css の「ボタン」)。本文の色は `--dp-fg` */
     color: var(--dp-fg);
   }
   .info.open {

@@ -266,7 +266,7 @@
     top: 50%;
     height: 4px;
     margin-top: -2px;
-    filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.5));
+    filter: var(--dp-on-video-ink);
     transition: transform var(--dp-duration) var(--dp-ease);
     pointer-events: none;
   }
