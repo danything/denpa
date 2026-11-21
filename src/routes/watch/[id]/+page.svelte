@@ -1,27 +1,9 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import type { ResponseMessage } from "@danything/arib/bml-protocol";
-  import {
-    CAPTION_TEXT_VERSION,
-    type CaptionLanguage,
-    captionLanguage as languageOf,
-    type CaptionPages,
-  } from "@danything/arib/caption-text";
   import { onMount, untrack } from "svelte";
 
   import { submitting } from "#lib/actions.js";
-  import {
-    ADAPT_NOTE,
-    type AdaptDecision,
-    adaptNote,
-    HOLD,
-    type Step,
-    stepOrder,
-    SWITCH_NOTE,
-  } from "#lib/adapt.js";
   import { arming } from "#lib/arming.svelte.js";
-  import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
-  import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import CloseLink from "#lib/components/player/CloseLink.svelte";
   import ControlBar from "#lib/components/player/ControlBar.svelte";
@@ -33,7 +15,6 @@
   } from "#lib/components/player/DataBroadcast.svelte";
   import Extras from "#lib/components/player/Extras.svelte";
   import FactsAside from "#lib/components/player/FactsAside.svelte";
-  import { eachFrame } from "#lib/components/player/frames.js";
   import { stageFullscreen } from "#lib/components/player/fullscreen.svelte.js";
   import {
     AUDIO,
@@ -55,7 +36,6 @@
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
   import NewYear from "#lib/components/player/NewYear.svelte";
-  import { fitRect } from "#lib/components/player/paint.js";
   import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
@@ -70,95 +50,36 @@
     subtitles,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
-  import {
-    captionWords,
-    grabbedFrame,
-    videoFrame,
-  } from "#lib/components/player/snapshot.js";
+  import { captionWords } from "#lib/components/player/snapshot.js";
   import SoundButton from "#lib/components/player/SoundButton.svelte";
-  import SpeedMenu, {
-    SPEED_KEY,
-    storedSpeed,
-  } from "#lib/components/player/SpeedMenu.svelte";
+  import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
   import { stageTap } from "#lib/components/player/stage-tap.js";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
-  import { unslipper } from "#lib/components/player/unslip.js";
   import VolumeNote from "#lib/components/player/VolumeNote.svelte";
-  import {
-    type PlaybackTarget,
-    playerWiring,
-  } from "#lib/components/player/wiring.svelte.js";
+  import { playerWiring } from "#lib/components/player/wiring.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, {
     errorNotice,
     type Notice,
   } from "#lib/components/Toasts.svelte";
   import { programDetail, recordingFacts } from "#lib/detail.svelte.js";
-  import { driveGate } from "#lib/drive-gate.svelte.js";
   import {
     clock,
     cmNoteWorthShowing,
     recordedDuration,
     size,
   } from "#lib/format.js";
-  import { handoff, HANDOFF_GIVE_UP, handoffTarget } from "#lib/handoff.js";
-  import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
-  import { CODEC_LABEL } from "#lib/hw.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { read as stored, write as remind } from "#lib/keep.js";
-  import { WATCH_HIDDEN_CODECS } from "#lib/live-choice.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
-  import { BROADCAST_HEVC, type LiveCodec } from "#lib/live.js";
-  import { type MkvSource, openMkv } from "#lib/mkv-source.js";
-  import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
-  import type { OfflineVideo } from "#lib/offline-db.js";
-  import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
-  import { fallBackTo } from "#lib/player/canvas-sink.js";
-  import { CaptionLayer } from "#lib/player/captions.svelte.js";
-  import { RecordingClock } from "#lib/player/clock-recording.js";
-  import { DataLayer } from "#lib/player/data.svelte.js";
-  import { playable, RecordingFeed } from "#lib/player/feed-recording.js";
-  import { rangesOf } from "#lib/player/mse-sink.js";
-  import { Note } from "#lib/player/notes.svelte.js";
-  import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
-  import {
-    type RemuxPlayer,
-    remuxPlayer,
-    type StreamHeard,
-  } from "#lib/remux-player.js";
+  import { fixedMediaVolume } from "#lib/native-audio-choice.js";
+  import { offline, removeLocal } from "#lib/offline.svelte.js";
+  import { recordingPlayback } from "#lib/player/core-recording.svelte.js";
   import { keepResume, keepResuming } from "#lib/resume.js";
-  import { busyNote, type Pace } from "#lib/rungs.js";
-  import type { Cue } from "#lib/ts/captions.js";
-  import type { PlacedMessage } from "#lib/ts/data-timeline.js";
-  import { pickMediaSource } from "#lib/ts/media-source.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
-  import {
-    aheadOf,
-    type CanvasAbility,
-    canvasChoices,
-    type CanvasCodec,
-    canvasTranscodes,
-    type CodecChoice,
-    codecChoices,
-    failureText,
-    type MediaAbility,
-    MENU_ORDER,
-    offersText,
-    pickCanvas,
-    type Picked,
-    pickedText,
-    pickOffer,
-    pickStream,
-    type PlaybackInfo,
-    type PlayCodec,
-    STREAM_RETRIES,
-    streamForAudio,
-    StreamRetry,
-    type StreamState,
-    transcodes,
-  } from "#lib/ts/playback.js";
+  import type { CodecChoice, PlaybackInfo } from "#lib/ts/playback.js";
   import {
     CallGaps,
     type Chapter,
@@ -176,1534 +97,53 @@
     skipTarget,
     toTsTime,
   } from "#lib/ts/watch.js";
-  import {
-    ADAPT_TICK,
-    autoLabel,
-    fileIdle,
-    watchAdapt,
-  } from "#lib/watch-adapt.js";
 
   let { data, form } = $props();
   const rec = $derived(data.recording);
-  /** 録画をサーバから読む所 (`player/feed-recording.ts`)。リクエスト先と、段 0 のビットレートを持つ */
-  const recordingFeed = new RecordingFeed(() => rec.id);
-  /** 開く位置 (`player/clock-recording.ts`)。選び直したときに続ける位置・この場面から観る位置 (切り抜きの画面から `?at=`)・続きの位置 */
-  // svelte-ignore state_referenced_locally
-  const recordingClock = new RecordingClock(data.scene, () => rec.resume_ms);
-
   /** 観るものがあるか。エンコード済みか、録り終えた元の TS (`+page.server.ts`) */
   const ready = $derived(data.playable);
-  /*
-   * 端末に保存してあればオンラインでもそちらを観る (docs/offline.md)。字幕・チャプター・データ放送も
-   * 端末に保存してあるものを使う。確かめ終わるまで src を渡さない。先に渡すとサーバから読み始め、
-   * あとから blob に差し替わって読み直しになる
-   */
-  let localSrc = $state<string | null>(null);
-  let localChecked = $state(false);
-  let localCopy: OfflineVideo | null = null;
-  /** 端末に保存したものを探している最中の Promise。字幕・チャプターも探し終えてから読む */
-  let localLookup: Promise<OfflineVideo | null> = Promise.resolve(null);
-  /**
-   * 何で観られるか (`api/recordings/<id>/playback`)。聞けなかった (オフライン) ときは null。
-   * どれを使うかはこの画面が決める (`ts/playback.ts` の `pickOffer`)
-   */
-  let info = $state.raw<PlaybackInfo | null>(null);
-  /** いま観ているもの。観られるものが無ければ null */
-  let picked = $state.raw<Picked | null>(null);
-  /** 人が選んだコーデック (`auto` は端末に合わせる)。端末ごとに覚える (デコードできるものが端末で違う) */
-  let choice = $state<CodecChoice | "mpeg2">("auto");
-  const CODEC_KEY = "watch-codec";
-  /** サーバが混んでいて、その場の変換を断られた (`remux-player.ts` の `busy`) */
-  let busy = $state(false);
-  /** その場で流しているときのプレイヤー (`remux-player.ts`) */
-  let remux: RemuxPlayer | null = null;
-
-  /*
-   * ---- 回線に合わせた画質の段 (`watch-adapt.ts`。docs/stream.md「回線に合わせて画質を下げる」) ----
-   *
-   * 「自動」のときだけ段を動かす。ファイルの直再生・MPEG-2 (段 0) から下げる、段 0 へ戻す、音声だけとの行き来は、
-   * 裏の `<video>` で用意してから入れ替える (`prepareStep`)。段 1〜3 の間は同じ MSE のまま替える (`remux-player.ts` の `switchTo`)。
-   * 互換モード (canvas に描く) は継ぎ目なく替える経路が無いので、段を替えるたびに canvas のプレイヤーを作り直す (`canvasStep`)
-   */
-  /** いまの段。0 は下げていない (ファイルの直再生・詰め替え・ふだんの変換) */
-  let step = $state<Step>(0);
-  /** 段を下げた変換でサーバが選んだコーデック (`X-Denpa-Codec`)。メニューの「自動」の行に添える */
-  let stepCodec = $state<string | null>(null);
-  /** 送り出しの具合を読む id (`X-Denpa-Pace`)。流していなければ null */
-  let paceId: string | null = null;
-  /** 段 0 がファイルの直再生か MPEG-2 (canvas に描く) だったとき、その観かた。写すだけのストリームが無いときに戻す先 */
-  let fileZero: Picked | null = null;
-  /**
-   * 互換モードで段を替えて作り直したとき、替える前の段。応答が来たら忘れる (`heard`)。その前に混んでいて断られたら、
-   * この段で作り直す (`canvasBusy`)
-   */
-  let stepFrom: Step | null = null;
-  /** canvas のプレイヤーがバッファを使い切って止まっているか (`waiting`)。段を決めるのに渡す */
-  let canvasStuck = false;
-  /** 段を切り替えている最中か (応答を待っている間は刻まない) */
-  let switching = false;
-  /** これより前 (ms) は段を動かさない。混んでいて断られたあと、続けてリクエストしない */
-  let adaptQuietUntil = 0;
-  /**
-   * ファイルの直再生で、ブラウザが最後にファイルを読むのを止めた時刻 (ms。`suspend`)。刻みの間に読み足して止めたぶんも
-   * `adapt.ts` に「読むのを止めている」(`idle`) と渡す
-   */
-  let suspendAt = Number.NEGATIVE_INFINITY;
-  /** 段の断り書き (`player/notes.svelte.ts`)。`ADAPT_NOTE` で引っ込める */
-  const adaptText = new Note();
-  /** 段を替えるために作り直したとき、作り直す前に再生していたか。尺が分かったら続ける (`resume`) */
-  let keepPlaying = false;
-
-  /*
-   * ---- 互換モード (`canvas-video.ts`。docs/player.md) ----
-   *
-   * `<video>` の再生が止まる端末 (テスラの車載ブラウザ) のため、canvas に描く (`canvas-player.ts`。
-   * ライブ・追っかけと同じエンジン)。ここでは `<video>` に戻らない。描けなくなったら MPEG-2 へ、
-   * それも無理なら理由を出して止まる。端末に保存したものはその Matroska を読んで描く (`mkv-source.ts`)
-   */
-  /** 互換モードか。開いたときに決める (⚙ で切り替えたら読み直す。`StageTail`) */
-  let compat = $state(false);
-  /**
-   * 互換モードでないとき、元の TS (MPEG-2) をこの端末でデコードできて、まだ打ち切っていないか (`MediaAbility.mpeg2`)。
-   * できれば互換モードと同じく canvas に描く (`pickOffer` の `raw`)。打ち切ったかは `rawGaveUp`
-   */
-  let rawCapable = $state(false);
-  /**
-   * 4K の局を録った元の TS を詰め替えたもの (放送の HEVC。`PlaybackInfo.broadcast`) を再生できるか。`isTypeSupported` に加えて
-   * `decodingInfo` に放送の値を渡して決める (`#lib/hevc-4k.ts`。ライブの 4K の局と同じ)。4K の局の録画を開いたときに調べる
-   */
-  let broadcastHevc = false;
-  /** MPEG-2 を描いている途中で打ち切ったか。**選び直すまで MPEG-2 にしない** (`canvasFallBack`) */
-  let rawGaveUp = $state(false);
-  /** この端末で描ける形式 (`raw/support.ts`)。調べるまで null */
-  let canvasAbility = $state.raw<CanvasAbility | null>(null);
-  /** いま canvas に描いている形式。描いていなければ null (`<video>` で観ている・まだ始めていない) */
-  let canvasCodec = $state<CanvasCodec | null>(null);
-  /** canvas に描くプレイヤー。`canvasCodec` が決まって、映像の箱ができたら作る */
-  let canvas: CanvasPlayer | null = null;
-  /** canvas のプレイヤーがあるか (`canvas` は作り直しの都度替わるので、画面の出し分けはこちらで見る) */
-  let drawing = $state(false);
-  /** 端末に保存した録画を描くときの読み込み元 (`mkv-source.ts`)。サーバから流しているなら null */
-  let localMkv: MkvSource | null = null;
-  /** 端末に保存した録画を canvas に描いているか (操作バーの「端末」の印・メニューの出し分け) */
-  let drawingLocal = $state(false);
-  /** 描いている途中で打ち切った形式。**選び直すまでリクエストし直さない** (戻しては打ち切るを繰り返さない) */
-  let canvasGaveUp: CanvasCodec[] = [];
-  /** 互換モードで観られない理由。出したら `<video>` には戻らずに止まる */
-  let canvasProblem = $state<string | null>(null);
-  /** 映像の上に出しておく断り書き (MPEG-2 に切り替えた、など)。`SWITCH_NOTE` で引っ込める (`note`。ライブと同じ) */
-  const warning = new Note();
-  /** 運転中の注意 (互換モード。`drive-gate.svelte.ts`)。押すまで再生を始めない */
-  const drive = driveGate();
-
-  /** 形式の名前 (メニュー・混んでいるときの勧め) */
-  function codecLabel(codec: PlayCodec): string {
-    return codec === "mpeg2" ? "MPEG-2" : CODEC_LABEL[codec];
-  }
 
   /**
-   * 互換モードの支度。運転中の注意をまだ見せていなければ見せて待ち、描ける形式を調べて、どれで観るかを決める
-   * (`ts/playback.ts` の `pickCanvas`)。端末に保存したものがあれば、まずそれを描く (下)
+   * **再生の核 (`player/core-recording.svelte.ts`)。** どれで観るか・読み口・段の切り替え・字幕・データ放送・断り書きを持つ。
+   * この画面は CM 飛ばし・チャプター・実況・どこまで観たか・削除を持ち、核がコマを映すたびに CM を跨ぐかを決める (`hooks`)
    */
-  async function prepareCompat(got: PlaybackInfo | null): Promise<void> {
-    if (got === null && localCopy?.video === undefined) {
-      canvasProblem = "サーバに繋がらないため、再生できません";
-      return;
-    }
-    if (!driveNoticeSeen()) await drive.confirm();
-    const support = await canvasSupport();
-    canvasAbility = { ...support, mpeg2: rawUnsupported() === null };
-    // 端末に保存したものはオンラインでも描く。描けない形式か読めなければ、サーバから流すものへ
-    if (localCopy?.video !== undefined) {
-      const source = await openMkv(localCopy.video).catch(() => null);
-      if (source?.codec != null && canvasAbility[source.codec]) {
-        localMkv = source;
-        canvasCodec = source.codec;
-        return;
-      }
-    }
-    const codec = got === null ? null : pickCanvas(got, canvasAbility, choice);
-    if (codec === null) canvasProblem = "再生できる形式がありません";
-    else canvasCodec = codec;
-  }
-
-  /** canvas に描くプレイヤーを作って流しはじめる。**続きの位置からリクエストする** (選び直し・切り替えならその位置) */
-  $effect(() => {
-    const codec = canvasCodec;
-    // 端末に保存したものはオフラインでも描く (`playback` が聞けなくてよい)
-    if (
-      codec === null ||
-      (info === null && localMkv === null) ||
-      mediaBox === null ||
-      canvas !== null
-    )
-      return;
-    untrack(() => startCanvas(codec));
-  });
-
-  /**
-   * 尺 (秒)。**端末に保存したものを描いているなら、そのファイルに書いてある長さ** (描いているのはそのファイル。
-   * 末尾の手前へ飛ぶと終わりにするので、違う長さを使うと途中で終わる)。それ以外は `playback`
-   */
-  function canvasLength(): number {
-    if (localMkv !== null)
-      return localMkv.duration ?? (localCopy?.durationMs ?? 0) / 1000;
-    return info?.duration ?? 0;
-  }
-
-  function startCanvas(codec: CanvasCodec): void {
-    const local = localMkv;
-    const duration = canvasLength();
-    // 選び直し・切り替えは観はじめではない。この場面から観るのは観はじめなので `settle` を通す
-    const fresh = recordingClock.switchAt === null;
-    const scene = recordingClock.sceneAt !== null;
-    const from = recordingClock.startFrom(duration);
-    /*
-     * 元の TS のビットレートを読んでおく (`adapt.ts` が測った速さと比べる)。読めなければ目安 (10.5 Mbit/s) と比べるので、
-     * MPEG-2 (13〜24 Mbit/s) に足りない回線でも足りていると見て、詰まっても下げなくなる
-     */
-    if (
-      codec === "mpeg2" &&
-      local === null &&
-      recordingFeed.baseOf("ts") === null
-    )
-      void recordingFeed.readBaseKbps("ts", duration);
-    let made: CanvasPlayer;
-    try {
-      made = canvasPlayer({
-        host: mediaBox as HTMLElement,
-        before: jikkyoSlot ?? overlay,
-        input:
-          local !== null
-            ? "mkv"
-            : codec === "mpeg2" && step === 0
-              ? "ts-mpeg2"
-              : "fmp4",
-        // `offset` は元の TS の続きをリクエストするとき (`canvas-player.ts` の `resume`)
-        request: (at, audio, signal, offset) =>
-          local !== null
-            ? Promise.resolve(local.request(at))
-            : fetch(
-                canvasUrl(codec, at, audio) +
-                  (offset === undefined ? "" : `&offset=${offset}`),
-                { signal },
-              ),
-        heard: (heard) => {
-          stepCodec = heard.codec;
-          paceId = heard.pace;
-          stepFrom = null;
-        },
-        duration,
-        // 端末に保存した録画の Blob は読むのが速すぎる。観ている位置の少し先までしか読まない (`canvas-player.ts` の `room`)
-        ...(local !== null && localCopy?.video !== undefined && duration > 0
-          ? { bytesPerSecond: localCopy.video.size / duration }
-          : {}),
-        start: from ?? 0,
-        audio: streamAudio(audioIndex),
-        background: background.on || pip.active,
-        muted,
-        volume: volume.applied,
-        state: (state) => {
-          // 段を替えようとして作り直したが、混んでいて断られた。替える前の段で作り直して続ける
-          if (state === "busy" && stepFrom !== null) {
-            canvasBusy();
-            return;
-          }
-          resuming = state === "retrying";
-          busy = state === "busy";
-          if (state !== "failed") return;
-          // 読めない中身・繋ぎ直しを使い切った。理由を出して止まる (`<video>` には戻らない)
-          stopCanvas();
-          canvasProblem = "録画を読み込めませんでした";
-        },
-        gaveUp: canvasFallBack,
-        remote: (stop) => (stop ? pauseMedia() : playMedia()),
-        waiting: (on) => {
-          canvasStuck = on;
-          if (on) stall();
-          else flowing();
-        },
-        ended: () => {
-          playing = false;
-          finished();
-        },
-        tick: canvasTick,
-      });
-    } catch (error) {
-      canvasFallBack(
-        `再生を始められませんでした (${error instanceof Error ? error.message : String(error)})`,
-      );
-      return;
-    }
-    canvas = made;
-    drawing = true;
-    drawingLocal = local !== null;
-    length = duration;
-    at = from ?? 0;
-    playing = !made.paused;
-    syncAudio();
-    place();
-    controls.stir();
-    if (!fresh || resumed) return;
-    resumed = true;
-    if (from !== null && !scene) showContinued();
-    settle();
-  }
-
-  /** canvas のプレイヤーのリクエスト先 (`RecordingFeed.canvasUrl`)。段を下げるなら、サーバは描ける形式 (`canvasPlayable`) から選ぶ */
-  function canvasUrl(codec: CanvasCodec, at: number, audio: string): string {
-    return recordingFeed.canvasUrl(step, codec, at, audio, canvasPlayable());
-  }
-
-  /** 互換モードで描けるコーデック (`?playable=`)。描いている途中で打ち切ったものは外す。H.265 は描かない (`raw/support.ts`) */
-  function canvasPlayable(): LiveCodec[] {
-    const can = canvasAbility;
-    if (can === null) return [];
-    return (["av1", "h264"] as const).filter(
-      (codec) => can[codec] && !canvasGaveUp.includes(codec),
-    );
-  }
-
-  /** この録画で描けて、まだ打ち切っていない形式 (`canvasChoices` の並び。描けなくなったときの移り先を決める `fallBackTo` に渡す) */
-  function canvasUsable(): CanvasCodec[] {
-    if (info === null || canvasAbility === null) return [];
-    return canvasChoices(info, canvasAbility)
-      .filter((item) => item.drawable && !canvasGaveUp.includes(item.codec))
-      .map((item) => item.codec);
-  }
-
-  /**
-   * **互換モードで段を替える。** canvas のプレイヤーには継ぎ目なく替える経路が無いので、いまの位置から作り直す
-   * (新しいプレイヤーが描き始めるまで、映像と音は止まる)。替えたら true
-   */
-  function canvasStep(next: Step): boolean {
-    const codec = canvasCodec;
-    if (codec === null || localMkv !== null) return false;
-    const position = mediaTime();
-    const from = step;
-    stopCanvas();
-    stepFrom = from;
-    step = next;
-    stepCodec = null;
-    paceId = null;
-    recordingClock.switchAt = position;
-    canvasCodec = codec;
-    startCanvas(codec);
-    return true;
-  }
-
-  /** 互換モードで段を替えようとして、混んでいて断られた。替える前の段で作り直し、しばらく段を動かさない */
-  function canvasBusy(): void {
-    const back = stepFrom;
-    if (back === null) return;
-    const down = stepOrder(step) > stepOrder(back);
-    adaptQuietUntil = Date.now() + HOLD;
-    canvasStep(back);
-    // 前の段に戻すのは段の切り替えではない。この作り直しが断られたら、ふだんどおり「混んでいる」と出す
-    stepFrom = null;
-    noteAdapt(busyNote(down));
-  }
-
-  /** canvas のプレイヤーを閉じる (切り替える・打ち切る) */
-  function stopCanvas(): void {
-    canvas?.destroy();
-    canvas = null;
-    canvasStuck = false;
-    // 作り直しの途中で閉じた (失敗した・打ち切った・選び直した)。替える前の段は忘れる (残すと段を動かさなくなる)
-    stepFrom = null;
-    drawing = false;
-    drawingLocal = false;
-    canvasCodec = null;
-    playing = false;
-    flowing();
-  }
-
-  /**
-   * 描くのを打ち切った。理由は断り書きに残す。ライブと同じ決め方で替える (`player/canvas-sink.ts` の `fallBackTo`)。
-   * H.264 / AV1 を打ち切ったら MPEG-2 へ、MPEG-2 を打ち切ったら描ける H.264 / AV1 へ。端末に保存した録画なら
-   * サーバから流すものへ (`pickCanvas`)。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
-   *
-   * 互換モードでないのに描いているのは、MPEG-2 を選んだとき (`pickOffer` の `raw`) と、端末に保存した Matroska を `<video>` が
-   * 読めなかったとき (`recover`)。MPEG-2 を打ち切ったらこの画面を開いている間は MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で
-   * `<video>` に戻す。ファイルを読めなかったあとはストリームから選ぶ (`pickStream`)。
-   *
-   * 間に合わずに打ち切ったとき (`slow` がある) は、掛かった条件をコンソールに出力する
-   */
-  function canvasFallBack(reason: string, slow?: string): void {
-    const failed = canvasCodec;
-    const position = mediaTime();
-    const wasLocal = localMkv !== null;
-    stopCanvas();
-    if (slow !== undefined)
-      console.warn(`[watch] ${failed ?? ""} を打ち切りました: ${slow}`);
-    // 描けなくなったのは端末のデコードの都合 (`raw/budget.ts`)。回線の段とは混ぜず、段 0 から決め直す
-    step = 0;
-    stepCodec = null;
-    stepFrom = null;
-    let next: CanvasCodec | "video" | null;
-    if (wasLocal && compat) {
-      localMkv = null;
-      // 互換モードで端末に保存したものをやめた。サーバから流すものを、開いたときと同じ決め方で選ぶ
-      next =
-        info !== null && canvasAbility !== null
-          ? pickCanvas(info, canvasAbility, choice, canvasGaveUp)
-          : null;
-    } else {
-      // 端末に保存したものを描いていた (`<video>` が読めなかったあと。`recover`)。MPEG-2 は外さない
-      if (wasLocal) localMkv = null;
-      else if (!compat) rawGaveUp = true;
-      else if (failed !== null) canvasGaveUp = [...canvasGaveUp, failed];
-      next = fallBackTo(
-        failed === "mpeg2" ? "mpeg2" : "encoded",
-        canvasUsable(),
-        compat,
-      );
-    }
-    if (next === "video") {
-      const fresh =
-        info === null
-          ? null
-          : fileFailed
-            ? pickStream(info, ability(), data.indoor)
-            : pickOffer(info, ability(), "auto", data.indoor);
-      note(
-        fresh === null
-          ? reason
-          : `${reason}。${codecLabel(fresh.codec)} に切り替えました`,
-      );
-      replay(fresh, position);
-      // 替える先が無い。断り書きが消えたあとも黒いままにせず、観られないことを幕に出す (開いたときの `picked === null` と同じ)
-      if (fresh === null)
-        giveUp(
-          `${wasLocal ? "端末に保存した " : ""}${codecLabel(failed ?? "mpeg2")}: ${reason}`,
-        );
-      return;
-    }
-    if (next === null) {
-      canvasProblem = reason;
-      return;
-    }
-    note(wasLocal ? reason : `${reason}。${codecLabel(next)} に切り替えました`);
-    recordingClock.switchAt = position;
-    canvasCodec = next;
-  }
-
-  /** canvas のプレイヤーの刻み。`<video>` の `timeupdate` と映した 1 枚ごとの追いかけ (`follow`) の代わり */
-  function canvasTick(): void {
-    if (canvas === null) return;
-    const now = canvas.currentTime;
-    if (Math.abs(now - at) >= 0.05) at = now;
-    // 自動再生で断られて音を出せていない。消音にしておき、押して出してもらう (ライブと同じ)
-    if (!muted && canvas.blocked && !canvas.paused) muted = true;
-    // 飛んだ先に着いた (流れ出した)。CM を跨ぐのを待つのをやめる
-    if (waiting && canvas.flowing && now >= hopTo) {
-      if (++settled >= SETTLED) open();
-    }
-    if (canvas.flowing && !hopping) askCaptions();
-    // 作り直したプレイヤーが流れ出した (描き始めた)
-    if (canvas.flowing) release(now);
-    paint();
-    guardCm();
-    markCall(canvas.flowing);
-    hopCm();
-    feedData();
-  }
-
-  /*
-   * ---- 再生の操作 ----
-   *
-   * `<video>` と canvas のプレイヤーのどちらで観ていても、位置・飛ぶ・止める・再開はここを通す
-   */
-  /** いまの位置 (秒。物差しの上) */
-  function mediaTime(): number {
-    return canvas?.currentTime ?? video?.currentTime ?? 0;
-  }
-
-  /** 飛ぶ。canvas は持っているものを捨ててリクエストし直す */
-  function seekMedia(to: number): void {
-    // 作り直している最中に後ろへ飛んだ。覆いは飛んだ先が映ったら外す
-    if (holding) holdAt = Math.min(holdAt, to);
-    if (canvas !== null) {
-      canvas.seek(to);
-      // `<video>` の `seeking` と同じく、飛んだあとは測り直す。段は持ち越す
-      adapt.reset();
-      at = to;
-      paint();
-      feedData();
-      return;
-    }
-    if (video !== null) {
-      video.currentTime = to;
-      // 時刻の表示も飛んだ先へ。`timeupdate` を待つと、つまみを離したあと一瞬元の時刻に戻って見える
-      at = to;
-    }
-  }
-
-  function mediaPaused(): boolean {
-    return canvas !== null ? canvas.paused : (video?.paused ?? true);
-  }
-
-  function playMedia(): void {
-    if (canvas !== null) {
-      canvas.play();
-      playing = true;
-      controls.stir();
-      return;
-    }
-    void video?.play().catch(() => undefined);
-  }
-
-  function pauseMedia(): void {
-    if (canvas !== null) {
-      canvas.pause();
-      /*
-       * **止めた位置を時計にすぐ出す。** 刻み (`canvasTick`) を待つと、押した直後は 1 つ前の刻みの位置が
-       * 出ていて、次の刻みで 1 秒進んだように見えた。0.05 秒より小さな差は刻みでは直さないので、
-       * 止めている間ずっとずれたままのこともあった (`<video>` は止めたときに `timeupdate` が来る)
-       */
-      at = canvas.currentTime;
-      playing = false;
-      flowing();
-      return;
-    }
-    video?.pause();
-  }
-
-  /** 音を消す・出す。canvas はプレイヤーの音 (自動再生で断られていても、押されたここなら鳴らせる) */
-  function toggleMute(): void {
-    if (canvas !== null) {
-      muted = !muted;
-      canvas.mute(muted);
-      return;
-    }
-    if (video !== null) video.muted = !video.muted;
-  }
-
-  /** ブラウザへの問い合わせ (`ts/playback.ts`)。DOM が要るので開いてから */
-  function ability(): MediaAbility {
-    return {
-      play: (type) => document.createElement("video").canPlayType(type) !== "",
-      mse: (type) =>
-        type === BROADCAST_HEVC
-          ? broadcastHevc
-          : (pickMediaSource()?.Source.isTypeSupported(type) ?? false),
-      mpeg2: rawCapable && !rawGaveUp,
-    };
-  }
-
-  onMount(() => {
-    localLookup = loadOffline(rec.id).catch(() => null);
-    const asked = stored(CODEC_KEY);
-    // メニューに並べない H.264・H.265 (`WATCH_HIDDEN_CODECS`) を前に選んでいた端末は、自動として扱う
-    choice = asked === "av1" || asked === "mpeg2" ? asked : "auto";
-    void (async () => {
-      const [held, got] = await Promise.all([
-        localLookup,
-        ready ? loadPlayback() : null,
-      ]);
-      localCopy = held;
-      info = got;
-      // 互換モードは canvas に描く (`prepareCompat`)。端末に保存したものも canvas に描く
-      compat = ready && canvasVideo();
-      if (compat) {
-        await prepareCompat(got);
-        localChecked = true;
-        return;
-      }
-      // 元の TS をそのまま流せるなら、この端末でデコードできるかを先に確かめる (MPEG-2 を並べる・選ぶ元)
-      if (got?.offers.some((offer) => offer.way === "raw") === true)
-        rawCapable = rawUnsupported() === null;
-      if (got?.broadcast === "hevc") {
-        broadcastHevc = await broadcastHevcPlayable(
-          browserHevcProbe(pickMediaSource()?.Source),
-        );
-      }
-      /*
-       * 聞けなかった (オフライン) ときは、今までどおりエンコード済みをそのまま渡す。
-       * 端末に保存したものがあればそちら (下)
-       */
-      picked =
-        got !== null
-          ? pickOffer(got, ability(), choice, data.indoor)
-          : rec.library_path?.endsWith(".mkv") === true ||
-              localCopy?.video !== undefined
-            ? { way: "file", codec: "av1", source: "encoded" }
-            : null;
-      /*
-       * 端末のコピーはエンコード済みの主。そのまま読むときだけ使う (選んだコーデックがあれば選んだほう)。
-       * 観方をサーバから受け取れなかった (オフライン) ときは、コーデックを選んでいても端末のコピーしか読めない
-       */
-      if (
-        localCopy?.video !== undefined &&
-        picked?.way === "file" &&
-        (choice === "auto" || got === null)
-      ) {
-        localSrc = URL.createObjectURL(localCopy.video);
-      }
-      // 元の TS は互換モードと同じく canvas に描く (`startCanvas`)
-      if (picked?.way === "raw") canvasCodec = "mpeg2";
-      if (ready && picked === null) giveUp(nothingToPlay());
-      localChecked = true;
-    })();
-    return () => {
-      if (localSrc !== null) URL.revokeObjectURL(localSrc);
-      remux?.destroy();
-      canvas?.destroy();
-      canvas = null;
-    };
-  });
-
-  /** `playback` を取得できなかった理由 (`HTTP 500` など)。観られないときの幕に添える */
-  let playbackMiss = "";
-
-  /** 何で観られるか (`api/recordings/<id>/playback`)。聞けなければ null */
-  async function loadPlayback(): Promise<PlaybackInfo | null> {
-    try {
-      const res = await fetch(recordingFeed.playbackUrl);
-      if (res.ok) return (await res.json()) as PlaybackInfo;
-      playbackMiss = `HTTP ${res.status}`;
-      return null;
-    } catch (error) {
-      playbackMiss = failureText(null, error);
-      return null;
-    }
-  }
-
-  /** 開いたときに観られるものが無かった理由。サーバが出せるもの (`offersText`) と、取得できなかった理由 */
-  function nothingToPlay(): string {
-    const offers = offersText(info);
-    return info === null && playbackMiss !== ""
-      ? `${offers} (${playbackMiss})`
-      : offers;
-  }
-
-  const src = $derived(
-    localChecked && picked?.way === "file"
-      ? (localSrc ?? recordingFeed.fileUrl(picked.source))
-      : undefined,
-  );
-
-  /** 「続きから」を消す時計。続けて出したら前の時計は止める (先に消さない)。画面を離れたら止める */
-  let continuedTimer: ReturnType<typeof setTimeout> | null = null;
-  /** **途中から始めたら、そう出す。** 続きから始めたと出し、しばらくで引っ込める */
-  function showContinued(): void {
-    continued = true;
-    if (continuedTimer !== null) clearTimeout(continuedTimer);
-    continuedTimer = setTimeout(() => (continued = false), 4000);
-  }
-
-  /** その場で流すときにリクエストする音声 (`playback` の `audios` の `id`) */
-  function streamAudio(index: number): string {
-    // 端末に保存した録画はトラックの何本目か (`mkv-source.ts`)
-    if (localMkv !== null) return String(index);
-    return info?.audios[index]?.id ?? info?.audios[0]?.id ?? "0";
-  }
-
-  /** その場で流すなら、プレイヤーを作って流しはじめる。**続きの位置からリクエストする** (先頭から読んで捨てない) */
-  $effect(() => {
-    const plan = picked;
-    if (
-      !localChecked ||
-      plan?.way !== "stream" ||
-      info === null ||
-      video === null ||
-      remux !== null
-    )
-      return;
-    const source = pickMediaSource();
-    if (source === null) return;
-    const total = info.duration;
-    const from = recordingClock.startFrom(total);
-    const at = untrack(() => step);
-    remux = remuxPlayer(video, source, {
-      url: recordingFeed.stepUrl(at, plan),
-      codecs: recordingFeed.stepType(at, plan),
-      duration: total,
-      start: from ?? 0,
-      audio: streamAudio(audioIndex),
-      state: streamState,
-      heard: streamHeard,
-    });
-  });
-
-  /** その場で流しているプレイヤーの様子を受ける (`remux-player.ts` の `state`) */
-  function streamState(state: StreamState, reason?: string): void {
-    // 段を下げようとして作り直したが、混んでいて断られた。ファイルの直再生に戻して続ける
-    if (state === "busy" && step !== 0 && fileZero !== null) {
-      backToFile(busyNote(true));
-      return;
-    }
-    resuming = state === "retrying";
-    busy = state === "busy";
-    if (state === "failed")
-      giveUp(
-        failedWith(
-          reason ?? `${STREAM_RETRIES} 回繋ぎ直しても繋がりませんでした`,
-        ),
-      );
-  }
-
-  /** 観られない。幕に出し (`broken`)、何を再生しようとして何で止まったかを添えてコンソールにも出力する */
-  function giveUp(why: string): void {
-    broken = true;
-    brokenWhy = why;
-    console.warn(`[watch] 再生できませんでした: ${why}`);
-  }
-
-  /** いま再生しようとしているもの (`pickedText`) と、止まった理由をつなぐ */
-  function failedWith(reason: string): string {
-    const plan = picked;
-    if (plan === null) return reason;
-    return `${pickedText(info, plan, localSrc !== null)}: ${reason}`;
-  }
-
-  /** その場で流しているストリームのヘッダを受ける (サーバが選んだコーデックと、送り出しの具合を読む id) */
-  function streamHeard(stream: StreamHeard): void {
-    stepCodec = stream.codec;
-    paceId = stream.pace;
-  }
-
-  /** 形式を切り替えた断り書きを出す。`SWITCH_NOTE` で引っ込める (ライブの `note` と同じ。切り替えた先はメニューの行に残る) */
-  function note(text: string): void {
-    warning.show(text, SWITCH_NOTE);
-  }
-
-  /** 段の断り書きを出す。しばらくで引っ込める */
-  function noteAdapt(text: string): void {
-    adaptText.show(text, ADAPT_NOTE);
-  }
-
-  /**
-   * 段を替えるためにプレイヤーを作り直す。いまの位置から観直し、再生していたなら続ける。
-   * 作り直したばかりで再生を待っている間 (`keepPlaying` が残っている) も続ける
-   */
-  function swap(fresh: Picked): void {
-    keepPlaying = keepPlaying || (video !== null && !video.paused);
-    // 作り直したプレイヤーが映すまで、最後のコマで覆っておく (黒い一瞬を出さない)
-    hold();
-    replay(fresh);
-  }
-
-  /*
-   * ---- 段を替えるときの受け渡し (`handoff.ts`) ----
-   *
-   * プレイヤーを作り直す段の切り替えは、いまのプレイヤーを映したまま、映していない側の `<video>` で次の観かたを
-   * 用意してから入れ替える。用意している間はサーバの読み出しとデコードが 2 本ぶんになる
-   */
-  /** 用意している最中の受け渡し。やめるときに呼ぶ。用意していなければ null */
-  let staged: (() => void) | null = null;
-  /** 映していない側の src (ファイルの直再生へ移るとき)。その場で流すなら `remux-player.ts` が入れる */
-  let spareSrc = $state<string | undefined>(undefined);
-
-  /** 用意している最中の受け渡しをやめる。いまのプレイヤーはそのまま */
-  function dropStep(): void {
-    const cancel = staged;
-    staged = null;
-    cancel?.();
-  }
-
-  /** 映していないほうの `<video>` を空にする */
-  function empty(target: HTMLVideoElement): void {
-    target.pause();
-    target.muted = true;
-    target.removeAttribute("src");
-    target.load();
-  }
-
-  /**
-   * いまのプレイヤーが詰まって進んでいないか (止めている間は詰まりではない)。届いたぶんの末尾まで観終えた
-   * (`ended`) のも詰まりに数える。人が止めたのではないので、入れ替えたら続ける
-   */
-  function mediaStuck(): boolean {
-    if (canvas !== null) return !canvas.paused && !canvas.flowing;
-    if (video === null) return false;
-    if (video.ended) return true;
-    return (
-      !video.paused && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
-    );
-  }
-
-  /** 人が止めているか (末尾まで観終えて止まったのは数えない。`mediaStuck`) */
-  function heldByUser(): boolean {
-    return mediaPaused() && !(canvas === null && video?.ended === true);
-  }
-
-  /**
-   * **段を `next` に替えて `fresh` で観る。** いまのプレイヤーを映したまま、映していない側の `<video>` (透明・消音) で
-   * `fresh` を少し先の位置に用意し、いまの再生がそこまで来たら入れ替える (`handoff.ts`)。黒いコマも、止まった間も出さない。
-   * `zero` は入れ替えたあとの `fileZero`。
-   *
-   * 用意できないとき (描く先が canvas・小窓を出している・裏に回っている) と、待つ上限 (`HANDOFF_GIVE_UP`) までに
-   * 入れ替えられなかったときは `rebuild` (いまのプレイヤーを作り直す) に任せる。替えたら true。
-   * 混んでいて断られた・読めなかったら、いまのプレイヤーのまま false
-   */
-  function prepareStep(
-    fresh: Picked,
-    next: Step,
-    zero: Picked | null,
-    rebuild: () => void,
-  ): Promise<boolean> {
-    dropStep();
-    const spare = spareVideo();
-    const plan = info;
-    const source = fresh.way === "stream" ? pickMediaSource() : null;
-    if (
-      spare === null ||
-      plan === null ||
-      fresh.way === "raw" ||
-      (fresh.way === "stream" && source === null) ||
-      pip.active ||
-      document.hidden
-    ) {
-      rebuild();
-      return Promise.resolve(true);
-    }
-    const down = stepOrder(next) > stepOrder(step);
-    const last = Math.max(0, plan.duration - 1);
-    let target = Math.min(
-      handoffTarget(mediaTime(), !heldByUser() && !mediaStuck()),
-      last,
-    );
-    let made: RemuxPlayer | null = null;
-    let heard: StreamHeard | null = null;
-    let stuckSince: number | null = null;
-    let frame = 0;
-    let done = false;
-    /** 待ち始めた時刻。裏に回っていた間 (刻みが止まる) はそのぶん後ろへずらし、待った長さに数えない */
-    let started = Date.now();
-    let ticked = started;
-    const seat = (): void => {
-      spare.currentTime = target;
-    };
-    spare.muted = true;
-    spare.defaultPlaybackRate = speed;
-    spare.playbackRate = speed;
-    return new Promise<boolean>((settle) => {
-      const finish = (moved: boolean): void => {
-        if (done) return;
-        done = true;
-        cancelAnimationFrame(frame);
-        spare.removeEventListener("loadedmetadata", seat);
-        spare.removeEventListener("error", broke);
-        if (staged === drop) staged = null;
-        settle(moved);
-      };
-      // 用意していたものを捨てる
-      const clear = (): void => {
-        made?.destroy();
-        made = null;
-        spareSrc = undefined;
-        empty(spare);
-      };
-      const drop = (): void => {
-        if (done) return;
-        clear();
-        finish(false);
-      };
-      // 混んでいて断られた・読めなかった。いまのプレイヤーのまま、しばらく段を動かさない
-      const refuse = (crowded: boolean): void => {
-        if (done) return;
-        drop();
-        adaptQuietUntil = Date.now() + HOLD;
-        if (crowded) noteAdapt(busyNote(down));
-      };
-      const broke = (): void => refuse(false);
-      staged = drop;
-      spare.addEventListener("error", broke);
-      if (fresh.way === "stream" && source !== null) {
-        made = remuxPlayer(spare, source, {
-          url: recordingFeed.stepUrl(next, fresh),
-          codecs: recordingFeed.stepType(next, fresh),
-          duration: plan.duration,
-          start: target,
-          audio: streamAudio(audioIndex),
-          // 入れ替えたあとは、いつものプレイヤーと同じに受ける
-          state: (state, reason) => {
-            if (done) streamState(state, reason);
-            else if (state === "busy") refuse(true);
-            else if (state === "failed") refuse(false);
-          },
-          heard: (stream) => {
-            if (done) streamHeard(stream);
-            else heard = stream;
-          },
-        });
-      } else if (fresh.way === "file") {
-        spare.addEventListener("loadedmetadata", seat);
-        spareSrc = recordingFeed.fileUrl(fresh.source);
-      }
-      const tick = (): void => {
-        if (done) return;
-        frame = requestAnimationFrame(tick);
-        const now = Date.now();
-        // 裏に回っていた (`requestAnimationFrame` が止まる)。いまのプレイヤーは鳴り続けているので、待ちは戻ってから数え直す
-        if (now - ticked > 1_000) started += now - ticked;
-        ticked = now;
-        // 間に合わなかった。いまのプレイヤーを作り直す (これまでの切り替え)
-        if (now - started > HANDOFF_GIVE_UP) {
-          clear();
-          finish(true);
-          rebuild();
-          return;
-        }
-        if (!mediaStuck()) stuckSince = null;
-        else stuckSince ??= Date.now();
-        const verdict = handoff({
-          ready:
-            spare.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-            !spare.seeking,
-          spareAt: spare.currentTime,
-          target,
-          at: mediaTime(),
-          paused: heldByUser(),
-          stuckFor:
-            stuckSince === null ? 0 : Math.max(1, Date.now() - stuckSince),
-        });
-        if (verdict.kind === "retarget") {
-          target = Math.min(verdict.to, last);
-          spare.currentTime = target;
-          return;
-        }
-        if (verdict.kind === "wait") return;
-        const player = made;
-        made = null;
-        finish(true);
-        handOver(spare, fresh, next, zero, player, heard, verdict.play);
-      };
-      frame = requestAnimationFrame(tick);
-    });
-  }
-
-  /**
-   * **用意できた側に入れ替える** (`prepareStep`)。同じコマの間に、映す側と音を出す側を替え、いままでのプレイヤーを閉じる。
-   * 位置は用意した側のまま (いまの再生と同じ所)。いままでの `<video>` を空にして出るイベントは、映していない側のものなので受けない
-   */
-  function handOver(
-    spare: HTMLVideoElement,
-    fresh: Picked,
-    next: Step,
-    zero: Picked | null,
-    player: RemuxPlayer | null,
-    heard: StreamHeard | null,
-    play: boolean,
-  ): void {
-    const old = video;
-    if (canvas !== null || canvasCodec !== null) stopCanvas();
-    remux?.destroy();
-    remux = player;
-    busy = false;
-    broken = false;
-    brokenWhy = "";
-    retryAt = 0;
-    recordingClock.switchAt = null;
-    keepPlaying = false;
-    fileZero = zero;
-    step = next;
-    stepCodec = heard?.codec ?? null;
-    paceId = heard?.pace ?? null;
-    // 映す側を替える。新しい側の src は用意したときと同じ値なので、読み直さない
-    front = 1 - front;
-    picked = fresh;
-    spareSrc = undefined;
-    spare.muted = muted;
-    length = Number.isFinite(spare.duration) ? spare.duration : length;
-    at = spare.currentTime;
-    if (play) void spare.play().catch(() => undefined);
-    else playing = false;
-    unslip.seeked();
-    follow(spare);
-    if (old !== null) empty(old);
-    syncAudio();
-    place();
-  }
-
-  /** 段を下げた変換をやめて、ファイルの直再生か MPEG-2 に戻す (作り直す) */
-  function backToFile(note: string | null): void {
-    const back = fileZero;
-    if (back === null) return;
-    fileZero = null;
-    step = 0;
-    stepCodec = null;
-    paceId = null;
-    adaptQuietUntil = Date.now() + HOLD;
-    swap(back);
-    // MPEG-2 は canvas のプレイヤーが止めずに始める。`<video>` を続けるための印は残さない
-    if (back.way === "raw") keepPlaying = false;
-    if (note !== null) noteAdapt(note);
-  }
-
-  /** 段 0 で観るファイルの `?source=`。MPEG-2 は元の TS、その場で流すもの (段 0 が変換) は null */
-  function zeroSource(plan: Picked): string | null {
-    if (plan.way === "file") return plan.source;
-    return plan.way === "raw" ? "ts" : null;
-  }
-
-  /** `adapt.ts` が決めたことを受ける。段を動かせたら断り書きを出す */
-  function decideStep(decision: AdaptDecision): void {
-    const from = step;
-    if (decision.reason === "encode" || decision.reason === "pinned") {
-      noteAdapt(adaptNote(decision, from));
-      return;
-    }
-    if (decision.step === from) return;
-    /*
-     * 互換モードは音声だけにせず、段 3 のまま流す (追っかけと同じ)。映像の無い fMP4 を canvas のプレイヤーで
-     * 鳴らす経路を確かめていない
-     */
-    if (decision.step === "audio" && compat) return;
-    void moveStep(decision.step).then((moved) => {
-      if (moved) noteAdapt(adaptNote(decision, from));
-    });
-  }
-
-  /**
-   * 段を `next` に替える。替えたら true。
-   *
-   * プレイヤーを作り直す切り替え (ファイルの直再生・MPEG-2 から下げる、段 0 へ戻す、音声だけとの行き来) は、
-   * いまのプレイヤーを映したまま裏で用意して入れ替える (`prepareStep`)。段 1〜3 の間は同じ MSE のまま替える (`switchTo`)
-   */
-  async function moveStep(next: Step): Promise<boolean> {
-    if (compat) return compatStep(next);
-    const plan = picked;
-    if (info === null || plan === null) return false;
-    switching = true;
-    try {
-      return await shiftStep(info, plan, next);
-    } finally {
-      switching = false;
-    }
-  }
-
-  /** `moveStep` の中身 (互換モードでないとき) */
-  async function shiftStep(
-    plan: PlaybackInfo,
-    now: Picked,
-    next: Step,
-  ): Promise<boolean> {
-    // MPEG-2 (canvas に描いている) から下げる。ファイルの直再生と同じく、1 回だけ `<video>` の変換に移る
-    if (now.way === "raw") {
-      if (next === 0) return false;
-      const fresh = streamForAudio(plan, ability(), "h264");
-      if (fresh === null) return false;
-      return prepareStep(fresh, next, now, () => {
-        fileZero = now;
-        step = next;
-        keepPlaying = canvas !== null && !canvas.paused;
-        swap(fresh);
-      });
-    }
-    // ファイルの直再生から下げる。1 回だけ変換へ移る (同じコーデックの詰め替えを先に)
-    if (now.way === "file") {
-      if (next === 0) return false;
-      const fresh = streamForAudio(plan, ability(), now.codec);
-      if (fresh === null) return false;
-      if (recordingFeed.baseOf(now.source) === null)
-        void recordingFeed.readBaseKbps(now.source, plan.duration);
-      return prepareStep(fresh, next, now, () => {
-        fileZero = now;
-        step = next;
-        swap(fresh);
-      });
-    }
-    /*
-     * 段 0 へ戻す。ファイルの直再生・MPEG-2 から下げていたなら、そこへ戻す。
-     * 同じ MSE のまま段 0 の詰め替えへ替えると、詰め替えは要求した位置の手前のキーフレームから始まるので、
-     * 溜めてあった下げた段のコマを途中から上書きし、デコーダも再生の途中で替わる。新しいプレイヤーで始め直せば、どちらも起きない
-     */
-    if (next === 0) {
-      const back = fileZero;
-      const fresh = back ?? { ...now };
-      const moved = await prepareStep(fresh, 0, null, () => {
-        if (back !== null) {
-          backToFile(null);
-          return;
-        }
-        step = 0;
-        swap(fresh);
-      });
-      if (moved) adaptQuietUntil = Date.now() + HOLD;
-      return moved;
-    }
-    // 音声だけとの行き来は作り直す (MSE は SourceBuffer に入れたトラックの数を替えられない)
-    if (next === "audio" || step === "audio" || remux === null) {
-      // 同じ中身でも新しいオブジェクトにする (同じものを入れ直しても、プレイヤーを作り直す `$effect` が動かない)
-      const fresh = { ...now };
-      return prepareStep(fresh, next, fileZero, () => {
-        step = next;
-        swap(fresh);
-      });
-    }
-    const result = await remux.switchTo(
-      recordingFeed.stepType(next, now),
-      recordingFeed.stepUrl(next, now),
-    );
-    if (result === "switched") {
-      step = next;
-      return true;
-    }
-    adaptQuietUntil = Date.now() + HOLD;
-    if (result === "busy")
-      noteAdapt(busyNote(stepOrder(next) > stepOrder(step)));
-    return false;
-  }
-
-  /**
-   * 互換モードで段を替える。canvas のプレイヤーは裏で用意しない (デコーダを 2 つ並べると、非力な端末では
-   * どちらも間に合わない。`raw/budget.ts`) ので作り直し、作り直したプレイヤーが描き始めるまで最後のコマで覆う
-   */
-  async function compatStep(next: Step): Promise<boolean> {
-    const player = canvas;
-    if (player === null) return false;
-    const frame = await player.grab();
-    if (canvas !== player) {
-      frame?.close();
-      return false;
-    }
-    hold(frame);
-    frame?.close();
-    const moved = canvasStep(next);
-    if (!moved) unhold();
-    return moved;
-  }
-
-  /**
-   * いまの様子 (`watch-adapt.ts` の `sample`)。段を動かさない間は null。
-   * 端末に保存したもの・止めている間・断られて止まっている間。canvas に描いているときは `canvasSample`。
-   * 映像の無い録画 (`info.video` が false) は音声だけなので動かさない
-   */
-  function adaptSample() {
-    if (info?.video === false) return null;
-    if (compat || canvas !== null) return canvasSample();
-    const target = video;
-    const plan = picked;
-    if (
-      target === null ||
-      info === null ||
-      plan === null ||
-      (plan.way !== "file" && plan.way !== "stream") ||
-      localSrc !== null ||
-      localMkv !== null ||
-      switching ||
-      broken ||
-      busy ||
-      target.paused ||
-      target.ended ||
-      Date.now() < adaptQuietUntil ||
-      playable().length === 0
-    )
-      return null;
-    return {
-      current: step,
-      manual: choice !== "auto",
-      throughput: remux?.throughput() ?? null,
-      ahead: aheadOf(rangesOf(target.buffered), target.currentTime),
-      waiting:
-        target.readyState < HTMLMediaElement.HAVE_FUTURE_DATA &&
-        !target.seeking,
-      paceId: plan.way === "stream" ? paceId : null,
-      /*
-       * ファイルの直再生は受け取りの速さを測れない。ブラウザが先を読み終えて読むのを止めていれば、回線は足りている
-       * (ファイルの終わり際や、飛んだ先をデコードしている間の詰まりを回線のせいにしない)。
-       * いまの位置をまだ読んでいない間と、飛んでいる最中は数えない (`fileIdle`)
-       */
-      idle:
-        plan.way === "file" &&
-        fileIdle(
-          {
-            networkState: target.networkState,
-            seeking: target.seeking,
-            buffered: rangesOf(target.buffered),
-            currentTime: target.currentTime,
-          },
-          suspendAt,
-          Date.now(),
-        ),
-      // 段 0 が変換 (エンコード済みが無い録画) なら分からない
-      baseKbps: recordingFeed.baseOf(zeroSource(fileZero ?? plan)),
-      codec: stepCodec ?? plan.codec,
-    };
-  }
-
-  /**
-   * canvas に描いているときの様子 (互換モードと MPEG-2)。端末に保存したもの・作り直している最中・止めている間・
-   * 鳴らし始める前・断られて止まっている間は null。下げた先の H.264 を受け取れなければ (互換モードは描けなければ) 動かさない
-   */
-  function canvasSample() {
-    const player = canvas;
-    if (
-      player === null ||
-      info === null ||
-      localMkv !== null ||
-      stepFrom !== null ||
-      switching ||
-      busy ||
-      player.paused ||
-      (!player.flowing && !canvasStuck) ||
-      Date.now() < adaptQuietUntil ||
-      // 段を下げた先は、GPU でエンコードできるものが無ければソフトウェアの H.264 (`server/live.ts` の `rungCodec`)
-      !(compat ? canvasPlayable() : playable()).includes("h264")
-    )
-      return null;
-    return {
-      current: step,
-      manual: choice !== "auto",
-      throughput: player.throughput(),
-      ahead: player.lead,
-      waiting: canvasStuck,
-      paceId,
-      // 段 0 が MPEG-2 なら元の TS のビットレート (`startCanvas` で読む)。互換モードの変換は分からない
-      baseKbps: canvasCodec === "mpeg2" ? recordingFeed.baseOf("ts") : null,
-      codec: stepCodec ?? canvasCodec,
-    };
-  }
-
-  const adapt = watchAdapt({
-    sample: adaptSample,
-    readPace: async (id) => {
-      const res = await fetch(
-        resolve(`api/playback/pace?id=${encodeURIComponent(id)}`),
-      );
-      return res.ok ? ((await res.json()) as Pace) : null;
+  const player = recordingPlayback({
+    recording: () => rec,
+    // svelte-ignore state_referenced_locally
+    scene: data.scene,
+    ready: () => ready,
+    indoor: () => data.indoor,
+    hasData: () => data.hasData,
+    autoStart: () => data.autoStart,
+    stir: () => controls.stir(),
+    wiring: () => wiring,
+    hooks: {
+      arrive,
+      frame,
+      covering: () => hopping,
+      waiting: () => waiting,
+      settle,
+      ended: finished,
     },
-    decide: decideStep,
   });
 
-  onMount(() => {
-    const timer = setInterval(() => adapt.tick(), ADAPT_TICK);
-    return () => {
-      clearInterval(timer);
-      adaptText.close();
-      warning.close();
-    };
-  });
-
-  /**
-   * **コーデックを選び直す** (コーデックのメニュー)。選んだものは端末ごとに覚える。
-   * 観られる方式が変わるなら、いまの位置から観直す (プレイヤーを作り直す)
-   */
-  function chooseCodec(next: CodecChoice | "mpeg2"): void {
-    choice = next;
-    remind(CODEC_KEY, next);
-    controls.stir();
-    if (info === null) return;
-    if (compat) {
-      chooseCanvas(next);
-      return;
-    }
-    // 選んだものは打ち切っていても試す (互換モードの `chooseCanvas` と同じ)
-    if (next === "mpeg2") rawGaveUp = false;
-    const fresh = pickOffer(info, ability(), next, data.indoor);
-    if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy && step === 0)
-      return;
-    warning.clear();
-    // 選び直したら段 0 から (下げた段は「自動」が回線を見て決め直す)
-    step = 0;
-    stepCodec = null;
-    fileZero = null;
-    replay(fresh);
-  }
-
-  /**
-   * 観るものを `fresh` に替えて、いまの位置 (`position`。省けばいま再生している位置) から観直す。
-   * 元の TS (`raw`) は canvas に描き、それ以外は `<video>` で観る。描いていた canvas は破棄する
-   */
-  function replay(fresh: Picked | null, position = mediaTime()): void {
-    // 段を替えるために裏で用意していたものは捨てる (選び直したほうを観る)
-    dropStep();
-    if (canvas !== null || canvasCodec !== null) stopCanvas();
-    remux?.destroy();
-    remux = null;
-    // 端末のコピーは自動のときだけ (主のエンコード済み)
-    if (localSrc !== null) {
-      URL.revokeObjectURL(localSrc);
-      localSrc = null;
-    }
-    busy = false;
-    broken = false;
-    brokenWhy = "";
-    // ファイルなら尺が分かったところで戻す (`resume`)。その場で流すならプレイヤーの開始位置
-    retryAt = position;
-    recordingClock.switchAt = position;
-    picked = fresh;
-    if (fresh?.way !== "raw") return;
-    // `<video>` で観ていたものは止める
-    stopVideo();
-    canvasCodec = "mpeg2";
-  }
-
-  /**
-   * 互換モードで選び直す。**選んだものは打ち切っていても試す** (選び直すまでリクエストし直さない、の「選び直し」)。
-   * 描く形式が変わるなら、いまの位置からプレイヤーを作り直す
-   */
-  function chooseCanvas(next: CodecChoice | "mpeg2"): void {
-    if (info === null || canvasAbility === null) return;
-    const fresh = pickCanvas(
-      info,
-      canvasAbility,
-      next,
-      next === "auto" ? canvasGaveUp : [],
-    );
-    if (fresh === canvasCodec && !busy && canvasProblem === null && step === 0)
-      return;
-    const position = mediaTime();
-    stopCanvas();
-    busy = false;
-    canvasProblem = null;
-    warning.clear();
-    if (fresh === null) {
-      canvasProblem = "再生できる形式がありません";
-      return;
-    }
-    canvasGaveUp = canvasGaveUp.filter((codec) => codec !== fresh);
-    // 選び直したら段 0 から (`chooseCodec` と同じ)
-    step = 0;
-    stepCodec = null;
-    stepFrom = null;
-    recordingClock.switchAt = position;
-    canvasCodec = fresh;
-  }
-
-  /**
-   * メニューに並べるもの。この端末で観られる方式があるコーデックが 2 つ以上あるときだけ出す。
-   * 互換モードは流せるもの (H.264・AV1・MPEG-2) を並べて描けない形式は押せなくし (ライブと同じ)、
-   * 端末に保存したものを描いている間は出さない。H.264・H.265 (`WATCH_HIDDEN_CODECS`) は並べない (自動では選ぶ)
-   */
-  const codecMenu = $derived.by(
-    (): { key: string; label: string; disabled?: boolean }[] => {
-      if (info === null || !localChecked) return [];
-      if (compat && (canvasAbility === null || drawingLocal)) return [];
-      const items =
-        compat && canvasAbility !== null
-          ? canvasChoices(info, canvasAbility)
-              .filter(
-                (item) =>
-                  !WATCH_HIDDEN_CODECS.some((codec) => codec === item.codec),
-              )
-              // 並びはほかのメニューと同じ (`MENU_ORDER`)。`canvasChoices` の並びは選ぶ順 (`pickCanvas`) のまま
-              .sort(
-                (a, b) =>
-                  MENU_ORDER.indexOf(a.codec) - MENU_ORDER.indexOf(b.codec),
-              )
-              .map((item) => ({
-                key: item.codec,
-                label: codecLabel(item.codec),
-                disabled: !item.drawable,
-              }))
-          : codecChoices(info, ability(), WATCH_HIDDEN_CODECS).map((codec) => ({
-              key: codec,
-              label: codecLabel(codec),
-            }));
-      return items.length < 2 ? [] : [{ key: "auto", label: "自動" }, ...items];
-    },
-  );
-
-  /** 混んでいて断られたとき、サーバに変換させずに観られるもの (エンコード済み・詰め替え) */
-  const lighter = $derived.by((): PlayCodec[] => {
-    if (info === null || !busy) return [];
-    // 互換モードは描ける形式のうち、変換させないもの (詰め替え・元の TS)
-    if (compat) {
-      if (canvasAbility === null) return [];
-      const plan = info;
-      return canvasChoices(plan, canvasAbility)
-        .filter((item) => item.drawable && !canvasTranscodes(plan, item.codec))
-        .map((item) => item.codec);
-    }
-    const can = ability();
-    return codecChoices(info, can).filter((codec) => {
-      const way = pickOffer(info as PlaybackInfo, can, codec);
-      return (
-        way !== null &&
-        way.codec === codec &&
-        !transcodes(info as PlaybackInfo, way)
-      );
-    });
-  });
-
-  /**
-   * `<video>` は 2 つ置く。段を替えるときは、映していない側 (透明・消音) で次の観かたを用意してから入れ替える
-   * (`prepareStep`)。`video` はいま映している側で、もう 1 つは用意している間だけ読み込む
-   */
-  let videos = $state<(HTMLVideoElement | null)[]>([null, null]);
-  /** いま映している側 (`videos` の何番目か) */
-  let front = $state(0);
-  const video = $derived(videos[front] ?? null);
-  /** 映していない側の `<video>` */
-  function spareVideo(): HTMLVideoElement | null {
-    return videos[1 - front] ?? null;
-  }
   /** 映像とその上の操作をまとめた箱。全画面にするのはこちら */
   let stage = $state<HTMLElement | null>(null);
   /** 全画面の出入り (3 画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
   const fullscreen = stageFullscreen(() => stage);
 
-  /*
-   * --- 録画のデータ放送 ---
-   *
-   * エンコードするときに取り出しておいた変化ログを、再生位置に合わせて流し直す (`ts/data-timeline`、
-   * `server/recorded-bml.ts`)。描くのはライブと同じ `DataBroadcast`
-   */
-  /**
-   * データ放送の受け口 (`player/data.svelte.ts`。ライブと同じ)。d ボタンで出しているかと、自動で受信するか
-   * (⚙ の「データ放送」を長押しして切り替える。ライブと同じ 1 つを端末ごとに覚える) と、変化ログを持つ。
-   * 録画の入口に自動起動の指定があれば (`data.autoStart`)、開く前から変化ログを取得して流し、入口の文書を裏で動かす
-   * (`DataBroadcast` の `receive`)
-   */
-  const broadcastData = new DataLayer();
-  /** 自動で受信していて、この録画にデータ放送があり、入口に自動起動の指定があるか */
-  const receiving = $derived(
-    broadcastData.receive && data.hasData && data.autoStart,
-  );
   /** 自動で受信するかを切り替えたときの通知 (`receive-note.svelte.ts`) */
   const dataReceive = receiveNote();
-  /** 映像を入れる箱。BML はこれを動かす (`DataBroadcast` の `placeVideo`) */
-  let mediaBox = $state<HTMLElement | null>(null);
   /** リモコンのキーを渡す関数と、d を文書へ渡す関数 (`DataBroadcast` の press / pressD) */
   let dataPress = $state<((code: number) => void) | null>(null);
   /** データ放送が映像の上に出す通知 (`DataBroadcast` の `note`。舞台の通知の列に積む) */
   let dataNote = $state("");
   let dataButton = $state<(() => boolean) | null>(null);
-  /** データ放送を作り直す合図 (`DataBroadcast` の channel)。戻ったら変えて、その時点まで積み直す */
-  let dataChannel = $state<string | null>(null);
-
-  function nowMs(): number {
-    return Math.round(mediaTime() * 1000);
-  }
-
-  /** データ放送を出す/消す。d ボタンの振る舞いは `pressD` (DataBroadcast) */
-  async function setData(on: boolean): Promise<void> {
-    broadcastData.show = on;
-    // 自動で受信しているなら、閉じてもエンジンは残す (入口から出直すのは `DataBroadcast`)
-    if (on || receiving) await startData();
-    else dataChannel = null;
-  }
-
-  /**
-   * 自動で受信するかを切り替える (⚙ の「データ放送」を長押し・Shift+D)。ライブと同じ 1 つを端末ごとに覚え (`data-receive.ts`)、
-   * 切り替えたら通知を出す
-   */
+  /** データ放送を自動で受信するかを切り替える (⚙ の「データ放送」の長押し・Shift+D)。切り替えたら通知を出す (ライブと同じ) */
   function toggleReceiveData(): void {
-    broadcastData.toggleReceive();
-    dataReceive.show(broadcastData.receive);
-    if (receiving) void startData();
-    else if (!broadcastData.show) dataChannel = null;
+    player.toggleReceiveData();
+    dataReceive.show(player.receiveData);
   }
-
-  // 開いた端末で決まる。自動で受信する端末は、入口に自動起動の指定がある録画なら開く前から流し始める
-  $effect(() => {
-    broadcastData.restore();
-    untrack(() => {
-      if (receiving) void startData();
-    });
-  });
-
-  /**
-   * 変化ログを取得して、エンジンを作らせる。**もう流していれば何もしない**。自動で受信しているところで開いたときは、
-   * 作り直さずに開く操作だけを届ける (`DataBroadcast` の `opened`)
-   */
-  async function startData(): Promise<void> {
-    if (dataChannel !== null) return;
-    // 取得は 1 回だけ。開いた直後 (自動で受信) と押したのが重なっても二重に取らない
-    dataLoading ??= loadTimeline();
-    await dataLoading;
-    // 取得している間に、閉じて自動で受信もやめていたら作らない
-    if (!broadcastData.show && !receiving) return;
-    broadcastData.rewind();
-    // エンジンを作らせる。open のあと listenData が呼ばれて、いまの位置まで積み直す
-    dataChannel = `${rec.id}`;
-  }
-
-  /** 変化ログを取得している最中の Promise (`startData`) */
-  let dataLoading: Promise<void> | null = null;
-
-  /**
-   * 変化ログを取得する。**端末に保存したものを探し終えてから**。自動で受信する端末は開いた直後に呼ぶので、
-   * 探し終える前に見るとオフラインでもサーバから取得しようとして空になる。取れなければ空 (次に押したら取り直す)
-   */
-  async function loadTimeline(): Promise<void> {
-    const copy = await localLookup;
-    if (Array.isArray(copy?.databroadcast)) {
-      // 端末に保存したものから。オフラインでも d が効く
-      broadcastData.timeline = copy.databroadcast as PlacedMessage[];
-    } else {
-      const response = await fetch(recordingFeed.timelineUrl).catch(() => null);
-      broadcastData.timeline = response?.ok ? await response.json() : [];
-    }
-    if (broadcastData.timeline.length === 0) dataLoading = null;
-  }
-
-  /**
-   * `DataBroadcast` がエンジンへの入口を渡してくる (作り直すたびに新しいものを)。
-   * **預かった直後に、いまの再生位置まで積んで追いつく** (`replayAt`)
-   */
-  function listenData(emit: ((message: ResponseMessage) => void) | null): void {
-    broadcastData.listenAt(emit, nowMs());
-  }
-
-  /**
-   * 再生が進んだぶんのデータ放送を流す。**戻っていたらエンジンを作り直す** (開いているかは持ち越し、入口から出直す)。
-   * 先へ飛んだ (シーク・CM 飛ばし) ときは、その間の変化を足す
-   */
-  function feedData(): void {
-    const to = nowMs();
-    // 戻っていた。channel を変えると close→open して listenData が積み直す
-    if (!broadcastData.follow(to)) dataChannel = `${rec.id}:${to}`;
-  }
-
-  let playing = $state(false);
-  let at = $state(0);
-  /** シークバーをつまんで動かしている間の位置 (`SeekBar` の `scrub`)。触っていなければ `null` */
-  let scrub = $state<number | null>(null);
-  let length = $state(0);
-  let muted = $state(false);
-  /**
-   * 選べる音声トラック (主音声・副音声など)。ブラウザが Matroska の音声を `video.audioTracks` に出せれば
-   * それを切り替える (サーバはエンコードし直さない)。出せない端末 (Chrome・Firefox の既定) では `playback` の
-   * 名前で並べ、選んだらその場で流すほうへ移る (`moveForAudio`)。押しても効かない操作を並べないため、
-   * 2 本以上あるときだけ出す
-   */
-  let audios = $state<string[]>([]);
-  let audioIndex = $state(0);
-  /**
-   * 字幕の受け口 (`player/captions.svelte.ts`。ライブと同じ)。出しているか (既定は出す。端末ごとに覚える)・載っている言語・
-   * 出している言語・描く先を持つ
-   */
-  const captions = new CaptionLayer();
-  /**
-   * 受け取った字幕 (全部の言語。`captions.json`)。持っていなければ null。持っているかは取ってみるまで
-   * 分からない (無ければ 404)。持っているときだけボタンを出す (ライブと同じ)
-   */
-  let captionText = $state.raw<CaptionPages | null>(null);
-  /**
-   * 載っている言語。第 1 言語は `pages`、第 2 言語から後ろは `others`。
-   * 名前が分からない第 1 言語 (古いサーバ・端末に保存した古いコピー) は「字幕 1」
-   */
-  function languagesOf(text: CaptionPages): CaptionLanguage[] {
-    return [
-      text.language ?? languageOf(1, ""),
-      ...(text.others ?? []).filter((o) => o.pages.length > 0),
-    ];
-  }
-  /** 言語 `index` の文字の配置。時刻の順 */
-  function cuesOf(text: CaptionPages | null, index: number): Cue[] {
-    if (text === null) return [];
-    if (index === 1) return text.pages;
-    return text.others?.find((o) => o.index === index)?.pages ?? text.pages;
-  }
-  const hasCaptions = $derived(
-    captionText !== null &&
-      (captionText.pages.length > 0 ||
-        (captionText.others ?? []).some((o) => o.pages.length > 0)),
-  );
-  // 文字の配置を描くもの (`overlay` ができたら作る)
-  $effect(() => {
-    if (overlay === null) return;
-    captions.attach(overlay);
-    return () => captions.close();
-  });
-  /** 字幕を重ねる先 */
-  let overlay = $state<HTMLCanvasElement | null>(null);
-  /** 実況の層の置き場。canvas で描くときの映像はこの手前に差し込む (映像 → 実況 → 字幕) */
-  let jikkyoSlot = $state<HTMLElement | null>(null);
 
   /**
    * 実況のコメント (docs/watch.md の「実況のコメント」)。世帯の設定と端末の ⚙ の両方がオンなら、
@@ -1735,8 +175,8 @@
    * 録画の先頭より前は「開始前」、切った CM の中は「CM」で、飛べない
    */
   function placeAir(at: number): number | "before" | "cut" {
-    if (info === null) return "before";
-    return playbackAt((at - data.head) / 1000, ruler(info));
+    if (player.info === null) return "before";
+    return playbackAt((at - data.head) / 1000, ruler(player.info));
   }
 
   /** 観ているものの物差し (`Ruler`)。元の TS なら null */
@@ -1751,130 +191,33 @@
    * 実況のコメントとデータ放送の時計 (`clock`) が使う。**切った CM の区間は飛び越すので、そこに書かれたコメントは流れない**
    */
   function airTime(): number | null {
-    if (info === null) return null;
-    return data.head + toTsTime(mediaTime(), ruler(info)) * 1000;
+    if (player.info === null) return null;
+    return data.head + toTsTime(player.mediaTime(), ruler(player.info)) * 1000;
   }
-  /** 字幕を貼り直す処理を回している映像。二重に回さないための目印 (`follow`) */
-  let following: HTMLVideoElement | null = null;
-  /** 映像だけ遅れたら飛び直す (`unslip.ts`)。段を替えてデコーダが作り直されると、Android の Chrome で映像だけ取り残される */
-  const unslip = unslipper();
-  /** 読めなかったとき。何も出さずに黒いままにしない */
-  let broken = $state(false);
-  /**
-   * 観られなかったわけの詳しいところ (`giveUp`)。何を再生しようとして (コーデック・出し方・codecs)、何で止まったか
-   * (`MediaError` の定数名など)。幕の文言の下に小さく出す。報告の画面写真だけで、どの形式で止まったかを読み分けるため
-   */
-  let brokenWhy = $state("");
-  /** ファイルをそのまま読めなかった (`recover`)。このあとはストリームから選ぶ (`pickStream`) */
-  let fileFailed = false;
-  /**
-   * 読み込み待ちで止まっているか (「読み込み中」を出す)。出すまでの間は幕の側が持つ (`PlayerVeil`。ライブ・追っかけと同じ 1.5 秒)。
-   * コマ落ち程度の詰まりで毎回出すと点滅するだけになる
-   */
-  let buffering = $state(false);
-  /**
-   * 観られないわけ (幕の文言)。無ければ空。
-   * サーバが混んでいて、その場の変換を断られた (同時に変換する本数の上限) ときは、待っても空くとは限らないので、
-   * サーバに変換させずに観られるもの (`lighter`) を勧める。
-   * 互換モードで出せないとき (`canvasProblem`) は、互換モードが `<video>` の止まる端末のためのものなので、ほかのブラウザを勧めない
-   */
-  const problem = $derived(
-    busy
-      ? lighter.length > 0
-        ? "サーバが混んでいます"
-        : "サーバが混んでいます。しばらくしてから開き直してください"
-      : (canvasProblem ??
-          (broken
-            ? "このブラウザでは再生できませんでした。Chrome・Edge か、テレビのアプリ (denpa-tv) で観てください"
-            : "")),
-  );
-  /** 繋ぎが切れて繋ぎ直している最中か (`recover`) */
-  let resuming = $state(false);
-  /**
-   * ファイルを直に再生しているときの繋ぎ直し (`recover`。ライブと同じ `StreamRetry`)。`STREAM_RETRIES` 回で打ち切る。
-   * 録画は読めない形式・壊れたファイルでも同じ所で切れるので、読み直し続けずに観られる先を案内する。
-   * その場で流しているもの (`remux-player.ts`)・canvas に描いているもの (`canvas-player.ts`) は、それぞれが同じ数で繋ぎ直す
-   */
-  const fileRetry = new StreamRetry((next) => {
-    resuming = next === "retrying";
-  });
-  /** 繋ぎ直したあとに戻る位置 (秒)。0 は「戻る先は無い」 */
-  let retryAt = 0;
+
   let chapters = $state<Chapter[]>([]);
+  /** シークバーをつまんで動かしている間の位置 (`SeekBar` の `scrub`)。触っていなければ `null` */
+  let scrub = $state<number | null>(null);
 
   /** 操作バーの出し入れ ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts)) */
   const controls = playerControls();
 
   /**
-   * 配線 (`wiring.svelte.ts`) に渡す包み。canvas のプレイヤー (互換モード・MPEG-2) と `<video>` を、ライブと同じ形にそろえる。
-   * `paused` で `playing` を読むのは、操作バーで止めた・再開したときに小窓とアンビエントモードを合わせ直させるため
-   * (canvas のプレイヤーと `<video>` の `paused` は `$state` ではない)
-   */
-  const target: PlaybackTarget = {
-    // 観られない幕 (`problem`) を出したら、画面を暗くさせない処理を外す (ライブ・追っかけの `error` と同じ)
-    get state() {
-      return problem === "" ? "playing" : "error";
-    },
-    get canvas() {
-      return drawing;
-    },
-    get paused() {
-      void playing;
-      return mediaPaused();
-    },
-    get captions() {
-      return captions.on;
-    },
-    get hasCaptions() {
-      return hasCaptions;
-    },
-    toggle: togglePlay,
-    grab: (size) => canvas?.grab(size) ?? Promise.resolve(null),
-    capture: () => canvas?.pipStream() ?? null,
-    captureFlow: (on) => canvas?.pipFlow(on),
-    set volume(level: number | null) {
-      if (drawing) canvas?.volume(level);
-    },
-    set playback(on: boolean) {
-      if (drawing) canvas?.background(on);
-    },
-  };
-
-  /**
    * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (3 画面で共通。`wiring.svelte.ts`)。
    * 裏から戻ったら止めた所から
    */
-  const { background, ambient, pip, volume } = playerWiring({
-    target,
-    video: () => video,
-    overlay: () => overlay,
-    pause: pauseMedia,
-    resume: playMedia,
+  const wiring = playerWiring({
+    target: player.target,
+    video: () => player.video,
+    overlay: () => player.overlay,
+    pause: player.pause,
+    resume: player.play,
     // WebKit は MSE の `<video>` を通すと無音になる。その場で流しているもの (`remux-player.ts`) は通さない
-    silentTap: () =>
-      typeof navigator !== "undefined" &&
-      tapSilent(navigator.userAgent, picked?.way === "stream"),
+    silentTap: player.silentTap,
     // iPhone・iPad は `<video>` の音量を変えられない。どの経路でもつまみを出さず、放送のままの大きさで鳴らす
     fixed: fixedMediaVolume,
   });
-
-  /**
-   * 早送りの速さ (追っかけと同じ並び。`ts/pacing` の `SPEEDS`)。選んだ値は端末ごとに覚える。
-   * 倍速で観る人はたいてい次も倍速で、手元の端末と居間のテレビで好みが違う
-   */
-  let speed = $state(1);
-
-  /**
-   * **選んだ速さは既定の速さ (`defaultPlaybackRate`) にも入れる。** src を入れ替えると
-   * (端末のコピーへの差し替え・読み直し) ブラウザは速さを既定の速さへ戻す。`loadstart` で
-   * 掛け直していた頃は、src を入れてから `loadstart` が来るまでの間だけ 1 倍に戻っていた。
-   * `<video>` ができた (作り直された) ときも、ここで掛かる
-   */
-  $effect(() => {
-    if (video === null) return;
-    video.defaultPlaybackRate = speed;
-    video.playbackRate = speed;
-  });
+  const { background, ambient, pip, volume } = wiring;
 
   /**
    * CM を自動で飛ばすか (CM はチャプターとして動画に入っている)。端末ごとに覚える。
@@ -1885,20 +228,13 @@
   /** CM を飛ばしたことを短く出す。何も出さずに飛ぶと壊れたように見える */
   let skipped = $state(false);
   let skipNotice: ReturnType<typeof setTimeout> | null = null;
-  /**
-   * 跨いでいる間、最後の本編のコマで覆う面。先読み (`ts/watch.ts` の `cmLead`) だけでは、コンポジタへ渡し済みの
-   * コマが出てしまう。黒で塗らないのは、止まったコマのほうが飛んだように見えるため
-   */
-  let cover = $state<HTMLCanvasElement | null>(null);
-  /** 覆っているか */
+  /** 跨いでいる間、最後の本編のコマで覆っているか (覆う面は核の `cover`) */
   let hopping = $state(false);
   /**
    * 飛んだ先が映るのを待っているか。`hopping` とは別。開いた直後は覆いだけ先に出してチャプターを待つが、
    * まだ飛ぶ判断はしていないので、覆いを理由に `hopCm` を止めてはいけない
    */
   let waiting = false;
-  /** 覆いが黒塗りか (写したコマではないか。`shut`) */
-  let blanked = $state(false);
   /** 飛んだ先 (秒)。ここまで来たら覆いを外す */
   let hopTo = 0;
   /** 飛んだ先に着いたと数えたコマ数。`SETTLED` まで数えてから覆いを外す */
@@ -1909,26 +245,10 @@
    * (実機)。4 コマ (0.13 秒) なら飛んだ間合いに紛れる。`mediaTime` の無いブラウザは `currentTime` で数える
    */
   const SETTLED = 4;
-  /**
-   * 段を替えるためにプレイヤーを作り直している間、最後のコマで覆っているか (`hold`)。CM の跨ぎ (`hopping`) とは別で、
-   * 覆っている間は CM を飛ばない。作り直した直後のプレイヤーは位置 0 などを返すことがあり、そこが CM だと
-   * 観ていない CM を飛んで「CM を飛ばしました」と出ていた
-   */
-  let holding = $state(false);
-  /** 作り直したプレイヤーがこの位置 (秒) のコマを出したら、覆いを外す */
-  let holdAt = 0;
-  let holdGiveUp: ReturnType<typeof setTimeout> | null = null;
-  /** 作り直す間、覆っておく上限 (ms)。変換の立ち上がりを待つので、CM の跨ぎより長い */
-  const HOLD_GIVE_UP = 10_000;
-  /** 作り直したプレイヤーが覆いを外す位置に着いたとみなす幅 (秒)。始まりはキーフレームに寄ることがある */
-  const HOLD_SLACK = 0.5;
   /** 覆いの外し忘れ止め。飛んだ先が来ないまま止まっても、いつかは外す */
   let hopGiveUp: ReturnType<typeof setTimeout> | null = null;
   /** 覆っておく上限 (ms) */
   const HOP_GIVE_UP = 2_000;
-
-  /** 続きから出したか。画面にも言う */
-  let continued = $state(false);
 
   /** 押し間違い防止に 2 回押させる (どの画面とも同じ。`arming.svelte.ts`) */
   const deleting = arming('[data-testid^="watch-delete"]');
@@ -1940,7 +260,6 @@
    * `play()` も全画面も通る。読み込み直したときだけ通らないので、どちらも失敗しても無視する
    */
   onMount(() => {
-    setSpeed(storedSpeed(), false);
     skipCm = skipCmAtStart(rec.cm_note, stored(SKIP_CM_KEY));
     // チャプターが来るまで覆っておく (始まりが CM のことが多い。`settle`)
     if (skipCm) shut();
@@ -1949,53 +268,26 @@
       settle();
     });
     void detail.open(rec.program_id, facts);
-    // 字幕は消していても取ってくる (持っているかどうかで ⚙ の字幕の行と字幕ボタンを出す)。観はじめてから (`askCaptions`)
-    captions.restore();
-    if (video !== null) follow(video);
-    if (!ready) {
-      askCaptions();
-      return;
-    }
-    captionWait = setTimeout(askCaptions, CAPTION_WAIT);
-    // 端末に保存したものはサーバを読まないので、待たずに取る
-    void localLookup.then((copy) => {
-      if (copy !== null) askCaptions();
-    });
-    video?.play().catch(() => undefined);
+    if (!ready) return;
     // 指のときは最初から全画面 (観るために置いてある画面)。画面の幅では決めない (幅で決めると狭いウィンドウの PC まで全画面になる)
     if (window.matchMedia("(pointer: coarse)").matches) fullscreen.enter();
-    const onResize = () => place();
-    window.addEventListener("resize", onResize);
     // 15 秒おきは再生している間だけ。閉じ際はいつも送る
     const stopResuming = keepResuming((leaving) => {
-      if (leaving || playing) remember(leaving);
+      if (leaving || player.playing) remember(leaving);
     });
     return () => {
-      window.removeEventListener("resize", onResize);
-      // 字幕を貼り直す処理を止める。外さないと画面を離れたあとも回り続ける
-      following = null;
       stopResuming();
       deleting.fire();
       if (skipNotice !== null) clearTimeout(skipNotice);
-      if (continuedTimer !== null) clearTimeout(continuedTimer);
       if (hopGiveUp !== null) clearTimeout(hopGiveUp);
-      if (holdGiveUp !== null) clearTimeout(holdGiveUp);
-      dropStep();
-      fileRetry.cancel();
-      if (captionWait !== null) clearTimeout(captionWait);
     };
   });
 
-  // 音声トラックは後から増えることがある (最初のフレームをデコードしたあとで `addtrack` が来るブラウザ)
+  // 全画面の出入り (iPhone で広げたときは `resize` が来ない) で、字幕と覆いを映像に重ね直す
   $effect(() => {
-    const tracks = audioTrackList();
-    if (tracks === null) return;
-    const update = (): void => syncAudio();
-    const kinds = ["addtrack", "removetrack", "change"];
-    for (const kind of kinds) tracks.addEventListener(kind, update);
-    return () => {
-      for (const kind of kinds) tracks.removeEventListener(kind, update);
-    };
+    void fullscreen.active;
+    const frame = requestAnimationFrame(player.place);
+    return () => cancelAnimationFrame(frame);
   });
 
   /**
@@ -2004,12 +296,9 @@
    */
   function remember(leaving = false): void {
     if (!ready) return;
-    if (canvas !== null) {
-      keepResume(rec.id, canvas.currentTime, length, info?.axis, leaving);
-      return;
-    }
-    if (video === null) return;
-    keepResume(rec.id, video.currentTime, video.duration, info?.axis, leaving);
+    const now = player.progress();
+    if (now === null) return;
+    keepResume(rec.id, now.at, now.duration, player.info?.axis, leaving);
   }
 
   /**
@@ -2022,157 +311,20 @@
   }
 
   /**
-   * 観ていたところから出す。尺が分かってから (`loadedmetadata`)、1 回だけ
-   * (もう一度来ると観ている最中に引き戻される)
-   */
-  let resumed = false;
-  function resume(): void {
-    length = video?.duration ?? 0;
-    place();
-    // 接続が切れて読み直したところ。観ていた位置へ戻して続ける (`recover`)
-    if (retryAt > 0 && video !== null) {
-      video.currentTime = retryAt;
-      retryAt = 0;
-      void video.play().catch(() => undefined);
-      return;
-    }
-    // 回線に合わせて段を替えるために作り直した (`moveStep`)。再生していたなら続ける
-    if (keepPlaying && video !== null) {
-      keepPlaying = false;
-      void video.play().catch(() => undefined);
-    }
-    if (resumed || video === null) return;
-    resumed = true;
-    // この場面から観るときも `settle` を通す (通らないと覆いが待つ上限の時間まで残る)
-    const opening = recordingClock.opening(video.duration);
-    if (opening !== null && !opening.continued) video.currentTime = opening.at;
-    else if (opening !== null) {
-      /*
-       * その場で流すときは、remux-player が続きの位置からリクエストし、溜まってから入れる (`remux-player.ts` の `startAt`)。
-       * ここで入れ直すと、まだ先頭 (init segment) しか無いうちに飛ぶことになり、macOS の WebKit は seeking のまま止まる
-       */
-      if (remux === null) video.currentTime = opening.at;
-      showContinued();
-    }
-    settle();
-  }
-
-  /** `video.audioTracks`。実装が揃っておらず TypeScript の DOM 型にも無いので自前で受ける。無ければ `null` */
-  interface AudioTrackLike {
-    label: string;
-    language: string;
-    enabled: boolean;
-  }
-  interface AudioTrackListLike {
-    readonly length: number;
-    [index: number]: AudioTrackLike;
-    addEventListener(type: string, listener: () => void): void;
-    removeEventListener(type: string, listener: () => void): void;
-  }
-  function audioTrackList(): AudioTrackListLike | null {
-    return (
-      (video as unknown as { audioTracks?: AudioTrackListLike } | null)
-        ?.audioTracks ?? null
-    );
-  }
-
-  /** トラックの見出し。コンテナに入っている名前 (主音声/副音声) → 言語 → 連番の順で選ぶ */
-  function audioLabel(name: string, language: string, i: number): string {
-    return name.trim() || language.trim() || `音声 ${i + 1}`;
-  }
-
-  /** `playback` の音声の名前で並べる */
-  function offeredAudios(): string[] {
-    return (info?.audios ?? []).map((audio, i) =>
-      audioLabel(audio.label, "", i),
-    );
-  }
-
-  /** いま観ているものが持っている音声トラックを読み直す (`loadedmetadata` と `addtrack` から) */
-  function syncAudio(): void {
-    // 端末に保存した録画を canvas に描いているなら、そのトラックの名前
-    if (localMkv !== null) {
-      audios = localMkv.audios.map((track, i) =>
-        audioLabel(track.name, track.language, i),
-      );
-      return;
-    }
-    // その場で流しているものは選んだ 1 本だけなので、`audioTracks` には 1 本しか出ない (`remux-player.ts`)
-    if (picked?.way === "stream" || canvas !== null) {
-      audios = offeredAudios();
-      return;
-    }
-    const tracks = audioTrackList();
-    if (tracks === null) {
-      /*
-       * **ブラウザが入れ物の音声を出さない** (Chrome・Firefox の既定)。流すほうへ移れるなら
-       * `playback` の名前で並べ、選んだら移る (`selectAudio`)。移れなければ出さない
-       */
-      audios = audioFallback() === null ? [] : offeredAudios();
-      return;
-    }
-    const list: string[] = [];
-    let enabled = 0;
-    for (let i = 0; i < tracks.length; i++) {
-      const track = tracks[i];
-      if (track === undefined) continue;
-      list.push(audioLabel(track.label, track.language, i));
-      if (track.enabled) enabled = i;
-    }
-    audios = list;
-    audioIndex = enabled;
-  }
-
-  /** 音声を選ぶ。**選んだものだけ有効にする** (ブラウザはそれで切り替える)。その場で流しているならリクエストし直す */
-  function selectAudio(index: number): void {
-    const player = remux ?? canvas;
-    if (player !== null) {
-      player.setAudio(streamAudio(index));
-      audioIndex = index;
-      return;
-    }
-    const tracks = audioTrackList();
-    if (tracks === null) {
-      moveForAudio(index);
-      return;
-    }
-    for (let i = 0; i < tracks.length; i++) {
-      const track = tracks[i];
-      if (track !== undefined) track.enabled = i === index;
-    }
-    audioIndex = index;
-  }
-
-  /** 音声を選ぶために移る先 (`streamForAudio`)。ファイルをそのまま読んでいないなら null */
-  function audioFallback(): Picked | null {
-    if (info === null || picked?.way !== "file") return null;
-    return streamForAudio(info, ability(), picked.codec);
-  }
-
-  /** ファイルのままでは選べない音声を、その場で流すほうへ移って選ぶ。いまの音声を選んだだけなら何もしない */
-  function moveForAudio(index: number): void {
-    if (index === audioIndex) return;
-    const fresh = audioFallback();
-    if (fresh === null) return;
-    audioIndex = index;
-    replay(fresh);
-  }
-
-  /**
    * チャプターの位置 (`api/recordings/<id>/chapters`)。CM もチャプターなので、そのまま CM 飛ばしになる。
    * 無い録画もあり、取れなければ送りのボタンを出さないだけ
    */
   async function loadChapters(): Promise<void> {
     try {
       // 端末に保存したものがあればそちら (オフラインでも CM 飛ばしが効く)。探し終えるのを待ってから
-      const copy = await localLookup;
+      const copy = await player.localLookup;
       const held = copy?.chapters as { chapters?: typeof chapters } | undefined;
       if (held?.chapters !== undefined) {
         chapters = held.chapters;
         return;
       }
       // 前に読んだものを持っていても、変わっていないか確かめさせる (CM 検出のやり直しは同じファイルを書き直す)
-      const res = await fetch(recordingFeed.chaptersUrl, {
+      const res = await fetch(player.feed.chaptersUrl, {
         cache: "no-cache",
       });
       if (!res.ok) return;
@@ -2193,130 +345,33 @@
     },
   });
 
-  /**
-   * 配信が切れたら (サーバの入れ替えなど) 同じ所から読み直し、切れた瞬間の位置へ戻す。
-   * 繋ぎ直すのは接続が切れたときだけ。読めない形式・壊れたファイルは何度やっても同じなので `broken`。
-   *
-   * **ファイルをそのまま読めなかったら、1 度だけほかの出し方に移る** (`fallBackFromFile`)。`canPlayType` が読めると
-   * 答えても、`<video>` が入れ物を読めないことがある (iPhone の Safari は Matroska を WebM としてしか読まない)
-   */
-  function recover(): void {
-    if (video === null) return;
-    // 映像は出せていない。字幕のボタンは出せるように取る
-    askCaptions();
-    const code = video.error?.code ?? 0;
-    // その場で流しているなら、開いた直後か飛んだ・切り替えたあとかと、何秒の位置かを添える
-    const why = failedWith(
-      [failureText(video.error), remux?.origin() ?? ""]
-        .filter((part) => part !== "")
-        .join("。"),
-    );
-    if (
-      remux === null &&
-      picked?.way === "file" &&
-      code !== MediaError.MEDIA_ERR_NETWORK &&
-      !fileFailed
-    ) {
-      fileFailed = true;
-      resuming = false;
-      fallBackFromFile(why);
-      return;
-    }
-    // その場で流しているときの切れ目は `remux-player.ts` が繋ぎ直す。ここに来るのは読めない中身
-    if (
-      remux !== null ||
-      code !== MediaError.MEDIA_ERR_NETWORK ||
-      fileRetry.spent
-    ) {
-      giveUp(why);
-      resuming = false;
-      return;
-    }
-    retryAt = video.currentTime;
-    fileRetry.cancel();
-    fileRetry.schedule(() => {
-      // 同じ src を読み直す。位置を戻すのは尺が分かってから (`resume`)
-      video?.load();
-    });
-  }
-
-  /**
-   * **ファイルをそのまま読めなかった。** サーバに繋がっていれば、MSE が受け取れるストリーム (詰め替えを先に) か元の TS へ移る
-   * (`pickStream`)。繋がっていない (オフライン) か移る先が無く、端末に保存したものを読んでいたなら、その Matroska を canvas に
-   * 描く (互換モードと同じ。`mkv-source.ts`)。どれも無理なら観られないと出す
-   */
-  function fallBackFromFile(why: string): void {
-    console.warn(`[watch] ファイルのままでは再生できませんでした: ${why}`);
-    const position = video?.currentTime ?? 0;
-    const fresh =
-      info === null ? null : pickStream(info, ability(), data.indoor);
-    if (fresh !== null) {
-      note(
-        `ファイルのままでは再生できないため、${codecLabel(fresh.codec)} に切り替えました`,
-      );
-      stopVideo();
-      replay(fresh, position);
-      return;
-    }
-    if (localSrc !== null) {
-      void drawLocal(why, position);
-      return;
-    }
-    giveUp(`${why}。${nothingToPlay()}`);
-  }
-
-  /** `<video>` を止めて空にする (src を外しただけでは読み込んだぶんを鳴らし続ける) */
-  function stopVideo(): void {
-    if (video === null) return;
-    video.pause();
-    video.removeAttribute("src");
-    video.load();
-  }
-
-  /** 端末に保存した Matroska を canvas に描く (`<video>` が読めなかったとき。`fallBackFromFile`)。描けなければ観られないと出す */
-  async function drawLocal(why: string, position: number): Promise<void> {
-    const blob = localCopy?.video;
-    if (blob === undefined) {
-      giveUp(why);
-      return;
-    }
-    const [support, source] = await Promise.all([
-      canvasSupport(),
-      openMkv(blob).catch(() => null),
-    ]);
-    const can: CanvasAbility = { ...support, mpeg2: false };
-    if (source?.codec == null || !can[source.codec]) {
-      giveUp(
-        source?.codec == null
-          ? `${why}。保存したファイルを読めませんでした`
-          : `${why}。${codecLabel(source.codec)} を canvas に描けません`,
-      );
-      return;
-    }
-    stopVideo();
-    if (localSrc !== null) URL.revokeObjectURL(localSrc);
-    localSrc = null;
-    // `<video>` には渡さない (`src` を外す)。canvas のプレイヤーは `canvasCodec` が決まったら作る
-    picked = null;
-    localMkv = source;
-    if (position > 0) recordingClock.switchAt = position;
-    canvasCodec = source.codec;
-  }
-
-  /** 早送りの速さを変える。音は残す (ブラウザは倍速でも音程を保つ)。canvas に描いているときは等速だけ */
-  function setSpeed(value: number, remember = true): void {
-    if (drawing) return;
-    speed = value;
-    if (remember) remind(SPEED_KEY, String(value));
-    controls.stir();
-  }
-
   /** CM 飛ばしのオン/オフ。いま CM の中にいればその場で飛ぶ (「CM が始まったから押した」がいちばん多い) */
   function toggleSkipCm(): void {
     skipCm = !skipCm;
     remind(SKIP_CM_KEY, skipCm ? "1" : "0");
     if (skipCm) hopCm();
     controls.stir();
+  }
+
+  /**
+   * 飛んだ先が映ったかを数える (`RecordingHooks.arrive`)。`<video>` は映したコマごとに、飛んでいる最中か飛んだ先より手前なら数え直す。
+   * canvas は刻みごとに、流れていて飛んだ先に来ていれば数える
+   */
+  function arrive(at: number, ready: boolean, canvas: boolean): void {
+    if (!waiting) return;
+    if (canvas) {
+      if (ready && at >= hopTo && ++settled >= SETTLED) open();
+      return;
+    }
+    if (!ready || at < hopTo) settled = 0;
+    else if (++settled >= SETTLED) open();
+  }
+
+  /** コマを映した・刻んだ (`RecordingHooks.frame`)。canvas には CM の先頭を渡し、呼んだ間隔を測って、CM の中なら飛ぶ */
+  function frame(shown: number | undefined, flowing: boolean | null): void {
+    guardCm();
+    if (flowing !== null) markCall(flowing);
+    hopCm(shown);
   }
 
   /**
@@ -2337,10 +392,10 @@
    * 飛ばさないとき (オフ・つまんでいる最中・作り直している最中) は外す
    */
   function guardCm(): void {
-    if (canvas === null) return;
-    canvas.stopAt(
-      skipCm && scrub === null && !holding
-        ? nextCmStart(chapters, canvas.currentTime)
+    if (!player.hasCanvas()) return;
+    player.stopAt(
+      skipCm && scrub === null && !player.holding
+        ? nextCmStart(chapters, player.mediaTime())
         : null,
     );
   }
@@ -2352,10 +407,10 @@
    */
   function hopCm(shown?: number): void {
     // 飛んだ先を待っている最中と、シークバーをつまんでいる最中 (離したら着いた先で決める) は飛ばない
-    if (waiting || !skipCm || (video === null && canvas === null)) return;
+    if (waiting || !skipCm || !player.hasMedia()) return;
     // 段を替えるために作り直している最中も飛ばない。位置はまだ観ていた所に戻っていない (`hold`)
-    if (scrub !== null || holding) return;
-    const now = mediaTime();
+    if (scrub !== null || player.holding) return;
+    const now = player.mediaTime();
     // 飛んだ直後のコマは飛ぶ前の時刻を持っていることがある (`unslip`)。離れていれば使わない
     const here =
       shown !== undefined && Math.abs(shown - now) < 1
@@ -2363,7 +418,7 @@
         : now;
     // canvas は早送りしない (`setSpeed`)
     const lead = cmLead(
-      canvas === null ? speed : 1,
+      player.hasCanvas() ? 1 : player.speed,
       callGaps.worst(performance.now()),
     );
     const to = skipTarget(chapters, here, lead);
@@ -2372,13 +427,13 @@
      * canvas は覆わない。プレイヤーは CM の先頭から先を描かず (`guardCm`)、飛んだあとも飛び先より前のフレームを捨て、
      * 描けるまで本編の最後のコマを出したままにする (`raw/worker.ts` の `floor`)。字幕だけ消す
      */
-    if (canvas === null) shut(here);
-    else clearCaptions();
+    if (!player.hasCanvas()) shut(here);
+    else player.clearCaptions();
     hopTo = to;
     waiting = true;
-    seekMedia(to);
+    player.seekMedia(to);
     // 続きから始めたばかりなら、そちらだけ言う (CM を跨いだのは中の都合)
-    if (continued) return;
+    if (player.continued) return;
     skipped = true;
     if (skipNotice !== null) clearTimeout(skipNotice);
     skipNotice = setTimeout(() => (skipped = false), 2500);
@@ -2390,6 +445,8 @@
    * CM の字幕も一緒に消す。`at` は映っているコマの位置 (`hopCm`。省けば `currentTime`)
    */
   function shut(at?: number): void {
+    const video = player.video;
+    const cover = player.cover;
     const here =
       video === null ? null : chapterAt(chapters, at ?? video.currentTime);
     const source =
@@ -2414,55 +471,12 @@
         ctx.fillRect(0, 0, cover.width, cover.height);
       }
     }
-    blanked = source === null;
+    player.blanked = source === null;
     hopping = true;
-    clearCaptions();
-    place();
+    player.clearCaptions();
+    player.place();
     if (hopGiveUp !== null) clearTimeout(hopGiveUp);
     hopGiveUp = setTimeout(open, HOP_GIVE_UP);
-  }
-
-  /**
-   * **作り直す前に、いま映っているコマで覆う** (段を替えるときの作り直し。`swap`・`compatStep`)。作り直したプレイヤーが
-   * 元の位置のコマを出すまで覆い (`release`)、その間は CM を飛ばない。canvas のコマは `frame` で受け取る (`grab`)。
-   * 写せないときは覆わない (これまでどおり)
-   */
-  function hold(frame: ImageBitmap | null = null): void {
-    const source =
-      frame ??
-      (!drawing && video !== null && video.videoWidth > 0 ? video : null);
-    const ctx = cover?.getContext("2d") ?? null;
-    if (source === null || cover === null || ctx === null) return;
-    const width = frame?.width ?? video?.videoWidth ?? 16;
-    const height = frame?.height ?? video?.videoHeight ?? 9;
-    cover.width = width;
-    cover.height = height;
-    try {
-      ctx.drawImage(source, 0, 0, width, height);
-    } catch {
-      return;
-    }
-    blanked = false;
-    holding = true;
-    holdAt = mediaTime();
-    clearCaptions();
-    place();
-    if (holdGiveUp !== null) clearTimeout(holdGiveUp);
-    holdGiveUp = setTimeout(unhold, HOLD_GIVE_UP);
-  }
-
-  /** 作り直したプレイヤーが `at` 秒のコマを出した。元の位置に着いていれば覆いを外す */
-  function release(at: number): void {
-    if (holding && at >= holdAt - HOLD_SLACK) unhold();
-  }
-
-  /** 作り直す間の覆いを外す */
-  function unhold(): void {
-    holding = false;
-    if (holdGiveUp !== null) {
-      clearTimeout(holdGiveUp);
-      holdGiveUp = null;
-    }
   }
 
   /** 覆いを外す。飛んだ先が映ったとき (`follow`) と、待つ上限の時間を過ぎたとき */
@@ -2483,260 +497,17 @@
    */
   let chaptersReady = false;
   function settle(): void {
-    if (!chaptersReady || !resumed) return;
+    if (!chaptersReady || !player.resumed) return;
     hopCm();
     // 飛ばなかった (CM ではなかった・切ってある)。覆いは要らない
     if (!waiting) open();
   }
 
-  function togglePlay(): void {
-    if (mediaPaused()) playMedia();
-    else pauseMedia();
-  }
-
-  function toggleCaptions(): void {
-    setCaptions(!captions.on);
-    controls.stir();
-  }
-
-  /** 字幕を出す・消す。端末ごとに覚える (`caption-pref.ts`) */
-  function setCaptions(on: boolean): void {
-    captions.setOn(on);
-    if (on) {
-      if (captionsFailed) {
-        captionsFailed = false;
-        captionsAsked = false;
-      }
-      askCaptions();
-      paint();
-    } else {
-      clearCaptions();
-    }
-  }
-
-  /** 字幕の言語を選ぶ。言語の名前 (ISO 639) で端末に覚える (`caption-pref.ts`) */
-  function setCaptionLanguage(index: number): void {
-    captions.remember(index);
-    captions.language = index;
-    captions.load(cuesOf(captionText, index));
-    clearCaptions();
-    paint();
-  }
-
-  /** 字幕を取得したか。取得は 1 回だけ */
-  let captionsAsked = false;
-  /** 取得しようとして繋がらなかったか。字幕を入れ直したときだけ取り直す */
-  let captionsFailed = false;
-  /** 映像が出ないまま待つ上限の時計 (`CAPTION_WAIT`) */
-  let captionWait: ReturnType<typeof setTimeout> | null = null;
-  /** 映像が出るのを待つ上限 (ms)。自動再生を断られて止まっている・読めない、でも字幕のボタンは出したい */
-  const CAPTION_WAIT = 3_000;
-
-  /**
-   * **字幕は映像が出てから取る** (最初のコマ・読めなかった・互換モードで流れ出した・待つ上限の時間を過ぎた、の早いほう)。
-   * サーバは字幕を抜くのに動画を丸ごと読む (`captions.json`。初回は 1 時間の録画で 1 秒ほど)。
-   * 開いた時点で取っていた頃は、観はじめの読み込み (続きの位置・CM の先へ飛んだ先) とディスクを
-   * 取り合い、最初のコマが字幕の応答を待つように遅れていた (実機で canplay から 0.8 秒)
-   */
-  function askCaptions(): void {
-    if (captionWait !== null) {
-      clearTimeout(captionWait);
-      captionWait = null;
-    }
-    if (captionsAsked) return;
-    captionsAsked = true;
-    void loadCaptions();
-  }
-
-  /**
-   * 字幕を取ってくる (`askCaptions` から 1 回)。端末に保存したものがあればそちら。字幕を持たない番組は 404 (ボタンを出さないだけ)
-   */
-  async function loadCaptions(): Promise<void> {
-    if (captionText !== null) return;
-    try {
-      const copy = await localLookup;
-      const text =
-        copy !== null
-          ? (copy.captionText as CaptionPages | undefined)
-          : await fetch(recordingFeed.captionsUrl).then((res) =>
-              res.ok ? (res.json() as Promise<CaptionPages>) : undefined,
-            );
-      if (text?.v === CAPTION_TEXT_VERSION) {
-        captionText = text;
-        // 覚えている言語が載っていればそれ、無ければ第 1 言語
-        captions.languages = languagesOf(text);
-        captions.language = captions.preferred(captions.languages);
-        captions.load(cuesOf(text, captions.language));
-        paint();
-      }
-    } catch (error) {
-      // 出せないだけ。観るのに支障は無い
-      console.warn("[captions] 取得できませんでした", error);
-      // 繋がらなかった。字幕を入れ直したときに取り直す (`setCaptions`。コマごとには取り直さない)
-      captionsFailed = true;
-    }
-  }
-
-  /** 詰まった。「読み込み中」は幕が少し待ってから出す (`PlayerVeil`) */
-  function stall(): void {
-    // CM を跨いでいる間は覆いがある。そちらに任せる
-    if (hopping || buffering) return;
-    buffering = true;
-  }
-
-  /** 動き出した。「読み込み中」を引っ込める */
-  function flowing(): void {
-    buffering = false;
-  }
-
-  function clearCaptions(): void {
-    captions.hide();
-  }
-
-  /**
-   * 字幕の貼り直しと CM の跨ぎを、映した 1 枚ごとに追わせる ([frames.ts](../../../lib/components/player/frames.ts)。
-   * ライブと同じ作り)。`timeupdate` (250ms ごと) 任せだった頃は字幕が遅れ、CM も数コマ見えていた
-   */
-  function follow(target: HTMLVideoElement): void {
-    if (following === target) return;
-    following = target;
-    eachFrame(target, (meta) => {
-      // 別の映像に移った (画面を閉じた) ら、こちらは閉じる
-      if (following !== target) return false;
-      /*
-       * 映したコマの時刻 (`mediaTime`) で外す。`currentTime` は代入した時点で飛んだ先を返すのに、
-       * 画面にはまだ手前のコマが出ていて、CM の最後の 1 コマが見えていた
-       */
-      if (waiting) {
-        const there =
-          !target.seeking && (meta?.mediaTime ?? target.currentTime) >= hopTo;
-        if (!there) settled = 0;
-        else if (++settled >= SETTLED) open();
-      }
-      // 作り直したプレイヤーが元の位置のコマを出した
-      if (
-        holding &&
-        !target.seeking &&
-        target.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-      )
-        release(meta?.mediaTime ?? target.currentTime);
-      // 映像だけ遅れていたら飛び直す。CM の先へ飛んでいる最中と、canvas に描いている間 (`<video>` は空) は見ない
-      if (meta !== undefined && !waiting && !hopping && !drawing)
-        unslip.check(target, meta.mediaTime);
-      // 最初のコマが出た (開いた直後に CM の先へ飛ぶなら、飛んだ先が出てから)
-      if (!hopping && target.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA)
-        askCaptions();
-      paint();
-      markCall(!target.paused && !target.seeking);
-      hopCm(meta?.mediaTime);
-      return true;
-    });
-  }
-
-  /** 字幕と CM の覆いを映像が出ているところにぴったり重ねる (`fitRect`) */
-  function place(): void {
-    if (video === null) return;
-    // canvas に描いているときは `<video>` は空なので、放送の 16:9 とみなす
-    // 作り直している最中は `<video>` の大きさが 0 に戻る。覆いに写したコマの大きさで合わせる
-    const [width, height] = drawing
-      ? [16, 9]
-      : holding && cover !== null && video.videoWidth === 0
-        ? [cover.width, cover.height]
-        : [video.videoWidth, video.videoHeight];
-    const rect = fitRect(video.clientWidth, video.clientHeight, width, height);
-    // 画面の画素の境目に揃える (端数だと字の縁が滲む)。端は外へ丸め、覆いが映像の縁を残さず覆うように
-    const dpr = window.devicePixelRatio || 1;
-    const left = Math.floor((video.offsetLeft + rect.left) * dpr) / dpr;
-    const top = Math.floor((video.offsetTop + rect.top) * dpr) / dpr;
-    const right =
-      Math.ceil((video.offsetLeft + rect.left + rect.width) * dpr) / dpr;
-    const bottom =
-      Math.ceil((video.offsetTop + rect.top + rect.height) * dpr) / dpr;
-    for (const layer of [overlay, cover]) {
-      if (layer === null) continue;
-      layer.style.left = `${left}px`;
-      layer.style.top = `${top}px`;
-      layer.style.width = `${right - left}px`;
-      layer.style.height = `${bottom - top}px`;
-    }
-    // 黒塗りの覆いは枠ごと覆う (開いた直後はまだ映像の大きさが分からず、`fitRect` が当てにならない)
-    if (blanked && cover !== null) {
-      cover.style.left = "0";
-      cover.style.top = "0";
-      cover.style.width = "100%";
-      cover.style.height = "100%";
-    }
-  }
-
-  /*
-   * 全画面の出入り (iPhone で広げたときは `resize` が来ない) と、映像の箱の伸び縮み
-   * (二段組の切り替わり・データ放送の小窓) で測り直す
-   */
-  $effect(() => {
-    void fullscreen.active;
-    const frame = requestAnimationFrame(place);
-    return () => cancelAnimationFrame(frame);
-  });
-  $effect(() => {
-    const target = video;
-    if (target === null) return;
-    const watcher = new ResizeObserver(() => place());
-    watcher.observe(target);
-    return () => watcher.disconnect();
-  });
-
-  /**
-   * いまの位置に合う 1 枚を重ねる (描き方はライブと同じ `caption-draw.ts`)。変わったときだけ描く。
-   * 覆いの下では描かない (CM の字幕を仕込むことになる)
-   */
-  function paint(): void {
-    if (hopping || !captions.on || overlay === null) return;
-    if (captions.paint(mediaTime())) place();
-  }
-
-  /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
-  function seekBy(by: number): void {
-    if (video === null && canvas === null) return;
-    seekMedia(
-      Math.min(Math.max(mediaTime() + by, 0), length || video?.duration || 0),
-    );
-    controls.stir();
-  }
-
-  function seekTo(seconds: number | null): void {
-    if ((video === null && canvas === null) || seconds === null) return;
-    seekMedia(seconds);
-    controls.stir();
-  }
-
-  /**
-   * シークバーをつまんで動かしている間の下見 (`SeekBar` の `preview`)。`<video>` だけ。
-   * 粗くてよいので、持っていれば `fastSeek` (近くのキーフレーム) を使う。飛び終わり (`seeked`) で
-   * Promise を終え、シークバーはそれから次をリクエストする。離したときは `seekTo` でちゃんと飛ぶ。
-   * **canvas のプレイヤーには渡さない**。飛ぶたびに持っているものを捨てて取り直すので、離したときだけにする
-   */
-  function previewSeek(to: number): Promise<void> {
-    const target = video;
-    if (target === null || canvas !== null) return Promise.resolve();
-    return new Promise((arrived) => {
-      const done = () => {
-        clearTimeout(timer);
-        target.removeEventListener("seeked", done);
-        arrived();
-      };
-      // 着かないまま (読めない・遅い) でも次へ進めるように
-      const timer = setTimeout(done, 1000);
-      target.addEventListener("seeked", done);
-      if (typeof target.fastSeek === "function") target.fastSeek(to);
-      else target.currentTime = to;
-    });
-  }
-
   /** 映像を押されたときの読み方は追っかけと同じ (`stage-tap.ts`) */
   const press = stageTap({
-    toggle: togglePlay,
+    toggle: player.togglePlay,
     controls: () => controls.toggle(),
-    seekBy,
+    seekBy: player.seekBy,
   });
 
   /**
@@ -2745,24 +516,24 @@
    * データ放送を出している間の空白・十字キーはあちらのリモコン (`dataRemoteKey`。ライブと同じ)
    */
   const playerKey = playerKeys({
-    togglePlay,
-    seekBy,
-    toggleCaptions,
+    togglePlay: player.togglePlay,
+    seekBy: player.seekBy,
+    toggleCaptions: player.toggleCaptions,
     snapshot,
     toggleFull: fullscreen.toggle,
-    stepSpeed: (by) => setSpeed(stepSpeed(speed, by)),
-    toggleMute,
+    stepSpeed: (by) => player.setSpeed(stepSpeed(player.speed, by)),
+    toggleMute: player.toggleMute,
     stepVolume: volume.step,
     toggleDataAuto: () => {
       if (data.hasData) toggleReceiveData();
     },
   });
   function keys(event: KeyboardEvent): void {
-    if (broadcastData.show && dataRemoteKey(event)) return;
+    if (player.showData && dataRemoteKey(event)) return;
     playerKey(event);
   }
 
-  const current = $derived(chapterAt(chapters, at));
+  const current = $derived(chapterAt(chapters, player.at));
   /** CM の入っている録画でだけ、飛ばすボタンを出す (押しても何も起きない操作を並べない) */
   const hasCm = $derived(chapters.some((chapter) => isCm(chapter.title)));
   /** シークバーで琥珀に塗る CM の区間と、それ以外の切れ目 */
@@ -2771,7 +542,10 @@
 
   /** あと何分で終わるか。倍速のぶんは割る (2 倍で「残り 30 分」と出ても掛かるのは 15 分) */
   const remaining = $derived(
-    Math.max(0, (length - at) / (drawing ? 1 : speed || 1)),
+    Math.max(
+      0,
+      (player.length - player.at) / (player.drawing ? 1 : player.speed || 1),
+    ),
   );
 
   /** 右に出す中身。録画の行が持っているぶん (追っかけと同じ)。番組表から引けたら `detail` が差し替える */
@@ -2807,16 +581,17 @@
    * canvas に描いているときはプレイヤーから 1 枚もらう (`<video>` は空)
    */
   function snapshot(): void {
+    const captions = player.captions;
     const drawn = captions.on && captions.shown !== null;
     void shooter.take(
-      () => (canvas !== null ? grabbedFrame(canvas.grab()) : videoFrame(video)),
-      drawn ? overlay : null,
+      player.frame,
+      drawn ? player.overlay : null,
       rec.name,
       () => ({
         place: "watch",
         recording: rec.id,
-        at: mediaTime(),
-        source: info?.axis,
+        at: player.mediaTime(),
+        source: player.info?.axis,
       }),
       drawn ? captionWords(captions.shown) : "",
     );
@@ -2853,7 +628,7 @@
           押すのは映像そのもので、ボタンはその上に重ねる (`--dp-z-stage-controls`)
         -->
         <div
-          bind:this={mediaBox}
+          bind:this={player.mediaBox}
           style="position:absolute; inset:0; width:100%; height:100%;"
         >
           <!--
@@ -2861,102 +636,46 @@
             イベントは映している側のものだけ受ける (空にした側の位置 0 で CM を飛んだりしない)
           -->
           {#each [0, 1] as slot (slot)}
+            {@const shown = slot === player.front}
             <!-- svelte-ignore a11y_media_has_caption -->
             <video
-              bind:this={videos[slot]}
-              src={slot === front ? src : spareSrc}
+              bind:this={player.videos[slot]}
+              src={shown ? player.src : player.spareSrc}
               style="position:absolute; inset:0; width:100%; height:100%; background:var(--dp-video);"
-              style:opacity={slot === front ? null : "0"}
-              style:pointer-events={slot === front ? null : "none"}
+              style:opacity={shown ? null : "0"}
+              style:pointer-events={shown ? null : "none"}
               playsinline
-              aria-hidden={slot === front ? undefined : "true"}
-              data-spare={slot === front ? undefined : ""}
+              aria-hidden={shown ? undefined : "true"}
+              data-spare={shown ? undefined : ""}
               onclick={(event) => {
-                if (event.currentTarget === video) press(event);
+                if (event.currentTarget === player.video) press(event);
               }}
-              onplay={(event) => {
-                if (event.currentTarget !== video) return;
-                playing = true;
-                follow(event.currentTarget);
-                // 出たので、繋ぎ直しは済み。次に切れたらまた 1 秒から待つ
-                fileRetry.flowing();
-                resuming = false;
-                controls.stir();
-              }}
-              onpause={(event) => {
-                if (event.currentTarget !== video) return;
-                playing = false;
-                // 止めたのは詰まりではない。「読み込み中」は引っ込める
-                flowing();
-              }}
-              onended={(event) => {
-                if (event.currentTarget === video) finished();
-              }}
-              onwaiting={(event) => {
-                if (event.currentTarget === video) stall();
-              }}
-              onstalled={(event) => {
-                if (event.currentTarget === video) stall();
-              }}
-              onseeking={(event) => {
-                if (event.currentTarget !== video) return;
-                stall();
-                // シーク・CM スキップのあとは測り直す。段は持ち越す
-                adapt.reset();
-                // 飛んだ先はまだ読んでいない
-                suspendAt = Number.NEGATIVE_INFINITY;
-                // 飛んだ直後の 1 コマは飛ぶ前の時刻を持っていることがあるので、映像の遅れに数えない (`unslipper`)
-                unslip.seeked();
-              }}
-              onplaying={(event) => {
-                if (event.currentTarget === video) flowing();
-              }}
-              oncanplay={(event) => {
-                if (event.currentTarget === video) flowing();
-              }}
-              ontimeupdate={(event) => {
-                if (event.currentTarget !== video) return;
-                // 作り直している最中の位置 (0 に戻る) は時計に出さない (`hold`)
-                if (!holding) at = event.currentTarget.currentTime;
-                hopCm();
-                paint();
-                feedData();
-              }}
-              onseeked={(event) => {
-                if (event.currentTarget !== video) return;
-                feedData();
-                // 飛んだ先に着いてからも 3 秒は数えない。飛んだ先を出すまでのデコードが長い (AV1) と、着いた直後にまだ詰まる
-                adapt.reset();
-              }}
-              onsuspend={(event) => {
-                if (event.currentTarget === video) suspendAt = Date.now();
-              }}
-              onloadedmetadata={(event) => {
-                if (event.currentTarget !== video) return;
-                resume();
-                syncAudio();
-              }}
-              onvolumechange={(event) => {
-                if (event.currentTarget === video)
-                  muted = event.currentTarget.muted;
-              }}
-              onerror={(event) => {
-                if (event.currentTarget === video) recover();
-              }}
-              data-testid={slot === front ? "watch-video" : "watch-video-spare"}
+              onplay={player.events.play}
+              onpause={player.events.pause}
+              onended={player.events.ended}
+              onwaiting={player.events.waiting}
+              onstalled={player.events.waiting}
+              onseeking={player.events.seeking}
+              onplaying={player.events.flowing}
+              oncanplay={player.events.flowing}
+              ontimeupdate={player.events.timeupdate}
+              onseeked={player.events.seeked}
+              onsuspend={player.events.suspend}
+              onloadedmetadata={player.events.loadedmetadata}
+              onvolumechange={player.events.volumechange}
+              onerror={player.events.error}
+              data-testid={shown ? "watch-video" : "watch-video-spare"}
             >
             </video>
           {/each}
-          <div bind:this={jikkyoSlot} style="display:contents">
+          <div bind:this={player.jikkyoSlot} style="display:contents">
             {#if data.jikkyoAllowed}
               <JikkyoLayer
                 feed={jikkyo}
                 air={airTime}
-                show={jikkyoActive &&
-                  data.jikkyo !== null &&
-                  !broadcastData.show}
-                paused={!playing}
-                rate={drawing ? 1 : speed}
+                show={jikkyoActive && data.jikkyo !== null && !player.showData}
+                paused={!player.playing}
+                rate={player.drawing ? 1 : player.speed}
                 ahead
               />
             {/if}
@@ -2967,10 +686,10 @@
             位置と大きさは `place` が書く。段は実況のコメント (`--dp-z-stage-comments`) より上、操作バーのボタン (`--dp-z-stage-controls`) より下
           -->
           <canvas
-            bind:this={overlay}
+            bind:this={player.overlay}
             style="position:absolute; z-index:var(--dp-z-stage-captions); pointer-events:none;"
             data-testid="watch-captions-canvas"
-            data-on={captions.on && hasCaptions}
+            data-on={player.captions.on && player.hasCaptions}
             aria-hidden="true"
           ></canvas>
           <!--
@@ -2978,12 +697,12 @@
             style に式を書くと `hopping` が変わるたびに書き直され、`place` が書いた位置と大きさが消える
           -->
           <canvas
-            bind:this={cover}
+            bind:this={player.cover}
             style="position:absolute; z-index:var(--dp-z-stage-captions); pointer-events:none;"
-            hidden={!hopping && !holding}
+            hidden={!hopping && !player.holding}
             aria-hidden="true"
             data-testid="watch-cover"
-            data-blank={blanked}
+            data-blank={player.blanked}
           ></canvas>
         </div>
         <!--
@@ -2991,11 +710,11 @@
           (`feedData`/`listenData`)。双方向は使わない (録画した時点の送り先は、もう使えない)
         -->
         <DataBroadcast
-          on={broadcastData.show}
-          receive={receiving}
-          channel={dataChannel}
-          media={mediaBox}
-          listen={listenData}
+          on={player.showData}
+          receive={player.receiving}
+          channel={player.dataChannel}
+          media={player.mediaBox}
+          listen={player.listenData}
           bind:press={dataPress}
           bind:pressD={dataButton}
           bind:note={dataNote}
@@ -3016,7 +735,7 @@
                 return w === null ? 0 : jikkyo.force(w);
               }
             : null}
-          hidden={broadcastData.show}
+          hidden={player.showData}
           testid="watch-new-year"
         />
 
@@ -3025,14 +744,14 @@
           観られないときは映像を暗く覆い、詰まりと繋ぎ直しの最中は映っている映像を覆わずに回るものだけを出す。
           何も出さずに止まっていると壊れたように見え、待てばいいのかが決められない (サーバの入れ替えでは数十秒繋がらない)
         -->
-        {#if problem !== "" || buffering || resuming}
+        {#if player.problem !== "" || player.buffering || player.resuming}
           <PlayerVeil
-            holding={problem === ""}
+            holding={player.problem === ""}
             busy
-            {resuming}
-            error={problem}
-            detail={broken && !busy && canvasProblem === null ? brokenWhy : ""}
-            actions={lighter.length > 0 ? lighterChoices : undefined}
+            resuming={player.resuming}
+            error={player.problem}
+            detail={player.problemDetail}
+            actions={player.lighter.length > 0 ? lighterChoices : undefined}
             testid="watch-status"
           />
         {/if}
@@ -3104,18 +823,18 @@
             色だけに頼らず、読み上げでは位置にいまのチャプターの名前を添える
           -->
           <SeekBar
-            value={at}
-            max={length || 0}
+            value={player.at}
+            max={player.length || 0}
             step={0.1}
-            onseek={seekTo}
-            preview={drawing ? undefined : previewSeek}
+            onseek={player.seekTo}
+            preview={player.drawing ? undefined : player.previewSeek}
             bind:scrub
             cm={cmOnBar}
             marks={marksOnBar}
             valuetext={current === null
               ? undefined
-              : `${clock(at)}、${current.title}`}
-            paused={!playing}
+              : `${clock(player.at)}、${current.title}`}
+            paused={!player.playing}
             testid="watch-seek"
           />
 
@@ -3125,28 +844,28 @@
               (`ts/watch.ts` の `tap`) でできる
             -->
             <ControlButton
-              icon={playing ? PAUSE : PLAY}
-              label={playing ? "一時停止" : "再生"}
+              icon={player.playing ? PAUSE : PLAY}
+              label={player.playing ? "一時停止" : "再生"}
               testid="watch-play"
-              onclick={togglePlay}
+              onclick={player.togglePlay}
             />
             <!-- 畳むときは音と速さを ⚙ の先頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
               <SoundButton
-                silenced={muted}
+                silenced={player.muted}
                 testid="watch-sound"
-                onclick={toggleMute}
+                onclick={player.toggleMute}
                 {volume}
               />
 
               <!-- 字幕を持っている録画でだけ出す。押しても何も起きない操作を並べない (`/live` と同じ) -->
-              {#if hasCaptions}
+              {#if player.hasCaptions}
                 <ControlButton
                   icon={CAPTION}
-                  label={captions.on ? "字幕を消す" : "字幕を出す"}
-                  on={captions.on}
+                  label={player.captions.on ? "字幕を消す" : "字幕を出す"}
+                  on={player.captions.on}
                   testid="watch-captions"
-                  onclick={toggleCaptions}
+                  onclick={player.toggleCaptions}
                 />
               {/if}
             </Extras>
@@ -3159,13 +878,15 @@
               <ControlButton
                 icon={PREV}
                 label="前のチャプター"
-                onclick={() => seekTo(prevChapterAt(chapters, at))}
+                onclick={() =>
+                  player.seekTo(prevChapterAt(chapters, player.at))}
               />
               <ControlButton
                 icon={NEXT}
                 label="次のチャプター"
                 testid="watch-next-chapter"
-                onclick={() => seekTo(nextChapterAt(chapters, at))}
+                onclick={() =>
+                  player.seekTo(nextChapterAt(chapters, player.at))}
               />
             {/if}
 
@@ -3176,7 +897,7 @@
               titleTestid="watch-name"
             >
               {#snippet prefix()}
-                {#if localSrc !== null || drawingLocal}
+                {#if player.local}
                   <!-- サーバではなく端末のコピーで観ている。事実なのでバッジにせず控えた字 (docs/design.md の「印の意味」) -->
                   <span class="local">端末</span><span class="local">・</span>
                 {/if}
@@ -3184,8 +905,8 @@
               {#snippet status()}
                 <!-- 残りは倍速のぶんを割った実際に掛かる時間 (`remaining`)。狭い枠では `.long` を省く -->
                 <span class="clock" data-testid="watch-clock">
-                  {clock(scrub ?? at)} / {clock(length)}<span class="long"
-                    >{"・残り "}{clock(remaining)}</span
+                  {clock(scrub ?? player.at)} / {clock(player.length)}<span
+                    class="long">{"・残り "}{clock(remaining)}</span
                   >
                 </span>
                 {#if current !== null}
@@ -3195,13 +916,13 @@
             </InfoBlock>
 
             <!-- 早送りは追っかけと同じ。canvas に描くとき (互換モード・MPEG-2) は等速だけ -->
-            {#if !compat && !drawing}
+            {#if !player.compat && !player.drawing}
               <Extras>
                 <SpeedMenu
                   testid="watch-speed"
                   label="再生の速さ"
-                  {speed}
-                  onselect={(value) => setSpeed(value)}
+                  speed={player.speed}
+                  onselect={(value) => player.setSpeed(value)}
                 />
               </Extras>
             {/if}
@@ -3214,15 +935,15 @@
               prefix="watch"
               {volume}
               fold={[
-                muteRow(SOUND_OFF, muted, toggleMute),
-                ...(compat || drawing
+                muteRow(SOUND_OFF, player.muted, player.toggleMute),
+                ...(player.compat || player.drawing
                   ? []
                   : [
                       speedRow({
                         icon: SPEED,
                         label: "再生の速さ",
-                        speed,
-                        onselect: (value) => setSpeed(value),
+                        speed: player.speed,
+                        onselect: (value) => player.setSpeed(value),
                       }),
                     ]),
               ]}
@@ -3234,14 +955,14 @@
               cm={hasCm ? { on: skipCm, toggle: toggleSkipCm } : undefined}
               data={data.hasData
                 ? {
-                    on: broadcastData.show,
+                    on: player.showData,
                     toggle: () =>
                       pressD(
-                        broadcastData.show,
+                        player.showData,
                         dataButton,
-                        (on) => void setData(on),
+                        (on) => void player.setData(on),
                       ),
-                    auto: broadcastData.receive,
+                    auto: player.receiveData,
                     toggleAuto: toggleReceiveData,
                   }
                 : undefined}
@@ -3253,38 +974,40 @@
                     down: jikkyo.down,
                   }
                 : undefined}
-              subtitle={hasCaptions
+              subtitle={player.hasCaptions
                 ? subtitles({
                     icon: CAPTION,
-                    on: captions.on,
-                    languages: captions.languages,
-                    language: captions.language,
-                    onoff: setCaptions,
-                    onlanguage: setCaptionLanguage,
+                    on: player.captions.on,
+                    languages: player.captions.languages,
+                    language: player.captions.language,
+                    onoff: player.setCaptions,
+                    onlanguage: player.setCaptionLanguage,
                   })
                 : undefined}
-              codec={codecMenu.length > 0
+              codec={player.codecMenu.length > 0
                 ? recordingCodecs({
                     icon: CODEC,
-                    choices: codecMenu,
-                    selected: codecMenu.some((item) => item.key === choice)
-                      ? choice
+                    choices: player.codecMenu,
+                    selected: player.codecMenu.some(
+                      (item) => item.key === player.choice,
+                    )
+                      ? player.choice
                       : "auto",
                     // 「自動」で段を下げている間は、いまの形式と高さを添える (「自動 (H.264 540p)」)
-                    auto:
-                      choice === "auto" ? autoLabel(step, stepCodec) : "自動",
-                    onpick: (key) => chooseCodec(key as CodecChoice | "mpeg2"),
+                    auto: player.autoLabel,
+                    onpick: (key) =>
+                      player.chooseCodec(key as CodecChoice | "mpeg2"),
                   })
                 : undefined}
-              audio={audios.length > 1
+              audio={player.audios.length > 1
                 ? audioTracks({
                     icon: AUDIO,
-                    items: audios.map((label, i) => ({
+                    items: player.audios.map((label, i) => ({
                       key: i,
                       label,
-                      active: i === audioIndex,
+                      active: i === player.audioIndex,
                     })),
-                    onselect: (key) => selectAudio(key),
+                    onselect: (key) => player.selectAudio(key),
                   })
                 : undefined}
             />
@@ -3302,19 +1025,19 @@
             >{dataReceive.text}</StageNote
           >
         {/if}
-        {#if continued}
+        {#if player.continued}
           <StageNote testid="watch-resumed">続きから再生しています</StageNote>
         {/if}
         {#if skipped}
           <StageNote testid="watch-skipped">CM を飛ばしました</StageNote>
         {/if}
-        {#if warning.text !== ""}
+        {#if player.warning !== ""}
           <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
-          <StageNote>{warning.text}</StageNote>
+          <StageNote>{player.warning}</StageNote>
         {/if}
-        {#if adaptText.text !== ""}
+        {#if player.adaptNote !== ""}
           <!-- 回線に合わせて段を替えた理由 (`watch-adapt.ts`) -->
-          <StageNote testid="watch-adapt">{adaptText.text}</StageNote>
+          <StageNote testid="watch-adapt">{player.adaptNote}</StageNote>
         {/if}
         <VolumeNote {volume} testid="watch-volume-note" />
       {/snippet}
@@ -3338,7 +1061,7 @@
             feed={jikkyo}
             air={airTime}
             place={placeAir}
-            seek={seekTo}
+            seek={player.seekTo}
             edge={() => data.jikkyo?.end ?? null}
           />
         {/if}
@@ -3370,14 +1093,14 @@
 {#snippet lighterChoices()}
   <div class="cluster choices">
     <!-- 主のボタンは先頭の 1 つだけ。残りは控え (docs/design.md の「ボタン」) -->
-    {#each lighter as codec, at (codec)}
+    {#each player.lighter as codec, at (codec)}
       <button
         type="button"
         class={at === 0 ? "small" : "small secondary"}
         data-testid="watch-busy-switch"
-        onclick={() => chooseCodec(codec)}
+        onclick={() => player.chooseCodec(codec)}
       >
-        {codecLabel(codec)} で観る
+        {player.codecLabel(codec)} で観る
       </button>
     {/each}
   </div>
@@ -3394,7 +1117,7 @@
 />
 
 <!-- 運転中の注意 (互換モードで初めて再生する前に 1 回。ライブ・追っかけと同じ)。押すまで再生を始めない -->
-<DriveNotice open={drive.open} onaccept={drive.accept} />
+<DriveNotice open={player.drive.open} onaccept={player.drive.accept} />
 
 <style>
   /* 幕のボタンは文言の下の真ん中に (`PlayerVeil`) */
