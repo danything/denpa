@@ -1,7 +1,12 @@
 <script lang="ts">
   import "@anyblades/blades/components/modal";
 
-  import { GREETING, hasNumbers, type YearSummary } from "#lib/season.js";
+  import {
+    GREETING,
+    hasNumbers,
+    spanOf,
+    type YearSummary,
+  } from "#lib/season.js";
 
   /**
    * **「denpa の 1 年」のダイアログ** (チップ `YearChip` を押したとき。docs/screens.md「季節の演出」)。
@@ -18,8 +23,6 @@
     summary: YearSummary | "loading" | "failed" | null;
     onclose: () => void;
   } = $props();
-
-  const HOUR = 3_600_000;
 
   let dialog = $state<HTMLDialogElement | null>(null);
   /** 閉じる間も出しておく中身 */
@@ -58,14 +61,10 @@
     const number = (label: string, count: number, unit: string) =>
       list.push({ label, count, text: count.toLocaleString("ja-JP"), unit });
     if (s.recorded > 0) number("録画した本数", s.recorded, "本");
-    if (s.recordedMs >= HOUR)
-      number("録画した長さ", Math.floor(s.recordedMs / HOUR), "時間");
-    else if (s.recordedMs > 0)
-      number(
-        "録画した長さ",
-        Math.max(1, Math.round(s.recordedMs / 60_000)),
-        "分",
-      );
+    if (s.recordedMs > 0) {
+      const span = spanOf(s.recordedMs);
+      number("録画した長さ", span.count, span.unit);
+    }
     if (s.topRecorded !== null)
       list.push({
         label: "いちばん録った局",

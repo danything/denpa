@@ -9,7 +9,7 @@ import {
   jstDate,
   nearestNewYear,
   newYearOf,
-  spanWords,
+  spanOf,
   spiked,
   yearChip,
 } from "./season";
@@ -165,8 +165,11 @@ describe("「denpa の 1 年」の数", () => {
     expect(hasNumbers({ ...empty, topRecorded: "でんぱテレビ" })).toBe(true);
   });
   test("長さは 1 時間からは時間、満たなければ分", () => {
-    expect(spanWords(300 * 3_600_000 + 1_000)).toBe("300 時間");
-    expect(spanWords(45 * 60_000)).toBe("45 分");
+    expect(spanOf(300 * 3_600_000 + 1_000)).toEqual({
+      count: 300,
+      unit: "時間",
+    });
+    expect(spanOf(45 * 60_000)).toEqual({ count: 45, unit: "分" });
   });
 });
 
