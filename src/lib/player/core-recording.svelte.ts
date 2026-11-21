@@ -11,7 +11,7 @@
  * - 描く先 (Sink) … MSE は `remux-player.ts` が `player/mse-sink.ts` に足し、canvas は `player/canvas-sink.ts` (`raw/engine.ts`)
  * - 核 (ここ) … どれで観るか (`pickOffer`・`pickCanvas`)、読み出し側 (その場で流すもの・canvas・ファイル) の作り直し、段の切り替え (`prepareStep`・`switchTo`)、
  *   ファイルの繋ぎ直し (`recover`)、音声トラック、速さ。字幕 (`CaptionLayer`)・データ放送 (`DataLayer`)・断り書き (`Note`)・
- *   描けなくなったときの移り先 (`fallBackTo`)・繋ぎ直し (`StreamRetry`)・配線の口 (`PlaybackTarget`) はライブと同じものを使う
+ *   描けなくなったときの移り先 (`fallBackTo`)・繋ぎ直し (`StreamRetry`)・配線に渡すもの (`PlaybackTarget`) はライブと同じものを使う
  *
  * CM 飛ばしとチャプターは画面が持つ (録画の中身の扱いで、再生の仕組みではない)。核はコマを映すたびに `hooks.frame` を呼び、
  * canvas には CM の先頭から先を描かせない (`stopAt`)
@@ -2519,7 +2519,7 @@ export function recordingPlayback(options: RecordingPlaybackOptions) {
     get holding() {
       return holding;
     },
-    /** 配線の口 (`wiring.svelte.ts`) */
+    /** 配線に渡すもの (`wiring.svelte.ts`) */
     target,
     pause: pauseMedia,
     play: playMedia,

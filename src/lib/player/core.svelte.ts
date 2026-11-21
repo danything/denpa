@@ -6,7 +6,7 @@
  * - 出どころ (Feed) … `player/feed-live.ts` の `LiveFeed`。チケット・接続・指示・届いた塊の読み分け・受け取りの速さ
  * - 時間の軸 (Clock) … ライブは `player/clock-live.svelte.ts` の `LiveClock` (放送の今へ寄せる)、追っかけは `player/clock-chase.svelte.ts` の `ChaseClock`
  * - 描く先 (Sink) … MSE は `player/mse-sink.ts`、canvas は `player/canvas-sink.ts` (`raw/engine.ts`)
- * - 核 (ここ) … 状態と操作、届いたものの使い方 (`useFrame`)、段の制御 (`adapt`・`act`)、断り書き (`note`)、字幕とデータ放送の受け口、配線の口 (`PlaybackTarget`)
+ * - 核 (ここ) … 状態と操作、届いたものの使い方 (`useFrame`)、段の制御 (`adapt`・`act`)、断り書き (`note`)、字幕とデータ放送の受け口、配線に渡すもの (`PlaybackTarget`)
  *
  * MSE は取ってこない。`appendBuffer()` に渡すバイト列をどこから持ってくるかはこちら次第で、denpa は WebSocket から受ける
  * ([stream.md](../../../docs/stream.md#websocket-プロトコル))。いつ足して、どこより前を捨てるかはここが決めて渡す。
@@ -265,7 +265,7 @@ export interface PlaybackCoreOptions extends PlaybackOptions {
 }
 
 /**
- * **再生の核。** 状態と操作、段の制御 (`adapt`・`act`)、断り書き (`note`)、配線の口 (`PlaybackTarget`) を持つ。
+ * **再生の核。** 状態と操作、段の制御 (`adapt`・`act`)、断り書き (`note`)、配線に渡すもの (`PlaybackTarget`) を持つ。
  * 届いたものは `feed` から受け、時間の軸はライブなら `LiveClock`、追っかけなら `ChaseClock` (`openChase` で替わる)。
  * MSE は `player/mse-sink.ts`、canvas は `player/canvas-sink.ts` に描く。入口は `live-player.svelte.ts`
  */
