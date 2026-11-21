@@ -67,7 +67,7 @@
   import { write as remind } from "#lib/keep.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
-  import { tapSilent } from "#lib/native-audio-choice.js";
+  import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
   import { keepResume, keepResuming } from "#lib/resume.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
   import { playbackAt } from "#lib/ts/watch.js";
@@ -272,6 +272,8 @@
     // 追っかけの `<video>` は MSE。WebKit では通すと無音になるので通さない (観る画面のその場で流すものと同じ)
     silentTap: () =>
       typeof navigator !== "undefined" && tapSilent(navigator.userAgent, true),
+    // iPhone・iPad は `<video>` の音量を変えられない。つまみを出さず、放送のままの大きさで鳴らす
+    fixed: fixedMediaVolume,
   });
 
   /** キーでも動かせるようにする。割り当てはライブ・観る画面と共通 (`player/keys.ts`) */

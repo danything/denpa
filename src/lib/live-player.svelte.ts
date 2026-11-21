@@ -687,8 +687,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * (画面が決める。`background.svelte.ts`)
    */
   let playback = false;
-  /** 音量 (%。`#lib/volume.ts`)。canvas で描くときに RawEngine へ渡す。`<video>` のぶんは画面が持つ (`volume.svelte.ts`) */
-  let volume = MAX_LEVEL;
+  /**
+   * 音量 (%。`#lib/volume.ts`)。canvas で描くときに RawEngine へ渡す。`<video>` のぶんは画面が持つ (`volume.svelte.ts`)。
+   * null は放送のまま (`<video>` の音量を変えられない端末の追っかけ)
+   */
+  let volume: number | null = MAX_LEVEL;
   /** 音を別に鳴らしているとき (`separateAudio`)。`<video>` は消音にしてある */
   let nativeAudio: NativeAudio | null = null;
   /** canvas で描く経路の刻み。バッファ・貯める量の決め直しを回す (`rawPace`) */
@@ -3504,8 +3507,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (engine !== null) engine.background = on;
       nativeAudio?.setBackground(on);
     },
-    /** 音量 (%)。canvas で描くときの音に掛ける。`<video>` の音は画面が Web Audio に通して掛ける (`volume.svelte.ts`) */
-    set volume(level: number) {
+    /** 音量 (%。null は放送のまま)。canvas で描くときの音に掛ける。`<video>` の音は画面が Web Audio に通して掛ける (`volume.svelte.ts`) */
+    set volume(level: number | null) {
       volume = level;
       if (engine !== null) engine.volume = level;
       nativeAudio?.setVolume(level);

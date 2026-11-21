@@ -124,7 +124,7 @@
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { BROADCAST_HEVC, codecsFor, type LiveCodec } from "#lib/live.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
-  import { tapSilent } from "#lib/native-audio-choice.js";
+  import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
@@ -469,7 +469,7 @@
     canvas = made;
     drawing = true;
     if (muted) made.mute(true);
-    made.volume(volume.level);
+    made.volume(volume.applied);
     drawingLocal = local !== null;
     length = duration;
     at = from ?? 0;
@@ -2014,11 +2014,13 @@
     silentTap: () =>
       typeof navigator !== "undefined" &&
       tapSilent(navigator.userAgent, picked?.way === "stream"),
+    // iPhone・iPad は `<video>` の音量を変えられない。どの経路でもつまみを出さず、放送のままの大きさで鳴らす
+    fixed: fixedMediaVolume,
     through: () => background.on || pip.active,
     remote: (stop) => (stop ? pauseMedia() : playMedia()),
   });
   $effect(() => {
-    const level = volume.level;
+    const level = volume.applied;
     if (drawing) canvas?.volume(level);
   });
 

@@ -50,8 +50,12 @@ export function stepLevel(level: number, direction: number): number {
  *
  * - 振幅に比例させると感じる大きさは 0.6 乗で、上半分を動かしても 6 dB しか変わらず、変わるのは下の端ばかりになる
  * - dB に比例させると 0% に届かない (どこかで下限を決めて無音へ飛ばすことになり、その手前が急に小さくなる)
+ *
+ * **null は放送のままの大きさ (1)。** `<video>` の音量を変えられない端末の観る画面と追っかけで、canvas に描くときの音を
+ * `<video>` とそろえる (`components/player/volume.svelte.ts` の `fixed`)
  */
-export function volumeGain(level: number): number {
+export function volumeGain(level: number | null): number {
+  if (level === null) return 1;
   const at = clampLevel(level) / MAX_LEVEL;
   return 10 ** (BOOST_DB / 20) * at * at;
 }

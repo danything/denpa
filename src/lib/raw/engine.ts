@@ -263,8 +263,8 @@ export class RawEngine {
     this.outlet.want(on);
   }
 
-  /** 音量 (%。`#lib/volume.ts`)。**消音 (`mute`) とは別**。消しても音量はそのまま */
-  set volume(level: number) {
+  /** 音量 (%。`#lib/volume.ts`)。null は放送のまま。**消音 (`mute`) とは別**。消しても音量はそのまま */
+  set volume(level: number | null) {
     this.outlet.level = level;
   }
 

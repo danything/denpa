@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { isWebKit, tapSilent } from "./native-audio-choice";
+import { isWebKit, tapSilent, volumeFixed } from "./native-audio-choice";
 
 const WEBKIT = "AppleWebKit/605.1.15 (KHTML, like Gecko)";
 const BLINK = "AppleWebKit/537.36 (KHTML, like Gecko)";
@@ -51,8 +51,31 @@ test("観る画面で Web Audio に通さないのは WebKit の MSE だけ", ()
   const chrome = `Mozilla/5.0 (Windows NT 10.0) ${BLINK} Chrome/140.0 Safari/537.36`;
   // MSE (その場で流しているもの) は通すと無音になる
   expect(tapSilent(safari, true)).toBe(true);
-  // ファイルの直再生は通せる (音量のつまみが iOS でも効く)
+  // ファイルの直再生は通せる
   expect(tapSilent(safari, false)).toBe(false);
   expect(tapSilent(chrome, true)).toBe(false);
   expect(tapSilent(chrome, false)).toBe(false);
+});
+
+test("音量を入れても 1 のままの要素は、音量を変えられない端末 (iOS・iPadOS)", () => {
+  // iOS の WebKit: 入れても読み返すと 1 のまま
+  const ios = {
+    get volume() {
+      return 1;
+    },
+    set volume(_: number) {},
+  };
+  expect(volumeFixed(ios)).toBe(true);
+  // ほかのブラウザ (macOS の Safari も): 入れた値が読み返せる
+  expect(volumeFixed({ volume: 1 })).toBe(false);
+  // 入れると例外になる要素も変えられないものとして扱う
+  const throwing = {
+    get volume() {
+      return 1;
+    },
+    set volume(_: number) {
+      throw new Error("read only");
+    },
+  };
+  expect(volumeFixed(throwing)).toBe(true);
 });

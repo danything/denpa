@@ -24,6 +24,8 @@
    * ⚙ のつまみは、このボタンがつまみを出せないときだけ出す (`StageTail`)。指の端末と、畳むとき (狭い枠か、
    * 一段に収まらないとき。このボタンごと ⚙ に入る) がそれ。
    *
+   * iPhone・iPad (音量を変えられない端末) の観る画面と追っかけでは、つまみを出さない (`volume.svelte.ts` の `fixed`)。
+   *
    * testid: ボタンは `testid`、浮かぶ所は `{testid}-pop`、つまみは `{testid}-volume`
    */
   let {
@@ -36,8 +38,8 @@
     silenced: boolean;
     testid: string;
     onclick: () => void;
-    /** 音量 (%。`volume.svelte.ts`) */
-    volume: { level: number; set: (level: number) => void };
+    /** 音量 (%。`volume.svelte.ts`)。`fixed` (音量を変えられない端末) ならつまみを出さない */
+    volume: { level: number; set: (level: number) => void; fixed: boolean };
   } = $props();
 
   /** 外れてから閉じるまで (ms)。ボタンとつまみの間を斜めに動かす間 */
@@ -56,7 +58,8 @@
     if (timer !== null) clearTimeout(timer);
   });
 
-  const can = (): boolean => window.matchMedia(POINTER).matches;
+  const can = (): boolean =>
+    !volume.fixed && window.matchMedia(POINTER).matches;
 
   function show(): void {
     if (timer !== null) clearTimeout(timer);
@@ -114,19 +117,21 @@
     {testid}
     {onclick}
   />
-  <span class="pop" data-testid="{testid}-pop">
-    <VolumeSlider
-      level={volume.level}
-      set={volume.set}
-      vertical
-      wheel
-      testid="{testid}-volume"
-      ondrag={(active) => {
-        dragging = active;
-        if (!active && !hovered) later();
-      }}
-    />
-  </span>
+  {#if !volume.fixed}
+    <span class="pop" data-testid="{testid}-pop">
+      <VolumeSlider
+        level={volume.level}
+        set={volume.set}
+        vertical
+        wheel
+        testid="{testid}-volume"
+        ondrag={(active) => {
+          dragging = active;
+          if (!active && !hovered) later();
+        }}
+      />
+    </span>
+  {/if}
 </span>
 
 <style>

@@ -158,7 +158,7 @@ export class NativeAudio {
     if (!this.gone && this.context.state !== "running")
       void this.context.resume().catch(() => undefined);
   };
-  setVolume(level: number): void {
+  setVolume(level: number | null): void {
     this.outlet.level = level;
   }
   setMuted(muted: boolean): void {
