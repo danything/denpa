@@ -248,7 +248,7 @@ export class RawEngine {
     this.send({ type: "visible", on: document.visibilityState === "visible" });
   };
 
-  /** どれだけ貯めるか (秒)。**決めるのはエンコードする経路と同じ `pacing.nextTarget`** (live-player) */
+  /** どれだけ貯めるか (秒)。**決めるのはエンコードする経路と同じ `pacing.nextTarget`** (`player/clock-live.svelte.ts`) */
   set target(seconds: number) {
     this.playout.target = seconds;
   }
