@@ -66,6 +66,7 @@
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
+  import NewYear from "#lib/components/player/NewYear.svelte";
   import { fitRect } from "#lib/components/player/paint.js";
   import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
@@ -3066,6 +3067,19 @@
           network={false}
           clock={airTime}
           tune={refuseTune}
+        />
+
+        <!-- 年越しのカウントダウンと紙吹雪 (季節の演出)。年越しをまたぐ録画で、再生位置の放送の時刻で数える。データ放送を出している間は出さない -->
+        <NewYear
+          at={airTime}
+          force={jikkyoActive && data.jikkyo !== null
+            ? () => {
+                const w = airTime();
+                return w === null ? 0 : jikkyo.force(w);
+              }
+            : null}
+          hidden={showData}
+          testid="watch-new-year"
         />
 
         <!--

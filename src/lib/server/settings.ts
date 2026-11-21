@@ -109,6 +109,11 @@ interface Settings {
    * (`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)
    */
   recordLogo: boolean;
+  /**
+   * **季節の演出を出すか。既定はオン。** 年越しのカウントダウンと紙吹雪、正月のロゴの飾り、「denpa の 1 年」の通知
+   * (`server/season.ts`。docs/screens.md「季節の演出」)。世帯で 1 つ
+   */
+  seasonal: boolean;
 }
 
 /** 本数の上限に選べる幅 */
@@ -195,6 +200,7 @@ const SETTING_KEYS = [
   "jikkyoNg",
   "indoorHosts",
   "recordLogo",
+  "seasonal",
 ] as const;
 
 export function settings(): Settings {
@@ -230,6 +236,7 @@ export function settings(): Settings {
     jikkyoNg: readNg(stored("jikkyoNg")),
     indoorHosts: readIndoorHosts(stored("indoorHosts")),
     recordLogo: flag("recordLogo", false),
+    seasonal: flag("seasonal", true),
   };
 }
 

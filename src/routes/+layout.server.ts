@@ -1,5 +1,6 @@
 import { isOpenPath } from "#lib/server/auth.js";
 import { channelAlert } from "#lib/server/channel-alert.js";
+import { settings } from "#lib/server/settings.js";
 import { updateAvailable } from "#lib/server/update.js";
 
 /**
@@ -16,11 +17,16 @@ import { updateAvailable } from "#lib/server/update.js";
  * `channelAlert` はチャンネルのお知らせ (`server/channel-alert.ts`)。ヘッダーの印と、スマホの形で設定の入口に付ける印に出す
  * (`+layout.svelte` の `ChannelAlert`)。**画面を移るたびに読み直す** (`url.pathname` を読むので、この load が動き直す)。
  * ログインの前に開ける画面 (`auth.isOpenPath`) には渡さない
+ *
+ * `seasonal` は季節の演出を出すか (世帯の設定。`#lib/season.svelte.ts`)。画面を移るたびに読み直すので、設定で切り替えると次の画面から効く。
+ * ログインの前に開ける画面では出さない
  */
 export function load({ locals, url }) {
+  const open = isOpenPath(url.pathname);
   return {
     user: locals.user ?? null,
     update: updateAvailable(),
-    channelAlert: isOpenPath(url.pathname) ? null : channelAlert(),
+    channelAlert: open ? null : channelAlert(),
+    seasonal: open ? false : settings().seasonal,
   };
 }

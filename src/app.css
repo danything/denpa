@@ -203,6 +203,9 @@
   --dp-on-video-on: #7dd3fc; /* sky-300 */
   --dp-on-video-danger: #ff8a7a;
   --dp-video-panel: #17191e;
+  /* 季節の演出 (年越しの紙吹雪) だけに使う金と赤 (お正月の紅白と金)。映像の上なのでテーマで変えない。状態の印には使わない (docs/design.md「季節の演出」) */
+  --dp-season-gold: #f6c445;
+  --dp-season-red: #f0524a;
   --dp-video-menu: color-mix(in srgb, var(--dp-video-panel) 75%, transparent);
   /* 映像の上のメニュー・音量・実況に書く欄の影。近い影と遠い影の 2 段 */
   --dp-video-shadow: 0 2px 6px rgb(0 0 0 / 0.35), 0 18px 40px rgb(0 0 0 / 0.45);
@@ -2936,4 +2939,15 @@ dialog[open] > article {
     --dp-duration-move: 0s;
     --dp-duration-exit: 0s;
   }
+}
+
+/*
+ * ---- 数え上がる数 (「denpa の 1 年」のダイアログ。`YearDialog.svelte`) ----
+ * `<integer>` として登録しておくと、アニメーションで 0 から目当ての数まで 1 ずつ進む (`counter()` で出す)。
+ * 登録できないブラウザでは途中を飛ばして目当ての数をそのまま出す (docs/design.md「季節の演出」)
+ */
+@property --dp-count {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
 }

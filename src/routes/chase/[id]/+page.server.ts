@@ -7,6 +7,7 @@ import { aribServiceId } from "#lib/server/encoder.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { relative } from "#lib/server/paths.js";
 import { recordedBroadcast } from "#lib/server/recorded-broadcast.js";
+import { tsHeadOf } from "#lib/server/recording.js";
 import { recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 import { viewingOptions } from "#lib/server/viewing.js";
@@ -74,5 +75,7 @@ export const load: PageServerLoad = ({ params, url }) => {
     liveCodecs: viewing.liveCodecs,
     /** 実況のチャンネルと先頭・終わりの放送時刻。古いところは過去ログ API、新しいところは NX-Jikkyo から取る */
     jikkyo: recordingJikkyo(rec),
+    /** 元の TS の先頭の放送時刻 (unix ms。観る画面と同じ `tsHeadOf`)。年越しのカウントダウン (季節の演出) が再生位置に足す */
+    head: tsHeadOf(rec),
   };
 };
