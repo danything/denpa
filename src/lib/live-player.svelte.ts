@@ -105,6 +105,11 @@ import {
 } from "#lib/live.js";
 import { onWebKit } from "#lib/native-audio-choice.js";
 import { fallBackTo, openCanvas } from "#lib/player/canvas-sink.js";
+import {
+  liveHandoff,
+  spareOffset,
+  type StreamClock,
+} from "#lib/player/live-handoff.js";
 import { type MseSink, mseSink, type Still } from "#lib/player/mse-sink.js";
 import type { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
@@ -141,6 +146,7 @@ import { StreamRetry } from "#lib/ts/playback.js";
 import { MAX_LEVEL } from "#lib/volume.js";
 
 type LiveState = "idle" | "connecting" | "playing" | "error";
+type TunedNotice = Extract<Notice, { type: "tuned" }>;
 
 /**
  * 遅れて見られる長さ (秒)。**止めている間も受け取り続けるので、上限が要る。**
@@ -234,6 +240,13 @@ const tenth = (value: number): number => Math.round(value * 10) / 10;
  * 数十で足りるが、モジュールは 1 通が 100 KB を超えることがあるので、立たなかったときに際限なく抱え込ませない
  */
 const HOLD_DATA = 300;
+/** 裏で用意している段の様子を見る間隔 (ms。`tickSpare`)。表の 1〜2 コマごと */
+const SPARE_EVERY = 50;
+/**
+ * 裏で用意している段に、これだけ (ms) たっても入れ替えられなければやめて、リクエストし直す (`stageStep`)。
+ * 変換の立ち上がり (1〜2 秒) とキーフレーム待ちに足り、上げた段が映るのを待つ上限 (`PROBE_START`) の倍ほど
+ */
+const LIVE_HANDOFF_GIVE_UP = 12_000;
 
 /**
  * 見ている局を覚える。置き場は cookie 1 つで、読むのはサーバ (`LAST_COOKIE` の説明)。
@@ -656,6 +669,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let rawProblem: string | null | undefined;
   /** 映像の入れ物。RawEngine の canvas はここに差し込む (`attach`) */
   let host: HTMLElement | null = null;
+  /** 段を替えるときに次の段を用意する `<video>` (`stageStep`)。入れ替えたら、前に映していたほうがこちらになる */
+  let spareEl: HTMLVideoElement | null = null;
+  /** 映している `<video>` (`MediaStack` の 0 か 1)。入れ替えるたびに替わる (`adoptSpare`) */
+  let front = $state(0);
   /**
    * canvas で描くときの音 (RawEngine が鳴らす) を「再生する音」として鳴らすか (`RawEngine.background`。Safari は Audio Session、
    * ほかは `<audio>` を通す)。**バックグラウンド再生をオンにしているか、押して小窓を開いている間**
@@ -712,7 +729,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** `droppedVideoFrames` を最後に読んだ値 (`countDropped`)。Safari は飛ぶたびに 0 に戻すので差を足し上げる */
   let droppedSeen = 0;
   /** 途中から入ったストリームの、最初のキーフレームまでを渡さない処理 (`ts/key-gate.ts`)。**始める位置もここで決まる** */
-  const keyGate = new KeyGate();
+  let keyGate = new KeyGate();
   /** 映した 1 枚が再生位置からどれだけ遅れているか (秒)。音と字幕は再生位置に乗るので、口の動きだけずれる (`unslip`) */
   let slip = $state(0);
   /** 飛び直した回数。**画面に出す**。直し続けているなら、まだ足りていない */
@@ -1018,6 +1035,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   function adapt(): void {
     if (videoless) return;
+    // 裏で次の段を用意している間は決め直さない (入れ替えるか、やめてリクエストし直すまで)
+    if (staging !== null) return;
     if (left || paused) {
       // 止めている間の先の無さを、再開したときの詰まりに数えない (`stuckNow`)
       starvedSince = null;
@@ -1255,7 +1274,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 上げたなら、映り始めるまでを数える (`adapt` の `PROBE_START`)
     upAsk = decision.reason === "restored" ? { from: served, at: now } : null;
     // 足りなくて下げるなら、溜まった前の段の映像の後ろに並ばないように繋ぎ直す (`tune`)
-    freshSocket = decision.reason === "slow" && chase === null;
+    const fresh = decision.reason === "slow" && chase === null;
     // 実際に下げたときだけ覚える。切れる直前なら取り消す (`UNDO_BEFORE_CLOSE`)。上げた段が映らずに戻したとき (`revert`) は、
     // 取り消すと映らなかった段をまたリクエストするので覚えない
     if (decision.reason === "slow" && !revert)
@@ -1263,6 +1282,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     asked = step;
     // 段を動かした断り書きは、観る画面と同じく少しで引っ込める (`ADAPT_NOTE`)
     note(text, ADAPT_NOTE);
+    // 裏の `<video>` で用意して入れ替える (`stageStep`)。用意できない形なら、前のコマで覆ってリクエストし直す
+    if (stageStep(fresh)) return;
+    freshSocket = fresh;
     requestAgain();
   }
 
@@ -1988,6 +2010,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function stop(): void {
     left = true;
     retry.cancel();
+    dropSpare();
     if (adaptTimer !== null) clearInterval(adaptTimer);
     adaptTimer = null;
     stopResuming();
@@ -2554,6 +2577,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     keepList: boolean,
   ): Promise<void> {
     const mine = ++begun;
+    // 裏で用意していた段はやめる (選び直した・リクエストし直す)
+    dropSpare();
     startup = { at: performance.now() };
     element = video;
     left = false;
@@ -2668,13 +2693,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      */
     let opened = false;
 
-    const scheme = location.protocol === "https:" ? "wss" : "ws";
-    // このエンドポイントは SvelteKit のルートではない (server.js が受ける) ので、型の付いた `resolve` に
-    // パスごとは渡せない。接頭辞 (`resolve('')` = 接頭辞 + `/`) だけを使う
-    const ws = new WebSocket(
-      `${scheme}://${location.host}${resolve("")}${SOCKET_PATH.slice(1)}?ticket=${ticket}`,
-    );
-    ws.binaryType = "arraybuffer";
+    const ws = openSocket(ticket);
     socket = ws;
 
     ws.onopen = () => {
@@ -2688,10 +2707,38 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       askedData = false;
       syncData();
     };
+    listen(ws, video, keepList, fromPage, () => opened);
+  }
 
+  /** チケットを付けて WebSocket を開く */
+  function openSocket(ticket: string): WebSocket {
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    // このエンドポイントは SvelteKit のルートではない (server.js が受ける) ので、型の付いた `resolve` に
+    // パスごとは渡せない。接頭辞 (`resolve('')` = 接頭辞 + `/`) だけを使う
+    const ws = new WebSocket(
+      `${scheme}://${location.host}${resolve("")}${SOCKET_PATH.slice(1)}?ticket=${ticket}`,
+    );
+    ws.binaryType = "arraybuffer";
+    return ws;
+  }
+
+  /**
+   * 開いた WebSocket の受け口を付ける (`begin`。裏で用意した段に入れ替えたとき `adoptSpare` も)。
+   * `video` はこの接続で届いたものを流す `<video>`
+   *
+   * @param fromPage ページと一緒に受け取ったチケットで繋いだなら、そのチケット (断られたら取り直す)
+   * @param opened 繋がったか (`onopen` が来たか)
+   */
+  function listen(
+    ws: WebSocket,
+    video: HTMLVideoElement,
+    keepList: boolean,
+    fromPage: string | null,
+    opened: () => boolean,
+  ): void {
     ws.onerror = () => {
       // 繋ぎ直しの最中か、ページと一緒に受け取ったチケットを断られた。すぐ後ろに `onclose` が来るので、そちらで待ち直す
-      if (retry.attempts > 0 || (fromPage !== null && !opened)) return;
+      if (retry.attempts > 0 || (fromPage !== null && !opened())) return;
       if (state !== "playing") fail("繋がりませんでした");
     };
 
@@ -2700,7 +2747,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (socket !== ws || state === "error") return;
       socket = null;
       // ページと一緒に受け取ったチケットを断られた。`/api/live/ticket` から取って繋ぎ直す (もう `takePageTicket` は渡さない)
-      if (fromPage !== null && !opened && !left && element !== null) {
+      if (fromPage !== null && !opened() && !left && element !== null) {
         void begin(element, keepList);
         return;
       }
@@ -2887,122 +2934,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           ending = true;
           finishStream();
           engine?.finish();
-        } else if (notice.type === "tuned") {
-          if (startup !== null)
-            startup.tuned ??= performance.now() - startup.at;
-          // 切れた接続を繋ぎ直した (入れ替えの通知 `restarting` のあとを含む)。ここからしばらくは回線が細いとして下げない (`HOLD_AFTER_RECONNECT`)
-          if (
-            rejoining ||
-            (restartingAt !== null &&
-              Date.now() - restartingAt < RESTARTING_MOST)
-          ) {
-            holdDownUntil = Date.now() + HOLD_AFTER_RECONNECT;
-            rejoining = false;
-            restartingAt = null;
-          }
-          // 選べる音声はここで初めて分かる (いま流れている番組次第)
-          audios = notice.audios;
-          audio = notice.audio;
-          awaiting = false;
-          // 映像の無い局・録画は音声だけ。段を動かさない (`adapt`)
-          videoless = notice.video === false;
-          /*
-           * **サーバが選局を受けた。** 待っていた別の局なら、ここでデータ放送を閉じる (`tunedCloses`)。
-           * サーバは `tuned` を次の局のデータ放送より先に送るので、閉じる前に次の局の入口へ d は届かない。
-           * 自動起動の指定 (`autoStart`) も false に戻す。次の局のものは `tuned` のあとに届く。追っかけの答えには `serviceId` が無い
-           */
-          if (
-            chase === null &&
-            tuned !== null &&
-            notice.serviceId === tuned.serviceId
-          ) {
-            if (tunedCloses(closing, notice.serviceId)) {
-              showData = false;
-              autoStart = false;
-            }
-            closing = null;
-            onAir = tuned;
-            /*
-             * **映像の無い局 (ラジオ・データ放送だけの局) は、データ放送を開く。** 観る中身はデータ放送で、開くまではリモコンを出さない
-             * (`DataBroadcast` の `press`) ので、開いていないと、自動で受信した文書を操作できない。閉じれば閉じたまま (局を替えるまで)
-             */
-            if (videoless && !openedVideoless) {
-              // 人が先に開いていても、開いたものとして覚える (閉じたあとに開き直さない)
-              if (!showData) showData = true;
-              openedVideoless = true;
-            }
-            syncData();
-          }
-          /*
-           * **サーバが PMT を読んで、TS に HEVC を入れて送る 4K の局と分かった** (`broadcast`)。放送のままをリクエストしていても
-           * 答えは HEVC の詰め替えで、下の `start` で MSE に移る。この局を開いている間は「放送のまま」を HEVC として扱い、
-           * 次からの指示にも付ける (`Tuned.broadcast`。サーバは選局の前から HEVC の詰め替えとして受ける)
-           */
-          if (
-            notice.broadcast === "hevc" &&
-            chase === null &&
-            tuned !== null &&
-            tuned.broadcast !== "hevc"
-          ) {
-            /*
-             * リクエストする形式も、4K の局で「放送のまま」を選んだときと同じ `hevc` にする (`pickFormat`)。`tuned.codec` が
-             * 前のまま (`h264` など) だと、字幕の選び直しのように選局し直さずに送る指示で、HEVC の詰め替えではなくエンコードになる
-             */
-            tuned = { ...tuned, broadcast: "hevc" };
-            if (!notice.raw) {
-              rawChosen = false;
-              if (notice.codec !== "audio") codec = notice.codec;
-              tuned = { ...tuned, codec, raw: false };
-            }
-            if (broadcastHevc === undefined) checkBroadcastHevc();
-          } else if (
-            notice.broadcast === "hevc" &&
-            chase !== null &&
-            chase.broadcast !== "hevc"
-          ) {
-            /*
-             * **元の TS で開いた追っかけの録画が、TS で送る 4K の局のものだった** (録り始めたばかりで、開く前にサーバが
-             * 録画の PMT を読めなかった。`server/live.ts` の `Session.learnsBroadcast`)。答えは放送の HEVC を写したもので、
-             * 下の `start` で MSE に移る。この録画を開いている間は 4K の局の録画として形式を選ぶ (`broadcastKind`)
-             */
-            chase = { ...chase, broadcast: "hevc" };
-            if (!notice.raw) {
-              rawChosen = false;
-              if (notice.codec !== "audio") codec = notice.codec;
-            }
-            if (broadcastHevc === undefined) checkBroadcastHevc();
-          }
-          const step = servedStep(notice);
-          // 追っかけで音声だけを選んでいたときは、実際には段 3 をリクエストしている (`wantedCommand`)
-          const requested =
-            chase !== null && asked === "audio" ? LOWEST_RUNG : asked;
-          // 映像の無い局の音声だけは、混んでいて下げられなかったのではない
-          if (!videoless && stepOrder(step) < stepOrder(requested)) {
-            // サーバが混んでいて下げられなかった (理由は続く `notice`)。段の切り替えとして数えられないので、20 秒は同じ段を返させない
-            adapter.refused(Date.now());
-            asked = step;
-          }
-          served = step;
-          // 音声だけのときは、映像のコーデックを前のまま持つ (メニューは「自動 (音声だけ)」)
-          if (notice.codec !== "audio") codec = notice.codec;
-          if (notice.raw) startRaw(video);
-          else if (compat) startCompat(video, codec);
-          // 音声だけ (AAC) を受け取れない端末は無いが、受け取れなければ H.264 と同じく理由を出して止まる
-          else
-            start(
-              video,
-              notice.codecs,
-              notice.codec === "audio" ? "h264" : notice.codec,
-            );
-          /*
-           * **映像の無い局 (`videoless`) は、前の局のフレームをすぐ剥がす。** 次のコマが来ないので、待つと `HOLD_MOST` まで残る。
-           * canvas に描く経路は canvas に前の局のフレームが残っているので、それも隠す (次の局の 1 枚目で出し直す)
-           */
-          if (videoless) {
-            thaw();
-            if (canvas) engine?.hide();
-          }
-        }
+        } else if (notice.type === "tuned") applyTuned(notice, video, true);
         return;
       }
 
@@ -3091,6 +3023,129 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         cues = insertCue(cues, { at, page });
       }
     };
+  }
+
+  /**
+   * 選局の答え (`tuned`) を受ける。`media` が false なら、MSE・canvas を用意しない (裏で用意した段に入れ替えたとき。
+   * MSE はもう `adoptSpare` が持ってきている)
+   */
+  function applyTuned(
+    notice: TunedNotice,
+    video: HTMLVideoElement,
+    media: boolean,
+  ): void {
+    if (startup !== null) startup.tuned ??= performance.now() - startup.at;
+    // 切れた接続を繋ぎ直した (入れ替えの通知 `restarting` のあとを含む)。ここからしばらくは回線が細いとして下げない (`HOLD_AFTER_RECONNECT`)
+    if (
+      rejoining ||
+      (restartingAt !== null && Date.now() - restartingAt < RESTARTING_MOST)
+    ) {
+      holdDownUntil = Date.now() + HOLD_AFTER_RECONNECT;
+      rejoining = false;
+      restartingAt = null;
+    }
+    // 選べる音声はここで初めて分かる (いま流れている番組次第)
+    audios = notice.audios;
+    audio = notice.audio;
+    awaiting = false;
+    // 映像の無い局・録画は音声だけ。段を動かさない (`adapt`)
+    videoless = notice.video === false;
+    /*
+     * **サーバが選局を受けた。** 待っていた別の局なら、ここでデータ放送を閉じる (`tunedCloses`)。
+     * サーバは `tuned` を次の局のデータ放送より先に送るので、閉じる前に次の局の入口へ d は届かない。
+     * 自動起動の指定 (`autoStart`) も false に戻す。次の局のものは `tuned` のあとに届く。追っかけの答えには `serviceId` が無い
+     */
+    if (
+      chase === null &&
+      tuned !== null &&
+      notice.serviceId === tuned.serviceId
+    ) {
+      if (tunedCloses(closing, notice.serviceId)) {
+        showData = false;
+        autoStart = false;
+      }
+      closing = null;
+      onAir = tuned;
+      /*
+       * **映像の無い局 (ラジオ・データ放送だけの局) は、データ放送を開く。** 観る中身はデータ放送で、開くまではリモコンを出さない
+       * (`DataBroadcast` の `press`) ので、開いていないと、自動で受信した文書を操作できない。閉じれば閉じたまま (局を替えるまで)
+       */
+      if (videoless && !openedVideoless) {
+        // 人が先に開いていても、開いたものとして覚える (閉じたあとに開き直さない)
+        if (!showData) showData = true;
+        openedVideoless = true;
+      }
+      syncData();
+    }
+    /*
+     * **サーバが PMT を読んで、TS に HEVC を入れて送る 4K の局と分かった** (`broadcast`)。放送のままをリクエストしていても
+     * 答えは HEVC の詰め替えで、下の `start` で MSE に移る。この局を開いている間は「放送のまま」を HEVC として扱い、
+     * 次からの指示にも付ける (`Tuned.broadcast`。サーバは選局の前から HEVC の詰め替えとして受ける)
+     */
+    if (
+      notice.broadcast === "hevc" &&
+      chase === null &&
+      tuned !== null &&
+      tuned.broadcast !== "hevc"
+    ) {
+      /*
+       * リクエストする形式も、4K の局で「放送のまま」を選んだときと同じ `hevc` にする (`pickFormat`)。`tuned.codec` が
+       * 前のまま (`h264` など) だと、字幕の選び直しのように選局し直さずに送る指示で、HEVC の詰め替えではなくエンコードになる
+       */
+      tuned = { ...tuned, broadcast: "hevc" };
+      if (!notice.raw) {
+        rawChosen = false;
+        if (notice.codec !== "audio") codec = notice.codec;
+        tuned = { ...tuned, codec, raw: false };
+      }
+      if (broadcastHevc === undefined) checkBroadcastHevc();
+    } else if (
+      notice.broadcast === "hevc" &&
+      chase !== null &&
+      chase.broadcast !== "hevc"
+    ) {
+      /*
+       * **元の TS で開いた追っかけの録画が、TS で送る 4K の局のものだった** (録り始めたばかりで、開く前にサーバが
+       * 録画の PMT を読めなかった。`server/live.ts` の `Session.learnsBroadcast`)。答えは放送の HEVC を写したもので、
+       * 下の `start` で MSE に移る。この録画を開いている間は 4K の局の録画として形式を選ぶ (`broadcastKind`)
+       */
+      chase = { ...chase, broadcast: "hevc" };
+      if (!notice.raw) {
+        rawChosen = false;
+        if (notice.codec !== "audio") codec = notice.codec;
+      }
+      if (broadcastHevc === undefined) checkBroadcastHevc();
+    }
+    const step = servedStep(notice);
+    // 追っかけで音声だけを選んでいたときは、実際には段 3 をリクエストしている (`wantedCommand`)
+    const requested = chase !== null && asked === "audio" ? LOWEST_RUNG : asked;
+    // 映像の無い局の音声だけは、混んでいて下げられなかったのではない
+    if (!videoless && stepOrder(step) < stepOrder(requested)) {
+      // サーバが混んでいて下げられなかった (理由は続く `notice`)。段の切り替えとして数えられないので、20 秒は同じ段を返させない
+      adapter.refused(Date.now());
+      asked = step;
+    }
+    served = step;
+    // 音声だけのときは、映像のコーデックを前のまま持つ (メニューは「自動 (音声だけ)」)
+    if (notice.codec !== "audio") codec = notice.codec;
+    if (!media) return;
+    if (notice.raw) startRaw(video);
+    else if (compat) startCompat(video, codec);
+    // 音声だけ (AAC) を受け取れない端末は無いが、受け取れなければ H.264 と同じく理由を出して止まる
+    else
+      start(
+        video,
+        notice.codecs,
+        notice.codec === "audio" ? "h264" : notice.codec,
+      );
+    /*
+     * **映像の無い局 (`videoless`) は、前の局のフレームをすぐ剥がす。** 次のコマが来ないので、待つと `HOLD_MOST` まで残る。
+     * canvas に描く経路は canvas に前の局のフレームが残っているので、それも隠す (次の局の 1 枚目で出し直す)
+     */
+    if (videoless) {
+      thaw();
+      if (canvas) engine?.hide();
+    }
   }
 
   /**
@@ -3382,6 +3437,380 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     else if (tuned !== null) void tune(element, tuned, true);
   }
 
+  /*
+   * ---- 段を替えるときは、裏の `<video>` で用意してから入れ替える ([stream.md](../../docs/stream.md#段を替えるときは裏の-video-で用意してから入れ替えます)) ----
+   *
+   * いまの段を映したまま、もう 1 本の WebSocket で次の段をリクエストし、映していない側の `<video>` (透明・消音) の MSE に溜める。
+   * 表の少し先で待たせ、表の再生がそこまで来たら入れ替える (決め方は `player/live-handoff.ts`)。前のコマで覆って止まる間を出さない。
+   * 用意している間は、サーバのエンコードとチューナーの共有が 2 本ぶんになる。
+   * 用意できないとき (canvas に描く・追っかけ・止めている・裏に回っている・小窓) と、サーバの変換の枠が空いておらず
+   * 段を下げられなかったとき、`LIVE_HANDOFF_GIVE_UP` までに入れ替えられなかったときは、これまでどおりリクエストし直す (`requestAgain`)
+   */
+  /** 用意している段。用意していなければ null */
+  let staging: Staging | null = null;
+
+  interface Staging {
+    socket: WebSocket | null;
+    video: HTMLVideoElement;
+    /** 届いた init と塊を溜める MSE。答え (`tuned`) が来てから作る */
+    sink: MseSink | null;
+    tuned: TunedNotice | null;
+    /** 裏の物差しと受け取った時刻の組 (`clock`) */
+    clock: StreamClock | null;
+    keyGate: KeyGate;
+    /** 映像のほかに届いたもの (字幕・通知)。入れ替えたあと、いつもの受け口に順に流す */
+    held: ArrayBuffer[];
+    /** 裏を待たせている位置 (表の物差し) */
+    target: number | null;
+    /** 用意し始めた時刻 (`LIVE_HANDOFF_GIVE_UP`) */
+    since: number;
+    timer: ReturnType<typeof setInterval>;
+    /** 用意できなかったら、これまでどおりリクエストし直すときに繋ぎ直すか (`freshSocket`) */
+    fresh: boolean;
+  }
+
+  /**
+   * 段を `asked` に替えるのを、裏の `<video>` で用意し始める。用意できない形なら false (呼ぶ側がリクエストし直す)。
+   * `fresh` は、用意できなかったときに繋ぎ直すか (`freshSocket`)
+   */
+  function stageStep(fresh: boolean): boolean {
+    dropSpare();
+    const video = spareEl;
+    const picked = pickMediaSource();
+    const hidden =
+      typeof document !== "undefined" && document.visibilityState === "hidden";
+    if (
+      video === null ||
+      picked === null ||
+      element === null ||
+      sink === null ||
+      broadcast === null ||
+      tuned === null ||
+      chase !== null ||
+      canvas ||
+      compat ||
+      videoless ||
+      !running ||
+      state !== "playing" ||
+      paused ||
+      chasing ||
+      hidden ||
+      inPictureInPicture() ||
+      // 段 0 が MPEG-2 なら canvas に描く。裏の `<video>` では用意できない
+      (asked === 0 && wantsRaw())
+    ) {
+      return false;
+    }
+    const command = wantedCommand();
+    if (command === null) return false;
+    const mine = begun;
+    const made: Staging = {
+      socket: null,
+      video,
+      sink: null,
+      tuned: null,
+      clock: null,
+      keyGate: new KeyGate(),
+      held: [],
+      target: null,
+      since: Date.now(),
+      timer: setInterval(() => tickSpare(made), SPARE_EVERY),
+      fresh,
+    };
+    staging = made;
+    video.muted = true;
+    void fetchTicket().then((ticket) => {
+      if (staging !== made || mine !== begun) return;
+      if (ticket === null) {
+        spareFailed();
+        return;
+      }
+      const ws = openSocket(ticket);
+      made.socket = ws;
+      ws.onopen = () => {
+        ws.send(JSON.stringify(command));
+      };
+      ws.onerror = () => {
+        if (staging === made) spareFailed();
+      };
+      ws.onclose = () => {
+        if (staging === made) spareFailed();
+      };
+      ws.onmessage = (event) => {
+        if (staging === made) spareMessage(made, event.data as ArrayBuffer);
+      };
+    });
+    return true;
+  }
+
+  /** `/api/live/ticket` からチケットを取る。取れなければ null */
+  async function fetchTicket(): Promise<string | null> {
+    try {
+      const res = await fetch(resolve("api/live/ticket"), { method: "POST" });
+      if (!res.ok) return null;
+      return ((await res.json()) as { ticket: string }).ticket;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 裏の接続に届いたもの。映像は裏の MSE に溜め、ほかは入れ替えたあとに流すために取っておく */
+  function spareMessage(made: Staging, data: ArrayBuffer): void {
+    const kind = new DataView(data).getUint8(0);
+    const body = new Uint8Array(data, 9);
+    if (kind === CHANNEL.control) {
+      const notice = JSON.parse(new TextDecoder().decode(body)) as Notice;
+      if (notice.type === "tuned") {
+        console.info(JSON.stringify(notice), String(asked));
+        const step = servedStep(notice);
+        /*
+         * 変換の枠が空いておらず、サーバが段を下げなかった (`server/live.ts` の `rungPlan`)。これまでどおりいまの接続で
+         * リクエストし直す (観ているのが自分だけの段なら、サーバは抜けてから枠を取り直せる)。
+         * canvas に描く形 (MPEG-2)・映像の無い局の答えも、裏の `<video>` では用意できない
+         */
+        if (
+          stepOrder(step) < stepOrder(asked) ||
+          notice.raw ||
+          notice.video === false
+        ) {
+          spareFailed();
+          return;
+        }
+        const picked = pickMediaSource();
+        const type =
+          picked === null
+            ? notice.codecs
+            : mseType(notice.codecs, (t) => picked.Source.isTypeSupported(t));
+        if (picked === null || !picked.Source.isTypeSupported(type)) {
+          spareFailed();
+          return;
+        }
+        made.tuned = notice;
+        const video = made.video;
+        const opened: MseSink = mseSink(video, picked, {
+          type: notice.codecs,
+          duration: Number.POSITIVE_INFINITY,
+          // 用意している間は捨てない (`LIVE_HANDOFF_GIVE_UP` までしか溜めない)。入れ替えたら `keepFrom` で捨てる
+          keepFrom: () => (sink === opened ? keepFrom() : 0),
+          settled: () => {
+            if (sink === opened) settled(video);
+          },
+          opened: () => undefined,
+        });
+        made.sink = opened;
+        video.addEventListener("error", spareBroke);
+        return;
+      }
+      if (notice.type === "clock")
+        made.clock = { at: notice.at, unixMs: notice.unixMs };
+      // 断られた・外された・作り直した。いまの接続でリクエストし直す
+      if (
+        notice.type === "error" ||
+        notice.type === "lost" ||
+        notice.type === "restart"
+      ) {
+        spareFailed();
+        return;
+      }
+      // サーバが入れ替えで止まる。いまの接続もこのあと切れて繋ぎ直す (`reconnect`) ので、裏はやめるだけ
+      if (notice.type === "restarting") {
+        dropSpare();
+        return;
+      }
+      holdForAdopt(made, data);
+      return;
+    }
+    if (kind === CHANNEL.videoInit || kind === CHANNEL.videoMedia) {
+      if (made.sink === null) return;
+      if (kind === CHANNEL.videoInit) made.keyGate.init(body);
+      // 途中から入ったら、最初のキーフレームまでは渡さない (`ts/key-gate.ts`)
+      else if (!made.keyGate.pass(body)) return;
+      void made.sink.append(body).catch(() => {
+        if (staging === made) spareFailed();
+      });
+      return;
+    }
+    if (kind === CHANNEL.rawTs) {
+      spareFailed();
+      return;
+    }
+    holdForAdopt(made, data);
+  }
+
+  /** 入れ替えたあとに流すものを取っておく。溜めすぎたら用意をやめる (届きすぎるのは字幕ではない) */
+  function holdForAdopt(made: Staging, data: ArrayBuffer): void {
+    if (made.held.length >= HOLD_DATA) spareFailed();
+    else made.held.push(data);
+  }
+
+  /** 裏の `<video>` が受け取れない形式だった */
+  function spareBroke(): void {
+    if (staging !== null) spareFailed();
+  }
+
+  /**
+   * 裏の様子を見て、待たせる・入れ替える (`liveHandoff`)。表が止められた・裏に回った・小窓を出した・
+   * 用意が `LIVE_HANDOFF_GIVE_UP` を過ぎたら、これまでどおりリクエストし直す
+   */
+  function tickSpare(made: Staging): void {
+    if (staging !== made) return;
+    const front = element;
+    if (
+      front === null ||
+      paused ||
+      chasing ||
+      document.visibilityState === "hidden" ||
+      inPictureInPicture() ||
+      Date.now() - made.since > LIVE_HANDOFF_GIVE_UP
+    ) {
+      spareFailed();
+      return;
+    }
+    const spare = made.video;
+    if (made.sink === null || made.clock === null || broadcast === null) return;
+    const offset = spareOffset(broadcast, made.clock);
+    const ranges = made.sink.buffered();
+    const head = ranges[0]?.[0];
+    const tail = ranges.at(-1)?.[1];
+    const step = liveHandoff({
+      at: front.currentTime,
+      target: made.target,
+      start: head === undefined ? null : head + offset,
+      end: tail === undefined ? null : tail + offset,
+      spareAt: spare.currentTime + offset,
+      ready:
+        spare.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        !spare.seeking,
+    });
+    if (step.kind === "seat") {
+      made.target = step.to;
+      spare.currentTime = step.to - offset;
+      return;
+    }
+    if (step.kind === "switch") adoptSpare(made);
+  }
+
+  /** 用意をやめて、これまでどおりいまの接続でリクエストし直す (前のコマで覆って作り直す) */
+  function spareFailed(): void {
+    const made = staging;
+    if (made === null) return;
+    dropSpare();
+    freshSocket = made.fresh;
+    // 上げた段が映るまでの待ち (`PROBE_START`) は、リクエストし直したところから数える
+    if (upAsk !== null) upAsk = { ...upAsk, at: Date.now() };
+    requestAgain();
+  }
+
+  /** 用意しているものを捨てる。いまの段はそのまま */
+  function dropSpare(): void {
+    const made = staging;
+    if (made === null) return;
+    staging = null;
+    clearInterval(made.timer);
+    made.video.removeEventListener("error", spareBroke);
+    // 繋ぐ前 (チケットを待っている間) なら、繋いだあとに捨てる (`stageStep`)
+    if (made.socket !== null) {
+      made.socket.onmessage = null;
+      made.socket.onclose = null;
+      made.socket.onerror = null;
+      made.socket.close();
+    }
+    made.sink?.destroy();
+    emptyVideo(made.video);
+  }
+
+  /** 映していない `<video>` を空にする */
+  function emptyVideo(video: HTMLVideoElement): void {
+    video.pause();
+    video.muted = true;
+    video.removeAttribute("src");
+    video.load();
+  }
+
+  /**
+   * **用意できた裏に入れ替える** (`tickSpare`)。裏の接続・MSE・`<video>` をいつものものにし、前の接続を閉じる
+   * (サーバは前の段のセッションから抜け、枠を返す)。届いていた字幕と通知はいつもの受け口に流し直す
+   */
+  function adoptSpare(made: Staging): void {
+    const tunedNow = made.tuned;
+    const madeSink = made.sink;
+    const ws = made.socket;
+    if (
+      tunedNow === null ||
+      madeSink === null ||
+      ws === null ||
+      element === null
+    )
+      return;
+    staging = null;
+    clearInterval(made.timer);
+    made.video.removeEventListener("error", spareBroke);
+    const old = element;
+    const video = made.video;
+    // 前の接続と MSE。並んでいる古い塊は足さない (`feedRun`)
+    const oldSocket = socket;
+    if (oldSocket !== null) {
+      oldSocket.onmessage = null;
+      oldSocket.onclose = null;
+      oldSocket.onerror = null;
+      oldSocket.close();
+    }
+    sink?.destroy();
+    feedRun++;
+    finishing = false;
+    old.removeEventListener("waiting", onWaiting);
+    old.removeEventListener("playing", onPlaying);
+    old.removeEventListener("error", onMediaError);
+    emptyVideo(old);
+    // 表と裏を替える (`MediaStack` の `front`)。同じコマの間に映す側と音を出す側が替わる
+    element = video;
+    spareEl = old;
+    front = 1 - front;
+    socket = ws;
+    sink = madeSink;
+    keyGate = made.keyGate;
+    mseCodec = tunedNow.codec === "audio" ? "h264" : tunedNow.codec;
+    video.addEventListener("error", onMediaError);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("playing", onPlaying);
+    // 新しい段の物差しで数え直す
+    broadcast = made.clock;
+    fromAir = null;
+    received = 0;
+    receivedFrom = 0;
+    slip = 0;
+    slipMost = 0;
+    decodeLag.reset();
+    enoughAt = 0;
+    starved = false;
+    ending = false;
+    stuck = false;
+    droppedSeen = video.getVideoPlaybackQuality?.().droppedVideoFrames ?? 0;
+    forgetFlow();
+    clearCaptions();
+    const now = Date.now();
+    quiet = now + GRACE;
+    awaiting = false;
+    upAsk = null;
+    lastPace = null;
+    throughput.reset(now);
+    lagMeter.reset();
+    starvedSince = null;
+    lastFrameAt = 0;
+    adapter.reset(now);
+    applyTuned(tunedNow, video, false);
+    listen(ws, video, true, null, () => true);
+    // データ放送を受け取るかは接続ごとにサーバが覚える。新しい接続でリクエストし直す
+    askedData = false;
+    syncData();
+    for (const data of made.held)
+      ws.onmessage?.(new MessageEvent("message", { data }));
+    video.playbackRate = 1;
+    unslipping.seeked();
+    follow(video);
+    void play(video);
+  }
+
   /**
    * canvas で描く経路の `pace`。**時計が音なので、足し終えたとき (`settled`) の代わりに刻みで回す。**
    * バッファ・放送からの遅れ・字幕の貼り直し・貯める量の決め直しを、エンコードする経路と同じ形で出す
@@ -3635,6 +4064,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /** 前のフレームを貼っているか。**切り替えの間の黒を埋めている** */
     get holding() {
       return holding;
+    },
+    /** 映している `<video>` (`MediaStack` の `front`)。段を裏で用意して入れ替えるたびに替わる */
+    get front() {
+      return front;
+    },
+    /**
+     * 段を替えるときに次の段を用意する `<video>` (`MediaStack` の `spare`。`stageStep`)。入れ替えると、前に映していたほうに替わる。
+     * 渡さなければ用意せず、前のコマで覆ってリクエストし直す
+     */
+    set spare(video: HTMLVideoElement | null) {
+      spareEl = video;
     },
     /** 追っかけ再生か。**わざと遅れて見ている** */
     get chasing() {

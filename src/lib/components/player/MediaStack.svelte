@@ -7,6 +7,8 @@
    *
    * - `video` … 映像。**備え付けの操作 (`controls`) は出さない**。あれの
    *   再生位置は「持っている範囲」を尺として描くので絶えず動く
+   * - `spare` … 段を替えるときに次の段を用意する `<video>` (`twin` のときだけ置く。ライブの `stageStep`)。
+   *   透明・消音で、入れ替えたら (`front`) こちらが `video` になる
    * - `still` … 切り替えの間、前の映像を貼っておく canvas (`live-player` の freeze)。
    *   映像より上 (黒を隠す)、字幕より下 (切り替え中も字幕は見えていてほしい)
    * - `under` … 前の映像と字幕の間に重ねるもの (実況のコメント。`JikkyoLayer`)。
@@ -22,9 +24,14 @@
     /** 字幕を出しているか。canvas の data-on に写す (描くのは `live-player` の `paint`) */
     captionsOn: boolean;
     onclick: (event: MouseEvent) => void;
-    /** data-testid の接頭辞。`<prefix>-video` / `-still` / `-captions` になる */
+    /** data-testid の接頭辞。`<prefix>-video` / `-video-spare` / `-still` / `-captions` になる */
     prefix: string;
+    /** `<video>` を 2 つ置くか (段を替えるときに裏で用意する。ライブ) */
+    twin?: boolean;
+    /** 映している `<video>` (0 か 1。`live-player` の `front`)。入れ替えるとこちらが `video` になる */
+    front?: number;
     video?: HTMLVideoElement | null;
+    spare?: HTMLVideoElement | null;
     still?: HTMLCanvasElement | null;
     overlay?: HTMLCanvasElement | null;
     box?: HTMLElement | null;
@@ -35,23 +42,37 @@
     captionsOn,
     onclick,
     prefix,
+    twin = false,
+    front = 0,
     video = $bindable(null),
+    spare = $bindable(null),
     still = $bindable(null),
     overlay = $bindable(null),
     box = $bindable(null),
     under,
   }: Props = $props();
+
+  /** 置いた `<video>`。2 つ目は `twin` のときだけ */
+  const slots = $state<(HTMLVideoElement | null)[]>([null, null]);
+  $effect.pre(() => {
+    video = slots[front] ?? null;
+    spare = twin ? (slots[1 - front] ?? null) : null;
+  });
 </script>
 
 <div bind:this={box} class="box">
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_media_has_caption -->
-  <video
-    bind:this={video}
-    class="video"
-    playsinline
-    {onclick}
-    data-testid="{prefix}-video"
-  ></video>
+  {#each twin ? [0, 1] : [0] as slot (slot)}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_media_has_caption -->
+    <video
+      bind:this={slots[slot]}
+      class="video"
+      class:back={slot !== front}
+      playsinline
+      {onclick}
+      aria-hidden={slot !== front ? "true" : undefined}
+      data-testid={slot === front ? `${prefix}-video` : `${prefix}-video-spare`}
+    ></video>
+  {/each}
   <canvas
     bind:this={still}
     class="layer still"
@@ -78,9 +99,16 @@
     height: 100%;
   }
   .video {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     background: var(--dp-video);
+  }
+  /* 用意している側は見せず、押させない。入れ替えた瞬間に表と裏が替わる */
+  .back {
+    opacity: 0;
+    pointer-events: none;
   }
   .layer {
     position: absolute;

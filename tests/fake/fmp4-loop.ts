@@ -25,10 +25,46 @@ import { readFileSync } from "node:fs";
 
 import { readClip, shiftFragment } from "./fmp4-clip";
 
-// 入口の TS は読んで捨てる (上の説明)
+/**
+ * 入口の TS から最初の PCR (秒) を読む。読めるまでは null。`clock` のときだけ、本物の ffmpeg と同じく
+ * 入力の見出し (`start:`) にして標準エラーへ出す。サーバはこれで時計 (`clock` の通知) を配る (`server/live.ts` の `startPts`)
+ */
+let firstPcr: number | null = null;
+/** 最初の PCR を読むか (`Rough` の `clock`。下で目印を読んでから決める) */
+let wantClock = false;
+let pending = new Uint8Array(0);
+function readPcr(chunk: Uint8Array): void {
+  const joined = new Uint8Array(pending.length + chunk.length);
+  joined.set(pending);
+  joined.set(chunk, pending.length);
+  let at = joined.indexOf(0x47);
+  while (at >= 0 && at + 188 <= joined.length && firstPcr === null) {
+    const packet = joined.subarray(at, at + 188);
+    if (
+      (packet[3]! & 0x20) !== 0 &&
+      packet[4]! >= 7 &&
+      (packet[5]! & 0x10) !== 0
+    )
+      firstPcr =
+        (packet[6]! * 2 ** 25 +
+          packet[7]! * 2 ** 17 +
+          packet[8]! * 2 ** 9 +
+          packet[9]! * 2 +
+          (packet[10]! >> 7)) /
+        90_000;
+    at += 188;
+  }
+  pending = joined.slice(Math.max(0, at));
+  if (firstPcr !== null)
+    process.stderr.write(
+      `Input #0, mpegts, from 'pipe:0':\n  Duration: N/A, start: ${firstPcr.toFixed(6)}, bitrate: N/A\n`,
+    );
+}
+
+// 入口の TS は読んで捨てる (上の説明)。`clock` のときは最初の PCR だけ読む
 void (async () => {
-  for await (const _ of Bun.stdin.stream()) {
-    // 捨てる
+  for await (const chunk of Bun.stdin.stream()) {
+    if (wantClock && firstPcr === null) readPcr(chunk);
   }
 })();
 
@@ -45,6 +81,8 @@ void (async () => {
  *   作り方は上の H.264 に `-itsoffset 0.1` (映像の入力の前) を足したもの
  * - `headStartMs` (ms) … 先頭のこの尺ぶんを、待たずにまとめて出す。本物の ffmpeg は立ち上がりで読み込んだぶんを
  *   一度に出すので、選局の直後は貯まりが狙いより多く、画面はすぐ速めにかかる (`pacing`)
+ * - `clock` … 入口の TS の最初の PCR を、本物の ffmpeg と同じ見出し (`start:`) で出す。サーバが時計 (`clock` の通知) を配り、
+ *   画面は別の ffmpeg がエンコードした段どうしの位置を突き合わせられる (`69-live-handoff.spec.ts`)
  */
 interface Rough {
   gapEvery?: [number, number];
@@ -53,6 +91,7 @@ interface Rough {
   burstMs?: [number, number];
   audioFirst?: boolean;
   headStartMs?: number;
+  clock?: boolean;
 }
 const rough: Rough = (() => {
   try {
@@ -65,6 +104,7 @@ const rough: Rough = (() => {
     return {};
   }
 })();
+wantClock = rough.clock === true;
 const between = ([low, high]: [number, number]) =>
   low + Math.random() * (high - low);
 /** 次に長く空ける時刻 (ms) */
