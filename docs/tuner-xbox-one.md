@@ -21,7 +21,8 @@ Microsoft の USB チューナー (USB `045e:02d5`) で、**ケーブル (ISDB-C
   コンテナで `/lib/firmware/` を使うときは、そのディレクトリをコンテナに渡します
 - Android (11 から) では、外部ストレージのアプリの置き場の `firmware/` に `adb push` で置き、アプリを「終了」してから起動し直します。
   エージェントの置き場 (`files/denpa/config/firmware/`) には利用者が書けないので、アプリがエージェントを起動するときにそこへ写します。
-  Android 10 では写しません。ほかのアプリも書ける置き場のためです ([install-android.md](install-android.md#環境変数を足す-denpaenv) の `denpa.env` と同じ)
+  Android 10 では写しません。ほかのアプリも書ける置き場のためです ([install-android.md](install-android.md#環境変数を足す-denpaenv) の `denpa.env` と同じ)。
+  写したファイルは、外部の置き場から消しても残ります。書きかけのファイルが写っても、大きさと SHA-256 が違うのでエージェントは使わず、次に起動し直したときに写し直します
 
   ```sh
   adb push dvb-demod-mn88472-02.fw /sdcard/Android/data/io.github.danything.denpa/files/firmware/
