@@ -1560,12 +1560,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     const cut = keepFrom();
     if (head >= cut || trimHeld) return;
     // 捨て終えるまで `busy` なので、終えるまで `pace` は回らず、続けては渡さない
-    void sink.trim(ours(feedRun)).catch(() => {
+    const mine = feedRun;
+    void sink.trim(ours(mine)).catch(() => {
       /*
        * 捨てられなかった。次の塊を足し終えるまで捨て直さない (`trimHeld`)。失敗しても手が空けば `settled` から
        * `pace` が回るので、そのまま捨て直すと待たずに `remove` を繰り返す
        */
-      trimHeld = true;
+      // 作り直したあとの前の MSE の失敗は、新しい MSE の捨て直しを止めない
+      if (mine === feedRun) trimHeld = true;
     });
     if (element !== null && at < cut) element.currentTime = cut + BEHIND;
   }
