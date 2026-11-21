@@ -266,6 +266,8 @@ copy.exec("PRAGMA secure_delete = ON");
 copy.exec("DELETE FROM sessions");
 copy.exec("DELETE FROM device_codes");
 copy.exec("DELETE FROM niconico_link");
+// 参加していなかった家の印は残す (「参加しない」と決めたことは、移した先でも同じ。案内を出し直さない)。
+// 単体テストは参加していた家 (印が消える) の側だけを置く。残る側はこの EXISTS の条件だけで決まる
 copy.exec("DELETE FROM settings WHERE key = 'rankingDecided' AND EXISTS (SELECT 1 FROM ranking_link)");
 copy.exec("DELETE FROM ranking_link");
 copy.exec("DELETE FROM ranking_sent");

@@ -58,6 +58,8 @@ test.describe("番組ランキング", () => {
         accept: "application/json",
         "x-sveltekit-action": "true",
       },
+      // 画面と同じくフォームで送る。本文が無いと SvelteKit が action を呼ぶ前に断り、`tokenRefusal` まで届かない
+      form: {},
     });
     expect(await refused.json()).toMatchObject({
       type: "failure",
