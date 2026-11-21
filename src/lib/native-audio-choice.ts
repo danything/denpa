@@ -11,6 +11,15 @@ export function isWebKit(ua: string): boolean {
   return /AppleWebKit\//.test(ua) && !/(Chrome|Chromium|Edg|OPR)\//.test(ua);
 }
 
+/**
+ * **`<video>` の音を Web Audio に通すと無音になるか。** WebKit で、MSE (ManagedMediaSource) で流しているとき (#266922)。
+ * 観る画面は音を別に鳴らさないので、このときは通さずに `video.volume` で下げる (`volume.svelte.ts` の `silentTap`)。
+ * macOS の Safari は `video.volume` が効く。iOS は変えられないので、放送のままの大きさで鳴る
+ */
+export function tapSilent(ua: string, mse: boolean): boolean {
+  return mse && isWebKit(ua);
+}
+
 /** この端末でライブの音を別に鳴らすか */
 export function separateLiveAudio(): boolean {
   return typeof navigator !== "undefined" && isWebKit(navigator.userAgent);

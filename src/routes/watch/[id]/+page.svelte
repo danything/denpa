@@ -124,6 +124,7 @@
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { BROADCAST_HEVC, codecsFor, type LiveCodec } from "#lib/live.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
+  import { tapSilent } from "#lib/native-audio-choice.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
@@ -2009,6 +2010,10 @@
   /** 音量 (`volume.svelte.ts`)。canvas はプレイヤーの中で、`<video>` は Web Audio に通して掛ける (ライブ・追っかけと同じ) */
   const volume = playerVolume({
     video: () => (drawing ? null : video),
+    // WebKit は MSE の `<video>` を通すと無音になる。その場で流しているもの (`remux-player.ts`) は通さない
+    silentTap: () =>
+      typeof navigator !== "undefined" &&
+      tapSilent(navigator.userAgent, picked?.way === "stream"),
     through: () => background.on || pip.active,
     remote: (stop) => (stop ? pauseMedia() : playMedia()),
   });

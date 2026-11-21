@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { isWebKit } from "./native-audio-choice";
+import { isWebKit, tapSilent } from "./native-audio-choice";
 
 const WEBKIT = "AppleWebKit/605.1.15 (KHTML, like Gecko)";
 const BLINK = "AppleWebKit/537.36 (KHTML, like Gecko)";
@@ -44,4 +44,15 @@ test.each([
   ],
 ])("音を別に鳴らすのは WebKit だけ: %s", (_, ua, webkit) => {
   expect(isWebKit(`Mozilla/5.0 ${ua}`)).toBe(webkit);
+});
+
+test("観る画面で Web Audio に通さないのは WebKit の MSE だけ", () => {
+  const safari = `Mozilla/5.0 (iPhone) ${WEBKIT} Version/27.2 Mobile/15E148 Safari/604.1`;
+  const chrome = `Mozilla/5.0 (Windows NT 10.0) ${BLINK} Chrome/140.0 Safari/537.36`;
+  // MSE (その場で流しているもの) は通すと無音になる
+  expect(tapSilent(safari, true)).toBe(true);
+  // ファイルの直再生は通せる (音量のつまみが iOS でも効く)
+  expect(tapSilent(safari, false)).toBe(false);
+  expect(tapSilent(chrome, true)).toBe(false);
+  expect(tapSilent(chrome, false)).toBe(false);
 });

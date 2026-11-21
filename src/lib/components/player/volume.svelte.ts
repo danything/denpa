@@ -40,6 +40,11 @@ interface Options {
   video: () => HTMLVideoElement | null;
   /** 音を別に鳴らすか (ライブの WebKit。`#lib/native-audio-choice.ts`)。そのときは `<video>` を Web Audio に通さない */
   separateAudio?: () => boolean;
+  /**
+   * 通すと無音になるか (観る画面の WebKit の MSE。`#lib/native-audio-choice.ts` の `tapSilent`)。そのときは通さず、
+   * 下げるぶんは `video.volume` で掛ける
+   */
+  silentTap?: () => boolean;
   /** `<audio>` を通すか (バックグラウンド再生をオンにしているか、押して小窓を開いている間) */
   through: () => boolean;
   /** `<audio>` を外 (ロック画面・車の操作) から止められた・再開された */
@@ -124,9 +129,12 @@ export function playerVolume(options: Options): Volume {
     /*
      * 音は別に鳴らす (`raw/native-audio.ts`)。`<video>` は通さない。WebKit では通しても無音しか来ない。
      * 別に鳴らせず `<video>` の音に戻ったとき (`live-player.svelte.ts`) のために、下げるぶんは `video.volume` でも掛ける
-     * (macOS の Safari は効く。iOS は `video.volume` を変えられない)
+     * (macOS の Safari は効く。iOS は `video.volume` を変えられない)。
+     *
+     * 通すと無音になるとき (`silentTap`) も同じにする。一度通した要素は Web Audio からしか鳴らないので、通した要素のまま
+     * MSE に移ると無音になる。観る画面は段を替えるとき映していない側の `<video>` に移るので、ふつうはまだ通していない要素になる
      */
-    if (options.separateAudio?.()) {
+    if (options.separateAudio?.() || options.silentTap?.()) {
       if (tapped !== null) sources.get(tapped)?.disconnect();
       tapped = null;
       outlet?.hold(true);
@@ -170,6 +178,7 @@ export function playerVolume(options: Options): Volume {
     void level;
     void options.through();
     void options.separateAudio?.();
+    void options.silentTap?.();
     untrack(() => {
       current = video;
       sync();
