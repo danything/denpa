@@ -74,9 +74,9 @@ export function worthLogging(line: string): boolean {
  *   1 枚ごとに書き出させる (溜められるとそのぶん遅れる)
  *
  * @param from ffmpeg に渡す局の指定 (`0:p:<局>` か `0`)
- * @param out 書き出す先 (`stream.sideOutput` の `url`。Windows では名前付きパイプ)
  * @param track その局の中で何本目の字幕を出すか。**言語が複数ある放送**では
  *   2 本以上入っている (`TrackList`)
+ * @param out 書き出す先 (`stream.sideOutput` の `url`。Windows では名前付きパイプ)
  */
 export function captionOutput(
   from: string,

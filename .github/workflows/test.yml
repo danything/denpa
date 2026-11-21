@@ -682,7 +682,7 @@ jobs:
           path: ${{ runner.temp }}\nuget
           key: ${{ steps.nuget.outputs.cache-primary-key }}
 
-      # wdi-simple.exe (libwdi。Zadig のコマンドライン版)。リリースと同じスクリプトで、決めたタグのソースからビルドする
+      # wdi-simple.exe (libwdi。Zadig をコマンドラインで使うもの)。リリースと同じスクリプトで、決めたタグのソースからビルドする
       # (取ってくるものはコミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)。エージェントと同じ zip に入れる。
       # **組んだものは actions/cache に置き、スクリプトかランナーのイメージ (MSVC のバージョン) が変わるまで使い回す**
       # (組むと 40 秒ほど。イメージは週に 1 回ほど上がるので、新しい MSVC で組めるかはそのたびに見る)。置くのは SDK と同じく main だけ

@@ -17,9 +17,10 @@ import { createHash } from "node:crypto";
 
 import { and, eq, gt, inArray, isNull, lte } from "drizzle-orm";
 
-import { ALL_CHANNEL_TYPES, type ChannelType, origin } from "../types";
+import { origin } from "../types";
 import { config, userAgent } from "./config";
 import { now, orm } from "./db";
+import { typeRank } from "./epg";
 import {
   programs,
   rankingLink,
@@ -658,12 +659,6 @@ function readEntries(body: unknown): HubEntry[] | null {
   return entries;
 }
 
-/** 種別の並び (番組表と同じ)。同じ放送を 2 つの局で受けているとき、地上波・BS・CS の局を先に選ぶ */
-function typeOrder(type: string): number {
-  const at = ALL_CHANNEL_TYPES.indexOf(type as ChannelType);
-  return at < 0 ? ALL_CHANNEL_TYPES.length : at;
-}
-
 /**
  * **手元の番組表と突き合わせる。** 番組ごとに、受信できる局 (一覧に出している局) にある終わっていない放送を選ぶ。
  * いくつかあれば始まりの早いもの。無ければ、まだ始まっていない放送のうち早いものを、受信できない局の行にする。
@@ -698,7 +693,8 @@ function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
       .sort(
         (a, b) =>
           a.start_at - b.start_at ||
-          typeOrder(a.service_type) - typeOrder(b.service_type),
+          // 同じ放送を 2 つの局で受けているときは、地上波・BS・CS の局を先に選ぶ (種別の並びは番組表と同じ)
+          typeRank(a.service_type) - typeRank(b.service_type),
       )[0];
     if (found !== undefined) {
       out.push({

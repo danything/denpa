@@ -209,8 +209,8 @@ export function reconcile(): {
 /** 動画そのものの拡張子。これの隣に置くものが「サイドカー」 */
 const VIDEO_EXTENSIONS = ["m2ts", "mmts", "ts", "mkv", "mp4"];
 const VIDEO = new RegExp(`\\.(?:${VIDEO_EXTENSIONS.join("|")})$`, "i");
-/** EPGStation の引き継ぎの書きかけ (`migrate.ts` の `TEMPORARY`)。`.epgstation-12.m2ts.migrating` は下の `TRAILING` にも当たる */
-const MIGRATING = /^\.epgstation-\d+\..+\.migrating$/;
+/** EPGStation の引き継ぎの書きかけ (`migrate.ts` の `temporaryPath`)。`.epgstation-12.m2ts.migrating` は下の `TRAILING` にも当たる */
+export const MIGRATING = /^\.epgstation-\d+\..+\.migrating$/;
 /** 作業ファイル。動画の名前をまるごと先頭に持つ (`….m2ts.chapters.txt`) */
 const TRAILING = new RegExp(
   `^(.+\\.(?:${VIDEO_EXTENSIONS.join("|")}))\\.[^/]+$`,

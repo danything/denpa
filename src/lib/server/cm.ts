@@ -424,7 +424,7 @@ interface CmOptions {
   serviceId: number;
   /** 番組の尺 (秒。番組表)。録画の先頭と末尾に入った前後の番組を見分けるのに使う */
   programLength?: number;
-  /** 番組表どおりなら番組が始まる秒 (録画の前のマージン。入れ物の先頭から) */
+  /** 番組表どおりなら番組が始まる秒 (入れ物の先頭から。`encoder.programSpan`) */
   programStart?: number;
   /** いま何をしているか。段階の名前だけでは進み具合が分からない */
   onStep?: (label: string) => void;

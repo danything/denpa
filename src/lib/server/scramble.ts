@@ -596,7 +596,7 @@ async function decodeAgent(): Promise<Agent> {
   const ready = all.filter(
     (_, i) => cards[i]!.ok && getActiveCardId(cards[i]!) !== null,
   );
-  if (ready.length === 0) return all[0]!;
+  if (ready.length === 0) return primaryAgent();
   let unknown: Agent | null = null;
   for (const agent of ready) {
     const seen = await rawVisible(agent);

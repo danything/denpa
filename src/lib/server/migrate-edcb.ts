@@ -83,7 +83,7 @@ const DAY_MINUTES = 24 * 60;
  *   その曜日を全部の日として写す。途中から始まる・途中で終わるものは写せない
  *
  * denpa のルールは時間帯を 1 つしか持てないので、時刻の同じものは曜日をまとめ、時刻の違うものが残れば写せない。
- * 範囲を外れた値は丸める (EDCB も丸めて使う)
+ * 範囲を外れた値は割った余りにして使う (曜日は 7、時は 24、分は 60 で割る。EDCB も同じく割った余りで扱う)
  */
 export function parseDateList(dates: readonly EdcbDate[]): DateListResult {
   const windows = new SlotWindows();

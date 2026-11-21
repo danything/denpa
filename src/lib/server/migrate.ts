@@ -48,6 +48,7 @@ import {
   parseSource,
 } from "./epgstation-api";
 import { emit } from "./events";
+import { MIGRATING } from "./files";
 import { fileSize } from "./fsx";
 import { type LibraryNameInput, libraryPath, recordedPath } from "./library";
 import { writeThumbnail } from "./metadata";
@@ -185,10 +186,9 @@ const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
  * **置き場と同じフォルダに書き、取り終えて確かめてから最終の名前へ rename する。**
  * 同じファイルシステムの中なので rename は一瞬で済み、最終の名前に
  * 書きかけのものが並ぶことは無い。先頭の `.` は、フォルダを辿るプレイヤーに見せないため。
- * 止まって残ったものは次の実行で続きから取る。もう対象に無いものだけ片付ける ({@link sweepTemporaries})
+ * 止まって残ったものは次の実行で続きから取る。もう対象に無いものだけ片付ける ({@link sweepTemporaries})。
+ * この名前に当たる正規表現は `files.MIGRATING`
  */
-const TEMPORARY = /^\.epgstation-\d+\..+\.migrating$/;
-
 function temporaryPath(
   dir: string,
   sourceId: number,
@@ -224,7 +224,7 @@ export function sweepTemporaries(keep: ReadonlySet<string>): number {
     }
     for (const name of names) {
       const path = join(dir, name);
-      if (!TEMPORARY.test(name) || keep.has(path)) continue;
+      if (!MIGRATING.test(name) || keep.has(path)) continue;
       rmSync(path, { force: true });
       removed++;
     }
@@ -369,6 +369,9 @@ async function importOne(
     record(`ファイルが無い: ${name}`);
     return "missing";
   }
+  // ここからの失敗は、取れなかった残り (`currentTotal - currentDone`) を合計から外す (`importRecordings`)
+  status_.currentDone = 0;
+  status_.currentTotal = file.size;
 
   recordPlan(
     options,
@@ -383,9 +386,6 @@ async function importOne(
     existing,
   );
   mkdirSync(dir, { recursive: true });
-
-  status_.currentDone = 0;
-  status_.currentTotal = file.size;
   const result = await downloadVideo(
     context.client,
     file.id,
@@ -1058,6 +1058,8 @@ async function importRecordings(
     } catch (error) {
       if (context.signal.aborted) throw error;
       status_.failed++;
+      // 取れなかった残りを合計から外す (進み具合が合計に届かないまま終わらないように)
+      status_.bytesTotal -= status_.currentTotal - status_.currentDone;
       record(
         `取り込めませんでした: ${text(item.name)} (${error instanceof Error ? error.message : String(error)})`,
       );

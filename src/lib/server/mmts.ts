@@ -4,7 +4,7 @@
  * 4K の録画を読む所はどこもここを通す。
  *
  * - 観る画面の詰め替えと変換、録画ファイルの音声だけ (`playback.ts` の `mmtsAttempts`・`mmtsPassthrough`・`fileAudioBody`)
- * - エンコードの前の詰め替え (`encoder.ts` の `runJob`。`remuxMmts` で作業ファイルの MP4 を作り、あとは TS の録画と同じ)
+ * - エンコードと CM 検出の前の詰め替え (`encoder.ts` の `remuxForEncode`。`remuxMmts` で作業ファイルの MP4 を作り、あとは TS の録画と同じ)
  * - 字幕 (`api/recordings/<id>/captions.json`。`mmtsCaptions`)
  *
  * **物差しは録画の先頭を 0 とした秒** (`MmtsFile.head`)。先頭はファイルの最初の頭出しできる映像のコマの DTS

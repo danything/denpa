@@ -31,7 +31,7 @@ import { replayAt } from "#lib/ts/data-timeline.js";
 
 import type { Recording } from "../types";
 
-// DB は一時ファイルへ (番組の名乗りを組むのに services を引く。files.test.ts と同じ手)
+// DB は一時ファイルへ (番組情報を組むのに services を引く。files.test.ts と同じ手)
 const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-bml-db-")), "denpa.db");
 const { orm } = await import("./db");
@@ -168,7 +168,7 @@ describe("saveRecordedBml / loadRecordedBml", () => {
     );
     if (done === undefined) throw new Error("moduleDownloaded が無い");
     expect(bmlBody(done.message)).toContain("ver1");
-    // **番組の名乗りが先頭に入っている。** 描く側はこれが来るまで入口を開かない
+    // **番組情報 (`programInfo`) が先頭に入っている。** 描く側はこれが来るまで入口を開かない
     const info = loaded[0]!.message;
     if (info.type !== "programInfo")
       throw new Error("programInfo が先頭に無い");
@@ -200,7 +200,7 @@ describe("saveRecordedBml / loadRecordedBml", () => {
     expect(shownAt(sidecar, 69_000)).toContain("ver2");
   });
 
-  test("名乗りを書いていなかった頃のサイドカーには、読むときに足す", () => {
+  test("番組情報を書いていなかった頃のサイドカーには、読むときに足す", () => {
     const old = [{ at: 0, message: { type: "pmt" as const, components: [] } }];
     const fixed = withProgramInfo(old, recording(T));
     expect(fixed[0]!.message.type).toBe("programInfo");

@@ -5,8 +5,8 @@
  *   端末が何台あっても、1 つの局に繋ぐのは 1 本
  * - 接続先は denpa-hub の `/niconico/live/watch` から受け取る (局の ID とユーザー ID を渡し、アクセストークンを付ける)。
  *   ニコニコ固有の値は hub が持つ。hub が 401 を返したら 1 回だけトークンを更新してやり直す
- * - やり取りは NX-Jikkyo と同じ形式 (`nx.ts`): `startWatching` (映像はリクエストしない)・`ping` に `pong`・`seat` の間隔で `keepSeat`・
- *   `postComment` (いつも 184) に `postCommentResult` か `error`・`disconnect`。最初の返事が来たら書ける。
+ * - やり取りは NX-Jikkyo と同じ形式 (`nx.ts`) で、`startWatching` (映像はリクエストしない)・`ping` に `pong`・`seat` の間隔で `keepSeat`・
+ *   `postComment` (いつも 184) に `postCommentResult` か `error`・`disconnect` を使う。最初の返事が来たら書ける。
  *   書き込みの `vpos` の基準 (`vposBaseTime`) は、どの返事に載っていても読む (読めなければ繋いだ時刻)
  * - **繋ぐのは書き込みの欄が開いている間だけ。** 欄は開いている間 30 秒おきに `touch` を呼ぶ。`IDLE` の間呼ばれなければ閉じる。
  *   同じアカウントで開ける接続の数には上限がある (数は公開されていない) ので、同時に開くのは `MAX_SESSIONS` まで

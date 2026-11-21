@@ -6,7 +6,7 @@
  * - 組むときの合言葉 (`#pair=`) は DB に持たない。環境変数から読む
  * - 通知の購読・ログ・バージョン・チャンネルの控え・チューナーとカードの一覧・スキャンと、選局の振り分けは全部の行 (`listAgents`。
  *   振り分けは `tuner.openChannel`、後から復号させる先は `scramble.decodeAgent`)。並びの先頭の 1 台 (`primaryAgent`) に送るのは、
- *   どのエージェントか分からないときのカードの問い合わせ (`scramble.cardStatus`) だけ
+ *   どのエージェントか分からないときのカードの問い合わせ (`scramble.cardStatus`) と、エージェントが 1 台のときかカードの準備ができたものが無いときの後から復号させる先 (`scramble.decodeAgent`) だけ
  */
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
@@ -244,7 +244,8 @@ export const NO_AGENT =
   "エージェントがありません。設定の「受信」の「エージェントを追加」に登録用の URL を貼るか、TUNER_AGENT_URL に https://ホスト:25252#pair=<合言葉> を書きます (docs/agent.md)";
 
 /**
- * 並びの先頭のエージェント。どのエージェントか分からないときのカードの問い合わせに使う (`scramble.cardStatus`)。
+ * 並びの先頭のエージェント。どのエージェントか分からないときのカードの問い合わせ (`scramble.cardStatus`) と、
+ * エージェントが 1 台のときかカードの準備ができたものが無いときの、後から復号させる先 (`scramble.decodeAgent`) に使う。
  * 1 台も無ければ、TUNER_AGENT_URL の書き方を入れたエラーを送出する
  */
 export function primaryAgent(): Agent {

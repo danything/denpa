@@ -686,10 +686,10 @@ export async function cancel(jobId: number): Promise<void> {
 
   /*
    * 動いている分。**段階の名前を先に書き換えてから待つ**。上限に間に合わな
-   * かったときでも、押した直後の読み直しが「中止しています」を読める
+   * かったときでも、押した直後の読み直しが「中断しています」を読める
    * (割合を出している段階では出ないが、CM 検出のように数分かかる段階で効く)
    */
-  writeStep(jobId, "中止しています");
+  writeStep(jobId, "中断しています");
   await settled(jobId);
 }
 
@@ -706,7 +706,7 @@ export function isCanceling(jobId: number): boolean {
 
 /** 段階を進めて画面にも伝える。押しても反応が無いように見えるのを防ぐ */
 function setPhase(jobId: number, phase: EncodePhase, log: string): void {
-  // 中止を指示された後は「中止しています」を残す (下の setStep と同じ)
+  // 中断を指示された後は「中断しています」を残す (下の setStep と同じ)
   if (canceled.has(jobId)) return;
   orm()
     .update(encodeJobs)
@@ -721,7 +721,7 @@ function setPhase(jobId: number, phase: EncodePhase, log: string): void {
  *
  * 段階の名前 (「CM 検出中」) だけでは、進んでいるのか止まっているのかが分からない。
  *
- * **中止を指示された後は書き換えない**。`cancel` が書いた「中止しています」を、
+ * **中断を指示された後は書き換えない**。`cancel` が書いた「中断しています」を、
  * 後始末が終わるまでの間に通る段階が上書きしないように
  */
 function setStep(jobId: number, log: string): void {
@@ -938,7 +938,7 @@ function progressMeter(jobId: number, recordingId: number, total: number) {
   const write = (force: boolean) => {
     const at = Date.now();
     if (!force && at - lastWrite < PROGRESS_INTERVAL) return;
-    // 中止を指示された後は「中止しています」を残す (setStep と同じ)
+    // 中断を指示された後は「中断しています」を残す (setStep と同じ)
     if (canceled.has(jobId)) return;
     lastWrite = at;
     const { percent, etaMs, log } = combineProgress(parts, total);

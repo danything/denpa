@@ -3895,7 +3895,7 @@ function httpWant(
  * 録画が無い・まだ何も録れていなければ null。再エンコードでその場の変換の枠 (`transcode.ts`) が
  * 埋まっていれば `'busy'`。
  *
- * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`。コーデックは呼ぶ側が `rungCodec` で決めて `codec` に渡す)。
+ * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`。コーデックは呼ぶ側が `viewing.askedFormat` で決めて `codec` に渡す)。
  * 追っかけはもともと枠を使うので、段を下げても使う枠は 1 つのまま。`raw` では効かない
  */
 export function chaseStream(
@@ -4958,7 +4958,7 @@ function openChase(
   const { codec, raw, rung, copy } = media.video
     ? chaseForm(asked, transport, broadcast)
     : { ...AUDIO_FORM, rung: 0 as Rung, copy: false };
-  // 段を下げた追っかけも使う枠は 1 つ (下げないときと同じ)。コーデックは呼ぶ側が選んである (`rungCodec`)。音声だけは枠を使わない
+  // 段を下げた追っかけも使う枠は 1 つ (下げないときと同じ)。コーデックは呼ぶ側 (`attend`・`chaseStream`) と `chaseForm` が選んである。音声だけは枠を使わない
   const release =
     raw || copy || codec === "audio"
       ? (held ?? (() => undefined))

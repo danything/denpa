@@ -347,6 +347,9 @@ export function clipPath(file: string, small = false): string {
 
 /** 元の画像の置き場 (`2026-10/12.src`)。重ねを分けて受けたものだけが持つ */
 export function clipSrcDir(file: string): string {
+  // 空の名前だと置き場そのものを指し、`deleteClips` が置き場ごと消してしまう。
+  // `saveClip` は最初のバージョンから行と名前を 1 つのトランザクションで書くので、空の名前の行は DB に無い
+  if (file === "") throw new Error("切り抜きの画像の名前が空です");
   return join(clipsDir(), file.replace(/\.avif$/, ".src"));
 }
 
@@ -707,11 +710,12 @@ export async function setClipLayers(
       );
       sweepWork(work);
       mkdirSync(work, { recursive: true });
-      if (!(await encode(join(dir, frame), layers, full, small)))
-        throw new ClipError(500, "重ね直せませんでした");
-      // 作っている間に消された (消すのは列に並ばない)。ここからは await を挟まないので、もう消されない
+      const encoded = await encode(join(dir, frame), layers, full, small);
+      // 作っている間に消された (消すのは列に並ばない。元の画像も消えるので encode も失敗する)。
+      // ここからは await を挟まないので、もう消されない
       if (clipById(id) === undefined)
         throw new ClipError(404, "切り抜きが見つかりません");
+      if (!encoded) throw new ClipError(500, "重ね直せませんでした");
       renameSync(full, clipPath(clip.file));
       renameSync(small, clipPath(clip.file, true));
       orm()
@@ -750,7 +754,7 @@ function clipById(id: number): (Clip & { file: string }) | undefined {
   const row = orm()
     .select({ ...getTableColumns(clips), alive: ALIVE })
     .from(clips)
-    .where(and(eq(clips.id, id), ne(clips.file, "")))
+    .where(eq(clips.id, id))
     .get();
   return row === undefined ? undefined : { ...toClip(row), file: row.file };
 }
@@ -763,7 +767,7 @@ function dayRange(day: string): [number, number] {
 
 /** 条件を SQL に。言葉は空白で区切った語を**すべて**含むもの (揃えた文字で比べる) */
 function clipConditions(query: ClipQuery): SQL[] {
-  const where: SQL[] = [ne(clips.file, "")];
+  const where: SQL[] = [];
   for (const word of searchWords(searchQuery(query.q)))
     where.push(sql`instr(${clips.search_text}, ${word}) > 0`);
   if (query.service !== undefined)
@@ -813,14 +817,12 @@ interface ClipFacets {
 }
 
 export function clipFacets(): ClipFacets {
-  const live = ne(clips.file, "");
   const total = orm()
     .select({
       count: sql<number>`count(*)`,
       bytes: sql<number>`coalesce(sum(${clips.bytes}), 0)`,
     })
     .from(clips)
-    .where(live)
     .get() ?? { count: 0, bytes: 0 };
   const byService = orm()
     .select({
@@ -828,11 +830,10 @@ export function clipFacets(): ClipFacets {
       // 局名は撮ったときのもの。いちばん新しい 1 枚の名前で出す。
       // 外の行の局は "clips"."service_id" と書く。`${clips.service_id}` は表の名前の付かない
       // "service_id" になり、副問い合わせの中では c2 自身の列と読まれて、どの局も全体の最新の 1 枚の名前になっていた
-      name: sql<string>`(SELECT c2.service_name FROM clips c2 WHERE c2.service_id = "clips"."service_id" AND c2.file <> '' ORDER BY c2.id DESC LIMIT 1)`,
+      name: sql<string>`(SELECT c2.service_name FROM clips c2 WHERE c2.service_id = "clips"."service_id" ORDER BY c2.id DESC LIMIT 1)`,
       count: sql<number>`count(*)`,
     })
     .from(clips)
-    .where(live)
     .groupBy(clips.service_id)
     .orderBy(desc(sql`count(*)`))
     .all();
@@ -841,7 +842,6 @@ export function clipFacets(): ClipFacets {
   const days = orm()
     .select({ day, count: sql<number>`count(*)` })
     .from(clips)
-    .where(live)
     .groupBy(day)
     .orderBy(desc(day))
     .all();
@@ -862,7 +862,6 @@ export function deleteClips(ids: number[]): number {
     .where(inArray(clips.id, ids))
     .all();
   for (const row of rows) {
-    if (row.file === "") continue;
     removeIfExists(clipPath(row.file));
     removeIfExists(clipPath(row.file, true));
     rmSync(clipSrcDir(row.file), { recursive: true, force: true });
@@ -960,7 +959,7 @@ export function clipCountsByRecording(): Record<number, number> {
   for (const row of orm()
     .select({ id: clips.recording_id, n: sql<number>`count(*)` })
     .from(clips)
-    .where(and(isNotNull(clips.recording_id), ne(clips.file, "")))
+    .where(isNotNull(clips.recording_id))
     .groupBy(clips.recording_id)
     .all())
     if (row.id !== null) counts[row.id] = row.n;

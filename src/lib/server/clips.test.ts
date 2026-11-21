@@ -723,6 +723,28 @@ describe("字幕・コメントを分けて受ける", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
+  test("重ね直している間に消されたら 404", async () => {
+    const clip = await saveClip(
+      { frame: png(1920, 1080), captions: png(1920, 1080, "c") },
+      liveScene(SERVICE, START),
+      "",
+    );
+    // 元の画像を消されて失敗する ffmpeg の代わり。消すまでの間を空けてから失敗する
+    const slow = join(root, "ffmpeg-slow.sh");
+    writeFileSync(slow, "#!/bin/sh\nsleep 0.3\nexit 1\n");
+    chmodSync(slow, 0o755);
+    config.ffmpeg = slow;
+    try {
+      const pending = setClipLayers(clip.id, { captions: false });
+      await Bun.sleep(100);
+      deleteClips([clip.id]);
+      expect(pending).rejects.toMatchObject({ status: 404 });
+      await pending.catch(() => undefined);
+    } finally {
+      config.ffmpeg = fake;
+    }
+  });
+
   test("画像を端末に持たせるのは、中身が替わらないときだけ", async () => {
     const layered = await saveClip(
       { frame: png(1920, 1080), captions: png(1920, 1080, "c") },

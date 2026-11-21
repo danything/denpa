@@ -6,7 +6,7 @@
 FROM docker.io/oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
-# ワークスペース (packages/) の package.json も、依存を解くのに要る
+# ワークスペース (packages/) の package.json も、依存を解決するのに要る
 COPY packages/arib/package.json packages/arib/
 RUN bun install
 
@@ -80,9 +80,9 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 # データ放送と字幕、画面の放送の文字を描くブラウザに渡すフォント (Denpa Font。danything/denpa-font のリリースの woff2 の 2 つ
 # (基本の文字と JIS X 0213 で足された漢字) と、後のほうの文字の範囲 (CSS の unicode-range)。
 # `/api/font/` が配る)。BML は**等幅・丸ゴシック・ARIB 外字**を要求していて、
-# このフォントが 3 つとも満たす (借りている側は Kosugi を 4.4 MB ぶん抱えているが、外字は入っていない)。
+# このフォントが 3 つとも満たす。
 # **留めるのはタグだけ** (Renovate はタグだけ上げればよい)。中身は同じリリースの SHA256SUMS で照らす。
-# 画面はこのタグを URL に付けて1 年持たせる (vite.config.ts がこの行を読む)。配る側は VERSION と
+# 画面はこのタグを URL に付けて 1 年持たせる (vite.config.ts がこの行を読む)。配る側は VERSION と
 # 照らし、合うときだけ immutable にする (src/lib/server/font.ts)。
 # 段を分けてあるのは、本番イメージ・Windows と Mac の配布物 (`native-files` 段)・画像を撮るイメージ (`docs` 段) のどれにも同じものを置くため
 # ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ CMD ["bun", "scripts/capture-docs.ts"]
 
 # ---------------------------------------------------------------------------
 # ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel・AMD の GPU (VA-API) + NVIDIA NVENC (amd64) + Rockchip MPP (arm64)。
-# 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
+# 上流に送る直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
 # デコーダ (libaribcaption) は組み込まない。`-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
 # **土台のイメージはどれも digest で固定する** (debian は ffmpeg / runtime-libs / denpa-font で同じもの。
@@ -208,7 +208,7 @@ ARG OPUS_VERSION=1.6.1
 # renovate: datasource=github-tags depName=rockchip-linux/mpp
 ARG MPP_VERSION=1.1.0
 
-# **上流に投げるつもりの直しだけを当てる** (patches/README.md。いまは無い)。`--fuzz=0` は、
+# **上流に送るつもりの直しだけを当てる** (patches/README.md。いまは無い)。`--fuzz=0` は、
 # ffmpeg を上げて当たらなくなったら黙ってずれて当たるより、ビルドを止めてほしいため
 COPY patches/ /patches/
 
@@ -324,7 +324,7 @@ RUN case "${TARGETARCH}" in \
 #
 # **Debian の mesa-va-drivers は使わず、Mesa をソースから組む。** パッケージは全部の GPU のドライバと
 # LLVM (libLLVM 120 MB) を引き込み、イメージが展開後で約 170 MB 増える。radeonsi と VA-API だけを
-# LLVM 無しで組むと1 ファイルで済む (radeonsi は Mesa 24.0 から LLVM 無しで組め、シェーダは ACO で組む)。
+# LLVM 無しで組むと 1 ファイルで済む (radeonsi は Mesa 24.0 から LLVM 無しで組め、シェーダは ACO で組む)。
 # **大きさを優先して組む** (`buildtype=minsize`)。release の 18 MB が 13 MB になる (LTO を足しても 0.4 MB しか減らない)。
 # エンコードは GPU の回路がやり、ドライバの CPU 側は命令を渡すくらいなので、速さへの響きは小さいはず (実機では見ていない)。
 # `video-codecs=all` は、既定では外れる H.264・H.265 のエンコードとデコードを入れるため (AV1 は既定で入る)。
@@ -432,9 +432,9 @@ FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:3a2dbf10c2fdafe5865e2b0
 # (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる。
 # arm64 の Rockchip MPP (librockchip_mpp.so.1) は ffmpeg 段で組んで /usr/local/lib に一緒に来る。
 # libdrm (rkmpp と VA-API が繋ぐ) は libva-drm2 の依存で入り、どちらも下の ldd で /rootfs に運ばれる
-# iHD は Debian の non-free 版 (そのために non-free を足す)。free 版はソースの無い GPU のカーネル (シェーダ) を
+# iHD は Debian の non-free のパッケージ (そのために non-free を足す)。free のパッケージはソースの無い GPU のカーネル (シェーダ) を
 # 抜いてあり、シェーダを使うエンコードができない。Skylake〜Comet Lake の H.265 と、Broadwell のエンコードは
-# どれもシェーダを使うので、free 版では GPU でエンコードできない。中身のライセンスは free 版と同じ MIT
+# どれもシェーダを使うので、free のパッケージでは GPU でエンコードできない。中身のライセンスは free のパッケージと同じ MIT
 # i965-va-driver は iHD が対応しない古い世代 (Haswell など) の内蔵 GPU 用。
 # AMD の VA-API ドライバ (radeonsi) は `mesa` 段で組んだもの。それが繋ぐライブラリ (libdrm-amdgpu1 など) と、
 # GPU の名前の一覧 (libdrm-common の amdgpu.ids) は Debian から入れる。これも amd64 だけ

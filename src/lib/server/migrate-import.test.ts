@@ -469,6 +469,8 @@ describe("ファイルの取り方", () => {
     const s = status();
     expect(s).toMatchObject({ state: "done", imported: 0, failed: 2 });
     expect(s.log.some((line) => line.includes("長さが合いません"))).toBe(true);
+    // 取れなかったぶんは合計から外れ、進み具合は合計に届いて終わる
+    expect(s.bytesDone).toBe(s.bytesTotal);
     expect(orm().select().from(recordings).all()).toEqual([]);
     expect(temporaries()).toEqual([]);
     // 取り直さない (長さが違うのは取り直しても変わらない)
@@ -487,6 +489,7 @@ describe("ファイルの取り方", () => {
     await run();
     const s = status();
     expect(s).toMatchObject({ state: "done", imported: 0, failed: 2 });
+    expect(s.bytesDone).toBe(s.bytesTotal);
     expect(
       s.log.some((line) => line.includes("3 回取り直しても取れませんでした")),
     ).toBe(true);
