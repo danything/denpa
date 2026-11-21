@@ -30,6 +30,7 @@ import {
   PacketStream,
   parsePat,
   PID_PAT,
+  pmtPcrPid,
   pmtProgramInfo,
   pmtStreams,
   SectionAssembler,
@@ -250,8 +251,8 @@ export class ServiceFilter {
       const pids = new Set<number>();
 
       // PCR。映像と同じ PID のことが多いが、別に振られていることもある
-      const pcrPid = u16(section, 8) & 0x1fff;
-      if (pcrPid !== PID_NULL) pids.add(pcrPid);
+      const pcrPid = pmtPcrPid(section);
+      if (pcrPid !== null) pids.add(pcrPid);
 
       const programInfo = pmtProgramInfo(section);
       collectCa(programInfo, pids);

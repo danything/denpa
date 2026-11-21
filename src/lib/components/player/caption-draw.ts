@@ -14,6 +14,7 @@
  * 画素は CSS の大きさ (`clientWidth`。整数に丸めてある) ではなく**実際に見えている大きさ**で数える。
  */
 
+import { fromBase64 } from "@danything/arib/bytes";
 import {
   type CaptionDrcs,
   type CaptionPage,
@@ -109,7 +110,7 @@ function drcsImage(drcs: CaptionDrcs, color: string): HTMLCanvasElement {
   canvas.height = drcs.h;
   const ctx = canvas.getContext("2d");
   if (ctx !== null) {
-    const bytes = Uint8Array.from(atob(drcs.data), (c) => c.charCodeAt(0));
+    const bytes = fromBase64(drcs.data);
     const image = ctx.createImageData(drcs.w, drcs.h);
     const [r, g, b, a] = rgba(color);
     for (let i = 0; i < drcs.w * drcs.h; i++) {

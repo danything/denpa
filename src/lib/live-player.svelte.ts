@@ -47,6 +47,7 @@ import {
   wantsData,
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
+import { inPictureInPicture } from "#lib/components/player/pip.svelte.js";
 import {
   DecodeLag,
   SLIP_MOST,
@@ -55,7 +56,7 @@ import {
 } from "#lib/components/player/unslip.js";
 import { writeCookie } from "#lib/cookie.js";
 import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
-import { forget, read, write } from "#lib/keep.js";
+import { forget as forgetKey, read, write } from "#lib/keep.js";
 import {
   holdsDown,
   LagMeter,
@@ -277,20 +278,7 @@ function rememberFloor(seconds: number): void {
 
 /** 忘れる。まっさらな端末と同じ状態に戻す (`relearn`) */
 function clearFloor(): void {
-  forget(FLOOR_KEY);
-}
-
-/**
- * 小窓 (PiP) で何かを出しているか。標準の API と、それが無い古い Safari の `webkitPresentationMode` の両方を見る (`pip.svelte.ts` と同じ)。
- * 映像を描く canvas の代わりの video を小窓にすることがあるので、この video に限らない
- */
-function inPictureInPicture(): boolean {
-  if (document.pictureInPictureElement) return true;
-  return [...document.querySelectorAll("video")].some(
-    (video) =>
-      (video as HTMLVideoElement & { webkitPresentationMode?: string })
-        .webkitPresentationMode === "picture-in-picture",
-  );
+  forgetKey(FLOOR_KEY);
 }
 
 /**
@@ -438,7 +426,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 測った回線の速さ (`AdaptSample.capacity`。`probeLink`)。まだ測っていなければ null */
   let capacity: { bps: number; at: number } | null = null;
   /**
-   * 別に鳴らす音の AudioContext。**作り直しても使い回す** (`NativeAudio` の `shared`)。iOS の Safari は、押したとき以外に作った
+   * 別に鳴らす音の AudioContext。**作り直しても使い回す** (`NativeAudio` の `context`)。iOS の Safari は、押したとき以外に作った
    * AudioContext を止めたまま始めるので、画質を切り替えるたびに作り直すと、自動再生を断られたとみて消音にしていた (#2728)。
    * **押されたときに作っておく** (`GestureContext`)。MPEG-2 (canvas に描く) から段を下げて `<video>` に移る瞬間は押されていないので、
    * そこで初めて作ると同じく消音になる。閉じるのは画面を離れるとき (`stop`)
@@ -876,7 +864,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    *
    * `play()` が返っただけでは**まだ何も映っていない**ので、そこで剥がすと
    * 一瞬黒くなる。`requestVideoFrameCallback` は「1 枚映した」ところで来る。
-   * 持っていないブラウザでは `timeupdate` で代える (1 枚ぶん遅いが実害は無い)
+   * 持っていないブラウザでは `timeupdate` で代える (1 枚ぶん遅いが実害は無い)。`frames.ts` の `eachFrame` を使わないのは、
+   * あちらの代わり (画面の書き換えごと) では映る前に剥がして黒くなるため
    */
   function onFrame(video: HTMLVideoElement, done: () => void): void {
     const request = (
@@ -940,13 +929,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * ライブで再生しているときだけ (追っかけはバッファを狙いに寄せない)
    */
   function sampleLow(video: HTMLVideoElement): void {
-    if (buffer === null || buffer.updating || buffer.buffered.length === 0)
-      return;
-    if (!running || paused || chase !== null || chasing) return;
-    lows.push(
-      performance.now() / 1000,
-      buffer.buffered.end(buffer.buffered.length - 1) - video.currentTime,
-    );
+    if (buffer === null || buffer.updating) return;
+    const end = bufferEnd();
+    if (end === null || !running || paused || chase !== null || chasing) return;
+    lows.push(performance.now() / 1000, end - video.currentTime);
   }
 
   /**
@@ -1140,6 +1126,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 届いた映像の端 (メディアの時刻、秒。`LagMeter`)。canvas は届いた音の端。まだ無ければ null */
   function edgeNow(): number | null {
     if (canvas) return engine?.edge ?? null;
+    return bufferEnd();
+  }
+
+  /** `<video>` に届いている映像の端 (メディアの時刻、秒)。まだ無ければ null */
+  function bufferEnd(): number | null {
     if (buffer === null || buffer.buffered.length === 0) return null;
     return buffer.buffered.end(buffer.buffered.length - 1);
   }
@@ -1210,10 +1201,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   function aheadNow(): number | null {
     if (canvas) return engine?.lead ?? null;
-    if (element === null || buffer === null || buffer.buffered.length === 0)
-      return null;
-    const edge =
-      buffer.buffered.end(buffer.buffered.length - 1) - element.currentTime;
+    const end = bufferEnd();
+    if (element === null || end === null) return null;
+    const edge = end - element.currentTime;
     return Math.min(edge, lows.peek(performance.now() / 1000) ?? edge);
   }
 
@@ -1258,8 +1248,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     upAsk = decision.reason === "restored" ? { from: served, at: now } : null;
     // 足りなくて下げるなら、溜まった前の段の映像の後ろに並ばないように繋ぎ直す (`tune`)
     freshSocket = decision.reason === "slow" && chase === null;
-    // 実際に下げたときだけ覚える。切れる直前なら取り消す (`UNDO_BEFORE_CLOSE`)
-    if (decision.reason === "slow") lastDown = { from: served, at: now };
+    // 実際に下げたときだけ覚える。切れる直前なら取り消す (`UNDO_BEFORE_CLOSE`)。上げた段が映らずに戻したとき (`revert`) は、
+    // 取り消すと映らなかった段をまたリクエストするので覚えない
+    if (decision.reason === "slow" && !revert)
+      lastDown = { from: served, at: now };
     asked = step;
     // 段を動かした断り書きは、観る画面と同じく少しで引っ込める (`ADAPT_NOTE`)
     note(text, ADAPT_NOTE);
@@ -1375,9 +1367,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   function pace(video: HTMLVideoElement): void {
     if (engine === null) countDropped(video);
-    if (buffer === null || buffer.updating || buffer.buffered.length === 0)
-      return;
-    const end = buffer.buffered.end(buffer.buffered.length - 1);
+    if (buffer === null || buffer.updating) return;
+    const end = bufferEnd();
+    if (end === null) return;
     const behind = end - video.currentTime;
     // 0.1 秒刻みにする (塊は毎秒 20 個届く。そのたびに書き換えると画面を無駄に描き直す)
     const rounded = running ? tenth(behind) : null;
@@ -1712,9 +1704,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (paused) toggle();
       return;
     }
-    if (element === null || buffer === null || buffer.buffered.length === 0)
-      return;
-    const end = buffer.buffered.end(buffer.buffered.length - 1);
+    const end = bufferEnd();
+    if (element === null || buffer === null || end === null) return;
     element.currentTime = Math.max(buffer.buffered.start(0), end - target);
     chasing = false;
     speed = 1;
@@ -1940,10 +1931,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (paused) return;
       const ahead = onCanvas
         ? (engine?.lead ?? 0)
-        : buffer === null || buffer.buffered.length === 0
-          ? 0
-          : buffer.buffered.end(buffer.buffered.length - 1) -
-            element.currentTime;
+        : (bufferEnd() ?? element.currentTime) - element.currentTime;
       if (ahead > RESUME_LEFT && Date.now() - movedAt < RESUME_STUCK) return;
       stopResuming();
       // <video> の位置は届いたときにしか写していない (`pace`)。もう届かないので、ここで写す
@@ -2494,7 +2482,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (!driveNoticeSeen() && options.confirm !== undefined)
       await options.confirm();
     compatSupport ??= await canvasSupport();
-    if (rawProblem === undefined) rawProblem = await rawUnsupported();
+    if (rawProblem === undefined) rawProblem = rawUnsupported();
   }
 
   /**
@@ -2547,7 +2535,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * エンコードしたものをリクエストする (選んでいたなら理由を断り書きに出す。`pickFormat`)
      */
     if (needsRawCheck() && rawProblem === undefined) {
-      rawProblem = await rawUnsupported();
+      rawProblem = rawUnsupported();
     }
     // 4K の局なら、放送の HEVC を再生できるかを先に確かめる (1 回だけ。`#lib/hevc-4k.ts`)
     if (broadcastKind() === "hevc" && broadcastHevc === undefined) {

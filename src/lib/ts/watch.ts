@@ -32,7 +32,7 @@ export const DOUBLE_TAP = 300;
  */
 const EDGE = 0.3;
 
-export type Zone = "left" | "center" | "right";
+type Zone = "left" | "center" | "right";
 
 /** 押されたのが左端か右端か真ん中か。`x` は映像の左端からの距離 */
 export function zoneOf(x: number, width: number): Zone {
@@ -444,7 +444,7 @@ export function skipCmAtStart(
 }
 
 /** シークバーで塗る区間 (秒) */
-export interface Span {
+interface Span {
   start: number;
   end: number;
 }

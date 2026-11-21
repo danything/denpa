@@ -37,11 +37,13 @@ const ENTITIES: Record<string, string | undefined> = {
 function unescape(text: string): string {
   return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, name) => {
     const code = name as string;
-    if (code.startsWith("#x") || code.startsWith("#X"))
-      return String.fromCodePoint(parseInt(code.slice(2), 16));
-    if (code.startsWith("#"))
-      return String.fromCodePoint(Number(code.slice(1)));
-    return ENTITIES[code] ?? whole;
+    if (!code.startsWith("#")) return ENTITIES[code] ?? whole;
+    const point =
+      code[1] === "x" || code[1] === "X"
+        ? parseInt(code.slice(2), 16)
+        : Number(code.slice(1));
+    // 文字の範囲 (U+10FFFF まで) の外は読めないので、そのまま残す (`fromCodePoint` は例外を投げる)
+    return point <= 0x10ffff ? String.fromCodePoint(point) : whole;
   });
 }
 

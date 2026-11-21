@@ -153,7 +153,9 @@ describe("端末に保存する", () => {
     const canvas = {
       toBlob: (done: (blob: Blob | null) => void) => done(null),
     } as unknown as HTMLCanvasElement;
-    expect(await saveOnDevice(canvas, "ニュース7", "shot-1")).toEqual({
+    expect(
+      await saveOnDevice(canvas, "ニュース7", "shot-1", new Date()),
+    ).toEqual({
       key: "shot-1",
       kind: "error",
       text: "サーバにも端末にも保存できませんでした",

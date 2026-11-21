@@ -42,18 +42,19 @@ import {
 } from "./dsmcc.js";
 import { parseTimeTable, PID_TIME } from "./eit.js";
 import { parseMediaType, readEntity } from "./multipart.js";
-import { WRAP } from "./pes.js";
+import { pcrBase, WRAP } from "./pes.js";
 import {
+  componentTagOf,
   descriptors,
   packetPid,
   PacketStream,
+  pmtPcrPid,
   pmtStreams,
   PmtTracker,
   SectionAssembler,
   STREAM_AAC,
 } from "./psi.js";
 
-const DESC_STREAM_IDENTIFIER = 0x52;
 /** データ符号化方式記述子 (STD-B10 第 2 部 6.2.20) */
 const DESC_DATA_COMPONENT = 0xfd;
 
@@ -90,8 +91,8 @@ export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
   if (entryPointFlag) {
     const autoStartFlag = ((data[at]! >> 4) & 1) === 1;
     /*
-     * 画面の大きさ。運用されるのは 0011 (960x540)、0100 (640x480 16:9)、
-     * 0101 (640x480 4:3) の 3 つ
+     * 画面の大きさ。運用されるのは 0011 (960x540)、0100 (720x480 16:9)、
+     * 0101 (720x480 4:3) の 3 つ
      */
     const documentResolution = data[at]! & 0x0f;
     at++;
@@ -155,19 +156,18 @@ export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
 export function parsePmt(section: Uint8Array): ComponentPMT[] {
   const components: ComponentPMT[] = [];
   for (const [streamType, pid, info] of pmtStreams(section)) {
-    let componentId: number | undefined;
+    const componentId = componentTagOf(info);
+    if (componentId === null) continue;
     let dataComponentId: number | undefined;
     let bxmlInfo: AdditionalAribBXMLInfo | undefined;
     for (const [tag, descriptor] of descriptors(info)) {
-      if (tag === DESC_STREAM_IDENTIFIER && descriptor.length >= 1)
-        componentId = descriptor[0];
-      else if (tag === DESC_DATA_COMPONENT && descriptor.length >= 2) {
+      if (tag === DESC_DATA_COMPONENT && descriptor.length >= 2) {
         dataComponentId = u16(descriptor, 0);
-        if (BXML_COMPONENT_IDS.has(dataComponentId))
+        // 追加の識別情報が無ければ読まない (無いまま読むと、全部 0 のカルーセルに見える)
+        if (BXML_COMPONENT_IDS.has(dataComponentId) && descriptor.length > 2)
           bxmlInfo = parseBxmlInfo(descriptor.subarray(2));
       }
     }
-    if (componentId === undefined) continue;
     components.push({
       componentId,
       pid,
@@ -186,12 +186,7 @@ export function parsePmt(section: Uint8Array): ComponentPMT[] {
 export function pmtAudios(section: Uint8Array): (number | null)[] {
   const audios: (number | null)[] = [];
   for (const [streamType, , info] of pmtStreams(section)) {
-    if (streamType !== STREAM_AAC) continue;
-    let componentId: number | null = null;
-    for (const [tag, descriptor] of descriptors(info))
-      if (tag === DESC_STREAM_IDENTIFIER && descriptor.length >= 1)
-        componentId = descriptor[0]!;
-    audios.push(componentId);
+    if (streamType === STREAM_AAC) audios.push(componentTagOf(info));
   }
   return audios;
 }
@@ -374,25 +369,13 @@ export class BmlDecoder {
     }
   }
 
-  /** 適応フィールドの PCR の基準部 (90 kHz)。拡張部 (27 MHz の端数) は使わない */
+  /** 適応フィールドの PCR の基準部 (90 kHz。`pcrBase`) */
   private readPcr(packet: Uint8Array): void {
-    if (
-      (packet[3]! & 0x20) === 0 ||
-      packet[4]! < 7 ||
-      (packet[5]! & 0x10) === 0
-    )
-      return;
-    this.stc =
-      packet[6]! * 2 ** 25 +
-      packet[7]! * 2 ** 17 +
-      packet[8]! * 2 ** 9 +
-      packet[9]! * 2 +
-      (packet[10]! >> 7);
+    this.stc = pcrBase(packet) ?? this.stc;
   }
 
   private onPmt(section: Uint8Array): void {
-    const pcrPid = u16(section, 8) & 0x1fff;
-    this.pcrPid = pcrPid === 0x1fff ? null : pcrPid;
+    this.pcrPid = pmtPcrPid(section);
     const components = parsePmt(section);
     if (components.length === 0) return;
     const audios = pmtAudios(section);

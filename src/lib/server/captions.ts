@@ -37,7 +37,7 @@ import {
 } from "@danything/arib/caption-text";
 import { LANGUAGE } from "@danything/arib/language";
 import { CLOCK } from "@danything/arib/pes";
-import { descriptors, PacketStream, pmtStreams } from "@danything/arib/psi";
+import { componentTagOf, PacketStream, pmtStreams } from "@danything/arib/psi";
 
 import { type CaptionTrack, CHANNEL, type Notice } from "#lib/live.js";
 import { type MkvFrame, MkvSplitter } from "#lib/ts/mkv.js";
@@ -165,7 +165,6 @@ export const NO_SUBTITLE = /matches no streams/;
 
 /** 字幕の ES の stream_type (PES の private_data) */
 const STREAM_PRIVATE_DATA = 0x06;
-const DESC_STREAM_IDENTIFIER = 0x52;
 
 /**
  * 字幕の部品タグ (component_tag)。ffmpeg が字幕として扱うのと同じ範囲 (libavformat/mpegts.c)。
@@ -186,12 +185,8 @@ export function captionStreams(section: Uint8Array): number {
   let count = 0;
   for (const [type, , info] of pmtStreams(section)) {
     if (type !== STREAM_PRIVATE_DATA) continue;
-    for (const [tag, body] of descriptors(info)) {
-      if (tag === DESC_STREAM_IDENTIFIER && body.length >= 1) {
-        if (isCaptionTag(body[0]!)) count++;
-        break;
-      }
-    }
+    const tag = componentTagOf(info);
+    if (tag !== null && isCaptionTag(tag)) count++;
   }
   return count;
 }

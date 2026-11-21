@@ -334,7 +334,7 @@ export function speedLabel(label: string, speed: number): string {
 }
 
 /** 貯める量と、その下限 */
-export interface Buffering {
+interface Buffering {
   /** どれだけ貯めてから出すか (秒) */
   target: number;
   /** ここより下へは戻さない (秒)。**止まった高さを覚えている** */

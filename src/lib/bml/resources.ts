@@ -17,6 +17,7 @@ import type {
   ProgramInfoMessage,
   ResponseMessage,
 } from "@danything/arib/bml-protocol";
+import { fromBase64 } from "@danything/arib/bytes";
 import { parseMediaType } from "@danything/arib/multipart";
 
 import { ENTRY_COMPONENT } from "#lib/ts/data-auto-start.js";
@@ -115,8 +116,7 @@ interface Pending {
   kind: LockKind | null;
 }
 
-/** 入口の部品 (地上波 A プロファイル・BS/CS は 0x40。自動起動の指定を見る `ts/data-auto-start.ts` と同じ値) とモジュール */
-export const STARTUP_COMPONENT = ENTRY_COMPONENT;
+/** 入口のモジュール。部品は `ENTRY_COMPONENT` (`ts/data-auto-start.ts`) */
 export const STARTUP_MODULE = 0;
 
 /** 0x0d はデータカルーセル */
@@ -508,8 +508,8 @@ export class Resources {
   private updateReceiving(): void {
     let receiving = this.pending.length > 0;
     // 入口の部品が無い・空のカルーセルなら、データ放送の番組ではない
-    if (this.pmtSeen && !this.pmt.has(STARTUP_COMPONENT)) receiving = false;
-    if (this.dii.get(STARTUP_COMPONENT)?.modules.size === 0) receiving = false;
+    if (this.pmtSeen && !this.pmt.has(ENTRY_COMPONENT)) receiving = false;
+    if (this.dii.get(ENTRY_COMPONENT)?.modules.size === 0) receiving = false;
     if (receiving === this.receiving) return;
     this.receiving = receiving;
     this.onReceiving(receiving);
@@ -679,11 +679,4 @@ function mediaType(contentType: string): MediaType {
       parameters: [],
     }
   );
-}
-
-function fromBase64(text: string): Uint8Array {
-  const binary = atob(text);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
 }

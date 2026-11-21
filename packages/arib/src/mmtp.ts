@@ -151,6 +151,12 @@ export function parseMessage(data: Uint8Array): SignalingMessage | null {
   };
 }
 
+/** 信号メッセージ 1 つ (`SignalingAssembler` が組んだもの) が PA メッセージなら、その表 (MPT・PLT など)。ほかは空 */
+export function paTables(raw: Uint8Array): Uint8Array[] {
+  const message = parseMessage(raw);
+  return message?.messageId === MESSAGE_PA ? messageTables(message) : [];
+}
+
 /**
  * 信号メッセージに入った表を返す。
  *

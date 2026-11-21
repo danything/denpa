@@ -113,18 +113,3 @@ export function throughAudio(now: {
 }): boolean {
   return now.wanted && !now.session && now.streamable;
 }
-
-/**
- * **`<video>` の音を Web Audio に通すか** (`volume.svelte.ts`)。
- *
- * 一度通した要素の音は、もう Web Audio からしか出ない。**AudioContext が鳴らせる (`running`) まで
- * 通さない**。自動再生の許しが無いまま通すと、`<video>` は鳴っているのに何も聞こえない
- */
-export function tapVideo(now: {
-  /** `<video>` で観ているか (canvas に描いていない) */
-  video: boolean;
-  /** AudioContext の状態。作れなければ null */
-  state: AudioContextState | "interrupted" | null;
-}): boolean {
-  return now.video && now.state === "running";
-}

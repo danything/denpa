@@ -23,10 +23,8 @@ import {
   TABLE_PLT,
 } from "./mmt-si.js";
 import {
-  MESSAGE_PA,
-  messageTables,
-  parseMessage,
   parseMmtp,
+  paTables,
   PAYLOAD_SIGNALING,
   SignalingAssembler,
 } from "./mmtp.js";
@@ -126,9 +124,7 @@ export class MmtServiceFilter {
   }
 
   private readSignaling(flow: Flow, raw: Uint8Array): void {
-    const message = parseMessage(raw);
-    if (message === null || message.messageId !== MESSAGE_PA) return;
-    for (const table of messageTables(message)) {
+    for (const table of paTables(raw)) {
       if (table[0] === TABLE_PLT) {
         const plt = parsePlt(table);
         if (plt === null) continue;

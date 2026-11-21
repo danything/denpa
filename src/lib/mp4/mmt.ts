@@ -85,11 +85,12 @@ function videoTrack(
   };
 }
 
-interface Pending<T> {
+interface Pending {
   /** DTS (90 kHz、放送の時刻のまま) */
   dts: number;
   sample: Mp4Sample;
-  unit: T;
+  /** どの MPU から来たか (`mpuSequenceNumber`)。MPU の変わり目で区切る */
+  mpu: number;
 }
 
 /**
@@ -109,8 +110,8 @@ export class MmtFmp4 {
   private audio: AudioTrack | null = null;
   private started = false;
   private sequence = 1;
-  private videoSamples: Pending<VideoUnit>[] = [];
-  private audioSamples: Pending<AudioUnit>[] = [];
+  private videoSamples: Pending[] = [];
+  private audioSamples: Pending[] = [];
 
   /**
    * @param assets `MmtMediaReader` が選んだアセット。映像も音声も無ければ何も出さない
@@ -135,10 +136,7 @@ export class MmtFmp4 {
     if (unit.kind === "video") {
       if (!this.hasVideo) return out;
       const last = this.videoSamples.at(-1);
-      if (
-        last !== undefined &&
-        last.unit.mpuSequenceNumber !== unit.mpuSequenceNumber
-      )
+      if (last !== undefined && last.mpu !== unit.mpuSequenceNumber)
         out.push(...this.cut(unit.dts));
       if (this.video === null) {
         // 頭出しできるコマから始める。それまでのコマは前のコマが無いとデコードできない
@@ -163,7 +161,7 @@ export class MmtFmp4 {
       });
       this.videoSamples.push({
         dts: unit.dts,
-        unit,
+        mpu: unit.mpuSequenceNumber,
         sample: {
           data: sampleData(nals),
           duration: unit.duration,
@@ -187,12 +185,12 @@ export class MmtFmp4 {
       if (
         !this.hasVideo &&
         last !== undefined &&
-        last.unit.mpuSequenceNumber !== unit.mpuSequenceNumber
+        last.mpu !== unit.mpuSequenceNumber
       )
         out.push(...this.cut(unit.dts));
       this.audioSamples.push({
         dts: unit.dts,
-        unit,
+        mpu: unit.mpuSequenceNumber,
         sample: {
           data: unit.frame,
           duration: unit.duration,
@@ -231,7 +229,7 @@ export class MmtFmp4 {
       out.push({ kind: "init", data: initSegment(tracks) });
     }
     const parts: Uint8Array[] = [];
-    const take = <T>(list: Pending<T>[], trackId: number): Pending<T>[] => {
+    const take = (list: Pending[], trackId: number): Pending[] => {
       const index = list.findIndex((p) => p.dts >= until);
       const taken = index < 0 ? list : list.slice(0, index);
       if (taken.length > 0)

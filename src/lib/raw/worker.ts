@@ -59,15 +59,14 @@ import {
   BEHIND_MOST,
   Fmp4Video,
   FOLLOW_BYTES_MOST,
-  newestKey,
   PENDING_MOST,
+  PendingQueue,
 } from "./fmp4";
 import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
 import { MkvInput } from "./mkv";
 import { YuvRenderer } from "./render";
 import {
   type AudioDecoder,
-  BROKEN_MOST,
   ensure,
   loadDecoder,
   WasmAudio,
@@ -86,7 +85,7 @@ const DECODED_MOST = 8;
 /** 1 コマの長さの目安 (90 kHz)。29.97 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 3003;
 /**
- * 録画 (`follow`) で圧縮のまま持っておく上限。**時間 (90 kHz) とバイト数の小さいほう。** 読む側
+ * 追っかけ・録画 (`follow`) で圧縮のまま持っておく上限。**時間 (90 kHz) とバイト数の小さいほう。** 読む側
  * (`canvas-player.ts`) が先へ読みすぎないようにしているので、ふつうは届かない。超えたら受け取るのを
  * やめて `full` を返す (fMP4 の `FOLLOW_AHEAD_MOST` と同じ考え)。バイト数は fMP4 と同じ `FOLLOW_BYTES_MOST`
  */
@@ -128,7 +127,7 @@ let demuxer = new PesDemuxer();
 const adts = new AdtsSplitter();
 let audioIndex = 0;
 /** 圧縮のまま待たせている映像 (デコードする順) */
-let pending: Pending[] = [];
+const pending = new PendingQueue<Pending>();
 /** I フレームを見たか。**見るまでは渡さない** */
 let started = false;
 /** PTS を伸ばす手元の物差し (`unwrap`)。選局し直すと捨てる */
@@ -160,10 +159,8 @@ let shownSinceReset = false;
 let failed = false;
 /** 放送の今を追わないか (追っかけ・録画。`messages.ts` の `follow`)。`init` で決まる */
 let follow = false;
-/** 録画で抱えきれなくなったか。**リクエストし直して `reset` が来るまで、届いたものは捨てる** */
+/** 追っかけ・録画で抱えきれなくなったか。**リクエストし直して `reset` が来るまで、届いたものは捨てる** */
 let overflowed = false;
-/** 圧縮のまま持っているバイト数 (`FOLLOW_BYTES_MOST`) */
-let pendingBytes = 0;
 /**
  * 飛び先 (`reset` の `from`)。**これより前のコマはデコードするだけで描かない。** 届いたものの近くに伸ばすまでは
  * 一周の中の値 (`floorRaw`) で持つ。最初の 1 枚を描いたら外す
@@ -179,7 +176,6 @@ let ceiling: number | null = null;
 
 /** いま開いている音の形式 (`標本化周波数/チャンネル数`)。変わったら開き直す */
 let audioConfig = "";
-let audioErrors = 0;
 /** 音をデコードする係 (`wasm-audio.ts`)。デコーダを読み終えたら作る */
 let audio: WasmAudio | null = null;
 
@@ -274,41 +270,24 @@ function onVideo(pes: Pes): void {
     if (!intra) return;
     started = true;
   }
-  const last = pending.at(-1);
+  const last = pending.last;
   const pts =
     pes.pts === null ? (last?.pts ?? 0) + frameTicks : extend(pes.pts);
   const dts = pes.dts === null ? pts : extend(pes.dts);
   pending.push({ pts, dts, data: pes.data, key: intra });
-  pendingBytes += pes.data.length;
   if (follow) {
     /*
-     * 録画は捨てて先へ飛ばない (止めた所から再開する)。読む側が読みすぎないようにしているが、
+     * 追っかけ・録画は捨てて先へ飛ばない (止めた所から再開する)。読む側が読みすぎないようにしているが、
      * それでも抱えきれなくなったら受け取るのをやめて、いまの位置からリクエストし直してもらう
      */
-    if (
-      !overflowed &&
-      (pending.at(-1)!.dts - pending[0]!.dts > FOLLOW_PENDING_MOST ||
-        pendingBytes > FOLLOW_BYTES_MOST)
-    ) {
+    if (!overflowed && pending.over(FOLLOW_PENDING_MOST, FOLLOW_BYTES_MOST)) {
       overflowed = true;
       post({ type: "full" });
     }
     return;
   }
   // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しい I から持ち直す
-  if (
-    pending.length > 1 &&
-    pending.at(-1)!.dts - pending[0]!.dts > PENDING_MOST
-  ) {
-    skipTo(Number.POSITIVE_INFINITY);
-  }
-}
-
-/** 待たせている圧縮の先頭を 1 つ取り出す */
-function shift(): Pending {
-  const item = pending.shift() as Pending;
-  pendingBytes -= item.data.length;
-  return item;
+  if (pending.over(PENDING_MOST)) skipTo(Number.POSITIVE_INFINITY);
 }
 
 /** 飛び先より前のコマか (`floor`)。**飛び先は、届いたものの物差しに伸ばしてから比べる** */
@@ -341,11 +320,7 @@ function dropUnder(): void {
  * 飛ばしたコマを参照するフレームを出させないため
  */
 function skipTo(target: number): void {
-  const found = newestKey(pending, target);
-  if (found <= 0) return;
-  pending = pending.slice(found);
-  pendingBytes = pending.reduce((sum, item) => sum + item.data.length, 0);
-  decoder?._dec_open();
+  if (pending.skipTo(target)) decoder?._dec_open();
 }
 
 function onAudio(pes: Pes): void {
@@ -377,12 +352,8 @@ function onAudio(pes: Pes): void {
  */
 function decodeAudio(audio: WasmAudio, data: Uint8Array, pts: number): void {
   const pcm = audio.decode(data);
-  if (pcm === "broken") {
-    if (++audioErrors > BROKEN_MOST) fail("音声を再生できません");
-    return;
-  }
-  if (pcm === null) return;
-  audioErrors = 0;
+  if (pcm === "failed") fail("音声を再生できません");
+  if (pcm === null || pcm === "broken" || pcm === "failed") return;
   const { samples, sampleRate, planes } = pcm;
   post(
     {
@@ -532,11 +503,14 @@ function tick(): void {
   const at = now();
 
   /*
-   * **見えていない間は映像をデコードしない** (小窓へ書いているときは別)。待たせている圧縮は、溜まりすぎたら
-   * いちばん新しい I から持ち直す (`onVideo` の `PENDING_MOST`)。見えるようになったら、大きく遅れているので I まで飛んで
-   * デコードし直す (下の `BEHIND_MOST`。デコーダを開き直すのはそのとき)
+   * **見えていない間は映像をデコードしない** (小窓へ書いているときは別)。音の時計より `BEHIND_MOST` 遅れた圧縮は、
+   * いまの位置の手前の I まで捨てる (`skipTo`。デコーダも開き直す)。追っかけ・録画 (`follow`) は `onVideo` で捨てないので、
+   * ここで捨てないと、バックグラウンド再生で音が進む間に溜まりすぎて (`FOLLOW_PENDING_MOST`) リクエストし直しを繰り返す
    */
   if (hidden && (pip === null || !pipFlowing)) {
+    const head = pending.first;
+    if (at !== null && head !== undefined && head.dts < at - BEHIND_MOST)
+      skipTo(at);
     report();
     return;
   }
@@ -559,7 +533,7 @@ function tick(): void {
     for (let i = 0; ; i++) {
       dropUnder();
       if (decoder._dec_count() > 0 || pending.length === 0 || i >= limit) break;
-      const item = shift();
+      const item = pending.shift();
       decode(item);
       // 飛び先より前の I は描かないので、先に出させない
       if (item.key && !seeking && decoder._dec_count() === 0) still(item);
@@ -574,7 +548,7 @@ function tick(): void {
   if (at === null) return;
 
   // 大きく遅れている (裏から戻った・止めていた)。デコードしながら追うより I まで飛ぶ
-  const head = pending[0];
+  const head = pending.first;
   if (head !== undefined && head.dts < at - BEHIND_MOST) skipTo(at);
 
   /*
@@ -608,9 +582,9 @@ function tick(): void {
       decoder._dec_count() < DECODED_MOST;
       i++
     ) {
-      const next = pending[0]!;
+      const next = pending.first!;
       if (next.dts > at + AHEAD || (i > 0 && next.dts > at)) break;
-      decode(shift());
+      decode(pending.shift());
     }
     dropUnder();
     present(decoder, at);
@@ -627,7 +601,8 @@ function tick(): void {
    * 届いたあとは番を過ぎたコマをまとめて捨てて追いつくので、そのあいだ (`BACK_GRACE`) も数えない。
    * 家の中の Wi-Fi で放送のまま (約 17 Mbit/s) 受けると一瞬の詰まりは起きやすく、数えると変換した映像へ早めに戻っていた
    */
-  const starved = behind > 0 && (pending.length === 0 || pending[0]!.dts > at);
+  const starved =
+    behind > 0 && (pending.length === 0 || pending.first!.dts > at);
   if (starved) starve();
   const late = starved ? 0 : behind;
   thin(decoder, late);
@@ -799,8 +774,7 @@ function reset(from: number | null): void {
   demuxer = new PesDemuxer();
   demuxer.audioIndex = audioIndex;
   adts.reset();
-  pending = [];
-  pendingBytes = 0;
+  pending.clear();
   overflowed = false;
   floorRaw = from;
   floor = null;
@@ -826,7 +800,6 @@ function reset(from: number | null): void {
   }
   // 次のコマで開き直す (前の局の持ち越しを捨てる)
   audioConfig = "";
-  audioErrors = 0;
 }
 
 /**
@@ -867,7 +840,6 @@ async function grab(id: number, size: GrabSize | undefined): Promise<void> {
  */
 function openAudio(codec: "aac" | "opus", config: Uint8Array | null): boolean {
   if (audio === null) return false;
-  audioErrors = 0;
   return audio.open(codec, config);
 }
 
@@ -933,7 +905,11 @@ async function init(
   try {
     decoder = await loadDecoder<Decoder>(base, scope.location.origin);
     audio = new WasmAudio(decoder);
-    if (decoder._dec_open() !== 0 || decoder._aac_open() !== 0)
+    // MPEG-2 のデコーダは TS のときだけ開く (fMP4・mkv の映像は WebCodecs)
+    if (
+      (kind === "ts-mpeg2" && decoder._dec_open() !== 0) ||
+      decoder._aac_open() !== 0
+    )
       throw new Error("開けません");
   } catch {
     fail(
@@ -993,13 +969,20 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
     case "data": {
       if (failed) return;
       const bytes = new Uint8Array(message.buffer, message.offset);
-      // デコーダを読み終えるまでは溜めておく (`early`)。録画は数ではなくバイト数で区切る (塊の大きさが決まっていない)
+      /*
+       * デコーダを読み終えるまでは溜めておく (`early`)。追っかけ・録画は数ではなくバイト数で区切る (塊の大きさが決まっていない)。
+       * 追っかけ・録画は抜けを作らない。溢れたら `onVideo` と同じく受け取るのをやめて `full` を返す
+       */
       if (early !== null) {
+        if (overflowed) break;
         if (
           follow ? earlyBytes < FOLLOW_BYTES_MOST : early.length < EARLY_MOST
         ) {
           early.push(bytes);
           earlyBytes += bytes.length;
+        } else if (follow) {
+          overflowed = true;
+          post({ type: "full" });
         }
         break;
       }

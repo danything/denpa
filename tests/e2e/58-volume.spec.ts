@@ -19,7 +19,7 @@ import {
  * **音量** (`src/lib/components/player/volume.svelte.ts`・`src/lib/sound.ts`)。
  *
  * 放送は動画サイトより小さめにそろえてあるので、既定 (100%) は +6 dB で鳴らし、つまみで 0% まで下げられる。
- * 割れないようにリミッタを必ず通す。ここでは**鳴っている音を測る** — `AudioNode.connect` を包んで、音の入口
+ * 割れないようにリミッタを必ず通す。ここでは**鳴っている音を測る**。`AudioNode.connect` を包んで、音の入口
  * (`<video>` の音・canvas の経路のデコードした音) と出口 (ページの出口・`<audio>` へのストリーム) に
  * AnalyserNode を付け、RMS とピークを比べる。
  *

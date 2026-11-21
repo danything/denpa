@@ -185,14 +185,8 @@ function mpt(
       type: "stpp",
       packetId: CAPTION,
       componentTag: 0x30,
-      descriptors: [
-        ...mpuTimestampDescriptor([[30, at(0)]]),
-        ...mpuExtendedTimestampDescriptor(
-          1000,
-          [{ sequence: 30, decodingOffset: 0, dtsPtsOffsets: [0] }],
-          0,
-        ),
-      ],
+      // 字幕は提示時刻だけ (拡張タイムスタンプ記述子が無くても時刻が付く)
+      descriptors: [...mpuTimestampDescriptor([[30, at(0)]])],
     });
   return signalingPackets(0xff01, [
     paMessage(mptTable({ packageId: SERVICE, assets: list })),

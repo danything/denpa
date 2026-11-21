@@ -538,14 +538,11 @@ export function luminance([r, g, b]: Rgb): number {
 }
 
 /**
- * **地に敷く色。** 映像の色を濃くし (`vivid`)、明るさだけを `limit` に収める。
+ * **地に敷く色。** 映像の色を濃くし (`vivid`)、明るさだけを `WASH_LUMINANCE` に収める。
  * 暗いテーマは光の強さ (線形) を落とし、明るいテーマは白へ寄せる。どちらも色相は変えない
  */
-export function washTone(
-  color: Rgb,
-  theme: "dark" | "light",
-  limit: { dark: number; light: number },
-): Rgb {
+export function washTone(color: Rgb, theme: "dark" | "light"): Rgb {
+  const limit = WASH_LUMINANCE;
   const pixel = new Uint8ClampedArray([...color, 255]);
   // 明るいテーマは白へ寄せると色が抜けるので、先に強く濃くしておく (`TONE`)
   vivid(pixel, theme);
@@ -568,13 +565,12 @@ export function washTone(
 export function toneFrame(
   data: Uint8ClampedArray,
   theme: "dark" | "light",
-  limit: { dark: number; light: number },
 ): void {
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i]!;
     const g = data[i + 1]!;
     const b = data[i + 2]!;
-    const [tr, tg, tb] = washTone([r, g, b], theme, limit);
+    const [tr, tg, tb] = washTone([r, g, b], theme);
     data[i] = tr;
     data[i + 1] = tg;
     data[i + 2] = tb;

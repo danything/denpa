@@ -37,6 +37,10 @@ export function parseStructure(text: string): Field[] | null {
   return fields;
 }
 
+/**
+ * ビット単位の読み取り。`@danything/arib/bits` の `BitReader` と違い、32 ビットを超える長さは書式の誤りとして投げる
+ * (書式は放送のスクリプトが書くので、大きな長さを書かれても 1 ビットずつ回さない)。位置は呼ぶ側が読み書きする
+ */
 class BitReader {
   constructor(
     private readonly data: Uint8Array,
@@ -44,7 +48,6 @@ class BitReader {
   ) {}
 
   bits(count: number): number {
-    // 値になるのは 32 ビットまで (U・I・長さ)。書式に大きな長さを書かれても 1 ビットずつ回さない
     if (count > 32) throw new BinaryError(`${count} ビットは読めません`);
     let value = 0;
     for (let i = 0; i < count; i++, this.position++) {

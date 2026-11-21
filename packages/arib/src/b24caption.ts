@@ -35,7 +35,7 @@ import {
   JISX0201,
   JISX0201_HALF,
   KANA_SYMBOLS_HALF,
-  KANJI_DIFF,
+  KANJI_DIFF_CELLS,
   KANJI_SEQUENCES,
   KANJI_SYMBOLS_HALF,
   KATAKANA,
@@ -142,11 +142,9 @@ const MACROS = [
 
 const eucjp = new TextDecoder("euc-jp");
 /** 漢字の表 (区×94+点 → 字)。EUC-JP で読み、違うところ (`KANJI_DIFF`) だけ差し替える */
-const kanjiOverride = new Map<number, number>();
-for (const [start, chars] of KANJI_DIFF) {
-  let i = start;
-  for (const char of chars) kanjiOverride.set(i++, char.codePointAt(0)!);
-}
+const kanjiOverride = new Map<number, number>(
+  [...KANJI_DIFF_CELLS].map(([i, char]) => [i, char.codePointAt(0)!]),
+);
 const kanjiCache = new Map<number, number>();
 function kanji(index: number): number {
   const known = kanjiOverride.get(index) ?? kanjiCache.get(index);
@@ -527,9 +525,12 @@ export class B24CaptionDecoder {
               this.drcsMaps[set.set.drcs]!.set(code & 0x7f, drcs);
             }
           } else {
-            const key = code >= 0xec00 && code <= 0xf8ff ? code : code & 0x7f7f;
-            this.drcsMaps[0]!.set(key, drcs);
+            // 引く側 (`body`) は 2 バイトとも下 7 ビットで組むので、入れる鍵もそろえる
+            this.drcsMaps[0]!.set(code & 0x7f7f, drcs);
           }
+        } else if (mode === 0b0010 || mode === 0b0011) {
+          // 圧縮の形式 (2・3) は運用されない。読み方を持たず、どこまでが 1 字かも分からないので、そこから後ろは読まない (`bml/drcs.ts` と同じ)
+          return;
         } else {
           // 幾何図形。読み飛ばす
           if (at + 4 > data.length) return;

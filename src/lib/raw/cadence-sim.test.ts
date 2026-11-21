@@ -84,4 +84,12 @@ describe("デコードを始める間合い (模擬)", () => {
       }
     },
   );
+
+  test("区切らない (いつでも始める) と、90 Hz で 1 枚 13 ms のとき前の作りより何倍もずれる", () => {
+    const none = average(GATES.none, 90, 13);
+    const before = average(GATES.half, 90, 13);
+    // docs/stream.md の表の下に書いた数 (222)
+    expect(Math.round(none.off)).toBe(222);
+    expect(none.off).toBeGreaterThan(before.off * 4);
+  });
 });

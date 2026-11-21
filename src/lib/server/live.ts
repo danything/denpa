@@ -64,7 +64,7 @@ import {
 import type { Fmp4Segment } from "#lib/mp4/fmp4.js";
 import {
   busyNote,
-  ENCODE_SLOW,
+  encodeSlow,
   parseRung,
   type Rung,
   RUNG_AUDIO_KBPS,
@@ -1171,7 +1171,7 @@ export class EncodeLag {
     state: Parameters<typeof nextLight>[0],
   ): { step: LightStep; light: Light } | "heavy" | null {
     if (this.decided) return null;
-    if (speed === null || speed <= 0 || speed >= ENCODE_SLOW) {
+    if (!encodeSlow(speed)) {
       this.slowSince = null;
       return null;
     }

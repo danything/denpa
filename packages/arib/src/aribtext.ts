@@ -30,7 +30,7 @@ import { GAIJI } from "./aribtext-gaiji.js";
 import {
   HIRAGANA as HIRAGANA_TABLE,
   JISX0201_HALF,
-  KANJI_DIFF,
+  KANJI_DIFF_CELLS,
   KANJI_SEQUENCES,
   KATAKANA as KATAKANA_TABLE,
   PLANE1_HIGH,
@@ -106,13 +106,7 @@ const eucjp = new TextDecoder("euc-jp");
 
 /** EUC-JP に無い JIS X 0213 の 1 面の字 (区×94+点 → 字)。字幕と同じ表 */
 const x0213 = new Map<number, string>(KANJI_SEQUENCES);
-for (const [start, chars] of KANJI_DIFF) {
-  let i = start;
-  for (const char of chars) {
-    if (!x0213.has(i)) x0213.set(i, char);
-    i++;
-  }
-}
+for (const [i, char] of KANJI_DIFF_CELLS) if (!x0213.has(i)) x0213.set(i, char);
 const PLANE1_HIGH_CHARS = [...PLANE1_HIGH];
 /** 2 面の区 (1〜94) → 94 字 */
 const PLANE2_ROWS = new Map(PLANE2.map(([ku, row]) => [ku, [...row]]));

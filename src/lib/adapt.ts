@@ -1,5 +1,5 @@
 import {
-  ENCODE_SLOW,
+  encodeSlow,
   LOWEST_RUNG,
   type Pace,
   type Rung,
@@ -378,8 +378,7 @@ export class RungAdapter {
      * `encode` を返し続けて段がいつまでも動かず、断り書きも出し直され続けた。本当に遅れていれば 0 より大きい値が届く
      */
     const speed = s.pace?.speed ?? null;
-    if (speed !== null && speed > 0 && speed < ENCODE_SLOW)
-      this.slowSince ??= now;
+    if (encodeSlow(speed)) this.slowSince ??= now;
     else this.slowSince = null;
     if (this.slowSince !== null) {
       // バッファの減り・詰まり・サーバが捨てた塊 (`dropped`) はエンコードが遅いせい。回線のぶんとして数えない
@@ -407,11 +406,14 @@ export class RungAdapter {
     }
 
     if (s.behind === true && s.current !== "audio") {
-      this.ceiling = s.current;
       this.upSince = null;
       this.probe = null;
-      if (now >= this.holdUntil && s.current !== LOWEST_RUNG)
-        return { step: (s.current + 1) as Rung, reason: "decode" };
+      // いちばん軽い段は下げ先が無いので上限にしない。上限にすると、あとで音声だけになったとき段 3 へも戻れなくなる
+      if (s.current !== LOWEST_RUNG) {
+        this.ceiling = s.current;
+        if (now >= this.holdUntil)
+          return { step: (s.current + 1) as Rung, reason: "decode" };
+      }
     }
 
     if (s.current === LOWEST_RUNG) this.markLow(now, tickMs, short);

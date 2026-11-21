@@ -24,7 +24,7 @@ import type {
 import { ascii, u16 } from "@danything/arib/bytes";
 import { STREAM_AAC } from "@danything/arib/psi";
 
-import { autoStarts } from "#lib/ts/data-auto-start.js";
+import { autoStarts, ENTRY_COMPONENT } from "#lib/ts/data-auto-start.js";
 
 import {
   type BmlIp,
@@ -62,7 +62,6 @@ import {
   refToPath,
   type ResourceEvent,
   Resources,
-  STARTUP_COMPONENT,
   STARTUP_MODULE,
   unknownScheme,
   withoutQuery,
@@ -320,7 +319,7 @@ function componentTag(ref: string): number | null {
 }
 
 /** 入口のモジュール */
-const ENTRY = `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}`;
+const ENTRY = `/${hex(ENTRY_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}`;
 
 class Engine implements DomHost, BrowserHost, RenderHost {
   readonly resources = new Resources();
@@ -545,7 +544,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     )
       return;
     const mine = component === this.component();
-    const back = component === STARTUP_COMPONENT && dii.returnToEntry;
+    const back = component === ENTRY_COMPONENT && dii.returnToEntry;
     if (!mine && !back) return;
     if (mine) {
       for (const beitem of this.beitems("DataEventChanged")) {
@@ -568,7 +567,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   private pmtChanged(components: Map<number, unknown>): void {
     if (this.doc === null) return;
-    if (!components.has(STARTUP_COMPONENT)) {
+    if (!components.has(ENTRY_COMPONENT)) {
       this.exit();
       return;
     }
@@ -583,9 +582,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private maybeStart(): void {
     if (this.doc !== null || this.loading || this.destroyed || this.halted)
       return;
-    if (this.resources.pmtSeen && !this.resources.pmt.has(STARTUP_COMPONENT))
+    if (this.resources.pmtSeen && !this.resources.pmt.has(ENTRY_COMPONENT))
       return;
-    if (!this.resources.has(STARTUP_COMPONENT, STARTUP_MODULE)) return;
+    if (!this.resources.has(ENTRY_COMPONENT, STARTUP_MODULE)) return;
     if (!this.mayStart()) return;
     void this.startup();
   }
@@ -1378,7 +1377,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   /** 今の主音声 (`getMainAudioStream`)。替えていなければ PMT の 1 本目 (分からない・1 本目に部品タグが無ければ `/10`) */
   mainAudioRef(): string {
     const tag = this.mainAudio ?? this.audios[0] ?? 0x10;
-    return `/${tag.toString(16).padStart(2, "0")}`;
+    return `/${hex(tag, 2)}`;
   }
 
   stream(element: BmlElement, status: string): void {

@@ -18,7 +18,7 @@ describe("WasmAudio", () => {
     const d = fakeDecoder({ sampleRate: 44100, samples: () => 4 });
     const audio = new WasmAudio(d);
     const pcm = audio.decode(new Uint8Array([7, 8, 9]));
-    if (pcm === null || pcm === "broken")
+    if (pcm === null || typeof pcm === "string")
       throw new Error("デコードできていない");
     expect([...d.last]).toEqual([7, 8, 9]);
     expect(pcm.sampleRate).toBe(44100);
@@ -37,6 +37,18 @@ describe("WasmAudio", () => {
     const audio = new WasmAudio(fakeDecoder({ samples: (b) => b[0]! - 1 }));
     expect(audio.decode(new Uint8Array([1]))).toBeNull();
     expect(audio.decode(new Uint8Array([0]))).toBe("broken");
+  });
+
+  test("壊れたコマが 20 より多く続いたら failed。デコードできるか開き直せば数え直す", () => {
+    const audio = new WasmAudio(fakeDecoder({ samples: (b) => b[0]! - 1 }));
+    const broken = new Uint8Array([0]);
+    for (let i = 0; i < 20; i++) expect(audio.decode(broken)).toBe("broken");
+    expect(audio.decode(broken)).toBe("failed");
+    audio.open("aac", null);
+    expect(audio.decode(broken)).toBe("broken");
+    for (let i = 0; i < 19; i++) audio.decode(broken);
+    expect(audio.decode(new Uint8Array([5]))).not.toBeNull();
+    expect(audio.decode(broken)).toBe("broken");
   });
 
   test("面の数・標本化周波数がおかしければ (読み違え) 面を切り出さず broken", () => {

@@ -129,7 +129,6 @@
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
-    heardOf,
     rangesOf,
     type RemuxPlayer,
     remuxPlayer,
@@ -137,7 +136,7 @@
     type StreamUrl,
   } from "#lib/remux-player.js";
   import { keepResume, keepResuming } from "#lib/resume.js";
-  import type { Pace } from "#lib/rungs.js";
+  import { busyNote, type Pace } from "#lib/rungs.js";
   import {
     type Cue,
     currentCue,
@@ -198,7 +197,6 @@
   import {
     ADAPT_TICK,
     autoLabel,
-    busyNote,
     fileIdle,
     rungQuery,
     watchAdapt,
@@ -343,11 +341,8 @@
       return;
     }
     if (!driveNoticeSeen()) await drive.confirm();
-    const [support, problem] = await Promise.all([
-      canvasSupport(),
-      rawUnsupported(),
-    ]);
-    canvasAbility = { ...support, mpeg2: problem === null };
+    const support = await canvasSupport();
+    canvasAbility = { ...support, mpeg2: rawUnsupported() === null };
     // 端末に保存したものはオンラインでも描く。描けない形式か読めなければ、サーバから流すものへ
     if (localCopy?.video !== undefined) {
       const source = await openMkv(localCopy.video).catch(() => null);
@@ -419,8 +414,7 @@
                   (offset === undefined ? "" : `&offset=${offset}`),
                 { signal },
               ),
-        heard: (response) => {
-          const heard = heardOf(response);
+        heard: (heard) => {
           stepCodec = heard.codec;
           paceId = heard.pace;
           stepFrom = null;
@@ -433,7 +427,6 @@
         start: from ?? 0,
         audio: streamAudio(audioIndex),
         background: background.on || pip.active,
-        paused: false,
         state: (state) => {
           // 段を替えようとして作り直したが、混んでいて断られた。替える前の段で作り直して続ける
           if (state === "busy" && stepFrom !== null) {
@@ -749,7 +742,7 @@
       }
       // 元の TS をそのまま流せるなら、この端末でデコードできるかを先に確かめる (MPEG-2 を並べる・選ぶ元)
       if (got?.offers.some((offer) => offer.way === "raw") === true)
-        rawCapable = (await rawUnsupported()) === null;
+        rawCapable = rawUnsupported() === null;
       if (got?.broadcast === "hevc") {
         broadcastHevc = await broadcastHevcPlayable(
           browserHevcProbe(pickMediaSource()?.Source),

@@ -14,6 +14,10 @@
  *
  * 中身は長さ付きの NAL の並び (avcC・hvcC の書き方。Matroska と mp4 はこの形で持つ)
  */
+
+import { BitReader } from "@danything/arib/bits";
+
+import { rbsp } from "#lib/mp4/hevc.js";
 export type NalCodec = "h264" | "hevc";
 
 /** NAL の長さを書くバイト数 (avcC の 5 バイト目、hvcC の 22 バイト目の下 2 ビット + 1)。読めなければ null */
@@ -45,45 +49,13 @@ const HEVC_IRAP_LAST = 21;
 
 /**
  * H.264 のスライスの slice_type。NAL の先頭の 1 バイトの後ろの first_mb_in_slice・slice_type (どちらも ue(v)) を読む。
- * 読めなければ null。エミュレーション防止の 0x03 は飛ばす
+ * 読めなければ null。エミュレーション防止の 0x03 は外す (`rbsp`)。先頭の 16 バイトあれば足りる
  */
 export function avcSliceType(nal: Uint8Array): number | null {
-  const bytes: number[] = [];
-  let zeros = 0;
-  for (let i = 1; i < nal.length && bytes.length < 8; i++) {
-    const byte = nal[i]!;
-    if (zeros >= 2 && byte === 3) {
-      zeros = 0;
-      continue;
-    }
-    zeros = byte === 0 ? zeros + 1 : 0;
-    bytes.push(byte);
-  }
-  let bit = 0;
-  const readBit = (): number | null => {
-    if (bit >= bytes.length * 8) return null;
-    const value = (bytes[bit >> 3]! >> (7 - (bit & 7))) & 1;
-    bit++;
-    return value;
-  };
-  const ue = (): number | null => {
-    let lead = 0;
-    for (;;) {
-      const b = readBit();
-      if (b === null || lead > 31) return null;
-      if (b === 1) break;
-      lead++;
-    }
-    let value = 0;
-    for (let i = 0; i < lead; i++) {
-      const b = readBit();
-      if (b === null) return null;
-      value = value * 2 + b;
-    }
-    return 2 ** lead - 1 + value;
-  };
-  if (ue() === null) return null;
-  return ue();
+  const reader = new BitReader(rbsp(nal.subarray(1, 17)));
+  reader.ue();
+  const type = reader.ue();
+  return reader.overrun ? null : type;
 }
 
 /** NAL の種類 (nal_unit_type) */

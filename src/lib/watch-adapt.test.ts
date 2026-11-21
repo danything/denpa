@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AdaptDecision } from "./adapt";
-import type { Pace } from "./rungs";
+import { busyNote, type Pace } from "./rungs";
 import {
   autoLabel,
-  busyNote,
   fileIdle,
   rungQuery,
   watchAdapt,

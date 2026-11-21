@@ -27,7 +27,6 @@ import {
   toHex,
   toneFrame,
   vivid,
-  WASH_LUMINANCE,
   washTone,
   washTop,
 } from "./ambient";
@@ -274,13 +273,13 @@ describe("色を濃くする", () => {
 
   test("明るいテーマでは、色の薄い所ほど透明にする", () => {
     const gray = pixel(90, 90, 90);
-    toneFrame(gray, "light", WASH_LUMINANCE);
+    toneFrame(gray, "light");
     expect(gray[3]).toBe(0);
     const red = pixel(200, 40, 40);
-    toneFrame(red, "light", WASH_LUMINANCE);
+    toneFrame(red, "light");
     expect(red[3]).toBe(255);
     const pale = pixel(140, 120, 120);
-    toneFrame(pale, "light", WASH_LUMINANCE);
+    toneFrame(pale, "light");
     expect(pale[3]).toBeGreaterThan(0);
     expect(pale[3]).toBeLessThan(255);
   });
@@ -320,8 +319,8 @@ describe("地に敷く色", () => {
     for (const theme of ["dark", "light"] as const) {
       for (const a of frames) {
         for (const b of frames) {
-          const toneA = washTone(a, theme, WASH_LUMINANCE);
-          const toneB = washTone(b, theme, WASH_LUMINANCE);
+          const toneA = washTone(a, theme);
+          const toneB = washTone(b, theme);
           for (const color of [toneA, mix(toneA, toneB, 0.5)]) {
             for (const t of text[theme])
               expect(contrast(color, t)).toBeGreaterThanOrEqual(4.5);
@@ -332,9 +331,9 @@ describe("地に敷く色", () => {
   });
 
   test("色相は残す (赤は赤みのまま、青は青みのまま)", () => {
-    const red = washTone(hex("#ff0000"), "light", WASH_LUMINANCE);
+    const red = washTone(hex("#ff0000"), "light");
     expect(red[0]).toBeGreaterThan(red[1]);
-    const blue = washTone(hex("#0000ff"), "dark", WASH_LUMINANCE);
+    const blue = washTone(hex("#0000ff"), "dark");
     expect(blue[2]).toBeGreaterThan(blue[0]);
   });
 });

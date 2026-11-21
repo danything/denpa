@@ -269,7 +269,7 @@
     player,
     video: () => video,
     overlay: () => overlay,
-    // 追っかけの `<video>` は MSE。WebKit では通すと無音になるので通さない (観る画面のその場で流すものと同じ)
+    // 追っかけの `<video>` はいつも MSE (`live-player.svelte.ts`)。WebKit では通すと無音になるのでいつも通さない (観る画面のその場で流すものと同じ)
     silentTap: () =>
       typeof navigator !== "undefined" && tapSilent(navigator.userAgent, true),
     // iPhone・iPad は `<video>` の音量を変えられない。つまみを出さず、放送のままの大きさで鳴らす

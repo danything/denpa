@@ -34,7 +34,7 @@ interface HevcSps {
 }
 
 /** NAL ユニットの中身から、エミュレーション防止の 0x03 (00 00 03 の 03) を外す */
-function rbsp(nal: Uint8Array): Uint8Array {
+export function rbsp(nal: Uint8Array): Uint8Array {
   const out: number[] = [];
   let zeros = 0;
   for (const byte of nal) {

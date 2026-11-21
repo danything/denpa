@@ -37,11 +37,11 @@
  * 組は永久には持たず、**30 秒ごとに選び直す** (直前の区切りのぶんも残して比べる)
  */
 
-import { u16 } from "@danything/arib/bytes";
-import { CLOCK, WRAP as PTS_WRAP } from "@danything/arib/pes";
+import { CLOCK, pcrBase, WRAP as PTS_WRAP } from "@danything/arib/pes";
 import {
   packetPid,
   PacketStream,
+  pmtPcrPid,
   PmtTracker,
   TABLE_PMT,
 } from "@danything/arib/psi";
@@ -60,27 +60,11 @@ export interface Anchor {
 }
 
 /**
- * 1 パケットから PCR を読む。無ければ NaN。
- *
- * PCR は適応フィールドの先頭に入っている。**基準部だけ使う。** 拡張部は
- * 27 MHz ぶんの端数で、秒に直すと 1/27,000,000 なので要らない
+ * 1 パケットから PCR を読む (秒。基準部だけ。`pcrBase`)。無ければ NaN
  */
 export function readPcr(packet: Uint8Array): number {
-  if (packet.length < 12 || packet[0] !== 0x47) return Number.NaN;
-  // 適応フィールドを持つか (2 = 適応のみ, 3 = 適応 + 中身)
-  const control = (packet[3]! >> 4) & 0x03;
-  if (control !== 2 && control !== 3) return Number.NaN;
-  const length = packet[4]!;
-  if (length < 7) return Number.NaN;
-  // PCR_flag
-  if ((packet[5]! & 0x10) === 0) return Number.NaN;
-  const base =
-    packet[6]! * 2 ** 25 +
-    packet[7]! * 2 ** 17 +
-    packet[8]! * 2 ** 9 +
-    packet[9]! * 2 +
-    (packet[10]! >> 7);
-  return base / CLOCK;
+  const base = pcrBase(packet);
+  return base === null ? Number.NaN : base / CLOCK;
 }
 
 /** `受け取った時刻 − PCR` (秒)。**小さいほど遅れずに着いた組** */
@@ -162,9 +146,7 @@ export class BroadcastClock {
 
   private onPmt(section: Uint8Array): void {
     if (section[0] !== TABLE_PMT || section.length < 12) return;
-    const pid = u16(section, 8) & 0x1fff;
-    // 0x1fff は「PCR を運ぶ ES は無い」の意味
-    this.pcrPid = pid === 0x1fff ? null : pid;
+    this.pcrPid = pmtPcrPid(section);
   }
 }
 

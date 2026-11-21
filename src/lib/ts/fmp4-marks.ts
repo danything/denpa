@@ -59,7 +59,10 @@ function children(
   return out;
 }
 
-/** moov から映像の trak の track_ID を読む。無ければ null */
+/**
+ * moov から映像の trak の track_ID を読む。無ければ null。`fmp4.ts` の `readInit` を使わないのは、あちらは stsd まで読んで
+ * コーデックの分かるトラックだけを返すため (ここは hdlr が vide かだけ分かればよい)
+ */
 export function videoTrackId(moov: Uint8Array): number | null {
   const view = new DataView(moov.buffer, moov.byteOffset, moov.byteLength);
   for (const trak of children(view, 8, moov.length)) {

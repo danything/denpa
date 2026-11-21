@@ -87,4 +87,10 @@ describe("ttmlPages", () => {
     expect(ttmlPages("<tt><p>", START)).toEqual([]);
     expect(ttmlPages("not xml", START)).toEqual([]);
   });
+
+  test("文字の範囲の外を指す参照は、例外を投げずにそのまま残す", () => {
+    const odd = DOCUMENT.replace("Hi &amp; 字", "&#x110000;&#65;");
+    const texts = JSON.stringify(ttmlPages(odd, START));
+    expect(texts).toContain("&#x110000;A");
+  });
 });

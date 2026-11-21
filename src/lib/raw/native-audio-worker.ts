@@ -12,12 +12,7 @@ import {
   type AudioOutput,
   MAX_PENDING_BYTES,
 } from "./native-audio-protocol";
-import {
-  type AudioDecoder,
-  BROKEN_MOST,
-  loadDecoder,
-  WasmAudio,
-} from "./wasm-audio";
+import { type AudioDecoder, loadDecoder, WasmAudio } from "./wasm-audio";
 
 type Segment = Extract<AudioInput, { type: "segment" }>;
 
@@ -25,7 +20,6 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 let decoder: WasmAudio | null = null;
 let track: Fmp4Track | undefined;
 let epoch = -1;
-let broken = 0;
 /** デコーダを読み終える前に届いたもの */
 let held: Segment[] = [];
 let heldBytes = 0;
@@ -50,7 +44,6 @@ function reason(error: unknown): string {
 function segment(d: WasmAudio, message: Segment): void {
   if (message.init) {
     epoch = message.epoch;
-    broken = 0;
     track = readInit(message.bytes).find((t) => t.kind === "audio");
     if (track === undefined) throw new Error("音声のトラックがありません");
     const open = audioCodec(track);
@@ -63,14 +56,9 @@ function segment(d: WasmAudio, message: Segment): void {
     const frame = audioFrame(track, sample.data);
     if (frame === null) throw new Error("対応していない AAC の形式です");
     const pcm = d.decode(frame);
-    // 壊れたコマは飛ばす (放送の取りこぼし)。続けて失敗するなら打ち切る (canvas に描く worker と同じ)
-    if (pcm === "broken") {
-      if (++broken > BROKEN_MOST)
-        throw new Error("音声をデコードできませんでした");
-      continue;
-    }
-    if (pcm === null) continue;
-    broken = 0;
+    // 壊れたコマは飛ばす (放送の取りこぼし)。続けて壊れていたら打ち切る (`WasmAudio.decode`)
+    if (pcm === "failed") throw new Error("音声をデコードできませんでした");
+    if (pcm === null || pcm === "broken") continue;
     const { sampleRate, planes } = pcm;
     const pts = sample.pts / track.timescale;
     post(

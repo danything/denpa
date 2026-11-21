@@ -74,6 +74,11 @@ export interface Pace {
  */
 export const ENCODE_SLOW = 0.95;
 
+/** エンコードが遅れているか (`ENCODE_SLOW`)。**0 と null は測れていないと読む** (遅れには数えない) */
+export function encodeSlow(speed: number | null): boolean {
+  return speed !== null && speed > 0 && speed < ENCODE_SLOW;
+}
+
 /**
  * 段を替えようとして、サーバが混んでいて断られたときの文言。`down` は下げようとしたか。
  * 録画の観る画面 (`watch-adapt.ts`) と、ライブで変換の枠が埋まっていて段を下げられなかったときのサーバの通知 (`server/live.ts`) が使う

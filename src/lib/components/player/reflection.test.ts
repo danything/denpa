@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { GLANCE, luminance, toneFrame, WASH_LUMINANCE } from "./ambient";
+import { GLANCE, luminance, toneFrame } from "./ambient";
 import { reflectionLayout, reflectionPixels, STRENGTH } from "./reflection";
 
 /** 上半分が赤、下半分が青の 32x18 */
@@ -61,7 +61,7 @@ describe("reflectionPixels", () => {
     const frame = new Uint8ClampedArray(GLANCE.width * GLANCE.height * 4).fill(
       255,
     );
-    toneFrame(frame, "dark", WASH_LUMINANCE);
+    toneFrame(frame, "dark");
     const pixels = reflectionPixels(frame, at, STRENGTH);
     let brightest = 0;
     for (let i = 0; i < pixels.length; i += 4) {

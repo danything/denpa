@@ -8,7 +8,7 @@
 
 import { concatBytes } from "@danything/arib/bytes";
 
-export const TIMESCALE = 90_000;
+const TIMESCALE = 90_000;
 
 /** 映像のトラック (HEVC) */
 export interface VideoTrack {

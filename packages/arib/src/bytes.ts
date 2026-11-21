@@ -52,3 +52,15 @@ export function u32(data: Uint8Array, at: number): number {
 export function ascii(data: Uint8Array, at: number, length: number): string {
   return String.fromCharCode(...data.subarray(at, at + length));
 }
+
+/** base64 → バイト列 (ブラウザでも使える `atob`)。読めなければ例外を投げる */
+export function fromBase64(text: string): Uint8Array {
+  return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+}
+
+/** バイト列 → base64 (ブラウザでも使える `btoa`) */
+export function toBase64(data: Uint8Array): string {
+  let binary = "";
+  for (const byte of data) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}

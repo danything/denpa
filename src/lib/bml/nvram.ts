@@ -18,6 +18,8 @@
  * (broadcaster_id) は BIT が要るが denpa はデコードしないので、サービスごとに分ける (混ざらないほうを選ぶ)。
  */
 
+import { fromBase64, toBase64 } from "@danything/arib/bytes";
+
 import { type Cell, parseStructure, readFields, writeFields } from "./binary";
 import { decodeEuc, encodeEuc } from "./euc";
 
@@ -141,9 +143,7 @@ export class Nvram {
     const kept = this.store.get(key);
     if (kept !== null) {
       try {
-        const binary = atob(kept);
-        for (let i = 0; i < Math.min(binary.length, BLOCK); i++)
-          out[i] = binary.charCodeAt(i);
+        out.set(fromBase64(kept).subarray(0, BLOCK));
       } catch {}
     }
     return out;
@@ -183,9 +183,7 @@ export class Nvram {
       );
       return Number.NaN;
     }
-    let binary = "";
-    for (const byte of data) binary += String.fromCharCode(byte);
-    this.store.set(key, btoa(binary));
+    this.store.set(key, toBase64(data));
     return data.length;
   }
 

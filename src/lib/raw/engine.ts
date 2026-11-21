@@ -155,9 +155,9 @@ export class RawEngine {
     before: Element | null,
     target: number,
     private readonly events: RawEvents,
-    background = false,
-    private readonly input: RawInput = "ts-mpeg2",
-    chase = false,
+    background: boolean,
+    private readonly input: RawInput,
+    chase: boolean,
   ) {
     this.playout = new Playout(target);
     this.playout.follow = chase;
@@ -611,7 +611,7 @@ export class RawEngine {
   }
 
   /**
-   * 時計を替える。**鳴っている位置はそのまま。** 自動再生の許しが出たら音へ、音が止められたら
+   * 時計を替える。**鳴っている位置はそのまま。** 自動再生の許可が出たら音へ、音が止められたら
    * (出口が外れた・OS に止められた) 壁時計へ。止まった音の時計に映像まで付いて止まらないように
    */
   private follow(): void {
