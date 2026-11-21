@@ -3561,6 +3561,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (kind === CHANNEL.control) {
       const notice = JSON.parse(new TextDecoder().decode(body)) as Notice;
       if (notice.type === "tuned") {
+        // 1 つの接続に答えは 1 回 (裏では音声も字幕も選び直さない)。来ても MSE を作り直さない
+        if (made.tuned !== null) return;
         const step = servedStep(notice);
         /*
          * 変換の枠が空いておらず、サーバが段を下げなかった (`server/live.ts` の `rungPlan`)。これまでどおりいまの接続で
@@ -3611,7 +3613,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         spareFailed();
         return;
       }
-      // サーバが入れ替えで止まる。いまの接続もこのあと切れて繋ぎ直す (`reconnect`) ので、裏はやめるだけ
+      /*
+       * サーバが入れ替えで止まる。いまの接続もこのあと切れて繋ぎ直す (`reconnect`) ので、裏はやめるだけ。リクエストする段 (`asked`) は
+       * もう次の段なので、繋ぎ直した指示 (`wantedCommand`) でその段になる
+       */
       if (notice.type === "restarting") {
         dropSpare();
         return;
@@ -3740,6 +3745,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       ws === null ||
       element === null
     )
+      // 用意できた (`switch`) のは裏の MSE がコマを持ってからなので、ここへは来ない。来たら 12 秒で諦める (`tickSpare`)
       return;
     staging = null;
     clearInterval(made.timer);
@@ -3772,7 +3778,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     video.addEventListener("error", onMediaError);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
-    // 新しい段の物差しで数え直す
+    /*
+     * 新しい段の物差しで数え直す。MSE を作り直すときの `clear` と同じものを戻すが、`clear` は呼ばない
+     * (止めているか・追っかけ再生か・速さは入れ替えの前後で同じで、`running` も続けたまま)。`clear` に足したら、ここも見直す
+     */
     broadcast = made.clock;
     fromAir = null;
     received = 0;
