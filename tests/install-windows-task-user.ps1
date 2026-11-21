@@ -100,8 +100,9 @@ Register-Server 'v1.0.0' 'token'
 if ($registered.Count -ne 1 -or $registered[0][1] -ne 'SYSTEM') { throw "fresh: wrong registration: $($registered | Out-String)" }
 if (($owned -join ',') -ne "$System,$Administrators") { throw "fresh: wrong data ACL: $owned" }
 if ($grants.Count -ne 0) { throw 'fresh: should not grant anyone' }
-# install.ps1 は Windows の区切り (\) で書くので、Linux では「data\denpa.cmd」という名前のファイルになる
-if (-not (Test-Path -LiteralPath "$Data\denpa.cmd")) { throw 'fresh: denpa.cmd not written' }
+# install.ps1 は Windows の区切り (\) で書く。Linux の .NET はそれを名前の一部として「data\denpa.cmd」を作り、
+# PowerShell のパスは \ を / に読み替えるので、.NET で確かめる
+if (-not [IO.File]::Exists("$Data\denpa.cmd")) { throw 'fresh: denpa.cmd not written' }
 Write-Host 'PASS: fresh install runs as SYSTEM'
 
 # 上げ直し、人がタスク スケジューラで alice に変えていた: 載せ直さず (SYSTEM に戻さない)、alice に権限を足し直す
