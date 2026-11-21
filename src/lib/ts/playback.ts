@@ -162,7 +162,11 @@ export async function busyAnswer(response: Response): Promise<boolean> {
 /** 流しているものの様子。流れている・繋ぎ直している・打ち切った・混んでいて断られた */
 export type StreamState = "flowing" | "retrying" | "failed" | "busy";
 
-/** 続けてリクエストし直す上限 */
+/**
+ * 録画を観るときに、続けてリクエストし直す上限 (待ちの合計は約 1 分)。録画は読めない形式・壊れたファイルでも
+ * 同じ所で切れるので、読み直し続けずに打ち切り、観られる先を案内する ([watch.md](../../../docs/watch.md))。
+ * ライブと追っかけは上限を置かない (`live-player.svelte.ts` の `reconnect`)
+ */
 export const STREAM_RETRIES = 8;
 
 /** `retries` 回リクエストし直したあと、次にリクエストするまで待つ時間 (ms)。倍々に伸ばして 10 秒で頭打ち (デプロイの入れ替えは数十秒かかる) */
@@ -171,8 +175,9 @@ export function retryWait(retries: number): number {
 }
 
 /**
- * 切れたときに、倍々に待ってリクエストし直す (`retryWait`)。続けて `STREAM_RETRIES` 回を超えたら打ち切る。
- * MSE で流すとき (`remux-player.ts`) と canvas に描くとき (`canvas-player.ts`) で同じものを使う
+ * 切れたときに、倍々に待ってリクエストし直す (`retryWait`)。続けて `limit` 回を超えたら打ち切る。
+ * 3 画面の繋ぎ直しはどれもこれを使う。録画をその場で流すとき (`remux-player.ts`)・canvas に描くとき (`canvas-player.ts`)・
+ * ファイルを直に再生するとき (観る画面の `recover`) は `STREAM_RETRIES` 回まで、ライブと追っかけ (`live-player.svelte.ts`) は上限なし
  */
 export class StreamRetry {
   private retries = 0;
@@ -180,11 +185,24 @@ export class StreamRetry {
   /** `retrying` を言わずに繋ぎ直しているか (`schedule` の `quiet`) */
   private quiet = false;
 
-  constructor(private readonly state: (state: StreamState) => void) {}
+  constructor(
+    private readonly state: (state: StreamState) => void,
+    private readonly limit = STREAM_RETRIES,
+  ) {}
 
   /** リクエストし直すのを待っている間 */
   get waiting(): boolean {
     return this.timer !== null;
+  }
+
+  /** 続けて何回リクエストし直したか。0 でなければ繋ぎ直しの最中 */
+  get attempts(): number {
+    return this.retries;
+  }
+
+  /** 上限まで使い切ったか (次の `schedule` は `failed` になる) */
+  get spent(): boolean {
+    return this.retries >= this.limit;
   }
 
   /**
@@ -193,7 +211,7 @@ export class StreamRetry {
    * 手元を使い切ったら、呼ぶ側が `starved` を呼ぶ
    */
   schedule(again: () => void, quiet = false): void {
-    if (this.retries >= STREAM_RETRIES) {
+    if (this.spent) {
       this.quiet = false;
       this.state("failed");
       return;
