@@ -263,10 +263,13 @@ public class It930xDeviceTests
         It930xDevice.CloseIfIdle("9-40", TimeSpan.Zero);
         var configured = log.IndexOf("W DA7C=67");
         string[] overflow = ["R DA39 1", "R DA57 1", "R DA8B 4"];
+        // 溢れを読み、記録に添える TS の経路の状態を読む (読むだけ)
+        await Assert.That(log.Skip(configured + 1).Take(overflow.Length)).IsEquivalentTo(overflow);
+        var reset = log.IndexOf("W DA4C=00", configured);
+        await Assert.That(reset).IsGreaterThan(configured + overflow.Length + 1);
+        await Assert.That(log.Skip(configured + 1 + overflow.Length).Take(reset - configured - 1 - overflow.Length).All(line => line.StartsWith("R ", StringComparison.Ordinal))).IsTrue();
         string[] expected =
         [
-            // 溢れを読む
-            .. overflow,
             // DRV_ResetRxPort の閉じる側: 入力を全部閉じる → 10 ms → 0xDA1D に 1、0
             "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00",
             // init_work_queue の「Clean PSB buffer」: 0xDA05 に 1
@@ -284,12 +287,37 @@ public class It930xDeviceTests
             // 下りたかを読み直す
             .. overflow,
         ];
-        await Assert.That(log.Skip(configured + 1).Take(expected.Length)).IsEquivalentTo(expected);
+        await Assert.That(log.Skip(reset).Take(expected.Length)).IsEquivalentTo(expected);
         // リセットし直してから電源を入れ、EP 0x84 の転送要求を出す
-        await Assert.That(log.IndexOf($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}")).IsGreaterThan(configured + expected.Length);
+        await Assert.That(log.IndexOf($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}")).IsGreaterThan(reset + expected.Length);
         var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-40")).ToList();
         await Assert.That(lines.Any(text => text.Contains("開いたときに TS のバッファが溢れていました") && text.Contains("入力ごとの溢れ (0xDA57・0xDA8B〜) 0 0 1 0 0、受信機 2"))).IsTrue();
+        // 溢れていた行には、前のファームウェアが動いていたかと、TS の経路の状態 (残りのバッファ・落ちたパケット・EP 0x84) を添える
+        var opened = lines.Single(text => text.Contains("開いたときに TS のバッファが溢れていました"));
+        await Assert.That(opened).Contains("開いたとき、ファームウェアは動いていませんでした");
+        await Assert.That(opened).Contains("ブリッジ: 残りのバッファ");
+        await Assert.That(opened).Contains("落ちたパケット (0xDA21)");
+        await Assert.That(opened).Contains("EP 0x84 (bit 5)");
         await Assert.That(lines.Any(text => text.Contains("リセットしても溢れたままです") && text.Contains("次の選局で、ロックしたあとに TS が届くかを確かめます"))).IsTrue();
+    }
+
+    /// <summary>
+    /// **開いたときに前のファームウェアが動いていて溢れていたら、その行に「REBOOT した」と添える** (PX-W3PE4。#1578)。
+    /// 前のドライバーかプロセスがファームウェアを動かしたまま離れたのかを、エージェントの回で溢れたのかと分けて読むため
+    /// </summary>
+    [Test]
+    public async Task 開いたときに前のファームウェアが動いていて溢れていれば_そう添える()
+    {
+        var (usb, _, _) = Fake();
+        usb.Running = FakeIt930x.BootVersion;
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        var device = Open(usb, "9-81", new FakeClock());
+        device.Release();
+        It930xDevice.CloseIfIdle("9-81", TimeSpan.Zero);
+        var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-81")).ToList();
+        var opened = lines.Single(text => text.Contains("開いたときに TS のバッファが溢れていました"));
+        await Assert.That(opened).Contains("開いたとき、前のファームウェアが動いていました (REBOOT した)");
+        await Assert.That(opened).Contains("ブリッジ: 残りのバッファ");
     }
 
     [Test]
@@ -415,7 +443,7 @@ public class It930xDeviceTests
         byte[] packet = [It930xBridge.SyncBytes[0], 0x01, 0x00, 0x10, .. new byte[184]];
         usb.TsSource = () => packet;
         var clock = new FakeClock();
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-53", clock), () => It930xDevice.CloseIfIdle("9-53", TimeSpan.Zero)) { TsProbeMs = 5000 };
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-53", clock), () => It930xDevice.CloseIfIdle("9-53", TimeSpan.Zero)) { TsProbeMs = 5000, TsLossMs = 200 };
         try
         {
             tuner.Tune(ChannelTable.Parse("T27")!);
@@ -430,7 +458,7 @@ public class It930xDeviceTests
             tuner.Tune(ChannelTable.Parse("T22")!);
             await Assert.That(tuner.Tuned).IsTrue();
             var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-53")).ToList();
-            await Assert.That(lines.Count(text => text.Contains("TS が届きました。この機材の受信機で選局を続けます"))).IsEqualTo(1);
+            await Assert.That(lines.Count(text => text.Contains("TS が届きました (") && text.Contains("連続性の飛び 0 回") && text.Contains("。この機材の受信機で選局を続けます"))).IsEqualTo(1);
         }
         finally
         {
@@ -456,7 +484,7 @@ public class It930xDeviceTests
         };
         usb.TsSource = () => Volatile.Read(ref resets) >= 2 ? packet : null;
         var clock = new FakeClock();
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-55", clock), () => It930xDevice.CloseIfIdle("9-55", TimeSpan.Zero)) { TsProbeMs = 500 };
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-55", clock), () => It930xDevice.CloseIfIdle("9-55", TimeSpan.Zero)) { TsProbeMs = 500, TsLossMs = 200 };
         try
         {
             tuner.Tune(ChannelTable.Parse("T27")!);
@@ -478,12 +506,51 @@ public class It930xDeviceTests
             await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
             var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-55")).ToList();
             await Assert.That(lines.Any(text => text.Contains("受信をやり直します"))).IsTrue();
-            await Assert.That(lines.Any(text => text.Contains("TS が届きました。この機材の受信機で選局を続けます"))).IsTrue();
+            await Assert.That(lines.Any(text => text.Contains("TS が届きました (") && text.Contains("この機材の受信機で選局を続けます"))).IsTrue();
         }
         finally
         {
             usb.OnNote = null;
             tuner.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// **全体の溢れが立ったままで、届いた TS が欠けていれば、届かないときと同じに扱う** (PX-W3PE4。#1578。欠けた地上波でライブの ffmpeg が止まった)。
+    /// 受信を 1 回やり直し、それでも欠けていれば、この機材の受信機では選局しない。記録には数えた欠けを添える
+    /// </summary>
+    [Test]
+    public async Task 全体の溢れが立ったままで_TS_が欠けて届けば届かないときと同じに断る()
+    {
+        var (usb, _, _) = Fake();
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        // continuity_counter が 2 つずつ進む (1 パケットおきに落ちている) TS。transport_error_indicator は 0
+        var counter = 0;
+        usb.TsSource = () =>
+        {
+            var next = Interlocked.Add(ref counter, 2);
+            return [It930xBridge.SyncBytes[0], 0x01, 0x00, (byte)(0x10 | (next & 0x0F)), .. new byte[184]];
+        };
+        var clock = new FakeClock();
+        var card = Open(usb, "9-58", clock);
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-58", clock), () => It930xDevice.CloseIfIdle("9-58", TimeSpan.Zero)) { TsProbeMs = 500, TsLossMs = 2000 };
+        try
+        {
+            var error = Assert.Throws<TunerUnusableException>(() => tuner.Tune(ChannelTable.Parse("T27")!));
+            await Assert.That(error.Message).Contains("TS が届かないか欠けています");
+            await Assert.That(tuner.Tuned).IsFalse();
+            await Assert.That(card.Jammed).IsNotNull();
+            var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-58")).ToList();
+            await Assert.That(lines.Count(text => text.Contains("TS が欠けて届くため") && text.Contains("受信をやり直します"))).IsEqualTo(1);
+            await Assert.That(lines.Any(text => text.Contains("TS が欠けて届きました (") && text.Contains("この機材の受信機では選局しません"))).IsTrue();
+            await Assert.That(lines.Any(text => text.Contains("TS が届きました"))).IsFalse();
+        }
+        finally
+        {
+            usb.TsSource = null;
+            tuner.Dispose();
+            card.Release();
+            It930xDevice.CloseIfIdle("9-58", TimeSpan.Zero);
         }
     }
 

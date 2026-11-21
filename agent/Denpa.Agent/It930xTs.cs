@@ -185,6 +185,20 @@ internal sealed class It930xTsOutput
 
     public DeviceStream Output { get; }
 
+    /// <summary>欠けを数える処理 (<see cref="WatchLoss"/>)。書くのは呼んだスレッド、読むのは <see cref="It930xTsDemux"/> のスレッド</summary>
+    private It930xTsLoss? _loss;
+
+    /// <summary>
+    /// このあと詰めるパケットの欠け (連続性の飛び) を数え始める (<see cref="It930xTuner"/> が、全体の溢れが立ったままの機材で TS を確かめるとき)。
+    /// 呼ぶたびに数え直す。数えるのは TSMF を通す前のパケットなので、ISDB-C では使わない (TSMF のフレームには複数の TS の同じ PID が混じる)
+    /// </summary>
+    internal It930xTsLoss WatchLoss()
+    {
+        var loss = new It930xTsLoss();
+        Volatile.Write(ref _loss, loss);
+        return loss;
+    }
+
     /// <summary>詰めたパケットの数 (TLV に組み立てているときは TLV パケットの数)。テストが、閉じたあとに詰めていないことを見る</summary>
     internal long Packets { get; private set; }
 
@@ -207,6 +221,7 @@ internal sealed class It930xTsOutput
     /// </summary>
     public void Write(ReadOnlySpan<byte> packet)
     {
+        Volatile.Read(ref _loss)?.Push(packet, Environment.TickCount64);
         if (_tsmf is not { } tsmf)
         {
             Store(packet);
@@ -301,4 +316,91 @@ internal sealed class It930xTsOutput
             _writer.Complete();
         }
     }
+}
+
+/// <summary>
+/// 受信機 1 つの TS の欠けを数える (<see cref="It930xTsOutput.WatchLoss"/>)。全体の溢れが立ったままの機材で、届いた TS が欠けていないかを確かめるため (<see cref="It930xTuner"/>)。
+///
+/// <para>
+/// 連続性の飛びは <see cref="ContinuityTracker"/> で数える。**前に同じ PID を受けてから transport_error_indicator が 1 のパケットが来ていれば、その飛びは電波の誤りとして数えない**
+/// (<see cref="Excused"/>)。電波の誤りのパケットは復調器が印を付けて出すので、印の無い飛びはブリッジから先でパケットが落ちたと読む (推定)。
+/// 選局の直後の最初の 1 秒には、印の付いたパケットが 1 チャンネルあたり 18〜67 個あった (TC90522 の地上波。docs/agent.md) ので、それを欠けに数えないため。
+/// </para>
+/// <para>
+/// 飛びは、最初のパケットからの <see cref="SlotMs"/> ごとの区間に分けて、飛んだ区間の数 (<see cref="Slots"/>) も数える。
+/// ブリッジに残っていた前の選局のパケットと、この選局のパケットのつなぎ目では、同じ PID が 1 回飛ぶ。それは最初の区間に収まるので、区間で数えれば 1 つで済む。
+/// 続けて欠けるときも、間を置いて何度も欠けるときも、区間の数が増える。
+/// </para>
+/// <para>
+/// <see cref="Push"/> は <see cref="It930xTsDemux"/> の 1 つのスレッドから呼び、数はほかのスレッドから読む。
+/// </para>
+/// </summary>
+internal sealed class It930xTsLoss
+{
+    /// <summary>飛びを数える区間の長さ (ms)。EP 0x84 の 1 回の転送 (65,424 バイト) が地上波 1 本 (約 17 Mbps) で埋まる約 31 ms の 3 倍ほど</summary>
+    public const int SlotMs = 100;
+
+    private readonly ContinuityTracker _tracker = new();
+
+    /// <summary>PID ごとの、前にその PID を受けたときの transport_error_indicator が 1 のパケットの数</summary>
+    private readonly long[] _errorsAt = new long[8192];
+
+    private long _first = -1;
+    private long _lastSlot = -1;
+    private long _packets;
+    private long _jumps;
+    private long _excused;
+    private long _slots;
+
+    /// <summary>受けたパケットの数</summary>
+    public long Packets => Volatile.Read(ref _packets);
+
+    /// <summary>電波の誤りでは説明できない連続性の飛びの数 (PID ごとに数える)</summary>
+    public long Jumps => Volatile.Read(ref _jumps);
+
+    /// <summary>前に同じ PID を受けてから transport_error_indicator が 1 のパケットが来ていたので、数えなかった飛びの数</summary>
+    public long Excused => Volatile.Read(ref _excused);
+
+    /// <summary><see cref="Jumps"/> の飛びがあった <see cref="SlotMs"/> ごとの区間の数</summary>
+    public long Slots => Volatile.Read(ref _slots);
+
+    /// <summary>transport_error_indicator が 1 のパケットの数</summary>
+    public long Errors => _tracker.Errors;
+
+    /// <summary>最初のパケットを受けてからの時間 (ms)。まだ受けていなければ 0</summary>
+    public long Span(long nowMs)
+    {
+        var first = Volatile.Read(ref _first);
+        return first < 0 ? 0 : nowMs - first;
+    }
+
+    /// <param name="packet">188 バイトのパケット (先頭は 0x47 に戻したもの)</param>
+    /// <param name="nowMs">今の時刻 (ms。<see cref="Environment.TickCount64"/>)</param>
+    public void Push(ReadOnlySpan<byte> packet, long nowMs)
+    {
+        if (_first < 0) Volatile.Write(ref _first, nowMs);
+        Volatile.Write(ref _packets, _packets + 1);
+        var errors = _tracker.Errors;
+        var pid = _tracker.Push(packet);
+        if (packet.Length < 4 || packet[0] != 0x47 || (packet[1] & 0x80) != 0) return;
+        var at = TsSync.Pid(packet);
+        var before = _errorsAt[at];
+        _errorsAt[at] = errors;
+        if (pid < 0) return;
+        if (errors > before)
+        {
+            Volatile.Write(ref _excused, _excused + 1);
+            return;
+        }
+        Volatile.Write(ref _jumps, _jumps + 1);
+        var slot = (nowMs - _first) / SlotMs;
+        if (slot == _lastSlot) return;
+        _lastSlot = slot;
+        Volatile.Write(ref _slots, _slots + 1);
+    }
+
+    /// <summary>記録に添える 1 行の中身 (「1000 ms でパケット 5,000 個、…」)</summary>
+    public string Describe(long spanMs) =>
+        $"{spanMs} ms でパケット {Packets:N0} 個、連続性の飛び {Jumps} 回 ({SlotMs} ms ごとに区切って {Slots} 区間)、"
+        + $"transport_error_indicator が 1 のパケット {Errors} 個 (そのあとの飛び {Excused} 回は数えない)";
 }

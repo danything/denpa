@@ -569,9 +569,12 @@ public sealed class It930xDevice
         {
             var bridge = new It930xBridge(usb, sleep);
             It930xBoot boot;
+            // 開いたときに前のファームウェアが動いていたか (REBOOT した)。REBOOT で USB がつなぎ直されたときは、開き直したあとの起動では動いていないと読むので、ここで覚える
+            bool rebooted;
             try
             {
                 boot = bridge.Start(code);
+                rebooted = boot.Rebooted;
             }
             catch (UsbGoneException) when (bridge.RebootSent)
             {
@@ -579,11 +582,12 @@ public sealed class It930xDevice
                 usb = It930xProbe.Reopen(() => open().Usb, sleep);
                 bridge = new It930xBridge(usb, sleep);
                 boot = bridge.Start(code);
+                rebooted = true;
             }
             var device = new It930xDevice(port, model, usb, bridge, sleep, nowMs, link);
-            device.Setup();
+            device.Setup(rebooted);
             device.OpenMs = started.ElapsedMilliseconds;
-            Log.Write($"[{device.Label}] 開きました (ファームウェア {It930xBoot.Format(boot.Version)}{(boot.Rebooted ? "、REBOOT した" : "")}、{device.OpenMs} ms)");
+            Log.Write($"[{device.Label}] 開きました (ファームウェア {It930xBoot.Format(boot.Version)}{(rebooted ? "、REBOOT した" : "")}、{device.OpenMs} ms)");
             return device;
         }
         catch
@@ -597,7 +601,8 @@ public sealed class It930xDevice
     /// ブリッジの設定と電源 (IT930x の仕様書 4.2・5・7.2・7.3)。そのあと受信を始める (<see cref="StartStream"/>)。
     /// 入力は、最初の受信機を開いたときに機種が使うものを全部開ける (<see cref="OpenInputs"/>)
     /// </summary>
-    private void Setup()
+    /// <param name="rebooted">開いたときに前のファームウェアが動いていた (REBOOT した)。溢れていたときに記録に出す (<see cref="RecoverOverflow"/>)</param>
+    private void Setup(bool rebooted)
     {
         if (Bridge.ConfigureReceivers(Model.Receivers) == 0)
         {
@@ -606,7 +611,7 @@ public sealed class It930xDevice
         SetupGpio(Bridge, Model, _sleep);
         // 受信機の TS 入力はどれもシリアル (IT930x の仕様書 5・6.1)。同期バイトが 0 の入力は使わないので、開けない (IT930x の仕様書 5)
         Bridge.ConfigureTs(new bool[It930xBridge.TsInputs], Model.SyncBytes);
-        RecoverOverflow();
+        RecoverOverflow(rebooted);
         if (Model.PowerWhileOpen) Power(true);
         try
         {
@@ -749,9 +754,11 @@ public sealed class It930xDevice
     /// <summary>
     /// 開くときに TS のバッファの溢れ (<see cref="It930xOverflow"/>) が立っていたら、記録に出して TS の経路をリセットし直す (<see cref="It930xBridge.ResetTs"/>)。
     /// EP 0x84 の転送要求を出す前に呼ぶ。リセットしても立ったままなら、記録に出して開くのは続ける (カードは EP 0x84 を使わないので読める)。
-    /// 全体の溢れが立ったままなら、次の選局でロックしたあとに TS が届くかを確かめる (<see cref="Unconfirmed"/>)。溢れの値が何を表すかは brRegister.h の名前からの推定
+    /// 全体の溢れが立ったままなら、次の選局でロックしたあとに TS が届くかを確かめる (<see cref="Unconfirmed"/>)。溢れの値が何を表すかは brRegister.h の名前からの推定。
+    /// 溢れていたときの行には、TS の経路の状態 (<see cref="It930xBridge.ReadTsStatus"/>) と、開いたときに前のファームウェアが動いていたか (<paramref name="rebooted"/>) を添える。
+    /// 前のドライバーかプロセスがファームウェアを動かしたまま離れたのか、ファームウェアが止まったあとも印が残っていたのかを、記録から分けるため
     /// </summary>
-    private void RecoverOverflow()
+    private void RecoverOverflow(bool rebooted)
     {
         var overflow = Bridge.ReadOverflow();
         _overflow = overflow;
@@ -761,7 +768,18 @@ public sealed class It930xDevice
             ForgetFaults();
             return;
         }
-        FaultOnce("open", $"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。TS の経路をリセットし直します");
+        string status;
+        try
+        {
+            status = Bridge.ReadTsStatus().Describe();
+        }
+        catch (IOException error) when (error is not UsbGoneException)
+        {
+            // 記録に添えるだけなので、読めなくても開くのは続ける
+            status = $"ブリッジの TS の経路の状態を読めませんでした ({error.Message})";
+        }
+        var firmware = rebooted ? "開いたとき、前のファームウェアが動いていました (REBOOT した)" : "開いたとき、ファームウェアは動いていませんでした";
+        FaultOnce("open", $"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{firmware}。{status}。TS の経路をリセットし直します");
         overflow = Bridge.ResetTs();
         _overflow = overflow;
         if (!overflow.Any) ForgetFaults();
@@ -809,7 +827,7 @@ public sealed class It930xDevice
     private volatile It930xOverflow? _flowing;
 
     /// <summary>
-    /// **全体の溢れ (<c>0xDA39</c>) が立ったままで、TS が届かないと確かめた溢れ。確かめていなければ null。** この間は、どの受信機の選局も断る (<see cref="It930xTuner"/>)。
+    /// **全体の溢れ (<c>0xDA39</c>) が立ったままで、TS が届かないか欠けて届くと確かめた溢れ。確かめていなければ null。** この間は、どの受信機の選局も断る (<see cref="It930xTuner"/>)。
     /// 立ったままの機材では、PX-MLT5PE (2026-11-11) でも PX-MLT8PE (2026-11-12) でも、ロックしても EP 0x84 から TS が届かず、電源を抜くまで戻らなかった。
     /// 電源を抜くと USB から外れるので、次に開くのは新しい機材として読み直す
     /// </summary>
@@ -828,12 +846,15 @@ public sealed class It930xDevice
     internal long InputPackets(int receiver) => _demux.PacketsOf(Wiring(receiver).TsInput);
 
     /// <summary>
-    /// 全体の溢れが立ったままの機材で、受信機 <paramref name="receiver"/> がロックしたあとに TS が届いたか (<paramref name="flowing"/>) を記録に出し、覚える。
-    /// 届かなければ、閉じるまでどの受信機の選局も断る (<see cref="Jammed"/>)。
+    /// 全体の溢れが立ったままの機材で、受信機 <paramref name="receiver"/> がロックしたあとに TS が欠けずに届いたか (<paramref name="flowing"/>) を記録に出し、覚える。
+    /// 届かないか欠けて届けば、閉じるまでどの受信機の選局も断る (<see cref="Jammed"/>)。
     /// 並べて選局した受信機が前後して確かめても食い違わないよう、<c>_gate</c> の中で読み書きする
     /// </summary>
+    /// <param name="loss">
+    /// 欠けを数えた結果 (<see cref="It930xTsLoss.Describe"/>)。届いたときは記録に添え、届かなかったときに渡せば「欠けて届いた」として記録に出す。数えていなければ null
+    /// </param>
     /// <returns>この機材の選局を断るようにしたか。同じ溢れのまま、並べて選局したほかの受信機で TS が届いたと確かめてあれば、断らずに false を返す</returns>
-    internal bool Confirm(int receiver, It930xOverflow overflow, bool flowing, long waitedMs)
+    internal bool Confirm(int receiver, It930xOverflow overflow, bool flowing, long waitedMs, string? loss = null)
     {
         lock (_gate)
         {
@@ -842,15 +863,16 @@ public sealed class It930xDevice
                 _flowing = overflow;
                 // 先にほかの受信機が届かないと確かめて断るようにしていても、同じ溢れのまま TS が届いたなら、ブリッジからは TS が出ている。断るのをやめる
                 if (overflow.SameAs(_blocked)) _blocked = null;
-                Log.Write($"[{Label}] 全体の溢れは立ったままですが ({overflow})、受信機 {receiver} の TS が届きました。この機材の受信機で選局を続けます");
+                Log.Write($"[{Label}] 全体の溢れは立ったままですが ({overflow})、受信機 {receiver} の TS が届きました{(loss is null ? "" : $" ({loss})")}。この機材の受信機で選局を続けます");
                 return false;
             }
             // ほかの受信機に TS が届いたなら、ブリッジからは TS が出ている。この受信機だけの失敗にする
             if (overflow.SameAs(_flowing)) return false;
             _blocked = overflow;
         }
+        var what = loss is null ? $"ロックしてから {waitedMs} ms 待っても TS が届きませんでした" : $"TS が欠けて届きました ({loss})";
         FaultOnce("jammed",
-            $"[{Label}] 全体の溢れが立ったままで ({overflow})、受信機 {receiver} がロックしてから {waitedMs} ms 待っても TS が届きませんでした。"
+            $"[{Label}] 全体の溢れが立ったままで ({overflow})、受信機 {receiver} の{what}。"
             + "機材の電源を抜いて入れ直すまで、この機材の受信機では選局しません (REBOOT や受信機の電源の入れ直しでは戻りません)");
         return true;
     }
@@ -1702,7 +1724,7 @@ public sealed class It930xTuner : ITuneDevice
                 // 受信を始めるときに、復調器の TS の端子を出す (TC90522 の仕様書 9.1)
                 _frontend.Stream(true);
                 // 全体の溢れが立っていて、TS が届くかを確かめていなければ、この受信機の TS が届くかを確かめる (流し始める前に読んだ溢れで決める)
-                if (_device.Unconfirmed is { } suspect) Probe(_device, suspect, before);
+                if (_device.Unconfirmed is { } suspect) Probe(_device, suspect, output, before, countLoss: tsmf is null);
                 if (tsmf is not null) WaitTsmf(_frontend, tsmf);
             }
             catch (ObjectDisposedException error) when (_device is { Closed: true } device)
@@ -1788,43 +1810,89 @@ public sealed class It930xTuner : ITuneDevice
     internal int TsProbeMs { get; init; } = 1000;
 
     /// <summary>
-    /// 全体の溢れが立ったままの機材で、ロックした受信機の TS が EP 0x84 から届くかを確かめる (流し始めたあと)。
-    /// <paramref name="before"/> (流し始める前に数えた、この受信機の入力のパケット) から増えれば、印は立ったままでも TS は届くので、この機材を使い続ける。
-    /// <see cref="TsProbeMs"/> 待っても増えなければ、受信を 1 回だけやり直して (<see cref="It930xDevice.RestartOnce"/>。IT930x の仕様書 6.4 の受信の始めの手順)、もう一度 <see cref="TsProbeMs"/> 待つ。
-    /// それでも増えなければ、閉じるまでこの機材の選局を断り (<see cref="It930xDevice.Jammed"/>)、この選局も断る。
-    /// 同じ溢れのまま、並べて選局したほかの受信機に TS が届いていれば、この選局だけを <see cref="TsMissing"/> で失敗にする (<see cref="TunerStalledException"/>。プールはほかのチューナーで選局し直す)
+    /// 全体の溢れが立ったままの機材で、TS が届いたあとに欠けを数える長さ (ms。最初のパケットから。<see cref="Probe"/>)。
+    /// 溢れていない機材では、<c>--tune</c> が数える連続性の飛び (最初の 1 秒は数えない) が、90 秒流しても 0 個だった (PX-MLT5PE の受信機 5 つの地上波。docs/tuner-it930x.md)。
+    /// 待つのは全体の溢れが立っていて、まだ確かめていない溢れのときだけなので、選局が遅くなるのもそのときだけ。変えるのはテストのため
     /// </summary>
-    private void Probe(It930xDevice device, It930xOverflow suspect, long before)
+    internal int TsLossMs { get; init; } = 1000;
+
+    /// <summary>
+    /// 欠けて届くと決める、飛んだ区間 (<see cref="It930xTsLoss.SlotMs"/> ごと) の数。
+    /// 前の選局のパケットがブリッジに残っていると、つなぎ目で 1 区間飛ぶので、1 区間は許す。電波の誤りの飛びは数えない (<see cref="It930xTsLoss"/>)。
+    /// PX-W3PE4 で全体の溢れが立ったまま届いた地上波は、ライブの ffmpeg が AAC のデコードの失敗を数秒おきに出して止まった (#1578)。
+    /// 1 秒のうちに 2 区間飛べば、つなぎ目のほかにも欠けていると読む。数秒に 1 回より少ない欠けは見逃す
+    /// </summary>
+    internal const int TsLossSlots = 2;
+
+    /// <summary>ロックしたあとに届いた TS が欠けていたときの失敗の文 (<see cref="Probe"/>)</summary>
+    public const string TsLossy = "ロックしましたが、TS が欠けて届きます (ブリッジから先で TS のパケットが落ちています)";
+
+    /// <summary>
+    /// 全体の溢れが立ったままの機材で、ロックした受信機の TS が EP 0x84 から届くかと、欠けていないかを確かめる (流し始めたあと)。
+    /// <paramref name="before"/> (流し始める前に数えた、この受信機の入力のパケット) から増え、そのあと <see cref="TsLossMs"/> の間に欠けが
+    /// <see cref="TsLossSlots"/> 区間に達しなければ、印は立ったままでも TS は届くので、この機材を使い続ける (PX-W3PE5 の「印だけで断らない」。<see cref="It930xDevice.Unconfirmed"/>)。
+    /// <see cref="TsProbeMs"/> 待っても増えないか、欠けて届けば、受信を 1 回だけやり直して (<see cref="It930xDevice.RestartOnce"/>。IT930x の仕様書 6.4 の受信の始めの手順)、もう一度確かめる。
+    /// それでも同じなら、閉じるまでこの機材の選局を断り (<see cref="It930xDevice.Jammed"/>)、この選局も断る。欠けて届くときも、届かないときと同じに扱う。
+    /// 同じ溢れのまま、並べて選局したほかの受信機に TS が届いていれば、この選局だけを <see cref="TsMissing"/> か <see cref="TsLossy"/> で失敗にする
+    /// (<see cref="TunerStalledException"/>。プールはほかのチューナーで選局し直す)。
+    /// 欠けを数えるのは TSMF を通さない方式だけ (<paramref name="countLoss"/>。<see cref="It930xTsOutput.WatchLoss"/>)。ISDB-C は届くかだけを確かめる
+    /// </summary>
+    private void Probe(It930xDevice device, It930xOverflow suspect, It930xTsOutput output, long before, bool countLoss)
     {
         var waited = Stopwatch.StartNew();
-        var flowing = Arrives(device, before)
-            || (device.RestartOnce(suspect, $"全体の溢れが立ったままで、受信機 {_receiver} がロックしてから {TsProbeMs} ms 待っても TS が届かないため")
-                && Arrives(device, device.InputPackets(_receiver)));
-        if (flowing)
+        var check = Watch(device, output, before, countLoss);
+        if (!check.Good)
         {
-            device.Confirm(_receiver, suspect, flowing: true, waited.ElapsedMilliseconds);
+            var why = check.Arrived
+                ? $"受信機 {_receiver} の TS が欠けて届くため ({check.Detail})"
+                : $"受信機 {_receiver} がロックしてから {TsProbeMs} ms 待っても TS が届かないため";
+            if (device.RestartOnce(suspect, $"全体の溢れが立ったままで、{why}")) check = Watch(device, output, device.InputPackets(_receiver), countLoss);
+        }
+        if (check.Good)
+        {
+            device.Confirm(_receiver, suspect, flowing: true, waited.ElapsedMilliseconds, check.Detail);
             return;
         }
-        var blocked = device.Confirm(_receiver, suspect, flowing: false, waited.ElapsedMilliseconds);
+        var blocked = device.Confirm(_receiver, suspect, flowing: false, waited.ElapsedMilliseconds, check.Arrived ? check.Detail : null);
         StopOutput();
         if (blocked) Refuse(suspect);
-        throw new TunerStalledException(TsMissing);
+        throw new TunerStalledException(check.Arrived ? TsLossy : TsMissing);
     }
 
-    /// <summary>この受信機の入力のパケットが <paramref name="before"/> から <see cref="TsProbeMs"/> のうちに増えたか</summary>
-    private bool Arrives(It930xDevice device, long before)
+    /// <summary>確かめた結果 (<see cref="Watch"/>)。<see cref="Detail"/> は欠けを数えたときの記録の中身 (<see cref="It930xTsLoss.Describe"/>)</summary>
+    private readonly record struct TsCheck(bool Arrived, bool Lossy, string? Detail)
     {
-        var waited = Stopwatch.StartNew();
-        while (device.InputPackets(_receiver) == before)
-        {
-            if (waited.ElapsedMilliseconds >= TsProbeMs) return false;
-            Thread.Sleep(5);
-        }
-        return true;
+        public bool Good => Arrived && !Lossy;
     }
 
     /// <summary>
-    /// TS が届かない機材の選局を断る (<see cref="TunerUnusableException"/>)。開いた受信機は閉じてから (LNB の給電の要求も取り下げて)、機材を返す。
+    /// この受信機の入力のパケットが <paramref name="before"/> から <see cref="TsProbeMs"/> のうちに増えたかを確かめ、増えたら最初のパケットから
+    /// <see cref="TsLossMs"/> の間、欠けを数える (<paramref name="countLoss"/> のとき)。欠けが <see cref="TsLossSlots"/> 区間に達したら、そこで決める
+    /// </summary>
+    private TsCheck Watch(It930xDevice device, It930xTsOutput output, long before, bool countLoss)
+    {
+        // 数え始めてから届いたパケットだけを数える (前の確かめの数を持ち越さない)
+        var loss = countLoss ? output.WatchLoss() : null;
+        var waited = Stopwatch.StartNew();
+        while (device.InputPackets(_receiver) == before)
+        {
+            if (waited.ElapsedMilliseconds >= TsProbeMs) return new(false, false, null);
+            Thread.Sleep(5);
+        }
+        if (loss is null) return new(true, false, null);
+        var counting = Stopwatch.StartNew();
+        while (true)
+        {
+            var span = loss.Span(Environment.TickCount64);
+            if (loss.Slots >= TsLossSlots) return new(true, true, loss.Describe(span));
+            // 数え始める前に届いた 1 回ぶんのあと、パケットが続かなければ、最初のパケットを待たずに数え終える (30 秒届かないときの扱いに任せる)
+            if (span >= TsLossMs || counting.ElapsedMilliseconds >= TsProbeMs + TsLossMs) return new(true, false, loss.Describe(span));
+            Thread.Sleep(5);
+        }
+    }
+
+    /// <summary>
+    /// TS が届かないか欠けて届く機材の選局を断る (<see cref="TunerUnusableException"/>)。開いた受信機は閉じてから (LNB の給電の要求も取り下げて)、機材を返す。
     /// カードもほかの受信機も使っていなければ、待ってから閉じる
     /// </summary>
     [DoesNotReturn]
@@ -1833,7 +1901,7 @@ public sealed class It930xTuner : ITuneDevice
         if (_device is { } device && _frontend is not null) Rest(device);
         Drop();
         _closeIdle?.Invoke();
-        throw new TunerUnusableException($"ブリッジの TS のバッファが溢れたままで、TS が届きません ({overflow})。機材の電源を抜いて入れ直してください");
+        throw new TunerUnusableException($"ブリッジの TS のバッファが溢れたままで、TS が届かないか欠けています ({overflow})。機材の電源を抜いて入れ直してください");
     }
 
     /// <summary>
