@@ -80,7 +80,7 @@ function Set-Case([hashtable]$Tasks) {
     $script:Media = Join-Path $case 'media'
     $script:DenpaDir = Join-Path $case 'home'
     $script:ServerLog = Join-Path $DenpaDir 'denpa.log'
-    New-Item -ItemType Directory -Force -Path "$Media/recorded", "$Media/library", $DenpaDir | Out-Null
+    New-Item -ItemType Directory -Force -Path "$Media\recorded", "$Media\library", $DenpaDir | Out-Null
     $script:tasks = $Tasks
     $script:registered = @()
     $script:grants = @()
@@ -100,7 +100,8 @@ Register-Server 'v1.0.0' 'token'
 if ($registered.Count -ne 1 -or $registered[0][1] -ne 'SYSTEM') { throw "fresh: wrong registration: $($registered | Out-String)" }
 if (($owned -join ',') -ne "$System,$Administrators") { throw "fresh: wrong data ACL: $owned" }
 if ($grants.Count -ne 0) { throw 'fresh: should not grant anyone' }
-if (-not (Test-Path (Join-Path $Data 'denpa.cmd'))) { throw 'fresh: denpa.cmd not written' }
+# install.ps1 は Windows の区切り (\) で書くので、Linux では「data\denpa.cmd」という名前のファイルになる
+if (-not (Test-Path -LiteralPath "$Data\denpa.cmd")) { throw 'fresh: denpa.cmd not written' }
 Write-Host 'PASS: fresh install runs as SYSTEM'
 
 # 上げ直し、人がタスク スケジューラで alice に変えていた: 載せ直さず (SYSTEM に戻さない)、alice に権限を足し直す
@@ -109,7 +110,7 @@ Register-Server 'v1.0.1' 'token'
 if ($registered.Count -ne 0) { throw "update: task re-registered: $($registered | Out-String)" }
 if ($tasks['denpa'] -ne 'PC\alice') { throw "update: task user changed to $($tasks['denpa'])" }
 if (($owned -join ',') -ne "$System,$Administrators,S-1-5-21-1-1001") { throw "update: wrong data ACL: $owned" }
-$granted = ($grants | ForEach-Object { "$(Split-Path -Leaf $_[0])=$($_[1])" }) -join ','
+$granted = ($grants | ForEach-Object { "$(($_[0] -split '[\\/]')[-1])=$($_[1])" }) -join ','
 if ($granted -ne 'recorded=*S-1-5-21-1-1001:(OI)(CI)M,library=*S-1-5-21-1-1001:(OI)(CI)M,denpa.log=*S-1-5-21-1-1001:M') { throw "update: wrong grants: $granted" }
 Write-Host 'PASS: update keeps the task user and grants it again'
 

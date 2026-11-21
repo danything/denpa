@@ -308,12 +308,14 @@ function Write-Loop([string]$Path, [Collections.Specialized.OrderedDictionary]$V
 # **実行ユーザー**: $Credential があればそのユーザーで、パスワードを保存して載せる (-User)。無ければ、
 # **いまのタスクが SYSTEM 以外で動いていれば触らない** (人がタスク スケジューラで変えたユーザーを、上げ直しで SYSTEM に戻さない。
 # 載せ直すにはそのユーザーのパスワードが要る。.cmd の場所は変わらないので、中身を書き直すだけで足りる)。
+# エージェントのタスク (Register-Agent) も同じで、人が変えたユーザーのまま残す (-User が決めるのは本体のタスクだけ)。
 # $AsSystem (-User SYSTEM) なら SYSTEM で載せ直す
 function Register-Loop([string]$Name, [string]$Cmd, [string]$Description, [int]$Priority, [pscredential]$Credential, [switch]$AsSystem) {
     if (-not $Credential -and -not $AsSystem) {
         $kept = Get-TaskUser $Name
         if ($kept) {
-            Say "タスク $Name は $kept で動かしたままにします (SYSTEM に戻すときは -User SYSTEM)"
+            $back = if ($Name -eq $DenpaTask) { '-User SYSTEM を付けて流す' } else { 'タスク スケジューラで実行ユーザーを SYSTEM にする' }
+            Say "タスク $Name は $kept で動かしたままにします (SYSTEM に戻すときは、$back)"
             return
         }
     }

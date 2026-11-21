@@ -608,6 +608,23 @@ describe("実体との照合", () => {
     expect(existsSync(gone.ts)).toBe(false);
   });
 
+  test("録画が 1 本だけなら、外から消したものとして削除済みにする", () => {
+    fresh();
+    placedRecording(21, []);
+    const result = reconcile();
+    expect(result.unreachable).toBe(false);
+    expect(result.removed).toBe(1);
+  });
+
+  test("保存先そのものが開けなければ、1 本だけでも削除済みにしない", () => {
+    fresh();
+    placedRecording(21, []);
+    rmSync(config.encodedDir, { recursive: true });
+    const result = reconcile();
+    expect(result.unreachable).toBe(true);
+    expect(rowOf(21).deleted).toBeNull();
+  });
+
   /*
    * **削除済みにした録画のファイルが置き場に戻れば、行を戻す。** 上の決まりより前の照合が削除済みにした録画は、
    * 行が消える (2 週間) までに保存先に繋がれば一覧に戻る

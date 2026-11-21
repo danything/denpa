@@ -132,9 +132,10 @@ export function usedByOther(path: string, recordingId: number): boolean {
  * **動画そのものには触らない。** 行の無い動画は、手で置いたものかもしれない。
  * 数だけ数えて、消すかどうかは人が決める。
  *
- * **保存先に 1 本も見つからない回は、行を書き換えない** (`unreachable`)。保存先に繋がっていないのを
- * 「全部消された」と読むと、録画が全部削除済みになり、元の TS まで消す。NAS に置いて、NAS の資格情報を
- * 持たないユーザー (Windows の SYSTEM) で動かしたときに起きていた。
+ * **保存先に繋がっていない回は、行を書き換えない** (`unreachable`)。保存先そのものが開けないか、
+ * 2 本以上ある録画が 1 本も見つからない回をそう読む。「全部消された」と読むと、録画が全部削除済みになり、元の TS まで消す。
+ * NAS に置いて、NAS の資格情報を持たないユーザー (Windows の SYSTEM) で動かしたときに起きていた。
+ * 録画が 1 本だけなら、外から消したものとして削除済みにする (2 本以上を外から全部消したのは、外れたマウントと見分けられない)。
  * 削除済みにした録画のファイルが置き場に戻っていれば、行を戻す (`restoreFound`)
  */
 export function reconcile(): {
@@ -156,9 +157,11 @@ export function reconcile(): {
     .all();
   const unreachable =
     placed.length > 0 &&
-    !placed.some((recording) =>
-      encodedPaths(recording).some((path) => existsSync(path)),
-    );
+    (!existsSync(config.encodedDir) ||
+      (placed.length > 1 &&
+        !placed.some((recording) =>
+          encodedPaths(recording).some((path) => existsSync(path)),
+        )));
   if (unreachable)
     console.warn(
       `[files] 保存先 (${config.encodedDir}) に録画が 1 本も見つかりません。保存先に繋がっていないとみて、削除済みにしません`,
