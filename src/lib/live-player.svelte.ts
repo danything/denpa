@@ -1341,7 +1341,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     void sink
       .append(body, () => mine === feedRun && !starved)
       .then(() => {
-        // 足せたときだけ下ろす (`still` が false で何もせずに戻ったときは下ろさない)
+        // 足せたときだけ下ろす (`still` が false で何もせずに戻ったときは下ろさない)。足している間に `starved` が立てば
+        // 下ろさず、次に足せた塊まで捨て直しを待つ (捨てるのが遅れるだけで、溜めすぎにはならない)
         if (mine === feedRun && !starved) trimHeld = false;
       })
       .catch(() => {
