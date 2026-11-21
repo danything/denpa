@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import {
   captureSockets,
+  countBarWakes,
   expect,
   feedNotice,
   goto,
@@ -94,6 +95,46 @@ test.describe("ライブの自動", () => {
       { timeout: 30_000 },
     );
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
+  });
+
+  /*
+   * **自動で段を切り替えても、操作バーは出さない** (`controls.svelte.ts` の `stir`)。出すのは人が触ったときだけで、
+   * 切り替えたことは映像の上の断り書きで伝える。カーソルは舞台の上に置いたまま (止まったカーソルの下で映像を入れ替える)
+   */
+  test("自動で段を切り替えても、引っ込んだ操作バーは出てこない", async ({
+    page,
+  }) => {
+    await captureSockets(page);
+    await openLive(page);
+    await expect(page.getByTestId("live-raw")).toBeVisible({
+      timeout: 30_000,
+    });
+    const wakes = await countBarWakes(page, "live-frame", "live-controls");
+    await expect(async () => {
+      await feedNotice(page, [
+        { type: "pace", backlog: 0, dropped: 3, speed: null },
+      ]);
+      await expect(page.getByTestId("live-warning")).toContainText(
+        "回線が細いため",
+        { timeout: 1_000 },
+      );
+    }).toPass({ timeout: 20_000 });
+    await expect(page.getByTestId("live-codec")).toContainText(
+      /自動 \(H\.264 \d+p\)/,
+      { timeout: 30_000 },
+    );
+    await expect(page.getByTestId("live-video")).toBeVisible({
+      timeout: 30_000,
+    });
+    // canvas を外して `<video>` に入れ替えた (止まったカーソルの下で中身が替わった)。ライブは `play` では操作バーを出さないので、
+    // 出てこないことは時間で待つ。CI では入れ替えた `<video>` の `paused` が 30 秒たっても false にならず、再生の始まりでは待てなかった
+    await expect(page.getByTestId("live-raw")).toHaveCount(0);
+    await page.waitForTimeout(3_000);
+    expect(await wakes()).toBe(0);
+    await expect(page.getByTestId("live-controls")).toHaveAttribute(
+      "data-shown",
+      "false",
+    );
   });
 
   /*

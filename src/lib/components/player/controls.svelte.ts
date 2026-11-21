@@ -1,8 +1,9 @@
 /**
- * 操作バーを出しておくか消すかの決め方 (3 画面で同じ。DOM も映像も触らない)。触っていない間は引っ込める。
+ * 操作バーを出しておくか消すかの決め方 (3 画面で同じ。映像は触らない。window では押した時刻だけを受け取る)。触っていない間は引っ込める。
  * 止めていても引っ込める。一時停止はたいてい映像の中の文字を見るためで、押さないと消せないほうが邪魔だった。
  * 残すのはキーボードで触っている間 (映像を押して出し直す手が無い) と、メニューを開いている間 (`stageMenu`)、
- * 映像の上に実況に書き込む 1 行を開いている間だけ (`writing`。一覧の下の 1 行は映像の外なので残さない)
+ * 映像の上に実況に書き込む 1 行を開いている間だけ (`writing`。一覧の下の 1 行は映像の外なので残さない)。
+ * 出すのは人が触ったときだけで、画質の段やコーデックを自動で切り替えても出さない (`stir`)
  */
 
 import { getContext, untrack } from "svelte";
@@ -15,6 +16,12 @@ const LINGER = 2500;
 
 /** 消す時刻を跨ぐためだけの目覚まし。出ている間しか回さない */
 const TICK = 250;
+
+/**
+ * 押してから `stir` が呼ばれるまでの猶予 (ms)。押したことで始まる処理はここまでに `stir` を呼ぶ。`<video>` の `play` は
+ * `play()` を呼んだ直後に来て (再生が始まるのを待たない)、canvas のプレイヤーは押した処理の中で呼ぶ。過ぎてから呼ばれた `stir` は何もしない
+ */
+const PRESSED = 1000;
 
 /** 舞台 (`PlayerStage`) が context に置き、その中のメニュー (`stageMenu`) が読むキー */
 export const PLAYER_CONTROLS = Symbol("player-controls");
@@ -44,7 +51,10 @@ export interface PlayerControls {
   holdOpen: () => () => void;
   /** 実況に書き込む 1 行を開いている間は残す (打っている最中に消えない) */
   writing: boolean;
-  /** その場で出し直す (ボタンを押した直後など) */
+  /**
+   * その場で出し直す (ボタンを押した直後など)。**人がポインタかキーを押した直後 (`PRESSED`) だけ出す。**
+   * 画質の段を自動で切り替えて `<video>` を入れ替えると `play` が来て、ここが呼ばれる。そのたびに操作バーが出て、映像に被さっていた
+   */
   stir: () => void;
   /** その場で消す (指で 1 回押して引っ込めるとき) */
   hide: () => void;
@@ -68,6 +78,8 @@ export function playerControls(): PlayerControls {
   /** 前にいた場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
   let lastX = Number.NaN;
   let lastY = Number.NaN;
+  /** 最後にポインタかキーを押した時刻。舞台の外で押したものも数える (キーの操作は window で受ける) */
+  let pressed = Number.NEGATIVE_INFINITY;
 
   // 見るのは「触ったか」だけ (キーボード・開いているメニュー・書き込む 1 行を除く。再生の状態は混ぜない)
   const shown = $derived(
@@ -80,9 +92,24 @@ export function playerControls(): PlayerControls {
     return () => clearInterval(timer);
   });
 
-  function stir(): void {
+  $effect(() => {
+    const press = () => (pressed = Date.now());
+    // 取り込みの段で受ける。押した先の処理が伝わるのを止めても数える
+    window.addEventListener("pointerdown", press, true);
+    window.addEventListener("keydown", press, true);
+    return () => {
+      window.removeEventListener("pointerdown", press, true);
+      window.removeEventListener("keydown", press, true);
+    };
+  });
+
+  function show(): void {
     touched = Date.now();
     now = touched;
+  }
+
+  function stir(): void {
+    if (Date.now() - pressed < PRESSED) show();
   }
 
   function hide(): void {
@@ -121,14 +148,14 @@ export function playerControls(): PlayerControls {
         byTouch = true;
         // 巻き直す前に読む。`toggle` は「押す前に出ていたか」で決める
         wasShown = shown;
-        stir();
+        show();
         return;
       }
       if (event.clientX === lastX && event.clientY === lastY) return;
       lastX = event.clientX;
       lastY = event.clientY;
       byTouch = false;
-      stir();
+      show();
     },
     // 指を離すと `pointerleave` が必ず飛ぶので、消すのはマウスが外へ出たときだけ
     away(event: PointerEvent): void {
