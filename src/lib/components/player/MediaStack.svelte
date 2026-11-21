@@ -53,10 +53,19 @@
   }: Props = $props();
 
   /** 置いた `<video>`。2 つ目は `twin` のときだけ */
-  const slots = $state<(HTMLVideoElement | null)[]>([null, null]);
-  $effect.pre(() => {
+  const slots: (HTMLVideoElement | null)[] = [null, null];
+  /**
+   * 映している側を `video`、もう一方を `spare` に写す。**置いたその場で写す** (`bind:this` の中から)。
+   * 写すのを effect に任せると、画面の `onMount` が `video` を読む時点でまだ null で、開いた局・追っかけを始められなかった
+   */
+  function sync(): void {
     video = slots[front] ?? null;
     spare = twin ? (slots[1 - front] ?? null) : null;
+  }
+  // 入れ替えたら (`front`) 写し直す
+  $effect.pre(() => {
+    void front;
+    sync();
   });
 </script>
 
@@ -64,7 +73,13 @@
   {#each twin ? [0, 1] : [0] as slot (slot)}
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_media_has_caption -->
     <video
-      bind:this={slots[slot]}
+      bind:this={
+        () => slots[slot] ?? null,
+        (el) => {
+          slots[slot] = el;
+          sync();
+        }
+      }
       class="video"
       class:back={slot !== front}
       playsinline
