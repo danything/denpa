@@ -709,6 +709,8 @@ public sealed class It930xDevice
             Log.Write($"[{Label}] {why}、受信をやり直します (転送要求を取り消し、ブリッジの TS のバッファを捨て、EP 0x84 をリセットして出し直す)");
             try
             {
+                // 欠けを数えているほかの受信機は、ここから数え直す (It930xTuner.Watch)。止める前に足すので、やり直しの飛びは数え直したあとに来る
+                Interlocked.Increment(ref _restarts);
                 if (!StopReader()) throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しを止められませんでした");
                 StartStream();
                 return true;
@@ -733,6 +735,11 @@ public sealed class It930xDevice
             }
         }
     }
+
+    private int _restarts;
+
+    /// <summary>受信をやり直した回数 (<see cref="RestartStream"/>)。TS の欠けを数えている受信機が、やり直しで欠けたぶんを数え直すため (<see cref="It930xTuner"/>)</summary>
+    internal int Restarts => Volatile.Read(ref _restarts);
 
     /// <summary>受信をやり直した溢れ (<see cref="RestartOnce"/>。同じ溢れのままでは 1 回だけ)。<c>_gate</c> の中で読み書きする</summary>
     private It930xOverflow? _restartedFor;
@@ -1869,11 +1876,14 @@ public sealed class It930xTuner : ITuneDevice
 
     /// <summary>
     /// この受信機の入力のパケットが <paramref name="before"/> から <see cref="TsProbeMs"/> のうちに増えたかを確かめ、増えたら最初のパケットから
-    /// <see cref="TsLossMs"/> の間、欠けを数える (<paramref name="countLoss"/> のとき)。欠けが <see cref="TsLossSlots"/> 区間に達したら、そこで決める
+    /// <see cref="TsLossMs"/> の間、欠けを数える (<paramref name="countLoss"/> のとき)。欠けが <see cref="TsLossSlots"/> 区間に達したら、そこで決める。
+    /// 数えている間に、並べて確かめているほかの受信機が受信をやり直したら (<see cref="It930xDevice.Restarts"/>)、そこから数え直す。
+    /// やり直しの間はこの受信機の TS も欠けるので、前の選局とのつなぎ目と合わせて 2 区間になり、欠けていない受信機まで断るため
     /// </summary>
     private TsCheck Watch(It930xDevice device, It930xTsOutput output, long before, bool countLoss)
     {
         // 数え始めてから届いたパケットだけを数える (前の確かめの数を持ち越さない)。確かめ終えたら、流している間は数えない
+        var restarts = device.Restarts;
         var loss = countLoss ? output.WatchLoss() : null;
         try
         {
@@ -1887,6 +1897,12 @@ public sealed class It930xTuner : ITuneDevice
             var counting = Stopwatch.StartNew();
             while (true)
             {
+                if (device.Restarts != restarts)
+                {
+                    restarts = device.Restarts;
+                    loss = output.WatchLoss();
+                    counting.Restart();
+                }
                 var span = loss.Span(Environment.TickCount64);
                 if (loss.Slots >= TsLossSlots) return new(true, true, loss.Describe(span));
                 // 数え始める前に届いた 1 回ぶんのあと、パケットが続かなければ、最初のパケットを待たずに数え終える (30 秒届かないときの扱いに任せる)
