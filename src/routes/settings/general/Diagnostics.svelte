@@ -184,7 +184,7 @@
   } | null>(null);
   let preparing = $state(false);
 
-  /** **伏せてから渡す。** 窓に見えるものが、そのまま GitHub に入る */
+  /** **伏せてから渡す。** ダイアログに見えるものが、そのまま GitHub に入る */
   async function openIssue(): Promise<void> {
     preparing = true;
     try {
