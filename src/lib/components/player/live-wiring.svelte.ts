@@ -18,6 +18,8 @@ interface Options {
   separateAudio?: () => boolean;
   /** `<video>` を Web Audio に通すと無音になるか (追っかけの WebKit。`volume.svelte.ts` の `silentTap`) */
   silentTap?: () => boolean;
+  /** 音量を変えられない端末か (追っかけ。`volume.svelte.ts` の `fixed`)。ライブは渡さない */
+  fixed?: () => boolean;
 }
 
 interface LiveWiring {
@@ -89,6 +91,7 @@ export function liveWiring(options: Options): LiveWiring {
     ...(options.silentTap === undefined
       ? {}
       : { silentTap: options.silentTap }),
+    ...(options.fixed === undefined ? {} : { fixed: options.fixed }),
     video: () => (player.canvas ? null : options.video()),
     through: () => background.on || pip.active,
     remote: (paused) => {
@@ -96,7 +99,7 @@ export function liveWiring(options: Options): LiveWiring {
     },
   });
   $effect(() => {
-    player.volume = volume.level;
+    player.volume = volume.applied;
   });
 
   return { background, ambient, pip, volume };

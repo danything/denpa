@@ -124,10 +124,13 @@
 
   /**
    * ⚙ に音量のつまみを置くか。**つまみは画面に 1 つだけ**。マウスの端末では音のボタンに乗せると浮かぶので
-   * (`SoundButton`) ⚙ には置かない。置くのは指の端末 (浮かばない) と、畳んで音のボタンごと ⚙ に入ったときだけ
+   * (`SoundButton`) ⚙ には置かない。置くのは指の端末 (浮かばない) と、畳んで音のボタンごと ⚙ に入ったときだけ。
+   * 音量を変えられない端末 (iPhone・iPad の観る画面と追っかけ。`volume.svelte.ts` の `fixed`) では置かない
    */
   const pointer = new MediaQuery(POINTER);
-  const showVolume = $derived(stage.fold || !pointer.current);
+  const showVolume = $derived(
+    !volume.fixed && (stage.fold || !pointer.current),
+  );
 
   /** 互換モードか。端末で決まるので、開いてから読む */
   let compat = $state(false);

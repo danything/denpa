@@ -795,3 +795,67 @@ test.describe("⚙ の開け閉めと遅れて届く toggle", () => {
     await expect(menu).toBeHidden();
   });
 });
+
+/**
+ * **`<video>` の音量を変えられない端末 (iPhone・iPad) では、観る画面に音量のつまみを出さない** (`volume.svelte.ts` の `fixed`)。
+ * 本体の音量ボタンに任せる。見分けるのは `volume` に 0.5 を入れて読み返す所 (`native-audio-choice.ts` の `volumeFixed`) なので、
+ * `volume` を入れても 1 のままにして iOS の WebKit と同じにする。指の端末なので、ふつうは ⚙ につまみが出る
+ */
+test.describe("音量を変えられない端末", () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 1280, height: 800 },
+  });
+
+  test("観る画面に音量のつまみを出さず、↑↓ も効かない。消音のボタンは残る", async ({
+    page,
+    request,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(HTMLMediaElement.prototype, "volume", {
+        configurable: true,
+        get: () => 1,
+        set() {
+          // iOS と同じく、入れても変わらない
+        },
+      });
+    });
+    const { id } = await recordOne(page, request);
+    await goto(page, `/watch/${id}`);
+
+    const bar = page.getByTestId("watch-controls");
+    const stage = page.getByTestId(STAGE.watch);
+    await expect(stage).toBeVisible();
+    if ((await bar.getAttribute("data-shown")) !== "true") {
+      const box = (await stage.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    }
+    await expect(bar).toHaveAttribute("data-shown", "true");
+
+    // 消音のボタンは残り、押すと切り替わる。浮かぶつまみは置かない
+    const button = page.getByTestId("watch-sound");
+    const name = (await button.getAttribute("aria-label"))!;
+    await button.tap();
+    await expect(button).not.toHaveAccessibleName(name);
+    await expect(page.getByTestId("watch-sound-pop")).toHaveCount(0);
+
+    // 指の端末でも ⚙ につまみを置かない
+    const gear = page.getByTestId("watch-settings");
+    await gear.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("watch-settings-menu")).toBeVisible();
+    await expect(page.getByTestId("watch-volume")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("watch-settings-menu")).toBeHidden();
+
+    // ↑↓ で音量を変えない (今の音量も出さない)
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await page.keyboard.press("ArrowDown");
+    // 出るなら押してすぐ出る (`VolumeNote`)。少し待ってから無いことを見る
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId("watch-volume-note")).toHaveCount(0);
+  });
+});

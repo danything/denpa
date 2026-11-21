@@ -24,7 +24,7 @@ const NOTE_FOR = 1_500;
  *
  * ## 掛け方
  *
- * - **canvas で描くとき** は RawEngine の中で掛ける (画面が `level` を渡す)
+ * - **canvas で描くとき** は RawEngine の中で掛ける (画面が `applied` を渡す)
  * - **`<video>` で観るとき** は、`<video>` の音を Web Audio に通して (`createMediaElementSource`) 掛ける。
  *   `video.volume` は 1 より大きくできない。リミッタ・`<audio>` を通すか (バックグラウンド再生・小窓) は
  *   canvas と同じもの (`#lib/sound.ts` の `Outlet`)
@@ -35,6 +35,14 @@ const NOTE_FOR = 1_500;
  * 通している間は Audio Session を `playback` にする (Safari。Web Audio の音を効果音として扱わせない)。
  *
  * **端末ごとに覚える** (`keep.ts`)。手元のイヤホンと居間のテレビでちょうどいい大きさは違う
+ *
+ * ## 音量を変えられない端末 (`fixed`)
+ *
+ * iOS と iPadOS は、ページから `<video>` の音量を変えられない (`#lib/native-audio-choice.ts` の `fixedMediaVolume`)。
+ * 観る画面と追っかけでは、**この端末ではつまみを使わず、本体の音量ボタンに任せる**。canvas に描いている間も
+ * つまみの値を掛けず、放送のままの大きさで鳴らす (`applied` が null)。`<video>` に移っても大きさが変わらない。
+ * `<video>` は Web Audio に通さず、つまみ (`SoundButton`・`StageTail`) も出さない。↑↓ も何もしない。消音は効く。
+ * ライブは渡さない。音を別に鳴らす (`raw/native-audio.ts`) ので、この端末でもつまみが効く
  */
 interface Options {
   /** `<video>` で観ているときの要素。canvas に描いているとき・まだ無いときは null */
@@ -46,6 +54,8 @@ interface Options {
    * 下げるぶんは `video.volume` で掛ける
    */
   silentTap?: () => boolean;
+  /** 音量を変えられない端末か (観る画面・追っかけ。`#lib/native-audio-choice.ts` の `fixedMediaVolume`)。ライブは渡さない */
+  fixed?: () => boolean;
   /** `<audio>` を通すか (バックグラウンド再生をオンにしているか、押して小窓を開いている間) */
   through: () => boolean;
   /** `<audio>` を外 (ロック画面・車の操作) から止められた・再開された */
@@ -53,8 +63,12 @@ interface Options {
 }
 
 export interface Volume {
-  /** いまの音量 (%) */
+  /** いまの音量 (%)。つまみの値 */
   readonly level: number;
+  /** 音量を変えられない端末か。つまみを出さない */
+  readonly fixed: boolean;
+  /** canvas に描くときに掛ける音量 (%)。音量を変えられない端末では null (放送のまま) */
+  readonly applied: number | null;
   /** ↑↓ で変えた直後か。映像の上に今の音量を出す */
   readonly noted: boolean;
   set: (level: number) => void;
@@ -66,6 +80,8 @@ export function playerVolume(options: Options): Volume {
   /** 開いた端末で決まる。サーバで組むときは無いので、開いてから読む */
   let level = $state(MAX_LEVEL);
   let noted = $state(false);
+  /** 音量を変えられない端末か。開いた端末で決まるので、開いてから読む */
+  let fixed = $state(false);
   let noteTimer: ReturnType<typeof setTimeout> | null = null;
 
   let context: AudioContext | null = null;
@@ -80,17 +96,19 @@ export function playerVolume(options: Options): Volume {
 
   $effect(() => {
     level = storedVolume(read(VOLUME_KEY));
+    fixed = options.fixed?.() ?? false;
   });
 
   /**
    * 押されたら AudioContext を起こす (自動再生の許可は押したときに出る)。**canvas に描いている間に押されたら作っておく。**
    * iOS の Safari は押したとき以外に作った AudioContext を止めたまま始めるので、`<video>` に移ってから作ると、次に押すまで通せない。
-   * 通さない画面 (`separateAudio`・`silentTap`) では作らない
+   * 通さない画面 (`separateAudio`・`silentTap`・`fixed`) では作らない
    */
   const wake = (): void => {
     if (context === null) {
       if (
         current === null &&
+        !fixed &&
         !options.separateAudio?.() &&
         !options.silentTap?.()
       )
@@ -136,6 +154,14 @@ export function playerVolume(options: Options): Volume {
       if (tapped !== null) sources.get(tapped)?.disconnect();
       tapped = null;
       outlet?.hold(true);
+      return;
+    }
+    // 音量を変えられない端末。通さずに放送のままの大きさで鳴らす (`video.volume` は変わらないが、1 にそろえておく)
+    if (fixed) {
+      if (tapped !== null) sources.get(tapped)?.disconnect();
+      tapped = null;
+      outlet?.hold(true);
+      video.volume = 1;
       return;
     }
     /*
@@ -188,6 +214,7 @@ export function playerVolume(options: Options): Volume {
   $effect(() => {
     const video = options.video();
     void level;
+    void fixed;
     void options.through();
     void options.separateAudio?.();
     void options.silentTap?.();
@@ -235,11 +262,18 @@ export function playerVolume(options: Options): Volume {
     get level() {
       return level;
     },
+    get fixed() {
+      return fixed;
+    },
+    get applied() {
+      return fixed ? null : level;
+    },
     get noted() {
       return noted;
     },
     set,
     step(direction: number) {
+      if (fixed) return;
       set(stepLevel(level, direction));
       noted = true;
       if (noteTimer !== null) clearTimeout(noteTimer);

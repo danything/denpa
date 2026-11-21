@@ -89,8 +89,8 @@ export class Outlet {
     this.tail.connect(context.destination);
   }
 
-  /** 音量 (%。`volume.ts` の `volumeGain`) */
-  set level(level: number) {
+  /** 音量 (%。`volume.ts` の `volumeGain`)。null は放送のまま */
+  set level(level: number | null) {
     this.input.gain.value = volumeGain(level);
   }
 

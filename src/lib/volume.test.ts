@@ -36,6 +36,10 @@ describe("音量", () => {
     expect(volumeGain(150)).toBe(volumeGain(100));
   });
 
+  test("null は放送のままの大きさ (音量を変えられない端末)", () => {
+    expect(volumeGain(null)).toBe(1);
+  });
+
   test("↑↓ は 5% ずつ。刻みの途中からは次の刻みの目へ、端で止まる", () => {
     expect(stepLevel(100, 1)).toBe(100);
     expect(stepLevel(100, -1)).toBe(95);
