@@ -348,7 +348,7 @@ export function kindsOf(row: {
   return kinds;
 }
 
-/** 送る終わった放送の行 (終わって `ENDED_MARGIN` たち、送る間の中のもの) */
+/** 送る終わった放送の行 (終わって `ENDED_MARGIN` を過ぎ、送る間の中のもの) */
 export function endedRows(at = now()) {
   return orm()
     .select()

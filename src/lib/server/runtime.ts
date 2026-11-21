@@ -273,10 +273,8 @@ export function start(): void {
    * ここでは送る時刻が来たかを見るだけで、参加していなければ何もしない。ライブで観ている最中の時間も 1 分ごとに控えに足す
    * (`ranking-watch.flushLive`。長く観ている間にサーバが止まっても、それまでの分を残す)
    */
-  every(RANKING_CHECK, "ranking", () => {
-    flushLive();
-    return sendRanking();
-  });
+  every(RANKING_CHECK, "ranking", sendRanking);
+  every(RANKING_CHECK, "ranking-live", flushLive);
 }
 
 /**
