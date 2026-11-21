@@ -145,21 +145,60 @@ export function chapterMetadata(cm: Range[], duration: number): string {
   return `${lines.join("\n")}\n`;
 }
 
-/** チャプターを差し替えて書き直す。再エンコードしない。`chapters` が null ならチャプターを外す */
+/** チャプターを書き足すときに一緒に足す音声 (`late-audio.ts`) */
+export interface ExtraAudio {
+  /** 音声だけの mkv (`late-audio.lateAudioArgs` で書いたもの) */
+  path: string;
+  /** トラックの名前。空なら付けない */
+  title: string;
+}
+
+/**
+ * チャプターを差し替えて書き直す。再エンコードしない。`chapters` が null ならチャプターを外す。
+ *
+ * `extra` を渡すと、その音声も足す。足した音声は本編の音声の後ろ (`audios` 本目から) に並べ、字幕はその後ろに置く
+ * (並びは映像 → 音声 → 字幕。encode.md「トラックの名前は放送のものを入れる」)。足す音声は本編の物差しで書いてあるので、
+ * どの入力の時刻も読んだまま写す (`-copyts`。付けないと、入力ごとに先頭の時刻を引いて 0 秒に寄せてしまう)
+ */
 export function chapterArgs(
   input: string,
   chapters: string | null,
   output: string,
+  extra: { audios: number; tracks: readonly ExtraAudio[] } = {
+    audios: 0,
+    tracks: [],
+  },
 ): string[] {
+  const { tracks } = extra;
+  // 足す音声の入力の番号。チャプターのファイルがあればその次
+  const first = chapters === null ? 1 : 2;
   return [
     config.ffmpeg,
     "-y",
     "-v",
     "error",
+    ...(tracks.length === 0 ? [] : ["-copyts"]),
     ...recordingInput(input),
-    ...(chapters === null
-      ? ["-map", "0", "-map_chapters", "-1"]
-      : ["-i", chapters, "-map", "0", "-map_chapters", "1"]),
+    ...(chapters === null ? [] : ["-i", chapters]),
+    ...tracks.flatMap((track) => ["-i", track.path]),
+    ...(tracks.length === 0
+      ? ["-map", "0"]
+      : [
+          "-map",
+          "0:v?",
+          "-map",
+          "0:a?",
+          ...tracks.flatMap((_, i) => ["-map", `${first + i}:a`]),
+          "-map",
+          "0:s?",
+        ]),
+    "-map_chapters",
+    chapters === null ? "-1" : "1",
+    ...tracks.flatMap((track, i) =>
+      track.title === ""
+        ? []
+        : [`-metadata:s:a:${extra.audios + i}`, `title=${track.title}`],
+    ),
     "-c",
     "copy",
     "-f",
@@ -275,25 +314,38 @@ export async function probeVideo(input: string): Promise<{
   };
 }
 
-/**
- * ffprobe の JSON から、**中身のある音声**が音声の何本目かを読み取る (`0:a:<n>` の n)。
- *
- * 中身があるかは `channels` で見る。探り (`tsProbe`) の間に 1 パケットも来なかった
- * 音声はデコードできておらず、0 のまま出てくる
- */
-export function liveAudioIndexes(json: string): number[] {
-  const parsed = JSON.parse(json) as { streams?: { channels?: number }[] };
-  return (parsed.streams ?? []).flatMap((stream, index) =>
-    (stream.channels ?? 0) > 0 ? [index] : [],
-  );
+/** 先頭の探りで中身のあった音声 1 本 */
+export interface LiveAudio {
+  /** 音声の何本目か (`0:a:<n>` の n) */
+  index: number;
+  /** ES の PID。ffprobe が出さなければ null */
+  pid: number | null;
 }
 
 /**
- * エンコードするときに使う音声 (音声の何本目か)。**先頭に中身の無い音声は使わない。**
+ * ffprobe の JSON から、**中身のある音声**が音声の何本目か (`0:a:<n>` の n) と、その PID を読み取る。
+ *
+ * 中身があるかは `channels` で見る。探り (`tsProbe`) の間に 1 パケットも来なかった
+ * 音声はデコードできておらず、0 のまま出てくる。PID は `id` (`0x111` の形)
+ */
+export function liveAudio(json: string): LiveAudio[] {
+  const parsed = JSON.parse(json) as {
+    streams?: { channels?: number; id?: string }[];
+  };
+  return (parsed.streams ?? []).flatMap((stream, index) => {
+    if ((stream.channels ?? 0) <= 0) return [];
+    const pid = stream.id === undefined ? NaN : Number(stream.id);
+    return [{ index, pid: Number.isInteger(pid) ? pid : null }];
+  });
+}
+
+/**
+ * エンコードするときに使う音声。**先頭に中身の無い音声は使わない。**
  *
  * 録画の末尾には次の番組の先頭が少し入る。次の番組が副音声つきだと、その音声の PID が
  * 最後の十数秒だけ現れ、`-map 0:a` はそれも 1 本の音声として取り込んでしまう
- * (出来上がりに**末尾にしか中身の無い音声トラック**が入る)。
+ * (出来上がりに**末尾にしか中身の無い音声トラック**が入る)。番組の途中から現れる音声
+ * (野球中継の副音声など) もここでは外れる。そちらは録画全体を読んで別に足す (`late-audio.ts`)。
  *
  * **探りの長さはエンコードするほうと揃える** (`tsProbe`)。何本目かで名指しするので、
  * 見えている音声の並びが食い違うと別の音声を指してしまう。
@@ -303,15 +355,15 @@ export function liveAudioIndexes(json: string): number[] {
 export async function probeLiveAudio(
   input: string,
   lead = 0,
-): Promise<number[]> {
+): Promise<LiveAudio[]> {
   try {
-    return liveAudioIndexes(
+    return liveAudio(
       await probe(input, [
         ...tsProbe(lead),
         "-select_streams",
         "a",
         "-show_entries",
-        "stream=channels",
+        "stream=channels,id",
         "-of",
         "json",
       ]),
