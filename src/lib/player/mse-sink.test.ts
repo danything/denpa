@@ -100,7 +100,12 @@ afterEach(() => {
 
 const H264 = 'video/mp4; codecs="avc1.640028,mp4a.40.2"';
 
-function open(options: Partial<MseSinkOptions> = {}, managed = false) {
+/** `wait` が false なら `waitRoom` を渡さない (ライブ) */
+function open(
+  options: Partial<MseSinkOptions> = {},
+  managed = false,
+  wait = true,
+) {
   const video = { src: "", disableRemotePlayback: false };
   let opened!: () => void;
   const ready = new Promise<void>((resolve) => {
@@ -113,7 +118,7 @@ function open(options: Partial<MseSinkOptions> = {}, managed = false) {
       type: H264,
       duration: 600,
       keepFrom: () => 0,
-      waitRoom: () => Promise.resolve(),
+      ...(wait ? { waitRoom: () => Promise.resolve() } : {}),
       ...options,
       opened: () => {
         options.opened?.();
@@ -173,6 +178,64 @@ describe("MSE を開いて足す (mseSink)", () => {
       sink.append(new Uint8Array(7)),
     ]);
     expect(buffer().sizes).toEqual([3, 5, 7]);
+  });
+
+  test("開く前に渡されたものは、開いてから順に足す", async () => {
+    const { sink, media, ready } = open();
+    const appended = Promise.all([
+      sink.append(new Uint8Array(3)),
+      sink.append(new Uint8Array(5)),
+    ]);
+    expect(sink.busy).toBe(true);
+    await ready;
+    await appended;
+    expect(media.buffer?.sizes).toEqual([3, 5]);
+  });
+
+  test("並んだものを回し終えたら settled を 1 回呼ぶ。回している間は busy", async () => {
+    const busyAt: boolean[] = [];
+    let sink!: ReturnType<typeof open>["sink"];
+    const opened = open({ settled: () => busyAt.push(sink.busy) });
+    sink = opened.sink;
+    await opened.ready;
+    expect(sink.busy).toBe(false);
+    const first = sink.append(new Uint8Array(3));
+    const second = sink.append(new Uint8Array(5));
+    expect(sink.busy).toBe(true);
+    await Promise.all([first, second]);
+    // 続けて渡したあいだは呼ばない。最後のものを終えたところで、手が空いた状態で 1 回
+    expect(busyAt).toEqual([false]);
+    await sink.remove(0, 1);
+    expect(busyAt).toEqual([false, false]);
+  });
+
+  test("足すのに失敗しても settled を呼ぶ", async () => {
+    let settled = 0;
+    const { sink, ready, buffer } = open(
+      { settled: () => settled++ },
+      false,
+      false,
+    );
+    await ready;
+    buffer().capacity = 2;
+    await sink.append(new Uint8Array(3)).catch(() => undefined);
+    expect(settled).toBe(1);
+  });
+
+  test("waitRoom が無ければ、溜めきれないときは捨てずに QuotaExceededError を投げる", async () => {
+    const { sink, ready, buffer } = open({ keepFrom: () => 6 }, false, false);
+    await ready;
+    await sink.append(new Uint8Array(8));
+    buffer().capacity = 10;
+    const error = await sink.append(new Uint8Array(4)).catch((e) => e);
+    expect(error).toBeInstanceOf(DOMException);
+    expect((error as DOMException).name).toBe("QuotaExceededError");
+    expect(buffer().removed).toEqual([]);
+    expect(buffer().sizes).toEqual([8]);
+    // 続けて足せる
+    buffer().capacity = Number.POSITIVE_INFINITY;
+    await sink.append(new Uint8Array(1));
+    expect(buffer().sizes).toEqual([8, 1]);
   });
 
   test("溜めきれなければ、捨ててよい所より前を捨てて入れ直す", async () => {

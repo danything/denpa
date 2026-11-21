@@ -3,6 +3,7 @@
  *
  * MSE は取ってこない。`appendBuffer()` に渡すバイト列をどこから持ってくるかは
  * こちら次第で、denpa は WebSocket から受ける ([stream.md](../../docs/stream.md#websocket-プロトコル))。
+ * MSE を開いて足すのは `player/mse-sink.ts`。いつ足して、どこより前を捨てるかはここが決めて渡す。
  * 同じ 1 本で字幕もデータ放送も一緒に送る作りなので、種別で振り分ける。
  *
  * 放送のまま (MPEG-2) と互換モードは、MSE の代わりに `raw/engine.ts` へ流して canvas に描く (下の「変換せずに送る経路」)。
@@ -104,6 +105,7 @@ import {
 } from "#lib/live.js";
 import { onWebKit } from "#lib/native-audio-choice.js";
 import { fallBackTo, openCanvas } from "#lib/player/canvas-sink.js";
+import { type MseSink, mseSink, type Still } from "#lib/player/mse-sink.js";
 import type { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import {
@@ -173,7 +175,7 @@ const LOW_SPAN = 2;
 /**
  * 映した 1 枚ごとにバッファを見るときの、`pace` を回す間隔 (ms)。**塊が届かない間も止まる前に手を打つ。**
  *
- * 塊が届いたとき (`updateend`) だけでは、空いている間に何もできない。空きの途中で遅くし始めれば、終わりまで持つことがある
+ * 塊を足し終えたとき (`settled`) だけでは、空いている間に何もできない。空きの途中で遅くし始めれば、終わりまで持つことがある
  */
 const PACE_EVERY = 250;
 /** 画面を離れて止めた試しのデータの印 (`AbortController.abort` の理由)。上限の時間で止めたものとは違い、測った値に使わない */
@@ -579,6 +581,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let feedHeld = false;
   /** 読み切ったら、流し残しが尽きたところで MediaSource を閉じる (`finishStream`) */
   let ending = false;
+  /** 閉じる (`endOfStream`) のを渡してから、それが終わるまで。終えたあとの `settled` から、もう一度渡さない */
+  let finishing = false;
 
   /*
    * ---- 録画に譲ったとき ([docs/stream.md](../../docs/stream.md#録画に譲る)) ----
@@ -671,8 +675,18 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let thinned = $state(false);
 
   let socket: WebSocket | null = null;
-  let source: MediaSource | null = null;
-  let buffer: SourceBuffer | null = null;
+  /** いまの MSE。canvas で描くときと、`<video>` がエラーになって SourceBuffer が外れたあと (`onMediaError`) は null */
+  let sink: MseSink | null = null;
+  /**
+   * いまの足し先の番号。**init が来たとき・足すのに失敗したとき・MSE を作り直したときに上げ、並んでいる古い塊を足さない**
+   * (`MseSink` の `still`)
+   */
+  let feedRun = 0;
+  /**
+   * 古いほうを捨てるのに失敗した。次の塊を足し終えるまで捨て直さない (`trim`)。塊が届かなくなれば捨て直さないままだが、
+   * 届かない間はバッファも増えないので構わない
+   */
+  let trimHeld = false;
   /** いま鳴らしている `<video>`。押して音を出すのに要る */
   let element: HTMLVideoElement | null = null;
   /** 前のフレームの写し先。画面から預かる */
@@ -800,8 +814,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 貯める量を伸ばすと、伸ばした先が下限として残って遅延が戻らない (`pacing.ts` の `PROBE`)
    */
   let quiet = 0;
-  /** 追加待ちの列。`appendBuffer` は 1 つずつしか受け付けない (前のが終わる前に呼ぶと止まる) */
-  const pending: Uint8Array[] = [];
   /** 受け取った映像の量と、数えはじめた時刻。**戻れる幅を決めるのに使う** */
   let received = 0;
   let receivedFrom = 0;
@@ -916,7 +928,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * ライブで再生しているときだけ (追っかけはバッファを狙いに寄せない)
    */
   function sampleLow(video: HTMLVideoElement): void {
-    if (buffer === null || buffer.updating) return;
+    if (sink === null || sink.busy) return;
     const end = bufferEnd();
     if (end === null || !running || paused || chase !== null || chasing) return;
     lows.push(performance.now() / 1000, end - video.currentTime);
@@ -1119,8 +1131,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /** `<video>` に届いている映像の端 (メディアの時刻、秒)。まだ無ければ null */
   function bufferEnd(): number | null {
-    if (buffer === null || buffer.buffered.length === 0) return null;
-    return buffer.buffered.end(buffer.buffered.length - 1);
+    return sink?.buffered().at(-1)?.[1] ?? null;
+  }
+
+  /** `<video>` に届いている映像の先頭 (メディアの時刻、秒)。まだ無ければ null */
+  function bufferStart(): number | null {
+    return sink?.buffered()[0]?.[0] ?? null;
   }
 
   /**
@@ -1314,40 +1330,56 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (kept.length !== cues.length) cues = kept;
   }
 
-  function drain(): void {
-    // 抱えきれなくなったら (`pace` が立てる `starved`)、届いたその場で捨てる
-    if (starved) {
-      pending.length = 0;
-      return;
-    }
-    if (buffer === null || buffer.updating || pending.length === 0) {
-      // 追っかけを読み切っていて、流し残しも無ければ、ここで MediaSource を閉じる
-      finishStream();
-      return;
-    }
-    const next = pending.shift();
-    if (next === undefined) return;
-    try {
-      buffer.appendBuffer(next as BufferSource);
-    } catch {
-      // 追いつけなくなった。次の init から入り直す
-      pending.length = 0;
-    }
+  /** 足し先がまだ `mine` のものか (`MseSink` の `still`) */
+  const ours =
+    (mine: number): Still =>
+    () =>
+      mine === feedRun;
+
+  /**
+   * 映像の塊を MSE に足す (届いた順に 1 つずつ。`MseSink`)。**抱えきれなくなったら** (`pace` が立てる `starved`)、
+   * 届いたその場で捨てる。並んでいるものも足さない
+   */
+  function feed(body: Uint8Array): void {
+    if (sink === null || starved) return;
+    const mine = feedRun;
+    void sink
+      .append(body, () => mine === feedRun && !starved)
+      .then(() => {
+        // 足せたときだけ下ろす (`still` が false で何もせずに戻ったときは下ろさない)。足している間に `starved` が立てば
+        // 下ろさず、次に足せた塊まで捨て直しを待つ (捨てるのが遅れるだけで、溜めすぎにはならない)
+        if (mine === feedRun && !starved) trimHeld = false;
+      })
+      .catch(() => {
+        // 追いつけなくなった (溜めきれない `QuotaExceededError` を含む)。並んでいるものは捨て、次に届いたものから足す
+        if (mine === feedRun) feedRun++;
+      });
+  }
+
+  /** 並んだものを足し終えた (`MseSinkOptions.settled`)。読み切っていれば閉じ、再生位置を合わせる */
+  function settled(video: HTMLVideoElement): void {
+    finishStream();
+    pace(video);
   }
 
   /**
    * 追っかけを読み切ったら MediaSource を閉じる (`MediaSource.endOfStream`)。
    * 締めないと、バッファの端で「読み込み中」のまま止まって見える。
-   * 流し残し (`pending`) があるうちは待つ。締めると残りが入らなくなる
+   * 並んでいる塊を足し終えてから閉じる (`MseSink.end`)。先に閉じると残りが入らなくなる。
+   * 閉じたあとに古いほうを捨てると (`trim`) MediaSource は開き直るので、足し終えるたびに (`settled`) 締め直す
    */
   function finishStream(): void {
-    if (!ending || source === null || source.readyState !== "open") return;
-    if (buffer === null || buffer.updating || pending.length > 0) return;
-    try {
-      source.endOfStream();
-    } catch {
-      // 追加中だった。次の updateend の drain で締め直す
-    }
+    if (!ending || finishing || sink === null || sink.readyState !== "open")
+      return;
+    finishing = true;
+    void sink
+      .end(ours(feedRun))
+      .catch(() => {
+        // 閉じられなかった。次に足し終えたとき (`settled`) に締め直す
+      })
+      .finally(() => {
+        finishing = false;
+      });
   }
 
   /**
@@ -1359,9 +1391,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   function pace(video: HTMLVideoElement): void {
     if (engine === null) countDropped(video);
-    if (buffer === null || buffer.updating) return;
+    // 足している・捨てている途中なら、終えたところ (`settled`) で回る
+    if (sink === null || sink.busy) return;
     const end = bufferEnd();
-    if (end === null) return;
+    const head = bufferStart();
+    if (end === null || head === null) return;
     const behind = end - video.currentTime;
     // 0.1 秒刻みにする (塊は毎秒 20 個届く。そのたびに書き換えると画面を無駄に描き直す)
     const rounded = running ? tenth(behind) : null;
@@ -1373,8 +1407,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     const truly = airLag(video.currentTime);
     if (truly !== fromAir) fromAir = truly;
 
-    if (tenth(buffer.buffered.start(0)) !== oldest)
-      oldest = tenth(buffer.buffered.start(0));
+    if (tenth(head) !== oldest) oldest = tenth(head);
     if (tenth(end) !== newest) newest = tenth(end);
     if (tenth(video.currentTime) !== position)
       position = tenth(video.currentTime);
@@ -1385,16 +1418,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      */
     paint(video.currentTime);
     // 字幕は戻れるいちばん前から残す。シークバーで溜めの中を戻ったときに、その間の字幕を出すため
-    sweep(Math.min(video.currentTime, buffer.buffered.start(0)));
+    sweep(Math.min(video.currentTime, head));
 
-    trim(end);
+    trim(head);
     settle();
 
     // 押して止めている間は動かさない (飛ばすと「止めた所から見る」ができなくなる)
     if (paused) {
       /*
        * 追っかけは、抱えきれる幅を超えたらそこから先を受け取らない。刈ると止めた所を捨てることになるので、
-       * 印を立てて受け取る側 (`drain`) で捨て、再開のときに止めた所から読み直す (`toggle`)。
+       * 印を立てて受け取る側 (`feed`) で捨て、再開のときに止めた所から読み直す (`toggle`)。
        * ライブは放送が待ってくれないので、古いほうから刈る (`trim`)
        */
       if (chase !== null && end - video.currentTime > keepFor()) starved = true;
@@ -1426,7 +1459,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * **飛んだあとは比べない。** Chromium は入れた時刻をマイクロ秒に丸めて返すので、キーフレームの
      * 時刻とぴったりは揃わない。比べ続けると「まだ手前にいる」と見て飛び続け、始まらない
      */
-    const first = buffer.buffered.start(0);
+    const first = head;
     const key = keyGate.at;
     const toKey =
       !running &&
@@ -1525,20 +1558,36 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 多すぎるバッファを古いほうから削る (止めている間も受け取り続けるので、放っておくと `QuotaExceededError` に着く)。
    * 追っかけはいま出している所より後ろを刈らない (受け取るほうを止める。`pace` の `starved`)。ライブは刈って、
    * 再生位置が刈った所に残っていれば残っている先頭へ移す (置き去りにすると動かなくなる)
+   *
+   * @param head いま持っている先頭 (秒)
    */
-  function trim(end: number): void {
-    if (buffer === null || buffer.updating || buffer.buffered.length === 0)
-      return;
+  function trim(head: number): void {
+    if (sink === null) return;
     const at = element === null ? 0 : element.currentTime;
-    const want = end - keepFor();
-    const cut = chase === null ? want : Math.min(want, at - BEHIND);
-    if (buffer.buffered.start(0) >= cut) return;
-    try {
-      buffer.remove(0, cut);
-      if (element !== null && at < cut) element.currentTime = cut + BEHIND;
-    } catch {
-      // 追加中だった。次の機会に
-    }
+    const cut = keepFrom();
+    if (head >= cut || trimHeld) return;
+    // 捨て終えるまで `busy` なので、終えるまで `pace` は回らず、続けては渡さない
+    const mine = feedRun;
+    void sink.trim(ours(mine)).catch(() => {
+      /*
+       * 捨てられなかった。次の塊を足し終えるまで捨て直さない (`trimHeld`)。失敗しても手が空けば `settled` から
+       * `pace` が回るので、そのまま捨て直すと待たずに `remove` を繰り返す
+       */
+      // 作り直したあとの前の MSE の失敗は、新しい MSE の捨て直しを止めない
+      if (mine === feedRun) trimHeld = true;
+    });
+    if (element !== null && at < cut) element.currentTime = cut + BEHIND;
+  }
+
+  /**
+   * ここより前は捨ててよい (秒。`MseSinkOptions.keepFrom`)。届いている端から戻れる幅 (`keepFor`) より前。
+   * 追っかけは、いま出している所の `BEHIND` 秒前より後ろを捨てない
+   */
+  function keepFrom(): number {
+    const want = (bufferEnd() ?? 0) - keepFor();
+    if (chase === null) return want;
+    const at = element === null ? 0 : element.currentTime;
+    return Math.min(want, at - BEHIND);
   }
 
   /**
@@ -1693,8 +1742,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     }
     const end = bufferEnd();
-    if (element === null || buffer === null || end === null) return;
-    element.currentTime = Math.max(buffer.buffered.start(0), end - target);
+    const head = bufferStart();
+    if (element === null || head === null || end === null) return;
+    element.currentTime = Math.max(head, end - target);
     chasing = false;
     speed = 1;
     element.playbackRate = 1;
@@ -1774,10 +1824,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 見て放送の今へ戻すので、戻した先が 1 秒も映らない
    */
   function seek(to: number): void {
-    if (element === null || buffer === null || buffer.buffered.length === 0)
-      return;
-    const start = buffer.buffered.start(0);
-    const end = buffer.buffered.end(buffer.buffered.length - 1);
+    const start = bufferStart();
+    const end = bufferEnd();
+    if (element === null || start === null || end === null) return;
     const at = Math.min(end, Math.max(start, to));
     element.currentTime = at;
     // 端の近くへ戻しただけならライブのまま。少しの操作で追っかけにしない
@@ -1800,9 +1849,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     }
     const local = to - chase.base;
-    if (buffer !== null && buffer.buffered.length > 0) {
-      const start = buffer.buffered.start(0);
-      const end = buffer.buffered.end(buffer.buffered.length - 1);
+    const start = bufferStart();
+    const end = bufferEnd();
+    if (start !== null && end !== null) {
       if (local >= start && local <= end) {
         element.currentTime = Math.min(end, Math.max(start, local));
         jumped();
@@ -1819,8 +1868,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 必要は無い (`setAudio`)。MediaSource を作り直す `start` からも通る
    */
   function clear(): void {
-    buffer = null;
-    source = null;
+    // 前の MSE に並んでいる塊は足さない (`ours`)。開く前なら、開いても何もしない
+    sink?.destroy();
+    sink = null;
+    feedRun++;
+    finishing = false;
+    trimHeld = false;
     mseCodec = null;
     running = false;
     delay = null;
@@ -1845,7 +1898,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 局が変われば物差しごと変わる。次の `clock` を待つ
     broadcast = null;
     fromAir = null;
-    pending.length = 0;
     // 作り直した MediaSource は開いている。読み切りの印は次の `ended` が立て直す
     ending = false;
     stuck = false;
@@ -2978,16 +3030,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         arrived();
         /*
          * **init が来たら作り直す。** チャンネルを変えると映像の形式も変わるので、
-         * 前の SourceBuffer に足すと中身が混ざって再生が止まる
+         * 前の SourceBuffer に足すと中身が混ざって再生が止まる。並んでいる前の塊は足さず (`feedRun`)、
+         * 読みかけを落としてから init を足す。足している途中の 1 つは、終えてから落とす (`MseSink.abort`)
          */
-        pending.length = 0;
-        if (buffer !== null && source?.readyState === "open") {
-          try {
-            buffer.abort();
-          } catch {
-            // 追加中でなければ例外になる。無視してよい
-          }
-        }
+        feedRun++;
+        void sink?.abort(ours(feedRun)).catch(() => {
+          // 捨てている途中だった。init は続けて足す
+        });
       }
       // データ放送 (`ResponseMessage` の JSON)。受け取る側がまだ無いときは取っておく (`heldData`)
       if (kind === CHANNEL.data) {
@@ -3015,8 +3064,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           // 途中から入ったら、最初のキーフレームまでは渡さない (`ts/key-gate.ts`)
           if (!keyGate.pass(body)) return;
         }
-        pending.push(body);
-        drain();
+        feed(body);
         return;
       }
 
@@ -3064,14 +3112,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * **`<video>` がエラーになった。送り込みを止めて、次の形式へ切り替える。** `isTypeSupported` が受け取れると
    * 答えても、流すと断る形式がある (Android の Chrome 133 は MP4 の `Opus` を受け取ると答え、流すと
    * `CHUNK_DEMUXER_ERROR_APPEND_FAILED` で断った。`live.ts` の `mseType`)。Chrome は断ったあと SourceBuffer を外すので、
-   * `buffer` を捨てる。外れたものの `buffered` を読むと `InvalidStateError` になり、そのまま「読み込み中」で止まっていた
+   * MSE (`sink`) ごと捨てる。外れたものの `buffered` を読むと `InvalidStateError` になり、そのまま「読み込み中」で止まっていた
    */
   function onMediaError(): void {
     const failed = mseCodec;
-    if (failed === null || source === null) return;
+    if (failed === null || sink === null) return;
     mseCodec = null;
-    buffer = null;
-    pending.length = 0;
+    sink.destroy();
+    sink = null;
+    feedRun++;
     if (failed !== "h264") giveUpCodec(failed);
     else fail("映像を再生できませんでした。選び直すと繋ぎ直します");
   }
@@ -3110,30 +3159,24 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // エンコード方式が変われば太さも変わる。数え直す
     received = 0;
     receivedFrom = 0;
-    const media = new picked.Source();
-    source = media;
     /*
-     * ManagedMediaSource は AirPlay を断らないと開かない (HLS は持っていない)。ほかの違い (送り込む頃合い・
-     * ブラウザが捨てる) は手当てしない。ライブは待てず、`trim`・`pace` は毎回 `buffered` を読み直す
+     * 開いて足すのは `MseSink`。尺は終わりが無いと言っておく (`Infinity`。言わないと尺が届くたびに伸び、備え付けの
+     * 再生位置が行き来する)。時刻は並べ直させない (`segments`。`sequence` だと 1 つ取りこぼすと以降ずっと映像と音声がずれる)。
+     * 開く前に届いた塊は、開いてから足す
      */
-    if (picked.managed) video.disableRemotePlayback = true;
-    const objectUrl = URL.createObjectURL(media);
-    video.src = objectUrl;
-    media.addEventListener(
-      "sourceopen",
-      () => {
-        URL.revokeObjectURL(objectUrl);
-        // 開く前に作り直した (選局し直した) あとに届いた古いほう。新しい MediaSource には触らない
-        if (source !== media) return;
-        // 終わりが無いと言っておく。言わないと尺が届くたびに伸び、備え付けの再生位置が行き来する
-        media.duration = Number.POSITIVE_INFINITY;
-        buffer = media.addSourceBuffer(type);
-        // 並べ直させない (`sequence` だと 1 つ取りこぼすと以降ずっと映像と音声がずれる)
-        buffer.mode = "segments";
-        buffer.addEventListener("updateend", () => {
-          drain();
-          pace(video);
-        });
+    const made: MseSink = mseSink(video, picked, {
+      type: codecs,
+      duration: Number.POSITIVE_INFINITY,
+      keepFrom,
+      /*
+       * `waitRoom` は渡さない。溜めきれなければ (`QuotaExceededError`) 例外で受け、並んでいるものを捨てる (`feed`)。
+       * ライブは放送が待ってくれず、古いほうは足し終えるたびに `pace` が捨てている (`trim`)
+       */
+      // 足し終えるたびに (塊が届くたび) 再生位置を合わせる (`pace`)。作り直したあとの前の MSE からは回さない
+      settled: () => {
+        if (sink === made) settled(video);
+      },
+      opened: () => {
         /*
          * 1 枚目が描かれてから前の局の静止画を剥がす (`play()` のあとだと貼ったまま音が鳴った)。待ち構えるのは
          * `loadedmetadata` から。`loadeddata` からでは 1 枚目を逃して、音より 54〜80 ms 遅れて剥がれていた
@@ -3148,10 +3191,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         video.addEventListener("waiting", onWaiting);
         // 詰まりの終わり (段を決めるのに使う。`stuck`)。同じく同じ関数を渡す
         video.addEventListener("playing", onPlaying);
-        drain();
+        // 塊が届く前に読み切っていた
+        finishStream();
       },
-      { once: true },
-    );
+      /*
+       * ManagedMediaSource の送り込む頃合い (`startstreaming`・`endstreaming`) は聞かない。ライブは止めても放送が
+       * 進むので待てない。ブラウザが捨てたぶん (`bufferedchange`) は、`trim`・`pace` が毎回 `buffered` を読み直す
+       */
+    });
+    sink = made;
   }
 
   /**
@@ -3335,7 +3383,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * canvas で描く経路の `pace`。**時計が音なので、`updateend` の代わりに刻みで回す。**
+   * canvas で描く経路の `pace`。**時計が音なので、足し終えたとき (`settled`) の代わりに刻みで回す。**
    * バッファ・放送からの遅れ・字幕の貼り直し・貯める量の決め直しを、エンコードする経路と同じ形で出す
    */
   function rawPace(): void {

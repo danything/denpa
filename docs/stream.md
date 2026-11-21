@@ -590,6 +590,10 @@ HW エンコーダの無い実機 (44 スレッド) で、1080i をデコード�
 > **戻れる幅はバイト数でも切る。** 5 分 (`KEEP`) を太ったストリームで持つと `appendBuffer` が `QuotaExceededError` で
 > 失敗し、そこから映像が出なくなる。受け取っている速さから 120 MB (`BUDGET`) に収まる長さを出し、
 > 時間と小さいほうで切る (`live-player.svelte.ts`)。
+> 古いほうを捨てるのは `pace` (塊を足し終えたときと、250 ms おき) で、それでも溜めきれなければ、並んでいる塊を捨てて次に届いたものから足す。
+> 観る画面のように観て減るのを待たない (放送は待ってくれない)。
+> MSE を開いて足すのは観る画面と同じ `player/mse-sink.ts` で、どこより前を捨てるか (`keepFrom`) をライブ・追っかけが渡す。
+> 追っかけは再生位置の 2 秒前 (`BEHIND`) より後ろを捨てない。
 
 **受け取れない端末では H.264 にする。** 自動では先に `MediaSource.isTypeSupported` に問い合わせて (`#lib/live.ts` の `codecsFor`)、
 受け取れなければ AV1 (と H.265) を飛ばす。選んだ AV1 を受け取れなければ次の形式に移り、理由を画面に出す。
@@ -603,8 +607,9 @@ HW エンコーダの無い実機 (44 スレッド) で、1080i をデコード�
 > [!NOTE]
 > **iPhone の Safari は `MediaSource` を持たず、`ManagedMediaSource` (iOS 17.1+) だけがある。**
 > 無ければそちらを使う (`ts/media-source.ts`)。`disableRemotePlayback` を立てないと開かない。
-> 送り込む頃合いの合図 (`startstreaming` / `endstreaming`) は聞かず、ブラウザの刈り取り
-> (`bufferedchange`) は `buffered` を毎回読み直すので手当てしていない。**実機では未確認。**
+> ライブと追っかけは、送り込む頃合いの合図 (`startstreaming` / `endstreaming`) を守らず、止めるよう合図されても足し続ける。
+> 放送は止めても進むので待てず、待つ間に詰まらないかは iPhone の実機でしか確かめられないため。観る画面は守る ([player.md](player.md))。
+> ブラウザの刈り取り (`bufferedchange`) は `buffered` を毎回読み直すので手当てしていない。**実機では未確認。**
 
 ### どの形式で流すか
 
