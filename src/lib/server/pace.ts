@@ -160,10 +160,16 @@ export class InputGaps {
     return id;
   }
 
-  /** 届いた */
+  /**
+   * 届いた。**これより前に読みに行ったまま終わっていない読み出しも捨てる。** 起こし直しで手放された古い読み出しが `end` も
+   * `cancel` も呼ばずに残っても、新しい読み出しに届いた時点でチューナーは流れているので、待ちとして数え続けない
+   */
   end(id: number, now: number): void {
     const since = this.pending.get(id);
     this.pending.delete(id);
+    if (since !== undefined)
+      for (const [other, start] of this.pending)
+        if (start <= since) this.pending.delete(other);
     if (since !== undefined && this.fed) {
       const ms = now - since;
       this.gaps.push({ at: now, ms });

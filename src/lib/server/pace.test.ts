@@ -143,17 +143,25 @@ describe("チューナーから届くのを待った間", () => {
     expect(gaps.longest(5_000)).toBe(0);
   });
 
-  test("起こし直しで古い読み出しと新しい読み出しが同時に待っても、それぞれの長さで数える", () => {
+  test("起こし直しで古い読み出しと新しい読み出しが同時に待っても、新しいほうの長さで数える", () => {
     const seen: number[] = [];
     const gaps = new InputGaps((ms) => seen.push(ms));
     gaps.end(gaps.begin(0), 10);
-    const old = gaps.begin(100);
+    gaps.begin(100);
     const fresh = gaps.begin(600);
+    // 届く前は、長く待っている古いほうで数える
+    expect(gaps.longest(650)).toBe(550);
     gaps.end(fresh, 700);
-    expect(gaps.longest(800)).toBe(700);
-    gaps.cancel(old);
     expect(gaps.longest(800)).toBe(100);
     expect(seen).toEqual([]);
+  });
+
+  test("手放された古い読み出しは、新しい読み出しに届いた時点で捨てる。待っている最中と数え続けない", () => {
+    const gaps = new InputGaps();
+    gaps.end(gaps.begin(0), 10);
+    gaps.begin(100); // end も cancel も呼ばれない
+    gaps.end(gaps.begin(200), 250);
+    expect(gaps.longest(9_000)).toBe(0);
   });
 
   test("SOURCE_GAP 以上待ったときだけ知らせる", () => {
