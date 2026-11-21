@@ -1,7 +1,7 @@
 /**
  * **音のコマを継ぎ目なく並べる** (docs/stream.md#継ぎ目はサンプル単位でつなぐ)。
  *
- * 自前で鳴らす音 (MPEG-2 の経路の `engine.ts`、WebKit のライブの `native-audio.ts`) は、AAC の 1 コマ
+ * canvas に描く経路の音 (`engine.ts`) は、AAC の 1 コマ
  * (48 kHz で 1024 サンプル、約 21 ms) ごとに `AudioBufferSourceNode` を作って予約する。継ぎ目に 1 サンプルでも
  * 隙間や重なりがあると、そこで波形が飛び「チリチリ」と聞こえる (#2684)。起きる所は次の 2 つ。
  *

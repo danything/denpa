@@ -1,6 +1,6 @@
 /**
- * **WASM のデコーダ (`wasm/decoder.c`) の音の関数。** canvas に描く worker (`worker.ts`) と、ライブの音だけを
- * 鳴らす worker (`native-audio-worker.ts`) で同じものを使う。AAC は ADTS で渡す (TS はもとから ADTS。fMP4 から読むときは
+ * **WASM のデコーダ (`wasm/decoder.c`) の音の関数。** canvas に描く worker (`worker.ts`) が使う。
+ * AAC は ADTS で渡す (TS はもとから ADTS。fMP4 から読むときは
  * ヘッダを付ける)。Opus は OpusHead を渡して開く (`fmp4.ts` の `audioCodec`・`audioFrame`)
  */
 

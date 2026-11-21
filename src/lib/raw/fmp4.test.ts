@@ -242,8 +242,8 @@ describe("Fmp4Video (描く大きさ)", () => {
 });
 
 /**
- * **音の開き方と 1 コマの渡し方** (`audioCodec`・`audioFrame`)。canvas に描く worker とライブの音だけの worker が
- * 同じものを使う。作り置きの H.264 は AAC、AV1 は Opus (本物の ffmpeg が書いたもの)
+ * **音の開き方と 1 コマの渡し方** (`audioCodec`・`audioFrame`)。canvas に描く worker が使う。
+ * 作り置きの H.264 は AAC、AV1 は Opus (本物の ffmpeg が書いたもの)
  */
 describe("audioCodec・audioFrame", () => {
   const audioOf = (name: string) => {

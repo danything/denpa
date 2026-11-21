@@ -16,8 +16,6 @@ export interface PlaybackTarget {
   /** canvas に描いているか (放送のままの MPEG-2・互換モード)。描いている間は `<video>` を使わない */
   readonly canvas: boolean;
   readonly paused: boolean;
-  /** 消音しているか。音を `<video>` と別に鳴らすときだけ読む */
-  readonly silenced: boolean;
   /** 字幕を出しているか・字幕があるか (小窓に字幕を重ねるか) */
   readonly captions: boolean;
   readonly hasCaptions: boolean;
@@ -40,11 +38,9 @@ interface Options {
   /** 裏に回ったので止める・戻ってきたので再開する (`backgroundPlayback`)。省くと止めた所から再開する */
   pause?: () => void;
   resume?: () => void;
-  /** 音を `<video>` と別に鳴らすか (ライブの WebKit。`#lib/native-audio-choice.ts`)。追っかけと観る画面は渡さない */
-  separateAudio?: () => boolean;
   /** `<video>` を Web Audio に通すと無音になるか (WebKit の MSE。`volume.svelte.ts` の `silentTap`) */
   silentTap?: () => boolean;
-  /** 音量を変えられない端末か (追っかけと観る画面。`volume.svelte.ts` の `fixed`)。ライブは渡さない */
+  /** 音量を変えられない端末か (`volume.svelte.ts` の `fixed`) */
   fixed?: () => boolean;
 }
 
@@ -57,7 +53,7 @@ interface Wiring {
 
 /**
  * **3 画面の共通の配線。** 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓 (PiP)・音量をここで 1 度だけつなぐ。
- * 画面ごとに違うのは、裏から戻ったときの再開のしかた (`pause`・`resume`) と、音の掛け方 (ライブは `separateAudio`、追っかけと観る画面は `silentTap`・`fixed`)。
+ * 画面ごとに違うのは、裏から戻ったときの再開のしかた (`pause`・`resume`) と、`<video>` を Web Audio に通すと無音になるか (`silentTap`。観る画面はファイルの直再生なら通す)。音量を変えられない端末か (`fixed`) は 3 画面で同じものを渡す。
  * コンポーネントを作るときに呼ぶ (中で `$effect` を使う)
  */
 export function playerWiring(options: Options): Wiring {
@@ -73,10 +69,6 @@ export function playerWiring(options: Options): Wiring {
     nativeVideo: () => (target.canvas ? null : options.video()),
     pip: () => pip.active,
     paused: () => target.paused,
-    // 音を `<video>` と別に鳴らすときだけ、消音を伝える (`<video>` はわざと消音にしてある)
-    ...(options.separateAudio === undefined
-      ? {}
-      : { muted: () => target.silenced }),
     pause: options.pause ?? (() => target.toggle()),
     resume: options.resume ?? (() => target.toggle()),
   });
@@ -110,9 +102,6 @@ export function playerWiring(options: Options): Wiring {
 
   /** 音量 (`volume.svelte.ts`)。canvas はエンジンの中で、`<video>` は Web Audio に通して掛ける */
   const volume = playerVolume({
-    ...(options.separateAudio === undefined
-      ? {}
-      : { separateAudio: options.separateAudio }),
     ...(options.silentTap === undefined
       ? {}
       : { silentTap: options.silentTap }),
