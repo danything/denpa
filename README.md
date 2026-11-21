@@ -158,6 +158,12 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 動いた/動かなかったを [Issue](https://github.com/danything/denpa/issues) で教えてもらえると助かります。
 
+## 困ったとき
+
+**不具合と質問は [Issue](https://github.com/danything/denpa/issues) で受け付けます。** 設定の「その他」→「ログ」の「Issue にする」を押すと、
+バージョンと環境とログが入った Issue を作れます。そのまま送ってください。
+X などの DM での個別の対応は、[GitHub Sponsors](https://github.com/sponsors/5ym) で支援してくださっている方だけにしています。
+
 ## 謝辞
 
 **特別協賛**:
