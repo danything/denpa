@@ -170,9 +170,9 @@
     pickStream,
     type PlaybackInfo,
     type PlayCodec,
-    retryWait,
     STREAM_RETRIES,
     streamForAudio,
+    StreamRetry,
     type StreamState,
     transcodes,
   } from "#lib/ts/playback.js";
@@ -1962,9 +1962,14 @@
   );
   /** 繋ぎが切れて繋ぎ直している最中か (`recover`) */
   let resuming = $state(false);
-  /** 続けて何回繋ぎ直したか。繋ぎ直しを打ち切る分かれ目 */
-  let retries = 0;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * ファイルを直に再生しているときの繋ぎ直し (`recover`。ライブと同じ `StreamRetry`)。`STREAM_RETRIES` 回で打ち切る。
+   * 録画は読めない形式・壊れたファイルでも同じ所で切れるので、読み直し続けずに観られる先を案内する。
+   * その場で流しているもの (`remux-player.ts`)・canvas に描いているもの (`canvas-player.ts`) は、それぞれが同じ数で繋ぎ直す
+   */
+  const fileRetry = new StreamRetry((next) => {
+    resuming = next === "retrying";
+  });
   /** 繋ぎ直したあとに戻る位置 (秒)。0 は「戻る先は無い」 */
   let retryAt = 0;
   let chapters = $state<Chapter[]>([]);
@@ -2151,7 +2156,7 @@
       if (hopGiveUp !== null) clearTimeout(hopGiveUp);
       if (holdGiveUp !== null) clearTimeout(holdGiveUp);
       dropStep();
-      if (retryTimer !== null) clearTimeout(retryTimer);
+      fileRetry.cancel();
       if (captionWait !== null) clearTimeout(captionWait);
     };
   });
@@ -2400,22 +2405,18 @@
     if (
       remux !== null ||
       code !== MediaError.MEDIA_ERR_NETWORK ||
-      retries >= STREAM_RETRIES
+      fileRetry.spent
     ) {
       giveUp(why);
       resuming = false;
       return;
     }
     retryAt = video.currentTime;
-    const wait = retryWait(retries);
-    retries++;
-    resuming = true;
-    if (retryTimer !== null) clearTimeout(retryTimer);
-    retryTimer = setTimeout(() => {
-      retryTimer = null;
+    fileRetry.cancel();
+    fileRetry.schedule(() => {
       // 同じ src を読み直す。位置を戻すのは尺が分かってから (`resume`)
       video?.load();
-    }, wait);
+    });
   }
 
   /**
@@ -3066,7 +3067,7 @@
                 playing = true;
                 follow(event.currentTarget);
                 // 出たので、繋ぎ直しは済み。次に切れたらまた 1 秒から待つ
-                retries = 0;
+                fileRetry.flowing();
                 resuming = false;
                 controls.stir();
               }}

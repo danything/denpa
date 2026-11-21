@@ -138,7 +138,7 @@ import {
   type Steering,
   steeringWhen,
 } from "#lib/ts/pacing.js";
-import { retryWait } from "#lib/ts/playback.js";
+import { StreamRetry } from "#lib/ts/playback.js";
 import { MAX_LEVEL } from "#lib/volume.js";
 
 type LiveState = "idle" | "connecting" | "playing" | "error";
@@ -771,10 +771,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   const hidesSlip = slipHidden();
   /** バッファが足りた最初の時刻。**映像を待ちきりにしないため** (`canStart`) */
   let enoughAt = 0;
-  /** 繋ぎ直しのタイマー。**待っている間だけ入っている** */
-  let retry: ReturnType<typeof setTimeout> | null = null;
-  /** 続けて何回繋ぎ直しに失敗したか。0 でなければ繋ぎ直しの最中で、繋げなくても失敗にしない */
-  let attempts = $state(0);
+  /** 繋ぎ直しを待っている最中か (`retry` の `retrying` と `flowing`)。画面に出すので `$state` に写す */
+  let reconnecting = $state(false);
+  /**
+   * 繋ぎ直し (観る画面と同じ `StreamRetry`)。`attempts` が 0 でなければ繋ぎ直しの最中で、繋げなくても失敗にしない。
+   * **回数の上限は置かない** (`Infinity`)。点けっぱなしで戻ってきたときに映っていてほしい。切れた時点で打ち切っていた頃は、
+   * 観ている最中に「選んでください」に戻って自分で選び直すことになっていた。観る画面は 8 回で打ち切る (`STREAM_RETRIES`)
+   */
+  const retry = new StreamRetry((next) => {
+    reconnecting = next === "retrying";
+  }, Infinity);
   /** 最後に作り直しを受けた時刻 (`restart`。`RESTART_CALM`) */
   let restartedAt = 0;
   /** 追っかけで作り直したあと、届いたぶんを観終えるのを待っている (`resumeChase`) */
@@ -1950,8 +1956,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 画面を離れる。**貼ったフレームも剥がす**。戻ってきたときに残っていては困る */
   function stop(): void {
     left = true;
-    if (retry !== null) clearTimeout(retry);
-    retry = null;
+    retry.cancel();
     if (adaptTimer !== null) clearInterval(adaptTimer);
     adaptTimer = null;
     stopResuming();
@@ -1975,7 +1980,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function fail(text: string): void {
     state = "error";
     message = text;
-    attempts = 0;
+    retry.flowing();
     // 段を上げたあとの待ち (`upAsk`) を残すと、エラーの画面のまま段を下げてリクエストし直す
     upAsk = null;
     thaw();
@@ -1990,13 +1995,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 待ってから繋ぎ直す (いちばん多いのはサーバの入れ替え)。待ちは倍々で 10 秒まで (`retryWait`)。回数の上限は
-   * 置かない。点けっぱなしで戻ってきたときに映っていてほしい。切れた時点で打ち切っていた頃は、
-   * 観ている最中に「選んでください」に戻って自分で選び直すことになっていた
+   * 待ってから繋ぎ直す (いちばん多いのはサーバの入れ替え)。待ちは倍々で 10 秒まで (`retryWait`)。回数の上限は置かない (`retry`)
    */
   function reconnect(): void {
     if (
-      retry !== null ||
+      retry.waiting ||
       left ||
       (tuned === null && chase === null) ||
       element === null
@@ -2004,10 +2007,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     state = "connecting";
     message = "";
-    const wait = retryWait(attempts);
-    attempts++;
-    retry = setTimeout(() => {
-      retry = null;
+    retry.schedule(() => {
       if (left || element === null) return;
       if (chase !== null) {
         reopenChase();
@@ -2016,7 +2016,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (tuned === null) return;
       // 局は変わらないので、選べる字幕の一覧は残す
       void tune(element, tuned, true);
-    }, wait);
+    });
   }
 
   /**
@@ -2386,7 +2386,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     returning = false;
     yielded = { recording, back, refused };
     // リクエストし直しで伸びた待ちは持ち越さない (追っかけが切れたら 1 秒から繋ぎ直す)
-    attempts = 0;
+    retry.flowing();
     // 4K の局の録画は HEVC で開く (省くと MPEG-2 として開き、HEVC を受け取れない端末がリクエストし直しを繰り返す)
     void openChase(
       element,
@@ -2626,7 +2626,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       } catch {
         if (superseded(mine)) return;
         // 繋ぎ直しの最中なら、サーバからまだ応答が無いだけ。待ち直す
-        if (attempts > 0) reconnect();
+        if (retry.attempts > 0) reconnect();
         else fail("繋がりませんでした");
         return;
       }
@@ -2652,7 +2652,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       opened = true;
       if (startup !== null) startup.open = performance.now() - startup.at;
       // 繋がった。次に切れたときはまた 1 秒から待ち直す
-      attempts = 0;
+      retry.flowing();
       const command = wantedCommand();
       if (command !== null) ws.send(JSON.stringify(command));
       // データ放送を受け取るかどうかはサーバでは接続 (Viewer) に紐づいていて、切れると忘れられる
@@ -2662,7 +2662,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
     ws.onerror = () => {
       // 繋ぎ直しの最中か、ページと一緒に受け取ったチケットを断られた。すぐ後ろに `onclose` が来るので、そちらで待ち直す
-      if (attempts > 0 || (fromPage !== null && !opened)) return;
+      if (retry.attempts > 0 || (fromPage !== null && !opened)) return;
       if (state !== "playing") fail("繋がりませんでした");
     };
 
@@ -3536,7 +3536,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     },
     /** 繋ぎ直しを待っている最中か。**待っていることを画面に出すため** */
     get resuming() {
-      return attempts > 0;
+      return reconnecting;
     },
     /** 描かれずに捨てられたコマ。**映像だけ遅れるときの切り分けに** */
     get dropped() {
