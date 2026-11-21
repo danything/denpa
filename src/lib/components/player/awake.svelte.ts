@@ -1,3 +1,5 @@
+import { GESTURES } from "#lib/raw/gesture-context.js";
+
 /**
  * 観ている間、**画面を暗くさせない**。3 画面 (ライブ・追っかけ・観る画面) で同じもの。
  *
@@ -62,8 +64,7 @@ export function screenAwake(): Awake {
         .finally(() => (asking = false));
     };
 
-    // 操作の直後と見なされる出来事。押し始め (pointerdown) は Safari では数えないことがあるので、押し終わりで見る
-    const GESTURES = ["click", "keydown", "touchend"] as const;
+    // 操作の直後と見なされる出来事 (`GESTURES`。押し始めは Safari では数えないことがあるので、押し終わりで見る)
     grab();
     document.addEventListener("visibilitychange", grab);
     for (const type of GESTURES)
