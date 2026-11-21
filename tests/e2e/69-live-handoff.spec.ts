@@ -13,7 +13,7 @@ import {
 } from "./helpers";
 
 /**
- * **ライブの段を替えるときは、裏の `<video>` で用意してから入れ替える** (`live-player.svelte.ts` の `stageStep`。
+ * **ライブの段を替えるときは、裏の `<video>` で用意してから入れ替える** (`player/core.svelte.ts` の `stageStep`。
  * docs/stream.md「段を替えるときは、裏の `<video>` で用意してから入れ替えます」)。
  *
  * 偽 ffmpeg に本物の H.264 の fMP4 を流させ、入口の TS の PCR から時計を配らせる (`tests/fake/fmp4-loop.ts` の `clock`)。

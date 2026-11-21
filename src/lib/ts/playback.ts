@@ -165,7 +165,7 @@ export type StreamState = "flowing" | "retrying" | "failed" | "busy";
 /**
  * 録画を観るときに、続けてリクエストし直す上限 (待ちの合計は約 1 分)。録画は読めない形式・壊れたファイルでも
  * 同じ所で切れるので、読み直し続けずに打ち切り、観られる先を案内する ([watch.md](../../../docs/watch.md))。
- * ライブと追っかけは上限を置かない (`live-player.svelte.ts` の `reconnect`)
+ * ライブと追っかけは上限を置かない (`player/core.svelte.ts` の `reconnect`)
  */
 export const STREAM_RETRIES = 8;
 
@@ -177,7 +177,7 @@ export function retryWait(retries: number): number {
 /**
  * 切れたときに、倍々に待ってリクエストし直す (`retryWait`)。続けて `limit` 回を超えたら打ち切る。
  * 3 画面の繋ぎ直しはどれもこれを使う。録画をその場で流すとき (`remux-player.ts`)・canvas に描くとき (`canvas-player.ts`)・
- * ファイルを直に再生するとき (観る画面の `recover`) は `STREAM_RETRIES` 回まで、ライブと追っかけ (`live-player.svelte.ts`) は上限なし
+ * ファイルを直に再生するとき (観る画面の `recover`) は `STREAM_RETRIES` 回まで、ライブと追っかけ (`player/core.svelte.ts`) は上限なし
  */
 export class StreamRetry {
   private retries = 0;

@@ -176,7 +176,7 @@ export const SWITCH_NOTE = 10_000;
 
 /**
  * 選局・シーク・切り替えの直後はこれだけ数えない (ms)。立ち上がりでバッファが空なのを「足りない」と読まない。
- * ライブも同じ間は詰まりを数えない (`live-player.svelte.ts`)。MediaSource を作り直せば必ず `waiting` が上がり、
+ * ライブも同じ間は詰まりを数えない (`player/core.svelte.ts`)。MediaSource を作り直せば必ず `waiting` が上がり、
  * 飛べば読み込み直しになる。宅外で本当に届かないのとは別ものなので、混ぜると遅延が伸びたまま戻らない
  */
 export const GRACE = 3_000;

@@ -73,7 +73,7 @@
   import { playbackAt } from "#lib/ts/watch.js";
 
   /**
-   * 追っかけ再生 (録画中の録画を先頭から観る)。プレイヤーはライブと同じ (`live-player.svelte.ts` の chase モード)。
+   * 追っかけ再生 (録画中の録画を先頭から観る)。プレイヤーはライブと同じ (`player/core.svelte.ts` の chase モード)。
    * ライブとの違いは、先頭から観られる・シークできる・右端 (いま録れているところ) が壁時計で伸びる
    */
   let { data } = $props();
@@ -269,7 +269,7 @@
     target: player,
     video: () => video,
     overlay: () => overlay,
-    // 追っかけの `<video>` はいつも MSE (`live-player.svelte.ts`)。WebKit では通すと無音になるのでいつも通さない (観る画面のその場で流すものと同じ)
+    // 追っかけの `<video>` はいつも MSE (`player/core.svelte.ts`)。WebKit では通すと無音になるのでいつも通さない (観る画面のその場で流すものと同じ)
     silentTap: () =>
       typeof navigator !== "undefined" && tapSilent(navigator.userAgent, true),
     // iPhone・iPad は `<video>` の音量を変えられない。つまみを出さず、放送のままの大きさで鳴らす

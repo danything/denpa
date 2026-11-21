@@ -41,7 +41,7 @@ export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
 /**
  * ブラウザに渡す codecs 文字列。**MSE はこれが合っていないと受け取らない。**
  *
- * 画面も MSE で受け取れるかを先に確かめるのに使う (`live-player.svelte.ts`)。中身から起こすのが本筋だが (moov を読めば分かる)、エンコード方式はこちらで決めて
+ * 画面も MSE で受け取れるかを先に確かめるのに使う (`player/core.svelte.ts`)。中身から起こすのが本筋だが (moov を読めば分かる)、エンコード方式はこちらで決めて
  * いるので、その組に対応する値を返す。
  *
  * - `avc1.640029` … High profile / Level 4.1。1080p60 まで
@@ -283,7 +283,7 @@ export type Notice =
        *
        * いちばん多いのは録画にチューナーを取り上げられたとき (ライブは録画にだけ譲る。docs/agent.md「選ぶ順の約束」)。
        * 画面は同じ局をリクエストし直す。使ってよいチューナーが空いていればそこに入り、見ているものは変わらない。
-       * **リクエストし直しても入れなかったときだけ** `recording` の追っかけに切り替える (`live-player.svelte.ts`)。
+       * **リクエストし直しても入れなかったときだけ** `recording` の追っかけに切り替える (`player/core.svelte.ts`)。
        * チューナーを取り上げた録画が分からない (録画ではなかった・エージェントに訊けなかった) なら null
        */
       type: "lost";
@@ -294,7 +294,7 @@ export type Notice =
        * **番組が替わって映像・音声・字幕の並び (PMT) が変わった。** セッションはここで閉じる (`server/live.ts` の `restart`)。
        * ffmpeg は起きたときの並びのまま音声・字幕を選んでいるので、作り直さないと追従しない。
        * 画面はすぐ同じ局をリクエストし直す (音声を選び直したときと同じ)。追っかけは届いたぶんを観終えてから、
-       * 観ていた位置をリクエストし直す (`live-player.svelte.ts` の `resumeChase`)
+       * 観ていた位置をリクエストし直す (`player/core.svelte.ts` の `resumeChase`)
        */
       type: "restart";
     }
@@ -302,7 +302,7 @@ export type Notice =
       /**
        * **サーバが入れ替えで止まる** (`server/live.ts` の `announceRestart`。止まる合図を受けて、録画を待ち終えてから)。
        * このあと接続が切れ、届かない間ができる。回線が細いのではないので、画面は繋ぎ直して映り始めてしばらくは段を下げない
-       * (`live-player.svelte.ts` の `HOLD_AFTER_RECONNECT`)
+       * (`player/core.svelte.ts` の `HOLD_AFTER_RECONNECT`)
        */
       type: "restarting";
     }
@@ -478,7 +478,7 @@ export const SOCKET_PATH = "/api/live/socket";
 
 /**
  * WebSocket に繋ぐチケットの寿命 (ms。`server/tickets.ts`)。取ってすぐ繋ぐだけなので短くてよい。
- * 画面は、ページを組むときに受け取ったチケットをこの半分までしか使わない (`live-player.svelte.ts` の `takePageTicket`)。
+ * 画面は、ページを組むときに受け取ったチケットをこの半分までしか使わない (`player/core.svelte.ts` の `takePageTicket`)。
  * サーバと端末の時計は合わせていないので、端末の時計で受け取ってからの時間を数え、HTML が届くまでのぶんを半分の余裕で覆う
  */
 export const TICKET_LIFETIME = 30_000;

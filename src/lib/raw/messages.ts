@@ -138,7 +138,7 @@ export type FromWorker =
   | { type: "frame"; id: number; bitmap: ImageBitmap | null }
   /**
    * 抱えきれなくなったので、届いたものを捨て始めた (`follow` のときだけ)。**画面は手元が尽きる前に
-   * 再生している位置からリクエストし直す** (`live-player.svelte.ts` の `starved`)
+   * 再生している位置からリクエストし直す** (`player/core.svelte.ts` の `starved`)
    */
   | { type: "full" }
   /**

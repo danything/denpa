@@ -1,5 +1,5 @@
 /**
- * **ライブの段を替えるときの受け渡し** (`live-player.svelte.ts` の `stageStep`。docs/stream.md「段を替えるときは、裏の `<video>` で用意してから入れ替えます」)。
+ * **ライブの段を替えるときの受け渡し** (`player/core.svelte.ts` の `stageStep`。docs/stream.md「段を替えるときは、裏の `<video>` で用意してから入れ替えます」)。
  *
  * いまの段を映したまま、別の WebSocket で次の段をリクエストし、裏の `<video>` (透明・消音) の MSE に溜める。
  * 裏は表の少し先 (`LIVE_HANDOFF_LEAD`) で止めて待ち、そのコマをデコードできて、表の再生がそこまで来たら入れ替える。

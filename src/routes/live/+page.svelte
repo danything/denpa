@@ -448,7 +448,7 @@
     target: player,
     video: () => video,
     overlay: () => overlay,
-    // ライブの `<video>` はいつも MSE (`live-player.svelte.ts`)。WebKit では通すと無音になるのでいつも通さない (追っかけと同じ)
+    // ライブの `<video>` はいつも MSE (`player/core.svelte.ts`)。WebKit では通すと無音になるのでいつも通さない (追っかけと同じ)
     silentTap: () =>
       typeof navigator !== "undefined" && tapSilent(navigator.userAgent, true),
     // iPhone・iPad は `<video>` の音量を変えられない。つまみを出さず、放送のままの大きさで鳴らす
@@ -833,7 +833,7 @@
             {/if}
 
             <!--
-              受け取れない形式 (AV1・H.265) なら次の形式に切り替えて理由を出す (`live-player.svelte.ts` の `start`)。
+              受け取れない形式 (AV1・H.265) なら次の形式に切り替えて理由を出す (`player/core.svelte.ts` の `start`)。
               末尾の MPEG-2 はエンコードせずに放送そのままをデコードする経路
             -->
             <StageTail

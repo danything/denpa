@@ -1,6 +1,6 @@
 /**
  * **MSE (`MediaSource` と SourceBuffer) を開いて、届いたものを足し、古いものを捨てる。** 観る画面のその場で流す録画
- * (`remux-player.ts`) と、ライブ・追っかけ (`live-player.svelte.ts`) が使う。
+ * (`remux-player.ts`) と、ライブ・追っかけ (`player/core.svelte.ts`) が使う。
  *
  * 何をどこから読むか、どこまで溜めるか、いつ捨てるかは呼ぶ側が決める。ここが受け持つのは次のこと。
  *

@@ -669,7 +669,7 @@ function softwareArgs(codec: Exclude<LiveCodec, "hevc">, gop = "60"): string[] {
    * いく」を流量の話だと見立てて入れたが、原因は受け側の貯め方だった
    * ([stream.md](../../../docs/stream.md#一瞬止まって遅延が増えていく))。そのあと実機で「映像だけ遅れる」が
    * 出たので流量を疑って戻したが、そちらは**デコード**の話で
-   * (`live-player.svelte.ts` の `unslip`)、やはり山とは関係が無かった。
+   * (`player/core.svelte.ts` の `unslip`)、やはり山とは関係が無かった。
    * **2 回とも、症状から流量を疑ったのが外れている**
    */
   return [
@@ -1216,7 +1216,7 @@ const GPU_BUSY =
 
 /**
  * H.265 を GPU でエンコードできずに失敗したときの文面。画面はこれを受けると H.265 をやめて次の形式に替える
- * (`live-player.svelte.ts`。文面は見ず、H.265 をリクエストしていて失敗したことで決める)
+ * (`player/core.svelte.ts`。文面は見ず、H.265 をリクエストしていて失敗したことで決める)
  */
 const HEVC_GAVE_UP = "H.265 を GPU でエンコードできませんでした";
 /** 段を下げた AV1 を GPU でエンコードできずに失敗したときの文面 (`Session.runEncode`) */
@@ -2169,7 +2169,7 @@ class Session {
       let hw = pickHw();
       /*
        * H.265 と段を下げた AV1 はソフトウェアに切り替えられない (`softwareEncodes`)。画面はその形式をやめて次の形式をリクエストし直す
-       * (`live-player.svelte.ts`)。段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
+       * (`player/core.svelte.ts`)。段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
        */
       // コーデックは PMT を読んだあとで替わることがある (下の 4K の局の段を下げた H.265) ので、そのつど見る
       const gpuOnly = () =>
@@ -2276,7 +2276,7 @@ class Session {
            * **追っかけの段を下げた H.265 は、映像を写さない** (写すと段を見ずに 4K の HEVC を送る)。追っかけは開く前に録画の PMT を読んで
            * 4K の局と分かれば H.265 を選ばない (`chaseForm`) ので、ここへ来るのは録り始めたばかりで開く前に PMT を読めなかったときだけ。
            * 選局の答えを出し直す仕組みは持たないので止める。画面は段を下げた H.265 が失敗したときと同じく、H.265 を外して
-           * 同じ段をリクエストし直す (`live-player.svelte.ts` の `rungOff`)
+           * 同じ段をリクエストし直す (`player/core.svelte.ts` の `rungOff`)
            */
           const lateHevc =
             this.source !== undefined &&
@@ -4388,7 +4388,7 @@ export function liveForm<C extends StreamCodec>(
  * **映像の無い局 (ラジオ・データ放送。`schema.hasVideo`) と映像の無い録画の追っかけで送る形式。** どの形式をリクエストされても音声だけ (AAC の fMP4)。
  * 放送のままの TS は送らない (画面の MPEG-2 のデコーダに映像の無い TS を渡すことを確かめていない)。音声だけは枠を使わない。
  * 音声も無い局 (データ放送だけの局) は無音を流す (`Session.silent`)。
- * 答え (`tuned`) には `video: false` を付け、画面は回線に合わせて段を動かさない (`live-player.svelte.ts`)
+ * 答え (`tuned`) には `video: false` を付け、画面は回線に合わせて段を動かさない (`player/core.svelte.ts`)
  */
 export const AUDIO_FORM = {
   codec: "audio",
@@ -4892,7 +4892,7 @@ export function attend(connection: Connection): void {
      * **再エンコードしなくても、リクエストされたら必ず答える。**
      *
      * 何も送らずに返していた頃は、**いま映している局をもう一度押すと映像が止まった**。
-     * 画面側は `tune` のたびに MediaSource を捨てる作りで (`live-player.svelte.ts` の
+     * 画面側は `tune` のたびに MediaSource を捨てる作りで (`player/core.svelte.ts` の
      * `forget`)、`tuned` と init が来て初めて作り直す。何も変わらないからと
      * 答えないと、**捨てたきり二度と作られない**。塊は届き続けるので、
      * エラーも出ないまま黒い画面で止まる (実機で起きた)。

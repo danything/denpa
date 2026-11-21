@@ -79,17 +79,17 @@ const AUTO = "auto";
  * この端末でデコードする経路 (docs/stream.md#放送そのままmpeg-2を送る)。4K の局 (`broadcast` が `hevc`) では同じ場所が **H.265** で、
  * 放送の HEVC をエンコードせずに詰め替えたもの (docs/stream.md「4K の局のライブ」)。
  * **エンコードするものは `shown` の 1 つだけ並べる** (サーバがその場でエンコードできて、端末で再生できる先頭。`#lib/live-choice.ts` の `shownCodec`)。
- * ほかは自動が選んだときに値に出す。`unavailable` に挙げた形式は、並べるが押せない (`live-player.svelte.ts` の `unavailable`)
+ * ほかは自動が選んだときに値に出す。`unavailable` に挙げた形式は、並べるが押せない (`player/core.svelte.ts` の `unavailable`)
  */
 export function liveCodecs(opts: {
   icon: IconShape;
   /** メニューで選んでいるもの */
   choice: LiveChoice;
-  /** 並べる、エンコードするもの (`live-player.svelte.ts` の `menuCodec`)。null なら並べない */
+  /** 並べる、エンコードするもの (`player/core.svelte.ts` の `menuCodec`)。null なら並べない */
   shown: LiveCodec | null;
   /** いま決まっている形式 (自動の行の値に添える) */
   format: LiveFormat;
-  /** 回線に合わせて下げた段 (`live-player.svelte.ts` の `step`)。自動の行の値に高さを添える (「自動 (H.264 540p)」)。省くと 0 */
+  /** 回線に合わせて下げた段 (`player/core.svelte.ts` の `step`)。自動の行の値に高さを添える (「自動 (H.264 540p)」)。省くと 0 */
   step?: Step;
   /** いまの局の放送のコーデック。省くと MPEG-2 */
   broadcast?: BroadcastCodec;
@@ -342,7 +342,7 @@ export function liveAudio(
   });
 }
 
-/** ライブと追っかけのコーデック。値は `live-player.svelte.ts` のプレイヤーから読む */
+/** ライブと追っかけのコーデック。値は `player/core.svelte.ts` のプレイヤーから読む */
 export function liveCodec(
   icon: IconShape,
   player: {
