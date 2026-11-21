@@ -442,6 +442,23 @@ describe("audioTitles", () => {
       audioTitles([{ componentType: 2, langs: ["jpn", "eng"] }], true),
     ).not.toContain("主+副");
   });
+
+  /** デュアルモノの ES のほかに音声の ES があれば、割った 2 本のあとにそのまま並べる (encoder.ts で足す) */
+  test("デュアルモノの番組の 2 本目の音声は、割った 2 本のあと", () => {
+    expect(
+      audioTitles(
+        [
+          { componentType: 2, langs: ["jpn", "eng"] },
+          { componentType: 3, langs: ["jpn"], text: "解説" },
+        ],
+        true,
+      ),
+    ).toEqual([
+      "音声 1 主音声 (日本語)",
+      "音声 1 副音声 (英語)",
+      "解説 (日本語)",
+    ]);
+  });
 });
 
 describe("seriesLabels", () => {

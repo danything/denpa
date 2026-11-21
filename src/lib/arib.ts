@@ -376,7 +376,7 @@ export function audioTracks(
  * 番組表の音声を、PMT の音声の ES の並びに置き直す (`audioTracks` の `pmt`)。番組表に無い ES は undefined。
  * 番組表の音声が 1 つも部品タグを持たない (古い行・引き継いだ行) ときは、番組表の並びが PMT の並びと同じとみなす
  */
-function onPmt(
+export function onPmt(
   audios: Audio[],
   pmt: readonly (number | null)[],
 ): (Audio | undefined)[] {
@@ -402,7 +402,7 @@ const AUDIO_CHANNELS: Record<number, number> = { 1: 1, 3: 2, 9: 6 };
 
 /**
  * エンコードしたものに入れる音声の名前 (番組表と同じ言い方。入れないとプレイヤーに「Audio 1」としか出ない)。
- * 数と並びはエンコードしたものに合わせる。デュアルモノは左右に割った 2 本 (`encoder.ts` の `channelsplit`)、
+ * 並びはエンコードしたものに合わせる。デュアルモノは左右に割った 2 本 (`encoder.ts` の `channelsplit`) のあとに 2 本目からの音声、
  * それ以外は放送の順。多すぎても ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
  */
 export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
@@ -410,7 +410,13 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
   if (dualMono) {
     const side = (which: "main" | "sub") =>
       tracks.find((track) => track.stream === 0 && track.side === which)?.label;
-    return [side("main") ?? "主音声", side("sub") ?? "副音声"];
+    return [
+      side("main") ?? "主音声",
+      side("sub") ?? "副音声",
+      ...tracks
+        .filter((track) => track.stream > 0 && track.side === "both")
+        .map((track) => track.label),
+    ];
   }
   return tracks
     .filter((track) => track.side === "both")

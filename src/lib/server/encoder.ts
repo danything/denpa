@@ -40,6 +40,7 @@ import {
   type CmDetection,
   type CmReading,
   decideFromMaterial,
+  type ExtraAudio,
   invertRanges,
   openCm,
   probeLeadIn,
@@ -68,6 +69,12 @@ import {
 } from "./fps";
 import { fileSize, pruneEmptyDirs, removeIfExists } from "./fsx";
 import { hwArgs, hwChain, hwReady, type HwWay } from "./hwenc";
+import {
+  encodeLateAudio,
+  findLateAudio,
+  type LateAudio,
+  lateOffset,
+} from "./late-audio";
 import {
   encodedFiles,
   encodedPath,
@@ -353,7 +360,7 @@ interface EncodeOptions {
   audioTitles?: string[];
   /**
    * 使う音声 (音声の何本目か。`cm.probeLiveAudio`)。**冒頭に中身の無い音声を外すため。**
-   * 無い・空なら全部使う。デュアルモノでは使わない (1 本を左右に割るだけ)
+   * 無い・空なら全部使う。デュアルモノでは 1 本目を左右に割り、残りはそのまま使う
    */
   audioStreams?: number[];
   /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
@@ -498,12 +505,24 @@ export function buildArgs(
   // 映像のストリーム。映像の無い録画 (ラジオ・データ放送の局) は runJob が先に断るので、ここには来ない
   args.push("-map", "0:v?", "-c:v", ...video.encoder);
 
+  /*
+   * 出す音声の並び。`titles` は `audioTitles` の何番目の名前を付けるか (無ければ並びのまま)。
+   * チャンネル数は番組表の構成にそろえる (`audioChannels`)。出す何本目 (out) と、入力の何本目は `audioStreams` で対応する
+   */
+  const streams = options.audioStreams ?? [];
+  const channels = options.audioChannels ?? [];
+  let titles: number[] = [];
   if (audioType === DUAL_MONO) {
-    // 副音声は二か国語放送 (外国語) と解説放送 (日本語の音声ガイド) があり判別できないため、言語は und にする。
-    // channelsplit の出力は FL/FR という位置情報付きの 1ch レイアウトのままだと libopus が受け付けないため、aformat で mono に付け替える
+    /*
+     * 1 本目 (左に主音声・右に副音声) を左右 2 本に割る。**ほかの音声はそのまま足す** (2 本目の ES が
+     * あるデュアルモノの番組。名前は `audioTitles` の 3 つ目から)。中身のある音声が分からなければ 1 本目だけを割る。
+     * 副音声は二か国語放送 (外国語) と解説放送 (日本語の音声ガイド) があり判別できないため、言語は und にする。
+     * channelsplit の出力は FL/FR という位置情報付きの 1ch レイアウトのままだと libopus が受け付けないため、aformat で mono に付け替える
+     */
+    const [split = 0, ...others] = streams;
     args.push(
       "-filter_complex",
-      "channelsplit[FL][FR];[FL]aformat=channel_layouts=mono[FLm];[FR]aformat=channel_layouts=mono[FRm]",
+      `[0:a:${split}]channelsplit[FL][FR];[FL]aformat=channel_layouts=mono[FLm];[FR]aformat=channel_layouts=mono[FRm]`,
       "-map",
       "[FLm]",
       "-map",
@@ -513,19 +532,23 @@ export function buildArgs(
       "-metadata:s:a:1",
       "language=und",
     );
+    others.forEach((index, i) => {
+      args.push("-map", `0:a:${index}`);
+      const count = channels[index];
+      if (count !== undefined) args.push(`-ac:a:${2 + i}`, String(count));
+    });
+    titles = [0, 1, ...others.map((index) => index + 1)];
   } else {
     // 音声ストリームを全て使う (多言語放送などで複数トラックある場合に備える)。
-    // ただし冒頭に中身の無いもの (次の番組の副音声) は外す (`audioStreams`)
-    const streams = options.audioStreams ?? [];
+    // ただし冒頭に中身の無いもの (次の番組の副音声・途中から現れる副音声) は外す (`audioStreams`)
     if (streams.length === 0) args.push("-map", "0:a");
     for (const index of streams) args.push("-map", `0:a:${index}`);
-    // チャンネル数は番組表の構成にそろえる (`audioChannels`)。出す何本目 (out) と、入力の何本目 (index) は `audioStreams` で対応する
-    const channels = options.audioChannels ?? [];
     const inputs = streams.length === 0 ? channels.map((_, i) => i) : streams;
     inputs.forEach((index, out) => {
       const count = channels[index];
       if (count !== undefined) args.push(`-ac:a:${out}`, String(count));
     });
+    if (streams.length > 0) titles = streams;
   }
   args.push("-c:a", "libopus", "-b:a", "256k"); // 元の放送 (AAC 256 kbps) と同じビットレート
 
@@ -538,11 +561,15 @@ export function buildArgs(
    *
    * **多すぎても困らない。** 番組表の本数と実際に入っている本数は
    * 食い違いうるが、ffmpeg は無いトラックへの指定をエラーにせず読み飛ばす
-   * (実機で確認)。言語はデュアルモノのところで別に付けてある
+   * (実機で確認)。言語はデュアルモノのところで別に付けてある。
+   * 外した音声があるときは、出す何本目と名前の何番目を `titles` で対応させる
    */
-  (options.audioTitles ?? []).forEach((title, index) => {
-    if (title === "") return;
-    args.push(`-metadata:s:a:${index}`, `title=${title}`);
+  const names = options.audioTitles ?? [];
+  const named = titles.length === 0 ? names.map((_, i) => i) : titles;
+  named.forEach((from, out) => {
+    const title = names[from];
+    if (title === undefined || title === "") return;
+    args.push(`-metadata:s:a:${out}`, `title=${title}`);
   });
 
   // トラックの default フラグを明示する (未設定だとプレイヤーが自動選択せず音声が出ないことがある。
@@ -1620,10 +1647,11 @@ async function runJob(jobId: number): Promise<void> {
 
   encodeOptions.probed = { duration: measured.duration, fps: measured.fps };
   encodeOptions.height = measured.height;
-  encodeOptions.audioStreams = await probeLiveAudio(
+  const liveAudio = await probeLiveAudio(
     sourceTs,
     encodeOptions.probeLead ?? 0,
   );
+  encodeOptions.audioStreams = liveAudio.map((audio) => audio.index);
   // 映像が出るまでの音声だけの区間。先頭から捨てて 0 秒から始める
   encodeOptions.videoStart = await probeLeadIn(
     sourceTs,
@@ -1914,26 +1942,47 @@ async function runJob(jobId: number): Promise<void> {
   };
 
   /**
-   * エンコードしたものにチャプターを書き足す (再エンコードしない。中身はそのまま写すだけ)。チャプターは
-   * エンコードしたものの 0 秒に合わせて書く。ファイルはコーデックごと (同時に書き足すので、1 つを取り合わない)。
-   * 書き足せたら作業ファイルと差し替える
+   * エンコードしたものに、チャプターと途中から現れる音声 (`late`) を書き足す (再エンコードしない。中身はそのまま写すだけ)。
+   * チャプターはエンコードしたものの 0 秒に合わせて書く。ファイルはコーデックごと (同時に書き足すので、1 つを取り合わない)。
+   * 書き足せたら作業ファイルと差し替える。音声を足して落ちたら、チャプターだけでもう一度書き足す
    */
-  const addChapters = async (working: string, skip: number): Promise<void> => {
+  const addChapters = async (
+    working: string,
+    skip: number,
+    late: readonly ExtraAudio[],
+  ): Promise<void> => {
     const file = `${working}.chapters.txt`;
     const output = `${working}.post`;
     const { cm, duration } = own(skip);
-    writeFileSync(file, chapterMetadata(cm, duration));
-    const code = (await run(chapterArgs(working, file, output), { signal }))
-      .code;
+    const chapters = cm.length === 0 ? null : file;
+    if (chapters !== null) writeFileSync(file, chapterMetadata(cm, duration));
+    const write = async (extra: readonly ExtraAudio[]) =>
+      (
+        await run(
+          chapterArgs(working, chapters, output, {
+            audios: mainAudios,
+            tracks: extra,
+          }),
+          { signal },
+        )
+      ).code === 0 && existsSync(output);
+    let done = await write(late);
+    if (!done && late.length > 0) {
+      console.error(
+        "[encode] 途中から現れる音声を書き足せませんでした。足さずに置きます",
+      );
+      done = chapters !== null && (await write([]));
+    }
     removeIfExists(file);
-    if (code === 0 && existsSync(output)) {
+    if (done) {
       renameSync(output, working);
       return;
     }
     removeIfExists(output);
-    console.error(
-      "[cm] チャプターを書き足せませんでした。チャプター無しで置きます",
-    );
+    if (chapters !== null)
+      console.error(
+        "[cm] チャプターを書き足せませんでした。チャプター無しで置きます",
+      );
   };
 
   /** エンコードし終えた 1 本。`skip` はこの 1 本で先頭から捨てた長さ */
@@ -1957,12 +2006,78 @@ async function runJob(jobId: number): Promise<void> {
     return done;
   };
 
-  /** 仕上げる。CM があればチャプターを書き足す */
+  /** 仕上げる。CM があればチャプターを、途中から現れる音声があればその音声を書き足す */
   const finish = async (made: Made): Promise<Made | null> => {
-    if (detection === null || detection.cm.length === 0) return made;
-    await addChapters(made.working, made.skip);
+    const late = await lateTracks(made.skip);
+    if ((detection === null || detection.cm.length === 0) && late.length === 0)
+      return made;
+    await addChapters(made.working, made.skip, late);
     return canceled.has(jobId) ? null : made;
   };
+
+  /*
+   * **途中から現れる音声 (野球中継の副音声など。`late-audio.ts`)。** エンコードと並べて録画全体を読み、
+   * 先頭の探りで中身の無かった音声を探す。見つけた音声は仕上げ (`finish`) で、本編の物差し (先頭から捨てた長さ) に
+   * 合わせて音声だけ Opus にし、チャプターと一緒に足す。4K の局の録画 (`.mmts`) は MP4 に詰め替えたものが入力で、
+   * 音声は MPT の 1 本だけなので読まない。失敗しても足さないだけ
+   */
+  const lateStop = new AbortController();
+  const lateSignal = AbortSignal.any([signal, lateStop.signal]);
+  const lateFound: Promise<LateAudio[]> = tlv
+    ? Promise.resolve([])
+    : findLateAudio(sourceTs, {
+        live: liveAudio,
+        formatStart: measured.formatStart,
+        programStart: encodeOptions.probeLead ?? 0,
+        programEnd:
+          (encodeOptions.probeLead ?? 0) + programSpan(recording).programLength,
+        audios: recording.audios ?? [],
+        signal: lateSignal,
+      }).catch((error: unknown) => {
+        console.error(
+          `[encode] 途中から現れる音声を探せませんでした。足さずに置きます: ${error}`,
+        );
+        return [];
+      });
+  /** 先頭から捨てた長さごとの、足す音声。コーデックが違っても捨てた長さが同じなら 1 回だけエンコードする */
+  const lateBySkip = new Map<number, Promise<ExtraAudio[]>>();
+  const lateTracks = (skip: number): Promise<ExtraAudio[]> => {
+    let tracks = lateBySkip.get(skip);
+    if (tracks === undefined) {
+      const n = lateBySkip.size;
+      tracks = (async () => {
+        const made: ExtraAudio[] = [];
+        const found = await lateFound;
+        if (found.length > 0)
+          setStep(jobId, "途中から始まる音声をエンコードしています");
+        for (const late of found) {
+          const path = `${workingOf(codecs[0]!)}.audio-${late.es.pid}-${n}.mka`;
+          const offset = lateOffset(late.es, measured.formatStart, skip);
+          const wrote = await encodeLateAudio(
+            sourceTs,
+            late,
+            offset,
+            path,
+            lateSignal,
+          ).catch((error: unknown) => {
+            console.error(
+              `[encode] 途中から現れる音声を足せませんでした: ${error}`,
+            );
+            removeIfExists(path);
+            return false;
+          });
+          if (wrote) made.push({ path, title: late.title });
+        }
+        return made;
+      })();
+      lateBySkip.set(skip, tracks);
+    }
+    return tracks;
+  };
+  /** エンコードしたものに入っている音声の本数 (`buildArgs`)。足す音声はこの後ろに並ぶ */
+  const liveCount = encodeOptions.audioStreams?.length ?? 0;
+  const mainAudios =
+    recording.audio_type === DUAL_MONO ? liveCount + 1 : liveCount;
 
   /**
    * 1 本目。CM を一緒に探し、エンコードし終えたら境目を決め、仕上げる。ほかのコーデックはこれが終わるのを待ってから
@@ -2008,6 +2123,10 @@ async function runJob(jobId: number): Promise<void> {
   });
   // 1 本が例外になっても、ほかが終わるまで待ってから後始末する (動いている ffmpeg と作業ファイルを残さない)
   const settledTasks = await Promise.allSettled([firstTask, ...otherTasks]);
+  // 足す音声はもう使わない。まだ書いている途中なら止め (どのコーデックも落ちたとき)、書いたものを消す
+  lateStop.abort();
+  for (const tracks of lateBySkip.values())
+    for (const track of await tracks) removeIfExists(track.path);
   const thrown = settledTasks.find((task) => task.status === "rejected");
   if (thrown !== undefined) {
     cleanup();

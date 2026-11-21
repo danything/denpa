@@ -10,7 +10,7 @@ import {
   firstFrameTime,
   invertRanges,
   leadIn,
-  liveAudioIndexes,
+  liveAudio,
   logoDetail,
   parseFrameRate,
   parseRatio,
@@ -162,6 +162,28 @@ describe("チャプターを書き直す", () => {
       "-map 0 -map_chapters -1 -c copy",
     );
   });
+
+  test("途中から現れる音声を足すときは、本編の音声の後ろ・字幕の前に並べ、時刻は読んだまま写す", () => {
+    const args = chapterArgs("/a.mkv", "/c.txt", "/o.mkv", {
+      audios: 1,
+      tracks: [{ path: "/late.mka", title: "副音声" }],
+    }).join(" ");
+    expect(args).toContain("-copyts -i /a.mkv -i /c.txt -i /late.mka");
+    expect(args).toContain(
+      "-map 0:v? -map 0:a? -map 2:a -map 0:s? -map_chapters 1 -metadata:s:a:1 title=副音声 -c copy",
+    );
+    // チャプターを外すときは、足す音声が 1 本目の入力の次
+    expect(
+      chapterArgs("/a.mkv", null, "/o.mkv", {
+        audios: 2,
+        tracks: [{ path: "/late.mka", title: "" }],
+      }).join(" "),
+    ).toContain("-map 1:a -map 0:s? -map_chapters -1 -c copy");
+  });
+
+  test("足す音声が無ければ -copyts を付けない", () => {
+    expect(chapterArgs("/a.mkv", null, "/o.mkv")).not.toContain("-copyts");
+  });
 });
 
 describe("ffprobe の読み取り", () => {
@@ -299,22 +321,35 @@ describe("ロゴで判定できなかったと扱うか", () => {
  * 実機の ffprobe の出力 (programs と streams の両方に同じものが並ぶ) をそのまま使う
  */
 describe("中身のある音声だけを選ぶ", () => {
+  const indexes = (json: string) => liveAudio(json).map((a) => a.index);
+
   test("channels が 0 の音声は外す", () => {
     const json =
       '{"programs":[{"streams":[{"channels":2},{"channels":0}]},{"streams":[]}],"streams":[{"channels":2},{"channels":0}]}';
-    expect(liveAudioIndexes(json)).toEqual([0]);
+    expect(indexes(json)).toEqual([0]);
   });
 
   test("多重音声はどちらも選ぶ", () => {
-    expect(
-      liveAudioIndexes('{"streams":[{"channels":2},{"channels":2}]}'),
-    ).toEqual([0, 1]);
+    expect(indexes('{"streams":[{"channels":2},{"channels":2}]}')).toEqual([
+      0, 1,
+    ]);
   });
 
   test("音声が無い・channels が出てこないときは空", () => {
-    expect(liveAudioIndexes('{"streams":[]}')).toEqual([]);
-    expect(liveAudioIndexes("{}")).toEqual([]);
-    expect(liveAudioIndexes('{"streams":[{}]}')).toEqual([]);
+    expect(indexes('{"streams":[]}')).toEqual([]);
+    expect(indexes("{}")).toEqual([]);
+    expect(indexes('{"streams":[{}]}')).toEqual([]);
+  });
+
+  test("PID は id (16 進) から読む。無ければ null", () => {
+    expect(
+      liveAudio(
+        '{"streams":[{"channels":2,"id":"0x111"},{"channels":0,"id":"0x112"},{"channels":2}]}',
+      ),
+    ).toEqual([
+      { index: 0, pid: 0x111 },
+      { index: 2, pid: null },
+    ]);
   });
 });
 
