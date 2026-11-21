@@ -126,6 +126,7 @@
   import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
+  import { fallBackTo } from "#lib/player/canvas-sink.js";
   import { rangesOf } from "#lib/player/mse-sink.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
@@ -426,6 +427,8 @@
         start: from ?? 0,
         audio: streamAudio(audioIndex),
         background: background.on || pip.active,
+        muted,
+        volume: volume.applied,
         state: (state) => {
           // 段を替えようとして作り直したが、混んでいて断られた。替える前の段で作り直して続ける
           if (state === "busy" && stepFrom !== null) {
@@ -460,8 +463,6 @@
     }
     canvas = made;
     drawing = true;
-    if (muted) made.mute(true);
-    made.volume(volume.applied);
     drawingLocal = local !== null;
     length = duration;
     at = from ?? 0;
@@ -495,6 +496,14 @@
     return (["av1", "h264"] as const).filter(
       (codec) => can[codec] && !canvasGaveUp.includes(codec),
     );
+  }
+
+  /** この録画で描けて、まだ打ち切っていない形式 (`canvasChoices` の並び。描けなくなったときの移り先を決める `fallBackTo` に渡す) */
+  function canvasUsable(): CanvasCodec[] {
+    if (info === null || canvasAbility === null) return [];
+    return canvasChoices(info, canvasAbility)
+      .filter((item) => item.drawable && !canvasGaveUp.includes(item.codec))
+      .map((item) => item.codec);
   }
 
   /**
@@ -544,9 +553,9 @@
   }
 
   /**
-   * 描くのを打ち切った。理由は断り書きに残す。ライブと同じ順で替える (`live-player.svelte.ts` の `fallBack`)。
+   * 描くのを打ち切った。理由は断り書きに残す。ライブと同じ決め方で替える (`player/canvas-sink.ts` の `fallBackTo`)。
    * H.264 / AV1 を打ち切ったら MPEG-2 へ、MPEG-2 を打ち切ったら描ける H.264 / AV1 へ。端末に保存した録画なら
-   * サーバから流すものへ。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
+   * サーバから流すものへ (`pickCanvas`)。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
    *
    * 互換モードでないのに描いているのは、MPEG-2 を選んだとき (`pickOffer` の `raw`) と、端末に保存した Matroska を `<video>` が
    * 読めなかったとき (`recover`)。MPEG-2 を打ち切ったらこの画面を開いている間は MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で
@@ -565,10 +574,26 @@
     step = 0;
     stepCodec = null;
     stepFrom = null;
-    if (!compat) {
+    let next: CanvasCodec | "video" | null;
+    if (wasLocal && compat) {
+      localMkv = null;
+      // 互換モードで端末に保存したものをやめた。サーバから流すものを、開いたときと同じ決め方で選ぶ
+      next =
+        info !== null && canvasAbility !== null
+          ? pickCanvas(info, canvasAbility, choice, canvasGaveUp)
+          : null;
+    } else {
       // 端末に保存したものを描いていた (`<video>` が読めなかったあと。`recover`)。MPEG-2 は外さない
       if (wasLocal) localMkv = null;
-      else rawGaveUp = true;
+      else if (!compat) rawGaveUp = true;
+      else if (failed !== null) canvasGaveUp = [...canvasGaveUp, failed];
+      next = fallBackTo(
+        failed === "mpeg2" ? "mpeg2" : "encoded",
+        canvasUsable(),
+        compat,
+      );
+    }
+    if (next === "video") {
       const fresh =
         info === null
           ? null
@@ -587,26 +612,6 @@
           `${wasLocal ? "端末に保存した " : ""}${codecLabel(failed ?? "mpeg2")}: ${reason}`,
         );
       return;
-    }
-    let next: CanvasCodec | null = null;
-    if (wasLocal) {
-      localMkv = null;
-      if (info !== null && canvasAbility !== null)
-        next = pickCanvas(info, canvasAbility, choice, canvasGaveUp);
-    } else {
-      if (failed !== null) canvasGaveUp = [...canvasGaveUp, failed];
-      const usable =
-        info === null || canvasAbility === null
-          ? []
-          : canvasChoices(info, canvasAbility).filter(
-              (item) => item.drawable && !canvasGaveUp.includes(item.codec),
-            );
-      next =
-        failed === "mpeg2"
-          ? (usable.find((item) => item.codec !== "mpeg2")?.codec ?? null)
-          : usable.some((item) => item.codec === "mpeg2")
-            ? "mpeg2"
-            : null;
     }
     if (next === null) {
       canvasProblem = reason;

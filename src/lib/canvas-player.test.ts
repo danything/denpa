@@ -102,6 +102,8 @@ function open(answer: (asked: Asked, n: number) => Response) {
     start: 10,
     audio: "0",
     background: false,
+    muted: false,
+    volume: null,
     state: (state) => states.push(state),
     gaveUp: () => {},
     remote: () => {},

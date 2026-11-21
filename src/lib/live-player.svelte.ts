@@ -103,7 +103,8 @@ import {
   type YieldedRecording,
 } from "#lib/live.js";
 import { separateLiveAudio } from "#lib/native-audio-choice.js";
-import { decoderBase, RawEngine } from "#lib/raw/engine.js";
+import { fallBackTo, openCanvas } from "#lib/player/canvas-sink.js";
+import { decoderBase, type RawEngine } from "#lib/raw/engine.js";
 import { GestureContext } from "#lib/raw/gesture-context.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { NativeAudio } from "#lib/raw/native-audio.js";
@@ -3242,58 +3243,55 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       video.pause();
       video.removeAttribute("src");
       video.load();
-      try {
-        const box = host ?? video.parentElement;
-        if (box === null) throw new Error("表示先がありません");
-        engine = new RawEngine(
-          box,
-          still,
-          target,
-          {
-            // 新しい局の 1 枚目を描いた。動き出すのは貯まってから (`rawPace`) だが、開くまでの時間はここで出す
-            shown: () => {
-              thaw();
-              reportStartup(performance.now());
-            },
-            stalled: onWaiting,
-            gaveUp: (reason, slow) => fallBack(reason, input, slow),
-            // ロック画面・車の操作で `<audio>` を直に止められた・再開された
-            remote: (stop) => {
-              if (stop !== paused) toggle();
-            },
-            // 追っかけで抱えきれなくなった。手元が尽きる前に再生している位置からリクエストし直す (`rawPace`)
-            full: () => {
-              starved = true;
-            },
-            // 追っかけを録れているところまで鳴らしきった (`ended` の通知で `finish` したあと)。止めておく
-            ended: () => {
-              drained = true;
-              if (paused || engine === null) return;
-              paused = true;
-              engine.pause();
-            },
+      const made = openCanvas({
+        host: host ?? video.parentElement,
+        before: still,
+        target,
+        input,
+        follow: forChase,
+        // 音を消していたなら、canvas で描くときも消したまま始める
+        muted: silenced,
+        volume,
+        playback,
+        events: {
+          // 新しい局の 1 枚目を描いた。動き出すのは貯まってから (`rawPace`) だが、開くまでの時間はここで出す
+          shown: () => {
+            thaw();
+            reportStartup(performance.now());
           },
-          playback,
-          input,
-          forChase,
-        );
-      } catch (error) {
-        const why = error instanceof Error ? error.message : String(error);
+          stalled: onWaiting,
+          gaveUp: (reason, slow) => fallBack(reason, input, slow),
+          // ロック画面・車の操作で `<audio>` を直に止められた・再開された
+          remote: (stop) => {
+            if (stop !== paused) toggle();
+          },
+          // 追っかけで抱えきれなくなった。手元が尽きる前に再生している位置からリクエストし直す (`rawPace`)
+          full: () => {
+            starved = true;
+          },
+          // 追っかけを録れているところまで鳴らしきった (`ended` の通知で `finish` したあと)。止めておく
+          ended: () => {
+            drained = true;
+            if (paused || engine === null) return;
+            paused = true;
+            engine.pause();
+          },
+        },
+      });
+      if (typeof made === "string") {
         fallBack(
           input === "fmp4"
-            ? `再生を始められませんでした (${why})`
-            : `MPEG-2 の再生を始められませんでした (${why})`,
+            ? `再生を始められませんでした (${made})`
+            : `MPEG-2 の再生を始められませんでした (${made})`,
           input,
         );
         return false;
       }
+      engine = made;
       engineInput = input;
       engineChase = forChase;
       // 押されたときの処理は <video> に付いている (`MediaStack`)。見えなくするだけで、そこに残す
       video.style.opacity = "0";
-      // 音を消していたなら、canvas で描くときも消したまま始める
-      if (silenced) engine.mute();
-      engine.volume = volume;
     } else {
       engine.reset();
     }
@@ -3336,32 +3334,41 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * - 互換モードのエンコードしたものをやめた … MPEG-2 で描けるならそちらへ、無理なら理由を出して止まる。
    *   **`<video>` には戻らない** (テスラでは止まってしまう)
    *
+   * 移り先は観る画面と同じ決め方 (`player/canvas-sink.ts` の `fallBackTo`)。どの形式の変換をリクエストするかは
+   * `decideFormat` が決め直す。
+   *
    * 間に合わずにやめたとき (`slow` がある) は、掛かった条件をコンソールに出力する
    */
   function fallBack(reason: string, input: RawInput, slow?: string): void {
     stopRaw();
+    const encoded = input === "fmp4";
     if (slow !== undefined)
       console.warn(
-        `[live] ${input === "fmp4" ? "互換モードの描画" : "MPEG-2"} を打ち切りました: ${slow}`,
+        `[live] ${encoded ? "互換モードの描画" : "MPEG-2"} を打ち切りました: ${slow}`,
       );
-    if (input === "fmp4") {
-      compatGaveUp = true;
-      if (rawProblem === null && !rawGaveUp) {
-        note(`${reason}。MPEG-2 に切り替えました`);
-        /*
-         * 段を下げていたら段 0 に戻す。下げた段のままだと `stepFields` が `raw` を外し、描けるものの無い
-         * `playable` でまた変換をリクエストする。MPEG-2 に移ったあとは段を動かさない (`adapt`)
-         */
-        asked = 0;
-        requestAgain();
-        return;
-      }
-      fail(reason);
+    if (encoded) compatGaveUp = true;
+    else rawGaveUp = true;
+    // 描けて、まだ打ち切っていない形式。エンコードしたものをやめたら MPEG-2 だけ、MPEG-2 をやめたらエンコードしたものだけを見る
+    const usable: (LiveCodec | "mpeg2")[] = encoded
+      ? rawProblem === null && !rawGaveUp
+        ? ["mpeg2"]
+        : []
+      : compatGaveUp
+        ? []
+        : LIVE_CODECS.map((c) => c.id).filter(canvasCan);
+    const next = fallBackTo(encoded ? "encoded" : "mpeg2", usable, compat);
+    if (next === null) {
+      fail(encoded ? reason : "MPEG-2 の再生を続けられませんでした");
       return;
     }
-    rawGaveUp = true;
-    if (compat && (compatGaveUp || !LIVE_CODECS.some((c) => canvasCan(c.id)))) {
-      fail("MPEG-2 の再生を続けられませんでした");
+    if (next === "mpeg2") {
+      note(`${reason}。MPEG-2 に切り替えました`);
+      /*
+       * 段を下げていたら段 0 に戻す。下げた段のままだと `stepFields` が `raw` を外し、描けるものの無い
+       * `playable` でまた変換をリクエストする。MPEG-2 に移ったあとは段を動かさない (`adapt`)
+       */
+      asked = 0;
+      requestAgain();
       return;
     }
     note(`${reason}。変換した映像に切り替えました`);
