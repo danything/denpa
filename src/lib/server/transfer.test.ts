@@ -229,7 +229,7 @@ describe("書き出す", () => {
     expect(n("device_codes")).toBe(0);
     // ニコニコとの連携は移さない (移した先で連携し直す)
     expect(n("niconico_link")).toBe(0);
-    // 予約数ランキングへの参加も移さない (2 台が同じトークンで送り合わないように)
+    // 番組ランキングへの参加も移さない (2 台が同じトークンで送り合わないように)
     expect(n("ranking_link")).toBe(0);
     expect(n("ranking_sent")).toBe(0);
     // アクセストークン (ハッシュだけ) は持っていく

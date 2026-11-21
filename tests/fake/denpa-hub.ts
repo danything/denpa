@@ -13,9 +13,9 @@ import { idTokenFor, sealForDenpa } from "./niconico-seal";
  * - `POST /niconico/token`: 更新。更新に使うトークンは毎回替わり、古いものは `invalid_grant`
  * - `POST /niconico/live/watch`: 出したアクセストークンなら、この偽物の視聴の WebSocket (`/__watch`) を返す。ほかは 401
  * - 視聴の WebSocket: `startWatching` に `seat` を返し、`postComment` を `posts` に貯めて `postCommentResult` を返す
- * - `/ranking/*`: 予約数ランキング (denpa-hub の docs/ranking.md)。トークンを出し、送られた本文を `votes` に貯める。
+ * - `/ranking/*`: 番組ランキング (denpa-hub の docs/ranking.md)。トークンを出し、送られた本文を `votes` に貯める。
  *   `/__control/ranking` で `off` にすると、本物の hub がランキングを受け付けていないときと同じく 404 を返す。
- *   `GET /ranking` は、そのトークンが送った予約をそのまま順位にし (どれも 10 票。始まりの早い順)、
+ *   `GET /ranking` は、そのトークンが送った放送のうち、これからのものをそのまま順位にし (どれも 10 票。始まりの早い順)、
  *   その下に受信できない局の番組 (`AWAY`) を足して返す。本物の 5 つのトークンの決まりは持たない
  */
 const PORT = Number(process.env["FAKE_HUB_PORT"] ?? 8100);
@@ -32,7 +32,7 @@ const accessTokens = new Set<string>();
 const posts: Record<string, unknown>[] = [];
 /** 接続先を求められた回数 (局ごと) */
 const watched: string[] = [];
-/** 予約数ランキング。`off` は hub がランキングを受け付けていないとき (404) */
+/** 番組ランキング。`off` は hub がランキングを受け付けていないとき (404) */
 let ranking: "ok" | "off" = "ok";
 /** 出したランキングのトークン (消したら外す) */
 const rankingTokens = new Set<string>();
@@ -46,6 +46,7 @@ interface FakeVote {
   service_id: number;
   event_id: number;
   start_at: string;
+  duration: number;
   name: string;
   service_name: string;
 }
@@ -67,6 +68,9 @@ function rankingOf(token: string, limit: number): Record<string, unknown> {
           service_id: vote.service_id,
           event_id: vote.event_id,
           start_at: vote.start_at,
+          end_at: new Date(
+            Date.parse(vote.start_at) + vote.duration * 1000,
+          ).toISOString(),
           service_name: vote.service_name,
           region: null,
         },
@@ -82,6 +86,7 @@ function rankingOf(token: string, limit: number): Record<string, unknown> {
         service_id: 900 + i,
         event_id: 1 + i,
         start_at: new Date(Date.now() + (i + 1) * 3_600_000).toISOString(),
+        end_at: new Date(Date.now() + (i + 1.5) * 3_600_000).toISOString(),
         service_name: `BSよその局${i + 1}`,
         region: null,
       },
