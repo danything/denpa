@@ -244,7 +244,7 @@ describe("送る中身", () => {
     expect(events).toEqual([bs, gr, pay, recording, onAir].sort());
   });
 
-  test("1 件の形は hub の add と同じ。家のアドレスやルールの中身は入らない", () => {
+  test("1 件の形は hub の add と同じ。家の住所やルールの中身は入らない", () => {
     // 期待値と同じ時刻を渡す。now() を読み直すと、その間に秒が進んで start_at がずれることがある
     const start = now() + 3 * HOUR;
     const event = reserve("bs11", {
