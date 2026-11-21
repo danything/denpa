@@ -606,7 +606,7 @@
     max-width: 20rem;
     margin: 0;
   }
-  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では横に巻く 1 行の中なので、検索の欄は決まった幅 */
+  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では横にスクロールする 1 行の中なので、検索の欄は決まった幅 */
   :global(:where(html[data-phone])) .search {
     flex: 0 0 10rem;
   }

@@ -24,7 +24,7 @@
     onclose: () => void;
   } = $props();
 
-  // エージェントごとに 1 つずつ置くので、見出しの ID を窓ごとに分ける
+  // エージェントごとに 1 つずつ置くので、見出しの ID をダイアログごとに分ける
   const uid = $props.id();
   const titleId = `contract-dialog-title-${uid}`;
   let dialog = $state<HTMLDialogElement | null>(null);
@@ -278,7 +278,7 @@
 </dialog>
 
 <style>
-  /* 表を並べるので、ほかの窓より広い */
+  /* 表を並べるので、ほかのダイアログより広い */
   .modal-box-wide {
     max-width: 48rem;
   }

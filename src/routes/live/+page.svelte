@@ -314,7 +314,7 @@
     if (list === scrolledList || row == null || list === null) return;
     scrolledList = list;
     /*
-     * `scrollIntoView` は使わない。動かせるものは何でも動かすので、縦に積む幅では窓ごと動いて、
+     * `scrollIntoView` は使わない。動かせるものは何でも動かすので、縦に積む幅ではウィンドウごと動いて、
      * 読み込み直したときに映像が画面から出ていた。動かすのは一覧の中身だけ (中で動けない幅では何もしない)
      */
     const room = list.scrollHeight - list.clientHeight;
@@ -1045,7 +1045,7 @@
         <!--
           枠の無い行を並べる (サイドバーの一覧と同じ形)。
           「実況」タブの並べ直しは、一覧を使っている間は待つ (`JikkyoRanking.hold`)。指は touch のほうで見る
-          (巻き始めると pointer は取り消されるが、touch は指を離すまで続く)。フォーカスはキーボードで入ったときだけ
+          (スクロールし始めると pointer は取り消されるが、touch は指を離すまで続く)。フォーカスはキーボードで入ったときだけ
           (マウスで押したボタンに残るフォーカスでは止めない)
         -->
         <ul
@@ -1168,7 +1168,7 @@
 <style>
   /*
    * 右の一覧の列 (幅と高さは `PlayerLayout`)。一覧 (`.channels`) だけは列の端まで広げて中で余白を取る
-   * (スクロールバーを窓の右端に出すため)
+   * (スクロールバーをウィンドウの右端に出すため)
    */
   .live-side {
     display: flex;
@@ -1177,7 +1177,7 @@
     padding: var(--dp-side-top, var(--dp-side-pad, 0)) var(--dp-side-pad, 0) 0;
   }
   /*
-   * 横にしたスマホでは、一覧から選ぶと映像へ滑って戻る (`backToPicture`)。巻くのは外枠 (`PlayerLayout` の `.layout`)。
+   * 横にしたスマホでは、一覧から選ぶと映像へ滑って戻る (`backToPicture`)。スクロールするのは外枠 (`PlayerLayout` の `.layout`)。
    * 局の一覧を出しているこの画面のこの形だけにする (条件は `PHONE_LANDSCAPE` と同じ)
    */
   @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) and (prefers-reduced-motion: no-preference) {
@@ -1256,11 +1256,11 @@
   .channels {
     flex: 1;
     margin: 0 calc(-1 * var(--dp-side-pad, 0px));
-    /* 行の面の端は、上にある種別のタブの端と同じ所。巻き取る箱は列の幅いっぱい (スクロールバーは窓の右端) */
+    /* 行の面の端は、上にある種別のタブの端と同じ所。スクロールする箱は列の幅いっぱい (スクロールバーはウィンドウの右端) */
     padding: 0 var(--dp-side-pad, 0px) var(--dp-side-pad, 0);
     overflow-y: auto;
   }
-  /* 高さの決まった列の中で巻く (二段組と、テーブルトップの下の段。`PlayerLayout`) */
+  /* 高さの決まった列の中でスクロールする (二段組と、テーブルトップの下の段。`PlayerLayout`) */
   @media (min-width: 1000px),
     (device-posture: folded) and (vertical-viewport-segments: 2) {
     .channels {

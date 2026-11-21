@@ -31,14 +31,14 @@ export const PLAYER_STAGE = Symbol("player-stage");
 
 /**
  * 枠の外で実況のコメントを流す所 (`PlayerStage` の `.outside`)。アンビエントの光を枠の外に出している間だけあり、
- * 無ければ null。枠の下・光と右の列の上に重なる。横は窓の端から端まで、縦は置き場 (`.room`) の中 (見出しには掛からない)
+ * 無ければ null。枠の下・光と右の列の上に重なる。横はウィンドウの端から端まで、縦は置き場 (`.room`) の中 (見出しには掛からない)
  */
 export const STAGE_OUTSIDE = Symbol("stage-outside");
 
 export interface PlayerControls {
   /** いま出ているか */
   readonly shown: boolean;
-  /** 押されたり動かされたりしたとき。出して、時計を巻き直す */
+  /** 押されたり動かされたりしたとき。出して、消す時刻を延ばす */
   wake: (event: PointerEvent) => void;
   /** 出ていく先で消す。**指のときは消さない** */
   away: (event: PointerEvent) => void;
@@ -146,7 +146,7 @@ export function playerControls(): PlayerControls {
       if (event.pointerType !== "mouse") {
         if (event.type !== "pointerdown") return;
         byTouch = true;
-        // 巻き直す前に読む。`toggle` は「押す前に出ていたか」で決める
+        // 出し直す前に読む。`toggle` は「押す前に出ていたか」で決める
         wasShown = shown;
         show();
         return;
@@ -177,7 +177,7 @@ export function playerControls(): PlayerControls {
  *   操作バーの中にあるので、選んでいる最中に**メニューごと消える**。舞台の外では何もしない
  * - **メニューは舞台の枠の中に収める。** 枠の外へ出ると、上はページの見出しにかぶる。
  *   スマホの縦で全画面をやめると枠は 224px しか無く、速さのメニューが上へはみ出す。
- *   返す枠を `Menu` の `boundary` に渡すと、入りきらなければメニューの中を巻き取る。
+ *   返す枠を `Menu` の `boundary` に渡すと、入りきらなければメニューの中をスクロールする。
  *   舞台の外 (と、枠がまだ無いうち) は画面に収める
  */
 export function stageMenu(

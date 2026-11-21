@@ -329,7 +329,7 @@
   });
 </script>
 
-<!-- スマホの形で下から出しているときは、ほかの窓と同じく Esc でも閉じる (docs/design.md の「メニュー・ダイアログ・検索の候補」) -->
+<!-- スマホの形で下から出しているときは、ほかのダイアログと同じく Esc でも閉じる (docs/design.md の「メニュー・ダイアログ・検索の候補」) -->
 <svelte:window
   onkeydown={(event) => {
     if (open && event.key === "Escape" && !event.defaultPrevented) open = false;
@@ -701,7 +701,7 @@
       </div>
     {/if}
     <!--
-      スマホの形で下から出しているときは、ほかの窓と同じく左下に「閉じる」、主の保存は右端
+      スマホの形で下から出しているときは、ほかのダイアログと同じく左下に「閉じる」、主の保存は右端
       (右上の ✕ は置かない。docs/design.md の「メニュー・ダイアログ・検索の候補」)
     -->
     <div class="foot-actions">
@@ -757,7 +757,7 @@
     top: var(--dp-header-space, 0px);
     height: calc(100svh - var(--dp-header-space, 0px));
     overflow-y: auto;
-    /* ほかのサイドバーと同じく、ヘッダーの下に貼り付けて高さは窓の残りまで (`app.css` の `.side-panel`)。上は空けず、最初の行を左の結果とそろえる */
+    /* ほかのサイドバーと同じく、ヘッダーの下に貼り付けて高さはウィンドウの残りまで (`app.css` の `.side-panel`)。上は空けず、最初の行を左の結果とそろえる */
     padding-top: 0;
   }
   :global(:where(html:not([data-phone]))) .close {

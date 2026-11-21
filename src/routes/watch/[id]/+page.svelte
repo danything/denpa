@@ -2018,7 +2018,7 @@
       if (copy !== null) askCaptions();
     });
     video?.play().catch(() => undefined);
-    // 指のときは最初から全画面 (観るために置いてある画面)。画面の幅では決めない (幅で決めると狭い窓の PC まで全画面になる)
+    // 指のときは最初から全画面 (観るために置いてある画面)。画面の幅では決めない (幅で決めると狭いウィンドウの PC まで全画面になる)
     if (window.matchMedia("(pointer: coarse)").matches) fullscreen.enter();
     const onResize = () => place();
     window.addEventListener("resize", onResize);

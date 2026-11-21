@@ -6,21 +6,21 @@
   import { submitting } from "#lib/actions.js";
 
   /**
-   * **エージェントの登録と付け替えの窓。** 入力欄は「登録用の URL」の 1 つだけ (エージェントが出す `https://ホスト:25252#pair=…`)。
+   * **エージェントの登録と付け替えのダイアログ。** 入力欄は「登録用の URL」の 1 つだけ (エージェントが出す `https://ホスト:25252#pair=…`)。
    *
    * - カメラを使える画面 (HTTPS か localhost で開き、ブラウザに QR を読む部品 `BarcodeDetector` がある) だけ「QR を読む」を出す。
    *   無ければ、スマートフォンのカメラで QR を読んで出た URL を貼ってもらう (QR の中身は URL の文字そのもの)
    * - 合言葉が入るので、欄は `autocomplete="off"` にし、送るのは POST の本文だけ
-   * - 断られたら窓の中に理由を出し、閉じない (打った URL を残す)。通ったら閉じる
+   * - 断られたらダイアログの中に理由を出し、閉じない (打った URL を残す)。通ったら閉じる
    */
   let {
     target,
     found = [],
     onclose,
   }: {
-    /** 開く窓。`add` は登録、`move` は「URL を変える」。null で閉じる */
+    /** 開くダイアログ。`add` は登録、`move` は「URL を変える」。null で閉じる */
     target: { kind: "add" } | { kind: "move"; id: number; name: string } | null;
-    /** LAN で見つかった、まだ登録していないエージェント (登録の窓にだけ出す。`agent-mdns.ts`) */
+    /** LAN で見つかった、まだ登録していないエージェント (登録のダイアログにだけ出す。`agent-mdns.ts`) */
     found?: { id: string; name: string; host: string; port: number }[];
     onclose: () => void;
   } = $props();
@@ -90,7 +90,7 @@
         "カメラを使えません。スマートフォンのカメラで QR を読み、出た URL を貼ってください";
       return;
     }
-    // カメラの許可を待つ間に窓を閉じていたら、届いたカメラをすぐ止める (閉じたときの `stopScan` はもう済んでいる)
+    // カメラの許可を待つ間にダイアログを閉じていたら、届いたカメラをすぐ止める (閉じたときの `stopScan` はもう済んでいる)
     if (dialog?.open !== true) {
       stopScan();
       return;

@@ -10,7 +10,7 @@
  * - **字幕が出ていないコマは素通し** (描き直さない)。描いているかは canvas の印で見る
  *   (`caption-draw.ts` の `CaptionPainter` が立てる `data-drawn`)
  * - **コマが来るたびに回す** (`MediaStreamTrackProcessor`)。画面の更新 (`requestAnimationFrame`
- *   や canvas の `captureStream`) に頼ると、窓が隠れたときに映像が止まる (`raw/worker.ts` の `toPip`)
+ *   や canvas の `captureStream`) に頼ると、ウィンドウが隠れたときに映像が止まる (`raw/worker.ts` の `toPip`)
  *
  * 使えるのは `MediaStreamTrackProcessor` と `MediaStreamTrackGenerator` を持つブラウザ
  * (Chrome・Edge) だけ。無ければ字幕無しの小窓のまま。

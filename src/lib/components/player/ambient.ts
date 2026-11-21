@@ -243,7 +243,7 @@ export function falloff(t: number): number {
 }
 
 /**
- * 枠から範囲のいちばん遠い端までの距離 (px)。二段組ではこれを届く幅にして、窓の端へ向かって薄くする
+ * 枠から範囲のいちばん遠い端までの距離 (px)。二段組ではこれを届く幅にして、ウィンドウの端へ向かって薄くする
  */
 export function farthest(stage: Rect, bounds: Rect): number {
   return Math.max(
@@ -257,8 +257,8 @@ export function farthest(stage: Rect, bounds: Rect): number {
 
 /**
  * 色を敷く範囲。**映像の枠を `spread` (`reach`) ぶん広げ、`bounds` (はみ出してよい範囲) で切る。**
- * どちらも画面の座標 (`getBoundingClientRect`)。`bounds` は `<main>` の縦の範囲と窓の横幅。
- * ページの巻き取れる長さを増やさない
+ * どちらも画面の座標 (`getBoundingClientRect`)。`bounds` は `<main>` の縦の範囲とウィンドウの横幅。
+ * ページのスクロールできる長さを増やさない
  */
 export function region(stage: Rect, bounds: Rect, spread: number): Rect {
   const left = Math.max(bounds.left, stage.left - spread);
@@ -452,7 +452,7 @@ export function blurPixels(
 
 /**
  * 1 方向の箱ぼかし。`length` 個並んだ列 (`step` 飛び) を `lines` 本 (`stride` 飛び)。
- * 窓の外は 0 として足し、いつも `2r+1` で割る (外は透明)
+ * ウィンドウの外は 0 として足し、いつも `2r+1` で割る (外は透明)
  */
 function boxLine(
   values: Float32Array,

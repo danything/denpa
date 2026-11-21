@@ -808,7 +808,7 @@
 
 <!--
   「これからの放送」の 1 行 (人気の番組の節も同じ)。行から予約・取消、押すと番組の詳細。
-  `ranked` があれば 1 段目の先頭に順位、2 段目に放送の状態と家の数を足す。放送中の番組は予約の代わりに「観る」(その局のライブ)、
+  `ranked` があれば 1 段目の先頭に順位、2 段目に放送の状態と家の数を足す。放送中の番組は予約の代わりに「視聴」(その局のライブ)、
   終わった番組は録画があれば「再生」を出す
 -->
 {#snippet programHit(
@@ -868,7 +868,7 @@
           <a
             class="button small outline"
             href={resolve(`live?service=${program.service_id}`)}
-            data-testid="search-watch">観る</a
+            data-testid="search-watch">視聴</a
           >
         {/if}
       {:else if ranked !== null && ranked.state === "ended"}
@@ -983,7 +983,7 @@
   }
   /*
    * **広い形では右に書く欄の列** (`RuleDraft`)。列は右と下を main の余白の外まで出して画面の右端に付け、
-   * ヘッダーの下に貼り付ける。結果は残りの幅の真ん中 (48rem まで) で、ページごと巻いて浮いたヘッダーの裏を流れる。
+   * ヘッダーの下に貼り付ける。結果は残りの幅の真ん中 (48rem まで) で、ページごとスクロールして浮いたヘッダーの裏を流れる。
    * 広い形とスマホの形は `#lib/phone-form.ts` (`<html data-phone>`) で分ける。テーブルトップは 1000px 以上でもスマホの形
    */
   :global(:where(html:not([data-phone]))) .search-layout.drafting {

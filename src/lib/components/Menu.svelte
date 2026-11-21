@@ -36,7 +36,7 @@
       window.removeEventListener("keydown", done, true);
     };
     for (const type of types) window.addEventListener(type, stop, true);
-    // 指で巻き取って押下が取り消されたら、そこで外す。押したまま動かして click が来なかったときは、
+    // 指でスクロールして押下が取り消されたら、そこで外す。押したまま動かして click が来なかったときは、
     // 次の押下かキー入力で外す (そちらは止めない)
     window.addEventListener("pointercancel", done, true);
     window.addEventListener("pointerdown", done, true);
@@ -234,7 +234,7 @@
       event.preventDefault();
       open = false;
     };
-    // メニューの中を巻き取ったときは置き直さない (測り直しで `max-height` を外すと、巻き取った位置が先頭に戻る)
+    // メニューの中をスクロールしたときは置き直さない (測り直しで `max-height` を外すと、スクロールした位置が先頭に戻る)
     const update = (event: Event) => {
       if (event.target instanceof Node && content?.contains(event.target))
         return;
@@ -270,7 +270,7 @@
 
   /**
    * **JS で置く。** 収める枠 (`boundary`) があるときと、anchor positioning の無いブラウザだけ。
-   * 指定の側に入りきらず反対側のほうが広ければ反対へ出し、入らないぶんは中を巻き取る (`max-height`)。
+   * 指定の側に入りきらず反対側のほうが広ければ反対へ出し、入らないぶんは中をスクロールする (`max-height`)。
    * 横は揃えた端から始め、枠からはみ出すなら内へずらす
    */
   function place(): void {

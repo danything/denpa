@@ -125,7 +125,7 @@
   /**
    * ⚙ に音量のつまみを置くか。**つまみは画面に 1 つだけ**。マウスの端末では音のボタンに乗せると浮かぶので
    * (`SoundButton`) ⚙ には置かない。置くのは指の端末 (浮かばない) と、畳んで音のボタンごと ⚙ に入ったときだけ。
-   * 音量を変えられない端末 (iPhone・iPad の観る画面と追っかけ。`volume.svelte.ts` の `fixed`) では置かない
+   * 音量を変えられない端末 (iPhone・iPad。3 画面とも。`volume.svelte.ts` の `fixed`) では置かない
    */
   const pointer = new MediaQuery(POINTER);
   const showVolume = $derived(

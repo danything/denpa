@@ -7,13 +7,13 @@
   import { dateTime } from "#lib/format.js";
 
   /**
-   * **ロゴを大きく見る窓** (設定の「受信できるチャンネル」の表で、局ロゴ・CM ロゴを押したとき)。
+   * **ロゴを大きく見るダイアログ** (設定の「受信できるチャンネル」の表で、局ロゴ・CM ロゴを押したとき)。
    *
    * 表の中のロゴは行の高さに合わせて小さく、CM ロゴは白い縁だけの画像なので、
    * ロゴの形になっているかは並べたままでは見分けにくい。**整数倍で拡大し、画素をぼかさない**
    * (`image-rendering: pixelated`)。CM ロゴは高さ 36px ほどなので 8〜10 倍になる。
    *
-   * 窓は `<dialog>` を `showModal` で開く (左下の「閉じる」・Esc・幕を押すと閉じる)。見た目は `app.css` の `.modal-box`。
+   * ダイアログは `<dialog>` を `showModal` で開く (左下の「閉じる」・Esc・幕を押すと閉じる)。見た目は `app.css` の `.modal-box`。
    * **閉じても中身は残す**。閉じる動き (`app.css` のダイアログ) の間に空にならないように。
    * 見せていた CM ロゴが消えたら (「再学習」) 閉じる。表の行もその時に消える
    */
@@ -32,7 +32,7 @@
     onclose: () => void;
   } = $props();
 
-  /** 拡大の上限。CM ロゴ (高さ 36px ほど) が窓に収まる大きさ */
+  /** 拡大の上限。CM ロゴ (高さ 36px ほど) がダイアログに収まる大きさ */
   const MAX_SCALE = 10;
 
   let dialog = $state<HTMLDialogElement | null>(null);
@@ -79,7 +79,7 @@
         : resolve(`api/services/${shown.id}/logo`),
   );
 
-  /** 窓の幅と高さ (画面の半分) に収まる、いちばん大きい整数倍 */
+  /** ダイアログの幅と高さ (画面の半分) に収まる、いちばん大きい整数倍 */
   const scale = $derived.by(() => {
     if (natural.width === 0 || room === 0) return 0;
     const height =
@@ -155,7 +155,7 @@
                   class="num">・{scale} 倍</span
                 >{/if}
             </span>
-            <!-- 「再学習」はこの窓の中だけ (表の行を低く保つ)。消えたら窓も閉じる -->
+            <!-- 「再学習」はこのダイアログの中だけ (表の行を低く保つ)。消えたらダイアログも閉じる -->
             <form method="POST" action="?/logoForget" use:submitting>
               <input type="hidden" name="serviceId" value={shown.id} />
               <button
