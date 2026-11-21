@@ -91,10 +91,12 @@ const {
   programs,
   rankingLink,
   rankingSent,
+  rankingWatched,
   recordings,
   reservations,
   services,
 } = await import("./schema");
+const watch = await import("./ranking-watch");
 const { programKey, serviceKey } = await import("./tuner");
 
 const MINUTE = 60_000;
@@ -1119,5 +1121,183 @@ describe("順位を見る", () => {
     rankingBody = { v: 1, entries: [] };
     await join();
     expect(await view()).toEqual({ ok: true, rows: [] });
+  });
+});
+
+describe("録った・観た", () => {
+  const { liveWatching, flushLive, timeshiftPlayed, settleEnded } = watch;
+  const bsService = serviceKey(4, 211, "BS");
+
+  /** 番組表に番組だけを入れる。返すのは番組の ID */
+  function program(event: number, start: number, minutes = 30): number {
+    const id = programKey(4, 211, event, "BS");
+    orm()
+      .insert(programs)
+      .values({
+        id,
+        service_id: bsService,
+        network_id: 4,
+        event_id: event,
+        start_at: start,
+        end_at: start + minutes * MINUTE,
+        name: `番組 ${event}`,
+        genres: [7],
+        is_free: true,
+        updated_at: now(),
+      })
+      .run();
+    return id;
+  }
+
+  function recording(programId: number, start: number, failed = false) {
+    return orm()
+      .insert(recordings)
+      .values({
+        program_id: programId,
+        service_id: bsService,
+        name: "録画",
+        start_at: start,
+        end_at: start + 30 * MINUTE,
+        finished_at: start + 30 * MINUTE,
+        error: failed ? "失敗" : null,
+        created_at: start,
+        updated_at: start,
+      })
+      .returning({ id: recordings.id })
+      .get().id;
+  }
+
+  function kindsAt(at: number): Record<number, string[]> {
+    return Object.fromEntries(
+      currentVotes(at).map((c) => [c.vote.event_id, c.vote.kinds]),
+    );
+  }
+
+  beforeEach(() => {
+    orm().delete(rankingWatched).run();
+    watch.resetWatchForTest();
+  });
+
+  test("ライブは局ごとに観ていた時間を番組で切り分け、5 分を超えた番組だけを、終わってから送る", async () => {
+    await join();
+    const start = now() - 2 * HOUR;
+    program(801, start);
+    program(802, start + 30 * MINUTE);
+    // 801 の終わり 4 分前から 802 の 6 分目まで。同じ局のセッションが 2 つあっても時間は 1 つ
+    liveWatching(bsService, true, start + 26 * MINUTE);
+    liveWatching(bsService, true, start + 27 * MINUTE);
+    liveWatching(bsService, false, start + 28 * MINUTE);
+    flushLive(start + 33 * MINUTE);
+    liveWatching(bsService, false, start + 36 * MINUTE);
+    const rows = orm().select().from(rankingWatched).all();
+    expect(
+      Object.fromEntries(rows.map((r) => [r.event_id, r.live_ms])),
+    ).toEqual({ 801: 4 * MINUTE, 802: 6 * MINUTE });
+    // 802 が放送中のうちは送らない。終わってから live だけを送る (801 は 4 分なので送らない)
+    expect(kindsAt(start + 40 * MINUTE)).toEqual({});
+    expect(kindsAt(start + 70 * MINUTE)).toEqual({ 802: ["live"] });
+  });
+
+  test("10 分より短い番組は、長さの半分で観たことにする", async () => {
+    await join();
+    const start = now() - HOUR;
+    program(803, start, 6);
+    liveWatching(bsService, true, start);
+    liveWatching(bsService, false, start + 3 * MINUTE);
+    expect(kindsAt(now())).toEqual({ 803: ["live"] });
+  });
+
+  test("参加していなければ何も貯めない", () => {
+    const start = now() - HOUR;
+    program(804, start);
+    liveWatching(bsService, true, start);
+    liveWatching(bsService, false, start + 20 * MINUTE);
+    expect(orm().select().from(rankingWatched).all()).toHaveLength(0);
+  });
+
+  test("録画の再生は進んだ分を経った時間までだけ足し、間が空いた・戻った・7 日を過ぎた再生は数えない", async () => {
+    await join();
+    const start = now() - 3 * HOUR;
+    const id = recording(program(805, start), start);
+    const at = now();
+    timeshiftPlayed(id, 0, at);
+    // 15 秒で 15 秒進む
+    timeshiftPlayed(id, 15, at + 15_000);
+    // 早送りで 15 秒に 100 秒進んでも、足すのは 15 秒
+    timeshiftPlayed(id, 115, at + 30_000);
+    // 戻した
+    timeshiftPlayed(id, 50, at + 45_000);
+    // 間が空いた (閉じてから開き直した)
+    timeshiftPlayed(id, 300, at + 5 * MINUTE);
+    const row = orm().select().from(rankingWatched).get()!;
+    expect(row.timeshift_ms).toBe(30_000);
+    expect(row.recording_id).toBe(id);
+
+    // 番組表から番組が消えても、写した行から放送に戻して足す
+    orm().delete(programs).run();
+    let t = at + 6 * MINUTE;
+    let position = 0;
+    timeshiftPlayed(id, position, t);
+    for (let i = 0; i < 20; i++)
+      timeshiftPlayed(id, (position += 15), (t += 15_000));
+    expect(orm().select().from(rankingWatched).get()!.timeshift_ms).toBe(
+      30_000 + 300_000,
+    );
+    expect(kindsAt(t)).toEqual({ 805: ["timeshift"] });
+
+    // 放送が終わって 7 日を過ぎた再生は数えない
+    const late = start + 30 * MINUTE + 7 * 24 * HOUR + MINUTE;
+    timeshiftPlayed(id, 0, late);
+    timeshiftPlayed(id, 15, late + 15_000);
+    expect(orm().select().from(rankingWatched).get()!.timeshift_ms).toBe(
+      330_000,
+    );
+  });
+
+  test("終わった放送は予約と録画を写し、番組表から消えても予約を送り続ける。失敗した録画は入れない", async () => {
+    await join();
+    const reservedEvent = reserve("bs11", {
+      startsIn: -2 * HOUR,
+      started: true,
+    });
+    const ok = programKey(4, 211, reservedEvent, "BS");
+    recording(ok, now() - 2 * HOUR);
+    const failed = program(806, now() - 3 * HOUR);
+    recording(failed, now() - 3 * HOUR, true);
+    // 放送中の予約は reserved だけ
+    const onAir = reserve("bs11", { startsIn: -10 * MINUTE });
+    settleEnded();
+    expect(kindsAt(now())).toEqual({
+      [reservedEvent]: ["reserved", "recorded"],
+      [onAir]: ["reserved"],
+    });
+    orm().delete(reservations).run();
+    orm().delete(programs).run();
+    expect(kindsAt(now())).toEqual({
+      [reservedEvent]: ["reserved", "recorded"],
+    });
+
+    // 終わって 8 日近くたったら送らず、控えも消す
+    const later = now() + 8 * 24 * HOUR;
+    settleEnded(later);
+    expect(kindsAt(later)).toEqual({});
+    expect(orm().select().from(rankingWatched).all()).toHaveLength(0);
+  });
+
+  test("送るときに終わった放送の種類を足し、オフにしたら控えを全部消す", async () => {
+    await join();
+    const event = reserve("bs11", { startsIn: -2 * HOUR, started: true });
+    recording(programKey(4, 211, event, "BS"), now() - 2 * HOUR);
+    received = [];
+    orm()
+      .update(rankingLink)
+      .set({ next_at: now() - 1 })
+      .run();
+    await sendIfDue();
+    const add = lastBody().add.find((a) => a["event_id"] === event);
+    expect(add?.["kinds"]).toEqual(["reserved", "recorded"]);
+    expect(orm().select().from(rankingWatched).all()).toHaveLength(1);
+    await leave();
+    expect(orm().select().from(rankingWatched).all()).toHaveLength(0);
   });
 });

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { now, orm } from "#lib/server/db.js";
 import { emit } from "#lib/server/events.js";
 import { rulerOf } from "#lib/server/playback.js";
+import { timeshiftPlayed } from "#lib/server/ranking-watch.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { recordings } from "#lib/server/schema.js";
 import { parseFileSource } from "#lib/source.js";
@@ -38,6 +39,11 @@ import {
  * 画面がそのたびに書き換わる。観た位置は開いたときに読めば足りる (画面も
  * `GET /api/recordings` の `resumeMs` も) ので、誰にも伝える必要が無い。
  * **観終えた 1 回だけは出す。** 未視聴の印が外れると、一覧の見た目が変わるため
+ *
+ * ## 番組ランキングのタイムシフト
+ *
+ * 15 秒おきに届く位置は、番組ランキングに送る「録画で観た」の長さにも使う (`ranking-watch.timeshiftPlayed`)。
+ * 参加していなければ何も貯めない
  */
 export async function POST({ params, request }) {
   const recording = recordingOr404(params.id);
@@ -74,6 +80,8 @@ export async function POST({ params, request }) {
     .where(eq(recordings.id, recording.id))
     .run();
   if (finished) emit("recordings");
+  // 番組ランキングに参加していれば、録画で観た長さを足す (前の位置から進んだ分。`ranking-watch.ts`)
+  timeshiftPlayed(recording.id, at);
 
   return Response.json({ resume: keep, edge: RESUME_EDGE });
 }
