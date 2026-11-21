@@ -72,17 +72,9 @@ jobs:
           echo "packages/arib が ${last} から変わったので ${version} を出す"
           echo "publish=true" >> "$GITHUB_OUTPUT"
 
-      # bun のバージョンは Dockerfile と食い違わないよう、そこから読む (test.yml と同じ)
-      - name: Read bun version from Dockerfile
-        if: steps.decide.outputs.publish == 'true'
-        id: bun
-        run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
-
       - name: Set up bun
         if: steps.decide.outputs.publish == 'true'
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ steps.bun.outputs.version }}
+        uses: ./.github/actions/setup-bun
 
       - name: Install dependencies
         if: steps.decide.outputs.publish == 'true'

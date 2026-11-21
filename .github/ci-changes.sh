@@ -26,7 +26,7 @@
 #
 # bundle が true なら windows と macos も true にする (配布物を確かめるジョブが、そちらで組んだエージェントを使う)。
 # android も true にする (Android のアプリの APK にも同じ denpa 本体を入れ、エミュレータで起動する)。
-# test.yml・このスクリプト・global.json (.NET の SDK の使い方) を触ったときは全部 true。
+# test.yml・このスクリプト・.github/actions/ (いくつもの workflow が使う composite action)・global.json (.NET の SDK の使い方) を触ったときは全部 true。
 set -euo pipefail
 
 if [ "${FILES:-}" != - ] && [ -z "${PR:-}" ]; then
@@ -44,7 +44,7 @@ e2e=false windows=false macos=false android=false bundle=false
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   case "$f" in
-    .github/workflows/test.yml | .github/ci-changes.sh | global.json)
+    .github/workflows/test.yml | .github/ci-changes.sh | .github/actions/* | global.json)
       e2e=true windows=true macos=true android=true bundle=true
       continue
       ;;

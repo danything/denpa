@@ -1,0 +1,52 @@
+name: Build an ffmpeg dependency
+description: ffmpeg に静的に繋ぐ依存 1 つを、キャッシュから戻すか、組んで保存する (android.yml・macos-server.yml・windows-server.yml)
+
+# 依存は組み終えた直後に保存する (ffmpeg のビルドが落ちても残る)。
+# 呼ぶ側は ffmpeg 本体のキャッシュが当たらなかったときだけ、この action を呼ぶ
+inputs:
+  path:
+    description: 組み上がりの置き場 (組むスクリプトの `deps` の下)
+    required: true
+  key:
+    description: キャッシュの鍵
+    required: true
+  script:
+    description: 組むスクリプト (.github/ffmpeg-*.sh)
+    required: true
+  args:
+    description: スクリプトに渡す引数 (空白で区切る。最後が依存の名前)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Restore
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}
+
+    - name: Build
+      if: steps.restore.outputs.cache-hit != 'true' && runner.os != 'Windows'
+      shell: bash
+      env:
+        SCRIPT: ${{ inputs.script }}
+        ARGS: ${{ inputs.args }}
+      run: bash "$SCRIPT" $ARGS
+
+    # Windows は MSYS2 の UCRT64 の中で組む (MSYS2 は windows-server.yml が入れる)
+    - name: Build (MSYS2)
+      if: steps.restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: msys2 {0}
+      env:
+        SCRIPT: ${{ inputs.script }}
+        ARGS: ${{ inputs.args }}
+      run: bash "$SCRIPT" $ARGS
+
+    - name: Save
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}

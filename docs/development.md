@@ -159,7 +159,7 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
   | android | `agent-android`                                                                  | `agent/`・android.yml・Android で組む部品・Android の ffmpeg と native-smoke が使うもの       |
   | bundle  | `server-windows-bundle`・`server-windows`・`server-macos-bundle`・`server-macos` | 配布物の組み方・ffmpeg・入れ方・`tests/native-*`・依存と、OS ごとに扱いが違うサーバのファイル |
 
-- test.yml・ci-changes.sh・global.json を触ったときは全部回します。bundle を回すときは windows・macos・android も回します (配布物を確かめるジョブがそちらで組んだエージェントを使い、Android の APK にも同じ denpa 本体を入れる)
+- test.yml・ci-changes.sh・`.github/actions/` (いくつもの workflow が使う composite action)・global.json を触ったときは全部回します。bundle を回すときは windows・macos・android も回します (配布物を確かめるジョブがそちらで組んだエージェントを使い、Android の APK にも同じ denpa 本体を入れる)
 - 回したか飛ばしたかは `changes` ジョブの Summary に出ます。`changes` が落ちたときも、必須チェックのジョブは回します
 - e2e だけはジョブを走らせ、`changes` を待たずにそれぞれのジョブの最初の段で決めて、中身の段を飛ばします。E2E がいちばん長いので、始まりを遅らせないためです
 - CodeQL の C# の解析は、PR が `agent/`・`tray/`・C# のファイル・global.json・codeql.yml を触っていなければ飛ばします (codeql.yml の `language-paths`。中身は 5ym/repo-config の共有の workflow)。

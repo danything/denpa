@@ -1,0 +1,16 @@
+name: Set up bun
+description: Dockerfile の oven/bun と同じバージョンの bun を入れる
+
+runs:
+  using: composite
+  steps:
+    # bun のバージョンは Dockerfile と食い違わないよう、そこから読む。macOS の grep には -P が無いので sed で読む
+    - name: Read bun version from Dockerfile
+      id: bun
+      shell: bash
+      run: echo "version=$(sed -nE 's/.*oven\/bun:([^-[:space:]]+).*/\1/p' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
+
+    - name: Set up bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version: ${{ steps.bun.outputs.version }}
