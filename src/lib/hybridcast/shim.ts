@@ -737,9 +737,26 @@ export function shim(init: ShimInit): void {
       f_desc: "",
     };
   };
+  /**
+   * 放送のイベントメッセージを受けるもの (`streamEvent.addGeneralEventMessageListener`)。
+   * `esRef` (部品タグ) と `group` (message_group_id) は渡されたときだけ絞る
+   */
+  const messageListeners: {
+    listener: (event: unknown) => void;
+    esRef: number | null;
+    group: number | null;
+  }[] = [];
+  /** `/40`・`40`・`0x40` のような ES の指定を部品タグに。読めなければ null (絞らない) */
+  const componentOf = (value: string): number | null => {
+    const text = value.replace(/^\//, "").replace(/^0x/i, "");
+    const n = Number.parseInt(text, 16);
+    return /^[0-9a-f]+$/i.test(text) && n >= 0 && n <= 0xff ? n : null;
+  };
   /*
-   * 放送の中のイベント (`streamEvent`)。**イベントメッセージは届けない** (denpa は Hybridcast へ流さない)。
-   * リスナーの登録は受け付けるだけ。番組が変わったことは知らせる。登録されたら一度すぐ呼ぶ (いまの番組はもう分かっている)
+   * 放送の中のイベント (`streamEvent`)。番組が変わったことと、放送のイベントメッセージ (汎用イベントメッセージ記述子) を知らせる。
+   * 番組のリスナーは、登録されたら一度すぐ呼ぶ (いまの番組はもう分かっている)。
+   * **イベントメッセージのリスナーの引数の並びは確かめていない** (IPTVFJ STD-0010 の本文を見ていない)。関数をリスナー、
+   * 文字を ES の指定、数を message_group_id として、並びを問わずに受ける
    */
   const streamEvent: Record<string, unknown> = {
     sourceIs: (source: unknown) => source === "onair",
@@ -753,8 +770,28 @@ export function shim(init: ShimInit): void {
     },
     removeEventIDUpdateListener: (listener: unknown) =>
       eventListeners.delete(listener as () => void),
-    addGeneralEventMessageListener: () => {},
-    removeGeneralEventMessageListener: () => {},
+    addGeneralEventMessageListener: (...args: unknown[]) => {
+      const listener = args.find((a) => typeof a === "function");
+      if (listener === undefined) return false;
+      const esRef = args.find((a) => typeof a === "string") as
+        string | undefined;
+      const group = args.find(
+        (a) => typeof a === "number" && Number.isInteger(a),
+      ) as number | undefined;
+      messageListeners.push({
+        listener: listener as (event: unknown) => void,
+        esRef: esRef === undefined ? null : componentOf(esRef),
+        group: group ?? null,
+      });
+      return true;
+    },
+    removeGeneralEventMessageListener: (...args: unknown[]) => {
+      const listener = args.find((a) => typeof a === "function");
+      for (let i = messageListeners.length - 1; i >= 0; i--)
+        if (messageListeners[i]!.listener === listener)
+          messageListeners.splice(i, 1);
+      return true;
+    },
   };
   const receiver: Record<string, unknown> = {
     getAITInfo: () => ({
@@ -887,6 +924,37 @@ export function shim(init: ShimInit): void {
       // 1 つずつ別に呼ぶ (アプリのリスナーが例外を投げても、ほかのリスナーとここの続きは止めない)
       if ((state.program?.eventId ?? null) !== before)
         for (const listener of eventListeners) setTimeout(listener, 0);
+    } else if (data["type"] === "event") {
+      // 放送のイベントメッセージ (画面が `app.ts` の `EventMessagePicker` で選んだもの)
+      const m = data["event"] as Record<string, unknown> | null;
+      if (m === null || typeof m !== "object") return;
+      const bytes = Array.isArray(m["privateDataByte"])
+        ? (m["privateDataByte"] as number[])
+        : [];
+      // ARIB の名前 (記述子のフィールド名) と、データ放送の EventMessageFired の名前の両方で見せる
+      const event = {
+        type: "GeneralEventMessage",
+        es_ref: m["esRef"],
+        esRef: m["esRef"],
+        component_tag: m["componentTag"],
+        message_group_id: m["messageGroupId"],
+        messageGroupId: m["messageGroupId"],
+        message_id: m["messageId"],
+        messageId: m["messageId"],
+        message_version: m["messageVersion"],
+        messageVersion: m["messageVersion"],
+        private_data_byte: Uint8Array.from(bytes),
+        privateDataByte: Uint8Array.from(bytes),
+        private_data: m["privateData"],
+        privateData: m["privateData"],
+      };
+      for (const entry of [...messageListeners]) {
+        if (entry.esRef !== null && entry.esRef !== m["componentTag"]) continue;
+        if (entry.group !== null && entry.group !== m["messageGroupId"])
+          continue;
+        // 1 つずつ別に呼ぶ (アプリのリスナーが例外を投げても、ほかのリスナーは止めない)
+        setTimeout(() => entry.listener(event), 0);
+      }
     } else if (data["type"] === "key") {
       press(
         data["key"] as string,

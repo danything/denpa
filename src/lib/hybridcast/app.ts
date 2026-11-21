@@ -15,6 +15,9 @@
  * script が動かないため (緩めると denpa の画面の CSP の意味がなくなる)。
  */
 
+import type { ESEventUpdatedMessage } from "@danything/arib/bml-protocol";
+
+import { decodeEuc } from "../bml/euc";
 import { rewriteLocation } from "./location";
 import { shim, type ShimInit } from "./shim";
 
@@ -260,4 +263,57 @@ export function receiverKey(
   };
   const found = keys[code];
   return found === undefined ? null : { key: found[0], code: found[1] };
+}
+
+/**
+ * **アプリへ渡すイベントメッセージ** (汎用イベントメッセージ記述子。ARIB STD-B24 第三編)。
+ * 差し込みが `streamEvent.addGeneralEventMessageListener` のリスナーへ渡す (`shim.ts`)
+ */
+export interface HcEventMessage {
+  /** 送られてきた ES (`/` と部品タグの 16 進 2 桁。データ放送の `es_ref` と同じ書き方) */
+  esRef: string;
+  componentTag: number;
+  messageGroupId: number;
+  /** event_msg_id の上位 8 ビット */
+  messageId: number;
+  /** event_msg_id の下位 8 ビット */
+  messageVersion: number;
+  privateDataByte: number[];
+  /** private_data_byte を EUC-JP として読んだもの (データ放送の `EventMessageFired` の privateData と同じ) */
+  privateData: string;
+}
+
+/**
+ * **ストリーム記述子 (`esEventUpdated`) から、アプリへ渡すイベントメッセージを選ぶ。** アプリを開くたびに作る。
+ *
+ * - 渡すのはすぐ起きるもの (time_mode 0) だけ。時刻指定 (NPT) のものは、NPT が達するとサーバがすぐ起きるものに直して送る
+ *   (`@danything/arib` の `dueEvents`)
+ * - 放送は同じメッセージを繰り返し送るので、部品・グループ・ID・バージョンが同じものは 1 回だけ渡す
+ *   (データ放送の `EventMessageFired` と同じ数え方。`bml/engine.ts` の `esEvents`)
+ * - message_group_id 0 を今の文書の data_event_id と比べる決まりは、データ放送の文書のものなので見ない
+ */
+export class EventMessagePicker {
+  private readonly seen = new Map<string, number>();
+
+  pick(message: ESEventUpdatedMessage): HcEventMessage[] {
+    const picked: HcEventMessage[] = [];
+    for (const event of message.events) {
+      if (event.type !== "immediateEvent") continue;
+      const messageId = event.eventMessageId >> 8;
+      const messageVersion = event.eventMessageId & 0xff;
+      const key = `${message.componentId}:${event.eventMessageGroupId}:${messageId}`;
+      if (this.seen.get(key) === messageVersion) continue;
+      this.seen.set(key, messageVersion);
+      picked.push({
+        esRef: `/${message.componentId.toString(16).padStart(2, "0")}`,
+        componentTag: message.componentId,
+        messageGroupId: event.eventMessageGroupId,
+        messageId,
+        messageVersion,
+        privateDataByte: [...event.privateDataByte],
+        privateData: decodeEuc(Uint8Array.from(event.privateDataByte)),
+      });
+    }
+    return picked;
+  }
 }

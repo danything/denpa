@@ -10,15 +10,18 @@
    *   cookie も UA も受信機を見分けるものも送らない) はデータ放送と同じ
    * - 受信機の記憶はアプリの配信元 (オリジン) ごとに分けて覚える (`storageKey`)
    * - データ放送の Greg と NVRAM を写して渡し、書かれたら戻す (`broadcast`・`onwrite`。`#lib/hybridcast/compat.ts`)
+   * - 放送のイベントメッセージ (ストリーム記述子) を渡す (`events`。アプリの `addGeneralEventMessageListener`)
    */
 
   import { resolve } from "$app/paths";
+  import type { ESEventUpdatedMessage } from "@danything/arib/bml-protocol";
   import { onDestroy } from "svelte";
 
   import type { Service } from "#lib/bml/engine.js";
   import { fetchRelayed } from "#lib/bml/relay.js";
   import {
     decodeHtml,
+    EventMessagePicker,
     type FrameMessage,
     frameMessage,
     type HcState,
@@ -59,6 +62,8 @@
     onvideo: (place: Place) => void;
     /** リモコン (AribKeyCode) を渡す関数 (bind で受け取る)。戻る・d は閉じる */
     press?: ((code: number, down: boolean) => void) | null;
+    /** ストリーム記述子 (`esEventUpdated`) を渡す関数 (bind で受け取る)。イベントメッセージをアプリのリスナーへ渡す */
+    events?: ((message: ESEventUpdatedMessage) => void) | null;
     /** 映像の上に出す読み込みの通知 (bind で受け取る。読み込めたら空)。出すのは `DataBroadcast` を使う画面 (舞台の通知の列) */
     note?: string;
   }
@@ -73,6 +78,7 @@
     oncaptions,
     onvideo,
     press = $bindable(null),
+    events = $bindable(null),
     note = $bindable(""),
   }: Props = $props();
 
@@ -100,6 +106,8 @@
   /** iframe を開き直すたびに変える (同じ入れ物を読み直させる) */
   let round = $state(0);
   let gone = false;
+  /** 渡したイベントメッセージ。同じものはページごとに 1 回だけ渡す (ページを移ったら、いま送られているものを渡し直す) */
+  let picker = new EventMessagePicker();
   /** いまのページを開いた局 (アプリの NVRAM はこの局の領域) */
   let opened: CompatInit["who"] = { originalNetworkId: null, serviceId: null };
   // svelte-ignore state_referenced_locally
@@ -129,6 +137,7 @@
     post({ type: "html", html });
     html = null;
     phase = "ready";
+    picker = new EventMessagePicker();
     frame?.focus();
   }
 
@@ -350,11 +359,18 @@
       post({ type: "key", key: found.key, code: found.code, down });
   };
 
+  // 放送のイベントメッセージ。ページを読み込んでいる間は渡さない (放送は繰り返し送るので、読み込み終えてから来たものを渡す)
+  events = (message) => {
+    if (phase !== "ready") return;
+    for (const event of picker.pick(message)) post({ type: "event", event });
+  };
+
   void load();
 
   onDestroy(() => {
     gone = true;
     press = null;
+    events = null;
     onvideo("full");
   });
 </script>

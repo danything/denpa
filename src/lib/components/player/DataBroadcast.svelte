@@ -149,6 +149,11 @@
   let appVideo: Place = "full";
   /** アプリへキーを渡す関数 (`HybridcastFrame` の `press`) */
   let appPress = $state<((code: number, down: boolean) => void) | null>(null);
+  /** アプリへ放送のイベントメッセージを渡す関数 (`HybridcastFrame` の `events`) */
+  let appEvents = $state<
+    | ((message: Extract<ResponseMessage, { type: "esEventUpdated" }>) => void)
+    | null
+  >(null);
   /** アプリの読み込みの通知 (`HybridcastFrame` の `note`) */
   let appNote = $state("");
   /** いまの番組 (放送の programInfo)。アプリへ渡す */
@@ -703,6 +708,8 @@
     listen((message) => {
       handed++;
       made.feed(message);
+      // 放送のイベントメッセージは、開いている Hybridcast のアプリにも渡す (データ放送の文書には `feed` が渡す)
+      if (message.type === "esEventUpdated") appEvents?.(message);
       if (message.type === "programInfo") {
         const p = made.program();
         program =
@@ -901,6 +908,7 @@
           place();
         }}
         bind:press={appPress}
+        bind:events={appEvents}
         bind:note={appNote}
       />
     {/key}
