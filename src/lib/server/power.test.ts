@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { cfAbsoluteTime } from "./awake.js";
-import { HOLD_BEFORE, shouldHold, wakeSecond, wakeTaskXml } from "./power.js";
+import { cfAbsoluteTime, fileTime, type WindowsWake } from "./awake.js";
+import {
+  HOLD_BEFORE,
+  scheduleWakeWindows,
+  shouldHold,
+  wakeSecond,
+  wakeState,
+} from "./power.js";
 
 const idle = {
   recording: false,
@@ -27,15 +33,14 @@ describe("shouldHold", () => {
   });
 });
 
-describe("wakeTaskXml", () => {
-  test("起こす時刻を UTC で書き、スリープを解除して実行する", () => {
-    const xml = wakeTaskXml(Date.UTC(2026, 10, 7, 11, 58, 30, 123));
-    expect(xml).toContain(
-      "<StartBoundary>2026-11-07T11:58:30Z</StartBoundary>",
+describe("Windows の起こすタイマー", () => {
+  test("時刻は 1601-01-01 (UTC) からの 100 ns (SetWaitableTimer に UTC の時刻として渡す)", () => {
+    expect(fileTime(0)).toBe(116_444_736_000_000_000n);
+    // 2026-11-07T11:58:30.123Z。ミリ秒より細かい値は捨てる
+    expect(fileTime(Date.UTC(2026, 10, 7, 11, 58, 30, 123) + 0.9)).toBe(
+      (BigInt(Date.UTC(2026, 10, 7, 11, 58, 30, 123)) + 11_644_473_600_000n) *
+        10_000n,
     );
-    expect(xml).toContain("<WakeToRun>true</WakeToRun>");
-    // SYSTEM で動かす (denpa 本体と同じ)
-    expect(xml).toContain("<UserId>S-1-5-18</UserId>");
   });
 });
 
@@ -49,5 +54,55 @@ describe("Mac の起こす予約", () => {
   test("CoreFoundation の時刻は 2001-01-01 (UTC) からの秒", () => {
     expect(cfAbsoluteTime(Date.UTC(2001, 0, 1))).toBe(0);
     expect(cfAbsoluteTime(Date.UTC(2001, 0, 1, 0, 1, 0, 500))).toBe(60.5);
+  });
+});
+
+describe("Windows の起こすタイマーの設定し直し", () => {
+  test("失敗したら理由を残して次に設定し直し、録画が無くなれば取り消して理由も消す", async () => {
+    const calls: string[] = [];
+    let refuse: string | null = "SetWaitableTimer が失敗しました (エラー 5)";
+    const timer: WindowsWake = {
+      set: (at) => {
+        calls.push(`set ${at}`);
+        return refuse;
+      },
+      cancel: () => {
+        calls.push("cancel");
+      },
+    };
+    const get = () => Promise.resolve(timer);
+    const now = 1_000_000;
+
+    // 一度も設定していないうちに録画が無ければ、タイマーに触らない
+    await scheduleWakeWindows(null, now, get);
+    expect(calls).toEqual([]);
+
+    // 失敗: 理由を残し、時刻は出さない
+    await scheduleWakeWindows(now + 60_000, now, get);
+    expect(wakeState(now)).toEqual({ at: null, problem: refuse });
+
+    // 次の定期チェックで設定し直す
+    refuse = null;
+    await scheduleWakeWindows(now + 60_000, now + 30_000, get);
+    expect(wakeState(now + 30_000)).toEqual({
+      at: now + 60_000,
+      problem: null,
+    });
+    // 同じ時刻なら設定し直さない
+    await scheduleWakeWindows(now + 60_000, now + 40_000, get);
+    expect(calls).toEqual([`set ${now + 60_000}`, `set ${now + 60_000}`]);
+
+    // 起こす時刻を過ぎたら (もう起きている) 設定せず、時刻も出さない
+    await scheduleWakeWindows(now + 50_000, now + 70_000, get);
+    expect(calls).toHaveLength(2);
+    expect(wakeState(now + 70_000).at).toBeNull();
+
+    // 失敗したあとで録画が無くなれば、取り消して理由も消す
+    refuse = "この PC はタイマーでスリープから復帰できません";
+    await scheduleWakeWindows(now + 200_000, now + 70_000, get);
+    expect(wakeState(now + 70_000).problem).toBe(refuse);
+    await scheduleWakeWindows(null, now + 80_000, get);
+    expect(calls.at(-1)).toBe("cancel");
+    expect(wakeState(now + 80_000)).toEqual({ at: null, problem: null });
   });
 });

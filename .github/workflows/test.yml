@@ -919,7 +919,7 @@ jobs:
           name: denpa-agent-windows
           path: ${{ runner.temp }}\agent
 
-      - name: Bundled ffmpeg, progress on a named pipe, keep awake
+      - name: Bundled ffmpeg, progress on a named pipe, keep awake and wake
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'

@@ -8,6 +8,7 @@ import {
   serverEnvironment,
   serverLogLines,
 } from "#lib/server/diagnostics.js";
+import { wakeStatus } from "#lib/server/power.js";
 import { type CardStatus, cardStatus } from "#lib/server/scramble.js";
 import { type AgentTuner, getTuners, pinKey } from "#lib/server/tuner.js";
 
@@ -29,7 +30,7 @@ interface TunerChoices {
 }
 
 /**
- * 「バージョンと環境」と「ログ」の節 (前の「診断」)。動いている環境 (denpa とエージェントのバージョン・OS・サーバの CPU と GPU・チューナー・カードリーダー) と、
+ * 「バージョンと環境」と「ログ」の節 (前の「診断」)。動いている環境 (denpa とエージェントのバージョン・OS・サーバの CPU と GPU・録画の前にスリープから起こす様子・チューナー・カードリーダー) と、
  * サーバとエージェントのログ・機材の異常 (`faults`)。チューナーには、受信の状態と C/N (`signal`) と使っている用途 (`uses`) も添える。
  * バグを報告するとき、ここから伏せた報告を作って GitHub の Issue を開く (`#lib/issue-report.ts`)。
  *
@@ -59,6 +60,8 @@ export function load(url: URL, locals: { token?: number }) {
   }
   return {
     environment: serverEnvironment(),
+    /** 録画の前にスリープから起こす様子 (Windows と Mac だけ。ほかは null)。起こせない理由も入る */
+    wake: wakeStatus(),
     hosts: refused === null ? known.hosts : [],
     serverLogs: refused === null ? serverLogLines(known) : [],
     agents: all.map((agent) => ({ id: agent.id, name: agent.name })),
