@@ -28,7 +28,7 @@ import kotlin.concurrent.thread
  * - **繋いだら、開いている機材を全部 `attached` で送り、最後に `synced` を送る。** エージェントは繋がるたびに前の機材を捨てるので、繋ぎ直したときも同じ
  * - **1 行は 1 回の write で送る。** `setFileDescriptorsForSend` のあと、行を 1 つの `ByteArray` にして書く。fd はその write に付く。
  *   分けて書くと、エージェントは fd を別の行のものとみる
- * - [UsbDeviceConnection] は機材が抜けるまで閉じない (閉じると送った fd の元も閉じる。エージェントの側は自分の写しを持つ)
+ * - [UsbDeviceConnection] は機材が抜けるまで閉じない (閉じると送った fd の元も閉じる。エージェントは自分の複製を持つ)
  * - 挿さった・抜けたは `USB_DEVICE_ATTACHED`・`DETACHED` のブロードキャストで受ける。許可が無い機材は [UsbManager.requestPermission] で求める
  */
 internal class UsbBroker(private val context: Context, private val socketFile: File, private val filter: DeviceFilter) {

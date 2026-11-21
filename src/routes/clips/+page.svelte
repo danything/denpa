@@ -62,7 +62,7 @@
    *   列は観る画面と同じ部品 (`ControlBar`・`ControlButton`)
    * - 選び方は写真のサービスと同じ。マウスでは乗せた 1 枚の左上に丸が出て、押すと選ぶ形に入る。指の端末は長押しで入る。
    *   選ぶ形の間は 1 枚を押すと選ぶ・外す (開かない)。Shift を押しながらなら、前に押した 1 枚までをまとめて選ぶ。
-   *   選んだぶんは 2 回押しで消す。Esc か「選択をやめる」で抜け、全部外しても抜ける
+   *   選んだぶんは 2 回押しで消す。Esc か「選択を終了」で抜け、全部外しても抜ける
    */
   let { data } = $props();
 
@@ -526,7 +526,7 @@
     type="button"
     class="ghost small"
     onclick={endSelecting}
-    data-testid="clip-select-end">選択をやめる</button
+    data-testid="clip-select-end">選択を終了</button
   >
 {/snippet}
 
@@ -623,8 +623,8 @@
                 type="button"
                 class="c-check"
                 aria-pressed={selected.has(clip.id)}
-                aria-label="選ぶ: {title(clip)}"
-                title="選ぶ"
+                aria-label="選択: {title(clip)}"
+                title="選択"
                 onclick={(event) => pick(clip, event)}
                 data-testid="clip-check"
                 ><span class="c-check-mark"

@@ -1,8 +1,7 @@
 <script lang="ts">
-  import type { SubmitFunction } from "$app/forms";
   import { resolve } from "$app/paths";
 
-  import { submitting } from "#lib/actions.js";
+  import { submitting, switched } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import Toasts, {
@@ -86,24 +85,6 @@
 
   /** ルールの削除は 2 回押させる (録画・通知先と同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
   const deleting = arming('[data-testid^="rule-delete"]');
-  /**
-   * 行のスイッチを送るとき。**送っている間は押せなくする** (連打で何度も切り替わらない)。
-   * 断られたら見た目を戻す
-   */
-  const switched: SubmitFunction = ({ formElement }) => {
-    const box = formElement.querySelector<HTMLInputElement>(
-      'input[role="switch"]',
-    );
-    if (box !== null) box.disabled = true;
-    return async ({ result, update }) => {
-      await update();
-      if (box !== null) {
-        if (result.type !== "success" && result.type !== "redirect")
-          box.checked = !box.checked;
-        box.disabled = false;
-      }
-    };
-  };
 
   const notices = $derived.by<Notice[]>(() => {
     const list = errorNotice(form, "rule-error");

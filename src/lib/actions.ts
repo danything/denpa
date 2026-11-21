@@ -73,6 +73,25 @@ export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
 }
 
 /**
+ * スイッチ (`role="switch"`) 1 つのフォームを送るときに `submitting` へ渡す (ルールの一覧・ルールとして保存・通知先)。
+ * **送っている間は押せなくする** (連打で何度も切り替わらない)。断られたら見た目を戻す
+ */
+export const switched: SubmitFunction = ({ formElement }) => {
+  const box = formElement.querySelector<HTMLInputElement>(
+    'input[role="switch"]',
+  );
+  if (box !== null) box.disabled = true;
+  return async ({ result, update }) => {
+    await update();
+    if (box !== null) {
+      if (result.type !== "success" && result.type !== "redirect")
+        box.checked = !box.checked;
+      box.disabled = false;
+    }
+  };
+};
+
+/**
  * ドラッグで動かせるスクロール。番組表は縦横どちらにも長いので、
  * スクロールバーを使わずに動かせるほうが早い。
  *

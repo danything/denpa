@@ -188,11 +188,10 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     /// <summary>制御転送を 1 回。長さは wLength (16 ビット) に収まるだけ</summary>
     private int ControlTransferOnce(byte requestType, byte request, ushort value, ushort index, byte* data, int length, int timeoutMs, string what)
     {
-        UsbDevices.ControlLength(length);
         var transfer = new ControlTransfer
         {
             RequestType = requestType, Request = request, Value = value, Index = index,
-            Length = (ushort)length, TimeoutMs = (uint)timeoutMs, Data = data,
+            Length = UsbDevices.ControlLength(length), TimeoutMs = (uint)timeoutMs, Data = data,
         };
         var done = Sys.Ioctl(Fd, Control, (nint)(&transfer));
         if (done < 0) throw Failure(what);

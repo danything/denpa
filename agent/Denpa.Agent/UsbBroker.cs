@@ -483,7 +483,7 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
     private const short PollIn = 0x001;
     private const int OwnerReadWrite = 0x180;
 
-    /// <summary>1 回の recvmsg で受けられる fd の数 (CMSG_SPACE(4 × 8))</summary>
+    /// <summary>1 回の recvmsg で受ける制御データの大きさ。fd は 8 つまで (CMSG_SPACE(4 × 8))</summary>
     private const int ControlSize = 16 + 8 * sizeof(int);
 
     /// <summary>USBDEVFS_CONNINFO_EX(len)。_IOC(_IOC_READ, 'U', 32, len)</summary>
@@ -622,7 +622,7 @@ public sealed class InheritedFds : IDisposable
             var copy = Sys.DupInheritable(fd);
             if (copy < 0)
             {
-                var message = System.Runtime.InteropServices.Marshal.GetLastPInvokeErrorMessage();
+                var message = Marshal.GetLastPInvokeErrorMessage();
                 foreach (var made in fds) Sys.Close(made);
                 throw new IOException($"USB のポート {port} の機材を子プロセスに渡せません ({message})");
             }

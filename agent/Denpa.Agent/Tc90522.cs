@@ -224,8 +224,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
             {
                 LockMs = nowMs() - started;
                 // 回数ではなく経った時間で足す (読み出しにかかった時間のぶん 350 ms を超えて待たない)
-                var settled = nowMs() - started;
-                if (settled < SettlePolls * PollMs) Sleep((int)(SettlePolls * PollMs - settled));
+                if (LockMs < SettlePolls * PollMs) Sleep((int)(SettlePolls * PollMs - LockMs));
                 return true;
             }
             Sleep(PollMs);

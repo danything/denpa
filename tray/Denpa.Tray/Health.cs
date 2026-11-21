@@ -66,7 +66,7 @@ public static class Words
     /// <summary>
     /// 更新を始める前に確かめる文。録画もエンコードもしていなければ null (確かめずに始める)。
     /// **録画は止めない。** install.ps1 が録画の終わりを待ってから入れ替える (Stop-Denpa)。
-    /// エンコードは待たずに止まり、起き直したあとで最初からやり直しになる (encoder.ts の requeueOrphanedJobs) ので、そう言って選んでもらう
+    /// エンコードは待たずに止まり、起動し直したあとで最初からやり直しになる (encoder.ts の requeueOrphanedJobs) ので、そう言って選んでもらう
     /// </summary>
     public static string? AskBeforeUpdate(Health health)
     {
@@ -104,7 +104,7 @@ public static class Installer
 
 /// <summary>
 /// エージェントだけ入れたとき (install.ps1 -AgentOnly) の文言。denpa はこの PC にいないので、エージェントが応答するかと、
-/// 別の機械の denpa に登録するための URL を出す (docs/agent.md「denpa と組む」)
+/// 別の機械の denpa に登録するための URL を出す (docs/agent.md「登録用の URL を出す」)
 /// </summary>
 public static class AgentWords
 {

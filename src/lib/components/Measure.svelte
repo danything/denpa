@@ -317,9 +317,9 @@
    * (明るいテーマ用の濃い文字色だと、この黒地では読めない)
    */
   .bad {
-    color: color-mix(in srgb, var(--dp-rec) 55%, #fff);
+    color: color-mix(in srgb, var(--dp-rec) 55%, var(--dp-on-video));
   }
   .good {
-    color: color-mix(in srgb, var(--dp-ok) 55%, #fff);
+    color: color-mix(in srgb, var(--dp-ok) 55%, var(--dp-on-video));
   }
 </style>

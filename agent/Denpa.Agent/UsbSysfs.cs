@@ -108,9 +108,9 @@ public static class UsbSysfs
                 throw new IOException($"USB のポート {port} の電源を入れ直せず、切れたままです ({error.Message})。機材を挿し直してください", error);
             }
         }
-        var deadline = DateTime.UtcNow + wait;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         var gone = before is null;
-        while (DateTime.UtcNow < deadline)
+        while (clock.Elapsed < wait)
         {
             // 前の機材が消えたのを見たか、前と違う番号の devnum が出たら、つながり直した (同じ番号が振り直されることもある)
             var now = Read(Path.Combine(sysfs, port), "devnum");

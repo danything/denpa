@@ -294,7 +294,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// カードに 1 つ要求を送る。**接続が切れていたら 1 回だけ繋ぎ直して送り直す。**
-    /// <see cref="_gate"/> を握ったまま呼ぶ
+    /// <see cref="_gate"/> を持ったまま呼ぶ
     /// </summary>
     private T Run<T>(Func<ICardLink, T> command)
     {

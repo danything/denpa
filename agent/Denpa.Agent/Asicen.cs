@@ -32,7 +32,7 @@ namespace Denpa.Agent;
 /// **Android (アプリから USB を受け取るとき。<see cref="BrokerUsbHost"/>) は、機材を開くのも並べるのもアプリ。** asicend は libusb で機材を
 /// 並べられないので、<c>--list-json</c> の代わりに受け取った機材の VID・PID から筐体を組み (<see cref="Group"/>)、
 /// 受け取った fd を継がせて <c>asicend --fd</c> で起動する (<see cref="BrokerUsbHost.Lend"/>)。実行ファイルは APK の
-/// <c>libasicend.so</c>・<c>libasicenctl.so</c> (<see cref="Bin"/>)。作りは docs/agent.md「asicen-userland の作り」。
+/// <c>libasicend.so</c>・<c>libasicenctl.so</c> (<see cref="Bin"/>)。
 /// </para>
 /// </summary>
 public static class AsicenUserland

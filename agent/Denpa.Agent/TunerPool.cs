@@ -799,8 +799,8 @@ public sealed class TunerPool(
         {
             if (_leases.ContainsKey(index)) continue;
             /*
-             * ロックの順は `_gate` → `_deviceGate`。`CloseAll` も同じ向きなので
-             * 噛み合わない。`Channel` を `held.Gate` 無しで読むのは承知の上で、
+             * ロックの順は `_gate` → `_deviceGate`。`CloseAll` と `ReadSignals` も同じ向きなので
+             * デッドロックしない。`Channel` を `held.Gate` 無しで読むのは承知の上で、
              * 外れても「選局し直しが 1 回増える」だけ
              */
             lock (_deviceGate)
@@ -1516,6 +1516,17 @@ internal sealed class Lease(int tuner, string name, string type, string channel)
         }
     }
 
+    /// <summary>
+    /// 誰も読まなくなった選局を <paramref name="after"/> 後に離す。呼ぶのも <see cref="CancelLinger"/> も <c>TunerPool._gate</c> の中から
+    ///
+    /// <para>
+    /// **時間が来た側は <c>_gate</c> の外で <c>_linger</c> を消すので、狭い競合が残る。** 時間が来て取り消しの確認を過ぎたあと、
+    /// 消すまでの間に、ロックの中で利用者が入って抜け、次の余韻が始まると、その余韻の <c>_linger</c> が消えて取り消せなくなる。
+    /// 起きても害は無い。<c>release</c> (<c>ScheduleRelease</c>) は <c>_gate</c> を取ってから利用者が 0 人のときだけ離すので、
+    /// 取り消せなかった余韻が利用者のいる選局を離すことはない。2 度目に離すときも、<c>Forget</c> は同じ選局がまだ一覧にあるときだけ消し、
+    /// <c>Dismiss</c> は利用者のいない選局では何も送らず、<c>Stop</c> は印を立て直すだけ。起きうるのは、次の余韻の 5 秒を待たずに先に離れて、次の選局が選局し直しになることだけ
+    /// </para>
+    /// </summary>
     public void StartLinger(Action release, TimeSpan after)
     {
         if (_linger is not null) return;

@@ -194,26 +194,19 @@ public sealed class AgentTls
     public static async Task<(JsonNode? Body, bool TooLarge)> ReadPairBody(Stream body, long? length)
     {
         if (length > PairBodyLimit) return (null, true);
-        // 1 バイト多く読めたら越えている
-        var buffer = new byte[PairBodyLimit + 1];
-        var filled = 0;
+        byte[]? read;
         try
         {
-            while (filled < buffer.Length)
-            {
-                var read = await body.ReadAsync(buffer.AsMemory(filled));
-                if (read == 0) break;
-                filled += read;
-            }
+            read = await CardWire.ReadUpTo(body, PairBodyLimit);
         }
         catch (IOException)
         {
             return (null, false);
         }
-        if (filled > PairBodyLimit) return (null, true);
+        if (read is null) return (null, true);
         try
         {
-            return (JsonNode.Parse(buffer.AsSpan(0, filled)), false);
+            return (JsonNode.Parse(read), false);
         }
         catch (System.Text.Json.JsonException)
         {

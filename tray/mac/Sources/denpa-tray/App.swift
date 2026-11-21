@@ -36,7 +36,7 @@ func fetchHealth(_ done: @escaping @MainActor (Health?) -> Void) {
 }
 
 /// エージェントが応答するか。TLS で繋ぎ、エージェントの証明書が返れば応答したとみなす。エージェントはクライアント証明書を求めるので、
-/// 証明書を持たないこちらとの握手はそのあと断られるが、それは見ない (組んでいないので API は呼べない)。結果はメインスレッドで返す
+/// 証明書を持たないこちらとのハンドシェイクはそのあと断られるが、それは見ない (組んでいないので API は呼べない)。結果はメインスレッドで返す
 func probeAgent(_ done: @escaping @MainActor (Bool) -> Void) {
     let probe = AgentProbe(done)
     let tls = NWProtocolTLS.Options()
@@ -68,7 +68,7 @@ final class AgentProbe: @unchecked Sendable {
         self.done = done
     }
 
-    /// 1 回だけ結果を返し、繋ぎを閉じる
+    /// 1 回だけ結果を返し、接続を閉じる
     func finish() {
         guard let done else { return }
         self.done = nil
@@ -241,7 +241,7 @@ final class Tray: NSObject, NSApplicationDelegate {
     }
 }
 
-// main.swift の上の段に書くと main actor の外として扱われ、@MainActor の Tray を作れない。@main の main() から起こす
+// main.swift のトップレベルに書くと main actor の外として扱われ、@MainActor の Tray を作れない。@main の main() から起こす
 @main
 enum App {
     @MainActor

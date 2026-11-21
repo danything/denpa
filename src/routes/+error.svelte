@@ -28,7 +28,7 @@
     const text = page.error?.message ?? "";
     if (text !== "" && text !== "Not Found" && text !== "Internal Error")
       return text;
-    return FALLBACK[page.status] ?? "うまく開けませんでした";
+    return FALLBACK[page.status] ?? "ページを開けませんでした";
   });
   const hint = $derived(
     HINT[page.status] ??

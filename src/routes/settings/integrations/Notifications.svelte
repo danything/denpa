@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { submitting } from "#lib/actions.js";
+  import { submitting, switched } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
@@ -79,6 +79,24 @@
               <!-- 状態のバッジは止めているときだけ (オンは塗らない。docs/design.md の「印の意味」。ルールの一覧と同じ) -->
               {#if !webhook.enabled}<span class="tag">無効</span>{/if}
               <span class="truncate mono">{webhook.url}</span>
+              <!-- 送るかどうかはスイッチ (1 つのことのオン/オフ。docs/design.md の「オン/オフと選ぶもの」。ルールの一覧の行と同じ) -->
+              <form
+                method="POST"
+                action="?/toggleWebhook"
+                class="switch"
+                use:submitting={switched}
+              >
+                <input type="hidden" name="id" value={webhook.id} />
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={webhook.enabled}
+                  aria-label="「{webhook.url}」に送る"
+                  onchange={(event) =>
+                    event.currentTarget.form?.requestSubmit()}
+                  data-testid="webhook-toggle"
+                />
+              </form>
             </div>
             <div class="small">
               <span class="muted">送る通知:</span>
@@ -107,14 +125,6 @@
                 testid="webhook-test"
               >
                 テスト送信
-              </ActionButton>
-              <ActionButton
-                action="?/toggleWebhook"
-                fields={{ id: webhook.id }}
-                class="small secondary"
-                testid="webhook-toggle"
-              >
-                {webhook.enabled ? "無効化" : "有効化"}
               </ActionButton>
               <ArmedDelete
                 {deleting}
@@ -153,5 +163,14 @@
   }
   .url-line .tag {
     flex-shrink: 0;
+  }
+  /* スイッチは行の右端 (URL が長ければ URL のほうを縮める) */
+  .switch {
+    display: flex;
+    flex-shrink: 0;
+    margin: 0 0 0 auto;
+  }
+  .switch input {
+    margin: 0;
   }
 </style>

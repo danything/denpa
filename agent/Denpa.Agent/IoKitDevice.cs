@@ -408,11 +408,11 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
     public int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         var pipe = Pipe(endpoint);
-        if (pipe.Type != TransferInterrupt) return ReadTimed(endpoint, buffer, timeoutMs);
+        if (pipe.Type != TransferInterrupt) return ReadTimed(endpoint, pipe.Ref, buffer, timeoutMs);
         UsbReadPump pump;
         lock (_gate)
         {
-            ObjectDisposedException.ThrowIf(_interface is null, Name);
+            if (_interface is null) throw new ObjectDisposedException(Name);
             if (!_pumps.TryGetValue(endpoint, out pump!))
             {
                 // 転送要求の大きさは最大パケット長ちょうど (下位 11 ビット)。大きくすると、ちょうどの長さの応答で転送が終わらない
@@ -446,9 +446,8 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         if (_interface is not null) ((delegate* unmanaged[Cdecl]<void*, byte, int>)Slot(_interface, AbortPipe))(_interface, pipe);
     }
 
-    private int ReadTimed(byte endpoint, Span<byte> buffer, int timeoutMs)
+    private int ReadTimed(byte endpoint, byte pipe, Span<byte> buffer, int timeoutMs)
     {
-        var pipe = Pipe(endpoint).Ref;
         fixed (byte* start = buffer)
         {
             var size = (uint)buffer.Length;
@@ -479,7 +478,10 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {
         // 閉じた機材では作らない (作ると、受けるスレッドの中で ObjectDisposedException になり、受ける所が無いままプロセスが落ちる)
-        lock (_gate) ObjectDisposedException.ThrowIf(_interface is null, Name);
+        lock (_gate)
+        {
+            if (_interface is null) throw new ObjectDisposedException(Name);
+        }
         return new InStream(this, Pipe(endpoint).Ref, transferSize, depth);
     }
 

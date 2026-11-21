@@ -99,12 +99,15 @@ public static class DeviceProbe
     public static uint ParseCaps(ReadOnlySpan<byte> info) => BitConverter.ToUInt32(info[CapsAt..(CapsAt + 4)]);
 
     /// <summary>開いたフロントエンドの <c>caps</c> を <c>FE_GET_INFO</c> で問い合わせる。答えなければ 0 (<see cref="DvbTuner"/> が変調の渡し方を決める)</summary>
-    internal static unsafe uint Caps(int fd)
+    internal static uint Caps(int fd) => Info(fd) is { } info ? ParseCaps(info) : 0;
+
+    /// <summary>開いたフロントエンドの <c>dvb_frontend_info</c> を <c>FE_GET_INFO</c> で読む。答えなければ null</summary>
+    private static unsafe byte[]? Info(int fd)
     {
         var info = new byte[FrontendInfoSize];
         fixed (byte* infoAt = info)
         {
-            return Sys.Ioctl(fd, FeGetInfo, (nint)infoAt) >= 0 ? ParseCaps(info) : 0;
+            return Sys.Ioctl(fd, FeGetInfo, (nint)infoAt) >= 0 ? info : null;
         }
     }
 
@@ -132,7 +135,7 @@ public static class DeviceProbe
     }
 
     /// <summary>見つけたときに選んでおく種別と、受けられる種別</summary>
-    private static unsafe (string[] Types, string[] Receivable) Ask(string device)
+    private static (string[] Types, string[] Receivable) Ask(string device)
     {
         var fd = Sys.Open(device, Sys.ReadOnly | Sys.NonBlocking | Sys.CloseOnExec);
         if (fd < 0) return ([], []);
@@ -142,11 +145,7 @@ public static class DeviceProbe
             if (ReceivableFor(delivery) is { Length: > 0 } receivable) return (TypesFor(delivery), receivable);
 
             // 方式を返さないドライバもある。名前から推定する
-            var info = new byte[FrontendInfoSize];
-            fixed (byte* infoAt = info)
-            {
-                if (Sys.Ioctl(fd, FeGetInfo, (nint)infoAt) < 0) return ([], []);
-            }
+            if (Info(fd) is not { } info) return ([], []);
             var types = TypesFromName(ParseName(info));
             return (types, types);
         }

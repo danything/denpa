@@ -249,7 +249,7 @@ internal sealed class UsbReadPump : IDisposable
     /// <summary>バッファの先頭の転送を 1 つ渡す。<paramref name="timeoutMs"/> の間に何も届かなければ 0。読み出しが失敗していれば例外を送出する</summary>
     public int Read(Span<byte> buffer, int timeoutMs)
     {
-        ObjectDisposedException.ThrowIf(_closing, _name);
+        if (_closing) throw new ObjectDisposedException(_name);
         if (!_chunks.TryTake(out var chunk, Math.Max(0, timeoutMs)))
         {
             if (_error is { } error) throw error as IOException ?? new IOException($"{_name}: {error.Message}", error);

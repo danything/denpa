@@ -338,7 +338,7 @@ public sealed class Descrambler(
         }
         if (_packets >= _checkUntil)
         {
-            FinishCheck($"覚えた PAT・PMT を本物で確かめられないまま {HoldLimit / 1024 / 1024}MB 読んだので、捨てずに流します");
+            FinishCheck($"覚えた PAT・PMT を本物で確かめられないまま {HoldLimit / 1024 / 1024} MB 読んだので、捨てずに流します");
             return false;
         }
         if (!Unlisted(packet)) return false;
@@ -633,7 +633,7 @@ public sealed class Descrambler(
         narrowed = false;
         if ((long)_held * PacketSize >= HoldLimit)
         {
-            Log.Write($"PAT・PMT・ECM が揃う前に {HoldLimit / 1024 / 1024}MB 溜まったので、待たずに流します");
+            Log.Write($"PAT・PMT・ECM が揃う前に {HoldLimit / 1024 / 1024} MB 溜まったので、待たずに流します");
             return true;
         }
         if (!TablesSettle()) return false;
@@ -1049,13 +1049,7 @@ public sealed class Descrambler(
             memory?.Pat(section);
         }
         _programs.Clear();
-        var loop = section[8..^4];
-        for (var at = 0; at + 4 <= loop.Length; at += 4)
-        {
-            var number = BinaryPrimitives.ReadUInt16BigEndian(loop[at..]);
-            // 番組 0 は NIT の PID。PMT ではない
-            if (number != 0) _programs[number] = BinaryPrimitives.ReadUInt16BigEndian(loop[(at + 2)..]) & 0x1FFF;
-        }
+        foreach (var (number, pid) in PsiMemory.Programs(section)) _programs[number] = pid;
         foreach (var pid in _pmtSections.Keys.Except(_programs.Values).ToList()) _pmtSections.Remove(pid);
         foreach (var pid in _programs.Values) _pmtSections.TryAdd(pid, new Section(null));
         foreach (var number in _pmts.Keys.Except(_programs.Keys).ToList()) _pmts.Remove(number);

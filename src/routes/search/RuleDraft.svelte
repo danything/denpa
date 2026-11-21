@@ -34,10 +34,9 @@
   import { page } from "$app/state";
   import { untrack } from "svelte";
 
-  import { submitting } from "#lib/actions.js";
+  import { submitting, switched } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
   import type { Arming } from "#lib/arming.svelte.js";
-  import ActionButton from "#lib/components/ActionButton.svelte";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import { SERVICE_TYPE_LABEL, WEEKDAYS } from "#lib/format.js";
   import { clockOf, minutesOf, slotSummary } from "#lib/rule-time.js";
@@ -673,14 +672,23 @@
     {/if}
     {#if draft.editing !== null}
       <div class="edit-actions">
-        <ActionButton
-          action="?/toggleRule"
-          fields={{ id: draft.editing.id }}
-          class="small secondary outline"
-          testid="rule-toggle"
-        >
-          {draft.editing.enabled ? "無効化" : "有効化"}
-        </ActionButton>
+        <!--
+          有効・無効はスイッチ (1 つのことのオン/オフ。docs/design.md の「オン/オフと選ぶもの」。ルールの一覧の行と同じ)。
+          送ったあとは読み直した `draft.editing.enabled` が位置を決め、断られたら `switched` が戻す (e2e の 47-search-rule)
+        -->
+        <form method="POST" action="?/toggleRule" use:submitting={switched}>
+          <input type="hidden" name="id" value={draft.editing.id} />
+          <label class="check-row">
+            <input
+              type="checkbox"
+              role="switch"
+              checked={draft.editing.enabled}
+              onchange={(event) => event.currentTarget.form?.requestSubmit()}
+              data-testid="rule-toggle"
+            />
+            <span>有効</span>
+          </label>
+        </form>
         <ArmedDelete
           {deleting}
           armKey={draft.editing.id}
@@ -919,10 +927,16 @@
   .draft-foot p {
     margin: 0;
   }
+  /* 有効のスイッチを左に、削除を右に */
   .edit-actions {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
     gap: var(--dp-space-2);
+  }
+  .edit-actions form {
+    margin: 0;
   }
   /* 広い形 (右の列) は保存だけを列の幅いっぱいに。スマホの形は「閉じる」を左端、保存を右端に置き、全幅にしない */
   .foot-actions {
