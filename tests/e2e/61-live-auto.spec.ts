@@ -126,8 +126,14 @@ test.describe("ライブの自動", () => {
     await expect(page.getByTestId("live-video")).toBeVisible({
       timeout: 30_000,
     });
-    // 入れ替えたあとの `play`・`playing` が届くまで待つ
-    await page.waitForTimeout(3_000);
+    // 入れ替えた `<video>` が再生を始める (`play` は `paused` が false になった時点で来る) まで待つ
+    await expect
+      .poll(() =>
+        page
+          .getByTestId("live-video")
+          .evaluate((v) => !(v as HTMLVideoElement).paused),
+      )
+      .toBe(true);
     expect(await wakes()).toBe(0);
     await expect(page.getByTestId("live-controls")).toHaveAttribute(
       "data-shown",

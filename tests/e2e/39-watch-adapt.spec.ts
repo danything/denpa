@@ -98,8 +98,10 @@ test.describe("観る画面でその場で流す", () => {
       "回線が細いため、720p に下げました",
     );
     await expect(video).not.toHaveAttribute("src", /file/);
-    // 入れ替えた `<video>` の `play` が届くまで待つ
-    await page.waitForTimeout(2_000);
+    // 入れ替えた `<video>` が再生を始める (`play` は `paused` が false になった時点で来る) まで待つ
+    await expect
+      .poll(() => video.evaluate((v) => !(v as HTMLVideoElement).paused))
+      .toBe(true);
     expect(await wakes()).toBe(0);
 
     // メニューの「自動」の行に、サーバが選んだ形式と高さを添える
