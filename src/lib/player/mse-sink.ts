@@ -81,7 +81,10 @@ export interface MseSink {
   abort(still?: Still): Promise<void>;
   /** 末尾まで届いたことを伝える (`endOfStream`)。伝えないと、最後で止まったまま `ended` が来ない */
   end(still?: Still): Promise<void>;
-  /** 閉じる。開く前なら、開いても何もしない */
+  /**
+   * 閉じる。開く前なら、開いても何もしない。閉じたあとは使わない。開く前に渡されていた仕事は回らないまま残り、
+   * `busy` は true のまま、`settled` も呼ばない
+   */
   destroy(): void;
 }
 

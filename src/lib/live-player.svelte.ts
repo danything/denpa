@@ -682,6 +682,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * (`MseSink` の `still`)
    */
   let feedRun = 0;
+  /** 古いほうを捨てるのに失敗した。次の塊を足し終えるまで捨て直さない (`trim`) */
+  let trimHeld = false;
   /** いま鳴らしている `<video>`。押して音を出すのに要る */
   let element: HTMLVideoElement | null = null;
   /** 前のフレームの写し先。画面から預かる */
@@ -1335,6 +1337,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     const mine = feedRun;
     void sink
       .append(body, () => mine === feedRun && !starved)
+      .then(() => {
+        trimHeld = false;
+      })
       .catch(() => {
         // 追いつけなくなった (溜めきれない `QuotaExceededError` を含む)。並んでいるものは捨て、次に届いたものから足す
         if (mine === feedRun) feedRun++;
@@ -1550,10 +1555,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (sink === null) return;
     const at = element === null ? 0 : element.currentTime;
     const cut = keepFrom();
-    if (head >= cut) return;
+    if (head >= cut || trimHeld) return;
     // 捨て終えるまで `busy` なので、終えるまで `pace` は回らず、続けては渡さない
     void sink.trim(ours(feedRun)).catch(() => {
-      // 捨てられなかった。次に足し終えたとき (`settled`) に
+      /*
+       * 捨てられなかった。次の塊を足し終えるまで捨て直さない (`trimHeld`)。失敗しても手が空けば `settled` から
+       * `pace` が回るので、そのまま捨て直すと待たずに `remove` を繰り返す
+       */
+      trimHeld = true;
     });
     if (element !== null && at < cut) element.currentTime = cut + BEHIND;
   }
@@ -1852,6 +1861,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     sink = null;
     feedRun++;
     finishing = false;
+    trimHeld = false;
     mseCodec = null;
     running = false;
     delay = null;
