@@ -23,7 +23,7 @@ public static class Log
     }
 
     /// <summary>
-    /// **機材の異常の行** (IT930x のブリッジの溢れ)。記録に出し、<see cref="Faulted"/> にも渡す。
+    /// **機材の異常の行** (IT930x のブリッジの溢れと、TS を読めなくなったこと)。記録に出し、<see cref="Faulted"/> にも渡す。
     /// エージェントはこれを denpa に送り (<c>/denpa/events</c> の <c>fault</c>)、denpa が DB に残す。
     /// 記録はメモリと標準出力だけで、エージェントを入れ替えると消え、溢れた瞬間に何をしていたかを読めなかった (2026-11-15 の PX-MLT8PE)
     /// </summary>

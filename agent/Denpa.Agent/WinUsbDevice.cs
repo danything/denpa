@@ -481,7 +481,8 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         {
             ObjectDisposedException.ThrowIf(_closed, this);
             var deadline = Environment.TickCount64 + timeoutMs;
-            for (var round = 0; ; round++)
+            var dropped = 0;
+            for (; ; )
             {
                 if (_length < 0)
                 {
@@ -493,7 +494,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     {
                         // Read と同じく、端点のストールと取り消しはその転送要求だけ捨てて出し直す。出し直しは 1 回の呼び出しで深さの分まで
                         var error = Marshal.GetLastPInvokeError();
-                        if (error is not (ErrorGenFailure or ErrorOperationAborted) || round >= _overlapped.Length) throw Failure(_owner.Name, "TS の読み出しが失敗しました", error);
+                        if (error is not (ErrorGenFailure or ErrorOperationAborted) || ++dropped > _overlapped.Length) throw Failure(_owner.Name, "TS の読み出しが失敗しました", error);
                         done = 0;
                     }
                     _length = (int)done;
@@ -525,6 +526,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                         && Marshal.GetLastPInvokeError() is not (ErrorOperationAborted or ErrorGenFailure or ErrorBadCommand or ErrorDeviceNotConnected))
                     {
                         // 済んだか分からない転送要求のバッファは返さない
+                        Log.Write($"[{_owner.Name}] TS の転送要求が済んだか分からないので、バッファを返さずに残します");
                         return;
                     }
                     _pending[i] = false;

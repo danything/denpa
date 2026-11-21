@@ -328,10 +328,10 @@ public static class Probe
     internal static void LoadCardChoice(Config config) => CardChoice.Load(config.CardsFile);
 
     /// <summary>その機材の鍵の出どころ。PIX-DT295 と IT930x の機材は、その機材のカードリーダーだけ (試験でほかのリーダーに触らない)。--card-url があればそちら</summary>
-    private static IKeySource KeysFor(string device, bool decode, bool cardUrl) =>
+    private static IKeySource KeysFor(string device, bool usesCard, bool cardUrl) =>
         cardUrl ? Keys.Source
         : Dt295.Parse(device) is { } dt295 ? new LocalCard(() => [Dt295.Card(dt295)])
-        : decode && It930x.Parse(device) is { } it930xReceiver && It930xCardAt(It930x.CardHost(it930xReceiver.Port)) is { } it930xCard ? new LocalCard(() => [it930xCard])
+        : usesCard && It930x.Parse(device) is { } it930xReceiver && It930xCardAt(It930x.CardHost(it930xReceiver.Port)) is { } it930xCard ? new LocalCard(() => [it930xCard])
         : Keys.Source;
 
     /// <summary>終わりに機材を閉じる (PIX-DT295 と IT930x の機材。ほかは null)</summary>
@@ -967,8 +967,8 @@ public static class Probe
             {
                 packets++;
                 if (buffer[at] == 0x47) sync++;
-                continuity.Push(buffer.AsSpan(at, 188), DateTime.UtcNow - started);
-                if (DateTime.UtcNow - started < TimeSpan.FromSeconds(1)) firstSecond.Push(buffer.AsSpan(at, 188));
+                continuity.Push(buffer.AsSpan(at, 188), last);
+                if (last < TimeSpan.FromSeconds(1)) firstSecond.Push(buffer.AsSpan(at, 188));
                 observation.Push(buffer.AsSpan(at, 188));
                 if (!Scrambled(buffer.AsSpan(at))) continue;
                 scrambledIn++;

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  denpa を端末で動かすアプリ。画面は持たず、常駐サービス (DenpaService) がエージェントを子プロセスとして起動する。
+  denpa を端末で動かすアプリ。画面は持たず、常駐サービス (DenpaService) がエージェントと denpa 本体を子プロセスとして起動する。
   作りは docs/install-android.md と docs/agent.md「Android でアプリから USB を受け取る」
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"

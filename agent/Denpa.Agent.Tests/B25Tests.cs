@@ -1747,7 +1747,7 @@ public class B25Tests
         var limit = Descrambler.HoldLimit / 188;
         await Assert.That(passed).IsGreaterThan(0);
         await Assert.That(extra - passed).IsBetween(limit - 2, limit);
-        await Assert.That(descrambler.TakeChecked()).StartsWith("覚えた PAT・PMT を本物で確かめられないまま 8MB 読んだので、捨てずに流します");
+        await Assert.That(descrambler.TakeChecked()).StartsWith("覚えた PAT・PMT を本物で確かめられないまま 8 MB 読んだので、捨てずに流します");
     }
 
     /// <summary>覚えておく側は、種別とチャンネルごとに別に持ち、新しい PMT で書き換え、PAT の transport_stream_id が変わればそのチャンネルだけ捨てる</summary>

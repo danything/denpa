@@ -55,7 +55,7 @@ val ffmpeg = System.getenv("DENPA_FFMPEG")?.takeIf { it.isNotEmpty() }
     ?: rootProject.layout.projectDirectory.dir("ffmpeg").asFile.path
 
 /*
- * denpa 本体 (3 段目) の置き場。CI が Dockerfile の `native-files` 段 (`app/`・`font/`・`mpeg2/`) を 1 つの zip にして `assets/server.zip` に置く
+ * denpa 本体の置き場。CI が Dockerfile の `native-files` 段 (`app/`・`font/`・`mpeg2/`) を 1 つの zip にして `assets/server.zip` に置く
  * (android.yml)。zip にするのは、AGP が assets の `_` で始まるディレクトリ (SvelteKit の `_app/`) を入れないため。
  * 既定は android/server/ (リポジトリには入れない)。`DENPA_SERVER` で別の置き場を渡せる。無ければ入れずに組む (エージェントだけが動く)
  */
@@ -99,7 +99,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.danything.denpa"
-        // foregroundServiceType が入った API 29 (Android 10)。bun の Android 向けのビルド (3 段目) も API 28 を求める
+        // foregroundServiceType が入った API 29 (Android 10)。bun の Android 向けのビルドが求める API 28 も満たす
         minSdk = 29
         targetSdk = 37
         versionName = denpaVersion

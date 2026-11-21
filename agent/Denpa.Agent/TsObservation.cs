@@ -166,14 +166,9 @@ public sealed class TsObservation
 
     private void OnPat(byte[] section)
     {
-        _transportStreamId = BinaryPrimitives.ReadUInt16BigEndian(section.AsSpan(3));
-        var loop = section.AsSpan(8, section.Length - 12);
-        for (var at = 0; at + 4 <= loop.Length; at += 4)
+        _transportStreamId = PsiMemory.Tsid(section);
+        foreach (var (number, pid) in PsiMemory.Programs(section))
         {
-            var number = BinaryPrimitives.ReadUInt16BigEndian(loop[at..]);
-            // 番組 0 は NIT の PID。PMT ではない
-            if (number == 0) continue;
-            var pid = BinaryPrimitives.ReadUInt16BigEndian(loop[(at + 2)..]) & 0x1FFF;
             _programs[number] = pid;
             _sections.TryAdd(pid, new Assembler());
         }

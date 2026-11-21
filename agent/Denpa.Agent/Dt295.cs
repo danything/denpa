@@ -38,7 +38,7 @@ public static class Dt295
     /// <summary>
     /// 公式 INF (<c>pxmb86m0x_usb.inf</c>) に並ぶ機材。INF はどれにも同じ idle・TRC イメージ 7 つを入れ、どのイメージを使うかは
     /// 書いていない。DT295 W・DT420・DT410 には DT295 に無い基板の設定 (CapacitanceOfSystem1・2) が付き、その扱いは仕様書に無い。
-    /// PIX-DTxxx は SPI モードの構成で、TS のエンドポイントの登録も 1 つだけ。どれも中身を推し量らずに未確認として断る
+    /// PIX-DTxxx は SPI モードの構成で、TS の端点の登録も 1 つだけ。どれも中身を推し量らずに未確認として断る
     /// </summary>
     public static readonly IReadOnlyList<Dt295Model> Family =
     [
@@ -74,7 +74,7 @@ public static class Dt295
     {
         try
         {
-            return Usable(Found(warn), warn);
+            return Usable(Found(UsbHost.Current, warn), warn);
         }
         catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
         {
@@ -99,10 +99,7 @@ public static class Dt295
     /// 同じドライバの機材 (<see cref="Family"/>) が挿さっているポートと、その機材。未確認のものも含む。**開かない。**
     /// カーネルのドライバが使っているものは並べない
     /// </summary>
-    public static List<(string Port, Dt295Model Model)> Found(Action<string>? warn = null) => Found(UsbHost.Current, warn);
-
-    /// <summary>渡した <see cref="IUsbHost"/> から (渡せるのはテストのため)</summary>
-    internal static List<(string Port, Dt295Model Model)> Found(IUsbHost host, Action<string>? warn) =>
+    private static List<(string Port, Dt295Model Model)> Found(IUsbHost host, Action<string>? warn) =>
         [.. UsbHost.Scan(host, Family, Id, model => model.Name, warn).Select(item => (item.Found.Port, item.Model))];
 
     private static UsbId Id(Dt295Model model) => new(model.Vendor, model.Product);

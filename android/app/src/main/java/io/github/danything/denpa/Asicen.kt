@@ -11,9 +11,9 @@ import java.io.IOException
  *
  * - 実行ファイル (`libasicend.so`・`libasicenctl.so`) は APK の jniLibs に入っていて、nativeLibraryDir に展開される。エージェントがそこから起動する
  * - ファームウェアは実行しないので assets に入れ、ここで filesDir に書き出す (エージェントは asicend に `--firmware` でパスを渡す)
- * - ソケットの置き場は `<dataDir>/r`。asicend の制御ソケット (`r/asicen-userland/v1/<ポート>/control.sock`) が `sun_path` の 108 バイトに収まる短さにする
+ * - ソケットの置き場は `<dataDir>/r`。asicend の制御ソケット (`r/asicen-userland/v1/<筐体の名前>/control.sock`) が `sun_path` の 108 バイトに収まる短さにする
  *
- * CI で入れずに組んだ APK (手元で asicen-userland を置かずに組んだもの) では、エージェントは ASICEN の機材を挙げない
+ * asicen-userland を置かずに組んだ APK では、エージェントは ASICEN の機材を挙げない
  */
 internal object Asicen {
     private const val FIRMWARE_ASSET = "asicen/asicen-loader.bin"

@@ -34,7 +34,7 @@ import kotlin.concurrent.thread
  * APK に denpa 本体が入っていれば bun で動かす denpa ([Server])。
  *
  * - **エージェントは全部のインターフェースで待ち受ける。** 同じ端末の denpa は `https://127.0.0.1:25252#pair=<合言葉>` で、
- *   別の機械の denpa は通知の「QR を表示」で出す登録用の URL で、同じ合言葉で組む (組んだ denpa しか通さないのは今と同じ)。
+ *   別の機械の denpa は通知の「QR を表示」で出す登録用の URL で、同じ合言葉で組む (エージェントは組んだ denpa しか通さない)。
  *   合言葉はアプリが `config/tls/pair-token` に作り、エージェントはそこから読む (Mac の install.sh と同じ)
  * - **動いている間は partial wake lock を持ち続ける。** いつ録画が始まるか分からず、画面を消すと CPU が止まって録画が欠けるため
  * - **部品が自分で終わったら、待ってから起動し直す。** 通知の「終了」のあとは起動し直さない
@@ -45,7 +45,7 @@ import kotlin.concurrent.thread
  *   通知を押すとこの端末のブラウザで denpa を開く。「URL をコピー」はその URL をクリップボードに渡す
  * - **「QR を表示」は、2 分だけ通知を大きな画像の形にして、登録用の URL の QR を出す。** そのあいだのボタンは「終了」「登録用の URL をコピー」「閉じる」。
  *   合言葉が入るので、ロック画面には QR の無い通知を出す (ボタンは 3 つまでしか出ないので、登録用の URL のコピーはこちらに置く)
- * - 状態はどれも [worker] のスレッドで触る
+ * - 状態はどれも [worker] のスレッドで書き換える。メインのスレッドから読むのは、onStartCommand で通知を出し直すときだけ
  */
 class DenpaService : Service() {
     private lateinit var worker: Handler

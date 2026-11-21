@@ -16,6 +16,7 @@ namespace Denpa.Agent;
 /// 使わないリーダーは開かない。カードの候補 (<see cref="CardLinks.Find"/>) に入らず、
 /// 画面がカードの状態を確かめるときも開かない。PIX-DT295・CECH-ZD1 J の差し込み口なら、
 /// チューナーも使っていなければ USB を閉じる (ほかのソフトや <c>--dt295-probe</c> から使える)。
+/// IT930x の機材の内蔵カードリーダーなら、受信機も機材を使っていなければ 30 秒待ってから閉じる (<see cref="It930xDevice.CloseIfIdle(string)"/>)。
 /// </para>
 /// </summary>
 public static class CardChoice

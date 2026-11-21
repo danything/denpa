@@ -30,7 +30,7 @@ internal class Advertiser(private val nsd: NsdManager) {
         }
         val next = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(info: NsdServiceInfo) {
-                Log.i(DenpaService.TAG, "LAN に知らせます (mDNS: ${info.serviceName})")
+                Log.i(DenpaService.TAG, "LAN に知らせました (mDNS: ${info.serviceName})")
             }
 
             override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {

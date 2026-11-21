@@ -18,6 +18,7 @@ namespace Denpa.Agent;
 /// <param name="StatsEveryMs">ロックを待つ間に統計の要求を送る間隔 (これより詰めない)</param>
 /// <param name="StatsResponseMs">受信中に統計の応答を待つ上限</param>
 /// <param name="ReadMs">IN の転送要求を 1 回待つ時間 (転送要求は出したままで、止める合図を確かめる間隔)</param>
+/// <param name="VersionRetryMs">バージョンの問い合わせに応答が無いとき、1 回だけ送り直すまでの時間 (値は仕様書に無い。issue #2755)</param>
 internal sealed record SianoTimings(
     int SendMs = 1_000, int ResponseMs = 10_000, int RunSettleMs = 400, int LockMs = 10_000,
     int StatsEveryMs = 100, int StatsResponseMs = 2_000, int ReadMs = 200, int VersionRetryMs = 1_000);

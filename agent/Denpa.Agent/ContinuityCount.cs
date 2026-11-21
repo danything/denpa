@@ -1,13 +1,14 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// PID ごとの continuity_counter を覚え、パケットごとに飛んだかを返す (<see cref="ContinuityCount"/> と、TSMF で選ぶ前後を数える <see cref="TsmfSelector"/> が使う)。
+/// PID ごとの continuity_counter を覚え、パケットごとに飛んだかを返す (<see cref="ContinuityCount"/>、<c>--tune</c> の最初の 1 秒の集計、TSMF で選ぶ前後を数える <see cref="TsmfSelector"/> が使う)。
 ///
 /// <list type="bullet">
 /// <item>ペイロードの無いパケット (adaptation_field_control が 2) は数を進めないので、比べない</item>
 /// <item>前と同じ数は重送として飛びにしない (規格が許すのは 1 回までだが、何回続いても数えない)</item>
 /// <item>discontinuity_indicator が立っていれば、そこからやり直す</item>
-/// <item>NULL パケット (PID 0x1FFF) と、transport_error_indicator が 1 のパケットは見ない (PID も崩れているため)</item>
+/// <item>NULL パケット (PID 0x1FFF) は見ない</item>
+/// <item>transport_error_indicator が 1 のパケットは PID も崩れているので、比べずに数える (<see cref="Errors"/>)</item>
 /// </list>
 ///
 /// 覚える量は PID の数 (8192) で決まり、長く受けても増えない
@@ -49,7 +50,7 @@ public sealed class ContinuityTracker
 }
 
 /// <summary>
-/// TS の連続性の飛びを数える (<c>--tune</c> の集計。Probe.cs)。PID ごとに continuity_counter が 1 ずつ進むかを見る (見方は <see cref="ContinuityTracker"/>)。
+/// TS の連続性の飛びを数える (<c>--tune</c> と <c>--dt295-probe</c> の集計。Probe.cs・Dt295NativeProbe.cs)。PID ごとに continuity_counter が 1 ずつ進むかを見る (見方は <see cref="ContinuityTracker"/>)。
 ///
 /// 受信の欠けでは、多くの PID が同じところで一緒に飛ぶ。**近くで起きた飛びは 1 か所にまとめる** (<see cref="Places"/>)。
 /// 選局の直後 (最初の 1 秒) は落ち着く前の並びが混じるので数えない
