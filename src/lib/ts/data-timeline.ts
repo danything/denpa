@@ -121,7 +121,7 @@ export function feedFor(
 /**
  * `at` の時点の画面。**そこまでの変化を積んで復元する。**
  *
- * 出す順は `Carousel` に委ねる (pmt → programInfo → DII → モジュール)。シークで戻った
+ * 出す順は `Carousel` に委ねる (pmt → programInfo → DII → モジュール → NPT 参照)。シークで戻った
  * ときも、先頭から積み直すだけで正しい状態になる。変化ログなので、積む順は届いた順。
  *
  * `at` の物差しは渡すタイムラインに合わせる。本番 (観る画面と `feedFor`) は再生位置 (ms) つきの

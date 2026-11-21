@@ -3066,6 +3066,7 @@
           prefecture={data.broadcast.prefecture}
           network={false}
           clock={airTime}
+          shownAt={airTime}
           tune={refuseTune}
         />
 

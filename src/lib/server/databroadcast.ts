@@ -54,10 +54,19 @@ export class DataBroadcast {
   private readonly held = new Carousel();
   private closed = false;
 
-  /** @param onMessage 組み立て終わったものが出るたび */
-  constructor(private readonly onMessage: (message: ResponseMessage) => void) {
+  /**
+   * @param onMessage 組み立て終わったものが出るたび
+   * @param stcTime STC (90 kHz) をサーバの時計の時刻 (unix ms) に直す。**NPT 参照に時刻を付ける** (`nptUpdated` の `timeUnixMillis`)。
+   *   画面は映しているコマの時刻を同じ時計で出す (ライブの `clock` の通知) ので、そこから NPT を進められる (`bml/npt.ts`)
+   */
+  constructor(
+    private readonly onMessage: (message: ResponseMessage) => void,
+    stcTime: (stc: number) => number,
+  ) {
     this.decoder = new BmlDecoder((message) => {
       if (this.closed) return;
+      if (message.type === "nptUpdated")
+        message.timeUnixMillis = stcTime(message.stc);
       // 配る価値のあるものだけ通す ([Carousel](../ts/carousel.ts))
       if (this.held.take(message)) this.onMessage(message);
     });

@@ -91,6 +91,11 @@
     network: boolean;
     /** 放送の時刻 (UNIX ミリ秒)。録画は再生位置から出す。渡さないか null を返せば放送の TOT から */
     clock?: (() => number | null) | null;
+    /**
+     * 映しているコマの時刻 (UNIX ミリ秒)。データ放送の NPT をこの時計で進める (`bml/npt.ts`)。ライブは時計の通知 (`clock`) から出す
+     * 時刻 (サーバが受け取った時刻。`player.airTime`)、録画は再生位置から出す放送の時刻。渡さなければ NPT は分からない
+     */
+    shownAt?: (() => number | null) | null;
     /** 文書が別の局へ選局したい (epgTune)。選局は画面がやり、切り替えたら true。渡さなければいつも失敗 */
     tune?: ((service: Service) => boolean) | null;
     /**
@@ -128,6 +133,7 @@
     prefecture,
     network,
     clock = null,
+    shownAt = null,
     tune = null,
     mainAudio = null,
     cardId = null,
@@ -652,6 +658,7 @@
         set: (key, value) => write(NVRAM_PREFIX + key, value),
       },
       clock: () => clock?.() ?? null,
+      shownAt: () => shownAt?.() ?? null,
       receiver: { zipcode: postal, prefecture },
       onVideoRect: (rect, size) => {
         videoRect = rect;

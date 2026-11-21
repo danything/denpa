@@ -797,8 +797,15 @@ export function eventMessageDescriptor(options: {
   return [0x40, body.length, ...body];
 }
 
-/** NPT 参照記述子 (0x17)。STC が `stc` のとき NPT が `npt` で、そこから同じ速さ (scale 1/1) で進む */
-export function nptReferenceDescriptor(stc: number, npt: number): number[] {
+/**
+ * NPT 参照記述子 (0x17)。STC が `stc` のとき NPT が `npt` で、そこから `scale` の速さで進む
+ * (既定は同じ速さの 1/1。0/1 なら `npt` で止まっている)
+ */
+export function nptReferenceDescriptor(
+  stc: number,
+  npt: number,
+  scale: [numerator: number, denominator: number] = [1, 1],
+): number[] {
   const body = [
     0x00, // post_discontinuity_indicator 0・dsm_content_id 0
     ...be33(stc),
@@ -806,8 +813,8 @@ export function nptReferenceDescriptor(stc: number, npt: number): number[] {
     0xff,
     0xff, // reserved (NPT_Reference の手前の 31 ビットのうち 24)
     ...be33(npt),
-    ...be(1), // scale_numerator
-    ...be(1), // scale_denominator
+    ...be(scale[0]), // scale_numerator
+    ...be(scale[1]), // scale_denominator
   ];
   return [0x17, body.length, ...body];
 }

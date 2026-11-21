@@ -691,6 +691,11 @@ const options: Bun.ServeOptions = {
       knobs.tablesLate = url.searchParams.get("on") === "1";
       return json({ tablesLate: knobs.tablesLate });
     }
+    // データ放送の NPT 参照を流すか (`Knobs.npt`)
+    if (url.pathname === "/__control/npt" && request.method === "POST") {
+      knobs.npt = url.searchParams.get("on") === "1";
+      return json({ npt: knobs.npt });
+    }
     // PMT に字幕の ES を載せるか (`Knobs.captions`)
     if (url.pathname === "/__control/captions" && request.method === "POST") {
       knobs.captions = url.searchParams.get("on") === "1";

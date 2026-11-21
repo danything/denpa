@@ -1191,6 +1191,122 @@ describe("イベントメッセージ (EventMessageFired)", () => {
   });
 });
 
+describe("NPT (getNPT・NPT の TimerFired)", () => {
+  /** 時刻 `at` (ミリ秒) に NPT `npt` (ミリ秒) で、そこから進む参照 */
+  const nptAt = (at: number, npt: number): ResponseMessage => ({
+    type: "nptUpdated",
+    componentId: 0x41,
+    reference: {
+      type: "nptReference",
+      postDiscontinuityIndicator: false,
+      dsmContentId: 0,
+      STCReference: 0,
+      NPTReference: npt * 90,
+      scaleNumerator: 1,
+      scaleDenominator: 1,
+    },
+    stc: 0,
+    timeUnixMillis: at,
+  });
+  const script = `function start() { browser.Ureg[1] = "ready"; }
+        function read() { browser.Ureg[3] = "" + browser.getNPT(); }
+        function fired() { browser.Ureg[4] = "fired:" + browser.getNPT(); }`;
+
+  async function opening(
+    shownAt: () => number | null,
+    timer = "",
+  ): Promise<Bml> {
+    const { bml } = open({ shownAt });
+    feedAll(
+      bml,
+      carousel([
+        startup(
+          `<bevent><beitem type="EventMessageFired" subscribe="subscribe" onoccur="read();" es_ref="/41" message_group_id="1"/>${timer}</bevent>`,
+          script,
+        ),
+      ]),
+    );
+    const { done } = await watch(() => inside(bml).ureg[1] === "ready");
+    expect(done).toBe(true);
+    return bml;
+  }
+
+  /** 文書に getNPT を読ませて返す。すぐ起きるイベントメッセージを送る (同じ id は 1 回しか起きないので、毎回変える) */
+  let asked = 0;
+  async function read(bml: Bml): Promise<string> {
+    const ureg = inside(bml).ureg;
+    ureg[3] = "";
+    asked++;
+    bml.feed({
+      type: "esEventUpdated",
+      componentId: 0x41,
+      dataEventId: 1,
+      events: [
+        {
+          type: "immediateEvent",
+          eventMessageGroupId: 1,
+          timeMode: 0,
+          eventMessageType: 0,
+          eventMessageId: ((asked & 0xff) << 8) | 1,
+          privateDataByte: [],
+        },
+      ],
+    });
+    const { done } = await watch(() => ureg[3] !== "", 2_000);
+    expect(done).toBe(true);
+    return ureg[3]!;
+  }
+
+  test("getNPT は届いた参照とコマの時刻から進み、止めれば止まり、飛べば付いてくる。届くまでは NaN", async () => {
+    let shown = 10_000;
+    const bml = await opening(() => shown);
+    expect(await read(bml)).toBe("NaN");
+    bml.feed(nptAt(10_000, 5_000));
+    shown = 12_500;
+    expect(await read(bml)).toBe("7500");
+    // 止めている (コマの時刻が進まない)
+    expect(await read(bml)).toBe("7500");
+    // シーク
+    shown = 70_000;
+    expect(await read(bml)).toBe("65000");
+    // コマの時刻が分からなくなった
+    shown = Number.NaN;
+    expect(await read(bml)).toBe("NaN");
+  });
+
+  test("NPT の TimerFired は、NPT が time_value (ミリ秒) に達したら 1 秒の刻みを待たずに 1 回だけ起きる", async () => {
+    const started = performance.now();
+    // コマは等速で進む
+    const shown = () => 10_000 + (performance.now() - started);
+    const bml = await opening(
+      shown,
+      '<beitem type="TimerFired" subscribe="subscribe" time_mode="NPT" time_value="5600" onoccur="fired();"/>',
+    );
+    const ureg = inside(bml).ureg;
+    expect(ureg[4]).toBe("");
+    // いまの NPT が 5 秒
+    bml.feed(nptAt(shown(), 5_000));
+    const { done } = await watch(() => ureg[4] !== "", 3_000);
+    expect(done).toBe(true);
+    const npt = Number(ureg[4]!.replace("fired:", ""));
+    expect(npt).toBeGreaterThanOrEqual(5_600);
+    // 刻み (1 秒) を待たず、達した所で起きる
+    expect(npt).toBeLessThan(5_600 + 300);
+    ureg[4] = "";
+    await watch(() => false, 1_200);
+    expect(ureg[4]).toBe("");
+  });
+
+  test("NPT が分からない間は、NPT の TimerFired を起こさない", async () => {
+    const bml = await opening(
+      () => 10_000,
+      '<beitem type="TimerFired" subscribe="subscribe" time_mode="NPT" time_value="0" onoccur="fired();"/>',
+    );
+    await watch(() => false, 1_200);
+    expect(inside(bml).ureg[4]).toBe("");
+  });
+});
+
 describe("ライブのように流し続けても、持つものと占める時間が一定に収まる", () => {
   /** 入口の部品のモジュール 1 つ */
   const moduleOf = (

@@ -42,6 +42,7 @@ import { Dom, type DomHost, numberAttr } from "./dom";
 import { fontIdOf, parseDrcs } from "./drcs";
 import { decodeEuc } from "./euc";
 import { parseMng } from "./mng";
+import { NptClock } from "./npt";
 import { Nvram, type ReceiverInfo, type Store } from "./nvram";
 import type { Plane } from "./plane";
 import { alphaPng, applyClut } from "./png";
@@ -100,6 +101,11 @@ export interface BmlOptions {
   store: Store;
   /** 放送の時刻 (UNIX ミリ秒)。null なら TOT から */
   clock?: () => number | null;
+  /**
+   * 映しているコマの時刻 (UNIX ミリ秒)。**NPT をこの時計で進める** (`nptUpdated` の `timeUnixMillis` と同じ物差し。[npt.ts](npt.ts))。
+   * ライブはサーバが受け取った時刻、録画は再生位置から出した放送の時刻。無いか null を返せば NPT は分からない (`getNPT` は NaN)
+   */
+  shownAt?: () => number | null;
   receiver?: Partial<ReceiverInfo>;
   /** 映像の object の場所 (画面の座標)。映像が無い・隠れていれば null */
   onVideoRect?: (rect: Rect | null, plane: Plane) => void;
@@ -332,6 +338,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   private readonly shadow: ShadowRoot;
   private doc: BmlDocument | null = null;
+  /** NPT (サーバの `nptUpdated` とコマの時刻から。[npt.ts](npt.ts))。局を替えるまで持つ (文書を替えても同じ放送) */
+  private readonly nptClock = new NptClock();
+  /** NPT で書いた TimerFired を 1 秒の刻みより細かく起こす (`timerFired`)。待っていなければ null */
+  private nptTimer: ReturnType<typeof setTimeout> | null = null;
   private current: string | null = null;
   private renderer: Renderer | null = null;
   private vm: Vm | null = null;
@@ -413,6 +423,13 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   feed(message: ResponseMessage): void {
     if (this.destroyed) return;
+    // NPT は文書でなく放送の状態。受け取ったときのコマの時刻は、時刻を付けない送り手のときだけ使う (`npt.ts`)
+    if (message.type === "nptUpdated") {
+      this.nptClock.update(message, this.shownAt());
+      // 届いた参照でもう達した NPT のタイマーがあれば起こし、次を待ち直す
+      this.tick();
+      return;
+    }
     if (message.type === "pmt")
       this.audioComponents(message.components, message.audios);
     // 届いたものを処理するのもエンジンの仕事に数える (ライブは止まらずに届き続ける。
@@ -463,6 +480,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.queue = [];
     this.clearTimers();
     if (this.ticker !== null) clearInterval(this.ticker);
+    if (this.nptTimer !== null) clearTimeout(this.nptTimer);
     this.stopMedia();
     this.renderer?.destroy();
     this.renderer = null;
@@ -471,6 +489,17 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   // ---- 時計 ----
+
+  /** 映しているコマの時刻 (`BmlOptions.shownAt`)。分からなければ null */
+  private shownAt(): number | null {
+    const shown = this.options.shownAt?.();
+    return shown == null || !Number.isFinite(shown) ? null : shown;
+  }
+
+  /** いまの NPT (ミリ秒)。NPT の無い局・まだ届いていない・コマの時刻が分からないときは null (`getNPT` は NaN) */
+  npt(): number | null {
+    return this.nptClock.at(this.shownAt());
+  }
 
   now(): number {
     const given = this.options.clock?.();
@@ -741,7 +770,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
   }
 
-  /** 1 秒ごと。時刻指定の TimerFired (absolute) */
+  /** 1 秒ごと。時刻指定の TimerFired (absolute・origAbsolute・NPT) */
   private tick(): void {
     if (this.doc === null || this.halted) return;
     this.work(() => this.timerFired());
@@ -749,11 +778,30 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   private timerFired(): void {
     const now = this.now();
+    const shown = this.shownAt();
+    const npt = this.nptClock.at(shown);
+    /** 次の NPT のタイマーまでのミリ秒 (NPT が進んでいるときだけ) */
+    let next = Number.POSITIVE_INFINITY;
     for (const beitem of this.beitems("TimerFired")) {
       if (beitem.memo["fired"] === true) continue;
       const mode = beitem.attr("time_mode") ?? "";
-      if (mode !== "absolute" && mode !== "origAbsolute") continue;
       const value = beitem.attr("time_value") ?? "";
+      /*
+       * **NPT は time_value をミリ秒の NPT として読む。** NPT がそこに達したら起こす。NPT が分からない間は起こさない
+       * (NPT の無い局・参照がまだ届いていない)。NPT が先へ飛んで越えたときも起こす
+       */
+      if (mode === "NPT") {
+        if (!/^\d+$/.test(value) || npt === null) continue;
+        const at = Number(value);
+        if (at > npt) {
+          if (this.nptClock.running(shown)) next = Math.min(next, at - npt);
+          continue;
+        }
+        beitem.memo["fired"] = true;
+        this.handle(beitem, "onoccur", { type: "TimerFired", status: 0 });
+        continue;
+      }
+      if (mode !== "absolute" && mode !== "origAbsolute") continue;
       const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(value);
       if (m === null) continue;
       const at =
@@ -762,6 +810,20 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       beitem.memo["fired"] = true;
       this.handle(beitem, "onoccur", { type: "TimerFired", status: 0 });
     }
+    /*
+     * **NPT のタイマーは、1 秒の刻みを待たずに達した所で起こす。** NPT は番組の中の場面に合わせて書かれ、
+     * 1 秒遅れると映像とずれて見える。次の刻みより前に達するものがあれば、その時刻にもう一度判定する
+     * (待つのは実時間のミリ秒。速く再生していると達したあとに起き、遅れは刻みの 1 秒より短い。遅く再生していると達する前に起き、
+     * そこで判定し直して待ち直す。どちらも達する前にはタイマーを起こさない)
+     */
+    if (this.nptTimer !== null) clearTimeout(this.nptTimer);
+    this.nptTimer =
+      next < 1000
+        ? setTimeout(() => {
+            this.nptTimer = null;
+            this.tick();
+          }, next)
+        : null;
   }
 
   // ---- 文書を替える ----

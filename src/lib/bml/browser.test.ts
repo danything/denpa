@@ -215,8 +215,8 @@ describe("browser.*", () => {
             out[groups.length + 1] = browser.getResidentAppVersion("x");
             var result = out;
         `);
-    // Ctrl.Media は isSupportedMedia が答えるのと揃える。PPP・常駐アプリ・外のブラウザ・AIT・NPT は無い
-    expect(items(result)).toEqual([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, null]);
+    // Ctrl.Media は isSupportedMedia が答えるのと揃える。PPP・常駐アプリ・外のブラウザ・AIT は無い。NPT はある
+    expect(items(result)).toEqual([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, null]);
   });
 
   test("getBrowserSupport の IRDID は、getIRDID が番号を返せるときだけ 1 と答える", async () => {

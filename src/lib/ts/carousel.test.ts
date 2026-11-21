@@ -151,6 +151,29 @@ describe("データ放送の覚え書き", () => {
     expect(ids).not.toContain(1);
   });
 
+  test("NPT 参照はコンポーネントごとに最後の 1 つをモジュールの後に渡し、NPT が無くなったら渡さない", () => {
+    const held = new Carousel();
+    const npt = (componentId: number, stc: number, gone = false): Message =>
+      ({
+        type: "nptUpdated",
+        componentId,
+        reference: gone ? null : { type: "nptReference", STCReference: stc },
+        stc,
+        timeUnixMillis: stc,
+      }) as unknown as Message;
+    held.take(npt(0x41, 1));
+    held.take(moduleOf(96, 1));
+    held.take(npt(0x41, 2));
+    held.take(npt(0x42, 3));
+    expect(held.replay()).toEqual([
+      moduleOf(96, 1),
+      npt(0x41, 2),
+      npt(0x42, 3),
+    ]);
+    held.take(npt(0x41, 4, true));
+    expect(held.replay()).toEqual([moduleOf(96, 1), npt(0x42, 3)]);
+  });
+
   /** 覚えないものは、渡すものに出てこない */
   test("時刻は覚えない", () => {
     const held = new Carousel();

@@ -7,7 +7,7 @@
  * web-bml は MIT で、著作権表示と許諾の文は [LICENSE](../LICENSE) に置いてある。
  *
  * 載せるのは denpa が実際に作るものだけ (PMT・モジュール一覧・揃ったモジュール・
- * ストリーム記述子のイベント・番組の情報・放送の時刻)。web-bml が自前の
+ * ストリーム記述子のイベント・使い始めた NPT 参照・番組の情報・放送の時刻)。web-bml が自前の
  * TS 解析のために持っていた PCR・PES・BIT・映像の URL は作らないので持たない。
  */
 
@@ -147,6 +147,29 @@ export interface ESEventUpdatedMessage {
   dataEventId: number;
 }
 
+/**
+ * 使い始めた NPT 参照 ([bml.ts](bml.ts) の `BmlDecoder`)。**参照が替わったときと、放送の時計 (STC) が不連続になったときだけ送る。**
+ *
+ * NPT は `reference` の STC_Reference で NPT_Reference になり、そこから速さ (scale_numerator / scale_denominator) で進む。
+ * 受け取る側は、STC を自分の時計に直した `timeUnixMillis` から NPT を進める
+ */
+export interface NPTUpdatedMessage {
+  type: "nptUpdated";
+  componentId: number;
+  /** 使い始めた参照。null は NPT が無くなった (STC が不連続になり、新しい時計の参照がまだ来ていない) */
+  reference: NPTReference | null;
+  /**
+   * この参照を使い始める STC (90 kHz)。ふつうは参照の STC_Reference。STC が不連続になった直後は、それより後で
+   * 使い始めた時点になる。`reference` が null なら NPT が無くなった時点
+   */
+  stc: number;
+  /**
+   * `stc` の時刻 (UNIX ミリ秒)。**`BmlDecoder` は付けない。** 受け取る側が自分の時計で付ける
+   * (denpa はライブならサーバが受け取った時刻、録画なら TS の先頭から PCR が進んだぶん)
+   */
+  timeUnixMillis?: number;
+}
+
 /** 番組の情報。TS からではなく DB から組む (denpa の `server/live.ts`・`server/recorded-bml.ts`) */
 export interface ProgramInfoMessage {
   type: "programInfo";
@@ -172,5 +195,6 @@ export type ResponseMessage =
   | ModuleDownloadedMessage
   | ModuleListUpdatedMessage
   | ESEventUpdatedMessage
+  | NPTUpdatedMessage
   | ProgramInfoMessage
   | CurrentTime;

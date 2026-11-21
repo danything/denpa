@@ -9,7 +9,7 @@ import {
   stream,
 } from "@danything/arib/synth";
 
-import { BroadcastClock, parseStart, readPcr } from "./clock";
+import { BroadcastClock, parseStart, readPcr, stcUnixMs } from "./clock";
 
 const PID_PMT = 0x1000;
 const PID_PCR = 0x0100;
@@ -121,5 +121,19 @@ describe("ffmpeg の start: を読む", () => {
     expect(
       Number.isNaN(parseStart("Stream #0:0[0x111]: Video: mpeg2video")),
     ).toBe(true);
+  });
+});
+
+describe("STC を時刻に直す", () => {
+  test("組の PCR から進んだぶんを足す。一周をまたいでも近いほうで数える", () => {
+    const anchor = { pcr: 100, unixMs: 1_000_000 };
+    expect(stcUnixMs(anchor, 102.5 * 90_000)).toBe(1_002_500);
+    expect(stcUnixMs(anchor, 99 * 90_000)).toBe(999_000);
+    // 組は一周の手前、STC は一周した直後 (2 秒進んだ)
+    const late = { pcr: 2 ** 33 / 90_000 - 1, unixMs: 1_000_000 };
+    expect(stcUnixMs(late, 90_000)).toBe(1_002_000);
+    expect(stcUnixMs({ pcr: 1, unixMs: 1_000_000 }, 2 ** 33 - 90_000)).toBe(
+      998_000,
+    );
   });
 });

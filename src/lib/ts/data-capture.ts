@@ -10,6 +10,7 @@ import { BmlDecoder } from "@danything/arib/bml";
 import { PacketStream } from "@danything/arib/psi";
 
 import { Carousel } from "./carousel";
+import { stcUnixMs } from "./clock";
 import type { TimedMessage } from "./data-timeline";
 import { TsHead } from "./ts-head";
 
@@ -55,8 +56,19 @@ export class DataBroadcastCapture {
     }
   }
 
-  /** ここまでに並んだ変化。渡し終えてから読む */
+  /**
+   * ここまでに並んだ変化。渡し終えてから読む。
+   *
+   * **NPT 参照には、TS の先頭から PCR が進んだぶんで時刻を付ける** (`nptUpdated` の `timeUnixMillis`)。観る画面は再生位置を
+   * 同じ物差しで放送の時刻に直す (`watch/[id]` の `airTime`) ので、TDT のずれは入らない。ffmpeg が先頭を最初の PTS に寄せるぶん
+   * (`ts-head.ts`。1 秒足らず) だけ NPT が遅れる。並べる位置 (`at`) は TDT の粒度のまま (ほかの変化と同じ順に並べるため)。先頭は TDT を見るまで決まらないので、ここで付ける
+   */
   result(): TimedMessage[] {
+    const anchor = this.measure.anchor;
+    if (anchor !== null)
+      for (const { message } of this.timeline)
+        if (message.type === "nptUpdated")
+          message.timeUnixMillis = stcUnixMs(anchor, message.stc);
     return this.timeline;
   }
 }

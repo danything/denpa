@@ -17,7 +17,7 @@
 import { parseTimeTable, PID_TIME } from "@danything/arib/eit";
 import { PacketStream, SectionAssembler } from "@danything/arib/psi";
 
-import { BroadcastClock, PCR_WRAP } from "./clock";
+import { type Anchor, BroadcastClock, PCR_WRAP } from "./clock";
 
 export class TsHead {
   private readonly packets = new PacketStream();
@@ -34,17 +34,31 @@ export class TsHead {
     return this.headAt;
   }
 
+  /**
+   * 先頭の PCR と放送時刻の組。**PCR の時計の値を放送時刻に直す** (`clock.ts` の `stcUnixMs`。録画のデータ放送の NPT 参照)。
+   * 先頭をまだ測れていなければ null
+   */
+  get anchor(): Anchor | null {
+    return this.headAt === null || Number.isNaN(this.firstPcr)
+      ? null
+      : { pcr: this.firstPcr, unixMs: this.headAt };
+  }
+
   /** TS のチャンクを渡す (パケットの切れ目は気にしなくてよい) */
   feed(chunk: Uint8Array): void {
     for (const packet of this.packets.feed(chunk)) this.feedPacket(packet);
   }
 
-  /** 切り分け済みのパケットを 1 つ。測れたあとは何もしない */
+  /**
+   * 切り分け済みのパケットを 1 つ。測れたあとは何もしない。PCR より先に TDT が来たときだけ、最初の PCR を読むまで続ける
+   * (先頭の時刻は TDT のところで決まり、`anchor` は最初の PCR をその時刻とみなす。PCR は 0.1 秒おきに来るので、ずれはその内に収まる)
+   */
   feedPacket(packet: Uint8Array): void {
-    if (this.headAt !== null) return;
+    if (this.headAt !== null && !Number.isNaN(this.firstPcr)) return;
     // 時計を先に進める。同じパケットで TDT が揃ったときに、そこまでの PCR で先頭を測る
     this.clock.feedPacket(packet, 0);
     if (Number.isNaN(this.firstPcr)) this.firstPcr = this.clock.now;
+    if (this.headAt !== null) return;
     for (const section of this.time.feed(packet)) {
       const at = parseTimeTable(section);
       if (at === null) continue;
