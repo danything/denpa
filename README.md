@@ -116,6 +116,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [docs/tuner-pt3.md](docs/tuner-pt3.md) — PT3 など (Linux DVB。実機で確かめていない機材も)
 - [docs/tuner-it930x.md](docs/tuner-it930x.md) — PX-MLT5 系・PX-Q3U4・PX-W3U4 など (IT930x の機材)
 - [docs/tuner-px-s1ud.md](docs/tuner-px-s1ud.md) — PX-S1UD
+- [docs/tuner-xbox-one.md](docs/tuner-xbox-one.md) — Xbox One Digital TV Tuner (ケーブルだけ)
 
 **乗り換え**
 

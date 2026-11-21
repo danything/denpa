@@ -133,15 +133,15 @@ adb push denpa.env /sdcard/Android/data/io.github.danything.denpa/files/denpa.en
 `denpa.env` のほかはアプリの置き場 (`/data/user/0/io.github.danything.denpa/`) の中です。どれもアンインストールで録画ごと消えます。端末のバックアップと引っ越しには載せません。
 録画を USB のストレージや SD カードに置くことは、まだできません。
 
-| 置き場                | 中身                                                                                                      |
-| --------------------- | --------------------------------------------------------------------------------------------------------- |
-| `files/denpa/config/` | エージェントの `tuners.json`・`channels.json`・`cards.json`・`tls/` (`tls/pair-token` は組むときの合言葉) |
-| `files/denpa/data/`   | denpa の DB (`denpa.db`) と、その隣に置くもの (`logos/`・`tls/` など)                                     |
-| `files/denpa/media/`  | 録画 (`MEDIA_DIR`。元の TS は `raw/`、エンコードしたものは `encoded/`)                                    |
-| `files/denpa/server/` | APK から書き出した denpa 本体 (アプリ・フォント・デコーダ)。上げると入れ替わる                            |
-| `u`                   | アプリが USB の機材を渡すソケット (`USB_BROKER`)                                                          |
-| `files/asicen/`       | ASICEN 系のファームウェア (`asicen-loader.bin`。APK から書き出したもの)                                   |
-| `r`                   | asicend のソケット (`ASICEN_RUNTIME_DIR`)                                                                 |
+| 置き場                | 中身                                                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `files/denpa/config/` | エージェントの `tuners.json`・`channels.json`・`cards.json`・`tls/` (`tls/pair-token` は組むときの合言葉)・`firmware/` (アプリが写した利用者のファームウェア。[tuner-xbox-one.md](tuner-xbox-one.md#置くファームウェア)) |
+| `files/denpa/data/`   | denpa の DB (`denpa.db`) と、その隣に置くもの (`logos/`・`tls/` など)                                                                                                                                                    |
+| `files/denpa/media/`  | 録画 (`MEDIA_DIR`。元の TS は `raw/`、エンコードしたものは `encoded/`)                                                                                                                                                   |
+| `files/denpa/server/` | APK から書き出した denpa 本体 (アプリ・フォント・デコーダ)。上げると入れ替わる                                                                                                                                           |
+| `u`                   | アプリが USB の機材を渡すソケット (`USB_BROKER`)                                                                                                                                                                         |
+| `files/asicen/`       | ASICEN 系のファームウェア (`asicen-loader.bin`。APK から書き出したもの)                                                                                                                                                  |
+| `r`                   | asicend のソケット (`ASICEN_RUNTIME_DIR`)                                                                                                                                                                                |
 
 ## 確かめる
 

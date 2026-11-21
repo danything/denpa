@@ -257,11 +257,13 @@ NAS のユーザーと Windows のユーザーが違うときは、そのユー�
 - **PIXELA PIX-DT295** (地上波・BS・CS)。エージェントが WinUSB で USB を直に持ちます。`06b8:103b` のドライバを WinUSB に替えます。
   機材のレジスタをエージェントが直に書く方式 (ファームウェアは入れません) は、Windows の実機では確かめていません。エージェントが途中で止まったあとなどは、機材を挿し直してください
   ([tuners.md](tuners.md#pixela-pix-dt295))
+- **Microsoft Xbox One Digital TV Tuner** (ケーブルだけ)。エージェントが WinUSB で USB を直に持ちます。`045e:02d5` のドライバを WinUSB に替え、
+  復調のファームウェアを `~/denpa/config/firmware/` に置きます。実機では確かめていません ([tuner-xbox-one.md](tuner-xbox-one.md))
 - ドライバは `install.ps1 -WinUsb` で WinUSB に替えます ([チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える)。Zadig でも替えられます)。
   **PX-Q3 系と PX-MLT8PE は USB の機材が 2 つ並ぶので、両方とも替えます** (`-WinUsb` は挿さっている対応機材をまとめて替える)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに選局が失敗し、そう添えて返します
   (エージェントは WinUSB で機材を開くので、WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
-- IT930x・Siano・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
+- IT930x・Siano・CECH-ZD1 J・PIX-DT295・Xbox One Digital TV Tuner の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
   `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。IT930x の機材の内蔵リーダーと CECH-ZD1 J の差し込み口も

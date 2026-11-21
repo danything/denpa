@@ -19,6 +19,14 @@ Microsoft の USB チューナー (USB `045e:02d5`) で、**ケーブル (ISDB-C
 - ファイル: `dvb-demod-mn88472-02.fw` (2,012 バイト。SHA-256 が `7be4b830` で始まり `2e9c6196` で終わるもの)。LibreELEC の dvb-firmware のリポジトリにあります
 - 置き場: `tuners.json` の隣の `firmware/` (コンテナは `/config/firmware/`、Mac と Windows は `~/denpa/config/firmware/`)。Linux はホストの `/lib/firmware/` も読みます。
   コンテナで `/lib/firmware/` を使うときは、そのディレクトリをコンテナに渡します
+- Android (11 から) では、外部ストレージのアプリの置き場の `firmware/` に `adb push` で置き、アプリを「終了」してから起動し直します。
+  エージェントの置き場 (`files/denpa/config/firmware/`) には利用者が書けないので、アプリがエージェントを起動するときにそこへ写します。
+  Android 10 では写しません。ほかのアプリも書ける置き場のためです ([install-android.md](install-android.md#環境変数を足す-denpaenv) の `denpa.env` と同じ)
+
+  ```sh
+  adb push dvb-demod-mn88472-02.fw /sdcard/Android/data/io.github.danything.denpa/files/firmware/
+  ```
+
 - 大きさか SHA-256 が違うファイルは送りません。無いときと違うときは、どのファイルをどこに置けばよいかを、設定の「受信」の「チューナー」の状態の列と記録に出します。
   その機材だけを使わず、ほかのチューナーは止めません
 
@@ -42,7 +50,7 @@ sudo reboot
 ## 確かめていないこと
 
 - **実機での動作のすべて。** ブリッジのファームウェアの流し込み、ロック、TS の受け取り
-- USB の記述子。インタフェースと代替設定の番号、bulk の `wMaxPacketSize`、`0x83` の端点があるかは、資料で確かめられていません。
+- USB の記述子。インターフェースと代替設定の番号、bulk の `wMaxPacketSize`、`0x83` の端点があるかは、資料で確かめられていません。
   エージェントは代替設定を選び直さず、開いたときに記述子を読んで記録に出し、TS の端点 (`0x82`) の `wMaxPacketSize` から転送の大きさを決めます
 - 256QAM の搬送波。元の報告は J:COM の 64QAM でのロックだけです。変調とシンボルレートは復調に書かず、復調が自分で見分けると推定しています
 - チューナーの AGC。仕様書が勧める側の値を書きます。帯域が 6 MHz ちょうどでないときに元のドライバが選ぶ値で、実機で受けられたと報告されている値です。もう一方の 6 MHz 用の値は試した記録が無く、入れていません
