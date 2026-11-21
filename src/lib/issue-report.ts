@@ -11,7 +11,7 @@
  * この端末の再生の記録 (`playback-log.ts`) とチューナーの状態・機材の異常を入れる。
  *
  * **URL は 8000 字まで** (`URL_LIMIT`)。長すぎる URL は GitHub やブラウザに断られる。
- * ログは先に選ぶ見出し (`LogSource.first`) を先に、次に警告とエラーを先に、それぞれ新しいほうから選び、出すときは古い順に並べ直す。
+ * ログは警告とエラーを先に (そのうち再生とチューナーの記録 `LogSource.first` を先に)、それぞれ新しいほうから選び、出すときは古い順に並べ直す。
  * 入りきらなかったぶんは数を書き、全部はコピーかダウンロードしたものを貼ってもらう
  */
 
@@ -121,7 +121,7 @@ const omittedNote = (count: number) =>
 
 /**
  * **枠 (`budget`。URL に入れたときの字数) に入るだけのログを選ぶ。**
- * 先に選ぶ見出し (`first`) の行を先に、次に警告とエラーを先に、同じなら新しいほうから。出すときは見出しごとに古い順
+ * 警告とエラーを先に、同じ重さなら先に選ぶ見出し (`first`) を先に、同じなら新しいほうから。出すときは見出しごとに古い順
  */
 export function fitLogs(
   sources: readonly LogSource[],
@@ -144,12 +144,15 @@ export function fitLogs(
     if (source.note !== undefined) used += cost(source.note);
   }
 
+  /*
+   * 選ぶ順: 先に選ぶ見出しの警告とエラー → ほかの警告とエラー → 先に選ぶ見出しのふつうの行 → ほかのふつうの行。
+   * 空いているチューナーの行のようなふつうの行に、サーバの警告より先に枠を使わせない
+   */
+  const rank = (entry: (typeof all)[number]) =>
+    (entry.line.level === "info" ? 2 : 0) +
+    (sources[entry.source]!.first === true ? 0 : 1);
   const order = [...all].sort(
-    (a, b) =>
-      Number(sources[b.source]!.first === true) -
-        Number(sources[a.source]!.first === true) ||
-      Number(a.line.level === "info") - Number(b.line.level === "info") ||
-      b.line.at - a.line.at,
+    (a, b) => rank(a) - rank(b) || b.line.at - a.line.at,
   );
   const chosen = new Set<(typeof all)[number]>();
   for (const entry of order) {
@@ -414,7 +417,7 @@ export function deviceText(device: {
     browser ?? "ブラウザ不明",
     os ?? "OS 不明",
     `画面 ${device.screen.width}×${device.screen.height}`,
-    `窓 ${device.viewport.width}×${device.viewport.height}`,
+    `ウィンドウ ${device.viewport.width}×${device.viewport.height}`,
     `倍率 ${Math.round(device.pixelRatio * 100) / 100}`,
     device.coarse ? "指で操作" : "マウスで操作",
   ].join("・");

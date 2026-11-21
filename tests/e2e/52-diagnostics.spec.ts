@@ -234,12 +234,19 @@ test.describe("設定のバージョンと環境・ログ", () => {
       /\[warn\] 回線が細いため、720p に下げました \(ライブ・h264・元の画質 → 720p・受け取り 3\.2 Mbit\/s・必要 10\.5 Mbit\/s/,
     );
     await expect(logs).toHaveValue(/--- チューナーのログ/);
-    await expect(logs).toHaveValue(/」[^\n]+・(空き|[^\n]+に使用中)/);
+    // 空いているチューナーの行はふつうの行なので、URL に入りきらなければ省かれる。全部入りの報告には必ず入る
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      dialog.getByTestId("issue-download").click(),
+    ]);
+    expect(readFileSync((await download.path())!, "utf8")).toMatch(
+      /」[^\n]+・(空き|[^\n]+に使用中)/,
+    );
     const environment = dialog.getByTestId("issue-field-environment");
     await expect(environment).toHaveValue(/ \/ CPU: .+コア/);
     await expect(environment).toHaveValue(/ \/ GPU: /);
     await expect(environment).toHaveValue(
-      / \/ 端末: [^/]+・画面 \d+×\d+・窓 \d+×\d+・倍率 [\d.]+・マウスで操作 \/ /,
+      / \/ 端末: [^/]+・画面 \d+×\d+・ウィンドウ \d+×\d+・倍率 [\d.]+・マウスで操作 \/ /,
     );
     // URL にもそのまま入る
     const url = new URL(

@@ -58,6 +58,13 @@ describe("再生の記録を足す", () => {
     expect(list).toHaveLength(1);
     list = pushPlayback(list, { ...encode, at: BASE + REPEAT_GAP });
     expect(list).toHaveLength(2);
+    // 間に別の理由が挟まっても、間のうちの同じ判断は足さない (encode と pinned が交互に出るとき)
+    const pinned = { ...encode, reason: "pinned" as const, at: BASE + 1_000 };
+    const alternated = pushPlayback(
+      pushPlayback(pushPlayback([], encode), pinned),
+      { ...encode, at: BASE + 2_000 },
+    );
+    expect(alternated).toHaveLength(2);
     // 段が違えば続けて足す
     list = pushPlayback(list, event({ at: BASE + REPEAT_GAP + 1 }));
     expect(list).toHaveLength(3);
@@ -146,6 +153,7 @@ describe("段を動かす判断を端末に覚える", () => {
 
   test("回線が細くて下げたとき、受け取りの速さと段に要る速さを残す", () => {
     const adapter = new RungAdapter();
+    const start = BASE + 1_000_000_000;
     const sample: Omit<AdaptSample, "now"> = {
       route: "watch",
       current: 0,
@@ -158,7 +166,11 @@ describe("段を動かす判断を端末に覚える", () => {
       codec: "h264",
     };
     let decided = null;
-    for (let now = BASE; now < BASE + 60_000 && decided === null; now += 1_000)
+    for (
+      let now = start;
+      now < start + 60_000 && decided === null;
+      now += 1_000
+    )
       decided = adapter.tick({ ...sample, now });
     expect(decided?.reason).toBe("slow");
     const saved = loadPlayback();

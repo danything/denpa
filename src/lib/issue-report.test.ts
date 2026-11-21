@@ -144,12 +144,12 @@ describe("最初に入れるログ", () => {
     expect(dropped).toBe(0);
   });
 
-  test("先に選ぶ見出し (再生とチューナーの記録) は、ほかの見出しの警告とエラーより先に入る", () => {
+  test("先に選ぶ見出し (再生とチューナーの記録) の警告は、ほかの見出しの警告とエラーより先に入る", () => {
     const errors = Array.from({ length: 2000 }, (_, i) =>
       line(i, "error", `サーバの行 ${i} ${"x".repeat(80)}`),
     );
     const playback = Array.from({ length: 10 }, (_, i) =>
-      line(i, "info", `再生の行 ${i}`),
+      line(i, "warn", `再生の行 ${i}`),
     );
     const { text, omitted } = initialLogs(fields, [
       { label: "この端末の再生", tagged: true, lines: playback, first: true },
@@ -158,6 +158,26 @@ describe("最初に入れるログ", () => {
     expect(omitted).toBeGreaterThan(0);
     for (let i = 0; i < 10; i++) expect(text).toContain(`再生の行 ${i}`);
     expect(text).toContain("--- この端末の再生のログ (10 行) ---");
+  });
+
+  test("先に選ぶ見出しでも、ふつうの行 (空いているチューナーなど) はほかの見出しの警告より後", () => {
+    const warns = Array.from({ length: 2000 }, (_, i) =>
+      line(i, "warn", `サーバの行 ${i} ${"x".repeat(80)}`),
+    );
+    const { text } = initialLogs(fields, [
+      {
+        label: "チューナー",
+        tagged: true,
+        lines: Array.from({ length: 200 }, (_, i) =>
+          line(5000 + i, "info", `空いているチューナー ${i} ${"y".repeat(80)}`),
+        ),
+        first: true,
+      },
+      { label: "サーバ", tagged: true, lines: warns },
+    ]);
+    // 警告で枠が埋まり、ふつうの行は余りに入るぶんだけ
+    expect(text.match(/空いているチューナー/g)?.length ?? 0).toBeLessThan(3);
+    expect(text).toContain("サーバの行 1999 ");
   });
 
   test("取れなかった相手は見出しの下に理由", () => {
@@ -233,7 +253,7 @@ describe("環境の欄", () => {
     cpu: "AMD Ryzen 7 5700G (16 コア)",
     gpu: "renderD128 (AMD): VA-API: H.264",
     device:
-      "Chrome 131・Android 14・画面 412×915・窓 412×800・倍率 2.63・指で操作",
+      "Chrome 131・Android 14・画面 412×915・ウィンドウ 412×800・倍率 2.63・指で操作",
     tuners: "PX-Q3U4 (GR)",
     card: "Reader (使用中)",
     browser: "Firefox",
@@ -267,7 +287,7 @@ describe("環境の欄", () => {
     expect(
       environmentText({ ...parts, agents: one({ about: linux, error: null }) }),
     ).toBe(
-      "サーバ: Linux 6.12.0 (x64)・Bun 1.4.4 / CPU: AMD Ryzen 7 5700G (16 コア) / GPU: renderD128 (AMD): VA-API: H.264 / 端末: Chrome 131・Android 14・画面 412×915・窓 412×800・倍率 2.63・指で操作 / エージェント「tuner-agent」: v1.2.3・Linux 6.12.0 #1 SMP (x64) / チューナー: PX-Q3U4 (GR) / カードリーダー: Reader (使用中) / ブラウザ: Firefox",
+      "サーバ: Linux 6.12.0 (x64)・Bun 1.4.4 / CPU: AMD Ryzen 7 5700G (16 コア) / GPU: renderD128 (AMD): VA-API: H.264 / 端末: Chrome 131・Android 14・画面 412×915・ウィンドウ 412×800・倍率 2.63・指で操作 / エージェント「tuner-agent」: v1.2.3・Linux 6.12.0 #1 SMP (x64) / チューナー: PX-Q3U4 (GR) / カードリーダー: Reader (使用中) / ブラウザ: Firefox",
     );
   });
 
@@ -372,7 +392,7 @@ describe("端末", () => {
       expect(browserAndOs(ua)).toEqual({ browser, os });
   });
 
-  test("画面と窓の大きさ・倍率・指で操作するかを添える", () => {
+  test("画面とウィンドウの大きさ・倍率・指で操作するかを添える", () => {
     expect(
       deviceText({
         userAgent: "curl/8.0",
@@ -382,7 +402,7 @@ describe("端末", () => {
         coarse: false,
       }),
     ).toBe(
-      "ブラウザ不明・OS 不明・画面 1920×1080・窓 1280×720・倍率 1.5・マウスで操作",
+      "ブラウザ不明・OS 不明・画面 1920×1080・ウィンドウ 1280×720・倍率 1.5・マウスで操作",
     );
   });
 });

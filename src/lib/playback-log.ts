@@ -6,7 +6,8 @@
  * 報告した人に聞き直さずに読むためのもの。
  *
  * 新しい `PLAYBACK_KEEP` 件までで、古いものから捨てる。同じ判断が続くあいだ (サーバのエンコードが追いつかない間など、
- * 刻むたびに同じものが返る) は `REPEAT_GAP` に 1 件だけ覚える。読み書きできない窓では覚えないだけ (`keep.ts`)
+ * 刻むたびに同じものが返る) は `REPEAT_GAP` に 1 件だけ覚える。localStorage を読み書きできないブラウザ (プライベートブラウズなど)
+ * では覚えないだけ (`keep.ts`)。タブを 2 つ同時に開いて再生すると、同じときに書いた片方の件が残らないことがある
  */
 
 import type { AdaptDecision, AdaptSample, Step } from "./adapt";
@@ -83,21 +84,23 @@ export function playbackEvent(
   };
 }
 
-/** 足した並び (古い順)。同じ判断が `REPEAT_GAP` のうちに続いたら足さない */
+/** 同じ判断 (理由と段が同じ) を `REPEAT_GAP` のうちに覚えているか */
+const repeats = (earlier: PlaybackEvent, event: PlaybackEvent) =>
+  earlier.reason === event.reason &&
+  earlier.from === event.from &&
+  earlier.to === event.to &&
+  event.at - earlier.at >= 0 &&
+  event.at - earlier.at < REPEAT_GAP;
+
+/**
+ * 足した並び (古い順)。同じ判断を `REPEAT_GAP` のうちに覚えていれば足さない。
+ * 直前の 1 件だけと比べると、`encode` と `pinned` が交互に出たときに間引けないので、間のうちの件を全部見る
+ */
 export function pushPlayback(
   list: readonly PlaybackEvent[],
   event: PlaybackEvent,
 ): PlaybackEvent[] {
-  const last = list.at(-1);
-  if (
-    last !== undefined &&
-    last.reason === event.reason &&
-    last.from === event.from &&
-    last.to === event.to &&
-    event.at - last.at >= 0 &&
-    event.at - last.at < REPEAT_GAP
-  )
-    return [...list];
+  if (list.some((earlier) => repeats(earlier, event))) return [...list];
   return [...list, event].slice(-PLAYBACK_KEEP);
 }
 
@@ -163,8 +166,17 @@ export function loadPlayback(): PlaybackEvent[] {
   return parsePlayback(read(KEY));
 }
 
+/**
+ * この画面で覚えた件のうち、`REPEAT_GAP` のうちのもの。同じ判断が刻むたびに返る間 (`encode`・`pinned`) は、
+ * localStorage を読まずに間引く
+ */
+let recent: PlaybackEvent[] = [];
+
 /** 1 件覚える */
 export function rememberPlayback(event: PlaybackEvent): void {
+  recent = recent.filter((earlier) => event.at - earlier.at < REPEAT_GAP);
+  if (recent.some((earlier) => repeats(earlier, event))) return;
+  recent.push(event);
   const list = loadPlayback();
   const next = pushPlayback(list, event);
   if (next.length !== list.length || next.at(-1) !== list.at(-1))
