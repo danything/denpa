@@ -568,7 +568,8 @@ public class It930xDeviceTests
         {
             if (line == "CLEAR_HALT 84") Interlocked.Increment(ref resets);
         };
-        // 受信機 0 の出口ができてから 50 個目のパケットで 1 回飛び (前の選局とのつなぎ目)、300 個目でほかの受信機のやり直しを頼み、やり直したあとの最初のパケットでもう 1 回飛ぶ TS
+        // 受信機 0 の出口ができてから 50 個目のパケットで 1 回飛び (前の選局とのつなぎ目)、300 個目でほかの受信機の代わりに受信をやり直し、やり直したあとの最初のパケットでもう 1 回飛ぶ TS。
+        // 遅い機械で 50 個目が数え始める前に来ても、テストは落ちずに確かめが弱まるだけ。300 個目は数える 2 秒 (TsLossMs) のうちに来る (偽物は 1 ms ごとに 1 個)
         It930xTuner? tuner = null;
         var sent = 0;
         var counter = 0;
@@ -588,9 +589,9 @@ public class It930xDeviceTests
             var index = attached ? Interlocked.Increment(ref sent) : 0;
             var step = index == 50 ? 5 : 1;
             if (index == 300) restart.Set();
-            if (Volatile.Read(ref resets) >= 2 && !jumped)
+            if (Volatile.Read(ref resets) >= 2 && !Volatile.Read(ref jumped))
             {
-                jumped = true;
+                Volatile.Write(ref jumped, true);
                 step = 5;
             }
             var next = Interlocked.Add(ref counter, step);
@@ -611,7 +612,7 @@ public class It930xDeviceTests
             await other;
             await Assert.That(tuner.Tuned).IsTrue();
             await Assert.That(card.Jammed).IsNull();
-            await Assert.That(jumped).IsTrue();
+            await Assert.That(Volatile.Read(ref jumped)).IsTrue();
             var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-59")).ToList();
             await Assert.That(lines.Count(text => text.Contains("受信をやり直します"))).IsEqualTo(1);
             await Assert.That(lines.Any(text => text.Contains("TS が欠けて届く"))).IsFalse();
