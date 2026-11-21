@@ -121,19 +121,20 @@
   import { read as stored, write as remind } from "#lib/keep.js";
   import { WATCH_HIDDEN_CODECS } from "#lib/live-choice.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
-  import { BROADCAST_HEVC, codecsFor, type LiveCodec } from "#lib/live.js";
+  import { BROADCAST_HEVC, type LiveCodec } from "#lib/live.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
   import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
   import { fallBackTo } from "#lib/player/canvas-sink.js";
+  import { RecordingClock } from "#lib/player/clock-recording.js";
+  import { playable, RecordingFeed } from "#lib/player/feed-recording.js";
   import { rangesOf } from "#lib/player/mse-sink.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
     type RemuxPlayer,
     remuxPlayer,
     type StreamHeard,
-    type StreamUrl,
   } from "#lib/remux-player.js";
   import { keepResume, keepResuming } from "#lib/resume.js";
   import { busyNote, type Pace } from "#lib/rungs.js";
@@ -147,18 +148,16 @@
     type PlacedMessage,
     replayAt,
   } from "#lib/ts/data-timeline.js";
-  import { pickMediaSource, wantsCleanStart } from "#lib/ts/media-source.js";
+  import { pickMediaSource } from "#lib/ts/media-source.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
   import {
     aheadOf,
-    AUDIO_TYPE,
     type CanvasAbility,
     canvasChoices,
     type CanvasCodec,
     canvasTranscodes,
     type CodecChoice,
     codecChoices,
-    ENCODED_ORDER,
     failureText,
     type MediaAbility,
     MENU_ORDER,
@@ -198,12 +197,16 @@
     ADAPT_TICK,
     autoLabel,
     fileIdle,
-    rungQuery,
     watchAdapt,
   } from "#lib/watch-adapt.js";
 
   let { data, form } = $props();
   const rec = $derived(data.recording);
+  /** 録画をサーバから読む所 (`player/feed-recording.ts`)。リクエスト先と、段 0 のビットレートを持つ */
+  const recordingFeed = new RecordingFeed(() => rec.id);
+  /** 開く位置 (`player/clock-recording.ts`)。選び直したときに続ける位置・この場面から観る位置 (切り抜きの画面から `?at=`)・続きの位置 */
+  // svelte-ignore state_referenced_locally
+  const recordingClock = new RecordingClock(data.scene, () => rec.resume_ms);
 
   /** 観るものがあるか。エンコード済みか、録り終えた元の TS (`+page.server.ts`) */
   const ready = $derived(data.playable);
@@ -231,8 +234,6 @@
   let busy = $state(false);
   /** その場で流しているときのプレイヤー (`remux-player.ts`) */
   let remux: RemuxPlayer | null = null;
-  /** 選び直したときに続ける位置 (秒)。プレイヤーの開始位置に使う */
-  let switchAt: number | null = null;
 
   /*
    * ---- 回線に合わせた画質の段 (`watch-adapt.ts`。docs/stream.md「回線に合わせて画質を下げる」) ----
@@ -276,12 +277,6 @@
   let adaptTimer: ReturnType<typeof setTimeout> | null = null;
   /** 段を替えるために作り直したとき、作り直す前に再生していたか。尺が分かったら続ける (`resume`) */
   let keepPlaying = false;
-  /**
-   * 「この場面から観る」(切り抜きの画面から `?at=`) で始める位置 (秒)。続きの位置より先に使い、1 度使ったら忘れる。
-   * 続きからではないので「続きから」とは言わない
-   */
-  // svelte-ignore state_referenced_locally
-  let sceneAt: number | null = data.scene;
 
   /*
    * ---- 互換モード (`canvas-video.ts`。docs/player.md) ----
@@ -385,15 +380,19 @@
     const local = localMkv;
     const duration = canvasLength();
     // 選び直し・切り替えは観はじめではない。この場面から観るのは観はじめなので `settle` を通す
-    const fresh = switchAt === null;
-    const scene = sceneAt !== null;
-    const from = startFrom(duration);
+    const fresh = recordingClock.switchAt === null;
+    const scene = recordingClock.sceneAt !== null;
+    const from = recordingClock.startFrom(duration);
     /*
      * 元の TS のビットレートを読んでおく (`adapt.ts` が測った速さと比べる)。読めなければ目安 (10.5 Mbit/s) と比べるので、
      * MPEG-2 (13〜24 Mbit/s) に足りない回線でも足りていると見て、詰まっても下げなくなる
      */
-    if (codec === "mpeg2" && local === null && baseOf("ts") === null)
-      void readBaseKbps("ts", duration);
+    if (
+      codec === "mpeg2" &&
+      local === null &&
+      recordingFeed.baseOf("ts") === null
+    )
+      void recordingFeed.readBaseKbps("ts", duration);
     let made: CanvasPlayer;
     try {
       made = canvasPlayer({
@@ -476,17 +475,9 @@
     settle();
   }
 
-  /**
-   * canvas のプレイヤーのリクエスト先。段 0 は選んだ形式そのまま。段を下げるなら変換で、コーデックはサーバが
-   * 描ける形式 (`canvasPlayable`) から選ぶ (MPEG-2 からは H.264 の変換としてリクエストする。`rungQuery`)
-   */
+  /** canvas のプレイヤーのリクエスト先 (`RecordingFeed.canvasUrl`)。段を下げるなら、サーバは描ける形式 (`canvasPlayable`) から選ぶ */
   function canvasUrl(codec: CanvasCodec, at: number, audio: string): string {
-    // 互換モードは音声だけにしない (`decideStep`)
-    if (step === 0 || step === "audio") return streamUrl(codec, at, audio);
-    return (
-      streamUrl(codec === "mpeg2" ? "h264" : codec, at, audio) +
-      rungQuery(step, canvasPlayable())
-    );
+    return recordingFeed.canvasUrl(step, codec, at, audio, canvasPlayable());
   }
 
   /** 互換モードで描けるコーデック (`?playable=`)。描いている途中で打ち切ったものは外す。H.265 は描かない (`raw/support.ts`) */
@@ -520,7 +511,7 @@
     step = next;
     stepCodec = null;
     paceId = null;
-    switchAt = position;
+    recordingClock.switchAt = position;
     canvasCodec = codec;
     startCanvas(codec);
     return true;
@@ -618,7 +609,7 @@
       return;
     }
     note(wasLocal ? reason : `${reason}。${codecLabel(next)} に切り替えました`);
-    switchAt = position;
+    recordingClock.switchAt = position;
     canvasCodec = next;
   }
 
@@ -793,7 +784,7 @@
   /** 何で観られるか (`api/recordings/<id>/playback`)。聞けなければ null */
   async function loadPlayback(): Promise<PlaybackInfo | null> {
     try {
-      const res = await fetch(resolve(`api/recordings/${rec.id}/playback`));
+      const res = await fetch(recordingFeed.playbackUrl);
       if (res.ok) return (await res.json()) as PlaybackInfo;
       playbackMiss = `HTTP ${res.status}`;
       return null;
@@ -813,48 +804,9 @@
 
   const src = $derived(
     localChecked && picked?.way === "file"
-      ? (localSrc ??
-          resolve(`api/recordings/${rec.id}/file?source=${picked.source}`))
+      ? (localSrc ?? recordingFeed.fileUrl(picked.source))
       : undefined,
   );
-
-  /**
-   * 観る画面ごとの値 (`/stream` の `?viewer=`)。手前に始めてよいコマが無い録画の変換で、サーバが同じ画面の前の変換を止めて
-   * 枠を譲らせるのに使う (シークを続けて押しても枠が埋まらない)
-   */
-  const viewer = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
-
-  /**
-   * その場で流すもの (`/stream`) のリクエスト先。`at` 秒から、`audio` (`streamAudio`) の音声で。
-   * WebKit なら、始めてよいコマから始まるものを求める (`?clean=1`。`wantsCleanStart`)
-   */
-  function streamUrl(
-    codec: PlayCodec | "audio",
-    at: number,
-    audio: string,
-  ): string {
-    return resolve(
-      `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}&viewer=${viewer}${wantsCleanStart() ? "&clean=1" : ""}`,
-    );
-  }
-
-  /**
-   * プレイヤーを作るときに始める位置 (秒)。コーデックを切り替えた所か、この場面から観る位置か、続きの位置。先頭からなら null。
-   * **切り替えた所は 1 度読んだら忘れる**
-   */
-  function startFrom(duration: number): number | null {
-    const from =
-      switchAt ??
-      sceneAt ??
-      (rec.resume_ms === null
-        ? null
-        : resumePoint(rec.resume_ms / 1000, duration));
-    switchAt = null;
-    sceneAt = null;
-    return from;
-  }
 
   /** 「続きから」を消す時計。続けて出したら前の時計は止める (先に消さない)。画面を離れたら止める */
   let continuedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -886,11 +838,11 @@
     const source = pickMediaSource();
     if (source === null) return;
     const total = info.duration;
-    const from = startFrom(total);
+    const from = recordingClock.startFrom(total);
     const at = untrack(() => step);
     remux = remuxPlayer(video, source, {
-      url: stepUrl(at, plan),
-      codecs: stepType(at, plan),
+      url: recordingFeed.stepUrl(at, plan),
+      codecs: recordingFeed.stepType(at, plan),
       duration: total,
       start: from ?? 0,
       audio: streamAudio(audioIndex),
@@ -934,34 +886,6 @@
   function streamHeard(stream: StreamHeard): void {
     stepCodec = stream.codec;
     paceId = stream.pace;
-  }
-
-  /** 端末が MSE で受け取れるコーデック (`?playable=`。段を下げたときはこの中からサーバが選ぶ) */
-  function playable(): LiveCodec[] {
-    const source = pickMediaSource();
-    if (source === null) return [];
-    return ENCODED_ORDER.filter((codec) =>
-      source.Source.isTypeSupported(codecsFor(codec)),
-    );
-  }
-
-  /** その段のリクエスト先。段 0 は選んだもの (`plan`) そのまま */
-  function stepUrl(
-    at: Step,
-    plan: Extract<Picked, { way: "stream" }>,
-  ): StreamUrl {
-    if (at === "audio") return (from, audio) => streamUrl("audio", from, audio);
-    const query = rungQuery(at, playable());
-    return (from, audio) => streamUrl(plan.codec, from, audio) + query;
-  }
-
-  /** その段の MSE の型。段を下げた変換はサーバがコーデックを選ぶので、応答を受けてから決める (null) */
-  function stepType(
-    at: Step,
-    plan: Extract<Picked, { way: "stream" }>,
-  ): string | null {
-    if (at === "audio") return AUDIO_TYPE;
-    return at === 0 ? plan.type : null;
   }
 
   /** 形式を切り替えた断り書きを出す。`SWITCH_NOTE` で引っ込める (ライブの `note` と同じ。切り替えた先はメニューの行に残る) */
@@ -1123,8 +1047,8 @@
       spare.addEventListener("error", broke);
       if (fresh.way === "stream" && source !== null) {
         made = remuxPlayer(spare, source, {
-          url: stepUrl(next, fresh),
-          codecs: stepType(next, fresh),
+          url: recordingFeed.stepUrl(next, fresh),
+          codecs: recordingFeed.stepType(next, fresh),
           duration: plan.duration,
           start: target,
           audio: streamAudio(audioIndex),
@@ -1141,9 +1065,7 @@
         });
       } else if (fresh.way === "file") {
         spare.addEventListener("loadedmetadata", seat);
-        spareSrc = resolve(
-          `api/recordings/${rec.id}/file?source=${fresh.source}`,
-        );
+        spareSrc = recordingFeed.fileUrl(fresh.source);
       }
       const tick = (): void => {
         if (done) return;
@@ -1208,7 +1130,7 @@
     broken = false;
     brokenWhy = "";
     retryAt = 0;
-    switchAt = null;
+    recordingClock.switchAt = null;
     keepPlaying = false;
     fileZero = zero;
     step = next;
@@ -1243,37 +1165,6 @@
     // MPEG-2 は canvas のプレイヤーが止めずに始める。`<video>` を続けるための印は残さない
     if (back.way === "raw") keepPlaying = false;
     if (note !== null) noteAdapt(note);
-  }
-
-  /** ビットレートを読みにいったファイル (`?source=`)。読めなくても同じファイルはリクエストし直さない (シーク・作り直しのたびに増やさない) */
-  const baseAsked = new Set<string>();
-
-  /** ファイルの大きさから段 0 のビットレートを読む (`HEAD`)。読めなければ null のまま */
-  async function readBaseKbps(source: string, duration: number): Promise<void> {
-    const key = fileKey(source);
-    if (baseAsked.has(key)) return;
-    baseAsked.add(key);
-    try {
-      const res = await fetch(
-        resolve(`api/recordings/${rec.id}/file?source=${source}`),
-        { method: "HEAD" },
-      );
-      const bytes = Number(res.headers.get("Content-Length"));
-      if (res.ok && bytes > 0 && duration > 0)
-        base.set(key, (bytes * 8) / duration / 1000);
-    } catch {
-      // 分からなければ `adapt.ts` の目安を使う
-    }
-  }
-
-  /** `base`・`baseAsked` のキー (録画と `?source=` の組) */
-  function fileKey(source: string): string {
-    return `${rec.id}:${source}`;
-  }
-
-  /** `source` のファイルのビットレート (kbit/s)。読めていなければ null */
-  function baseOf(source: string | null): number | null {
-    return source === null ? null : (base.get(fileKey(source)) ?? null);
   }
 
   /** 段 0 で観るファイルの `?source=`。MPEG-2 は元の TS、その場で流すもの (段 0 が変換) は null */
@@ -1341,8 +1232,8 @@
       if (next === 0) return false;
       const fresh = streamForAudio(plan, ability(), now.codec);
       if (fresh === null) return false;
-      if (baseOf(now.source) === null)
-        void readBaseKbps(now.source, plan.duration);
+      if (recordingFeed.baseOf(now.source) === null)
+        void recordingFeed.readBaseKbps(now.source, plan.duration);
       return prepareStep(fresh, next, now, () => {
         fileZero = now;
         step = next;
@@ -1378,8 +1269,8 @@
       });
     }
     const result = await remux.switchTo(
-      stepType(next, now),
-      stepUrl(next, now),
+      recordingFeed.stepType(next, now),
+      recordingFeed.stepUrl(next, now),
     );
     if (result === "switched") {
       step = next;
@@ -1463,7 +1354,7 @@
           Date.now(),
         ),
       // 段 0 が変換 (エンコード済みが無い録画) なら分からない
-      baseKbps: baseOf(zeroSource(fileZero ?? plan)),
+      baseKbps: recordingFeed.baseOf(zeroSource(fileZero ?? plan)),
       codec: stepCodec ?? plan.codec,
     };
   }
@@ -1496,7 +1387,7 @@
       waiting: canvasStuck,
       paceId,
       // 段 0 が MPEG-2 なら元の TS のビットレート (`startCanvas` で読む)。互換モードの変換は分からない
-      baseKbps: canvasCodec === "mpeg2" ? baseOf("ts") : null,
+      baseKbps: canvasCodec === "mpeg2" ? recordingFeed.baseOf("ts") : null,
       codec: stepCodec ?? canvasCodec,
     };
   }
@@ -1567,7 +1458,7 @@
     brokenWhy = "";
     // ファイルなら尺が分かったところで戻す (`resume`)。その場で流すならプレイヤーの開始位置
     retryAt = position;
-    switchAt = position;
+    recordingClock.switchAt = position;
     picked = fresh;
     if (fresh?.way !== "raw") return;
     // `<video>` で観ていたものは止める
@@ -1603,7 +1494,7 @@
     step = 0;
     stepCodec = null;
     stepFrom = null;
-    switchAt = position;
+    recordingClock.switchAt = position;
     canvasCodec = fresh;
   }
 
@@ -1775,9 +1666,7 @@
       // 端末に保存したものから。オフラインでも d が効く
       dataTimeline = copy.databroadcast as PlacedMessage[];
     } else {
-      const response = await fetch(
-        resolve(`api/recordings/${rec.id}/databroadcast`),
-      ).catch(() => null);
+      const response = await fetch(recordingFeed.timelineUrl).catch(() => null);
       dataTimeline = response?.ok ? await response.json() : [];
     }
     if (dataTimeline.length === 0) dataLoading = null;
@@ -2218,19 +2107,15 @@
     if (resumed || video === null) return;
     resumed = true;
     // この場面から観るときも `settle` を通す (通らないと覆いが待つ上限の時間まで残る)
-    if (sceneAt !== null) {
-      video.currentTime = sceneAt;
-      sceneAt = null;
-    } else {
-      const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
-      if (at !== null && resumePoint(at, video.duration) !== null) {
-        /*
-         * その場で流すときは、remux-player が続きの位置からリクエストし、溜まってから入れる (`remux-player.ts` の `startAt`)。
-         * ここで入れ直すと、まだ先頭 (init segment) しか無いうちに飛ぶことになり、macOS の WebKit は seeking のまま止まる
-         */
-        if (remux === null) video.currentTime = at;
-        showContinued();
-      }
+    const opening = recordingClock.opening(video.duration);
+    if (opening !== null && !opening.continued) video.currentTime = opening.at;
+    else if (opening !== null) {
+      /*
+       * その場で流すときは、remux-player が続きの位置からリクエストし、溜まってから入れる (`remux-player.ts` の `startAt`)。
+       * ここで入れ直すと、まだ先頭 (init segment) しか無いうちに飛ぶことになり、macOS の WebKit は seeking のまま止まる
+       */
+      if (remux === null) video.currentTime = opening.at;
+      showContinued();
     }
     settle();
   }
@@ -2350,7 +2235,7 @@
         return;
       }
       // 前に読んだものを持っていても、変わっていないか確かめさせる (CM 検出のやり直しは同じファイルを書き直す)
-      const res = await fetch(resolve(`api/recordings/${rec.id}/chapters`), {
+      const res = await fetch(recordingFeed.chaptersUrl, {
         cache: "no-cache",
       });
       if (!res.ok) return;
@@ -2477,7 +2362,7 @@
     // `<video>` には渡さない (`src` を外す)。canvas のプレイヤーは `canvasCodec` が決まったら作る
     picked = null;
     localMkv = source;
-    if (position > 0) switchAt = position;
+    if (position > 0) recordingClock.switchAt = position;
     canvasCodec = source.codec;
   }
 
@@ -2737,9 +2622,8 @@
       const text =
         copy !== null
           ? (copy.captionText as CaptionPages | undefined)
-          : await fetch(resolve(`api/recordings/${rec.id}/captions.json`)).then(
-              (res) =>
-                res.ok ? (res.json() as Promise<CaptionPages>) : undefined,
+          : await fetch(recordingFeed.captionsUrl).then((res) =>
+              res.ok ? (res.json() as Promise<CaptionPages>) : undefined,
             );
       if (text?.v === CAPTION_TEXT_VERSION) {
         captionText = text;
