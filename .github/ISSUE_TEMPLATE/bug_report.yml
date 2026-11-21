@@ -32,7 +32,7 @@ body:
     id: logs
     attributes:
       label: ログ
-      description: 設定の「その他」→「ログ」の「Issue にする」から開くと、伏せたサーバとエージェントのログが入ります。ほかにブラウザのコンソールなど。長ければ関係しそうなところだけ
+      description: 設定の「その他」→「ログ」の「Issue にする」から開くと、伏せたサーバとエージェントのログ・この端末の再生の記録 (画質を下げた理由と受け取りの速さ)・チューナーの状態が入ります。ほかにブラウザのコンソールなど。長ければ関係しそうなところだけ
       render: text
   - type: input
     id: version
@@ -43,5 +43,5 @@ body:
     id: environment
     attributes:
       label: 環境
-      description: チューナー・OS・ブラウザなど、関係しそうなもの
+      description: チューナー・OS・ブラウザなど、関係しそうなもの。「Issue にする」から開くと、サーバの CPU と GPU・端末も入ります
       placeholder: PX-W3U4 / k3s / Android Chrome

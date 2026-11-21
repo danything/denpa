@@ -1056,6 +1056,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       capacity,
       // canvas に描く経路は自分で変換した映像へ戻る (`raw/budget.ts`)。`<video>` だけ渡す
       behind: !canvas && decodeLag.behind(now),
+      codec,
     });
     // canvas の詰まりには終わりの合図が無い。1 回の刻みで数える
     if (canvas) stuck = false;

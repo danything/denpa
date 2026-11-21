@@ -7,13 +7,16 @@
  * 開くのは Issue のフォーム (`.github/ISSUE_TEMPLATE/bug_report.yml`) で、欄の `id` をそのまま
  * 問い合わせの名前にすると、その欄が埋まった状態で開く。埋めるのはタイトル・バージョン・環境・ログ。
  * 「何が起きたか」「再現手順」はその人が GitHub で書く。
+ * 環境にはサーバの機材 (CPU・GPU) と開いている端末 (`deviceText`) を、ログの欄にはサーバとエージェントのログのほかに、
+ * この端末の再生の記録 (`playback-log.ts`) とチューナーの状態・機材の異常を入れる。
  *
  * **URL は 8000 字まで** (`URL_LIMIT`)。長すぎる URL は GitHub やブラウザに断られる。
- * ログは警告とエラーを先に、それぞれ新しいほうから選び、出すときは古い順に並べ直す。
+ * ログは警告とエラーを先に (そのうち再生とチューナーの記録 `LogSource.first` を先に)、それぞれ新しいほうから選び、出すときは古い順に並べ直す。
  * 入りきらなかったぶんは数を書き、全部はコピーかダウンロードしたものを貼ってもらう
  */
 
-import { pad } from "./format";
+import { pad, signalText } from "./format";
+import type { TunerSignal } from "./server/tuner";
 
 export type LogLevel = "info" | "warn" | "error";
 
@@ -32,6 +35,11 @@ export interface LogSource {
   tagged: boolean;
   /** 取得できなかったときの一言。見出しのすぐ下に出す */
   note?: string;
+  /**
+   * URL に入りきらないとき、ほかの見出しより先に選ぶか (再生の記録とチューナーの状態)。
+   * 原因を切り分けるのに要るのに、件数が少なく、サーバの警告に押し出されやすいもの
+   */
+  first?: boolean;
 }
 
 interface IssueFields {
@@ -113,7 +121,7 @@ const omittedNote = (count: number) =>
 
 /**
  * **枠 (`budget`。URL に入れたときの字数) に入るだけのログを選ぶ。**
- * 警告とエラーを先に、同じ重さなら新しいほうから。出すときは見出しごとに古い順
+ * 警告とエラーを先に、同じ重さなら先に選ぶ見出し (`first`) を先に、同じなら新しいほうから。出すときは見出しごとに古い順
  */
 export function fitLogs(
   sources: readonly LogSource[],
@@ -136,10 +144,15 @@ export function fitLogs(
     if (source.note !== undefined) used += cost(source.note);
   }
 
+  /*
+   * 選ぶ順: 先に選ぶ見出しの警告とエラー → ほかの警告とエラー → 先に選ぶ見出しのふつうの行 → ほかのふつうの行。
+   * 空いているチューナーの行のようなふつうの行に、サーバの警告より先に枠を使わせない
+   */
+  const rank = (entry: (typeof all)[number]) =>
+    (entry.line.level === "info" ? 2 : 0) +
+    (sources[entry.source]!.first === true ? 0 : 1);
   const order = [...all].sort(
-    (a, b) =>
-      Number(a.line.level === "info") - Number(b.line.level === "info") ||
-      b.line.at - a.line.at,
+    (a, b) => rank(a) - rank(b) || b.line.at - a.line.at,
   );
   const chosen = new Set<(typeof all)[number]>();
   for (const entry of order) {
@@ -324,10 +337,17 @@ function agentParts(denpaVersion: string, agent: AgentEnvironment): string[] {
   ];
 }
 
-/** 報告の「環境」の欄。画面の「環境」の節と同じ中身を 1 行に。エージェントは 1 台ずつ並べ、1 台も無ければ「—」 */
+/**
+ * 報告の「環境」の欄。画面の「環境」の節と同じ中身を 1 行に。エージェントは 1 台ずつ並べ、1 台も無ければ「—」。
+ * 欄の上限 (`ENVIRONMENT_LIMIT`) を超えると後ろから切れるので、切り分けに効くもの (サーバの機材と端末) を先に、
+ * 長い UA を最後に置く
+ */
 export function environmentText(parts: {
   denpaVersion: string;
   server: string;
+  cpu: string;
+  gpu: string;
+  device: string;
   agents: readonly AgentEnvironment[];
   tuners: string;
   card: string;
@@ -335,6 +355,9 @@ export function environmentText(parts: {
 }): string {
   return [
     `サーバ: ${parts.server}`,
+    `CPU: ${parts.cpu}`,
+    `GPU: ${parts.gpu}`,
+    `端末: ${parts.device}`,
     ...(parts.agents.length === 0
       ? ["エージェント: —"]
       : parts.agents.flatMap((agent) => agentParts(parts.denpaVersion, agent))),
@@ -342,4 +365,137 @@ export function environmentText(parts: {
     `カードリーダー: ${parts.card}`,
     `ブラウザ: ${parts.browser}`,
   ].join(" / ");
+}
+
+// ---- 端末 ----
+
+/** UA から読んだブラウザと OS。読めなければそれぞれ null */
+export function browserAndOs(ua: string): {
+  browser: string | null;
+  os: string | null;
+} {
+  const named = (name: string, pattern: RegExp) => {
+    const version = pattern.exec(ua)?.[1];
+    return version === undefined ? null : `${name} ${version}`;
+  };
+  // 順が大事。Edge・Opera・Samsung Internet は UA に Chrome も Safari も入れ、iOS の Chrome・Firefox は Safari も入れる
+  const browser =
+    named("Edge", /\bEdg(?:e|A|iOS)?\/(\d+)/) ??
+    named("Opera", /\bOPR\/(\d+)/) ??
+    named("Samsung Internet", /\bSamsungBrowser\/(\d+)/) ??
+    named("Firefox", /\b(?:Firefox|FxiOS)\/(\d+)/) ??
+    named("Chrome", /\b(?:Chrome|CriOS)\/(\d+)/) ??
+    (/\bSafari\//.test(ua)
+      ? named("Safari", /\bVersion\/(\d+(?:\.\d+)?)/)
+      : null);
+
+  let os: string | null = null;
+  const ios = /\b(iPhone|iPad|iPod)\b.*? OS (\d+(?:_\d+)?)/.exec(ua);
+  if (ios !== null) os = `iOS ${ios[2]!.replace("_", ".")} (${ios[1]})`;
+  else if (/\bAndroid\b/.test(ua))
+    os = named("Android", /\bAndroid (\d+(?:\.\d+)?)/) ?? "Android";
+  else if (/\bCrOS\b/.test(ua)) os = "ChromeOS";
+  else if (/\bWindows NT\b/.test(ua)) os = "Windows";
+  else if (/\bMac OS X\b/.test(ua)) os = "macOS";
+  else if (/\bLinux\b/.test(ua)) os = "Linux";
+  // Tesla の車のブラウザは UA に Tesla を入れる
+  if (/\bTesla\b/.test(ua)) os = os === null ? "Tesla" : `${os} (Tesla)`;
+  return { browser, os };
+}
+
+/** 開いている端末のこと (報告の「端末」)。ブラウザ・OS・画面の大きさ・指で操作するか */
+export function deviceText(device: {
+  userAgent: string;
+  screen: { width: number; height: number };
+  viewport: { width: number; height: number };
+  pixelRatio: number;
+  /** `(pointer: coarse)` に当たるか */
+  coarse: boolean;
+}): string {
+  const { browser, os } = browserAndOs(device.userAgent);
+  return [
+    browser ?? "ブラウザ不明",
+    os ?? "OS 不明",
+    `画面 ${device.screen.width}×${device.screen.height}`,
+    `ウィンドウ ${device.viewport.width}×${device.viewport.height}`,
+    `倍率 ${Math.round(device.pixelRatio * 100) / 100}`,
+    device.coarse ? "指で操作" : "マウスで操作",
+  ].join("・");
+}
+
+// ---- チューナー ----
+
+/** チューナー 1 台の様子 (設定の「その他」の `tuners`。`diagnostics.server.ts`) */
+export interface TunerState {
+  name: string;
+  /** エージェントの名前 (`agents.name`) */
+  agentName: string;
+  disabled: boolean;
+  error: string | null;
+  signal: TunerSignal | null;
+  /** 使っている用途の先頭の語 (`rec`・`live`・`epg`・`scan`・`logo`) */
+  uses: string[];
+}
+
+const USE_WORD: Record<string, string> = {
+  rec: "録画",
+  live: "ライブ視聴",
+  epg: "番組表の取得",
+  scan: "チャンネルスキャン",
+  logo: "局ロゴの取得",
+};
+
+/** 1 台の行の中身 */
+function tunerText(tuner: TunerState): string {
+  const parts = [
+    `「${tuner.agentName}」${tuner.name}`,
+    tuner.disabled
+      ? "無効"
+      : tuner.uses.length === 0
+        ? "空き"
+        : `${tuner.uses.map((use) => USE_WORD[use] ?? use).join("・")}に使用中`,
+  ];
+  if (tuner.signal !== null) parts.push(signalText(tuner.signal));
+  if (tuner.error !== null) parts.push(`エラー: ${tuner.error}`);
+  return parts.join("・");
+}
+
+/**
+ * **報告に入れるチューナーの記録。** いまの様子 (使っている用途・受信の状態・C/N・強度。時刻は `now`) と、
+ * エージェントが知らせた機材の異常 (`agent_faults`。TS のバッファの溢れなど)。
+ * エラーのあるチューナーはエラー、使っているのに同期していないチューナーと機材の異常は警告にする。
+ * URL に入りきらないときは、ほかの見出しより先に選ぶ (`first`)
+ */
+export function tunerSource(
+  tuners: { list: readonly TunerState[]; error: string | null } | undefined,
+  faults: readonly { agentName: string; at: number; text: string }[],
+  now: number,
+): LogSource {
+  const lines: LogLine[] = [
+    ...faults.map((fault): LogLine => ({
+      at: fault.at,
+      level: "warn",
+      text: `「${fault.agentName}」機材の異常: ${fault.text}`,
+    })),
+    ...(tuners?.list ?? []).map((tuner): LogLine => ({
+      at: now,
+      level:
+        tuner.error !== null
+          ? "error"
+          : tuner.uses.length > 0 && tuner.signal?.locked === false
+            ? "warn"
+            : "info",
+      text: tunerText(tuner),
+    })),
+  ];
+  const source: LogSource = {
+    label: "チューナー",
+    tagged: true,
+    lines,
+    first: true,
+  };
+  if (tuners === undefined) source.note = "(チューナーを取得できませんでした)";
+  else if (tuners.error !== null)
+    source.note = `(チューナーを取得できません: ${tuners.error})`;
+  return source;
 }

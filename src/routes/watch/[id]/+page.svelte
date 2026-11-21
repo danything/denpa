@@ -1464,6 +1464,7 @@
         ),
       // 段 0 が変換 (エンコード済みが無い録画) なら分からない
       baseKbps: baseOf(zeroSource(fileZero ?? plan)),
+      codec: stepCodec ?? plan.codec,
     };
   }
 
@@ -1496,6 +1497,7 @@
       paceId,
       // 段 0 が MPEG-2 なら元の TS のビットレート (`startCanvas` で読む)。互換モードの変換は分からない
       baseKbps: canvasCodec === "mpeg2" ? baseOf("ts") : null,
+      codec: stepCodec ?? canvasCodec,
     };
   }
 
