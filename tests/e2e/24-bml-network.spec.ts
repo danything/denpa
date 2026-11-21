@@ -475,7 +475,7 @@ test.describe("データ放送の双方向", () => {
   }) => {
     const appUrl = "https://hybridcast.example.jp/app.html";
     const app = `<!DOCTYPE html><html><head><title>hc</title></head><body>
-<p id="ev">-</p><p id="other">-</p>
+<p id="ev">-</p><p id="other">-</p><p id="name">-</p>
 <script>
 var got = [];
 navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 1, function (e) {
@@ -485,6 +485,10 @@ navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 1, fu
 navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 2, function () {
     document.getElementById('other').textContent = 'called';
 });
+// /40・0x40 の形でない文字は ES の指定とみなさない (16 進に読める名前でも絞らない)
+navigator.receiverDevice.streamEvent.addGeneralEventMessageListener(function () {
+    document.getElementById('name').textContent = 'called';
+}, 'ab');
 </script></body></html>`;
     await page.route("**/api/bml/proxy**", (route) => {
       const target =
@@ -550,6 +554,7 @@ navigator.receiverDevice.streamEvent.addGeneralEventMessageListener('/40', 2, fu
       { timeout: 10_000 },
     );
     expect(await inApp.locator("#other").textContent()).toBe("-");
+    await expect(inApp.locator("#name")).toHaveText("called");
   });
 
   test("双方向を切ってあれば、Hybridcast は起動しない", async ({ page }) => {
