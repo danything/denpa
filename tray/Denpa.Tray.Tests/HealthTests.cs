@@ -99,6 +99,7 @@ public class HealthTests
         var encoded = args.Split(' ')[^1];
         await Assert.That(Encoding.Unicode.GetString(Convert.FromBase64String(encoded))).IsEqualTo("Write-Host '更新'");
     }
+
     [Test]
     public async Task エージェントだけのときは応答するかを出す()
     {

@@ -739,8 +739,7 @@ describe("チューナー", () => {
   /**
    * **チューナーを取り上げられた側は、そこで読めなくなる。**
    *
-   * ここで大事なのは「エラーとして伝わること」ではなく **「勝手には終わらない
-   * ものが終わった」こと**。HTTP を 1 枚挟むと、送っている途中の
+   * 見るのは **「勝手には終わらないものが終わった」こと**。HTTP を 1 枚挟むと、送っている途中の
    * ReadableStream を `error()` にしても向こうには**正常終了として届く**
    * (Bun は残りの chunk を打ち切って閉じるだけで、接続を壊さない)。
    *
@@ -1163,7 +1162,7 @@ describe("カードとスクランブルの復号", () => {
   test.each<[string, string]>([
     // 書き間違い
     ["CARD_SHARE_NETWORKS", "lan"],
-    // LAN の外 (グローバルアドレス・CGNAT・全部) は、読めても書けない
+    // LAN の外 (グローバルアドレス・CGNAT・全部) は、値として読めても受け付けない
     ["CARD_SHARE_NETWORKS", "0.0.0.0/0"],
     ["CARD_SHARE_NETWORKS", "100.64.0.0/10"],
     ["CARD_SHARE_NETWORKS", "192.168.1.0/24,203.0.113.0/24"],
@@ -1232,7 +1231,7 @@ describe("カードとスクランブルの復号", () => {
 
   /*
    * **カードが無ければ復号できない。** ここにリーダーは無いので、確かめるのは
-   * 「復号できたか」ではなく **理由を返さずに壊れないこと。** 復号できなければ理由が返り、
+   * **復号できなくても理由を返して壊れないこと。** 復号できなければ理由が返り、
    * 復号できたならスクランブルされていない TS が出る。
    *
    * 復号するのもカードを扱うのもエージェントの中なので、外から偽物を差し込めない
@@ -1572,7 +1571,7 @@ describe("止まれの合図を受けたとき", () => {
       other.kill("SIGTERM");
       await sleep(500);
 
-      const second = await openOn(
+      const later = await openOn(
         "/denpa/stream?type=BS&channel=BS11:18000&use=rec%202&priority=10",
       );
       const live = await openOn(
@@ -1583,10 +1582,10 @@ describe("止まれの合図を受けたとき", () => {
       first.abort();
       await sleep(2500);
       expect(other.exitCode).toBeNull();
-      expect((await second.reader.read()).done).toBe(false);
+      expect((await later.reader.read()).done).toBe(false);
 
       // 録画が終われば、ライブが開いていても待たずに終了する (ライブは一緒に切れる)
-      second.abort();
+      later.abort();
       expect(await exitsWithin(other, 10_000)).toBe(true);
       // 残りを読み切れば終わる (接続ごと壊れて終わってもよい)。流れ続けることはない
       try {
@@ -1628,11 +1627,12 @@ describe("止まれの合図を受けたとき", () => {
 });
 
 /**
- * デバッグ用の名指し。**ファイルの最後に置く。** 名指しで使ったチューナーに選局が余韻で残るので、
+ * デバッグ用の名指し。**後ろのほうに置く。** 名指しで使った衛星のチューナーに選局が余韻で残るので、
  * 前提が崩れる (空いているチューナーが使われていない、など) テストが後ろにあると巻き込む。
+ * 後ろに置くのは、地上波のチューナーだけを使うテスト (定義の書き換えと選局) だけにする
  */
 describe("チューナーの名指し", () => {
-  // 前の描画で定義を書き換えていても、顔ぶれ (gr0 / bs0 / bs1 / off0) をそろえてから始める
+  // 前のテストで定義を書き換えていても、顔ぶれ (gr0 / bs0 / bs1 / off0) をそろえてから始める
   beforeAll(async () => {
     const put = await request("PUT", "/denpa/tuners", {
       tuners: [

@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **dB に直せる根拠があるものだけ dB にする。** dB で返すドライバやファームウェア (DVB の <c>DTV_STAT_CNR</c>・Siano の機材の SNR) と、
-/// dB の式がある仕様書 (DiB8000・CXD2856ER) の値と、同じ系統の復調で使われてきた換算式がある PIX-DT295 (TC90522 系。<see cref="Tc90522Db"/>) は <see cref="Unit"/> が <c>dB</c>。
+/// dB の式がある仕様書 (DiB8000・CXD2856ER) の値と、PT1・PT2・PT3 で使われてきた換算式がある TC90522 (Q3・W3 系) と PIX-DT295 (TC90522 系と推定。<see cref="Tc90522Db"/>) は <see cref="Unit"/> が <c>dB</c>。
 /// DVB のドライバが相対値 (0〜65535) で返すものは、来た値のまま <c>raw</c> にする。
 /// raw は同じ機材でチャンネルや配線を比べる目安。大きいほど良いかどうかも、機材ごとに違ってよい (docs/tuners.md「信号レベル」)
 /// </para>

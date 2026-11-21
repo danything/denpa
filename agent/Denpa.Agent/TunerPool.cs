@@ -799,8 +799,8 @@ public sealed class TunerPool(
         {
             if (_leases.ContainsKey(index)) continue;
             /*
-             * ロックの順は `_gate` → `_deviceGate`。`CloseAll` も同じ向きなので
-             * 噛み合わない。`Channel` を `held.Gate` 無しで読むのは承知の上で、
+             * ロックの順は `_gate` → `_deviceGate`。`CloseAll` と `ReadSignals` も同じ向きなので
+             * デッドロックしない。`Channel` を `held.Gate` 無しで読むのは承知の上で、
              * 外れても「選局し直しが 1 回増える」だけ
              */
             lock (_deviceGate)

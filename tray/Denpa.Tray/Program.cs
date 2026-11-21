@@ -6,7 +6,7 @@
 //
 // 更新は勝手に始めない。新しいバージョンが出たら通知を 1 回出し、人がメニューから選んだら install.ps1 を管理者の
 // PowerShell で流す (UAC を通す)。録画中・エンコード中なら先に確かめる (Words.AskBeforeUpdate)。
-// install.ps1 は録画の終わりを待ってから、このアプリごと入れ替えて起こし直す。
+// install.ps1 は録画の終わりを待ってから、このアプリごと入れ替えて起動し直す。
 //
 // **エージェントだけ入れたとき** (install.ps1 -AgentOnly) は、引数 `--agent-only <TUNERS_FILE>` で起こされる。
 // denpa はこの PC にいないので、10 秒ごとにエージェント (127.0.0.1:25252) へ TLS で繋ぎ、証明書が返るかだけを見る
@@ -129,7 +129,7 @@ internal static unsafe partial class Program
                     PostQuitMessage(0);
                     return 0;
             }
-            // エクスプローラーが落ちて起き直したら、アイコンを出し直す
+            // エクスプローラーが落ちて起動し直したら、アイコンを出し直す
             if (msg == taskbarCreated && taskbarCreated != 0) AddIcon();
         }
         catch
@@ -446,14 +446,14 @@ internal static unsafe partial class Program
     private static partial nint ShellExecuteW(nint hwnd, string? verb, string file, string? parameters, string? dir, int show);
 }
 
-/// <summary>denpa との話。await は unsafe の文脈では書けないので、Program とは分ける</summary>
+/// <summary>denpa とエージェントへの問い合わせ。await は unsafe の文脈では書けないので、Program とは分ける</summary>
 internal static class Net
 {
     static readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
     /// <summary>
     /// エージェントが応答するか。TLS で繋ぎ、エージェントの証明書が返れば応答したとみなす。エージェントはクライアント証明書を求めるので、
-    /// 証明書を持たないこちらとの握手はそのあと断られるが、それは見ない (組んでいないので API は呼べない)
+    /// 証明書を持たないこちらとのハンドシェイクはそのあと断られるが、それは見ない (組んでいないので API は呼べない)
     /// </summary>
     public static async Task<bool> AgentAnswers()
     {
@@ -476,7 +476,7 @@ internal static class Net
         }
         catch
         {
-            // 繋がらない・握手を断られた。証明書が返っていたかで決める
+            // 繋がらない・ハンドシェイクを断られた。証明書が返っていたかで決める
         }
         return answered;
     }

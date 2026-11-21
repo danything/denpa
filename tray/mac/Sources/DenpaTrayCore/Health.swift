@@ -56,7 +56,7 @@ public enum Words {
 
     /// 更新を始める前に確かめる文。録画もエンコードもしていなければ nil (確かめずに始める)。
     /// 録画は止めない。install.sh が録画の終わりを待ってから入れ替える (mac_stop。本体は SIGTERM を受けると録画を待つ)。
-    /// エンコードは待たずに止まり、起き直したあとで最初からやり直しになる (encoder.ts の requeueOrphanedJobs) ので、そう言って選んでもらう
+    /// エンコードは待たずに止まり、起動し直したあとで最初からやり直しになる (encoder.ts の requeueOrphanedJobs) ので、そう言って選んでもらう
     public static func askBeforeUpdate(_ health: Health) -> String? {
         if health.recording == 0 && health.encoding == 0 { return nil }
         var text = ""
@@ -83,7 +83,7 @@ public enum Installer {
 }
 
 /// エージェントだけ入れたとき (install.sh --agent-only) の文言。denpa はこの Mac にいないので、エージェントが応答するかと、
-/// 別の機械の denpa に登録するための URL を出す (docs/agent.md「denpa と組む」)。Windows (tray/Denpa.Tray/Health.cs の AgentWords) とそろえる
+/// 別の機械の denpa に登録するための URL を出す (docs/agent.md「登録用の URL を出す」)。Windows (tray/Denpa.Tray/Health.cs の AgentWords) とそろえる
 public enum AgentWords {
     /// メニューの先頭に出す 1 行 (選べない)。組んだ denpa があるかは出さない (このアプリは組んだ相手の一覧を読めない)
     public static func summary(_ answering: Bool) -> String {
@@ -118,6 +118,7 @@ public enum Pairing {
 
     /// シェルの 1 語にする ('…' で囲み、中の ' は '\'' にする)
     static func quote(_ text: String) -> String {
-        "'" + text.replacingOccurrences(of: "'", with: "'\''") + "'"
+        // Swift の "\'" は ' だけになるので、'\'' は生の文字列で書く
+        "'" + text.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
     }
 }

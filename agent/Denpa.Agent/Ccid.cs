@@ -489,7 +489,7 @@ public static class Ccid
         {
             using var link = (CcidLink)found[0].Open();
             var info = link.Interface;
-            text.AppendLine($"{link.Name}: {info.Level} 単位, dwFeatures 0x{info.Features:x8}, "
+            text.AppendLine($"{link.Name}: {info.Level}, dwFeatures 0x{info.Features:x8}, "
                 + $"メッセージ {info.MaxMessage} バイトまで, 電圧 0x{info.Voltages:x2}, "
                 + $"bulk in 0x{info.BulkIn:x2} / out 0x{info.BulkOut:x2}");
             link.Reset();

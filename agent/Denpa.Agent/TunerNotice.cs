@@ -2,8 +2,8 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 受信機ごとの注意書き (設定の <c>device</c> → 文)。選局は通るが設定どおりには動いていないこと
-/// (LNB に給電せずに選局した、など。AsicenUdtv.cs) を、
-/// チューナー画面に出す (<see cref="TunerPool.Status"/> の <c>error</c>)
+/// (LNB に給電せずに選局した、など。AsicenUdtv.cs) と、機材を開けなかった理由 (Dt295NativeTuner.cs) を、
+/// 空いているときもチューナー画面に出す (<see cref="TunerPool.Status"/> の <c>error</c>)
 /// </summary>
 public static class TunerNotice
 {

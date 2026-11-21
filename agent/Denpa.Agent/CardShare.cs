@@ -44,7 +44,7 @@ public static class Keys
 /// <param name="find">探すリーダー。既定は見えているもの全部 (<see cref="CardLinks.Find"/>)。<c>--tune zd1j:… --decode</c> (<c>dt295:</c>・<c>it930x:</c> も) は
 /// その機材の内蔵の差し込み口だけを渡す (試験でほかの機材に触らない)</param>
 /// <param name="open">カードを開く。既定は <paramref name="find"/> から探して開く (テストは偽のリーダーを開く関数を渡す)</param>
-/// <param name="clock">開けなかったあと探さずに断る間を測る時計 (<see cref="BCas"/>・<see cref="Emm"/> と同じ。テストは時を進める)</param>
+/// <param name="clock">開けなかったあと探さずに断る間を測る時計 (<see cref="BCas"/>・<see cref="Denpa.Agent.Emm"/> と同じ。テストは時を進める)</param>
 public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = null, Func<BCas>? open = null, TimeProvider? clock = null) : IKeySource
 {
     private readonly Func<BCas> _open = open ?? (find is null ? CardLinks.Open : () => BCas.Open(find));
@@ -299,7 +299,7 @@ public static class CardWire
 
     /// <summary>
     /// 本文を <paramref name="limit"/> バイトまで読む。超えたら、その時点で読むのをやめて null。
-    /// 先に全部読むと、LAN の相手が上限の何倍もの本文を溜めさせられる
+    /// 先に全部読むと、相手が上限の何倍もの本文を溜めさせられる (鍵を配る API と、組む前の相手からも受ける <see cref="AgentTls.ReadPairBody"/>)
     /// </summary>
     internal static async Task<byte[]?> ReadUpTo(Stream body, int limit)
     {

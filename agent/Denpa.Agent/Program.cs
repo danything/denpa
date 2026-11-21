@@ -167,7 +167,7 @@ CardChoice.Load(config.CardsFile);
 var events = new Events();
 // カードが契約の更新 (EMM) を受け入れたら、denpa に契約を確かめ直させる (Emm.cs)
 CardNotice.Shared = new CardNotice(() => events.Emit("card"));
-// 機材の異常の行 (IT930x のブリッジの溢れ) は、直前の記録と一緒に denpa へ送って DB に残させる。denpa が入れ替わっている間のものも、繋ぎ直したときに送る
+// 機材の異常の行 (Log.Fault。IT930x のブリッジの溢れなど) は、直前の記録と一緒に denpa へ送って DB に残させる。denpa が入れ替わっている間のものも、繋ぎ直したときに送る
 Log.Faulted = text => events.Emit("fault", Events.FaultData(text, Log.Recent.Snapshot(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()), retain: true);
 var (tuners, detected) = config.ResolveTuners();
 
@@ -657,7 +657,8 @@ app.MapGet("/denpa/card", async (HttpContext http) =>
  * 受け取るのは使わないリーダーの名前の一覧 (disabled)。画面は挿さっているリーダーしか並べないので、
  * **挿さっていないリーダーの「使わない」は残す** (抜いて挿し直したら勝手に使い始めない)。
  * 使っている最中のリーダーなら手放して次のリーダーで繋ぎ直し、
- * PIX-DT295・CECH-ZD1 J の差し込み口なら、チューナーも使っていなければ USB を閉じる
+ * PIX-DT295・CECH-ZD1 J の差し込み口なら、チューナーも使っていなければ USB を閉じる。
+ * IT930x の機材の内蔵カードリーダーは、手放したあと受信機が使われていなければ、30 秒待ってから閉じる (It930xCard.cs)
  */
 app.MapPut("/denpa/card/readers", async (HttpContext http) =>
 {

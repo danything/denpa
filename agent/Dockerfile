@@ -51,7 +51,7 @@ RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet
 # 外から取ってくるもの (asicen-userland)。**取ってくる道具は実行イメージに残さない**
 # (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る。
-# 土台は digest で留める (Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
+# 土台は digest で留める (リポジトリ直下の Dockerfile にある ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
 # 組み直しになり、配布元から取ってくる回数が増える
 # ---------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS fetch
@@ -97,23 +97,18 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
     case "${TARGETARCH}" in \
       amd64) arch=x86_64; sum="${ASICEN_ARCHIVE_SHA256_AMD64}" ;; \
       arm64) arch=aarch64; sum="${ASICEN_ARCHIVE_SHA256_ARM64}" ;; \
-      *) arch= ;; \
     esac && \
-    if [ -z "${arch}" ]; then \
-      echo "asicen-userland: ${TARGETARCH} の配布物は無いので入れません"; \
-    else \
-      base="https://github.com/Khronos31/asicen-userland/releases/download/v${ASICEN_USERLAND_VERSION}" && \
-      archive="asicen-userland-${ASICEN_USERLAND_VERSION%%-*}-linux-glibc-${arch}.tar.gz" && \
-      $CURL -O "${base}/${archive}" && $CURL -O "${base}/SHA256SUMS" && \
-      grep -E "^[0-9a-f]{64} [ *]${archive}\$" SHA256SUMS > archive.sum && \
-      sha256sum -c archive.sum && \
-      echo "${sum}  ${archive}" | sha256sum -c - && \
-      tar -xzf "${archive}" -C /opt/asicen-userland && \
-      rm -rf /opt/asicen-userland/ifd /opt/asicen-userland/mdev /opt/asicen-userland/reader.conf.d && \
-      for bin in asicend asicenctl; do test -x "/opt/asicen-userland/${bin}"; done && \
-      echo "${ASICEN_FIRMWARE_SHA256}  /opt/asicen-userland/firmware/asicen-loader.bin" | sha256sum -c - && \
-      test -f /opt/asicen-userland/licenses/VENDOR-FIRMWARE-NOTICE.txt; \
-    fi && \
+    base="https://github.com/Khronos31/asicen-userland/releases/download/v${ASICEN_USERLAND_VERSION}" && \
+    archive="asicen-userland-${ASICEN_USERLAND_VERSION%%-*}-linux-glibc-${arch}.tar.gz" && \
+    $CURL -O "${base}/${archive}" && $CURL -O "${base}/SHA256SUMS" && \
+    grep -E "^[0-9a-f]{64} [ *]${archive}\$" SHA256SUMS > archive.sum && \
+    sha256sum -c archive.sum && \
+    echo "${sum}  ${archive}" | sha256sum -c - && \
+    tar -xzf "${archive}" -C /opt/asicen-userland && \
+    rm -rf /opt/asicen-userland/ifd /opt/asicen-userland/mdev /opt/asicen-userland/reader.conf.d && \
+    test -x /opt/asicen-userland/asicend && test -x /opt/asicen-userland/asicenctl && \
+    echo "${ASICEN_FIRMWARE_SHA256}  /opt/asicen-userland/firmware/asicen-loader.bin" | sha256sum -c - && \
+    test -f /opt/asicen-userland/licenses/VENDOR-FIRMWARE-NOTICE.txt && \
     rm -rf /tmp/*
 
 # ---------------------------------------------------------------------------

@@ -1198,7 +1198,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         uint status = 0;
         _seenStatus = 0;
         // 時刻ではなく経過時間で測る (待っている間に NTP が時刻を戻しても、待ちが延びない)
-        var waited = System.Diagnostics.Stopwatch.StartNew();
+        var waited = Stopwatch.StartNew();
         while (waited.Elapsed < LockTimeout)
         {
             // 細かく見る。同期は 200 ms ほどで来るので、100 ms 刻みだと
