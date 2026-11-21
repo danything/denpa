@@ -2691,7 +2691,7 @@
    */
   function paint(): void {
     if (hopping || !captions.on || overlay === null) return;
-    if (captions.paint(mediaTime())) place();
+    captions.paint(mediaTime(), place);
   }
 
   /** 秒で動かす。**端は超えさせない** (超えると勝手に終わる) */
