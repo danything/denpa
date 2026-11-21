@@ -167,11 +167,11 @@ export interface YearSummary {
   topWatched: string | null;
 }
 
-/** 長さを「300 時間」「45 分」に。1 時間に満たなければ分 */
-export function spanWords(ms: number): string {
+/** 録画した長さを数と単位に (300 時間・45 分)。1 時間に満たなければ分 */
+export function spanOf(ms: number): { count: number; unit: "時間" | "分" } {
   const hours = Math.floor(ms / HOUR);
-  if (hours >= 1) return `${hours.toLocaleString("ja-JP")} 時間`;
-  return `${Math.max(1, Math.round(ms / 60_000))} 分`;
+  if (hours >= 1) return { count: hours, unit: "時間" };
+  return { count: Math.max(1, Math.round(ms / 60_000)), unit: "分" };
 }
 
 /** 「denpa の 1 年」のダイアログの見出し (新年のあいさつ) */

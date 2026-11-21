@@ -12,7 +12,7 @@ class Season {
   on = $state(false);
   /** サーバの時計 − 端末の時計 (ms)。サーバの時刻をもらえるまでは null */
   skew = $state<number | null>(null);
-  /** 「denpa の 1 年」を世帯で最後に出した年 */
+  /** 「denpa の 1 年」のチップを世帯で最後に閉じた年 */
   greeted = $state<number | null>(null);
   private loading = false;
 
