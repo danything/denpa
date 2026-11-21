@@ -672,7 +672,10 @@
     {/if}
     {#if draft.editing !== null}
       <div class="edit-actions">
-        <!-- 有効・無効はスイッチ (1 つのことのオン/オフ。docs/design.md の「オン/オフと選ぶもの」。ルールの一覧の行と同じ) -->
+        <!--
+          有効・無効はスイッチ (1 つのことのオン/オフ。docs/design.md の「オン/オフと選ぶもの」。ルールの一覧の行と同じ)。
+          送ったあとは読み直した `draft.editing.enabled` が位置を決め、断られたら `switched` が戻す (e2e の 47-search-rule)
+        -->
         <form method="POST" action="?/toggleRule" use:submitting={switched}>
           <input type="hidden" name="id" value={draft.editing.id} />
           <label class="check-row">
