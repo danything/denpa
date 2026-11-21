@@ -505,7 +505,8 @@ function tick(): void {
   /*
    * **見えていない間は映像をデコードしない** (小窓へ書いているときは別)。音の時計より `BEHIND_MOST` 遅れた圧縮は、
    * いまの位置の手前の I まで捨てる (`skipTo`。デコーダも開き直す)。追っかけ・録画 (`follow`) は `onVideo` で捨てないので、
-   * ここで捨てないと、バックグラウンド再生で音が進む間に溜まりすぎて (`FOLLOW_PENDING_MOST`) リクエストし直しを繰り返す
+   * ここで捨てないと、バックグラウンド再生で音が進む間に溜まりすぎて (`FOLLOW_PENDING_MOST`) リクエストし直しを繰り返す。
+   * 捨て方は `PendingQueue.skipTo` (`fmp4.test.ts`) で確かめてある。worker の刻みそのものは単体で動かせないので、ここはテストしない
    */
   if (hidden && (pip === null || !pipFlowing)) {
     const head = pending.first;
