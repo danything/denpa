@@ -51,7 +51,7 @@ RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet
 # 外から取ってくるもの (asicen-userland)。**取ってくる道具は実行イメージに残さない**
 # (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る。
-# 土台は digest で留める (リポジトリの直下の Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
+# 土台は digest で留める (リポジトリ直下の Dockerfile にある ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
 # 組み直しになり、配布元から取ってくる回数が増える
 # ---------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS fetch
