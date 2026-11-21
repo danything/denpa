@@ -298,6 +298,30 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
     expect(args).toContain("language=und");
   });
 
+  test("デュアルモノの番組に 2 本目の音声があれば、割った 2 本のあとにそのまま足す", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 2, null, "av1", {
+      audioStreams: [0, 1],
+      audioChannels: [undefined, 2],
+      audioTitles: ["主音声", "副音声", "解説"],
+    });
+    expect(argValue(args, "-filter_complex")).toStartWith(
+      "[0:a:0]channelsplit",
+    );
+    expect(args.join(" ")).toContain(
+      "-map [FLm] -map [FRm] -metadata:s:a:0 language=jpn -metadata:s:a:1 language=und -map 0:a:1 -ac:a:2 2",
+    );
+    expect(argValue(args, "-metadata:s:a:2")).toBe("title=解説");
+  });
+
+  test("外した音声があれば、名前は入力の何本目かで引く", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 3, null, "av1", {
+      audioStreams: [1],
+      audioTitles: ["主音声", "解説"],
+    });
+    expect(argValue(args, "-metadata:s:a:0")).toBe("title=解説");
+    expect(args).not.toContain("-metadata:s:a:1");
+  });
+
   test("再試行時は先頭を捨てる", () => {
     expect(argValue(buildArgs("/in.m2ts", "/out.mkv", 1, 0.2), "-ss")).toBe(
       "0.2",
