@@ -173,6 +173,90 @@ test.describe("設定のバージョンと環境・ログ", () => {
     await expect(dialog).toBeHidden();
   });
 
+  test("Issue にすると、サーバの機材・端末・この端末の再生の記録・チューナーの記録も入る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    // 再生の画面が覚えたもの (`playback-log.ts`)。ライブで回線が細くて 720p に下げた
+    const at = Date.now() - 60_000;
+    await page.addInitScript((at) => {
+      localStorage.setItem(
+        "denpa.playback-events",
+        JSON.stringify([
+          {
+            at,
+            screen: "live",
+            reason: "slow",
+            from: 0,
+            to: 1,
+            note: "回線が細いため、720p に下げました",
+            codec: "h264",
+            throughput: 3_200_000,
+            need: 10_500_000,
+            capacity: null,
+            speed: 1,
+            ahead: 0.4,
+            manual: false,
+          },
+        ]),
+      );
+    }, at);
+    // エージェントが機材の異常を知らせる (denpa は DB に残す)。denpa が購読するまで送り直す
+    await expect
+      .poll(async () => {
+        const res = await request.post(
+          `${stack.agentUrl}/__control/fault?text=${encodeURIComponent("偽チューナー: TS のバッファが溢れていました")}`,
+        );
+        return ((await res.json()) as { listeners: number }).listeners;
+      })
+      .toBeGreaterThan(0);
+
+    await goto(page, "/settings/general");
+    await expect(page.getByTestId("diag-cpu")).toContainText("コア");
+    await expect(page.getByTestId("diag-gpu")).not.toBeEmpty();
+    await expect(page.getByTestId("diag-device")).toContainText("マウスで操作");
+
+    const dialog = page.getByTestId("issue-dialog");
+    const logs = dialog.getByTestId("issue-field-logs");
+    // 機材の異常は届いて DB に入るまで少しかかる。入るまで開き直す
+    await expect(async () => {
+      await page.reload();
+      await page.getByTestId("issue-start").click();
+      await expect(logs).toHaveValue(
+        /機材の異常: 偽チューナー: TS のバッファ/,
+        { timeout: 2_000 },
+      );
+    }).toPass();
+
+    await expect(logs).toHaveValue(/--- この端末の再生のログ \(1 行\) ---/);
+    await expect(logs).toHaveValue(
+      /\[warn\] 回線が細いため、720p に下げました \(ライブ・h264・元の画質 → 720p・受け取り 3\.2 Mbit\/s・必要 10\.5 Mbit\/s/,
+    );
+    await expect(logs).toHaveValue(/--- チューナーのログ/);
+    // 空いているチューナーの行はふつうの行なので、URL に入りきらなければ省かれる。全部入りの報告には必ず入る
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      dialog.getByTestId("issue-download").click(),
+    ]);
+    expect(readFileSync((await download.path())!, "utf8")).toMatch(
+      /」[^\n]+・(空き|[^\n]+に使用中)/,
+    );
+    const environment = dialog.getByTestId("issue-field-environment");
+    await expect(environment).toHaveValue(/ \/ CPU: .+コア/);
+    await expect(environment).toHaveValue(/ \/ GPU: /);
+    await expect(environment).toHaveValue(
+      / \/ 端末: [^/]+・画面 \d+×\d+・ウィンドウ \d+×\d+・倍率 [\d.]+・マウスで操作 \/ /,
+    );
+    // URL にもそのまま入る
+    const url = new URL(
+      (await dialog.getByTestId("issue-open").getAttribute("href"))!,
+    );
+    expect(url.searchParams.get("logs")).toContain(
+      "回線が細いため、720p に下げました",
+    );
+  });
+
   test("ログが長くても URL は 8000 字に収め、警告とエラーを先に入れる", async ({
     page,
     request,

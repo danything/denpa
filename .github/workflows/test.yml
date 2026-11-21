@@ -232,6 +232,12 @@ jobs:
         shell: pwsh
         run: ./tests/install-windows-winusb.ps1
 
+      # 本体のタスクの実行ユーザー (install.ps1 -User と上げ直し)。ランナーのタスクと ACL は変えないので、偽のタスク スケジューラと偽の icacls で。
+      # 見るのは、上げ直しで人が変えた実行ユーザーを SYSTEM に戻さないことと、そのユーザーに置き場の権限を足すこと
+      - name: Windows task user with a fake task scheduler
+        shell: pwsh
+        run: ./tests/install-windows-task-user.ps1
+
       - name: install.sh end to end
         env:
           DENPA_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}

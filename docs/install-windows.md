@@ -9,7 +9,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 ```
 
 引数を渡すときは `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall`
-のようにします (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-AgentOnly` エージェントだけ / `-WinUsb` [チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える))。
+のようにします (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-AgentOnly` エージェントだけ / `-WinUsb` [チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える) / `-User <ユーザー>` [本体のタスクをそのユーザーで動かす](#録画を-nas-に置く))。
 
 **Windows 10 1809・Windows Server 2019 (ビルド 17763) 以降で動きます。** 本体の bun が 1809 より前の Windows を受けず、
 install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の Windows には無いためです。Windows Server 2016 では install.ps1 が止まります。
@@ -26,6 +26,8 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 
 **タスクは SYSTEM で動くので、誰もログインしていなくても録画でき、外から観られます。** そのために管理者で流します
 (管理者でなければ、install.ps1 がそう表示して止まる)。
+**上げ直しでは、タスクの実行ユーザーを書き戻しません。** `-User` で決めたユーザーや、タスク スケジューラで変えたユーザーのまま動かします
+(SYSTEM に戻すときは `-User SYSTEM`)。
 
 2 つが組むときの合言葉 ([agent.md](agent.md)) はエージェント自身の置き場 (`~/denpa/config/tls/pair-token`) に無いときだけ作り、エージェントはそこから読み
 (手で `denpa-agent --pair` を流しても同じ URL が出る)、denpa には `TUNER_AGENT_URL` (`https://127.0.0.1:25252#pair=<合言葉>`) で渡します。
@@ -41,13 +43,13 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
   LAN のほかの機器から開けないときは、Windows の設定でこの PC のネットワークを「プライベート」にします (パブリックのネットワークには開けない)
 - 本体とエージェントの zip は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                    | 中身                                                                                                                                                                                                        |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・ドライバを WinUSB に替える `wdi-simple.exe` (`bin\libwdi\`)・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd`                                          |
-| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起動する `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる |
-| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                               |
-| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                         |
-| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                                |
+| 置き場                    | 中身                                                                                                                                                                                                                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・ドライバを WinUSB に替える `wdi-simple.exe` (`bin\libwdi\`)・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd`                                                                                                    |
+| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起動する `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者 (本体のタスクを別のユーザーで動かすなら、そのユーザーも) だけが読み書きできる |
+| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                                                                                         |
+| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                                                                                   |
+| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                                                                                          |
 
 `%ProgramFiles%\denpa` と `%ProgramData%\denpa` を管理者だけのものにしてあるのは、SYSTEM で動くものと、その環境変数を
 ほかの人やほかのプログラムに書き換えさせないためです。ログはふつうのユーザーでも読めるように `~/denpa` に置きます (回さずに足していく)。
@@ -131,6 +133,55 @@ install.ps1 は無いときだけ雛形 (`TZ`・`TRUSTED_NETWORKS`) を作り、
 - `TRUSTED_NETWORKS` の雛形は `127.0.0.0/8,::1/128,192.168.0.0/16,10.0.0.0/8` です。`127.0.0.0/8` と `::1/128` はこの PC のブラウザです。
   この PC で cloudflared のような前段を動かすときは、前段越しの人もループバックから来たように見えるので、ループバックを外して OIDC を使います
   ([auth.md](auth.md#前段の後ろに置くとき-trusted_proxies))
+
+## 録画を NAS に置く
+
+**NAS に置くなら、本体のタスクを NAS に繋げるユーザーで動かします** (`-User`)。SYSTEM は SMB の共有にこの PC のコンピューターのアカウントとして繋ぎ、
+ユーザーの資格情報を持たないので、ふつうの NAS の共有には書けません。
+
+1. 録画もエンコードもしていないときに、管理者の PowerShell で `Stop-ScheduledTask denpa` を流して本体を止める (2 と 3 も同じ窓で)
+2. `~/Videos/denpa/library` の中身を NAS の共有へ写し、フォルダを消して、同じ名前で共有へのリンクを作る。
+   ドライブ文字 (`Z:` など) はタスクからは見えないので、`\\<NAS の名前>\<共有>\…` で書く
+
+   ```powershell
+   robocopy "$HOME\Videos\denpa\library" "\\nas\share\denpa" /E /COPY:DAT
+   Remove-Item -Recurse "$HOME\Videos\denpa\library"
+   New-Item -ItemType SymbolicLink -Path "$HOME\Videos\denpa\library" -Target "\\nas\share\denpa"
+   ```
+
+3. `-User` を付けて流す。パスワードを聞くので、そのユーザーの Windows のパスワードを入れる (タスクに保存する)
+
+   ```powershell
+   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -User $env:USERNAME
+   ```
+
+`-User` で流すと、install.ps1 は次のことをします。
+
+- 本体のタスク (`denpa`) を、そのユーザーで「ユーザーがログオンしているかどうかにかかわらず実行する」で載せ直す。パスワードを保存しないタスクはネットワークの共有に繋げないため、パスワードを保存する
+- DB の置き場 `%ProgramData%\denpa` に、そのユーザーの読み書きを足す。**DB は実行ユーザーによらずここの 1 つ**で、ユーザーを変えても同じ録画の一覧を使う
+- 元の TS の置き場 (`~/Videos/denpa/recorded`)・録画の置き場 (リンクでなければ)・ログ (`~/denpa/denpa.log`) に、そのユーザーの変更の権限を足す
+
+NAS のユーザーと Windows のユーザーが違うときは、そのユーザーでサインインして、NAS の資格情報を Windows の資格情報マネージャーに保存します
+(`cmdkey /add:nas /user:<NAS のユーザー> /pass`)。エクスプローラーで繋ぐときに「資格情報を記憶する」をオンにしても同じです。
+
+- `-User` が決めるのは本体のタスクだけで、エージェントのタスクは SYSTEM のままです。元の TS (`recorded`) はこの PC に置きます。エージェントのタスクも、タスク スケジューラで変えた実行ユーザーは上げ直しで戻しません
+- パスワードを変えたら、`-User` を付けて流し直します (タスクに保存したパスワードは自動で変わらない)
+- **SYSTEM のまま NAS に置く方法**は、NAS がこの PC と同じ Active Directory のドメインにいるときだけです。共有の権限に、この PC のコンピューターのアカウント (`<ドメイン>\<PC の名前>$`) を足します
+- **保存先に録画が 1 本も見つからない間は、録画を削除済みにしません** (NAS に繋がらない・リンクが切れた。[library.md](library.md#削除))。
+  前は、繋がらないのを「全部消された」と読み、録画を全部削除済みにしていました
+
+### 上げ直したあとで録画の一覧が空になったとき
+
+**前のバージョンでは、タスク スケジューラで実行ユーザーを変えていても、上げ直すと SYSTEM に戻していました。** SYSTEM の本体は NAS に繋がらず、
+保存先から消えたと読んで録画を削除済みにしていました。NAS の録画のファイルは消えていません。
+
+**削除済みにしてから 2 週間のうちなら、NAS に繋がる本体を起動すれば一覧に戻ります。** 上の 3 の 1 行 (`-User`) で上げ直します。
+本体は起動したときと 5 分ごとに置き場を照合し、削除済みの録画の名前のファイルが置き場にあれば、行を戻します (すぐなら録画の一覧の「ファイルと照合」)。
+
+- 2 週間を過ぎた録画は、行が DB から消えているので戻りません。ファイルは NAS に残ります
+- 戻らないもの: EPGStation・EDCB から引き継いだ録画の多く (置き場での名前が違う)、元の TS (削除済みにしたときに、この PC の `recorded` から消している)、切り抜きから録画への行き先
+- DB を前の状態に戻したいときは、本体を止めて (`Stop-ScheduledTask denpa`)、上げ直す前に取った `%ProgramData%\denpa\denpa.db` の写し (バックアップや、エクスプローラーの「以前のバージョン」) と入れ替えます。
+  隣の `denpa.db-wal`・`denpa.db-shm` は消します。入れ替えたあとに録った録画は、その写しには入っていません
 
 ## スリープ
 
@@ -227,10 +278,12 @@ install.ps1 は無いときだけ雛形 (`TZ`・`TRUSTED_NETWORKS`) を作り、
   Run に載ること・上げ直すと動いているものを止めること・外すと消えることまで。
   ドライバを WinUSB に替えるところ (`-WinUsb`) は、聞いてから替える分岐と止まるときの表示を偽の機材と偽の wdi-simple で流し (`tests/install-windows-winusb.ps1`)、
   ランナーでは、ビルドした `wdi-simple.exe` が zip に入っていること、機材が無いと `-WinUsb` が何も変えずに止まること、`wdi-simple.exe` を同じ引数で流すと
-  証明書とドライバのパッケージがランナーに入ることを見る
+  証明書とドライバのパッケージがランナーに入ることを見る。
+  本体のタスクの実行ユーザーは、偽のタスク スケジューラと偽の icacls で、上げ直しで人が変えたユーザーのまま残すこと・`-User` でそのユーザーとパスワードで載せること・
+  そのユーザーに置き場の権限を足すこと・`-User SYSTEM` で戻すことを見る (`tests/install-windows-task-user.ps1`)
 - **Windows の実機で確かめたことのあるチューナーは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 だけで、いまの方式では確かめていません。** ほかのチューナーとカードは、CI で
   ビルドして起動し、偽の USB の機材を相手にした単体テストを流すところまでです
 - **まだ確かめていないこと**: `-WinUsb` で実機のチューナーのドライバが WinUSB に替わるか (CI のランナーに機材が無い。ほかのドライバが入っている機材・複合デバイスの機材も確かめていない)、
   SYSTEM で動くエージェントから WinUSB の機材とカードリーダー (PC/SC) を使えるか、スリープから復帰させるタスクで
-  録画が始まるか、wslc の本体からの移行 (実機の wslc で)、通知領域のアイコンの見た目とメニュー・通知と、そこから UAC を通して更新する流れ。実機で当てるのは `denpa-agent --tune it930x:<USB のポート>:2 T27` と `denpa-agent --card`
+  録画が始まるか、wslc の本体からの移行 (実機の wslc で)、`-User` で載せたタスクの本体が NAS へのリンクの先に書けるか (資格情報マネージャーに保存した NAS の資格情報を使えるかも)、通知領域のアイコンの見た目とメニュー・通知と、そこから UAC を通して更新する流れ。実機で当てるのは `denpa-agent --tune it930x:<USB のポート>:2 T27` と `denpa-agent --card`
   (管理者の PowerShell で、エージェントのタスクを止めてから)

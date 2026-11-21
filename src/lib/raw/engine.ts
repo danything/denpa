@@ -36,8 +36,8 @@ const GRAB_WAIT = 2_000;
 /** デコーダの置き場 (`routes/api/live/mpeg2`) */
 const DECODER = "/api/live/mpeg2";
 
-/** デコーダの置き場の URL (置いたパスの下)。WebKit のライブで音を別に鳴らす経路 (`native-audio.ts`) も同じものを読む */
-export function decoderBase(): string {
+/** デコーダの置き場の URL (置いたパスの下) */
+function decoderBase(): string {
   return `${resolve("")}${DECODER.slice(1)}`;
 }
 /**

@@ -1,7 +1,6 @@
 import { untrack } from "svelte";
 
 import { read, write } from "#lib/keep.js";
-import { GESTURES } from "#lib/raw/gesture-context.js";
 import { audioContext } from "#lib/raw/seam.js";
 import { Outlet, playbackSession } from "#lib/sound.js";
 import {
@@ -12,6 +11,8 @@ import {
   VOLUME_KEY,
   volumeGain,
 } from "#lib/volume.js";
+
+import { GESTURES } from "./awake.svelte.js";
 
 /** ↑↓ で変えたときに、映像の上へ今の音量を出しておく長さ (ms) */
 const NOTE_FOR = 1_500;
@@ -39,22 +40,19 @@ const NOTE_FOR = 1_500;
  * ## 音量を変えられない端末 (`fixed`)
  *
  * iOS と iPadOS は、ページから `<video>` の音量を変えられない (`#lib/native-audio-choice.ts` の `fixedMediaVolume`)。
- * 観る画面と追っかけでは、**この端末ではつまみを使わず、本体の音量ボタンに任せる**。canvas に描いている間も
+ * 3 画面とも、**この端末ではつまみを使わず、本体の音量ボタンに任せる**。canvas に描いている間も
  * つまみの値を掛けず、放送のままの大きさで鳴らす (`applied` が null)。`<video>` に移っても大きさが変わらない。
- * `<video>` は Web Audio に通さず、つまみ (`SoundButton`・`StageTail`) も出さない。↑↓ も何もしない。消音は効く。
- * ライブは渡さない。音を別に鳴らす (`raw/native-audio.ts`) ので、この端末でもつまみが効く
+ * `<video>` は Web Audio に通さず、つまみ (`SoundButton`・`StageTail`) も出さない。↑↓ も何もしない。消音は効く
  */
 interface Options {
   /** `<video>` で観ているときの要素。canvas に描いているとき・まだ無いときは null */
   video: () => HTMLVideoElement | null;
-  /** 音を別に鳴らすか (ライブの WebKit。`#lib/native-audio-choice.ts`)。そのときは `<video>` を Web Audio に通さない */
-  separateAudio?: () => boolean;
   /**
-   * 通すと無音になるか (WebKit の MSE。観る画面のその場で流すものと追っかけ。`#lib/native-audio-choice.ts` の `tapSilent`)。そのときは通さず、
-   * 下げるぶんは `video.volume` で掛ける
+   * 通すと無音になるか (WebKit の MSE。ライブ・追っかけと、観る画面のその場で流すもの。`#lib/native-audio-choice.ts` の `tapSilent`)。
+   * そのときは通さず、下げるぶんは `video.volume` で掛ける
    */
   silentTap?: () => boolean;
-  /** 音量を変えられない端末か (観る画面・追っかけ。`#lib/native-audio-choice.ts` の `fixedMediaVolume`)。ライブは渡さない */
+  /** 音量を変えられない端末か (`#lib/native-audio-choice.ts` の `fixedMediaVolume`) */
   fixed?: () => boolean;
   /** `<audio>` を通すか (バックグラウンド再生をオンにしているか、押して小窓を開いている間) */
   through: () => boolean;
@@ -101,7 +99,7 @@ export function playerVolume(options: Options): Volume {
   /**
    * 押されたら AudioContext を起こす (自動再生の許可は押したときに出る)。**`<video>` がまだ無い間に押されたら作っておく。**
    * Safari は押したとき以外に作った AudioContext を止めたまま始める (iOS で確かめた)。canvas から段を下げて `<video>` に
-   * 移ってから作ると、次に押すまで通せない。通さない画面 (`separateAudio`・`silentTap`・`fixed`) では作らない。
+   * 移ってから作ると、次に押すまで通せない。通さないとき (`silentTap`・`fixed`) は作らない。
    *
    * 読み込み中 (`<video>` をまだ渡されていない間) に押されても作るので、押した後で作っても鳴らせるブラウザ (Chromium など) でも
    * 早めに作る。そのまま `<video>` に移れば同じものを通すので、作るのが少し早くなるだけで済む。最後まで canvas に描いたときは、
@@ -109,13 +107,7 @@ export function playerVolume(options: Options): Volume {
    */
   const wake = (): void => {
     if (context === null) {
-      if (
-        current === null &&
-        !fixed &&
-        !options.separateAudio?.() &&
-        !options.silentTap?.()
-      )
-        open();
+      if (current === null && !fixed && !options.silentTap?.()) open();
       return;
     }
     if (context.state !== "running")
@@ -183,14 +175,11 @@ export function playerVolume(options: Options): Volume {
     /** 通さずに直に鳴らすときの大きさ。1 より大きくはできない */
     const direct = Math.min(1, volumeGain(level));
     /*
-     * 音は別に鳴らす (`raw/native-audio.ts`)。`<video>` は通さない。WebKit では通しても無音しか来ない。
-     * 別に鳴らせず `<video>` の音に戻ったとき (`live-player.svelte.ts`) のために、下げるぶんは `video.volume` でも掛ける
-     * (macOS の Safari は効く。iOS は `video.volume` を変えられない)。
-     *
-     * 通すと無音になるとき (`silentTap`) も同じにする。一度通した要素は Web Audio からしか鳴らないので、通した要素のまま
-     * MSE に移ると無音になる。観る画面は段を替えるとき映していない側の `<video>` に移るので、ふつうはまだ通していない要素になる
+     * 通すと無音になるとき (`silentTap`。WebKit の MSE) は通さず、下げるぶんを `video.volume` で掛ける (macOS の Safari は効く)。
+     * 一度通した要素は Web Audio からしか鳴らないので、通した要素のまま MSE に移ると無音になる。観る画面は段を替えるとき
+     * 映していない側の `<video>` に移るので、ふつうはまだ通していない要素になる
      */
-    if (options.separateAudio?.() || options.silentTap?.()) {
+    if (options.silentTap?.()) {
       untap();
       video.volume = direct;
       return;
@@ -232,7 +221,6 @@ export function playerVolume(options: Options): Volume {
     void level;
     void fixed;
     void options.through();
-    void options.separateAudio?.();
     void options.silentTap?.();
     untrack(() => {
       current = video;
@@ -249,7 +237,7 @@ export function playerVolume(options: Options): Volume {
     };
   });
 
-  // 押したと見なす出来事 (`raw/gesture-context.ts`) と押し始め (`pointerdown`) で起こす
+  // 押したと見なす出来事 (`awake.svelte.ts` の `GESTURES`) と押し始め (`pointerdown`) で起こす
   $effect(() => {
     const listening = new AbortController();
     for (const type of ["pointerdown", ...GESTURES])

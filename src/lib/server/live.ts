@@ -139,6 +139,7 @@ import {
   VideoLength,
 } from "./pace";
 import { PmtWatch } from "./pmt-watch";
+import { liveWatching } from "./ranking-watch";
 import {
   broadcastDecided,
   learnBroadcast,
@@ -1820,6 +1821,18 @@ class Session {
   /** 一覧 (`sessions`) での目印。**作ったときに決めて、終えるときも同じものを消す** */
   readonly id: string;
 
+  /**
+   * 番組ランキングに数える、映像を観ている人がいるか (`ranking-watch.liveWatching`)。変わったときだけ伝える。
+   * 追っかけ (`source`) は録画を読んでいるので数えない (タイムシフトとして観る画面と同じく再生位置で数える)
+   */
+  private watching = false;
+  private noteWatching(): void {
+    const on = this.source === undefined && !this.stopped && !this.empty;
+    if (on === this.watching) return;
+    this.watching = on;
+    liveWatching(this.serviceId, on);
+  }
+
   get empty(): boolean {
     // 脇から字幕だけ受け取っている人は数えない (`Viewer.side`)
     for (const viewer of this.viewers) if (viewer.side !== true) return false;
@@ -1846,6 +1859,7 @@ class Session {
 
   add(viewer: Viewer): void {
     this.viewers.add(viewer);
+    this.noteWatching();
     // そのままの TS に init は無い。**どこから受け取っても先頭から読める** (PAT/PMT は繰り返し来る)
     if (this.raw) viewer.ready = true;
     if (this.init !== null) this.hand(viewer, CHANNEL.videoInit, this.init);
@@ -1956,6 +1970,7 @@ class Session {
 
   remove(viewer: Viewer): void {
     this.viewers.delete(viewer);
+    this.noteWatching();
     // 出していた人が抜けたら、誰も出していないかを見直す (意思は消さない)
     this.refreshData();
   }
@@ -3389,6 +3404,7 @@ class Session {
   stop(): void {
     if (this.stopped) return;
     this.stopped = true;
+    this.noteWatching();
     this.aborter.abort();
     this.proc?.kill();
     this.data?.close();

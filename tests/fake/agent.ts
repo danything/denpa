@@ -608,6 +608,13 @@ const options: Bun.ServeOptions = {
       aboutMode = mode === "off" || mode === "mac" ? mode : "normal";
       return json({ mode: aboutMode });
     }
+    /* 機材の異常を知らせる (本物では IT930x のブリッジの溢れ。`/denpa/events` の `fault`)。届いた購読者の数を返す */
+    if (url.pathname === "/__control/fault" && request.method === "POST") {
+      const text =
+        url.searchParams.get("text") ?? "TS のバッファが溢れていました";
+      emit("fault", { at: Date.now(), text, context: [] });
+      return json({ listeners: listeners.size });
+    }
     if (url.pathname === "/__control/unusable" && request.method === "POST") {
       unusableTypes = new Set(url.searchParams.getAll("type"));
       return json({ types: [...unusableTypes] });
