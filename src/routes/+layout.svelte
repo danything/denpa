@@ -453,7 +453,7 @@
       ? yearChip(seasonClock.now + (season.skew ?? 0), season.greeted)
       : null,
   );
-  let yearShown = $state<YearSummary | "loading" | null>(null);
+  let yearShown = $state<YearSummary | "loading" | "failed" | null>(null);
   async function openYear(counted: number): Promise<void> {
     yearShown = "loading";
     const response = await fetch(
@@ -464,14 +464,7 @@
         ? ((await response.json().catch(() => null)) as YearSummary | null)
         : null;
     if (yearShown !== "loading") return;
-    yearShown = summary ?? {
-      year: counted,
-      recorded: 0,
-      recordedMs: 0,
-      topRecorded: null,
-      watched: 0,
-      topWatched: null,
-    };
+    yearShown = summary ?? "failed";
   }
   function dismissYear(year: number): void {
     season.greeted = year;

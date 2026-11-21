@@ -14,8 +14,8 @@
     summary,
     onclose,
   }: {
-    /** 見せる数。`null` で閉じる。読み込み中は `"loading"` */
-    summary: YearSummary | "loading" | null;
+    /** 見せる数。`null` で閉じる。読み込み中は `"loading"`、読めなかったら `"failed"` */
+    summary: YearSummary | "loading" | "failed" | null;
     onclose: () => void;
   } = $props();
 
@@ -26,6 +26,8 @@
   let shown = $state.raw<YearSummary | null>(null);
   /** 開くたびに数え上げ直す (面ごと作り直す) */
   let opened = $state(0);
+  /** 数を読めなかった (0 本と見分ける) */
+  let failed = $state(false);
 
   $effect(() => {
     const element = dialog;
@@ -34,7 +36,8 @@
       if (element.open) element.close();
       return;
     }
-    if (summary !== "loading") {
+    failed = summary === "failed";
+    if (summary !== "failed" && summary !== "loading") {
       shown = summary;
       opened++;
     }
@@ -97,7 +100,11 @@
   ></button>
   <article class="modal-box" tabindex="-1">
     <h2 id="year-dialog-title">{GREETING}</h2>
-    {#if shown === null}
+    {#if failed}
+      <p class="muted" data-testid="year-dialog-failed">
+        去年の数を読み込めませんでした。閉じて、もう一度チップを押してください
+      </p>
+    {:else if shown === null}
       <p class="muted">読み込んでいます…</p>
     {:else}
       <p class="small muted">denpa の {shown.year} 年</p>
