@@ -2106,7 +2106,7 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
   (`hybridcast/app.ts` の `EventMessagePicker`)。ページを読み込んでいる間に来たものは渡さない
 - リスナーには `es_ref` (`/40` の形)・`message_group_id`・`message_id`・`message_version`・`private_data_byte` (Uint8Array)・
   `private_data` (EUC-JP として読んだ文字) を持つものを渡す。データ放送の `EventMessageFired` と同じ名前 (`esRef`・`messageId` など) でも読める
-- 引数は、関数をリスナー、文字を ES の指定、数を message_group_id として受け、渡された分だけで絞る。
+- 引数は、関数をリスナー、`/40`・`0x40` の形の文字を ES の指定、整数を message_group_id として受け、渡された分だけで絞る (ほかの形の文字では絞らない)。
   STD-0010・STD-0011 の本文で引数の並びとリスナーに渡すものの名前を確かめていないので、並びを問わずに受ける
 - message_group_id 0 を文書の data_event_id と比べる決まり (データ放送の文書のもの) は、アプリには当てない
 - 録画では Hybridcast のアプリを開かないので (上の表の「録画の再生中」)、アプリへ渡すのはライブだけです

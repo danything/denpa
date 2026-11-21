@@ -746,11 +746,13 @@ export function shim(init: ShimInit): void {
     esRef: number | null;
     group: number | null;
   }[] = [];
-  /** `/40`・`40`・`0x40` のような ES の指定を部品タグに。読めなければ null (絞らない) */
+  /**
+   * `/40`・`0x40` の形の ES の指定を部品タグに。**ほかの形の文字は ES の指定とみなさない** (null。絞らない)。
+   * 引数の並びを確かめていないので、ES の指定でない文字 (16 進に読める名前など) で絞って何も届かなくならないようにする
+   */
   const componentOf = (value: string): number | null => {
-    const text = value.replace(/^\//, "").replace(/^0x/i, "");
-    const n = Number.parseInt(text, 16);
-    return /^[0-9a-f]+$/i.test(text) && n >= 0 && n <= 0xff ? n : null;
+    const match = /^(?:\/|0x)([0-9a-f]{1,2})$/i.exec(value);
+    return match === null ? null : Number.parseInt(match[1]!, 16);
   };
   /*
    * 放送の中のイベント (`streamEvent`)。番組が変わったことと、放送のイベントメッセージ (汎用イベントメッセージ記述子) を知らせる。
