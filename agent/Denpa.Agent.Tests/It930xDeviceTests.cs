@@ -555,6 +555,77 @@ public class It930xDeviceTests
     }
 
     /// <summary>
+    /// **欠けを数えている間に、並べて確かめているほかの受信機が受信をやり直したら、そこから数え直す**。
+    /// やり直しの間の飛びと前の選局とのつなぎ目で 2 区間になり、欠けていない受信機まで断らないため
+    /// </summary>
+    [Test]
+    public async Task 欠けを数えている間にほかの受信機が受信をやり直したら数え直す()
+    {
+        var (usb, _, _) = Fake();
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        var resets = 0;
+        usb.OnNote = line =>
+        {
+            if (line == "CLEAR_HALT 84") Interlocked.Increment(ref resets);
+        };
+        // 受信機 0 の出口ができてから 50 個目のパケットで 1 回飛び (前の選局とのつなぎ目)、300 個目でほかの受信機のやり直しを頼み、やり直したあとの最初のパケットでもう 1 回飛ぶ TS
+        It930xTuner? tuner = null;
+        var sent = 0;
+        var counter = 0;
+        var jumped = false;
+        using var restart = new ManualResetEventSlim();
+        usb.TsSource = () =>
+        {
+            var attached = false;
+            try
+            {
+                attached = Volatile.Read(ref tuner)?.Output is not null;
+            }
+            catch (InvalidOperationException)
+            {
+                // まだ選局していない
+            }
+            var index = attached ? Interlocked.Increment(ref sent) : 0;
+            var step = index == 50 ? 5 : 1;
+            if (index == 300) restart.Set();
+            if (Volatile.Read(ref resets) >= 2 && !jumped)
+            {
+                jumped = true;
+                step = 5;
+            }
+            var next = Interlocked.Add(ref counter, step);
+            return [It930xBridge.SyncBytes[0], 0x01, 0x00, (byte)(0x10 | (next & 0x0F)), .. new byte[184]];
+        };
+        var clock = new FakeClock();
+        var card = Open(usb, "9-59", clock);
+        // 読み出しのスレッドの中では受信をやり直せない (読み出しが止まるのを待つ) ので、ほかのスレッドから
+        var other = Task.Run(() =>
+        {
+            restart.Wait(TimeSpan.FromSeconds(10));
+            card.RestartStream("ほかの受信機の TS が届かないため");
+        });
+        tuner = new It930xTuner("test", 0, () => Open(usb, "9-59", clock), () => It930xDevice.CloseIfIdle("9-59", TimeSpan.Zero)) { TsProbeMs = 500, TsLossMs = 2000 };
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("T27")!);
+            await other;
+            await Assert.That(tuner.Tuned).IsTrue();
+            await Assert.That(card.Jammed).IsNull();
+            await Assert.That(jumped).IsTrue();
+            var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-59")).ToList();
+            await Assert.That(lines.Count(text => text.Contains("受信をやり直します"))).IsEqualTo(1);
+            await Assert.That(lines.Any(text => text.Contains("TS が欠けて届く"))).IsFalse();
+        }
+        finally
+        {
+            usb.TsSource = null;
+            tuner.Dispose();
+            card.Release();
+            It930xDevice.CloseIfIdle("9-59", TimeSpan.Zero);
+        }
+    }
+
+    /// <summary>
     /// **並べて選局した受信機のどれかに TS が届いていれば、同じ溢れのまま別の受信機で届かなくても、機材の選局は断らない** (その受信機だけの失敗にする)
     /// </summary>
     [Test]
