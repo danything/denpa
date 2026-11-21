@@ -21,7 +21,13 @@ import { join } from "node:path";
 
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
 
-import { holdAwake, type MacPower, macPower, windowsWake } from "./awake";
+import {
+  holdAwake,
+  type MacPower,
+  macPower,
+  type WindowsWake,
+  windowsWake,
+} from "./awake";
 import { config } from "./config";
 import { orm } from "./db";
 import { runningEncodes } from "./encoder";
@@ -107,10 +113,19 @@ export interface WakeStatus {
 }
 
 /** いまの起こす様子。Windows と Mac 以外では null (起こさない) */
-export function wakeStatus(): WakeStatus | null {
+export function wakeStatus(now = Date.now()): WakeStatus | null {
   if (process.platform !== "win32" && process.platform !== "darwin")
     return null;
-  return { at: typeof written === "number" ? written : null, problem };
+  return wakeState(now);
+}
+
+/**
+ * OS によらない中身 (単体テストが使う)。起こす時刻を過ぎたら (もう起きている) `at` は null にする。
+ * 過ぎたあとは設定し直さず (`scheduleWakeWindows`)、`written` に前の時刻が残るため
+ */
+export function wakeState(now: number): WakeStatus {
+  const at = typeof written === "number" && written > now ? written : null;
+  return { at, problem };
 }
 
 /**
@@ -119,11 +134,14 @@ export function wakeStatus(): WakeStatus | null {
  * SYSTEM で動かすタスクは管理者でないと登録し直せず、本体のユーザーで動かすタスクは、ログオンしていなくても動かすのに
  * そのユーザーのパスワードが要る (本体は持たない)。待機可能タイマーは権限が要らず、どちらのユーザーでも同じに設定できる
  */
-async function scheduleWakeWindows(
+export async function scheduleWakeWindows(
   at: number | null,
   now: number,
+  getTimer: () => Promise<WindowsWake | null> = windowsWake,
 ): Promise<void> {
   if (at === written) return;
+  // 起こす録画が無ければ、起こせない理由も消す (次の録画で設定するときに、また確かめる)
+  if (at === null) problem = null;
   // 一度も設定していなければ、取り消すものは無い
   if (at === null && written === undefined) {
     written = null;
@@ -131,7 +149,7 @@ async function scheduleWakeWindows(
   }
   // 起こす時刻を過ぎていれば設定しない (もう起きている。録画が始まるまで `HOLD_BEFORE` でスリープさせない)
   if (at !== null && at <= now) return;
-  const timer = await windowsWake();
+  const timer = await getTimer();
   if (timer === null) {
     fail("kernel32 の待機可能タイマーを使えません (理由はログにあります)");
     return;
@@ -209,6 +227,7 @@ async function scheduleWakeMac(at: number | null, now: number): Promise<void> {
   written = null;
   if (target === null) {
     rmSync(wakeFile(), { force: true });
+    problem = null;
     return;
   }
   const code = power.schedule(target, WAKE_BY);

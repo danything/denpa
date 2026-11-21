@@ -338,7 +338,7 @@
               {:else if data.wake.at !== null}
                 {dateTime(data.wake.at)} に起こします
               {:else}
-                次の録画が無いので、起こしません
+                起こす予定はありません
               {/if}
             </span>
           </div>

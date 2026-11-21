@@ -101,6 +101,8 @@ export async function windowsWake(): Promise<WindowsWake | null> {
     win = {
       set: (at) => {
         const due = BigInt64Array.of(fileTime(at));
+        // 成功しても復帰できないことは GetLastError でしか分からない。3 つは別々の FFI の呼び出しなので、間に bun が Win32 API を呼べば
+        // 値が変わりうる (同じ JS のスレッドで続けて呼ぶので、まず起きない)。読み違えても変わるのは画面とログに出す理由だけで、タイマーはそのまま設定される
         k.SetLastError(0);
         // 繰り返さず、鳴ったときに呼ぶ関数も渡さない。最後の 1 がスリープから起こす指定 (fResume)
         const ok = k.SetWaitableTimer(handle, due, 0, null, null, 1);
