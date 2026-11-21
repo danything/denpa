@@ -573,4 +573,20 @@ public class It930xTsTests
         await Assert.That(loss.Jumps).IsEqualTo(1);
         await Assert.That(loss.Slots).IsEqualTo(1);
     }
+
+    [Test]
+    public async Task ほかの_PID_の誤りでは飛びを許さない()
+    {
+        var loss = new It930xTsLoss();
+        loss.Push(CountedPacket(0x100, 0), 0);
+        loss.Push(CountedPacket(0x200, 0), 0);
+        // PID 0x200 の誤りのあと、PID 0x100 が飛ぶ (間隔の長い PID の本当の欠け)
+        loss.Push(CountedPacket(0x200, 1, error: true), 10);
+        loss.Push(CountedPacket(0x100, 3), 20);
+        await Assert.That(loss.Jumps).IsEqualTo(1);
+        await Assert.That(loss.Excused).IsEqualTo(0);
+        // 印は PID 0x200 に残っていて、その PID の次の飛びだけを許す
+        loss.Push(CountedPacket(0x200, 3), 30);
+        await Assert.That(loss.Excused).IsEqualTo(1);
+    }
 }

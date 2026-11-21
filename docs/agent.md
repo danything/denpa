@@ -1076,7 +1076,7 @@ It930xProbe (--it930x-probe。ブリッジを試す。--chips で TC90522 の機
   記録には「受信の始めに、ブリッジの TS のバッファを捨てました (EP 0x84 から 512 バイト)」のように、読めたバイトの数を出します
 - **全体の溢れ (`0xDA39`) が立っていたら、印だけでは断らず、ロックした受信機の TS が欠けずに届くかで決めます** (`It930xDevice.Unconfirmed`・`It930xTuner.Probe`)。
   流し始めてから 1 秒 (`TsProbeMs`) のうちに、その受信機の入力から来たパケットが EP 0x84 から届き、そのあと 1 秒 (`TsLossMs`) の間に欠けていなければ、印が立ったままでも機材を使い続けます。溢れの値が変わるまでは確かめ直しません。
-  欠けは出口 (`It930xTsOutput.WatchLoss`・`It930xTsLoss`) で数えます。transport_error_indicator が 1 のパケットのあとの飛びを除いた連続性の飛びを 100 ms ごとの区間に分け、2 区間 (`TsLossSlots`) で飛んでいれば欠けて届くとします。
+  欠けは出口 (`It930xTsOutput.WatchLoss`・`It930xTsLoss`) で数えます。同じ PID の transport_error_indicator が 1 のパケットのあとの飛びを除いた連続性の飛びを 100 ms ごとの区間に分け、2 区間 (`TsLossSlots`) で飛んでいれば欠けて届くとします。
   しきい値の理由は [tuner-it930x.md](tuner-it930x.md#ts-のバッファの溢れ) にあります。ISDB-C は TSMF のフレームに複数の TS の同じ PID が混じるので、届くかだけを確かめます。
   届かないか欠けていれば、受信を 1 回やり直して (`It930xDevice.RestartOnce`。同じ溢れの値のままでは 1 回だけ)、もう一度確かめます。
   1 秒は、ロックから最初の TS までの実機の記録 (PX-W3U4 で 4〜20 ms。#2805) と、EP 0x84 の 1 回の転送 (65,424 バイト) が地上波 1 本で埋まる約 31 ms の 30 倍ほどです。

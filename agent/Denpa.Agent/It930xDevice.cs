@@ -1873,23 +1873,30 @@ public sealed class It930xTuner : ITuneDevice
     /// </summary>
     private TsCheck Watch(It930xDevice device, It930xTsOutput output, long before, bool countLoss)
     {
-        // 数え始めてから届いたパケットだけを数える (前の確かめの数を持ち越さない)
+        // 数え始めてから届いたパケットだけを数える (前の確かめの数を持ち越さない)。確かめ終えたら、流している間は数えない
         var loss = countLoss ? output.WatchLoss() : null;
-        var waited = Stopwatch.StartNew();
-        while (device.InputPackets(_receiver) == before)
+        try
         {
-            if (waited.ElapsedMilliseconds >= TsProbeMs) return new(false, false, null);
-            Thread.Sleep(5);
+            var waited = Stopwatch.StartNew();
+            while (device.InputPackets(_receiver) == before)
+            {
+                if (waited.ElapsedMilliseconds >= TsProbeMs) return new(false, false, null);
+                Thread.Sleep(5);
+            }
+            if (loss is null) return new(true, false, null);
+            var counting = Stopwatch.StartNew();
+            while (true)
+            {
+                var span = loss.Span(Environment.TickCount64);
+                if (loss.Slots >= TsLossSlots) return new(true, true, loss.Describe(span));
+                // 数え始める前に届いた 1 回ぶんのあと、パケットが続かなければ、最初のパケットを待たずに数え終える (30 秒届かないときの扱いに任せる)
+                if (span >= TsLossMs || counting.ElapsedMilliseconds >= TsProbeMs + TsLossMs) return new(true, false, loss.Describe(span));
+                Thread.Sleep(5);
+            }
         }
-        if (loss is null) return new(true, false, null);
-        var counting = Stopwatch.StartNew();
-        while (true)
+        finally
         {
-            var span = loss.Span(Environment.TickCount64);
-            if (loss.Slots >= TsLossSlots) return new(true, true, loss.Describe(span));
-            // 数え始める前に届いた 1 回ぶんのあと、パケットが続かなければ、最初のパケットを待たずに数え終える (30 秒届かないときの扱いに任せる)
-            if (span >= TsLossMs || counting.ElapsedMilliseconds >= TsProbeMs + TsLossMs) return new(true, false, loss.Describe(span));
-            Thread.Sleep(5);
+            if (loss is not null) output.StopLoss();
         }
     }
 
