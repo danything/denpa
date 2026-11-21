@@ -375,6 +375,10 @@ public sealed class XboxOneTuner : ITuneDevice
     }
 
     /// <summary>受信の状態と C/N (dB)。強度は相対値しか分からないので出さない</summary>
+    /// <remarks>
+    /// 選局と同じ `_gate` を取るので、選局し直している間は待つ (Siano と同じ作り)。`TunerPool` は選局が合っているチューナーにだけ
+    /// これを呼ぶ (選局し直している最中には呼ばない) ので、長く待つことはない
+    /// </remarks>
     public TunerSignal? Signal()
     {
         lock (_gate)
