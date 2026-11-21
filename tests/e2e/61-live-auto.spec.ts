@@ -126,7 +126,9 @@ test.describe("ライブの自動", () => {
     await expect(page.getByTestId("live-video")).toBeVisible({
       timeout: 30_000,
     });
+    // canvas を外して `<video>` に入れ替えた (止まったカーソルの下で中身が替わった)。ライブは `play` では操作バーを出さないので、
     // 出てこないことは時間で待つ。CI では入れ替えた `<video>` の `paused` が 30 秒たっても false にならず、再生の始まりでは待てなかった
+    await expect(page.getByTestId("live-raw")).toHaveCount(0);
     await page.waitForTimeout(3_000);
     expect(await wakes()).toBe(0);
     await expect(page.getByTestId("live-controls")).toHaveAttribute(
