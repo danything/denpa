@@ -609,6 +609,7 @@
         prefecture={data.prefecture}
         network={data.bmlNetwork}
         tune={tuneFromData}
+        shownAt={() => player.airTime()}
         mainAudio={mainAudioFromData}
         cardId={player.cardId}
         apps={player.hybridcast}

@@ -163,3 +163,15 @@ export function parseStart(line: string): number {
   const match = /\bstart:\s*(-?\d+(?:\.\d+)?)/.exec(line);
   return match === null ? Number.NaN : Number(match[1]);
 }
+
+/**
+ * STC (PCR の基準部と同じ 90 kHz の時計) の値が、`anchor` の時計で何時か (unix ms)。**組の PCR から進んだ (戻った) ぶんを足す。**
+ * 一周 (26.5 時間) をまたいでも、近いほうで数える。データ放送の NPT 参照に時刻を付けるのに使う
+ * (ライブは `BroadcastClock.anchor`、録画は `TsHead.anchor`。`server/databroadcast.ts`・`data-capture.ts`)
+ */
+export function stcUnixMs(anchor: Anchor, stc: number): number {
+  let seconds = (stc / CLOCK - anchor.pcr) % PCR_WRAP;
+  if (seconds > PCR_WRAP / 2) seconds -= PCR_WRAP;
+  else if (seconds < -PCR_WRAP / 2) seconds += PCR_WRAP;
+  return Math.round(anchor.unixMs + seconds * 1000);
+}

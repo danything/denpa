@@ -76,6 +76,8 @@ export interface BrowserHost {
   program(): ProgramInfoMessage | null;
   /** 放送の時刻 (UNIX ミリ秒) */
   now(): number;
+  /** いまの NPT (ミリ秒)。NPT の無い局・まだ届いていないときは null (`getNPT` は NaN。[npt.ts](npt.ts)) */
+  npt?(): number | null;
   activeDocument(): string | null;
   /** 移る。戻らない (Abort)・失敗 (NaN)・通信の文書を取るまで待つ (Suspend) */
   launch(name: string): NativeResult;
@@ -116,7 +118,8 @@ export interface BrowserHost {
 /**
  * getBrowserSupport の APIGroup で「ある」と答えるもの。組の中身は STD-B24 第二編 付属 1 表 11-2 で、
  * **ここで動く関数の組だけ**を挙げる。無いと答えるもの: Com.IP.Connect・Com.IP.Params (PPP)・
- * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.NPT (NPT は無く、getNPT は NaN)・Ctrl.startExtraBrowser・EPG.Basic2 (epgTuneToComponent)。
+ * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.startExtraBrowser・EPG.Basic2 (epgTuneToComponent)。
+ * Ctrl.NPT は「ある」(getNPT は NPT の無い局・まだ届いていないときに NaN)。
  * EPG.Basic は epgTune が動くので「ある」(予約は失敗を返す。録画の再生中は epgTune も失敗)。
  * AITControlledApp.Start は Hybridcast を開けるときだけ「ある」(`browserSupport`)
  */
@@ -131,6 +134,7 @@ const API_GROUPS = new Set([
   "Ctrl.Basic",
   "Ctrl.Basic2",
   "Ctrl.Time",
+  "Ctrl.NPT",
   "Ctrl.Cache",
   "Ctrl.Cache2",
   "Ctrl.Cache.Ext",
@@ -355,7 +359,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
     const start = host.program()?.startTimeUnixMillis;
     return start == null ? Number.NaN : Math.floor((host.now() - start) / 1000);
   });
-  fn("getNPT", () => Number.NaN);
+  fn("getNPT", () => host.npt?.() ?? Number.NaN);
 
   // 画面と文書
   fn("lockScreen", () => {

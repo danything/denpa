@@ -213,8 +213,33 @@ function nptAt(reference: NPTReference, stc: number): number | null {
  * 33 ビットで一周するので、差が半周より大きいものはまだ先とみなす
  */
 function reached(reference: NPTReference, stc: number): boolean {
-  return (stc - reference.STCReference + WRAP) % WRAP < WRAP / 2;
+  return since(reference.STCReference, stc) < WRAP / 2;
 }
+
+/** `from` から `to` まで STC が進んだ量 (90 kHz)。33 ビットで一周するので、戻ったものは半周より大きく出る */
+function since(from: number, to: number): number {
+  return (((to - from) % WRAP) + WRAP) % WRAP;
+}
+
+/** 同じ参照か (NPT 参照記述子の中身が全部同じ) */
+function sameReference(a: NPTReference, b: NPTReference | null): boolean {
+  return (
+    b !== null &&
+    a.postDiscontinuityIndicator === b.postDiscontinuityIndicator &&
+    a.dsmContentId === b.dsmContentId &&
+    a.STCReference === b.STCReference &&
+    a.NPTReference === b.NPTReference &&
+    a.scaleNumerator === b.scaleNumerator &&
+    a.scaleDenominator === b.scaleDenominator
+  );
+}
+
+/**
+ * **PCR がこれより先へ飛んだら、放送の時計 (STC) が不連続になったとみなす** (10 秒。90 kHz)。PCR は 0.1 秒より短い間隔で
+ * 届くので、ふつうは飛ばない。戻ったときと、適応フィールドの discontinuity_indicator が立ったときも不連続とみなす。
+ * 電波が数秒途切れただけなら STC は続いているので、短い飛びでは参照を捨てない
+ */
+const STC_JUMP = 10 * 90_000;
 
 /** ストリーム記述子 (table_id 0x3D)。NPT とイベントメッセージが載っている */
 function parseEsEvents(section: Uint8Array): ESEvent[] {
@@ -297,6 +322,11 @@ interface Component {
   carousel: boolean;
   /** 使い始めた NPT 参照 (`reached`)。時刻指定のイベントメッセージを起こす時刻を決める */
   npt: NPTReference | null;
+  /**
+   * 最後に NPT が替わった STC (90 kHz。参照を使い始めた時点か、STC が不連続になって NPT が無くなった時点)。
+   * 次の参照を使い始める時点は、これより前に戻さない (`nptUpdated` の `stc`)。まだ替わっていなければ null
+   */
+  nptSince: number | null;
   sections: SectionAssembler;
   /** DII の transaction_id。**変わっていなければ組み立て直さない** */
   transactionId: number | null;
@@ -369,9 +399,31 @@ export class BmlDecoder {
     }
   }
 
-  /** 適応フィールドの PCR の基準部 (90 kHz。`pcrBase`) */
+  /**
+   * 適応フィールドの PCR の基準部 (90 kHz。`pcrBase`)。**STC が不連続になったら、使っていた NPT 参照を捨てる** (`STC_JUMP`)。
+   * 前の時計の参照で NPT を求めると、飛んだぶんだけ NPT も飛ぶ。新しい時計で達した参照が届けば、そこから使い直す
+   */
   private readPcr(packet: Uint8Array): void {
-    this.stc = pcrBase(packet) ?? this.stc;
+    const stc = pcrBase(packet);
+    if (stc === null) return;
+    const previous = this.stc;
+    this.stc = stc;
+    if (previous === null) return;
+    // 適応フィールドの discontinuity_indicator (pcrBase が読めたので、適応フィールドの長さは 7 以上ある)
+    const flagged = (packet[5]! & 0x80) !== 0;
+    const step = since(previous, stc);
+    if (!flagged && step <= STC_JUMP) return;
+    for (const component of this.components.values()) {
+      if (component.npt === null) continue;
+      component.npt = null;
+      component.nptSince = stc;
+      this.send({
+        type: "nptUpdated",
+        componentId: component.componentId,
+        reference: null,
+        stc,
+      });
+    }
   }
 
   private onPmt(section: Uint8Array): void {
@@ -408,6 +460,7 @@ export class BmlDecoder {
         componentId: component.componentId,
         carousel,
         npt: null,
+        nptSince: null,
         // DSM-CC は section_syntax_indicator が立たないことがある (psi.ts)
         sections: new SectionAssembler(component.pid, "syntax"),
         transactionId: null,
@@ -454,9 +507,7 @@ export class BmlDecoder {
   private dueEvents(component: Component, events: ESEvent[]): ESEvent[] {
     const stc = this.stc;
     if (stc === null) return events;
-    for (const event of events)
-      if (event.type === "nptReference" && reached(event, stc))
-        component.npt = event;
+    this.useReference(component, events, stc);
     const npt = component.npt === null ? null : nptAt(component.npt, stc);
     if (npt === null) return events;
     return events.map((event) =>
@@ -471,6 +522,43 @@ export class BmlDecoder {
           }
         : event,
     );
+  }
+
+  /**
+   * STC が達した参照のうち、いちばん新しいもの (STC_Reference が最も近いもの) を使う。**替わったら `nptUpdated` を送る。**
+   * 同じ参照は繰り返し届くので、中身が変わったときだけ送る。
+   *
+   * 使い始める STC はふつう参照の STC_Reference。前に NPT が替わった時点 (`nptSince`) より前になるときは、
+   * 届いた今の STC にする。STC が不連続になったあとに前と同じ参照が届いたとき、NPT を無くした時点より前へ戻さないため
+   */
+  private useReference(
+    component: Component,
+    events: ESEvent[],
+    stc: number,
+  ): void {
+    let chosen: NPTReference | null = null;
+    for (const event of events) {
+      if (event.type !== "nptReference" || !reached(event, stc)) continue;
+      if (
+        chosen === null ||
+        since(event.STCReference, stc) < since(chosen.STCReference, stc)
+      )
+        chosen = event;
+    }
+    if (chosen === null || sameReference(chosen, component.npt)) return;
+    const held = component.nptSince;
+    const start =
+      held !== null && since(held, chosen.STCReference) >= WRAP / 2
+        ? stc
+        : chosen.STCReference;
+    component.npt = chosen;
+    component.nptSince = start;
+    this.send({
+      type: "nptUpdated",
+      componentId: component.componentId,
+      reference: chosen,
+      stc: start,
+    });
   }
 
   private onDii(component: Component, section: Uint8Array): void {

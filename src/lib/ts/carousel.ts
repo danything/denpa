@@ -12,13 +12,16 @@
  * 揃ったモジュールを渡しても始まらない。字幕で最後の 1 枚を配り直しているのと
  * 同じ理由 (`server/live.ts` の `showing`)。
  *
- * 覚えるのは次の 4 つだけ。
+ * 覚えるのは次の 5 つだけ。
  *
  * - `pmt` … 最後の 1 つ。差し替わったら上書き
  * - `programInfo` … 同じく最後の 1 つ
  * - `moduleListUpdated` … コンポーネントごとに最後の 1 つ (DII)
  * - `moduleDownloaded` … コンポーネントとモジュールの組ごとに最後の 1 つ。
  *   **バージョンが上がると中身が変わる**ので、来るたびに置き換える
+ * - `nptUpdated` … コンポーネントごとに最後の 1 つ。NPT が無くなったら消す。替わったときにしか送られないので、
+ *   覚えていないと遅れて繋いだ人・録画で飛んだ先では NPT が分からない。時刻が付いているので、古いものを配っても
+ *   受け側はいまの NPT を求められる (`bml/npt.ts`)
  *
  * ## DII (`moduleListUpdated`) を覚える理由
  *
@@ -72,6 +75,8 @@ export class Carousel {
   /** DII。**コンポーネントごとに最後の 1 つ** (上の説明) */
   private readonly lists = new Map<number, ResponseMessage>();
   private readonly modules = new Map<string, ResponseMessage>();
+  /** 使い始めた NPT 参照。**コンポーネントごとに最後の 1 つ** (NPT が無くなったら消す) */
+  private readonly npts = new Map<number, ResponseMessage>();
 
   /**
    * 1 つ受ける。**覚えるかどうかと、配る価値があるかをここで決める**
@@ -93,6 +98,11 @@ export class Carousel {
       this.lists.set(message.componentId, message);
       return true;
     }
+    if (message.type === "nptUpdated") {
+      if (message.reference === null) this.npts.delete(message.componentId);
+      else this.npts.set(message.componentId, message);
+      return true;
+    }
     if (message.type !== "moduleDownloaded") return true;
     const key = moduleKey(message);
     /*
@@ -110,7 +120,7 @@ export class Carousel {
   /**
    * 繋いできた人に渡すぶん。
    *
-   * **出す順は pmt → programInfo → DII → モジュール。** 何番のコンポーネントを
+   * **出す順は pmt → programInfo → DII → モジュール → NPT 参照。** 何番のコンポーネントを
    * 出すかが決まってからでないと、モジュールを渡しても置き場所が無い。DII は
    * モジュールより先に置く (「在る」と知らせる前に中身だけ来ても、受け側は
    * 在ることを知らないまま)
@@ -122,6 +132,7 @@ export class Carousel {
     for (const held of this.lists.values()) out.push(held);
     for (const held of this.modules.values())
       if (this.current(held)) out.push(held);
+    for (const held of this.npts.values()) out.push(held);
     return out;
   }
 

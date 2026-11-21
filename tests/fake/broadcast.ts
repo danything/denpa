@@ -24,12 +24,14 @@ import {
   eitSection,
   logoModule,
   nitSection,
+  nptReferenceDescriptor,
   packetize,
   patSection,
   pmtSection,
   programMap,
   satelliteDeliveryDescriptor,
   sdtSection,
+  streamDescriptorSection,
   type SynthEvent,
   withCrc,
 } from "@danything/arib/synth";
@@ -144,6 +146,12 @@ export interface Knobs {
    * (`packages/arib/src/bml.ts`)、データ放送の E2E が手で流し込む PMT を上書きしてしまう
    */
   captions: boolean;
+  /**
+   * **データ放送の NPT 参照を流す。** 部品タグ 0x41 の DSM-CC の ES を PMT に載せ、ストリーム記述子で
+   * 「映像の最初の PCR で NPT 0、そこから同じ速さ」の参照を表と一緒に繰り返し流す (`packages/arib/src/bml.ts` の `nptUpdated`)。
+   * 既定は流さない。部品タグの付いた ES があると PMT が画面へ配られ、データ放送の E2E が手で流し込む PMT を上書きする (`captions` と同じ)
+   */
+  npt: boolean;
 }
 
 export const DEFAULT_KNOBS: Knobs = {
@@ -155,6 +163,7 @@ export const DEFAULT_KNOBS: Knobs = {
   pmtCopyNever: false,
   tablesLate: false,
   captions: false,
+  npt: false,
 };
 
 /** その局の番組。つまみ (`eitCopyNever`) に入っている局なら、コピー禁止の印を付ける */
@@ -429,7 +438,15 @@ const pidsOf = (index: number) => ({
   ait: 0x1003 + index * 0x10,
   /** 字幕。ES を PMT に載せるだけで、中身は流さない (字幕の有無は PMT で決まる) */
   caption: 0x1004 + index * 0x10,
+  /** データ放送の NPT 参照 (`Knobs.npt`)。ストリーム記述子だけを流す */
+  npt: 0x1005 + index * 0x10,
 });
+
+/** NPT 参照の部品タグ (`Knobs.npt`) */
+const NPT_TAG = 0x41;
+
+/** 局ごとの最初の PCR (90 kHz。`avPackets`)。局ごとにずらす (実機もばらばら) */
+const pcrBaseOf = (index: number) => 900_000 * (index + 1);
 
 /**
  * ロゴのカルーセル (衛星)。**地上波とは伝送方式が違う。**
@@ -650,6 +667,14 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
             number,
             number[],
           ][])),
+      // NPT 参照を運ぶ ES。運用と同じく文書とは別の部品で、BML の符号化方式は付けない
+      ...(knobs.npt
+        ? ([[0x0d, pids.npt, [0x52, 0x01, NPT_TAG]]] as [
+            number,
+            number,
+            number[],
+          ][])
+        : []),
     ];
     // コピー禁止は番組ぜんたいの記述子に載せる (本物もここ)
     const programInfo = [
@@ -664,6 +689,16 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
       programInfo,
     );
     parts.push(...packetize(pids.pmt, pmt));
+    // 映像の最初の PCR で NPT 0。選局してからの秒が、そのまま NPT になる
+    if (knobs.npt)
+      parts.push(
+        ...packetize(
+          pids.npt,
+          streamDescriptorSection([
+            nptReferenceDescriptor(pcrBaseOf(index), 0),
+          ]),
+        ),
+      );
     if (service.hybridcast !== undefined) {
       parts.push(
         ...packetize(
@@ -932,7 +967,7 @@ export function broadcast(
   let ticks = 0;
   const av: AvState[] = services.map((_, index) => ({
     startedAt: performance.now(),
-    base: 900_000 * (index + 1),
+    base: pcrBaseOf(index),
     frames: 0,
     audio: 0,
     videoCounter: 0,

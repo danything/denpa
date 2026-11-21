@@ -72,7 +72,12 @@ import {
   SOURCE_GAP,
 } from "#lib/rungs.js";
 import { recordedTransport, tsPathOf } from "#lib/source.js";
-import { type Anchor, BroadcastClock, parseStart } from "#lib/ts/clock.js";
+import {
+  type Anchor,
+  BroadcastClock,
+  parseStart,
+  stcUnixMs,
+} from "#lib/ts/clock.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { KeyGate } from "#lib/ts/key-gate.js";
 import { MkvSplitter } from "#lib/ts/mkv.js";
@@ -1952,7 +1957,17 @@ class Session {
       return;
     }
     if (this.data === null) {
-      this.data = new DataBroadcast((message) => this.handData(message));
+      /*
+       * NPT 参照の時刻は、時計の通知 (`clockNotice`) と同じ組 (PCR とサーバが受け取った時刻) から出す。画面は映しているコマの
+       * 時刻を同じ組から出すので、NPT がコマに合う。組がまだ無ければ (PCR を読む前) いまの時刻
+       */
+      this.data = new DataBroadcast(
+        (message) => this.handData(message),
+        (stc) => {
+          const anchor = this.clock.anchor;
+          return anchor === null ? Date.now() : stcUnixMs(anchor, stc);
+        },
+      );
     }
     if (viewer?.wantsData !== true) return;
     /*

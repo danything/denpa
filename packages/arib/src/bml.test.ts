@@ -657,6 +657,95 @@ describe("イベントメッセージ (ストリーム記述子)", () => {
     expect(events(out)[0]?.events[1]?.type).toBe("nptEvent");
   });
 
+  const npts = (out: ResponseMessage[]) =>
+    out.flatMap((message) => (message.type === "nptUpdated" ? [message] : []));
+  const nptSection = (...descriptors: number[][]) =>
+    packetize(EVENT_PID, streamDescriptorSection(descriptors));
+
+  test("使い始めた NPT 参照を、参照の STC と一緒に 1 回だけ送る", () => {
+    // STC 10 秒で NPT 5 秒。同じ参照は繰り返し届く
+    const section = nptSection(nptReferenceDescriptor(10 * 90_000, 450_000));
+    const out = decode(
+      ...eventHead(),
+      pcrPacket(VIDEO_PID, 10.5),
+      section,
+      pcrPacket(VIDEO_PID, 11),
+      section,
+    );
+    expect(npts(out)).toEqual([
+      {
+        type: "nptUpdated",
+        componentId: EVENT_TAG,
+        reference: expect.objectContaining({
+          STCReference: 10 * 90_000,
+          NPTReference: 450_000,
+          scaleNumerator: 1,
+          scaleDenominator: 1,
+        }),
+        stc: 10 * 90_000,
+      },
+    ]);
+    // 送るのはストリーム記述子のイベントより先 (NPTReferred より前に NPT が分かる)
+    expect(out.findIndex((m) => m.type === "nptUpdated")).toBeLessThan(
+      out.findIndex((m) => m.type === "esEventUpdated"),
+    );
+  });
+
+  test("参照が替わったら送り直す。達した参照のうち新しいほうを使い、止まる参照 (scale 0/1) も送る", () => {
+    const out = decode(
+      ...eventHead(),
+      pcrPacket(VIDEO_PID, 10.5),
+      nptSection(nptReferenceDescriptor(10 * 90_000, 0)),
+      pcrPacket(VIDEO_PID, 20.5),
+      // 20 秒から止まる参照と、まだ達していない 30 秒からの参照
+      nptSection(
+        nptReferenceDescriptor(10 * 90_000, 0),
+        nptReferenceDescriptor(20 * 90_000, 900_000, [0, 1]),
+        nptReferenceDescriptor(30 * 90_000, 900_000),
+      ),
+    );
+    expect(npts(out).map((m) => [m.stc, m.reference?.scaleNumerator])).toEqual([
+      [10 * 90_000, 1],
+      [20 * 90_000, 0],
+    ]);
+  });
+
+  test("STC が不連続になったら NPT を無くし、届き直した参照は不連続より前の時点へ戻さずに使う", () => {
+    const section = nptSection(nptReferenceDescriptor(10 * 90_000, 0));
+    const out = decode(
+      ...eventHead(),
+      pcrPacket(VIDEO_PID, 12),
+      section,
+      // 時計が 5 秒へ戻った。同じ参照はまだ達していない
+      pcrPacket(VIDEO_PID, 5),
+      section,
+      // 新しい時計で 10 秒を越えた。参照の 10 秒は不連続の 5 秒より後なので、10 秒から使う
+      pcrPacket(VIDEO_PID, 13),
+      section,
+      // 時計が 40 秒へ飛んだ (10 秒より大きい飛び)。参照の 10 秒は不連続より前なので、届いた 40.5 秒から使う
+      pcrPacket(VIDEO_PID, 40),
+      pcrPacket(VIDEO_PID, 40.5),
+      section,
+    );
+    expect(npts(out).map((m) => [m.reference === null, m.stc])).toEqual([
+      [false, 10 * 90_000],
+      [true, 5 * 90_000],
+      [false, 10 * 90_000],
+      [true, 40 * 90_000],
+      [false, 40.5 * 90_000],
+    ]);
+  });
+
+  test("PCR が少し途切れただけ (10 秒まで) なら、NPT を無くさない", () => {
+    const out = decode(
+      ...eventHead(),
+      pcrPacket(VIDEO_PID, 12),
+      nptSection(nptReferenceDescriptor(10 * 90_000, 0)),
+      pcrPacket(VIDEO_PID, 20),
+    );
+    expect(npts(out)).toHaveLength(1);
+  });
+
   test("PCR を読む前は、時刻指定のまま配る", () => {
     const out = decode(
       ...eventHead(),

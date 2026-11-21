@@ -3,11 +3,15 @@ import { describe, expect, test } from "bun:test";
 import {
   BML_TS,
   bmlHead,
+  nptReferenceDescriptor,
+  packetize,
   pcrPacket,
   stream,
+  streamDescriptorSection,
   tdtPacket as tdt,
 } from "@danything/arib/synth";
 
+import { stcUnixMs } from "./clock";
 import { DataBroadcastCapture } from "./data-capture";
 import { TsHead } from "./ts-head";
 
@@ -52,6 +56,38 @@ describe("TsHead", () => {
     for (let at = 0; at < whole.length; at += 100)
       head.feed(whole.subarray(at, at + 100));
     expect(head.head).toBe(T1 - 12_000);
+  });
+
+  test("先頭の PCR と放送時刻の組 (`anchor`) から、PCR の時計の値を放送時刻に直せる", () => {
+    const head = new TsHead();
+    head.feed(recorded());
+    const anchor = head.anchor!;
+    expect(anchor).toEqual({ pcr: 1000, unixMs: T1 - 12_000 });
+    expect(stcUnixMs(anchor, 1017 * 90_000)).toBe(T1 + 5_000);
+    // 先頭より前の STC も、近いほう (前) で数える
+    expect(stcUnixMs(anchor, 990 * 90_000)).toBe(T1 - 22_000);
+  });
+
+  test("録画のデータ放送の NPT 参照に、先頭から PCR が進んだぶんの時刻を付ける", () => {
+    const capture = new DataBroadcastCapture();
+    capture.feed(
+      stream(
+        recorded(),
+        // STC 1010 秒で NPT 0 の参照。1017 秒の PCR のあとに届く
+        packetize(
+          BML_TS.bmlPid,
+          streamDescriptorSection([nptReferenceDescriptor(1010 * 90_000, 0)]),
+        ),
+      ),
+    );
+    const npt = capture
+      .result()
+      .map((item) => item.message)
+      .find((message) => message.type === "nptUpdated");
+    expect(npt).toMatchObject({
+      stc: 1010 * 90_000,
+      timeUnixMillis: T1 - 2_000,
+    });
   });
 
   test("TDT が来なければ null", () => {
