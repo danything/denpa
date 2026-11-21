@@ -1,0 +1,1 @@
+ALTER TABLE `ranking_sent` ADD `end_at` integer DEFAULT 0 NOT NULL;

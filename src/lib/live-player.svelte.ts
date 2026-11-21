@@ -103,7 +103,8 @@ import {
   type YieldedRecording,
 } from "#lib/live.js";
 import { separateLiveAudio } from "#lib/native-audio-choice.js";
-import { decoderBase, RawEngine } from "#lib/raw/engine.js";
+import { fallBackTo, openCanvas } from "#lib/player/canvas-sink.js";
+import { decoderBase, type RawEngine } from "#lib/raw/engine.js";
 import { GestureContext } from "#lib/raw/gesture-context.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { NativeAudio } from "#lib/raw/native-audio.js";
@@ -137,7 +138,7 @@ import {
   type Steering,
   steeringWhen,
 } from "#lib/ts/pacing.js";
-import { retryWait } from "#lib/ts/playback.js";
+import { StreamRetry } from "#lib/ts/playback.js";
 import { MAX_LEVEL } from "#lib/volume.js";
 
 type LiveState = "idle" | "connecting" | "playing" | "error";
@@ -770,10 +771,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   const hidesSlip = slipHidden();
   /** バッファが足りた最初の時刻。**映像を待ちきりにしないため** (`canStart`) */
   let enoughAt = 0;
-  /** 繋ぎ直しのタイマー。**待っている間だけ入っている** */
-  let retry: ReturnType<typeof setTimeout> | null = null;
-  /** 続けて何回繋ぎ直しに失敗したか。0 でなければ繋ぎ直しの最中で、繋げなくても失敗にしない */
-  let attempts = $state(0);
+  /** 繋ぎ直しを待っている最中か (`retry` の `retrying` と `flowing`)。画面に出すので `$state` に写す */
+  let reconnecting = $state(false);
+  /**
+   * 繋ぎ直し (観る画面と同じ `StreamRetry`)。`attempts` が 0 でなければ繋ぎ直しの最中で、繋げなくても失敗にしない。
+   * **回数の上限は置かない** (`Infinity`)。点けっぱなしで戻ってきたときに映っていてほしい。切れた時点で打ち切っていた頃は、
+   * 観ている最中に「選んでください」に戻って自分で選び直すことになっていた。観る画面は 8 回で打ち切る (`STREAM_RETRIES`)
+   */
+  const retry = new StreamRetry((next) => {
+    reconnecting = next === "retrying";
+  }, Infinity);
   /** 最後に作り直しを受けた時刻 (`restart`。`RESTART_CALM`) */
   let restartedAt = 0;
   /** 追っかけで作り直したあと、届いたぶんを観終えるのを待っている (`resumeChase`) */
@@ -1953,8 +1960,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 画面を離れる。**貼ったフレームも剥がす**。戻ってきたときに残っていては困る */
   function stop(): void {
     left = true;
-    if (retry !== null) clearTimeout(retry);
-    retry = null;
+    retry.cancel();
     if (adaptTimer !== null) clearInterval(adaptTimer);
     adaptTimer = null;
     stopResuming();
@@ -1978,7 +1984,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function fail(text: string): void {
     state = "error";
     message = text;
-    attempts = 0;
+    retry.flowing();
     // 段を上げたあとの待ち (`upAsk`) を残すと、エラーの画面のまま段を下げてリクエストし直す
     upAsk = null;
     thaw();
@@ -1993,13 +1999,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 待ってから繋ぎ直す (いちばん多いのはサーバの入れ替え)。待ちは倍々で 10 秒まで (`retryWait`)。回数の上限は
-   * 置かない。点けっぱなしで戻ってきたときに映っていてほしい。切れた時点で打ち切っていた頃は、
-   * 観ている最中に「選んでください」に戻って自分で選び直すことになっていた
+   * 待ってから繋ぎ直す (いちばん多いのはサーバの入れ替え)。待ちは倍々で 10 秒まで (`retryWait`)。回数の上限は置かない (`retry`)
    */
   function reconnect(): void {
     if (
-      retry !== null ||
+      retry.waiting ||
       left ||
       (tuned === null && chase === null) ||
       element === null
@@ -2007,10 +2011,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     state = "connecting";
     message = "";
-    const wait = retryWait(attempts);
-    attempts++;
-    retry = setTimeout(() => {
-      retry = null;
+    retry.schedule(() => {
       if (left || element === null) return;
       if (chase !== null) {
         reopenChase();
@@ -2019,7 +2020,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (tuned === null) return;
       // 局は変わらないので、選べる字幕の一覧は残す
       void tune(element, tuned, true);
-    }, wait);
+    });
   }
 
   /**
@@ -2389,7 +2390,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     returning = false;
     yielded = { recording, back, refused };
     // リクエストし直しで伸びた待ちは持ち越さない (追っかけが切れたら 1 秒から繋ぎ直す)
-    attempts = 0;
+    retry.flowing();
     // 4K の局の録画は HEVC で開く (省くと MPEG-2 として開き、HEVC を受け取れない端末がリクエストし直しを繰り返す)
     void openChase(
       element,
@@ -2629,7 +2630,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       } catch {
         if (superseded(mine)) return;
         // 繋ぎ直しの最中なら、サーバからまだ応答が無いだけ。待ち直す
-        if (attempts > 0) reconnect();
+        if (retry.attempts > 0) reconnect();
         else fail("繋がりませんでした");
         return;
       }
@@ -2655,7 +2656,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       opened = true;
       if (startup !== null) startup.open = performance.now() - startup.at;
       // 繋がった。次に切れたときはまた 1 秒から待ち直す
-      attempts = 0;
+      retry.flowing();
       const command = wantedCommand();
       if (command !== null) ws.send(JSON.stringify(command));
       // データ放送を受け取るかどうかはサーバでは接続 (Viewer) に紐づいていて、切れると忘れられる
@@ -2665,7 +2666,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
     ws.onerror = () => {
       // 繋ぎ直しの最中か、ページと一緒に受け取ったチケットを断られた。すぐ後ろに `onclose` が来るので、そちらで待ち直す
-      if (attempts > 0 || (fromPage !== null && !opened)) return;
+      if (retry.attempts > 0 || (fromPage !== null && !opened)) return;
       if (state !== "playing") fail("繋がりませんでした");
     };
 
@@ -3247,58 +3248,55 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       video.pause();
       video.removeAttribute("src");
       video.load();
-      try {
-        const box = host ?? video.parentElement;
-        if (box === null) throw new Error("表示先がありません");
-        engine = new RawEngine(
-          box,
-          still,
-          target,
-          {
-            // 新しい局の 1 枚目を描いた。動き出すのは貯まってから (`rawPace`) だが、開くまでの時間はここで出す
-            shown: () => {
-              thaw();
-              reportStartup(performance.now());
-            },
-            stalled: onWaiting,
-            gaveUp: (reason, slow) => fallBack(reason, input, slow),
-            // ロック画面・車の操作で `<audio>` を直に止められた・再開された
-            remote: (stop) => {
-              if (stop !== paused) toggle();
-            },
-            // 追っかけで抱えきれなくなった。手元が尽きる前に再生している位置からリクエストし直す (`rawPace`)
-            full: () => {
-              starved = true;
-            },
-            // 追っかけを録れているところまで鳴らしきった (`ended` の通知で `finish` したあと)。止めておく
-            ended: () => {
-              drained = true;
-              if (paused || engine === null) return;
-              paused = true;
-              engine.pause();
-            },
+      const made = openCanvas({
+        host: host ?? video.parentElement,
+        before: still,
+        target,
+        input,
+        follow: forChase,
+        // 音を消していたなら、canvas で描くときも消したまま始める
+        muted: silenced,
+        volume,
+        playback,
+        events: {
+          // 新しい局の 1 枚目を描いた。動き出すのは貯まってから (`rawPace`) だが、開くまでの時間はここで出す
+          shown: () => {
+            thaw();
+            reportStartup(performance.now());
           },
-          playback,
-          input,
-          forChase,
-        );
-      } catch (error) {
-        const why = error instanceof Error ? error.message : String(error);
+          stalled: onWaiting,
+          gaveUp: (reason, slow) => fallBack(reason, input, slow),
+          // ロック画面・車の操作で `<audio>` を直に止められた・再開された
+          remote: (stop) => {
+            if (stop !== paused) toggle();
+          },
+          // 追っかけで抱えきれなくなった。手元が尽きる前に再生している位置からリクエストし直す (`rawPace`)
+          full: () => {
+            starved = true;
+          },
+          // 追っかけを録れているところまで鳴らしきった (`ended` の通知で `finish` したあと)。止めておく
+          ended: () => {
+            drained = true;
+            if (paused || engine === null) return;
+            paused = true;
+            engine.pause();
+          },
+        },
+      });
+      if (typeof made === "string") {
         fallBack(
           input === "fmp4"
-            ? `再生を始められませんでした (${why})`
-            : `MPEG-2 の再生を始められませんでした (${why})`,
+            ? `再生を始められませんでした (${made})`
+            : `MPEG-2 の再生を始められませんでした (${made})`,
           input,
         );
         return false;
       }
+      engine = made;
       engineInput = input;
       engineChase = forChase;
       // 押されたときの処理は <video> に付いている (`MediaStack`)。見えなくするだけで、そこに残す
       video.style.opacity = "0";
-      // 音を消していたなら、canvas で描くときも消したまま始める
-      if (silenced) engine.mute();
-      engine.volume = volume;
     } else {
       engine.reset();
     }
@@ -3341,32 +3339,41 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * - 互換モードのエンコードしたものをやめた … MPEG-2 で描けるならそちらへ、無理なら理由を出して止まる。
    *   **`<video>` には戻らない** (テスラでは止まってしまう)
    *
+   * 移り先は観る画面と同じ決め方 (`player/canvas-sink.ts` の `fallBackTo`)。どの形式の変換をリクエストするかは
+   * `decideFormat` が決め直す。
+   *
    * 間に合わずにやめたとき (`slow` がある) は、掛かった条件をコンソールに出力する
    */
   function fallBack(reason: string, input: RawInput, slow?: string): void {
     stopRaw();
+    const encoded = input === "fmp4";
     if (slow !== undefined)
       console.warn(
-        `[live] ${input === "fmp4" ? "互換モードの描画" : "MPEG-2"} を打ち切りました: ${slow}`,
+        `[live] ${encoded ? "互換モードの描画" : "MPEG-2"} を打ち切りました: ${slow}`,
       );
-    if (input === "fmp4") {
-      compatGaveUp = true;
-      if (rawProblem === null && !rawGaveUp) {
-        note(`${reason}。MPEG-2 に切り替えました`);
-        /*
-         * 段を下げていたら段 0 に戻す。下げた段のままだと `stepFields` が `raw` を外し、描けるものの無い
-         * `playable` でまた変換をリクエストする。MPEG-2 に移ったあとは段を動かさない (`adapt`)
-         */
-        asked = 0;
-        requestAgain();
-        return;
-      }
-      fail(reason);
+    if (encoded) compatGaveUp = true;
+    else rawGaveUp = true;
+    // 描けて、まだ打ち切っていない形式。エンコードしたものをやめたら MPEG-2 だけ、MPEG-2 をやめたらエンコードしたものだけを見る
+    const usable: (LiveCodec | "mpeg2")[] = encoded
+      ? rawProblem === null && !rawGaveUp
+        ? ["mpeg2"]
+        : []
+      : compatGaveUp
+        ? []
+        : LIVE_CODECS.map((c) => c.id).filter(canvasCan);
+    const next = fallBackTo(encoded ? "encoded" : "mpeg2", usable, compat);
+    if (next === null) {
+      fail(encoded ? reason : "MPEG-2 の再生を続けられませんでした");
       return;
     }
-    rawGaveUp = true;
-    if (compat && (compatGaveUp || !LIVE_CODECS.some((c) => canvasCan(c.id)))) {
-      fail("MPEG-2 の再生を続けられませんでした");
+    if (next === "mpeg2") {
+      note(`${reason}。MPEG-2 に切り替えました`);
+      /*
+       * 段を下げていたら段 0 に戻す。下げた段のままだと `stepFields` が `raw` を外し、描けるものの無い
+       * `playable` でまた変換をリクエストする。MPEG-2 に移ったあとは段を動かさない (`adapt`)
+       */
+      asked = 0;
+      requestAgain();
       return;
     }
     note(`${reason}。変換した映像に切り替えました`);
@@ -3534,7 +3541,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     },
     /** 繋ぎ直しを待っている最中か。**待っていることを画面に出すため** */
     get resuming() {
-      return attempts > 0;
+      return reconnecting;
     },
     /** 描かれずに捨てられたコマ。**映像だけ遅れるときの切り分けに** */
     get dropped() {

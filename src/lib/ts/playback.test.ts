@@ -75,6 +75,35 @@ describe("StreamRetry", () => {
     }
   });
 
+  test("上限を Infinity にすると打ち切らず、待ちは 10 秒で頭打ちのまま呼び続ける (ライブ)", () => {
+    const states: StreamState[] = [];
+    const waits: number[] = [];
+    let pending: (() => void) | null = null;
+    const saved = globalThis.setTimeout;
+    globalThis.setTimeout = ((run: () => void, wait: number) => {
+      waits.push(wait);
+      pending = run;
+      return 1;
+    }) as unknown as typeof setTimeout;
+    try {
+      const retry = new StreamRetry((state) => states.push(state), Infinity);
+      let calls = 0;
+      for (let i = 0; i < STREAM_RETRIES * 3; i++) {
+        retry.schedule(() => calls++);
+        expect(retry.spent).toBe(false);
+        const run = pending as (() => void) | null;
+        pending = null;
+        run?.();
+      }
+      expect(calls).toBe(STREAM_RETRIES * 3);
+      expect(retry.attempts).toBe(STREAM_RETRIES * 3);
+      expect(waits.at(-1)).toBe(10_000);
+      expect(states).not.toContain("failed");
+    } finally {
+      globalThis.setTimeout = saved;
+    }
+  });
+
   test("届き始めたら数を戻して flowing にする。リクエストし直していなければ何も言わない", () => {
     const { retry, states, waits, fire, restore } = fake();
     try {

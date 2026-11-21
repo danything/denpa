@@ -164,7 +164,7 @@ function section<T>(
 const counted = (row: { n: number } | undefined): number => Number(row?.n ?? 0);
 
 /**
- * **これからの放送の行** (番組表の番組と、立っている予約)。検索の結果と、予約の多い番組の節 (`ranking.ts`) で同じ形にする。
+ * **これからの放送の行** (番組表の番組と、立っている予約)。検索の結果と、人気の番組の節 (`ranking.ts`) で同じ形にする。
  * 大きな欄 (音声・映像・拡張の説明) は読まない。`service_type`・`service_sid` (局の service_id) は画面に渡す前に外す (`withoutService`)
  */
 export function programRows(where: SQL | undefined) {

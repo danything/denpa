@@ -47,8 +47,8 @@ import {
 
 /** 画面が受け取る下見の形 (`rule-preview.ts`) */
 export type { Preview, PreviewRow, Verdict } from "#lib/server/rule-preview.js";
-/** 画面が受け取る予約の多い番組の形 (`ranking.ts`) */
-export type { RankingView } from "#lib/server/ranking.js";
+/** 画面が受け取る人気の番組の形 (`ranking.ts`) */
+export type { AiringState, RankingView } from "#lib/server/ranking.js";
 
 /**
  * 1 つの節に渡す上限。画面は先頭の数件だけ出し、「もっと見る」でここまで広げる。
@@ -172,7 +172,7 @@ export function load({ url }) {
 
   const options = { limit: LIMIT, count: true };
   /*
-   * **予約の多い番組** (言葉なしで開いて、ルールを書いていないとき)。参加していなければ null で、節を出さない。
+   * **人気の番組** (言葉なしで開いて、ルールを書いていないとき)。参加していなければ null で、節を出さない。
    * hub を呼ぶ間は Promise のまま渡し、画面は待たずに出す (`ranking.rankingView`)
    */
   const ranking =

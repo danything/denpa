@@ -24,9 +24,6 @@
   import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
   import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
-  import { ambientMode } from "#lib/components/player/ambient.svelte.js";
-  import { screenAwake } from "#lib/components/player/awake.svelte.js";
-  import { backgroundPlayback } from "#lib/components/player/background.svelte.js";
   import { CaptionPainter } from "#lib/components/player/caption-draw.js";
   import {
     CAPTION_LANGUAGE_KEY,
@@ -70,7 +67,6 @@
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
   import { fitRect } from "#lib/components/player/paint.js";
-  import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
@@ -99,8 +95,11 @@
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
   import { unslipper } from "#lib/components/player/unslip.js";
-  import { playerVolume } from "#lib/components/player/volume.svelte.js";
   import VolumeNote from "#lib/components/player/VolumeNote.svelte";
+  import {
+    type PlaybackTarget,
+    playerWiring,
+  } from "#lib/components/player/wiring.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, {
     errorNotice,
@@ -127,9 +126,10 @@
   import { fixedMediaVolume, tapSilent } from "#lib/native-audio-choice.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
+  import { fallBackTo } from "#lib/player/canvas-sink.js";
+  import { rangesOf } from "#lib/player/mse-sink.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
-    rangesOf,
     type RemuxPlayer,
     remuxPlayer,
     type StreamHeard,
@@ -170,9 +170,9 @@
     pickStream,
     type PlaybackInfo,
     type PlayCodec,
-    retryWait,
     STREAM_RETRIES,
     streamForAudio,
+    StreamRetry,
     type StreamState,
     transcodes,
   } from "#lib/ts/playback.js";
@@ -427,6 +427,8 @@
         start: from ?? 0,
         audio: streamAudio(audioIndex),
         background: background.on || pip.active,
+        muted,
+        volume: volume.applied,
         state: (state) => {
           // 段を替えようとして作り直したが、混んでいて断られた。替える前の段で作り直して続ける
           if (state === "busy" && stepFrom !== null) {
@@ -461,8 +463,6 @@
     }
     canvas = made;
     drawing = true;
-    if (muted) made.mute(true);
-    made.volume(volume.applied);
     drawingLocal = local !== null;
     length = duration;
     at = from ?? 0;
@@ -496,6 +496,14 @@
     return (["av1", "h264"] as const).filter(
       (codec) => can[codec] && !canvasGaveUp.includes(codec),
     );
+  }
+
+  /** この録画で描けて、まだ打ち切っていない形式 (`canvasChoices` の並び。描けなくなったときの移り先を決める `fallBackTo` に渡す) */
+  function canvasUsable(): CanvasCodec[] {
+    if (info === null || canvasAbility === null) return [];
+    return canvasChoices(info, canvasAbility)
+      .filter((item) => item.drawable && !canvasGaveUp.includes(item.codec))
+      .map((item) => item.codec);
   }
 
   /**
@@ -545,9 +553,9 @@
   }
 
   /**
-   * 描くのを打ち切った。理由は断り書きに残す。ライブと同じ順で替える (`live-player.svelte.ts` の `fallBack`)。
+   * 描くのを打ち切った。理由は断り書きに残す。ライブと同じ決め方で替える (`player/canvas-sink.ts` の `fallBackTo`)。
    * H.264 / AV1 を打ち切ったら MPEG-2 へ、MPEG-2 を打ち切ったら描ける H.264 / AV1 へ。端末に保存した録画なら
-   * サーバから流すものへ。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
+   * サーバから流すものへ (`pickCanvas`)。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
    *
    * 互換モードでないのに描いているのは、MPEG-2 を選んだとき (`pickOffer` の `raw`) と、端末に保存した Matroska を `<video>` が
    * 読めなかったとき (`recover`)。MPEG-2 を打ち切ったらこの画面を開いている間は MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で
@@ -566,10 +574,26 @@
     step = 0;
     stepCodec = null;
     stepFrom = null;
-    if (!compat) {
+    let next: CanvasCodec | "video" | null;
+    if (wasLocal && compat) {
+      localMkv = null;
+      // 互換モードで端末に保存したものをやめた。サーバから流すものを、開いたときと同じ決め方で選ぶ
+      next =
+        info !== null && canvasAbility !== null
+          ? pickCanvas(info, canvasAbility, choice, canvasGaveUp)
+          : null;
+    } else {
       // 端末に保存したものを描いていた (`<video>` が読めなかったあと。`recover`)。MPEG-2 は外さない
       if (wasLocal) localMkv = null;
-      else rawGaveUp = true;
+      else if (!compat) rawGaveUp = true;
+      else if (failed !== null) canvasGaveUp = [...canvasGaveUp, failed];
+      next = fallBackTo(
+        failed === "mpeg2" ? "mpeg2" : "encoded",
+        canvasUsable(),
+        compat,
+      );
+    }
+    if (next === "video") {
       const fresh =
         info === null
           ? null
@@ -588,26 +612,6 @@
           `${wasLocal ? "端末に保存した " : ""}${codecLabel(failed ?? "mpeg2")}: ${reason}`,
         );
       return;
-    }
-    let next: CanvasCodec | null = null;
-    if (wasLocal) {
-      localMkv = null;
-      if (info !== null && canvasAbility !== null)
-        next = pickCanvas(info, canvasAbility, choice, canvasGaveUp);
-    } else {
-      if (failed !== null) canvasGaveUp = [...canvasGaveUp, failed];
-      const usable =
-        info === null || canvasAbility === null
-          ? []
-          : canvasChoices(info, canvasAbility).filter(
-              (item) => item.drawable && !canvasGaveUp.includes(item.codec),
-            );
-      next =
-        failed === "mpeg2"
-          ? (usable.find((item) => item.codec !== "mpeg2")?.codec ?? null)
-          : usable.some((item) => item.codec === "mpeg2")
-            ? "mpeg2"
-            : null;
     }
     if (next === null) {
       canvasProblem = reason;
@@ -1958,9 +1962,14 @@
   );
   /** 繋ぎが切れて繋ぎ直している最中か (`recover`) */
   let resuming = $state(false);
-  /** 続けて何回繋ぎ直したか。繋ぎ直しを打ち切る分かれ目 */
-  let retries = 0;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * ファイルを直に再生しているときの繋ぎ直し (`recover`。ライブと同じ `StreamRetry`)。`STREAM_RETRIES` 回で打ち切る。
+   * 録画は読めない形式・壊れたファイルでも同じ所で切れるので、読み直し続けずに観られる先を案内する。
+   * その場で流しているもの (`remux-player.ts`)・canvas に描いているもの (`canvas-player.ts`) は、それぞれが同じ数で繋ぎ直す
+   */
+  const fileRetry = new StreamRetry((next) => {
+    resuming = next === "retrying";
+  });
   /** 繋ぎ直したあとに戻る位置 (秒)。0 は「戻る先は無い」 */
   let retryAt = 0;
   let chapters = $state<Chapter[]>([]);
@@ -1968,69 +1977,60 @@
   /** 操作バーの出し入れ ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts)) */
   const controls = playerControls();
 
-  /** 画面を落とさせない。観るためだけに開く画面なので、開いている間はずっと */
-  const awake = screenAwake();
-  $effect(() => {
-    awake.on = true;
-  });
-
   /**
-   * 小窓 (PiP。[pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。互換モードは canvas の
-   * プレイヤーからストリームを取って出す。`paused` で `playing` を読むのは、操作バーで止めた・再開したときに
-   * 小窓の側も合わせ直させるため
+   * 配線 (`wiring.svelte.ts`) に渡す包み。canvas のプレイヤー (互換モード・MPEG-2) と `<video>` を、ライブと同じ形にそろえる。
+   * `paused` で `playing` を読むのは、操作バーで止めた・再開したときに小窓とアンビエントモードを合わせ直させるため
+   * (canvas のプレイヤーと `<video>` の `paused` は `$state` ではない)
    */
-  const pip = pictureInPicture({
-    video: () => video,
-    raw: () => drawing,
-    capture: () => canvas?.pipStream() ?? null,
-    flow: (on) => canvas?.pipFlow(on),
-    paused: () => {
+  const target: PlaybackTarget = {
+    // 観られない幕 (`problem`) を出したら、画面を暗くさせない処理を外す (ライブ・追っかけの `error` と同じ)
+    get state() {
+      return problem === "" ? "playing" : "error";
+    },
+    get canvas() {
+      return drawing;
+    },
+    get paused() {
       void playing;
       return mediaPaused();
     },
+    get silenced() {
+      return muted;
+    },
+    get captions() {
+      return captions;
+    },
+    get hasCaptions() {
+      return hasCaptions;
+    },
     toggle: togglePlay,
-    auto: () => background.on,
+    grab: (size) => canvas?.grab(size) ?? Promise.resolve(null),
+    capture: () => canvas?.pipStream() ?? null,
+    captureFlow: (on) => canvas?.pipFlow(on),
+    set volume(level: number | null) {
+      if (drawing) canvas?.volume(level);
+    },
+    set playback(on: boolean) {
+      if (drawing) canvas?.background(on);
+    },
+  };
+
+  /**
+   * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (3 画面で共通。`wiring.svelte.ts`)。
+   * 裏から戻ったら止めた所から
+   */
+  const { background, ambient, pip, volume } = playerWiring({
+    target,
+    video: () => video,
     overlay: () => overlay,
-    captions: () => captions && hasCaptions,
-  });
-
-  // canvas の音を「再生する音」と言うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
-  $effect(() => {
-    const on = background.on || pip.active;
-    if (drawing) canvas?.background(on);
-  });
-
-  /** 音量 (`volume.svelte.ts`)。canvas はプレイヤーの中で、`<video>` は Web Audio に通して掛ける (ライブ・追っかけと同じ) */
-  const volume = playerVolume({
-    video: () => (drawing ? null : video),
+    pause: pauseMedia,
+    resume: playMedia,
     // WebKit は MSE の `<video>` を通すと無音になる。その場で流しているもの (`remux-player.ts`) は通さない
     silentTap: () =>
       typeof navigator !== "undefined" &&
       tapSilent(navigator.userAgent, picked?.way === "stream"),
     // iPhone・iPad は `<video>` の音量を変えられない。どの経路でもつまみを出さず、放送のままの大きさで鳴らす
     fixed: fixedMediaVolume,
-    through: () => background.on || pip.active,
-    remote: (stop) => (stop ? pauseMedia() : playMedia()),
-  });
-  $effect(() => {
-    const level = volume.applied;
-    if (drawing) canvas?.volume(level);
-  });
-
-  /** バックグラウンド再生 ([background.svelte.ts](../../../lib/components/player/background.svelte.ts)) */
-  const background = backgroundPlayback({
-    nativeVideo: () => (drawing ? null : video),
-    pip: () => pip.active,
-    paused: mediaPaused,
-    pause: pauseMedia,
-    resume: playMedia,
-  });
-
-  /** アンビエントモード。canvas に描いているときはプレイヤーから縮めた 1 枚をもらう */
-  const ambient = ambientMode({
-    playing: () => playing && !pip.active,
-    canvas: () => canvas,
-    video: () => video,
   });
 
   /**
@@ -2156,7 +2156,7 @@
       if (hopGiveUp !== null) clearTimeout(hopGiveUp);
       if (holdGiveUp !== null) clearTimeout(holdGiveUp);
       dropStep();
-      if (retryTimer !== null) clearTimeout(retryTimer);
+      fileRetry.cancel();
       if (captionWait !== null) clearTimeout(captionWait);
     };
   });
@@ -2405,22 +2405,18 @@
     if (
       remux !== null ||
       code !== MediaError.MEDIA_ERR_NETWORK ||
-      retries >= STREAM_RETRIES
+      fileRetry.spent
     ) {
       giveUp(why);
       resuming = false;
       return;
     }
     retryAt = video.currentTime;
-    const wait = retryWait(retries);
-    retries++;
-    resuming = true;
-    if (retryTimer !== null) clearTimeout(retryTimer);
-    retryTimer = setTimeout(() => {
-      retryTimer = null;
+    fileRetry.cancel();
+    fileRetry.schedule(() => {
       // 同じ src を読み直す。位置を戻すのは尺が分かってから (`resume`)
       video?.load();
-    }, wait);
+    });
   }
 
   /**
@@ -3071,7 +3067,7 @@
                 playing = true;
                 follow(event.currentTarget);
                 // 出たので、繋ぎ直しは済み。次に切れたらまた 1 秒から待つ
-                retries = 0;
+                fileRetry.flowing();
                 resuming = false;
                 controls.stir();
               }}

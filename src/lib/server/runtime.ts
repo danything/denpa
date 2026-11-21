@@ -268,7 +268,7 @@ export function start(): void {
   every(config.logoSweepInterval, "logo", sweep);
 
   /*
-   * **予約数ランキングに予約を送る** (ranking.ts)。参加している世帯だけ、6 時間ごとに家ごとにずらした時刻で送る。
+   * **番組ランキングに予約を送る** (ranking.ts)。参加している世帯だけ、6 時間ごとに家ごとにずらした時刻で送る。
    * ここでは送る時刻が来たかを見るだけで、参加していなければ何もしない
    */
   every(RANKING_CHECK, "ranking", sendRanking);

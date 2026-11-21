@@ -30,7 +30,7 @@ const NETWORK_IDLE = 1;
 interface FileMedia {
   networkState: number;
   seeking: boolean;
-  /** 読めている区間 (`remux-player.ts` の `rangesOf`) */
+  /** 読めている区間 (`player/mse-sink.ts` の `rangesOf`) */
   buffered: Ranges;
   currentTime: number;
 }

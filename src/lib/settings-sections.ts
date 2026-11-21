@@ -37,7 +37,7 @@ export const SETTINGS_GROUPS = [
       { slug: "notifications", label: "通知" },
       { slug: "tv", label: "テレビのアプリ" },
       { slug: "jikkyo", label: "実況" },
-      { slug: "ranking", label: "予約数ランキング" },
+      { slug: "ranking", label: "番組ランキング" },
       { slug: "migrate", label: "EPGStation からの引き継ぎ" },
       { slug: "migrate-edcb", label: "EDCB からの引き継ぎ" },
       { slug: "transfer", label: "denpa を別の機械へ移す" },

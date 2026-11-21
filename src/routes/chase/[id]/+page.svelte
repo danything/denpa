@@ -28,7 +28,6 @@
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
-  import { liveWiring } from "#lib/components/player/live-wiring.svelte.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
@@ -56,6 +55,7 @@
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
   import VolumeNote from "#lib/components/player/VolumeNote.svelte";
+  import { playerWiring } from "#lib/components/player/wiring.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
   import { programDetail, recordingFacts } from "#lib/detail.svelte.js";
@@ -262,11 +262,11 @@
   });
 
   /**
-   * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (ライブと共通。`live-wiring.svelte.ts`)。
+   * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (3 画面で共通。`wiring.svelte.ts`)。
    * 裏から戻ったら止めた所から
    */
-  const { background, ambient, pip, volume } = liveWiring({
-    player,
+  const { background, ambient, pip, volume } = playerWiring({
+    target: player,
     video: () => video,
     overlay: () => overlay,
     // 追っかけの `<video>` はいつも MSE (`live-player.svelte.ts`)。WebKit では通すと無音になるのでいつも通さない (観る画面のその場で流すものと同じ)

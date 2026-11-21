@@ -6,7 +6,7 @@ import { join as joinPath } from "node:path";
 import { eq } from "drizzle-orm";
 
 /**
- * 予約数ランキングに送るもの (`ranking.ts`)。外の hub には繋がず、偽の hub で受けた本文を見る。
+ * 番組ランキングに送るもの (`ranking.ts`)。外の hub には繋がず、偽の hub で受けた本文を見る。
  * 送る中身・差分・送る時刻のずらし方・オフにしたときの取り消しを見る
  */
 const dir = mkdtempSync(joinPath(tmpdir(), "denpa-ranking-"));
@@ -87,8 +87,14 @@ const {
   sendIfDue,
 } = ranking;
 const { now, orm } = await import("./db");
-const { programs, rankingLink, rankingSent, reservations, services } =
-  await import("./schema");
+const {
+  programs,
+  rankingLink,
+  rankingSent,
+  recordings,
+  reservations,
+  services,
+} = await import("./schema");
 const { programKey, serviceKey } = await import("./tuner");
 
 const MINUTE = 60_000;
@@ -204,6 +210,7 @@ beforeEach(() => {
   orm().delete(rankingSent).run();
   orm().delete(rankingLink).run();
   orm().delete(reservations).run();
+  orm().delete(recordings).run();
   orm().delete(programs).run();
   addServices();
   received = [];
@@ -215,20 +222,24 @@ beforeEach(() => {
 });
 
 describe("送る中身", () => {
-  test("まだ始まっていない地上波・BS・CS の予約済みと競合を、有料放送も送る", () => {
+  test("終わっていない地上波・BS・CS の予約済みと競合を、録画中も有料放送も送る", () => {
     const bs = reserve("bs11", { manual: false });
     const gr = reserve("mx", { state: "conflict" });
     const pay = reserve("cs", { free: false });
+    const recording = reserve("bs11", {
+      startsIn: -10 * MINUTE,
+      started: true,
+    });
+    const onAir = reserve("bs11", { startsIn: -10 * MINUTE });
     reserve("bs11", { state: "skipped" });
     reserve("bs11", { state: "canceled" });
-    reserve("bs11", { started: true });
-    reserve("bs11", { startsIn: -10 * MINUTE });
+    reserve("bs11", { startsIn: -HOUR });
     reserve("catvOwn");
     reserve("sky");
     const events = currentVotes()
       .map((c) => c.vote.event_id)
       .sort();
-    expect(events).toEqual([bs, gr, pay].sort());
+    expect(events).toEqual([bs, gr, pay, recording, onAir].sort());
   });
 
   test("1 件の形は hub の add と同じ。家のアドレスやルールの中身は入らない", () => {
@@ -250,14 +261,14 @@ describe("送る中身", () => {
       name: "[字]アニメ 例の番組",
       service_name: "BS11イレブン",
       genres: [7, 3],
-      kind: "rule",
+      kinds: ["reserved"],
     });
     expect(Object.keys(only!.vote).sort()).toEqual(
       [
         "duration",
         "event_id",
         "genres",
-        "kind",
+        "kinds",
         "name",
         "network_id",
         "service_id",
@@ -273,12 +284,12 @@ describe("送る中身", () => {
     );
   });
 
-  test("同じ放送を BS とケーブルの再送信で予約していたら 1 件にし、手の予約を取る", () => {
+  test("同じ放送を BS とケーブルの再送信で予約していたら 1 件にする", () => {
     reserve("bs11", { event: 77, manual: false });
     reserve("catvBs", { event: 77, manual: true });
     const votes = currentVotes();
     expect(votes).toHaveLength(1);
-    expect(votes[0]!.vote.kind).toBe("manual");
+    expect(votes[0]!.vote.kinds).toEqual(["reserved"]);
     expect(votes[0]!.vote.network_id).toBe(4);
   });
 
@@ -295,17 +306,23 @@ describe("送る中身", () => {
 });
 
 describe("差分", () => {
-  function sentRow(event: number, startAt: number, d: string) {
+  function sentRow(
+    event: number,
+    startAt: number,
+    d: string,
+    endAt = startAt + 30 * MINUTE,
+  ) {
     return {
       network_id: 4,
       service_id: 211,
       event_id: event,
       start_at: startAt,
+      end_at: endAt,
       digest: d,
     };
   }
 
-  test("送っていないもの・中身が変わったものを add、外れたものを remove、始まったものは控えから消すだけ", () => {
+  test("送っていないもの・中身が変わったものを add、外れたものを remove、終わったものは控えから消すだけ", () => {
     const a = reserve("bs11");
     const b = reserve("bs11");
     const current = currentVotes();
@@ -320,17 +337,23 @@ describe("差分", () => {
         sentRow(b, at + HOUR, "old"),
         // 取り消した予約
         sentRow(9001, at + HOUR, "x"),
-        // もう始まった番組
+        // もう終わった番組
         sentRow(9002, at - HOUR, "x"),
+        // 放送中に取り消した予約は remove を送る
+        sentRow(9003, at - 10 * MINUTE, "x"),
+        // 終わりを持たない行 (列を足す前) は始まりで見る
+        sentRow(9004, at - 10 * MINUTE, "x", 0),
       ],
       at,
     );
     expect(result.add.map((c) => c.vote.event_id)).toEqual([b]);
     expect(result.remove).toEqual([
       { network_id: 4, service_id: 211, event_id: 9001 },
+      { network_id: 4, service_id: 211, event_id: 9003 },
     ]);
     expect(result.drop).toEqual([
       { network_id: 4, service_id: 211, event_id: 9002 },
+      { network_id: 4, service_id: 211, event_id: 9004 },
     ]);
   });
 
@@ -345,9 +368,10 @@ describe("差分", () => {
         name: "x",
         service_name: "y",
         genres: [],
-        kind: "manual" as const,
+        kinds: ["reserved" as const],
       },
       startMs: now() + (MAX_ADD + 5 - i) * MINUTE,
+      endMs: now() + (MAX_ADD + 6 - i) * MINUTE,
     }));
     const result = plan(current, []);
     expect(result.add).toHaveLength(MAX_ADD);
@@ -432,7 +456,7 @@ describe("オンにする・送る", () => {
     expect(result).toEqual({
       ok: false,
       message:
-        "denpa-hub が予約数ランキングを受け付けていないため、参加できませんでした",
+        "denpa-hub が番組ランキングを受け付けていないため、参加できませんでした",
     });
     expect(rankingState()).toEqual({ state: "off" });
   });
@@ -650,6 +674,8 @@ describe("順位を見る", () => {
       startsIn?: number;
       /** 始まりの時刻。あれば `startsIn` より先に使う */
       at?: number;
+      /** 長さ (分)。省くと 30 分 */
+      minutes?: number;
       service_name?: string;
       region?: string | null;
     }[],
@@ -666,6 +692,10 @@ describe("順位を見る", () => {
         service_id: a.service_id,
         event_id: a.event_id,
         start_at: isoJst(a.at ?? now() + (a.startsIn ?? 2 * HOUR)),
+        end_at: isoJst(
+          (a.at ?? now() + (a.startsIn ?? 2 * HOUR)) +
+            (a.minutes ?? 30) * MINUTE,
+        ),
         service_name: a.service_name ?? "hub の局",
         region: a.region ?? null,
       })),
@@ -740,6 +770,76 @@ describe("順位を見る", () => {
     expect(mine!.program).not.toHaveProperty("service_sid");
   });
 
+  test("放送中と終わった番組も出し、行の状態と、終わった番組の再生できる録画を添える", async () => {
+    const onAir = addProgram("bs11", 511, { startsIn: -10 * MINUTE });
+    const ended = addProgram("bs11", 512, { startsIn: -3 * HOUR });
+    const missed = addProgram("bs11", 513, { startsIn: -5 * HOUR });
+    const at = now();
+    orm()
+      .insert(recordings)
+      .values({
+        program_id: ended,
+        service_id: serviceKey(4, 211, "BS"),
+        name: "手元の番組 512",
+        start_at: at - 3 * HOUR,
+        end_at: at - 3 * HOUR + 30 * MINUTE,
+        finished_at: at - 2 * HOUR,
+        created_at: at,
+        updated_at: at,
+      })
+      .run();
+    const recording = orm().select().from(recordings).get()!.id;
+    rankingBody = {
+      v: 1,
+      entries: [
+        entry(1, 40, [
+          {
+            network_id: 4,
+            service_id: 211,
+            event_id: 512,
+            startsIn: -3 * HOUR,
+          },
+        ]),
+        entry(2, 30, [
+          {
+            network_id: 4,
+            service_id: 211,
+            event_id: 511,
+            startsIn: -10 * MINUTE,
+          },
+        ]),
+        entry(3, 20, [
+          {
+            network_id: 4,
+            service_id: 211,
+            event_id: 513,
+            startsIn: -5 * HOUR,
+          },
+        ]),
+        // 受信できない局で終わった番組も、終わって 24 時間までは出す
+        entry(4, 10, [
+          { network_id: 4, service_id: 999, event_id: 1, startsIn: -20 * HOUR },
+        ]),
+      ],
+    };
+    await join();
+    const result = await view();
+    if (!result.ok) throw new Error("読めませんでした");
+    expect(
+      result.rows.map((r) => [
+        r.rank,
+        r.state,
+        r.program?.id ?? null,
+        r.recording,
+      ]),
+    ).toEqual([
+      [1, "ended", ended, recording],
+      [2, "onair", onAir, null],
+      [3, "ended", missed, null],
+      [4, "ended", null, null],
+    ]);
+  });
+
   test("同じ放送を BS とケーブルの再送信で受けていたら、BS の局の行にする", async () => {
     // 同じ放送なので始まりも同じ。別々に now() を読むと、先に入れたほうがミリ秒だけ早く始まることがある
     const at = now() + 2 * HOUR;
@@ -756,7 +856,7 @@ describe("順位を見る", () => {
     expect(result.ok && result.rows[0]!.program?.id).toBe(bs);
   });
 
-  test("一覧から外れた局は受信できない局として出し、始まっていて手元に無い番組は出さない", async () => {
+  test("一覧から外れた局は受信できない局として出し、終わって 24 時間を過ぎていて手元に無い番組は出さない", async () => {
     addProgram("mx", 503);
     orm()
       .update(services)
@@ -775,7 +875,7 @@ describe("順位を見る", () => {
           },
         ]),
         entry(2, 40, [
-          { network_id: 4, service_id: 999, event_id: 1, startsIn: -MINUTE },
+          { network_id: 4, service_id: 999, event_id: 1, startsIn: -25 * HOUR },
         ]),
       ],
     };

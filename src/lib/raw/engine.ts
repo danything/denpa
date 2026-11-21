@@ -56,7 +56,7 @@ interface AudioChunk extends Chunk {
   planes: Float32Array[];
 }
 
-interface RawEvents {
+export interface RawEvents {
   /** 選局し直してから最初のフレームが出た */
   shown(): void;
   /** バッファを使い切って止まった (エンコードする経路の `waiting` にあたる) */

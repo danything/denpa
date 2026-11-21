@@ -41,7 +41,6 @@
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
-  import { liveWiring } from "#lib/components/player/live-wiring.svelte.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import PlayerLayout, {
     PHONE_LANDSCAPE,
@@ -69,6 +68,7 @@
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
   import VolumeNote from "#lib/components/player/VolumeNote.svelte";
+  import { playerWiring } from "#lib/components/player/wiring.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, {
@@ -434,12 +434,12 @@
   let draft = $state("");
 
   /**
-   * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (追っかけと共通。`live-wiring.svelte.ts`)。
+   * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (3 画面で共通。`wiring.svelte.ts`)。
    * 裏から戻ったら、張り付いていたなら放送の今へ (止めた所からではなく)
    */
   let wasLive = false;
-  const { background, ambient, pip, volume } = liveWiring({
-    player,
+  const { background, ambient, pip, volume } = playerWiring({
+    target: player,
     video: () => video,
     overlay: () => overlay,
     separateAudio: separateLiveAudio,

@@ -31,7 +31,12 @@
   import { deleteWithLocal, offline } from "#lib/offline.svelte.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
 
-  import type { Preview, PreviewRow, RankingView } from "./+page.server";
+  import type {
+    AiringState,
+    Preview,
+    PreviewRow,
+    RankingView,
+  } from "./+page.server";
   import RuleDraft, { SKIP_LABEL } from "./RuleDraft.svelte";
 
   let { data, form } = $props();
@@ -43,7 +48,7 @@
 
   /**
    * 節ごとに最初に出す数。「もっと見る」で受け取ったぶん (上限は `+page.server.ts` の `LIMIT`。
-   * 予約の多い番組は `ranking.ts` の `VIEW_LIMIT`) まで広げる
+   * 人気の番組は `ranking.ts` の `VIEW_LIMIT`) まで広げる
    */
   const FIRST = 5;
   type Key = "programs" | "recordings" | "reservations" | "rules" | "ranking";
@@ -356,7 +361,7 @@
             </ul>
           </section>
         {/if}
-        <!-- 予約数ランキングに参加している世帯だけ。hub を待つ間も画面は出し、節だけあとから埋める -->
+        <!-- 番組ランキングに参加している世帯だけ。hub を待つ間も画面は出し、節だけあとから埋める -->
         {#if data.ranking !== null}
           {#await data.ranking}
             {@render rankingSection(null)}
@@ -726,9 +731,9 @@
 {/snippet}
 
 <!--
-  **予約の多い番組** (予約数ランキング。言葉なしで開いたとき。`server/ranking.ts`)。行は「これからの放送」と同じで、
-  1 段目の先頭に順位、2 段目の最後に「予約 約 120」。受信できない局の番組は予約のボタンを出さず、押しても詳細を開かない
-  (手元の番組表に無い)。`view` が null の間は hub を待っている
+  **人気の番組** (番組ランキング。言葉なしで開いたとき。`server/ranking.ts`)。これから・放送中・終わって 24 時間以内の番組を、hub の順位のまま混ぜて出す。
+  行は「これからの放送」と同じで、1 段目の先頭に順位、2 段目の先頭に放送の状態 (放送中・放送済み)、最後に「約 120 世帯」。
+  受信できない局の番組はボタンを出さず、押しても詳細を開かない (手元の番組表に無い)。`view` が null の間は hub を待っている
 -->
 {#snippet rankingSection(view: RankingView | null)}
   <section
@@ -737,7 +742,7 @@
     data-testid="search-ranking"
   >
     <div class="hits-head">
-      <h2 id="ranking-head">予約の多い番組</h2>
+      <h2 id="ranking-head">人気の番組</h2>
     </div>
     {#if view === null}
       <p class="none small muted">読み込んでいます…</p>
@@ -765,7 +770,9 @@
                 </span>
                 <!-- 系列のある地上波は系列と地域の数 (「TBS 系・関東広域ほか 12 地域」)、独立局と BS・CS は局名と地域 -->
                 <span class="hit-meta small muted"
-                  >受信できない局・{#if row.away.affiliation !== null}{row.away
+                  >{@render airingState(
+                    row.state,
+                  )}受信できない局・{#if row.away.affiliation !== null}{row.away
                       .affiliation}{:else}<span class="broadcast"
                       >{row.away.service_name}</span
                     >{/if}{#if row.away.region !== null}・{row.away
@@ -787,16 +794,31 @@
   <span class="rank num" data-testid="search-rank">{value}</span>
 {/snippet}
 {#snippet votes(value: number)}
-  <span class="num" data-testid="search-votes">予約 約 {value}</span>
+  <span data-testid="search-votes"
+    >約 <span class="num">{value}</span> 世帯</span
+  >
+{/snippet}
+<!-- 放送中と終わった番組は、2 段目の先頭に状態を書く。これからの番組には書かない (時刻で分かる) -->
+{#snippet airingState(state: AiringState)}
+  {#if state === "onair"}<span data-testid="search-airing-state">放送中</span
+    >・{:else if state === "ended"}<span data-testid="search-airing-state"
+      >放送済み</span
+    >・{/if}
 {/snippet}
 
 <!--
-  「これからの放送」の 1 行 (予約の多い番組の節も同じ)。行から予約・取消、押すと番組の詳細。
-  `ranked` があれば 1 段目の先頭に順位、2 段目に予約の数を足す
+  「これからの放送」の 1 行 (人気の番組の節も同じ)。行から予約・取消、押すと番組の詳細。
+  `ranked` があれば 1 段目の先頭に順位、2 段目に放送の状態と家の数を足す。放送中の番組は予約の代わりに「観る」(その局のライブ)、
+  終わった番組は録画があれば「再生」を出す
 -->
 {#snippet programHit(
   program: (typeof data.programs.rows)[number],
-  ranked: { rank: number; votes: number } | null,
+  ranked: {
+    rank: number;
+    votes: number;
+    state: AiringState;
+    recording: number | null;
+  } | null,
 )}
   {@const verdict = verdictOf(program.id)}
   <li
@@ -821,7 +843,9 @@
         <span class="truncate broadcast">{program.name}</span>
       </span>
       <span class="hit-meta small muted">
-        {@render service(program)}<span class="num"
+        {#if ranked !== null}{@render airingState(
+            ranked.state,
+          )}{/if}{@render service(program)}<span class="num"
           >{dateTime(program.start_at)}〜{time(program.end_at)}</span
         >{#if ranked !== null}・{@render votes(
             ranked.votes,
@@ -838,8 +862,25 @@
       </span>
     </button>
     <div class="row-actions">
-      <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`rowCancelable`) -->
-      {#if program.reservation_id !== null}
+      {#if ranked !== null && ranked.state === "onair"}
+        <!-- 選局は押した先でやり直すのでリンクにする (番組の詳細の「視聴」と同じ) -->
+        {#if watchable.has(program.service_id)}
+          <a
+            class="button small outline"
+            href={resolve(`live?service=${program.service_id}`)}
+            data-testid="search-watch">観る</a
+          >
+        {/if}
+      {:else if ranked !== null && ranked.state === "ended"}
+        {#if ranked.recording !== null}
+          <a
+            class="button small outline"
+            href={resolve(`watch/${ranked.recording}`)}
+            data-testid="search-ranking-play">再生</a
+          >
+        {/if}
+      {:else if program.reservation_id !== null}
+        <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`rowCancelable`) -->
         {#if rowCancelable(program.reservation_state, program.end_at)}
           <ActionButton
             action="?/cancel"
@@ -1084,7 +1125,7 @@
     gap: var(--dp-space-2);
     min-width: 0;
   }
-  /* 予約の多い番組の順位。数はほかの数と同じく本文の字の太字で、2 桁でもタイトルの始まりがそろう幅 */
+  /* 人気の番組の順位。数はほかの数と同じく本文の字の太字で、2 桁でもタイトルの始まりがそろう幅 */
   .rank {
     flex: none;
     min-inline-size: 2ch;

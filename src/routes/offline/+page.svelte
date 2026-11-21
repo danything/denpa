@@ -13,6 +13,7 @@
     removeEverywhere,
     removeLocal,
   } from "#lib/offline.svelte.js";
+  import { MAX_LEVEL } from "#lib/volume.js";
 
   /**
    * 端末に保存した録画。**電波が無くてもここだけは開く**。サービスワーカーが
@@ -163,6 +164,9 @@
          * (`<video>` は消音スイッチでも鳴る)。押して観はじめたものなので、`<video>` と同じに扱う
          */
         background: true,
+        // 音量のつまみはこの画面に無い。音を出したまま始め、音量は `sound.ts` の `Outlet` を作ったときと同じ `MAX_LEVEL`
+        muted: false,
+        volume: MAX_LEVEL,
         state: (state) => {
           if (state === "failed") close("録画を読み込めませんでした");
         },

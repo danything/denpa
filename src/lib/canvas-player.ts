@@ -34,7 +34,8 @@
 import { CLOCK } from "@danything/arib/pes";
 
 import type { AudioSide } from "#lib/arib.js";
-import { RawEngine } from "#lib/raw/engine.js";
+import { openCanvas } from "#lib/player/canvas-sink.js";
+import type { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { mayRead } from "#lib/read-ahead.js";
 import { heardOf, type StreamHeard } from "#lib/remux-player.js";
@@ -101,6 +102,10 @@ interface CanvasOptions {
   audio: string;
   /** 「再生する音」として鳴らすか (バックグラウンド再生・小窓。`RawEngine.background`) */
   background: boolean;
+  /** 音を消したまま始めるか。あとから変えるときは `mute` */
+  muted: boolean;
+  /** 音量 (%。`#lib/volume.ts`)。null は放送のまま。あとから変えるときは `volume` */
+  volume: number | null;
   /** 繋ぎ直している・打ち切った・戻った・混んでいて断られた */
   state(state: StreamState): void;
   /** 描けなくなった (間に合わない・デコーダが失敗し続ける・音が来ない)。**画面がほかの方式へ移す**。`slow` は `RawEvents.gaveUp` と同じ */
@@ -186,7 +191,8 @@ function own(bytes: Uint8Array): ArrayBuffer {
 }
 
 /**
- * エンジンを作って、`start` からリクエストし始める。**エンジンを作れなければ例外を投げる** (呼ぶ側が理由を出す)
+ * エンジンを作って (`player/canvas-sink.ts` の `openCanvas`)、`start` からリクエストし始める。
+ * **エンジンを作れなければ例外を投げる** (呼ぶ側が理由を出す)
  */
 export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   const { input } = options;
@@ -215,11 +221,16 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   /** 元の TS をどこまで受け取ったか。切れたら続きをここからリクエストする */
   const cursor = new RawCursor();
 
-  const engine = new RawEngine(
-    options.host,
-    options.before,
-    TARGET,
-    {
+  const made = openCanvas({
+    host: options.host,
+    before: options.before,
+    target: TARGET,
+    input,
+    follow: true,
+    muted: options.muted,
+    volume: options.volume,
+    playback: options.background,
+    events: {
       shown: () => undefined,
       stalled: () => {
         if (paused || ended) return;
@@ -241,10 +252,9 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
       },
       ended: () => finished(),
     },
-    options.background,
-    input,
-    true,
-  );
+  });
+  if (typeof made === "string") throw new Error(made);
+  const engine = made;
   // 選んでいる音声で始める (選び直して作り直したとき・デュアルモノの片側)。fMP4 はリクエストに載せる
   if (input !== "fmp4") selectIn(engine, input, audio);
 
