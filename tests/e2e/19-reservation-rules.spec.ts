@@ -1,3 +1,5 @@
+import type { Locator, Page } from "@playwright/test";
+
 import {
   clearRules,
   deleteRule,
@@ -105,7 +107,7 @@ test.describe("ルールで立った予約", () => {
     const row = page
       .getByTestId("reservation-row")
       .filter({ hasText: "テストアニメ" })
-      .filter({ has: page.getByTestId("rule-name") })
+      .filter({ has: ruleLink(page) })
       .first();
     // 行にボタンを足すと窮屈になるので、出しているルール名をそのまま入口にする
     await row.getByTestId("rule-name").getByRole("link").click();
@@ -134,7 +136,7 @@ test.describe("ルールで立った予約", () => {
     const reservation = page
       .getByTestId("reservation-row")
       .filter({ hasText: "テストアニメ" })
-      .filter({ has: page.getByTestId("rule-name") })
+      .filter({ has: ruleLink(page) })
       .first();
     await expect(reservation).toBeVisible();
     // 番組で辿る。同じ名前の録画は他のテストも残すので、名前では絞れない
@@ -165,3 +167,12 @@ test.describe("ルールで立った予約", () => {
     );
   });
 });
+
+/**
+ * いまあるルールへのリンクが付いたルール名。前のテストのルールで録り始めた予約は、そのルールを消すと
+ * 「ルール: (削除済み)」になって一覧に残る (`rule-actions.ts` の `deleteRule`)。ルール名だけで選ぶとそれを拾い、
+ * CI では録画の行が「(削除済み)」のまま 30 秒たった
+ */
+function ruleLink(page: Page): Locator {
+  return page.getByTestId("rule-name").getByRole("link");
+}

@@ -116,6 +116,24 @@ jobs:
           git add -N drizzle
           git diff --exit-code --stat -- drizzle
 
+      # 字の表とフォントを突き合わせるテスト (`src/lib/ts/font-coverage.test.ts`) が読む Denpa Font を、
+      # Dockerfile の `denpa-font` 段と同じリリースから取得して照合しておく。テストの中で取得していた頃は、
+      # GitHub との接続が 1 回切れただけで落ちた。ここは切れたら繰り返す
+      - name: Fetch Denpa Font
+        run: |
+          version=$(sed -n 's/^ARG DENPA_FONT_VERSION=//p' Dockerfile)
+          dir="$RUNNER_TEMP/denpa-font"
+          mkdir -p "$dir" && cd "$dir"
+          for name in SHA256SUMS denpa-font.woff2 denpa-font-jisx0213.woff2 denpa-font-jisx0213.txt; do
+            curl -fsSL --retry 5 --retry-all-errors -o "$name" \
+              "https://github.com/danything/denpa-font/releases/download/$version/$name"
+          done
+          grep -E ' (denpa-font\.woff2|denpa-font-jisx0213\.woff2|denpa-font-jisx0213\.txt)$' SHA256SUMS > want
+          [ "$(wc -l < want)" = 3 ]
+          sha256sum -c want
+          printf '%s\n' "$version" > VERSION
+          echo "FONT_DIR=$dir" >> "$GITHUB_ENV"
+
       # denpa 本体だけ。エージェントは .NET なので下の agent ジョブで見る
       # (`agent/conformance.test.ts` はビルドした実行ファイルが要るので、ここには入れない)
       - name: Unit tests

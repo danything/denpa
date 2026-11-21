@@ -54,23 +54,47 @@ interface Listed {
   programId: number;
 }
 
-/** 地上波の局を 2 つ、物理チャンネルの違うもの (MX と、ほかの中継の局) */
+/** 録る番組に残っていてほしい時間 (ms)。通ったときのテストは 15 秒ほどで、その間ずっと録画がチューナーを塞いでいる必要がある */
+const REMAINING = 60_000;
+
+/**
+ * 地上波の局を 2 つ、物理チャンネルの違うもの (MX と、ほかの中継の局)。
+ *
+ * **どちらの番組も終わりまで `REMAINING` 以上あるときに選ぶ。** 偽の番組表は 30 分ごとに番組が替わる。終わる間際の番組を
+ * 録ると、録画がチューナーを取り上げる前に番組が終わり、取り上げられた通知が出ないまま落ちた。間際なら次の番組に替わるまで待つ
+ */
 async function twoChannels(
   request: APIRequestContext,
 ): Promise<[Listed, Listed]> {
   const other = SERVICES.find(
     (s) => s.type === "GR" && s.serviceType === 1 && s.channel !== MX.channel,
   )!;
-  const services = (await (await request.get("/api/services")).json()) as {
-    id: number;
-    now: { id: number } | null;
-  }[];
-  const listed = (fake: typeof MX): Listed => {
-    const now = services.find((s) => s.id === fake.id)?.now;
-    expect(now, `${fake.name} にいま放送中の番組が要る`).toBeTruthy();
-    return { id: fake.id, channel: fake.channel, programId: now!.id };
-  };
-  return [listed(MX), listed(other)];
+  let picked: [Listed, Listed] | null = null;
+  await expect
+    .poll(
+      async () => {
+        const services = (await (
+          await request.get("/api/services")
+        ).json()) as {
+          id: number;
+          now: { id: number; endAt: number } | null;
+        }[];
+        const nows = [MX, other].map(
+          (fake) => services.find((s) => s.id === fake.id)?.now ?? null,
+        );
+        if (nows.some((now) => now === null)) return "いま放送中の番組が無い";
+        if (nows.some((now) => now!.endAt - Date.now() < REMAINING))
+          return "番組が終わる間際";
+        picked = [
+          { id: MX.id, channel: MX.channel, programId: nows[0]!.id },
+          { id: other.id, channel: other.channel, programId: nows[1]!.id },
+        ];
+        return "選べる";
+      },
+      { timeout: REMAINING + 30_000, intervals: [1_000] },
+    )
+    .toBe("選べる");
+  return picked!;
 }
 
 /**
@@ -122,6 +146,8 @@ async function stopRecording(
 for (const mpeg2 of [false, true])
   test.describe(`ライブが録画にチューナーを取り上げられたとき (${mpeg2 ? "MPEG-2" : "H.264"})`, () => {
     test.use({ liveMpeg2: mpeg2 });
+    // 番組が替わるのを待つ (`twoChannels`) ぶん、既定の 2 分に足す
+    test.describe.configure({ timeout: 120_000 + REMAINING + 30_000 });
 
     test.beforeEach(async ({ request, stack }) => {
       await syncEpg(request);
