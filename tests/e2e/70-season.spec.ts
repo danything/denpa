@@ -151,6 +151,19 @@ test.describe("正月", () => {
     await expect(chip).toHaveCount(0);
   });
 
+  test("去年の数を読めなかったときは、0 本と見分けて読めなかったことを言う", async ({
+    page,
+  }) => {
+    await pretendNow(page, jst(freshYear(), 1, 2, 10));
+    await page.route("**/api/season/year?*", (route) =>
+      route.fulfill({ status: 500, body: "" }),
+    );
+    await goto(page, "/");
+    await page.getByTestId("year-chip-open").click();
+    await expect(page.getByTestId("year-dialog-failed")).toBeVisible();
+    await expect(page.getByTestId("year-dialog-numbers")).toHaveCount(0);
+  });
+
   test("1 月 8 日からはロゴの飾りもチップも出さない", async ({ page }) => {
     await pretendNow(page, jst(freshYear(), 1, 8, 10));
     await goto(page, "/");
