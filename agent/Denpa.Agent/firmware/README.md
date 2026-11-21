@@ -1,6 +1,6 @@
 # エージェントに同梱するファームウェア
 
-どちらのファイルも、機材のメーカーが配っているバイト列のままで、手を加えていません。変えないでください。
+どのファイルも、機材のメーカーが配っているバイト列のままで、手を加えていません。変えないでください。
 エージェントの MPL-2.0 ([../../LICENSE](../../LICENSE)) はこれらのファイルには及びません。一覧は [docs/licenses.md](../../../docs/licenses.md) にあります。
 
 ## IT930x のファームウェア
@@ -33,6 +33,21 @@
 - 許諾: 同じコミットの `LICENSES/LICENCE.siano` (Siano Mobile Silicon Ltd.)。無改変のバイナリの再配布と使用を認めていて、
   著作権表示と免責の文面を配布物に添えること、解析しないことを求めています。文面は [LICENCE.siano](LICENCE.siano) にそのまま置いてあり、
   エージェントのイメージ (`/usr/share/doc/denpa-agent/`) と、Mac・Windows の配布物 (実行ファイルの隣) と、Android の APK (`assets/licenses/`) に入れています
+
+## DiB0700 のファームウェア
+
+`dvb-usb-dib0700-1.20.fw` は、Microsoft Xbox One Digital TV Tuner の USB ブリッジ (DiBcom DiB0700) に、ファームウェアが入っていないときに送るファームウェアです。
+エージェントの実行ファイルに埋め込んで配り、エージェントが USB で直に送ります (`../Dib0700.cs`)。
+中身は解析しません。レコードの長さの欄で区切り、仕様書の手順でアドレスの 2 バイトを入れ替えて送ります。
+
+- 大きさ: 33,768 バイト
+- SHA-256: `74f5ffeb43767e1af6d379d6cc2e0efeaa54455d030bcd71d95f0f2a908c672a` (エージェントが使う前に確かめる)
+- 出どころ: [linux-firmware](https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git) の
+  コミット `a2dcb924f0897368b0b4f305cbf9808cdda90ce0` (タグ `20261019`) にある `dvb-usb-dib0700-1.20.fw` をそのまま
+- 許諾: 同じコミットの `LICENSES/LICENSE.dib0700` (DiBcom。ISC)。`WHENCE` は「Redistributable」としています。著作権表示と許諾の文面を添えることを求めるので、
+  文面を [LICENSE.dib0700](LICENSE.dib0700) にそのまま置き、`LICENCE.siano` と同じ場所 (イメージ・Mac と Windows の配布物・Android の APK) に入れています
+
+同じ機材の復調のファームウェア (`dvb-demod-mn88472-02.fw`) は再配布の許諾が分からないので、ここには置きません (docs/tuner-xbox-one.md)。
 
 リポジトリに置いているのは、IT930x のファームウェアと同じ扱いにして、実行ファイル 1 個で Linux・Mac・Windows のどれでも同じファームウェアを使うためです。
 イメージを組むときと `install.sh`・`install.ps1` が、外から取ってくるものが 1 つ減ります。

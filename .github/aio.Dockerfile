@@ -33,9 +33,10 @@ COPY --from=agent /usr/share/doc/libzstd1/copyright /usr/share/doc/libzstd1/copy
 FROM ${DENPA}
 COPY --from=ssl / /
 COPY --from=agent /usr/local/bin/denpa-agent /usr/local/bin/denpa-agent
-# エージェントに埋め込んだ Siano のファームウェアの許諾の文面 (agent/Dockerfile と同じ場所に置く)。
+# エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 (agent/Dockerfile と同じ場所に置く)。
 # エージェントのイメージからは写さない (PR の確認は main で組んだエージェントのイメージを使うので、足したばかりのファイルが無いことがある)
 COPY agent/Denpa.Agent/firmware/LICENCE.siano /usr/share/doc/denpa-agent/LICENCE.siano
+COPY agent/Denpa.Agent/firmware/LICENSE.dib0700 /usr/share/doc/denpa-agent/LICENSE.dib0700
 COPY --from=agent /opt/asicen-userland /opt/asicen-userland
 COPY .github/aio-entrypoint.ts /usr/local/lib/denpa-aio.ts
 # エージェントは同じコンテナの中。元の TS の置き場は既定が両方 `/media/raw` なので書かない。

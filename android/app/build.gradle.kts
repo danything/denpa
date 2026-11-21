@@ -20,12 +20,13 @@ val agentLibs = System.getenv("DENPA_AGENT_LIBS")?.takeIf { it.isNotEmpty() }
 
 /*
  * エージェントに入っているもののライセンスの文書。APK の `assets/licenses/` に入れる (docs/licenses.md「Android のアプリ」)。
- * Siano のファームウェアの許諾 (LICENCE.siano) はリポジトリから取る。OpenSSL の LICENSE は、エージェントを組んだ CI が
+ * Siano と DiB0700 のファームウェアの許諾 (LICENCE.siano・LICENSE.dib0700) はリポジトリから取る。OpenSSL の LICENSE は、エージェントを組んだ CI が
  * `android/agent-licenses/` (`DENPA_AGENT_LICENSES` で替えられる) に置く
  */
 val agentLicenses = System.getenv("DENPA_AGENT_LICENSES")?.takeIf { it.isNotEmpty() }
     ?: rootProject.layout.projectDirectory.dir("agent-licenses").asFile.path
 val sianoLicence = rootProject.layout.projectDirectory.file("../agent/Denpa.Agent/firmware/LICENCE.siano")
+val dib0700Licence = rootProject.layout.projectDirectory.file("../agent/Denpa.Agent/firmware/LICENSE.dib0700")
 
 /** denpa (アプリと denpa 本体) の LICENSE (AGPL-3.0-or-later)。同じく `assets/licenses/` に入れる */
 val denpaLicense = rootProject.layout.projectDirectory.file("../LICENSE")
@@ -80,7 +81,7 @@ abstract class LicenseAssets : DefaultTask() {
 }
 
 val licenseAssets = tasks.register<LicenseAssets>("licenseAssets") {
-    sources.from(denpaLicense, sianoLicence, fileTree(agentLicenses))
+    sources.from(denpaLicense, sianoLicence, dib0700Licence, fileTree(agentLicenses))
 }
 
 /*

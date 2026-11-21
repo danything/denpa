@@ -457,8 +457,8 @@ jobs:
       - name: install.sh end to end
         run: |
           set -euo pipefail
-          cp agent/Denpa.Agent/firmware/LICENCE.siano out/
-          tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent LICENCE.siano
+          cp agent/Denpa.Agent/firmware/LICENCE.siano agent/Denpa.Agent/firmware/LICENSE.dib0700 out/
+          tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent LICENCE.siano LICENSE.dib0700
           export DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz"
           prefix="/Library/Application Support/denpa"
           plist=/Library/LaunchDaemons/io.github.danything.denpa-agent.plist
@@ -486,9 +486,10 @@ jobs:
           # 上げ直しても合言葉は変えない
           sudo -E env PATH="$PATH" bash install.sh --agent-only
           test "$(sudo cat "$HOME/denpa/config/tls/pair-token")" = "$token"
-          # Siano と IT930x のファームウェアはエージェントに埋め込んである。Siano の許諾の文面を実行ファイルの隣に置き、
+          # Siano・IT930x・DiB0700 のファームウェアはエージェントに埋め込んである。Siano と DiB0700 の許諾の文面を実行ファイルの隣に置き、
           # siano-userland・px4-userland と px4d のソケットの置き場 (run/) は置かない
           test -f "$prefix/bin/LICENCE.siano"
+          test -f "$prefix/bin/LICENSE.dib0700"
           test ! -e "$prefix/siano-userland"
           test ! -e "$prefix/px4-userland"
           test ! -e "$prefix/run"
@@ -788,8 +789,8 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          Copy-Item agent\Denpa.Agent\firmware\LICENCE.siano out\
-          Compress-Archive -Path out\denpa-agent.exe, out\denpa-tray.exe, out\libwdi, out\LICENCE.siano -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
+          Copy-Item agent\Denpa.Agent\firmware\LICENCE.siano, agent\Denpa.Agent\firmware\LICENSE.dib0700 out\
+          Compress-Archive -Path out\denpa-agent.exe, out\denpa-tray.exe, out\libwdi, out\LICENCE.siano, out\LICENSE.dib0700 -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
           $env:DENPA_AGENT_ZIP = "$env:RUNNER_TEMP\denpa-agent.zip"
           $script = [scriptblock]::Create((Get-Content install.ps1 -Raw -Encoding UTF8))
           & $script -AgentOnly -NoOpen
@@ -808,8 +809,9 @@ jobs:
           $log = "$env:USERPROFILE\denpa\denpa-agent.log"
           for ($i = 0; $i -lt 15 -and -not (Select-String -LiteralPath $log -SimpleMatch "#pair=$token" -Quiet); $i++) { Start-Sleep 1 }
           if (-not (Select-String -LiteralPath $log -SimpleMatch "#pair=$token" -Quiet)) { throw 'agent does not log the pairing URL with the token' }
-          # The Siano firmware is bundled in the agent: its licence text sits next to the executable, and siano-userland is not installed
+          # The Siano and DiB0700 firmware is bundled in the agent: the licence texts sit next to the executable, and siano-userland is not installed
           if (-not (Test-Path "$prefix\bin\LICENCE.siano")) { throw 'LICENCE.siano is not next to the agent' }
+          if (-not (Test-Path "$prefix\bin\LICENSE.dib0700")) { throw 'LICENSE.dib0700 is not next to the agent' }
           if (Test-Path "$prefix\siano-userland") { throw 'siano-userland should not be installed' }
           if (Test-Path "$prefix\px4-userland") { throw 'px4-userland should not be installed' }
           if (Test-Path C:\denpa-run) { throw 'C:\denpa-run should not be created' }
@@ -1118,7 +1120,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/agent/denpa-agent.tar.gz" -C "$bundle"
           cp "$RUNNER_TEMP/tray/denpa-tray" "$bundle/denpa-tray"
           chmod 755 "$bundle/denpa-agent" "$bundle/denpa-tray"
-          tar -czf "$RUNNER_TEMP/denpa-agent-tray.tar.gz" -C "$bundle" denpa-agent denpa-tray LICENCE.siano
+          tar -czf "$RUNNER_TEMP/denpa-agent-tray.tar.gz" -C "$bundle" denpa-agent denpa-tray LICENCE.siano LICENSE.dib0700
           export DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent-tray.tar.gz"
           tray_plist=/Library/LaunchAgents/io.github.danything.denpa-tray.plist
           DENPA_SERVER_TARBALL=$(ls "$RUNNER_TEMP"/server/denpa-*-darwin-arm64.tar.gz)

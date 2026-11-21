@@ -18,7 +18,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。
- *   asicen-userland の機材は同梱のものに USB を扱わせる (Asicen.cs)。IT930x の機材と CECH-ZD1 J と PIX-DT295 と Siano の機材 (PX-S1UD など) は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs / Siano.cs)
+ *   asicen-userland の機材は同梱のものに USB を扱わせる (Asicen.cs)。IT930x の機材と CECH-ZD1 J と PIX-DT295 と Siano の機材 (PX-S1UD など) と Xbox One Digital TV Tuner は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs / Siano.cs / XboxOne.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM と、契約の更新に要る CAT・EMM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、

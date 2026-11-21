@@ -216,6 +216,11 @@ public static class DeviceProbe
          */
         found.AddRange(It930x.Detect());
 
+        /*
+         * Xbox One Digital TV Tuner も並べるだけで開かない (開くとブリッジのファームウェアを動かす。XboxOne.cs)。受けられるのはケーブルだけ
+         */
+        found.AddRange(XboxOne.Detect());
+
         Remember(found, cable);
         return found;
     }

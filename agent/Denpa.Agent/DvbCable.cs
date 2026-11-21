@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// DVB の機材で ISDB-C を受けている間、dvr から読んだ TS を TSMF の処理に通して流す (<see cref="DvbTuner"/>)。選局のたびに作り直す。
+/// DVB の機材 (<see cref="DvbTuner"/>) と Xbox One Digital TV Tuner (<see cref="XboxOneTuner"/>) で ISDB-C を受けている間、dvr (Xbox は USB の bulk IN) から読んだ TS を TSMF の処理に通して流す。選局のたびに作り直す。
 ///
 /// <para>
 /// **TSMF から TS を選ぶのはソフトの仕事。** DVB-C の復調器は搬送波の TS (TSMF のフレームのまま) を dvr に出す。IT930x の受信機と同じく、
@@ -25,10 +25,11 @@ internal sealed class DvbCable
     private readonly Thread _thread;
     private volatile bool _stopped;
 
-    public DvbCable(Source source, TsmfSelector tsmf, SplitTlv tlv, string name)
+    /// <param name="ended">読めなくなったときに読む側へ伝える理由。既定は dvr のもの (<see cref="Ended"/>)。USB の機材 (<see cref="XboxOneTuner"/>) は自分の文を渡す</param>
+    public DvbCable(Source source, TsmfSelector tsmf, SplitTlv tlv, string name, string ended = Ended)
     {
         _output = new It930xTsOutput(tsmf, tlv);
-        _thread = new Thread(() => Pump(source, name)) { IsBackground = true, Name = $"{name} ISDB-C" };
+        _thread = new Thread(() => Pump(source, name, ended)) { IsBackground = true, Name = $"{name} ISDB-C" };
         _thread.Start();
     }
 
@@ -41,7 +42,7 @@ internal sealed class DvbCable
     /// <summary>読む側が詰まって捨てたパケットの数 (TLV に組み立てているときは TLV パケットの数)</summary>
     public long Dropped => _output.Dropped;
 
-    private void Pump(Source source, string name)
+    private void Pump(Source source, string name, string ended)
     {
         var demux = new It930xTsDemux([0x47]);
         demux.Attach(0, _output);
@@ -55,12 +56,12 @@ internal sealed class DvbCable
                 demux.Push(buffer.AsSpan(0, read));
             }
             // 止めたのでなければ、dvr が尽きた。読む側に理由を伝えて終える
-            _output.Complete(_stopped ? null : Ended);
+            _output.Complete(_stopped ? null : ended);
         }
         catch (Exception error) when (error is IOException or ObjectDisposedException)
         {
-            Log.Write($"[{name}] {Ended} ({error.Message})");
-            _output.Complete($"{Ended} ({error.Message})");
+            Log.Write($"[{name}] {ended} ({error.Message})");
+            _output.Complete($"{ended} ({error.Message})");
         }
     }
 

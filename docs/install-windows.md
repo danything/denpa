@@ -88,7 +88,7 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 | 「対応しているチューナーが挿さっていません」 | チューナーを挿して流し直す。デバイス マネージャーにも出ないときは、ケーブルとポートを変える                         |
 | 「wdi-simple.exe の終了コード …」            | 機材を挿し直して流し直す。終了コードは libwdi のエラーの番号 (`wdi_error`)。それでも替えられないときは Zadig を使う |
 
-**対象の機材は、エージェントに問い合わせて決めます。** エージェントが USB を直に持つ機材 (IT930x の機材・CECH-ZD1 J・PIX-DT295・PX-S1UD などの Siano の機材) の USB ID は
+**対象の機材は、エージェントに問い合わせて決めます。** エージェントが USB を直に持つ機材 (IT930x の機材・CECH-ZD1 J・PIX-DT295・PX-S1UD などの Siano の機材・Xbox One Digital TV Tuner) の USB ID は
 `denpa-agent --usb-ids` が返します。
 install.ps1 は USB ID の表を持ちません。
 
