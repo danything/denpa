@@ -28,7 +28,7 @@
     time,
   } from "#lib/format.js";
   import { minuteClock } from "#lib/minute-clock.svelte.js";
-  import { offline, removeLocal } from "#lib/offline.svelte.js";
+  import { deleteWithLocal, offline } from "#lib/offline.svelte.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
 
   import type { Preview, PreviewRow, RankingView } from "./+page.server";
@@ -218,18 +218,6 @@
   const deleting = arming(
     '[data-testid="search-delete"], [data-testid="search-delete-confirm"]',
   );
-  /** 消し終えたら、端末に保存したコピーも片付ける (ホームの行の削除と同じ) */
-  function afterDelete(id: number): SubmitFunction {
-    return () => async (options) => {
-      await options.update();
-      if (
-        options.result.type === "success" &&
-        offline.entries[id] !== undefined
-      ) {
-        void removeLocal(id);
-      }
-    };
-  }
 
   /**
    * 録画を観る画面。録り終えたものは `/watch`、録っている最中は `/chase`。
@@ -462,7 +450,7 @@
                       {deleting}
                       armKey={rec.id}
                       fields={{ id: rec.id }}
-                      submit={afterDelete(rec.id)}
+                      submit={deleteWithLocal(rec.id)}
                       class="small"
                       testid="search-delete"
                       confirmLabel={offline.entries[rec.id] === undefined

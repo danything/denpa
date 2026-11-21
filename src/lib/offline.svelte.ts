@@ -11,6 +11,7 @@
  */
 
 import { browser } from "$app/env";
+import type { SubmitFunction } from "$app/forms";
 import { resolve } from "$app/paths";
 
 import { afterPrevious } from "./after-previous";
@@ -623,6 +624,15 @@ export async function removeLocal(id: number): Promise<void> {
   await stopFetching(id);
   await videos.remove(id);
   await refresh();
+}
+
+/** 録画をサーバから消すフォームに渡す。消し終えたら、端末に保存したコピーも消す (ホームと検索で同じ) */
+export function deleteWithLocal(id: number): SubmitFunction {
+  return () => async (options) => {
+    await options.update();
+    if (options.result.type === "success" && offline.entries[id] !== undefined)
+      void removeLocal(id);
+  };
 }
 
 /** 観るとき用。実体を IndexedDB から出す (無ければ null) */
