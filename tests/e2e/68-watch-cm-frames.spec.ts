@@ -210,6 +210,7 @@ test.describe("CM のコマを映さずに飛ぶ", () => {
         let worst = 0;
         for (let i = 1; i < walls.length; i++) {
           const gap = walls[i]! - walls[i - 1]!;
+          // 1 秒を超える間隔は画面も数えない (止めていた・飛んでいた間。`ts/watch.ts` の `GAP_IGNORE`)
           if (gap <= 1_000) worst = Math.max(worst, gap);
         }
         const lead = busy ? 0.5 : cmLead(rate, worst / 1000);
