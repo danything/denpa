@@ -24,9 +24,6 @@
   import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
   import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
-  import { ambientMode } from "#lib/components/player/ambient.svelte.js";
-  import { screenAwake } from "#lib/components/player/awake.svelte.js";
-  import { backgroundPlayback } from "#lib/components/player/background.svelte.js";
   import { CaptionPainter } from "#lib/components/player/caption-draw.js";
   import {
     CAPTION_LANGUAGE_KEY,
@@ -70,7 +67,6 @@
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
   import { fitRect } from "#lib/components/player/paint.js";
-  import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
@@ -99,8 +95,11 @@
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
   import { unslipper } from "#lib/components/player/unslip.js";
-  import { playerVolume } from "#lib/components/player/volume.svelte.js";
   import VolumeNote from "#lib/components/player/VolumeNote.svelte";
+  import {
+    type PlaybackTarget,
+    playerWiring,
+  } from "#lib/components/player/wiring.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, {
     errorNotice,
@@ -1968,69 +1967,60 @@
   /** 操作バーの出し入れ ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts)) */
   const controls = playerControls();
 
-  /** 画面を落とさせない。観るためだけに開く画面なので、開いている間はずっと */
-  const awake = screenAwake();
-  $effect(() => {
-    awake.on = true;
-  });
-
   /**
-   * 小窓 (PiP。[pip.svelte.ts](../../../lib/components/player/pip.svelte.ts))。互換モードは canvas の
-   * プレイヤーからストリームを取って出す。`paused` で `playing` を読むのは、操作バーで止めた・再開したときに
-   * 小窓の側も合わせ直させるため
+   * 配線 (`wiring.svelte.ts`) に渡す包み。canvas のプレイヤー (互換モード・MPEG-2) と `<video>` を、ライブと同じ形にそろえる。
+   * `paused` で `playing` を読むのは、操作バーで止めた・再開したときに小窓とアンビエントモードを合わせ直させるため
+   * (canvas のプレイヤーと `<video>` の `paused` は `$state` ではない)
    */
-  const pip = pictureInPicture({
-    video: () => video,
-    raw: () => drawing,
-    capture: () => canvas?.pipStream() ?? null,
-    flow: (on) => canvas?.pipFlow(on),
-    paused: () => {
+  const target: PlaybackTarget = {
+    // 観られない幕 (`problem`) を出したら、画面を暗くさせない処理を外す (ライブ・追っかけの `error` と同じ)
+    get state() {
+      return problem === "" ? "playing" : "error";
+    },
+    get canvas() {
+      return drawing;
+    },
+    get paused() {
       void playing;
       return mediaPaused();
     },
+    get silenced() {
+      return muted;
+    },
+    get captions() {
+      return captions;
+    },
+    get hasCaptions() {
+      return hasCaptions;
+    },
     toggle: togglePlay,
-    auto: () => background.on,
+    grab: (size) => canvas?.grab(size) ?? Promise.resolve(null),
+    capture: () => canvas?.pipStream() ?? null,
+    captureFlow: (on) => canvas?.pipFlow(on),
+    set volume(level: number | null) {
+      if (drawing) canvas?.volume(level);
+    },
+    set playback(on: boolean) {
+      if (drawing) canvas?.background(on);
+    },
+  };
+
+  /**
+   * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (3 画面で共通。`wiring.svelte.ts`)。
+   * 裏から戻ったら止めた所から
+   */
+  const { background, ambient, pip, volume } = playerWiring({
+    target,
+    video: () => video,
     overlay: () => overlay,
-    captions: () => captions && hasCaptions,
-  });
-
-  // canvas の音を「再生する音」と言うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
-  $effect(() => {
-    const on = background.on || pip.active;
-    if (drawing) canvas?.background(on);
-  });
-
-  /** 音量 (`volume.svelte.ts`)。canvas はプレイヤーの中で、`<video>` は Web Audio に通して掛ける (ライブ・追っかけと同じ) */
-  const volume = playerVolume({
-    video: () => (drawing ? null : video),
+    pause: pauseMedia,
+    resume: playMedia,
     // WebKit は MSE の `<video>` を通すと無音になる。その場で流しているもの (`remux-player.ts`) は通さない
     silentTap: () =>
       typeof navigator !== "undefined" &&
       tapSilent(navigator.userAgent, picked?.way === "stream"),
     // iPhone・iPad は `<video>` の音量を変えられない。どの経路でもつまみを出さず、放送のままの大きさで鳴らす
     fixed: fixedMediaVolume,
-    through: () => background.on || pip.active,
-    remote: (stop) => (stop ? pauseMedia() : playMedia()),
-  });
-  $effect(() => {
-    const level = volume.applied;
-    if (drawing) canvas?.volume(level);
-  });
-
-  /** バックグラウンド再生 ([background.svelte.ts](../../../lib/components/player/background.svelte.ts)) */
-  const background = backgroundPlayback({
-    nativeVideo: () => (drawing ? null : video),
-    pip: () => pip.active,
-    paused: mediaPaused,
-    pause: pauseMedia,
-    resume: playMedia,
-  });
-
-  /** アンビエントモード。canvas に描いているときはプレイヤーから縮めた 1 枚をもらう */
-  const ambient = ambientMode({
-    playing: () => playing && !pip.active,
-    canvas: () => canvas,
-    video: () => video,
   });
 
   /**
