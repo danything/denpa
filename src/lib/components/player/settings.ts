@@ -310,7 +310,7 @@ export function speedRow(opts: Parameters<typeof speeds>[0]): SettingRow {
   return { kind: "choice", ...speeds(opts) };
 }
 
-/** ライブと追っかけ (`live-player`) の音声と字幕。持っている・選べるときだけ */
+/** ライブと追っかけ (`player/core.svelte.ts`) の音声と字幕。持っている・選べるときだけ */
 interface LiveTracks {
   audios: { id: string; label: string }[];
   audio: string;

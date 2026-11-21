@@ -131,7 +131,10 @@ import {
   trimCues,
 } from "#lib/ts/captions.js";
 import { KeyGate } from "#lib/ts/key-gate.js";
-import { pickMediaSource } from "#lib/ts/media-source.js";
+import {
+  type PickedMediaSource,
+  pickMediaSource,
+} from "#lib/ts/media-source.js";
 import { pacing, steeringWhen } from "#lib/ts/pacing.js";
 import { StreamRetry } from "#lib/ts/playback.js";
 import { MAX_LEVEL } from "#lib/volume.js";
@@ -890,6 +893,16 @@ export function playbackCore(options: PlaybackCoreOptions) {
     adapter.reset(now);
   }
 
+  /** 段を決めるのに測った値を捨てる (選局・シーク・段の切り替え・裏の段への入れ替え。`RungAdapter.reset`)。段そのものは持ち越す */
+  function forgetMeasures(now: number): void {
+    lastPace = null;
+    feed.throughput.reset(now);
+    lagMeter.reset();
+    starvedSince = null;
+    lastFrameAt = 0;
+    adapter.reset(now);
+  }
+
   /**
    * **段を上げ下げするかを決める** (`ADAPT_EVERY` ごと)。測った値を `RungAdapter` に渡し、返ってきたら動かす (`act`)。
    * 決めないのは、止めている間・リクエストしてから `tuned` が来るまで・まだ再生していない間。
@@ -1627,12 +1640,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     if (index === captionLanguage) return;
     captionLanguage = index;
     clearCaptions();
-    send({ type: "language", language: index });
-  }
-
-  /** 指示を送る。**送れたか**を返す (繋がっていない・繋ぎ直している間は送らずに false) */
-  function send(command: Command): boolean {
-    return feed.send(command);
+    feed.send({ type: "language", language: index });
   }
 
   /** 字幕を出す・消す。端末ごとに覚える (`caption-pref.ts`) */
@@ -1658,7 +1666,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     forget(true);
     captionTrack = index;
     const command = wantedCommand();
-    if (command !== null) send(command);
+    if (command !== null) feed.send(command);
   }
 
   /**
@@ -1984,6 +1992,18 @@ export function playbackCore(options: PlaybackCoreOptions) {
     return chase === null ? (tuned?.broadcast ?? "mpeg2") : chase.broadcast;
   }
 
+  /**
+   * サーバが送ってきた型 (`codecs`) を受け取れる MSE。受け取れなければ null。iPhone の Safari には MediaSource が無く、
+   * ManagedMediaSource だけがある (`ts/media-source.ts`)。MP4 の `Opus` は小文字でも問い合わせる (`live.ts` の `mseType`。
+   * 小文字で渡すのは `MseSink`)
+   */
+  function mseFor(codecs: string): PickedMediaSource | null {
+    const picked = pickMediaSource();
+    if (picked === null) return null;
+    const type = mseType(codecs, (t) => picked.Source.isTypeSupported(t));
+    return picked.Source.isTypeSupported(type) ? picked : null;
+  }
+
   /** MSE で受け取れるか (`#lib/live.ts` の `codecsFor` で問い合わせる。サーバが渡すものと同じ) */
   function mseCan(next: LiveCodec): boolean {
     return pickMediaSource()?.Source.isTypeSupported(codecsFor(next)) ?? false;
@@ -2145,7 +2165,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     if (!want) heldData = [];
     if (want === askedData || !feed.open) return;
     askedData = want;
-    send({ type: "data", on: want });
+    feed.send({ type: "data", on: want });
   }
 
   /**
@@ -2416,17 +2436,9 @@ export function playbackCore(options: PlaybackCoreOptions) {
     }
     // 数え直す。再エンコードでも MediaSource から作り直しになるので、前の数は続きではない
     stalls = 0;
-    /*
-     * 段を決めるのに測った値も捨てる (選局・シーク・段の切り替え。`RungAdapter.reset`)。`tuned` が来るまでは決めない。
-     * 段そのものは持ち越す
-     */
+    // 段を決めるのに測った値も捨てる (`forgetMeasures`)。`tuned` が来るまでは決めない
     awaiting = true;
-    lastPace = null;
-    feed.throughput.reset(Date.now());
-    lagMeter.reset();
-    starvedSince = null;
-    lastFrameAt = 0;
-    adapter.reset(Date.now());
+    forgetMeasures(Date.now());
     adaptTimer ??= setInterval(adapt, ADAPT_EVERY);
     // 字幕は映した 1 枚ごとに貼り直す (`follow`)。2 度目からは何もしない
     follow(video);
@@ -2461,7 +2473,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
        * 覚えているぶん (実機で約 2 MB) をまとめて送る (`server/live.ts` の `refreshData`)
        */
       if (!wantData()) syncData();
-      if (command !== null) send(command);
+      if (command !== null) feed.send(command);
       // 局を映すか (追っかけ・録画に譲るか) で、自動で受信のときのリクエストが変わる
       syncData();
       return;
@@ -2981,14 +2993,8 @@ export function playbackCore(options: PlaybackCoreOptions) {
   ): void {
     // canvas で描いていたものからエンコードしたものへ戻るとき (打ち切った・選び直した)。canvas を破棄して <video> を出す
     stopRaw();
-    // iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある (`ts/media-source.ts`)
-    const picked = pickMediaSource();
-    // MP4 の `Opus` は、小文字を受け取れる端末には小文字で渡す (`live.ts` の `mseType`)
-    const type =
-      picked === null
-        ? codecs
-        : mseType(codecs, (t) => picked.Source.isTypeSupported(t));
-    if (picked === null || !picked.Source.isTypeSupported(type)) {
+    const picked = mseFor(codecs);
+    if (picked === null) {
       if (encoded !== "h264") {
         giveUpCodec(encoded);
         return;
@@ -3364,12 +3370,8 @@ export function playbackCore(options: PlaybackCoreOptions) {
           spareFailed();
           return;
         }
-        const picked = pickMediaSource();
-        const type =
-          picked === null
-            ? notice.codecs
-            : mseType(notice.codecs, (t) => picked.Source.isTypeSupported(t));
-        if (picked === null || !picked.Source.isTypeSupported(type)) {
+        const picked = mseFor(notice.codecs);
+        if (picked === null) {
           spareFailed();
           return;
         }
@@ -3577,12 +3579,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
     quiet = now + GRACE;
     awaiting = false;
     upAsk = null;
-    lastPace = null;
-    feed.throughput.reset(now);
-    lagMeter.reset();
-    starvedSince = null;
-    lastFrameAt = 0;
-    adapter.reset(now);
+    forgetMeasures(now);
     applyTuned(tunedNow, video, false);
     feed.listen(
       ws,
@@ -3636,7 +3633,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
       if (local !== position) position = local;
     }
     if (raw && chase !== null)
-      chase.hold(engine.lead, paused, (on) => send({ type: "hold", on }));
+      chase.hold(engine.lead, paused, (on) => feed.send({ type: "hold", on }));
     /*
      * **互換モードの追っかけで抱えきれなくなっていたら、手元が尽きる前に再生している位置からリクエストし直す**
      * (`RawEvents.full`)。サーバは倍速で送り込むので観ている先が伸び続け、worker は上限で

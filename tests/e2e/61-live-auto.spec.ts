@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { LAG_SPAN } from "../../src/lib/adapt";
 import {
   captureSockets,
   countBarWakes,
@@ -126,10 +127,18 @@ test.describe("ライブの自動", () => {
     await expect(page.getByTestId("live-video")).toBeVisible({
       timeout: 30_000,
     });
-    // canvas を外して `<video>` に入れ替えた (止まったカーソルの下で中身が替わった)。ライブは `play` では操作バーを出さないので、
-    // 出てこないことは時間で待つ。CI では入れ替えた `<video>` の `paused` が 30 秒たっても false にならず、再生の始まりでは待てなかった
+    /*
+     * canvas を外して `<video>` に入れ替えた (止まったカーソルの下で中身が替わった)。入れ替えで描き直したものと、
+     * 止まったカーソルの下で中身が替わったときの `pointermove` は次のコマまでに届くので、2 コマ描き終えるのを待つ。
+     * CI では入れ替えた `<video>` が再生を始めない (黒いまま) ので、再生の始まりでは待てない
+     */
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
-    await page.waitForTimeout(3_000);
+    await page.evaluate(
+      () =>
+        new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done())),
+        ),
+    );
     expect(await wakes()).toBe(0);
     await expect(page.getByTestId("live-controls")).toHaveAttribute(
       "data-shown",
@@ -147,27 +156,52 @@ test.describe("ライブの自動", () => {
     page,
   }) => {
     await openLive(page);
-    const canvas = page.getByTestId("live-raw");
-    await expect(canvas).toBeVisible({ timeout: 30_000 });
-    await expect
-      .poll(async () => Number((await canvas.getAttribute("data-shown")) ?? 0))
-      .toBeGreaterThan(30);
-    // 放送に対する遅れを測れるまで (選局から 4 秒。`LAG_SPAN`) は、これまでどおり詰まりで下げる。測れてから塞ぎ始める
-    await page.waitForTimeout(5_000);
+    await expect(page.getByTestId("live-raw")).toBeVisible({
+      timeout: 30_000,
+    });
+    /*
+     * 進み具合は描いたコマ数 (canvas の `data-shown`。30 コマ/秒) で測る。CI の遅い機械では描くのも遅れるので、
+     * 時計で待つと測れる前に塞ぎ始めることがある。形式を替えて canvas が無くなったら null
+     */
+    const shown = () =>
+      page.evaluate(() => {
+        const canvas = document.querySelector<HTMLCanvasElement>(
+          '[data-testid="live-raw"]',
+        );
+        return canvas === null ? null : Number(canvas.dataset["shown"] ?? 0);
+      });
+    const span = (LAG_SPAN / 1000) * 30;
+    // 放送に対する遅れを測れるまで (`LAG_SPAN`) は、これまでどおり詰まりで下げる。それより 1 秒ぶん多く映してから塞ぎ始める
+    await expect.poll(shown).toBeGreaterThan(30 + span + 30);
+    // 断り書きは出たらすぐ控える (しばらくで消える)
     await page.evaluate(() => {
+      const seen = window as unknown as { __thin: number };
+      seen.__thin = 0;
+      new MutationObserver(() => {
+        if (document.body.textContent?.includes("回線が細いため"))
+          seen.__thin++;
+      }).observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
       setInterval(() => {
         const end = performance.now() + 700;
         while (performance.now() < end);
       }, 1_500);
     });
-    const seen: string[] = [];
-    for (let i = 0; i < 20; i++) {
-      seen.push(
-        (await page.getByTestId("live-warning").allTextContents()).join(""),
-      );
-      await page.waitForTimeout(1_000);
-    }
-    expect(seen.join("\n")).not.toContain("回線が細いため");
+    // 塞いだまま `LAG_SPAN` の 5 回ぶん映すまで。形式を替えた (`raw/budget.ts`) ら、そこまで
+    const from = (await shown()) ?? 0;
+    await expect
+      .poll(async () => ((await shown()) ?? Infinity) > from + span * 5, {
+        timeout: 60_000,
+      })
+      .toBe(true);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __thin: number }).__thin,
+      ),
+    ).toBe(0);
   });
 
   test("H.264 も受け取れない端末では AV1 で観る", async ({ page }) => {

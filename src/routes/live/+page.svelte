@@ -136,7 +136,7 @@
   });
   /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
   let video = $state<HTMLVideoElement | null>(null);
-  /** 段を替えるときに次の段を用意する `<video>` (`live-player` の `stageStep`) */
+  /** 段を替えるときに次の段を用意する `<video>` (`player/core.svelte.ts` の `stageStep`) */
   let spare = $state<HTMLVideoElement | null>(null);
   let still = $state<HTMLCanvasElement | null>(null);
   let overlay = $state<HTMLCanvasElement | null>(null);
@@ -497,7 +497,7 @@
   /**
    * キーでも動かせるようにする。**割り当ては追っかけ・観る画面と共通** (`player/keys.ts`)。
    * ← → はシークバーと同じく、出しているときだけ (canvas に描いている間と、録画に譲っている間は無い)。速さは追っかけ中だけ効く
-   * (`live-player` の `setSpeed`)
+   * (`player/core.svelte.ts` の `setSpeed`)
    */
   const playerKey = playerKeys({
     togglePlay: () => player.toggle(),
@@ -770,13 +770,13 @@
               {#snippet status()}
                 <!--
                   項目は「・」で区切り、あいだに空白を入れない (docs/writing.md)。空白が入らないよう {#if} どうしを詰めて書く。
-                  放送からの遅れ (`live-player` の `fromAir`。隣のテレビとの差)。出るまではバッファだけを「遅延」として出す。
+                  放送からの遅れ (`player/core.svelte.ts` の `fromAir`。隣のテレビとの差)。出るまではバッファだけを「遅延」として出す。
                   手元のバッファ (`buffered.end - currentTime`)。上流は入っていない。
                   再測定 (`relearn`)。覚えているものがあるときだけ、遅延のすぐ隣に置く。
                   情報の欄の行なので丸いボタンにはしない (操作バーが厚くなる)。
-                  途切れは止まったときだけ (`live-player` の `stalls`)。下限は、いま効いている下限と届く間隔のいちばん長いもの。
+                  途切れは止まったときだけ (`player/core.svelte.ts` の `stalls`)。下限は、いま効いている下限と届く間隔のいちばん長いもの。
                   途切れの報告に添えてもらう (#1210)。コマ落ちは描かれずに捨てられたコマで、映像だけ遅れるときの切り分け
-                  (`live-player` の `dropped`)。映像だけの遅れは開いたままにせず飛び直す (`unslip`) ので、直した回数も出す。
+                  (`player/core.svelte.ts` の `dropped`)。映像だけの遅れは開いたままにせず飛び直す (`unslip`) ので、直した回数も出す。
                   再生の速さは遅延を詰めるのに変えている。Safari は変えるたびにつまずく (`ts/pacing.ts` の `Steering`)。
                   デコードは MPEG-2 を 1 コマデコードするのに掛かる時間。8 割を 3 秒超え続けたらエンコードしたものに戻る (`raw/budget.ts`)
                 -->
@@ -933,7 +933,7 @@
         >
       {/if}
       <!--
-        録画に譲った (`live-player` の `giveWay`)。「ライブに戻る」を置くので、この通知だけ押せる形で並べる
+        録画に譲った (`player/core.svelte.ts` の `giveWay`)。「ライブに戻る」を置くので、この通知だけ押せる形で並べる
         (見た目は StageNote と同じ。追っかけの「観る画面で」と同じ扱い)
       -->
       {#if player.yielded}

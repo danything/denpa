@@ -61,7 +61,7 @@ export const load: PageServerLoad = ({ params, url }) => {
     },
     /**
      * 録画の放送のコーデック (`recordedBroadcast`)。4K の局の録画 (`.mmts` と、PMT の映像が HEVC の `.m2ts`) は `hevc` で、
-     * 放送のままは HEVC を写したもの (`live-player` の `openChase`)
+     * 放送のままは HEVC を写したもの (`player/core.svelte.ts` の `openChase`)
      */
     broadcast: recordedBroadcast(rec.ts_path, aribServiceId(rec.service_id)),
     /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
