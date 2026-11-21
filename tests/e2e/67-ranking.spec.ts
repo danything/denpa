@@ -10,18 +10,18 @@ import {
 } from "./helpers";
 
 /**
- * **予約数ランキングに参加する** (設定の「連携」の「予約数ランキング」。`server/ranking.ts`)。
+ * **番組ランキングに参加する** (設定の「連携」の「番組ランキング」。`server/ranking.ts`)。
  *
  * 偽の denpa-hub (`tests/fake/denpa-hub.ts`) がトークンを出し、送られた本文を貯めるので、
  * スイッチをオンにする → トークンを受け取ってすぐ送る → 最後に送った時刻が出る → オフにするとトークンを消す、まで画面で通す。
- * 検索を言葉なしで開いたときの節「予約の多い番組」も、偽の hub が送られた予約をそのまま順位にして返すので画面で通す。
+ * 検索を言葉なしで開いたときの節「人気の番組」も、偽の hub が送られた予約をそのまま順位にして返すので画面で通す。
  * 送る中身・差分・送る時刻のずらし方・順位の突き合わせとためておき方は単体テスト (`ranking.test.ts`)
  */
 interface HubState {
   ranking: { tokens: number; votes: { v: number }[]; revoked: number };
 }
 
-test.describe("予約数ランキング", () => {
+test.describe("番組ランキング", () => {
   test.beforeEach(async ({ request, stack }) => {
     await request.post(`${stack.hubUrl}/__control/ranking`, { data: "ok" });
   });
@@ -81,14 +81,14 @@ test.describe("予約数ランキング", () => {
     await expect(
       page.locator("#ranking").getByTestId("settings-error"),
     ).toContainText(
-      "denpa-hub が予約数ランキングを受け付けていないため、参加できませんでした",
+      "denpa-hub が番組ランキングを受け付けていないため、参加できませんでした",
     );
     await expect(toggle).not.toBeChecked();
     await goto(page, "/settings/integrations#ranking");
     await expect(page.getByTestId("ranking-setting")).not.toBeChecked();
   });
 
-  test("参加すると、検索を言葉なしで開いたときに予約の多い番組を出し、その場で予約できる", async ({
+  test("参加すると、検索を言葉なしで開いたときに人気の番組を出し、その場で予約できる", async ({
     page,
     request,
   }) => {
@@ -104,13 +104,13 @@ test.describe("予約数ランキング", () => {
     await goto(page, "/search");
     const section = page.getByTestId("search-ranking");
     await expect(
-      section.getByRole("heading", { level: 2, name: "予約の多い番組" }),
+      section.getByRole("heading", { level: 2, name: "人気の番組" }),
     ).toBeVisible();
     const mine = section.locator(
       `[data-testid="search-program"][data-program-id="${programId}"]`,
     );
     await expect(mine.getByTestId("search-rank")).toHaveText(/^\d+$/);
-    await expect(mine.getByTestId("search-votes")).toHaveText("予約 約 10");
+    await expect(mine.getByTestId("search-votes")).toHaveText("約 10 世帯");
     await expect(mine.getByTestId("search-program-state")).toHaveText(
       "予約済み",
     );
@@ -130,7 +130,7 @@ test.describe("予約数ランキング", () => {
     expect(await rows.count()).toBeGreaterThan(5);
     const away = section.getByTestId("search-ranking-away").first();
     await expect(away).toContainText("受信できない局・BSよその局1");
-    await expect(away).toContainText("予約 約 5");
+    await expect(away).toContainText("約 5 世帯");
     await expect(away.getByRole("button")).toHaveCount(0);
 
     // やめると節を出さない
@@ -163,7 +163,7 @@ async function reserveLater(page: Page): Promise<string> {
   throw new Error("予約できる先の放送がありません");
 }
 
-/** 設定の「予約数ランキング」のスイッチを切り替え、保存されるのを待つ */
+/** 設定の「番組ランキング」のスイッチを切り替え、保存されるのを待つ */
 async function setRanking(page: Page, on: boolean): Promise<void> {
   await goto(page, "/settings/integrations#ranking");
   await page.getByTestId("ranking-setting").setChecked(on);

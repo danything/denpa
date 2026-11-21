@@ -1020,7 +1020,7 @@ export const niconicoLink = sqliteTable("niconico_link", {
 });
 
 /**
- * **予約数ランキングへの参加** (`ranking.ts`。世帯で 1 つなので行は多くて 1 つ、`id` はいつも 1)。行があれば参加している。
+ * **番組ランキングへの参加** (`ranking.ts`。世帯で 1 つなので行は多くて 1 つ、`id` はいつも 1)。行があれば参加している。
  *
  * - トークンは denpa-hub が出したもの。denpa のサーバだけが持ち、端末と記録には出さない
  * - 送る時刻は 6 時間の中の `slot` を家ごとに乱数で決め、毎回そこから ±15 分ずらす (`next_at`)
@@ -1043,9 +1043,9 @@ export const rankingLink = sqliteTable("ranking_link", {
 });
 
 /**
- * **予約数ランキングに送った予約の控え** (`ranking.ts`)。次に送るときに、いまの予約と比べて差分 (add・remove) を作る。
- * 送った中身 (時刻・番組名・局名・ジャンル・ルールの予約か手の予約か) は `digest` にまとめて持ち、変わったら送り直す。
- * 始まった番組の行は hub に送らずに消す (hub は始まった番組を順位に入れない)
+ * **番組ランキングに送った放送の控え** (`ranking.ts`)。次に送るときに、いまの中身と比べて差分 (add・remove) を作る。
+ * 送った中身 (時刻・番組名・局名・ジャンル・種類の組) は `digest` にまとめて持ち、変わったら送り直す。
+ * 終わった放送の行は、送る条件から外れたら hub に送らずに消す (終わった放送の数は、終わったあとの操作で減らさない)
  */
 export const rankingSent = sqliteTable(
   "ranking_sent",
@@ -1055,6 +1055,11 @@ export const rankingSent = sqliteTable(
     event_id: integer("event_id").notNull(),
     /** 番組の始まり (unix ms) */
     start_at: integer("start_at").notNull(),
+    /**
+     * 番組の終わり (unix ms)。過ぎたら、送る条件から外れても `remove` を送らない。列を足す前の行は 0 で、
+     * 始まりを終わりの代わりにする (前のバージョンは始まった番組を控えから消していた)。送った中身の形も変わったので、次の送信で送り直して書く
+     */
+    end_at: integer("end_at").notNull().default(0),
     /** 送った中身の SHA-256 (`ranking.ts` の `digest`) */
     digest: text("digest").notNull(),
   },

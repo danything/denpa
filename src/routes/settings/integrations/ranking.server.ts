@@ -4,7 +4,7 @@ import { tokenRefusal } from "#lib/server/auth.js";
 import { join, leave, rankingState } from "#lib/server/ranking.js";
 
 export function load() {
-  /** 予約数ランキングに参加しているか (世帯の設定。`server/ranking.ts`) と、最後に送った時刻 */
+  /** 番組ランキングに参加しているか (世帯の設定。`server/ranking.ts`) と、最後に送った時刻 */
   return { ranking: rankingState() };
 }
 
