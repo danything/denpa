@@ -28,6 +28,7 @@
  */
 
 import { B24CaptionDecoder, isManagement } from "@danything/arib/b24caption";
+import { concatBytes } from "@danything/arib/bytes";
 import {
   CAPTION_TEXT_VERSION,
   type CaptionLanguage,
@@ -71,7 +72,8 @@ export function worthLogging(line: string): boolean {
  *
  * - `-c:s copy` … 字幕の PES の中身をそのまま (`S_ARIBSUB`)。デコードするのは denpa (`CaptionText`)
  * - `matroska` … **時刻をコマと一緒に運ぶコンテナ**。塊の上限を最小にして、
- *   1 枚ごとに書き出させる (溜められるとそのぶん遅れる)
+ *   1 枚ごとに書き出させる (溜められるとそのぶん遅れる)。それでも 1 枚は次の字幕のパケットが来るまで書き出されないので、
+ *   入力に中身の無い字幕を足して押し出す (`CaptionFlush`)
  *
  * @param from ffmpeg に渡す局の指定 (`0:p:<局>` か `0`)
  * @param track その局の中で何本目の字幕を出すか。**言語が複数ある放送**では
@@ -146,6 +148,195 @@ export function rawCaptionArgs(
     "pipe:0",
     ...captionOutput(from, track, out),
   ];
+}
+
+/**
+ * 字幕を押し出すために足す PES の中身。データ識別 (0x80)・私的ストリーム識別 (0xFF)・PES データパケットヘッダ長 (0) だけで、
+ * データグループを持たない。ffmpeg はこれをそのまま写すので、Matroska のコマの中身もこの 3 バイトになる (`CaptionText` が読み捨てる)
+ */
+export const FLUSH_DATA = Uint8Array.from([0x80, 0xff, 0xf0]);
+
+/** 字幕を押し出すために足したコマか (`FLUSH_DATA`) */
+export const isFlush = (data: Uint8Array): boolean =>
+  data.length === FLUSH_DATA.length &&
+  data.every((byte, i) => byte === FLUSH_DATA[i]);
+
+/** 字幕の PES の stream_id (private_stream_1) */
+const PRIVATE_STREAM_1 = 0xbd;
+
+/**
+ * **字幕を写させる ffmpeg への入力に、字幕の PES が 1 つ届き終わるたびに、中身の無い字幕の PES を 1 つ足す。**
+ *
+ * ffmpeg の Matroska のマルチプレクサは、パケットを塊 (Cluster) に入れておき、**次のパケットが来たときに**塊を閉じて書き出す
+ * (libavformat/matroskaenc.c の `mkv_write_packet`。`-cluster_size_limit 1` でも同じ)。字幕の出口に入るのは字幕だけなので、
+ * 1 枚は次の字幕のパケットが届くまで ffmpeg の中に残る。偽の放送で 1 秒ごとに字幕を流すと、どの 1 枚も次の 1 枚と同時に
+ * 書き出され、1 秒遅れた (`-f data` で出させると届いてすぐ出る)。字幕の間が空く番組では、そのぶん遅れる。
+ * 映像を変換せずに送る経路 (テレビのアプリは 0.25 秒しか溜めない) では、映像より後に届いて遅れて出る。
+ *
+ * ffmpeg の CLI には、パケットごとに塊を閉じさせる指定が無い。そこで、字幕の PES が終わったところ (PES_packet_length で数える) に、
+ * 同じ PID・同じ PTS で中身の無い字幕の PES (`FLUSH_DATA`) を 1 つ足し、ffmpeg に次のパケットを渡す。
+ * 足した 1 枚は次の字幕まで ffmpeg の中に残るが、読み捨てるので困らない。
+ *
+ * - 足すのは PMT で字幕と分かる PID (`captionPids`) だけ。字幕の PMT を読むまでは何もしない
+ * - 足すパケットは適応フィールドの不連続の印を立て、連続性カウンタをその PID の直前のものと同じにする。
+ *   ffmpeg は印のあるパケットでは数え直し、次の元のパケットを続きとして読むので、元のパケットは書き換えない
+ * - PTS の無い PES と、長さが 0 (長さを書いていない) の PES には足さない
+ * - 塊は TS のパケットの切れ目で割れていなくてよい。届いたバイトはその場で返し、足すのはパケットが終わったところ
+ * - 足すものが無い塊は、渡されたものをそのまま返す (新しく作らない)
+ */
+export class CaptionFlush {
+  private readonly pmt: PmtWatch<number[]>;
+  /** 読みかけのパケット (前の塊の末尾)。`filled` バイトまで入っている */
+  private readonly partial = new Uint8Array(PACKET_SIZE);
+  private filled = 0;
+  /** 字幕の PID ごとの、読みかけの PES (残りのバイト数と PTS) */
+  private readonly open = new Map<number, { rest: number; pts: number }>();
+
+  /** @param program 放送が名乗っている番号。その局の PMT から字幕の PID を読む */
+  constructor(program: number) {
+    this.pmt = new PmtWatch(program, captionPids);
+  }
+
+  feed(chunk: Uint8Array): Uint8Array {
+    /** 足すパケットと、塊の中で足す位置 (その位置のバイトの前) */
+    const inserts: [number, Uint8Array][] = [];
+    let at = 0;
+    while (at < chunk.length) {
+      if (this.filled === 0) {
+        // パケットの先頭から読む。同期バイトでなければ 1 バイトずつ進める (ffmpeg も同期バイトを探し直す)
+        if (chunk[at] !== SYNC_BYTE) {
+          at++;
+          continue;
+        }
+        if (chunk.length - at >= PACKET_SIZE) {
+          const added = this.packet(chunk.subarray(at, at + PACKET_SIZE));
+          at += PACKET_SIZE;
+          if (added !== null) inserts.push([at, added]);
+          continue;
+        }
+      }
+      const take = Math.min(PACKET_SIZE - this.filled, chunk.length - at);
+      this.partial.set(chunk.subarray(at, at + take), this.filled);
+      this.filled += take;
+      at += take;
+      if (this.filled < PACKET_SIZE) break;
+      this.filled = 0;
+      const added = this.packet(this.partial);
+      if (added !== null) inserts.push([at, added]);
+    }
+    if (inserts.length === 0) return chunk;
+    const parts: Uint8Array[] = [];
+    let from = 0;
+    for (const [to, added] of inserts) {
+      parts.push(chunk.subarray(from, to), added);
+      from = to;
+    }
+    parts.push(chunk.subarray(from));
+    return concatBytes(parts);
+  }
+
+  /** パケットを 1 つ読む。字幕の PES がここで終わったら、足すパケットを返す */
+  private packet(packet: Uint8Array): Uint8Array | null {
+    this.pmt.feedPacket(packet);
+    const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+    const pids = this.pmt.value;
+    if (pids === null || !pids.includes(pid)) return null;
+    const control = (packet[3]! >> 4) & 0x03;
+    // 中身の無いパケット (適応フィールドだけ) は PES を進めない
+    if ((control & 0x01) === 0) return null;
+    const start = control & 0x02 ? 5 + packet[4]! : 4;
+    if (start >= PACKET_SIZE) return null;
+    const payload = packet.subarray(start);
+    if ((packet[1]! & 0x40) !== 0) {
+      this.open.delete(pid);
+      const begun = pesStart(payload);
+      if (begun === null) return null;
+      this.open.set(pid, {
+        rest: begun.length - payload.length,
+        pts: begun.pts,
+      });
+    } else {
+      const reading = this.open.get(pid);
+      if (reading === undefined) return null;
+      reading.rest -= payload.length;
+    }
+    const reading = this.open.get(pid)!;
+    if (reading.rest > 0) return null;
+    this.open.delete(pid);
+    return flushPacket(pid, packet[3]! & 0x0f, reading.pts);
+  }
+}
+
+/** TS のパケットの大きさと同期バイト */
+const PACKET_SIZE = 188;
+const SYNC_BYTE = 0x47;
+
+/** PMT にある字幕の ES の PID (`captionStreams` と同じ数え方) */
+function captionPids(section: Uint8Array): number[] {
+  const pids: number[] = [];
+  for (const [type, pid, info] of pmtStreams(section)) {
+    if (type !== STREAM_PRIVATE_DATA) continue;
+    const tag = componentTagOf(info);
+    if (tag !== null && isCaptionTag(tag)) pids.push(pid);
+  }
+  return pids;
+}
+
+/**
+ * PES の先頭を読む。字幕の PES (private_stream_1) で、長さと PTS が書いてあれば、PES ぜんたいの長さ (先頭の 6 バイトを含む) と PTS。
+ * そうでなければ null (足さない)
+ */
+function pesStart(payload: Uint8Array): { length: number; pts: number } | null {
+  if (payload.length < 14) return null;
+  if (payload[0] !== 0 || payload[1] !== 0 || payload[2] !== 1) return null;
+  if (payload[3] !== PRIVATE_STREAM_1) return null;
+  const length = (payload[4]! << 8) | payload[5]!;
+  if (length === 0) return null;
+  if ((payload[7]! & 0x80) === 0) return null;
+  const p = payload.subarray(9, 14);
+  const pts =
+    ((p[0]! >> 1) & 0x07) * 2 ** 30 +
+    ((p[1]! << 7) | (p[2]! >> 1)) * 2 ** 15 +
+    ((p[3]! << 7) | (p[4]! >> 1));
+  return { length: length + 6, pts };
+}
+
+/**
+ * 字幕を押し出すために足すパケット。PES (`FLUSH_DATA`) を 1 つ、適応フィールドで詰めて 188 バイトにする。
+ * 不連続の印を立て、連続性カウンタは直前のパケットと同じ `counter` にする (`CaptionFlush` の説明)
+ */
+function flushPacket(pid: number, counter: number, pts: number): Uint8Array {
+  const header = [
+    0x80,
+    0x80,
+    5,
+    0x21 | ((Math.floor(pts / 2 ** 30) & 0x07) << 1),
+    Math.floor(pts / 2 ** 22) & 0xff,
+    ((Math.floor(pts / 2 ** 15) & 0x7f) << 1) | 1,
+    Math.floor(pts / 2 ** 7) & 0xff,
+    ((pts & 0x7f) << 1) | 1,
+  ];
+  const length = header.length + FLUSH_DATA.length;
+  const pes = [
+    0x00,
+    0x00,
+    0x01,
+    PRIVATE_STREAM_1,
+    length >> 8,
+    length & 0xff,
+    ...header,
+    ...FLUSH_DATA,
+  ];
+  const packet = new Uint8Array(PACKET_SIZE).fill(0xff);
+  packet[0] = SYNC_BYTE;
+  packet[1] = 0x40 | ((pid >> 8) & 0x1f);
+  packet[2] = pid & 0xff;
+  packet[3] = 0x30 | counter;
+  // 適応フィールドの長さ (この 1 バイトを除く)。フラグは不連続の印だけ、残りは 0xFF で詰める
+  packet[4] = PACKET_SIZE - 5 - pes.length;
+  packet[5] = 0x80;
+  packet.set(pes, PACKET_SIZE - pes.length);
+  return packet;
 }
 
 /**
@@ -444,11 +635,13 @@ export class CaptionText {
 
   /**
    * 出すもの (言語ごとに 0 か 1 枚)。字幕管理データ・送り直し・待ちだけのコマは何も出さない。
+   * 字幕を押し出すために足したコマ (`CaptionFlush`) は読み捨てる。
    * **読めないコマは捨てて続ける。** 例外を送出すると、受けている側 (ライブの字幕 API) ごと止まる
    */
   feed(frame: MkvFrame): CaptionShown[] {
     const out: CaptionShown[] = [];
     this.languagesChanged = false;
+    if (isFlush(frame.data)) return out;
     if (isManagement(frame.data)) this.management = frame.data;
     for (const [language, decoder] of this.decoders) {
       const page = this.decode(decoder, frame.data);
