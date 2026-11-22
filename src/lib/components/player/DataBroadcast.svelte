@@ -12,6 +12,15 @@
     if (on && press?.() === true) return;
     set(!on);
   }
+
+  /**
+   * 映像を置く場所 (`onvideo`)。**枠に対する割合** (0〜1。左上が 0)。`"hidden"` は映像を隠す (Hybridcast のアプリが求めた)。
+   * null は枠いっぱいに戻す (小窓をやめた・閉じた)
+   */
+  export type VideoPlace =
+    | { left: number; top: number; width: number; height: number }
+    | "hidden"
+    | null;
 </script>
 
 <script lang="ts">
@@ -61,8 +70,22 @@
     receive?: boolean;
     /** いま映している局。変わったら作り直す (エンジンは一度に一つの放送しか持たない) */
     channel: string | null;
-    /** 映像がある入れ物。**小窓へ寄せるのはこちら** (`placeVideo`) */
-    media: HTMLElement | null;
+    /** 映像がある入れ物。**小窓へ寄せるのはこちら** (`placeVideo`)。映像がページの外にあるとき (`onvideo`) は渡さない */
+    media?: HTMLElement | null;
+    /**
+     * 映像の場所を知らせる先 (`VideoPlace`)。**映像がページの外にあるとき** (テレビのアプリが WebView の下に映す。`/embed/data`) に渡す。
+     * 渡すと `media` は使わず、場所が変わったときにここへ知らせる
+     */
+    onvideo?: ((place: VideoPlace) => void) | null;
+    /** キーボードのキーを window から受けるか。**埋め込みのページは受けない** (キーはテレビのアプリがメッセージで渡す。`key`) */
+    windowKeys?: boolean;
+    /**
+     * キーを押した・離したことを渡す関数 (bind で受け取る。AribKeyCode)。開いている間だけ入る (`press` と同じ)。
+     * Hybridcast のアプリを開いていればアプリへ渡す
+     */
+    key?: ((code: number, down: boolean) => void) | null;
+    /** エンジンを読み込めなかったときに呼ぶ (`data-load.ts` の `loadEngine`)。閉じて開き直すと読み込み直す */
+    onfailed?: (() => void) | null;
     /** 通知を受け取る関数を預ける。`null` を渡すと外れる */
     listen: (handler: ((message: ResponseMessage) => void) | null) => void;
     /**
@@ -124,7 +147,11 @@
     on,
     receive = false,
     channel,
-    media,
+    media = null,
+    onvideo = null,
+    windowKeys = true,
+    key: keyOut = $bindable(null),
+    onfailed = null,
     listen,
     press = $bindable(null),
     pressD = $bindable(null),
@@ -460,53 +487,80 @@
   }
 
   /**
+   * 映像を置く場所を枠に対する割合で出す (`VideoPlace`)。Hybridcast のアプリを開いている間はアプリが指定した場所
+   * (1920x1080 の座標。枠いっぱいに伸ばしてある)、BML を出している間は映像の object の場所。どちらでもなければ null
+   */
+  function videoPlace(want: boolean): VideoPlace {
+    if (running !== null) {
+      if (appVideo === "full") return null;
+      if (appVideo === "hidden") return "hidden";
+      return {
+        left: appVideo.left / VIEWPORT.width,
+        top: appVideo.top / VIEWPORT.height,
+        width: appVideo.width / VIEWPORT.width,
+        height: appVideo.height / VIEWPORT.height,
+      };
+    }
+    if (!want || videoRect === null || plane === null) return null;
+    // 面の中の場所を、枠の中の割合に (面は縦横比を保って枠の真ん中に置いてある。`fit`)
+    const box = host?.getBoundingClientRect() ?? { width: 1, height: 1 };
+    const area = planeArea(box, plane);
+    const left = box.width > 0 ? area.left / box.width : 0;
+    const top = box.height > 0 ? area.top / box.height : 0;
+    const sx =
+      box.width > 0 ? area.width / box.width / plane.width : 1 / plane.width;
+    const sy =
+      box.height > 0
+        ? area.height / box.height / plane.height
+        : 1 / plane.height;
+    return {
+      left: left + videoRect.left * sx,
+      top: top + videoRect.top * sy,
+      width: videoRect.width * sx,
+      height: videoRect.height * sy,
+    };
+  }
+
+  /** 最後に `onvideo` へ知らせた場所 (JSON)。まだなら null */
+  let toldVideo: string | null = null;
+
+  /**
    * 映像の入れ物を、BML の映像の object の場所へ style で寄せる (映像そのものは動かさない)。字幕の canvas は
-   * 入れ物の中なので一緒に縮む。隠れたら元の style に戻す
+   * 入れ物の中なので一緒に縮む。隠れたら元の style に戻す。映像がページの外にあるときは場所を知らせるだけ (`onvideo`)
    */
   function placeVideo(want: boolean): void {
+    const where = videoPlace(want);
+    if (onvideo !== null) {
+      // 同じ場所を何度も知らせない (`fit` は枠の大きさが変わるたびに呼ぶ)
+      const said = JSON.stringify(where);
+      if (said === toldVideo) return;
+      toldVideo = said;
+      onvideo(where);
+      return;
+    }
     if (media === null) return;
     const share = (n: number): string => `${n * 100}%`;
-    // Hybridcast のアプリを開いている間は、アプリが指定した場所 (1920x1080 の座標。枠いっぱいに伸ばしてある)
-    if (running !== null && appVideo !== "full") {
+    if (where !== null) {
       mediaStyle ??= media.style.cssText;
+      // 字幕を操作バーの上へ持ち上げない印 (`PlayerStage`。小窓の中は操作バーと重ならない)
       media.dataset["bmlWindow"] = "";
-      if (appVideo === "hidden") {
+      if (where === "hidden") {
         media.style.opacity = "0";
         return;
       }
       media.style.opacity = "";
-      /*
-       * **アプリの上に出す。** テレビは映像を放送の object の場所に描く。アプリは枠の周りを塗る
-       * (NHK は枠を黒、画面を灰色) ので、下に敷いたままだと隠れる。操作バーの影よりは下 (`--dp-z-stage-window`)
-       */
-      media.style.zIndex = "var(--dp-z-stage-window)";
+      if (running !== null) {
+        /*
+         * **アプリの上に出す。** テレビは映像を放送の object の場所に描く。アプリは枠の周りを塗る
+         * (NHK は枠を黒、画面を灰色) ので、下に敷いたままだと隠れる。操作バーの影よりは下 (`--dp-z-stage-window`)
+         */
+        media.style.zIndex = "var(--dp-z-stage-window)";
+      }
       media.style.inset = "auto";
-      media.style.left = share(appVideo.left / VIEWPORT.width);
-      media.style.top = share(appVideo.top / VIEWPORT.height);
-      media.style.width = share(appVideo.width / VIEWPORT.width);
-      media.style.height = share(appVideo.height / VIEWPORT.height);
-      return;
-    }
-    if (running === null && want && videoRect !== null && plane !== null) {
-      mediaStyle ??= media.style.cssText;
-      // 字幕を操作バーの上へ持ち上げない印 (`PlayerStage`。小窓の中は操作バーと重ならない)
-      media.dataset["bmlWindow"] = "";
-      // 面の中の場所を、枠の中の割合に (面は縦横比を保って枠の真ん中に置いてある。`fit`)
-      const box = host?.getBoundingClientRect() ?? { width: 1, height: 1 };
-      const area = planeArea(box, plane);
-      const left = box.width > 0 ? area.left / box.width : 0;
-      const top = box.height > 0 ? area.top / box.height : 0;
-      const sx =
-        box.width > 0 ? area.width / box.width / plane.width : 1 / plane.width;
-      const sy =
-        box.height > 0
-          ? area.height / box.height / plane.height
-          : 1 / plane.height;
-      media.style.inset = "auto";
-      media.style.left = share(left + videoRect.left * sx);
-      media.style.top = share(top + videoRect.top * sy);
-      media.style.width = share(videoRect.width * sx);
-      media.style.height = share(videoRect.height * sy);
+      media.style.left = share(where.left);
+      media.style.top = share(where.top);
+      media.style.width = share(where.width);
+      media.style.height = share(where.height);
       return;
     }
     if (mediaStyle !== null) {
@@ -620,7 +674,7 @@
 
   /** 開く。映像は動かさず、エンジンが知らせる場所へ寄せる (`placeVideo`) */
   async function open(): Promise<void> {
-    if (host === null || media === null) return;
+    if (host === null || !placed) return;
     const mine = ++generation;
     loading = true;
     failed = false;
@@ -632,12 +686,13 @@
     if (loadedEngine === null) {
       loading = false;
       failed = true;
+      onfailed?.();
       return;
     }
     const { createBml, aribKey, visibleFrom } = loadedEngine;
     toAribKey = aribKey;
     nvramVisible = visibleFrom;
-    if (host === null || media === null) return;
+    if (host === null || !placed) return;
     const into = makeMount(host);
     // 出す操作は文書にとっての d の 1 押し。受け付ける文書が出てきたら届ける (`knock`)。受信しているだけなら届けない
     dueD = on;
@@ -729,6 +784,7 @@
     // 指のリモコンにも同じ関数を渡す。受信しているだけなら、開くまで渡さない (`opened`)
     if (on) {
       press = tap;
+      keyOut = send;
       pressD = pressData;
     }
   }
@@ -747,6 +803,7 @@
     dueD = true;
     taps = 0;
     press = tap;
+    keyOut = send;
     pressD = pressData;
     engine.open();
     // 文書はもう組み上がっていることがある。次の文書 (`loaded`) を待たずに届けに行く
@@ -766,6 +823,7 @@
     running = null;
     appVideo = "full";
     press = null;
+    keyOut = null;
     pressD = null;
     dueD = false;
     taps = 0;
@@ -784,6 +842,7 @@
     program = null;
     listen(null);
     press = null;
+    keyOut = null;
     pressD = null;
     loading = false;
     failed = false;
@@ -815,11 +874,12 @@
     mount = null;
   }
 
+  /** 映像の場所を渡す先があるか (入れ物か `onvideo`)。無ければ作らない */
+  const placed = $derived(media !== null || onvideo !== null);
+
   $effect(() => {
     const want =
-      (on || receive) && media !== null && host !== null
-        ? (channel ?? "")
-        : null;
+      (on || receive) && placed && host !== null ? (channel ?? "") : null;
     if (want === shown) return;
     close();
     shown = want;
@@ -858,6 +918,12 @@
     if (code === -1) return;
     event.preventDefault();
     // Hybridcast のアプリを開いている間はアプリへ (iframe に入力が向いていれば、こちらには来ない)
+    send(code, down);
+  }
+
+  /** キーを押した・離した (AribKeyCode)。Hybridcast のアプリを開いている間はアプリへ。開くまでは渡さない (`key`) */
+  function send(code: number, down: boolean): void {
+    if (engine === null || !on) return;
     if (running !== null) appPress?.(code, down);
     else engine.key(code, down);
   }
@@ -866,8 +932,12 @@
 </script>
 
 <svelte:window
-  onkeydown={(event) => key(event, true)}
-  onkeyup={(event) => key(event, false)}
+  onkeydown={(event) => {
+    if (windowKeys) key(event, true);
+  }}
+  onkeyup={(event) => {
+    if (windowKeys) key(event, false);
+  }}
   onblur={() => engine?.releaseKeys()}
 />
 

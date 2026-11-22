@@ -91,7 +91,7 @@ test.describe("PWA", () => {
   test("二段組の画面はページごとスクロールしない", async ({ page }) => {
     for (const width of [768, 915, 1280]) {
       await page.setViewportSize({ width, height: 700 });
-      // 一覧の画面 (録画・ルール) はページごと巻く (`+layout.svelte` の `FILLED`)。自分で巻き取るのは番組表と映像の画面
+      // 一覧の画面 (録画・ルール) はページごと巻く (`Shell.svelte` の `FILLED`)。自分で巻き取るのは番組表と映像の画面
       for (const path of ["/guide"]) {
         await goto(page, path);
         const doc = await page.evaluate(() => {
@@ -126,7 +126,7 @@ test.describe("PWA", () => {
    * `html` に高さを与えて `%` で受け継げば、言い当てる余地が無い
    */
   test("土台の高さに画面単位を使わない", async () => {
-    const layout = await readFile("src/routes/+layout.svelte", "utf8");
+    const layout = await readFile("src/routes/Shell.svelte", "utf8");
     // 土台は `<div class="shell">`。高さの決まりはそのファイルの <style> の `.shell` にある
     expect(
       /<div\s+class="shell\b/.test(layout),
@@ -481,7 +481,7 @@ test.describe("PWA", () => {
   });
 
   /*
-   * 番組表は窓ではなく表の箱 (`.grid-box`) の中で巻くので、箱の縦の巻き取りで操作の 1 行を出し入れする (`+layout.svelte`)。
+   * 番組表は窓ではなく表の箱 (`.grid-box`) の中で巻くので、箱の縦の巻き取りで操作の 1 行を出し入れする (`Shell.svelte`)。
    * 隠すのは低い画面 (横向きのスマホ) だけで、下のタブはいつも出ている。高い画面 (縦向き) では 1 行も隠さない。
    * 表は画面の下の端まで伸びていて、出し入れで箱の大きさも巻いた位置も変わらない (中身が跳ねない)。
    * 開いたときの箱の位置は時刻で変わるので、時計を止めて 2 通り見る。昼は「いま」への位置合わせで巻かれていて、

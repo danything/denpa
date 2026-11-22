@@ -328,7 +328,7 @@ export function load({ url, cookies }) {
   const room = capacity();
 
   return {
-    /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
+    /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `Shell.svelte`) */
     channelNotice: channelNotice(
       serviceCounts(),
       listedServices(),

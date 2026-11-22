@@ -3,7 +3,7 @@
  *
  * - 日付は**サーバの時計**で決める。開いたときに `GET /api/season` で一度だけサーバの時刻をもらい、端末の時計とのずれを覚える。
  *   もらえるまで (と、もらえなかったとき) は何も出さない
- * - 出すかどうか (世帯の設定 `seasonal`) は `+layout.svelte` が load の値で入れる。設定を切り替えると次の load で替わる
+ * - 出すかどうか (世帯の設定 `seasonal`) は `Shell.svelte` が load の値で入れる。設定を切り替えると次の load で替わる
  */
 import { resolve } from "$app/paths";
 

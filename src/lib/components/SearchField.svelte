@@ -15,8 +15,8 @@
 
   /**
    * **サイト全体の検索の欄** (`/search?q=`)。広い形はヘッダーの真ん中、スマホの形は検索の画面の上の 1 行に
-   * 同じものを置く (`+layout.svelte`)。`/` と Ctrl/⌘+K で入る (`data-search-field`。見えている欄を
-   * `+layout.svelte` が探す)。
+   * 同じものを置く (`Shell.svelte`)。`/` と Ctrl/⌘+K で入る (`data-search-field`。見えている欄を
+   * `Shell.svelte` が探す)。
    *
    * **打つそばから候補か結果を出す。** 結果の画面の外 (`live` でない) では、少し待ってから `/api/search` に問い合わせ、
    * 欄の下に節ごとの候補を出す (combobox と listbox の形。↑/↓ で選び、Enter で開く。何も選んでいなければ

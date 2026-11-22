@@ -355,7 +355,7 @@
   const selecting = $derived(selected.size > 0);
   /**
    * 選ぶ形の 1 行 (広い形の `.c-select-wide`) がヘッダーの下に貼り付く間は、ヘッダーも近い影にそろえる
-   * (`+layout.svelte` の `html[data-page-bar]`。docs/design.md の「浮かせ方」)
+   * (`Shell.svelte` の `html[data-page-bar]`。docs/design.md の「浮かせ方」)
    */
   $effect(() => {
     if (!selecting) return;

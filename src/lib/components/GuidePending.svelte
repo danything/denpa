@@ -18,7 +18,7 @@
   /**
    * 番組表 (`/guide`) へ移っている途中なら、その行き先。着いた・取り消されたら null。
    * 終わりは `navigating.complete` で見る (`navigating` は取り消された遷移で真のまま残るので当てにしない。
-   * [reload.svelte.ts](../reload.svelte.ts))。土台 (`+layout.svelte`) と番組表が使う
+   * [reload.svelte.ts](../reload.svelte.ts))。土台 (`Shell.svelte`) と番組表が使う
    */
   export function guideNavigation(): { readonly to: URL | null } {
     let to = $state<URL | null>(null);
@@ -54,7 +54,7 @@
   import { SERVICE_TYPE_LABEL } from "#lib/format.js";
 
   /**
-   * **ほかの画面から番組表へ移る途中の姿** (`+layout.svelte` の `pending`)。
+   * **ほかの画面から番組表へ移る途中の姿** (`Shell.svelte` の `pending`)。
    *
    * 番組表の外枠 (日付の並びなど) もサーバから届くので、届くまでは前の画面がそのまま
    * 残り、着いた瞬間に番組表へ飛んでいた (読み直したときは外枠と骨組みが先に出る)。

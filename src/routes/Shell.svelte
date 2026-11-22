@@ -1,0 +1,1387 @@
+<script lang="ts">
+  import { afterNavigate, goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
+  import { navigating, page } from "$app/state";
+  import { onMount, type Snippet } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import CalendarDays from "~icons/lucide/calendar-days";
+  import Camera from "~icons/lucide/camera";
+  import Ellipsis from "~icons/lucide/ellipsis";
+  import ExternalLink from "~icons/lucide/external-link";
+  import ListChecks from "~icons/lucide/list-checks";
+  import ListVideo from "~icons/lucide/list-video";
+  import Search from "~icons/lucide/search";
+  import Settings from "~icons/lucide/settings";
+  import Tv from "~icons/lucide/tv";
+
+  import type { ChannelNotice as NoticeKind } from "#lib/channel-notice.js";
+  import ChannelAlert from "#lib/components/ChannelAlert.svelte";
+  import ChannelAlertDot from "#lib/components/ChannelAlertDot.svelte";
+  import ChannelNotice from "#lib/components/ChannelNotice.svelte";
+  import FreshDot from "#lib/components/FreshDot.svelte";
+  import GuidePending, {
+    guideNavigation,
+  } from "#lib/components/GuidePending.svelte";
+  import Measure from "#lib/components/Measure.svelte";
+  import Menu from "#lib/components/Menu.svelte";
+  import NewYearMark from "#lib/components/NewYearMark.svelte";
+  import Icon from "#lib/components/player/Icon.svelte";
+  import SearchField from "#lib/components/SearchField.svelte";
+  import YearChip from "#lib/components/YearChip.svelte";
+  import YearDialog from "#lib/components/YearDialog.svelte";
+  import { denpaFontCssUrl } from "#lib/font.js";
+  import { markLite } from "#lib/lite.js";
+  import { measure } from "#lib/measure.svelte.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
+  import { startOffline } from "#lib/offline.svelte.js";
+  import { TABLETOP } from "#lib/phone-form.js";
+  import { followNavigation, reload } from "#lib/reload.svelte.js";
+  import { decorated, yearChip, type YearSummary } from "#lib/season.js";
+  import { season } from "#lib/season.svelte.js";
+  import { groupLabel } from "#lib/settings-sections.js";
+  import { theme } from "#lib/theme.svelte.js";
+
+  import type { LayoutData } from "./$types";
+
+  /**
+   * **画面の土台** (ヘッダー・本文・下のタブ・通知・季節の演出)。ルートのレイアウト (`+layout.svelte`) が、
+   * 埋め込みのページ (`/embed/…`) のほかでこれを置く。埋め込みのページは土台を持たない (テレビのアプリが映像の上に重ねる)
+   */
+  interface Props {
+    children: Snippet;
+    data: LayoutData;
+  }
+
+  let { children, data }: Props = $props();
+
+  // オフライン視聴の控えを読み、オンラインに戻ったら outbox を流す (docs/offline.md)
+  onMount(() => startOffline());
+
+  // ソフトウェアで描いている端末では、動き続けるものを止める (`<html data-lite>`。開いた直後の一瞬だけは回る)
+  onMount(markLite);
+
+  /*
+   * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると、スマホの形で下のタブの上に出す操作の 1 行を隠し、上へ戻すと出す。**下のタブはいつも出す** (ほかの画面へ移るのに上へ戻させない。#2911)。
+   * 広い形のヘッダーは引っ込めない (検索の欄を見せたまま)。JS は印 (`data-retract`) を付け外しするだけで、動きは CSS。
+   * **見るのはウィンドウのスクロールと、自分でスクロールする箱 (`data-retract-scroll`。番組表の表の箱) の縦のスクロール。**
+   * 箱を横に送ったときは出し入れしない (縦の量が変わらない。局を探しているところで、読み進めているのではない)。
+   * **`#` で飛んだスクロール (設定の節へ飛ぶ) は読んでいるのではないので引っ込めない。** 飛んだ先の節の操作の 1 行を見せたままにする。
+   * 自分でスクロールし始めたら (ホイール・指・キー) いつもどおり。
+   * **箱は、自分でその中をスクロールしたときだけ見る** (最後に触った所 `touched` が箱の中)。開いた直後の「いま」への位置合わせや、
+   * 操作の 1 行の時刻へ送るボタンで動いたぶんは読んでいるのではないので、押したボタンごと隠さない。
+   * 画面を移ったら出し、触った所も忘れる (番組表から移るとウィンドウはスクロールされないので、隠れたまま残っていた)
+   * **隠すのはウィンドウの高さが `SHORT` に満たないときだけ** (横向きのスマホ)。それより高い画面では、出し入れの動きのほうが空く 1 行より気になる (#2911)
+   */
+  let retract = $state(false);
+  /** 操作の 1 行を隠してよいウィンドウの高さ。横向きのスマホ (430px 前後まで) を含み、縦向きのスマホ (640px から) を含まない */
+  const SHORT = "(max-height: 599.98px)";
+  let jumped = false;
+  let touched: EventTarget | null = null;
+  afterNavigate(({ to }) => {
+    jumped = Boolean(to?.url.hash);
+    retract = false;
+    touched = null;
+  });
+  onMount(() => {
+    let prev = scrollY;
+    const short = matchMedia(SHORT);
+    const onShort = () => {
+      if (!short.matches) retract = false;
+    };
+    short.addEventListener("change", onShort);
+    const follow = (y: number, before: number) => {
+      if (!short.matches || y < 48) retract = false;
+      else if (y - before > 4) retract = true;
+      else if (before - y > 4) retract = false;
+    };
+    const onScroll = () => {
+      const y = scrollY;
+      if (jumped) retract = false;
+      else follow(y, prev);
+      prev = y;
+    };
+    const boxes = new WeakMap<Element, number>();
+    const onBoxScroll = ({ target }: Event) => {
+      if (!(target instanceof Element)) return;
+      if (!target.hasAttribute("data-retract-scroll")) return;
+      const y = target.scrollTop;
+      // 初めてスクロールした箱は先頭 (0) から動いた。今の位置と比べると、先頭から一度に大きく送った分を見落とす
+      const before = boxes.get(target) ?? 0;
+      boxes.set(target, y);
+      if (touched instanceof Node && target.contains(touched))
+        follow(y, before);
+    };
+    const own = (event: Event) => {
+      jumped = false;
+      touched = event.target;
+    };
+    /*
+     * ページの中の `#` へのリンクは afterNavigate が来ない (SvelteKit はブラウザの既定の動きに任せる) ので、押した所で見る。
+     * 押す前の pointerdown・keydown で外れた印を、スクロールし始める前 (click の既定の動きの前) に付け直す
+     */
+    const onClick = ({ target }: MouseEvent) => {
+      if (!(target instanceof Element)) return;
+      const link = target.closest("a[href]");
+      if (link instanceof HTMLAnchorElement && link.hash !== "") jumped = true;
+    };
+    const OWN = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    addEventListener("scroll", onScroll, { passive: true });
+    // 箱のスクロールは上へ伝わらないので、捕まえる側で受ける
+    document.addEventListener("scroll", onBoxScroll, {
+      capture: true,
+      passive: true,
+    });
+    for (const type of OWN) addEventListener(type, own, { passive: true });
+    addEventListener("click", onClick, { capture: true });
+    return () => {
+      short.removeEventListener("change", onShort);
+      removeEventListener("scroll", onScroll);
+      document.removeEventListener("scroll", onBoxScroll, { capture: true });
+      for (const type of OWN) removeEventListener(type, own);
+      removeEventListener("click", onClick, { capture: true });
+    };
+  });
+
+  /*
+   * 画面遷移の終わりを自前で見る。**`navigating` は取り消された遷移で真のまま残る**
+   * ので、あれを当てにすると「遷移が終わったら流す」が永久に来ない (理由は
+   * [reload.svelte.ts](../lib/reload.svelte.ts))。土台は画面遷移で作り直されない
+   * ので、ここで 1 度追い始めれば全部の遷移を見ていられる
+   */
+  followNavigation();
+
+  /**
+   * **ほかの画面から番組表へ移る途中は、押したらすぐ番組表の外枠と骨組みに替える** (`GuidePending`)。
+   *
+   * 番組表は外枠もサーバから届く (日付の並びなど)。届くまで前の画面が残り、着いた瞬間に
+   * 番組表へ飛んでいた。読み直したときは外枠と骨組みが先に出るので、それに揃える。
+   * 前の画面は消さずに隠すだけ。遷移が取り消されても、そのまま戻せる。
+   * 着いたら `page.route.id` が番組表になるので、その時点で外す
+   */
+  const toGuide = guideNavigation();
+  const pending = $derived(page.route.id !== "/guide" ? toGuide.to : null);
+
+  /**
+   * **遷移が長引いているときだけ、上端に細いバーを出す。**
+   *
+   * リンクを押してから次の画面のデータが届くまで、画面は何も変わらない。
+   * 番組表やルールのように読むものが多い画面では、それが「止まった」に見えて
+   * いた (押した指の先に返事が無い)。
+   *
+   * 150ms 待ってから出す。速い遷移でまで出すと、押すたびに光ってちらつく。
+   * 消すのは `navigating.complete` の解決/拒否で。`navigating` が null に戻るのを待つと、
+   * 取り消された遷移 (読み直しに追い越されたもの) で**永久に出たまま**になる
+   * ([reload.svelte.ts](../lib/reload.svelte.ts) と同じ落とし穴)
+   */
+  let slow = $state(false);
+  $effect(() => {
+    const done = navigating.complete;
+    if (done === null) {
+      slow = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      slow = true;
+    }, 150);
+    let stale = false;
+    const settle = (): void => {
+      clearTimeout(timer);
+      // 次の遷移がもう始まっているなら、消すのはあちらに任せる
+      if (stale) return;
+      slow = false;
+    };
+    void done.then(settle, settle);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  });
+
+  /**
+   * **その端末の高さを読む表示** (`Measure`)。入口は `?measure` (1 回だけ) と設定画面のオン/オフ
+   * (覚える。PWA にはアドレスバーが無いので URL だけでは入れない)
+   */
+  $effect(() => {
+    measure.start(page.url);
+  });
+
+  // ハイドレーション完了の目印。SSR 直後の DOM に入力しても、ハイドレーションで
+  // 値が書き戻されて消える。E2E はこの印が付くのを待ってから操作する
+  let hydrated = $state(false);
+
+  /**
+   * テーマは `theme.svelte.ts` が持ち、選ぶのは設定の「この端末」。ここは画面に出たら読み始めるだけ
+   * (どの画面から開いても、端末の設定の変化に付いていく)
+   */
+  onMount(() => {
+    hydrated = true;
+    return theme.start();
+  });
+
+  /**
+   * **戻ってきたら読み直す。** PWA は閉じても捨てられず、次に開くと前に閉じたときの一覧がそのまま出る。
+   * 通知 (`liveUpdates`) の接続も凍っている間に切られ、その間に起きたことは流れてこない (溜めていない)。
+   *
+   * 見るのは `visibilitychange`・`pageshow` (履歴で戻ったとき。**取っておいた画面のときだけ**。素の読み込みでも来る)・
+   * `resume` (Android の Chrome が凍らせた画面を戻すとき。`visibilitychange` が付いてくるとは決まっていない)。
+   * `resume` は実機でしか確かめられない (CDP の `setWebLifecycleState` では `freeze` も `resume` も飛んでこない)
+   */
+  onMount(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      reload();
+    };
+    const restored = (event: PageTransitionEvent) => {
+      if (event.persisted) refresh();
+    };
+    document.addEventListener("visibilitychange", refresh);
+    document.addEventListener("resume", refresh);
+    window.addEventListener("pageshow", restored);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      document.removeEventListener("resume", refresh);
+      window.removeEventListener("pageshow", restored);
+    };
+  });
+
+  /**
+   * **スマホの形 (1000px 未満とテーブルトップ。`#lib/phone-form.ts`) では、ナビを画面の下のタブにする** (下の `.tabbar`)。
+   *
+   * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
+   * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
+   * 420px)。上のハンバーガーにたたんでいた頃は、画面を移るたびに 2 回押していた。
+   * 640px 未満はよく開く 3 画面と検索をタブに、残り (切り抜き・ルール・設定) は「その他」の `Menu` (popover) に。
+   * 640px からは切り抜き・ルール・設定もタブに出し (`wide`。7 つ並ぶ。並びはヘッダーと同じ)、「その他」は出さない (中身が無くなる)。
+   * テーマは設定の「この端末」、新しいバージョンは設定の「バージョンと環境」にあり、設定の入口に点で知らせる (下の `fresh`)。
+   * ヘッダー (検索の欄) を隠すので、検索はタブから入る。
+   *
+   * `/offline` (端末に保存した録画) はここに並べない。ふだんの操作は一覧で
+   * 全部できて、あの画面が要るのは**電波が無いとき**だけ。そのときは
+   * サービスワーカーがあそこへ移す (service-worker/index.ts)
+   */
+  const tabs = [
+    { href: "/", label: "録画", icon: ListVideo, wide: false },
+    { href: "/guide", label: "番組表", icon: CalendarDays, wide: false },
+    { href: "/live", label: "ライブ", icon: Tv, wide: false },
+    { href: "/clips", label: "切り抜き", icon: Camera, wide: true },
+    { href: "/rules", label: "ルール", icon: ListChecks, wide: true },
+    { href: "/search", label: "検索", icon: Search, wide: false },
+    { href: "/settings", label: "設定", icon: Settings, wide: true },
+  ] as const;
+  /** ヘッダーのリンク。検索はヘッダーでは欄にするので並べない */
+  const links = tabs.filter((tab) => tab.href !== "/search");
+  /** テストの目印 (`nav-*`・`tab-*`) に使う画面の名前 */
+  const slug = (href: string) => (href === "/" ? "home" : href.slice(1));
+
+  /**
+   * **本文へ移動** (キーボードで Tab を押したときだけ左上に出る)。押したら本文 (`main`) に焦点を移し、次の Tab が本文の最初から始まる。
+   * 行き先を URL の `#` で渡さないのは、設定の画面が `#` を節の名前として読むため
+   */
+  let main = $state<HTMLElement>();
+  function skipToMain(event: MouseEvent): void {
+    event.preventDefault();
+    main?.focus();
+  }
+
+  /**
+   * いま開いている画面のナビの行き先。**設定はグループごとに経路が分かれている** (`/settings/reception` など) ので、
+   * その下も「設定」に数える。録画 (`/`) は先頭が全部に合うので、ぴったりのときだけ
+   */
+  const here = $derived.by(() => {
+    const route = page.route.id ?? "";
+    return (
+      tabs.find(
+        (l) =>
+          route === l.href ||
+          (l.href !== "/" && route.startsWith(`${l.href}/`)),
+      )?.href ?? null
+    );
+  });
+
+  /** 検索の欄に入れておく言葉。結果の画面 (`/search?q=`) ではその言葉のまま直して送れる */
+  const query = $derived(
+    here === "/search" ? (page.url.searchParams.get("q") ?? "").trim() : "",
+  );
+
+  /**
+   * ページ名はナビと同じものを使う。タブに出す。設定はグループの名前を前に付ける。
+   * 検索は言葉を前に付ける (履歴に並んだときに、どの検索だったか分かる)
+   */
+  const title = $derived.by(() => {
+    const label = tabs.find((l) => l.href === here)?.label ?? "denpa";
+    const section =
+      here === "/settings"
+        ? groupLabel(page.route.id?.split("/")[2] ?? "")
+        : query === ""
+          ? null
+          : query;
+    return `${section === null ? "" : `${section} - `}${label} - denpa`;
+  });
+
+  /**
+   * 画面ぴったりの高さにして、中の箱だけをスクロールさせる画面。
+   *
+   * - **ライブ**・**観る**・**追っかけ** … 映像を見ながら読む・選ぶものなので、**ページごと
+   *   動くと映像が画面から出ていく**。右の列だけが動けばよい。追っかけを入れ忘れていた頃は、
+   *   右の列の地が画面の途中 (中身の高さ) で切れていた
+   * - **番組表** … 表が画面の残りをぜんぶ使う。`max-height: 75vh` で切っていた頃は、
+   *   **画面の下に余白があるのに表のほうが先に終わって**いた
+   *
+   * **一覧の画面 (録画・切り抜き・ルール・設定・検索) は入れない** (ページごとスクロールする。docs/design.md の「浮かせ方」)。
+   * ウィンドウごとスクロールすれば、戻ったときに見ていた位置へも帰る。
+   * 二段組にしない幅 (1000px 未満。横にしたスマホは下) では画面ぴったりにせず (下の style)、映像の画面もページごとスクロールする (番組表は外枠が自分で高さを採る。`app.css` の `.guide-frame`)。
+   *
+   * **二段組にする幅は全画面で 1000px** (ヘッダーを出す幅と同じ。`#lib/phone-form.ts`)。画面ごとに違えていた頃は、
+   * **同じ幅なのに画面によって形が変わって**いた (縦の iPad 820px で、
+   * ライブは 1 段・観る画面は 2 段。映像の大きさが 772px と 436px)。ここと、
+   * 各画面の 1000px の `@media` がその 1 本の線で、**片方だけ動かさない**。横にしたスマホは 768px から画面ぴったりにする (下の style)
+   */
+  /** 映像の画面 (ライブ・観る画面・追っかけ)。画面ぴったりにする・下のタブを出す・テーブルトップで下の段に浮かべる、のどれもこの一覧で決める */
+  const VIDEO_ROUTES = ["/live", "/watch/[id]", "/chase/[id]"];
+  const FILLED = [...VIDEO_ROUTES, "/guide"];
+  // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと先頭が付く (server/paths.ts)
+  const fill = $derived(
+    pending !== null || FILLED.includes(page.route.id ?? ""),
+  );
+  const video = $derived(VIDEO_ROUTES.includes(page.route.id ?? ""));
+  /**
+   * 番組表 (と、番組表へ移る途中の骨組み) を出しているか。ヘッダーの影を番組表に合わせるのに使う (下の `.shell.guide`)。
+   * **`:has(.guide-frame)` で CSS に探させない。** 土台に `:has()` があると、中に `<button>` を足すたびに
+   * ブラウザが土台から下のボタンや入力欄をまとめて計算し直す (Pico の `[role="group"]:has(button:focus)` などと重なるため)。
+   * 番組表はマスを数百個ずつ足すので、そのたびに全部のマスのボタンが計算し直しになっていた
+   */
+  const guide = $derived(pending !== null || page.route.id === "/guide");
+
+  /**
+   * 切り抜き・ルール・設定もタブに出している幅か。**下の style の `@media (min-width: 640px)` と同じ線**。
+   * その幅では「その他」を隠すので、印も付けない (隠れたタブに印が付くと、下線がそこへ滑っていく)
+   */
+  const wideTabbar = new MediaQuery("(min-width: 640px)", false);
+  /** 「その他」の中身。640px 未満で隠れるタブ (切り抜き・ルール・設定) */
+  const moreLinks = tabs.filter((tab) => tab.wide);
+  const moreCurrent = $derived(
+    !wideTabbar.current && moreLinks.some((link) => link.href === here),
+  );
+  /**
+   * **新しいバージョンが出ていれば、設定の入口に点を付ける** (中身は設定の「バージョンと環境」。`server/update.ts`)。
+   * 点は未視聴の録画と同じ `.fresh-dot` (まだ見ていないものの印)。付けるのは下のタブの「設定」、640px 未満はそれを入れた
+   * 「その他」とその中の「設定」、広い形はヘッダーの「設定」
+   */
+  const fresh = $derived(data.update !== null);
+  /**
+   * タブを出すのはナビの画面と検索 (設定はその下の節も) と、観る画面・追っかけ。ログインとペアリングには出さない。
+   * **観る画面・追っかけにも出す。** スマホの形ではタブがある画面だけヘッダーを隠すので、出さなかった頃は
+   * この 2 つだけ上にヘッダーが出ていた。どのタブにも印は付けない (ナビの画面ではない)
+   */
+  const showTabbar = $derived(here !== null || video);
+  /**
+   * テーブルトップ (`#lib/phone-form.ts`) の映像の画面 (ライブ・観る画面・追っかけ) では、下のタブは下の段 (舞台の中。黒い地) の下端に浮く。
+   * 右の列と同じく、テーマにかかわらず暗いテーマの色で描く (`PlayerLayout` の `data-theme`)
+   */
+  const tabletop = new MediaQuery(TABLETOP);
+  const stageTabbar = $derived(tabletop.current && video);
+  /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
+  const notice = $derived(
+    (page.data["channelNotice"] ?? null) as NoticeKind | null,
+  );
+  /**
+   * チャンネルのお知らせ (書き換えた・地上波を続けて選局できない)。どの画面にも `+layout.server.ts` が渡す (`server/channel-alert.ts`)。
+   * 広い形はヘッダーの印 (`ChannelAlert`)、スマホの形はヘッダーを隠すので、設定の入口 (下のタブの「設定」、640px 未満は「その他」とその中の「設定」) に同じ印を付ける。
+   * 新しいバージョンの点と重なったら、印のほうを出す (1 つの入口に印は 1 つ)
+   */
+  const alert = $derived(data.channelAlert);
+  let menuOpen = $state(false);
+  /** 行き先を選んだら閉じる。開いたままだと次の画面の先頭が隠れる */
+  $effect(() => {
+    // pathname を読んでおくと、画面が変わるたびにこの効果が動き直す
+    page.url.pathname;
+    menuOpen = false;
+  });
+
+  /**
+   * **どこからでも `/` か Ctrl/⌘+K で検索の欄へ。** 字を打っている最中 (入力欄・テキストエリア・
+   * 選ぶ欄・編集できる所) では取らない。`/` を打てなくなる。見えている欄 (ヘッダーか検索の画面) に入り、
+   * どちらも無ければ (スマホの形でヘッダーを隠しているとき) 検索の画面を開く (開くと欄に入る)
+   */
+  function searchShortcut(event: KeyboardEvent): void {
+    if (event.defaultPrevented || event.isComposing) return;
+    const slash =
+      event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey;
+    const k =
+      event.key.toLowerCase() === "k" &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      !event.shiftKey;
+    if (!slash && !k) return;
+    const target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        target.closest("input, textarea, select") !== null)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const field = [
+      ...document.querySelectorAll<HTMLInputElement>("[data-search-field]"),
+    ].find((input) => input.getClientRects().length > 0);
+    if (field === undefined) {
+      void goto(resolve("search"));
+      return;
+    }
+    field.focus();
+    field.select();
+  }
+
+  /**
+   * **放送の字 (Denpa Font) の `@font-face` をここで読み込む** (使うのは `app.css` の `.broadcast` と字幕)。
+   * バージョン付きの URL は組むときに決まるので、`app.css` には書けない (`#lib/font.ts`)。
+   * この CSS は基本の字と JIS X 0213 で足された漢字の 2 つの woff2 を `unicode-range` で分けて書いてあり、
+   * どちらも使う字が画面に出たときだけダウンロードされる。届くまでは画面の字で出しておく (`swap`)
+   */
+  const fontCss = denpaFontCssUrl();
+
+  /*
+   * **季節の演出** (`#lib/season.ts`。docs/screens.md「季節の演出」)。出すかは世帯の設定 (load の `seasonal`)、日付はサーバの時計。
+   * サーバの時刻は開いたときに 1 回だけもらう (`season.load`)。ロゴの飾りは分ごとに見直す
+   */
+  $effect(() => {
+    season.on = data.seasonal;
+    if (data.seasonal) void season.load();
+  });
+  const seasonClock = minuteClock();
+  const newYearMark = $derived(
+    season.ready && decorated(seasonClock.now + (season.skew ?? 0)),
+  );
+
+  /**
+   * **「denpa の 1 年」** (1 月 1〜7 日。`YearChip` と `YearDialog`)。録画の一覧の上にチップを出し、押すと去年の数のダイアログを開く
+   * (`GET /api/season/year`。開くたびに読み直す)。✕ で閉じると世帯で覚え (`POST /api/season/greeting`)、その年はどの端末にも出さない
+   */
+  const chip = $derived(
+    season.ready
+      ? yearChip(seasonClock.now + (season.skew ?? 0), season.greeted)
+      : null,
+  );
+  let yearShown = $state<YearSummary | "loading" | "failed" | null>(null);
+  async function openYear(counted: number): Promise<void> {
+    yearShown = "loading";
+    const response = await fetch(
+      resolve(`api/season/year?year=${counted}`),
+    ).catch(() => null);
+    const summary =
+      response !== null && response.ok
+        ? ((await response.json().catch(() => null)) as YearSummary | null)
+        : null;
+    if (yearShown !== "loading") return;
+    yearShown = summary ?? "failed";
+  }
+  function dismissYear(year: number): void {
+    season.greeted = year;
+    void fetch(resolve("api/season/greeting"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ year }),
+    }).catch(() => undefined);
+  }
+</script>
+
+<svelte:window onkeydown={searchShortcut} />
+
+<svelte:head>
+  <title>{title}</title>
+  <link rel="stylesheet" href={fontCss} />
+</svelte:head>
+
+<!--
+  **土台の高さは `html` から `%` で受け継ぐ** (`app.css` で `html, body` に
+  高さを与えてある)。単位で言い当てない。`100vh` も `100dvh` も**実機では
+  画面の高さと一致しないことがあった** (PWA で 763.765px 対 708px。差の
+  56px は Chrome for Android のアドレスバーの高さそのもの)。
+
+  `%` なら JS も要らず、**描く前から正しい**。**横にしたスマホ** (915x412 など) **も
+  `.fill` にする** (下の style の 768px) ので、`.fill` のほうも同じ採り方
+-->
+<div
+  class="shell"
+  class:fill
+  class:guide
+  data-root
+  data-retract={retract ? "" : undefined}
+  data-hydrated={hydrated ? "true" : undefined}
+>
+  <a class="skip" href="#main" onclick={skipToMain} data-testid="skip-to-main"
+    >本文へ移動</a
+  >
+  <!--
+    遷移の進み具合 (上の `slow`)。長さの分からない読み込みなので、
+    光が左から右へ走るだけの不確定のバー。ヘッダーの上端に貼る
+  -->
+  {#if slow}
+    <div
+      class="nav-progress"
+      role="progressbar"
+      aria-label="次の画面を読み込んでいます"
+      data-testid="nav-progress"
+    ></div>
+  {/if}
+  <div class="navbar">
+    <div class="brand">
+      <!--
+        アンテナの印 (favicon と同じ形) と名前。印は飾りなので読み上げない (名前で足りる)
+      -->
+      <a class="button ghost logo" href={resolve("")}>
+        <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="6" fill="#1d232a" />
+          <g
+            fill="none"
+            stroke="#7dd3fc"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M11 9a8 8 0 0 0 0 10" />
+            <path d="M21 9a8 8 0 0 1 0 10" />
+            <path d="M7.5 5.5a13 13 0 0 0 0 17" />
+            <path d="M24.5 5.5a13 13 0 0 1 0 17" />
+          </g>
+          <circle cx="16" cy="14" r="2.5" fill="#7dd3fc" />
+          <path d="M16 16.5 13 27h6z" fill="#7dd3fc" />
+        </svg>
+        <!--
+          名前は字ではなく形で描く。BIZ UDPゴシックの欧文は下に伸びる部分がごく短く、
+          「denpa」の p が下で切れて見えた (行の高さを広げても字の形は変わらない)。
+          同じ字 (Bold) の輪郭から作り、p の下だけを伸ばしてある。読み上げには字で渡す
+        -->
+        <svg class="logo-word" viewBox="95 0 7016 2134" aria-hidden="true"
+          ><path
+            d="M1045 692L1045 0L1313 0L1313 1757L1063 1757L1063 1591Q1018 1656 955 1699Q823 1788 650 1788Q376 1788 219 1576Q95 1407 95 1152Q95 941 182 785Q265 635 410 564Q519 510 643 510Q908 510 1045 692ZM1045 1329L1045 924Q899 717 712 717Q539 717 445 872Q375 987 375 1156Q375 1305 429 1408Q518 1579 710 1579Q844 1579 946 1479Q1005 1422 1045 1329ZM2773 1129L2773 1199L1872 1199Q1879 1358 1972 1457Q2084 1574 2257 1574Q2461 1574 2618 1383L2778 1545Q2581 1793 2232 1793Q1946 1793 1771 1610Q1604 1434 1604 1156Q1604 930 1713 763Q1810 615 1972 548Q2083 502 2209 502Q2410 502 2552 614Q2699 728 2750 933Q2773 1026 2773 1129ZM1889 1004L2505 1004Q2497 901 2451 832Q2364 705 2201 705Q2055 705 1961 823Q1903 896 1889 1004ZM3092 543L3350 543L3350 752Q3518 520 3770 520Q3947 520 4064 622Q4196 737 4196 998L4196 1751L3926 1751L3926 1032Q3926 890 3873 814Q3822 741 3701 741Q3577 741 3476 845Q3402 921 3362 1041L3362 1751L3092 1751L3092 543ZM4565 543L4813 543L4813 707Q4979 510 5230 510Q5482 510 5636 678Q5783 837 5783 1106Q5783 1333 5678 1486Q5527 1706 5234 1706Q4968 1706 4833 1524L4833 2134L4565 2134L4565 543ZM4833 957L4833 1292Q4977 1499 5169 1499Q5322 1499 5411 1398Q5503 1294 5503 1103Q5503 930 5426 831Q5338 719 5169 719Q5048 719 4952 795Q4877 854 4833 957ZM6670 973L6777 973L6777 954Q6777 707 6542 707Q6322 707 6146 840L6044 655Q6275 504 6551 504Q6817 504 6948 657Q7039 762 7039 967L7039 1389Q7039 1623 7111 1751L6867 1751Q6824 1668 6810 1561L6803 1561Q6752 1661 6639 1730Q6547 1786 6396 1786Q6217 1786 6100 1681Q5978 1571 5978 1401Q5978 973 6670 973ZM6777 1249L6777 1161L6697 1161Q6463 1161 6346 1221Q6246 1272 6246 1397Q6246 1481 6306 1530Q6363 1577 6454 1577Q6575 1577 6671 1491Q6777 1397 6777 1249Z"
+          /></svg
+        >
+        <span class="visually-hidden">denpa</span>
+        <!-- 正月 (1 月 1〜3 日) の飾り。季節の演出がオフなら出さない (上の `newYearMark`) -->
+        {#if newYearMark}
+          <NewYearMark />
+        {/if}
+      </a>
+      <!--
+        **チャンネルのお知らせの印** (上の `alert`)。乗せるか押すと、文と設定の「チャンネル」へのボタンを印の下に出す
+      -->
+      {#if alert !== null}
+        <ChannelAlert kind={alert.kind} text={alert.text} />
+      {/if}
+      <!--
+        **新しいバージョンが出ている** (server/update.ts が GitHub のリリースと比べる)。
+        押せばリリースのページ。閉じるボタンは無い。上げるか、リリースが消えれば引っ込む。
+        事実なのでバッジにせず控えた字 (docs/design.md の「印の意味」)。外へ出るリンクの印を添えて、押せることを示す
+      -->
+      {#if data.update !== null}
+        <a
+          class="update"
+          href={data.update.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="GitHub のリリースを開く"
+          data-testid="update-available"
+        >
+          {data.update.version} が公開されています
+          <Icon icon={ExternalLink} size="size-3.5" />
+        </a>
+      {/if}
+    </div>
+    <!--
+      **検索の欄はヘッダーの真ん中** (広い形だけ。スマホの形ではヘッダーごと隠し、検索の画面の上の 1 行に同じ欄を置く)。
+      結果の画面でも同じ欄で、探した言葉が入ったまま直して送れる
+    -->
+    <div class="header-search">
+      <SearchField
+        value={query}
+        testid="header-search"
+        live={here === "/search"}
+      />
+    </div>
+    <!--
+      画面へのリンク (広い形だけ。スマホの形では画面の下のタブ `.tabbar` に替わる)。テーマとログアウトは設定の「その他」にある。
+      同じリンクを 2 か所に出すので、data-testid は別にする (`nav-*` と `tab-*`)
+    -->
+    <nav class="actions">
+      <ul class="links">
+        {#each links as link (link.href)}
+          <li>
+            <a
+              href={resolve(link.href)}
+              class="button ghost small"
+              aria-current={here === link.href ? "page" : undefined}
+              data-testid="nav-{slug(link.href)}"
+            >
+              {link.label}
+              {#if fresh && link.href === "/settings"}
+                <FreshDot />
+              {/if}
+            </a>
+          </li>
+        {/each}
+      </ul>
+    </nav>
+  </div>
+
+  <!--
+    **スマホの形の検索の画面だけ、上に検索の欄を出す** (ヘッダーを隠しているので)。ヘッダーと同じ欄
+  -->
+  {#if here === "/search"}
+    <div class="search-bar">
+      <SearchField value={query} testid="search" live />
+    </div>
+  {/if}
+
+  <!--
+    **局が無いときの案内** (録画・番組表・ライブ。`#lib/channel-notice.ts`)。閉じるボタンは無く、
+    元のことが片付けば消える。中身が動いている間に起きたお知らせはここに出さず、ヘッダーの印にたたむ (`ChannelAlert`)。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
+  -->
+  <!-- 「denpa の 1 年」のチップは録画の一覧 (`/`) の上だけ (上の `chip`。数えるのは終わった前の年) -->
+  {#if notice || (chip !== null && here === "/")}
+    <div class="notice-slot">
+      {#if notice}
+        <ChannelNotice kind={notice} />
+      {/if}
+      {#if chip !== null && here === "/"}
+        {@const shown = chip}
+        <YearChip
+          year={shown.counted}
+          onopen={() => void openYear(shown.counted)}
+          ondismiss={() => dismissYear(shown.year)}
+        />
+      {/if}
+    </div>
+  {/if}
+
+  <main id="main" tabindex="-1" bind:this={main}>
+    {#if pending !== null}
+      <GuidePending url={pending} />
+    {/if}
+    <!-- 番組表へ移る途中は前の画面を隠すだけ (上の `pending`)。`display: contents` なので並びは変わらない -->
+    <div class="route" class:hidden={pending !== null}>
+      {@render children()}
+    </div>
+  </main>
+
+  <!-- スマホの形で出す下のタブ (上の `tabs`・`showTabbar`)。映像の全画面のときは隠す (下の style) -->
+  {#if showTabbar}
+    <nav
+      class="tabbar"
+      aria-label="主な画面"
+      data-testid="tabbar"
+      data-theme={stageTabbar ? "dark" : undefined}
+    >
+      {#each tabs as tab (tab.href)}
+        <a
+          href={resolve(tab.href)}
+          class="tab"
+          class:wide={tab.wide}
+          aria-current={here === tab.href && (!tab.wide || wideTabbar.current)
+            ? "page"
+            : undefined}
+          data-testid="tab-{slug(tab.href)}"
+        >
+          <Icon icon={tab.icon} size="size-5" />
+          <span
+            >{tab.label}{#if tab.href === "/settings"}{@render entryMark()}{/if}</span
+          >
+        </a>
+      {/each}
+      <!--
+        「その他」(640px 未満だけ。下の style)。ほかのメニューと同じ `Menu` (popover)。リンクを並べるだけなので `nav`。
+        スマホの形ではヘッダーを隠すが、ヘッダーにあったもの (新しいバージョン・チャンネルのお知らせ) は設定の中にあるので、ここは画面へのリンクと設定の入口の印だけ
+      -->
+      <div class="tab-more" data-testid="nav-menu">
+        <Menu
+          bind:open={menuOpen}
+          side="top"
+          align="end"
+          nav
+          class="tab-more-menu"
+        >
+          {#snippet trigger(props)}
+            <button
+              {...props}
+              type="button"
+              class="tab"
+              aria-current={moreCurrent ? "page" : undefined}
+            >
+              <Icon icon={Ellipsis} size="size-5" />
+              <span>その他{@render entryMark()}</span>
+            </button>
+          {/snippet}
+          <ul class="more-list">
+            {#each moreLinks as link (link.href)}
+              <li>
+                <a
+                  href={resolve(link.href)}
+                  class="menu-item"
+                  aria-current={here === link.href ? "page" : undefined}
+                >
+                  {link.label}
+                  {#if link.href === "/settings"}
+                    {@render entryMark()}
+                  {/if}
+                </a>
+              </li>
+            {/each}
+          </ul>
+        </Menu>
+      </div>
+    </nav>
+  {/if}
+</div>
+
+{#if measure.on}
+  <Measure />
+{/if}
+
+<!-- 「denpa の 1 年」のダイアログ (上の `yearShown`) -->
+<YearDialog summary={yearShown} onclose={() => (yearShown = null)} />
+
+<!-- 設定の入口に付ける点 (上の `fresh`)。読み上げには何の点かを渡す -->
+<!--
+  スマホの形で設定の入口に付ける印 (上の `alert`・`fresh`)。チャンネルのお知らせがあればその印 (ヘッダーの印と同じ形を小さく)、
+  無くて新しいバージョンがあれば点
+-->
+{#snippet entryMark()}
+  {#if alert !== null}
+    <ChannelAlertDot kind={alert.kind} />
+  {:else if fresh}
+    <FreshDot />
+  {/if}
+{/snippet}
+
+<style>
+  /* 土台。高さは html から % で受け継ぐ (上のコメント) */
+  .shell {
+    /*
+     * **余白の幅は `--dp-gutter` で配る。** スマホの縦で映像だけ端まで広げる (`PlayerStage`) のに、
+     * 同じ幅だけ外へはみ出させるため。中身の外 (スマホの形の検索の欄) も同じ幅で、本文と字の始まりがそろう
+     */
+    --dp-gutter: 1rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    background: var(--dp-bg);
+  }
+  /*
+   * 遷移中のバー。**ヘッダーより上に重ねる** (z-index)。色は主の色で、
+   * 光の筋を左から右へ流す。筋を流すのは動かしてよい端末だけで、動きを減らす設定と
+   * ソフトウェアで描いている端末 (`data-lite`) では色だけ出す (`app.css` の最後と同じ決まり)
+   */
+  .nav-progress {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: var(--dp-z-modal);
+    height: 3px;
+    overflow: hidden;
+    background: var(--pico-primary-background);
+  }
+  /* 光の筋は幅 40% の層を transform で横に流す (背景の位置は動かさない。docs/design.md 7 章) */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(:root:not([data-lite])) .nav-progress {
+      background: color-mix(
+        in srgb,
+        var(--pico-primary-background) 30%,
+        transparent
+      );
+    }
+    :global(:root:not([data-lite])) .nav-progress::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 40%;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--pico-primary-background) 40%,
+        var(--pico-primary-background) 60%,
+        transparent 100%
+      );
+      animation: nav-progress var(--dp-shine) ease-in-out infinite;
+    }
+  }
+  @keyframes nav-progress {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(250%);
+    }
+  }
+  /* 浮いたヘッダーの面と影 (広い形の `.navbar`。スクロール量で進む) */
+  @keyframes header-float {
+    from {
+      background: transparent;
+      box-shadow: none;
+    }
+    to {
+      background: var(--dp-float);
+      box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
+    }
+  }
+  /*
+   * ヘッダー。スマホの形で下のタブの無い画面 (ログイン・ペアリング) では地の上の 1 行 (高さちょうど 3.5rem)。
+   * 広い形では操作の層として中身の上に浮かせる (下の「広い形」)
+   */
+  .navbar {
+    position: sticky;
+    top: 0;
+    z-index: var(--dp-z-header);
+    display: flex;
+    align-items: center;
+    gap: var(--dp-space-2);
+    min-height: 3.5rem;
+    padding: var(--dp-space-2) var(--dp-space-3);
+    background: var(--dp-bg);
+  }
+  .brand {
+    display: flex;
+    flex: 1 1 0%;
+    align-items: center;
+    gap: var(--dp-space-2);
+  }
+  /* 印と名前。名前は 1.25rem の字と同じ大きさで描く (d の頂から p の下まで) */
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dp-space-2);
+    padding-block: var(--dp-space-1);
+  }
+  .logo-mark {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+  }
+  .logo-word {
+    height: 1.3rem;
+    flex-shrink: 0;
+    fill: currentColor;
+  }
+  /* 新しいバージョンのお知らせ。控えた小さな字で、指を乗せたら本文の色 */
+  .update {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dp-space-1);
+    color: var(--dp-muted);
+    font-size: var(--dp-text-xs);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .update:hover {
+    color: var(--dp-fg);
+  }
+  .actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--dp-space-1);
+  }
+  /* 印と余白を消す。Pico のナビの部品は読まないので、文章の決まり (`ul li` の印・下の余白) がそのまま当たる */
+  ul.links li,
+  ul.more-list li {
+    margin: 0;
+    list-style: none;
+  }
+  ul.links {
+    display: none;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0 var(--dp-space-1);
+  }
+  /* ヘッダーのリンクは高さ 40px。小さい字のままでも指で外さない */
+  .actions :global(a.button) {
+    min-height: 2.5rem;
+  }
+  /*
+   * **いまの画面は主の色の太字と下線で示す** (選んでいるものはどこも線と字。塗らない)。ほかの画面へのリンクは本文の字のまま (薄くしない)。
+   * 薄い灰色の地を敷くだけだった頃は、ヘッダーの地とほとんど見分けが付かず「どの画面にいるのか」が読めなかった。
+   * 下線は押す場所の内側に引くので、ヘッダーの高さは変わらない。線と、画面を移ると前の画面の下線から横に滑る動きは
+   * タブと同じもの (`app.css` の「滑る印」)
+   */
+  ul.links a.button {
+    position: relative;
+    font-size: var(--dp-text-sm);
+  }
+  ul.links a.button.ghost[aria-current="page"] {
+    --pico-color: var(--dp-primary-text);
+    font-weight: var(--dp-weight-bold);
+  }
+  /*
+   * ヘッダーの検索の欄 (中身は `SearchField`)。広い形では「印と名前 ｜ 欄 ｜ ナビ」の 3 列にして、
+   * 欄を真ん中に置く (両脇の列を同じ幅に分けるので、欄は画面の中央に来る)。欄は 36rem まで広がり、
+   * 中くらいの幅ではナビより先に縮む
+   */
+  .header-search {
+    display: none;
+    min-width: 0;
+  }
+  /*
+   * スマホの形で検索の画面の上に出す欄。ヘッダーと同じ地で、スクロールしても上に残る (下の線も引かない)。
+   * 指で使う幅なので `/` の印は出さない
+   */
+  .search-bar :global(kbd) {
+    display: none;
+  }
+  .search-bar {
+    position: sticky;
+    top: 0;
+    z-index: var(--dp-z-header);
+    padding: calc(var(--dp-space-2) + env(safe-area-inset-top)) var(--dp-gutter)
+      var(--dp-space-2);
+    background: var(--dp-bg);
+  }
+  /*
+   * 画面の下のタブ (スマホの形だけ)。**操作の層** (docs/design.md)。タブは幅を等分する。
+   * タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の位置に使う (タブに被らないように)。
+   * 左右と下から離したカプセルにして、中身の上に浮かせる。
+   * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。下を流れる中身がうっすら見える。
+   * 角は入れ子でそろえる: 外 (2rem) = 中のタブ (1.75rem) + 間の余白 (0.25rem)
+   */
+  .tabbar {
+    position: fixed;
+    inset: auto var(--dp-dock-inset)
+      calc(var(--dp-space-2) + env(safe-area-inset-bottom));
+    z-index: var(--dp-z-header);
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    padding: var(--dp-space-1);
+    border: 0;
+    border-radius: 2rem;
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+  }
+  /*
+   * テーマを切り替えた下のタブ (テーブルトップの映像の画面。上の `stageTabbar`) は、字の色もそのテーマから取り直す。
+   * `--dp-fg` は `<html>` で決まった値を受け継ぐので、箱のテーマで書き換わる Pico の `--pico-color` を使う
+   */
+  .tabbar[data-theme] {
+    color: var(--pico-color);
+  }
+  .tabbar .tab,
+  .tab-more :global(.tab) {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.125rem;
+    width: 100%;
+    min-height: 3.5rem;
+    margin: 0;
+    padding: var(--dp-space-1) 0;
+    border: 0;
+    border-radius: 1.75rem;
+    background: transparent;
+    box-shadow: none;
+    color: inherit;
+    font-size: var(--dp-text-2xs);
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  /*
+   * 指を乗せたら地をごく薄く (ほかの選ぶものと同じ。選んでいる印とは混ぜない)。
+   * 乗せられる端末だけ。指で押すと押したタブに乗せたままと見なされ、選んだタブに地が残る
+   */
+  @media (hover: hover) {
+    .tabbar .tab:hover,
+    .tab-more :global(.tab:is(:hover, [aria-expanded="true"])) {
+      background: var(--dp-hover-soft);
+    }
+  }
+  .tabbar .tab[aria-current="page"],
+  .tab-more :global(.tab[aria-current="page"]) {
+    color: var(--dp-primary-text);
+    font-weight: var(--dp-weight-bold);
+  }
+  .tab-more {
+    display: flex;
+  }
+  /*
+   * いまの画面の印。**ほかの横の並び (タブ・ヘッダーのナビ) と同じく、字の幅いっぱいの下線** (主の色、2px)。字 (タブの名前) のすぐ下に引く。
+   * 画面を移ると前のタブの下線から横に滑る (`app.css` の「滑る印」と同じ作り)。アンカーに対応していないブラウザは、いまのタブの字の下に線を引く (滑らない)
+   */
+  .tabbar .tab > span,
+  .tab-more :global(.tab > span) {
+    position: relative;
+  }
+  .tabbar .tab[aria-current="page"] > span::after,
+  .tab-more :global(.tab[aria-current="page"] > span)::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: calc(100% + 0.125rem);
+    height: var(--dp-mark);
+    border-radius: var(--dp-mark);
+    background: var(--pico-primary);
+    pointer-events: none;
+  }
+  @supports (anchor-name: --a) {
+    .tabbar {
+      anchor-scope: --tab;
+    }
+    /*
+     * アンカーはタブの字に付ける。「その他」のボタンには `Menu` がメニューを置くためのアンカー名を style で付けているが、
+     * 中の字はそれと別なので、ほかのタブと同じに書ける
+     */
+    .tabbar .tab[aria-current="page"] > span,
+    .tab-more :global(.tab[aria-current="page"] > span) {
+      anchor-name: --tab;
+    }
+    .tabbar .tab[aria-current="page"] > span::after,
+    .tab-more :global(.tab[aria-current="page"] > span)::after {
+      content: none;
+    }
+    .tabbar:has(:global(.tab[aria-current="page"]))::before {
+      content: "";
+      position: absolute;
+      position-anchor: --tab;
+      left: anchor(left);
+      right: anchor(right);
+      top: calc(anchor(bottom) + 0.125rem);
+      height: var(--dp-mark);
+      border-radius: var(--dp-mark);
+      background: var(--pico-primary);
+      pointer-events: none;
+      transition:
+        left var(--dp-duration-move) var(--dp-ease-spring),
+        right var(--dp-duration-move) var(--dp-ease-spring);
+    }
+  }
+  /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */
+  :global(.tab-more-menu) {
+    width: 12rem;
+  }
+  /*
+   * 「その他」はいちばん右のタブなので、右端を揃えると画面の端に貼り付く。下のタブの右端 (`--dp-dock-inset`) にそろえる
+   * (anchor positioning の無いブラウザは `Menu` が JS で置き、端から 4px 空ける)
+   */
+  :global(.menu.tab-more-menu) {
+    margin-inline-end: var(--dp-dock-inset);
+  }
+  /* 縦に積む。いまの画面の項目は `app.css` の `.menu-item` (左の縦線と主の色の太字) */
+  .more-list {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin: 0;
+    padding: 0;
+  }
+  /*
+   * 設定の入口の点 (`FreshDot.svelte`)。タブは字の右上に浮かせ、字の真ん中寄せと下線の幅は変えない。
+   * ヘッダーのリンクも字の右上 (押す場所の内側)。メニューの項目は字の後ろに並べる
+   */
+  .tabbar :global(.tab > span > .fresh-dot) {
+    position: absolute;
+    top: -0.125rem;
+    left: calc(100% + 0.125rem);
+  }
+  ul.links :global(.fresh-dot) {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.3rem;
+  }
+  /* チャンネルのお知らせの印 (上の `entryMark`。`app.css` の `.alert-dot`)。タブは点と同じく字の右上 */
+  .tabbar :global(.tab > span > .alert-dot) {
+    position: absolute;
+    top: -0.5rem;
+    left: 100%;
+    margin: 0;
+  }
+  /* 「その他」の項目は字の後ろに並べる。字との間は点と同じ (`.menu-item` の gap) */
+  .more-list :global(.alert-dot) {
+    margin: 0;
+  }
+  /* スマホの形 (`#lib/phone-form.ts`。1000px 未満とテーブルトップ。`<html data-phone>`) */
+  :global(:where(html[data-phone]:has(.tabbar))) {
+    --dp-tabbar: calc(4rem + 0.5rem + env(safe-area-inset-bottom));
+  }
+  /*
+   * 下のタブがある画面ではヘッダーを隠す。リンクはタブと重なり、新しいバージョンのお知らせは設定の中にもあるので、
+   * 上の 3.5rem はまるごと中身に回す。上の安全域 (ノッチ) のぶんは本文の余白で避ける
+   */
+  :global(:where(html[data-phone])) .shell:has(.tabbar) .navbar {
+    display: none;
+  }
+  /*
+   * **スマホの形では先頭に 0.5rem 空ける。** ヘッダーが無いので、上の安全域のすぐ下から中身を始める。
+   * 1rem では、録画の画面で日付の見出しの余白まで重なって、上に大きな空きが出ていた
+   */
+  :global(:where(html[data-phone])) .shell:has(.tabbar) main {
+    --dp-page-top: 0.5rem;
+  }
+  /*
+   * **映像の画面 (`PlayerLayout`) は空けない。** 映像を上の安全域のすぐ下から始める。0.5rem 空けると、
+   * 縦のスマホで映像の上に暗い隙間が見えた (映像は左右も端まで出している。`PlayerStage`)
+   */
+  :global(:where(html[data-phone]))
+    .shell:has(.tabbar)
+    main:has(:global([data-player-layout])) {
+    --dp-page-top: 0rem;
+  }
+  :global(:where(html[data-phone])) .shell:has(.tabbar) main {
+    padding-top: calc(var(--dp-page-top) + env(safe-area-inset-top));
+    padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
+  }
+  /* 「denpa の 1 年」のチップは本文と同じ左の余白から (`YearChip`) */
+  .notice-slot :global(.year-chip) {
+    margin: var(--dp-space-2) var(--dp-gutter) 0;
+  }
+  /* 局が無いときの案内がいちばん上に来る。安全域はそちらで避け、本文は普通の余白に戻す */
+  :global(:where(html[data-phone])) .shell:has(.tabbar) .notice-slot {
+    padding-top: env(safe-area-inset-top);
+  }
+  :global(:where(html[data-phone])) .shell:has(.tabbar):has(.notice-slot) main,
+  :global(:where(html[data-phone])) .shell:has(.tabbar):has(.search-bar) main {
+    padding-top: var(--dp-page-top);
+  }
+  /*
+   * **640px からは切り抜き・ルール・設定もタブに出し、「その他」を隠す** (7 つ。上の `wideTabbar` と同じ線)。字はアイコンの下のまま一段大きく。
+   * 640px 未満は 5 つ (録画・番組表・ライブ・検索・その他)。タブの幅はどれも等分 (`.tabbar` の `grid-auto-flow`)
+   */
+  .tabbar .tab.wide {
+    display: none;
+  }
+  @media (min-width: 640px) {
+    .tabbar .tab.wide {
+      display: flex;
+    }
+    .tab-more {
+      display: none;
+    }
+    .tabbar .tab,
+    .tab-more :global(.tab) {
+      font-size: var(--dp-text-xs);
+    }
+  }
+  /* 映像の全画面のあいだは隠す (映像だけにする) */
+  :global(html[data-stage-fullscreen]) :is(.tabbar, .notice-slot) {
+    display: none;
+  }
+  /*
+   * 本文へ移動のリンク。ふだんは画面の上の外に置き、焦点が来たときだけ左上に操作の層のカプセルで出す。
+   * ヘッダー・遷移中のバーより上に重ねる
+   */
+  .skip {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + var(--dp-space-2));
+    left: calc(env(safe-area-inset-left) + var(--dp-space-3));
+    z-index: var(--dp-z-skip);
+    padding: var(--dp-space-2) var(--dp-space-4);
+    border-radius: var(--dp-radius-full);
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    color: var(--dp-fg);
+    font-weight: var(--dp-weight-bold);
+    text-decoration: none;
+    translate: 0 calc(-100% - 2rem);
+  }
+  .skip:focus {
+    translate: none;
+  }
+  /* 本文そのものはボタンではないので、焦点を移しても枠を描かない (次の Tab から本文の中を回る) */
+  main:focus {
+    outline: none;
+  }
+  /* 画面の中身を包むだけ (箱を作らない)。番組表へ移る途中だけ隠す (`pending`) */
+  .route {
+    display: contents;
+  }
+  .route.hidden {
+    display: none;
+  }
+  main {
+    /*
+     * **ヘッダーから最初の中身までは `--dp-page-top`。** 地の上のヘッダーなら 0 (すぐ下から始める)、
+     * 浮いたヘッダーの画面はそのぶん (`--dp-header-space`。下の「広い形」)。左右と下の余白 (`--dp-gutter`) は
+     * 広い画面で 1.5rem に広がるが、上は広げない。余白の外まで広げる画面 (番組表・観る画面の右の列など) も、
+     * 上はこの値だけ打ち消す
+     */
+    --dp-page-top: 0rem;
+    padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
+  }
+  /* 広い形 (スマホの形でないとき。`#lib/phone-form.ts`) */
+  :global(:where(html:not([data-phone]))) ul.links {
+    display: flex;
+  }
+  /*
+   * **ヘッダーは操作の層** (docs/design.md)。端から 0.5rem / `--dp-bar-inset` 離した角丸の面にして、スクロールすると中身の上に浮かせる (下の `@supports`)。
+   * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。中身はヘッダーの下から始め (`--dp-header-space`)、スクロールすると下を流れる。
+   * 角は入れ子でそろえる: 外 (`--dp-bar-radius` 0.875rem) = 中の欄 (`--dp-radius` 0.5rem) + 間の余白 (`--dp-bar-pad` 0.375rem)
+   *
+   * `--dp-header-bottom` はヘッダーの下端。スクロールしても上に残す操作の 1 行は、ここから `--dp-bar-gap` 離した同じ形の面に乗せて貼り付ける
+   * (`app.css` の `dp-bar-float`)。その 1 行がある間はヘッダーも近い影 (`--navbar-shadow`) にそろえ、遠い影が下の 1 行に掛からないようにする
+   */
+  :global(:where(html:not([data-phone]))) {
+    --dp-header-bottom: 3.75rem;
+    /* 中身の先頭はヘッダーの下端から、操作の 1 行どうしと同じ隙間 (`--dp-bar-gap`) だけ離す */
+    --dp-header-space: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
+    /* 自分でスクロールする画面 (映像・番組表) の箱の先頭。番組表は表をヘッダーの裏まで伸ばし、操作の 1 行の面をヘッダーの下 `--dp-bar-gap` に置く (`app.css` の `.guide-bar`) */
+    --dp-fill-top: 4.25rem;
+  }
+  :global(:where(html:not([data-phone]))) main {
+    --dp-page-top: var(--dp-header-space);
+  }
+  /* ヘッダーの下に操作の 1 行が貼り付いている間 (切り抜きの選ぶ形。印は使う画面が付ける) は、ヘッダーも近い影 */
+  :global(:where(html[data-page-bar]:not([data-phone]))) .navbar {
+    --navbar-shadow: var(--dp-shadow-tight);
+  }
+  /*
+   * **局が無いときの案内の 1 行は、ヘッダーの下から始める。** 広い形のヘッダーは中身の上に浮かせて流れから外している (`position: fixed`) ので、
+   * 流れの先頭に置くとヘッダーの裏に入って重なる。中身と同じくヘッダーの下端から `--dp-bar-gap` 空け、中身は案内のすぐ下から始める。
+   * スクロールすれば中身と一緒にヘッダーの裏を流れる。自分でスクロールする画面 (`.shell.fill`) は箱の上端を空けてあるので、そちらは下の 1000px の所
+   */
+  :global(:where(html:not([data-phone]))) .shell:not(.fill) .notice-slot {
+    margin-top: var(--dp-header-space);
+  }
+  :global(:where(html:not([data-phone])))
+    .shell:not(.fill):has(.notice-slot)
+    main {
+    --dp-page-top: var(--dp-space-2);
+  }
+  :global(:where(html:not([data-phone]))) .navbar {
+    position: fixed;
+    top: 0.5rem;
+    inset-inline: var(--dp-bar-inset);
+    min-height: 3.25rem;
+    padding: var(--dp-bar-pad) var(--dp-bar-pad) var(--dp-bar-pad)
+      var(--dp-space-3);
+    border-radius: var(--dp-bar-radius);
+    background: var(--dp-float);
+    box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
+    display: grid;
+    grid-template-columns:
+      minmax(max-content, 1fr) minmax(8rem, 36rem)
+      minmax(max-content, 1fr);
+    gap: var(--dp-space-4);
+  }
+  /*
+   * **上端では平ら、スクロールすると浮く。** 裏に中身が無いうちは浮かせる理由が無いので、地に馴染ませる
+   * (docs/design.md の「浮かせ方」)。スクロール量に合わせて面と影が出る (`animation-timeline: scroll()`。JS は使わない)。
+   * ページがスクロールしない画面のうち、映像の画面 (ライブ・観る画面・追っかけ) はアニメーションごと外して、いつも平ら (アンビエントの色もそのまま届く)。番組表は表のスクロール量で浮く (下の 1000px から)。
+   * 対応していないブラウザと、動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも浮いた形
+   */
+  @supports (animation-timeline: scroll()) {
+    :global(:where(html:not([data-phone]))) .navbar {
+      background: transparent;
+      box-shadow: none;
+      animation: header-float linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 1.5rem;
+    }
+  }
+  /*
+   * **スクロールできない画面に移ったら平らに戻す。** スクロールできなくなると時間の軸が止まり、Chrome は止まる前の値を残す。
+   * 長いページでスクロールしてから短いページへ移ると、裏に何も無いのに浮いたままになっていた。
+   * 上へ戻せる量が無いとき (上端・スクロールできない画面) はアニメーションごと外す (`scroll-state(scrollable: top)`)。
+   * 番組表はページではなく表のスクロール量で浮くので外さない。この問い合わせに対応していないブラウザは今までどおり
+   */
+  @supports (animation-timeline: scroll()) and (container-type: scroll-state) {
+    :global(:where(html:not([data-phone]))) {
+      container-type: scroll-state;
+    }
+    :global(:where(html:not([data-phone]))) .shell:not(.fill) .navbar {
+      animation-name: none;
+    }
+    @container scroll-state(scrollable: top) {
+      :global(:where(html:not([data-phone]))) .shell:not(.fill) .navbar {
+        animation-name: header-float;
+      }
+    }
+  }
+  :global(:where(html:not([data-phone]))) .header-search {
+    display: block;
+  }
+  :global(:where(html:not([data-phone]))) .actions {
+    justify-self: end;
+  }
+  :global(:where(html:not([data-phone]))) .search-bar {
+    display: none;
+  }
+  :global(:where(html:not([data-phone]))) .tabbar {
+    display: none;
+  }
+  @media (min-width: 768px) {
+    .shell {
+      --dp-gutter: 1.5rem;
+    }
+  }
+  /* 画面ぴったりにするのは二段組の幅 (1000px) から。横にしたスマホは 768px から (映像を画面の高さいっぱいにする。`PlayerLayout`) */
+  @media (min-width: 1000px),
+    (min-width: 768px) and (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+    /*
+     * **位置の基準もここにする** (`position: relative`)。`overflow: hidden` だけでは、中の
+     * `position: absolute` のうち位置を持つ祖先の無いもの (読み上げ用の `.visually-hidden` など) が
+     * 文書を基準に置かれ、この箱で切られずにページの高さを伸ばす。ライブでは局の一覧の下のほう
+     * (一覧の中で隠れている行) の「リモコン」がウィンドウの下に出て、映像の色が付くまで (右の列が
+     * `position: relative` になるまで) の 1 秒ほど、ウィンドウにスクロールバーが出ていた。E2E 20 で毎コマ見る
+     *
+     * **自分でスクロールする画面 (番組表・映像の画面) は、浮いたヘッダーの下から始める** (docs/design.md の「浮かせ方」)。
+     * 箱のスクロールバーがヘッダーの透かしの裏に見えないように。番組表だけは表を上に伸ばし、スクロールバーを隠してヘッダーの裏まで使う (`app.css` の `.guide-frame`)。中では先頭の空き (`--dp-page-top`) を 0 にする
+     */
+    .shell.fill {
+      position: relative;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      padding-top: var(--dp-fill-top, 0px);
+    }
+    .shell.fill main {
+      --dp-page-top: 0rem;
+      min-height: 0;
+      flex: 1 1 0%;
+    }
+    /*
+     * **番組表は表をヘッダーの裏まで伸ばすので、ヘッダーは表のスクロール量で浮かせる** (ウィンドウはスクロールできない)。
+     * 表の箱が名前付きの時間の軸 `--guide` を出し (`guide/+page.svelte`)、ここで外枠まで見えるようにする
+     * (`timeline-scope`)。
+     *
+     * **映像の画面 (ライブ・観る画面・追っかけ) はアニメーションごと外す。** 軸の無い画面に同じアニメーションを残すと、
+     * 軸が止まり、Chrome は止まる前の値を残す。表をスクロールして浮いた番組表からライブへ移ると、裏に何も無いのに浮いたままになっていた
+     */
+    @supports (animation-timeline: scroll()) {
+      .shell.fill {
+        timeline-scope: --guide;
+      }
+      .shell.fill.guide .navbar {
+        animation-timeline: --guide;
+      }
+      .shell.fill:not(.guide) .navbar {
+        animation-name: none;
+      }
+    }
+    /*
+     * 番組表ではヘッダー・操作の 1 行・局名の面が隙間を詰めて重なるように並ぶ。遠い影を落とすと上の影が下の面に掛かって
+     * 段々に見えるので、3 つとも近い影だけにして同じ高さに並べる (`--dp-shadow-tight`)
+     */
+    .shell.fill.guide .navbar {
+      --navbar-shadow: var(--dp-shadow-tight);
+    }
+    /*
+     * **案内の 1 行がある間は、表をヘッダーの裏まで伸ばさない** (広い形)。1 行は箱の上端に置くので、伸ばすとマスが 1 行の上を流れる。
+     * 1 行はほかの画面と同じくヘッダーの下端から `--dp-bar-gap` 空けて置き、操作の 1 行と表はそのすぐ下から始める (`--dp-fill-top` を
+     * ヘッダーの下端にそろえると、操作の 1 行 (`app.css` の `.guide-bar`) はヘッダーの裏へ引き上げない)。
+     * 裏に何も来ないので、ヘッダーは表をスクロールしても平らなまま
+     */
+    :global(:where(html:not([data-phone]))) .shell.fill:has(.notice-slot) {
+      padding-top: var(--dp-header-space);
+    }
+    :global(:where(html:not([data-phone]))) .shell.fill:has(.notice-slot) main {
+      --dp-fill-top: var(--dp-header-bottom);
+    }
+    :global(:where(html:not([data-phone])))
+      .shell.fill:has(.notice-slot)
+      :global(.guide-frame) {
+      --guide-head: 0px;
+    }
+    :global(:where(html:not([data-phone])))
+      .shell.fill.guide:has(.notice-slot)
+      .navbar {
+      animation-name: none;
+    }
+  }
+</style>

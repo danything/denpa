@@ -75,7 +75,7 @@
     posterUrls.clear();
   });
 
-  // 控えが変わったら映し直す。SW の「保存できた」も startOffline (`+layout.svelte` が始める) が受け取って revision に出る
+  // 控えが変わったら映し直す。SW の「保存できた」も startOffline (`Shell.svelte` が始める) が受け取って revision に出る
   $effect(() => {
     offline.revision;
     void load();

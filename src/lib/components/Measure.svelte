@@ -39,7 +39,7 @@
    * `.shell` の実際の姿。
    *
    * **塞いであるはずのものが塞がっていないことがある。** 二段組の画面では
-   * `.shell` (`.shell.fill`、+layout.svelte) に 1000px 以上で `height: 100%; overflow: hidden`
+   * `.shell` (`.shell.fill`、Shell.svelte) に 1000px 以上で `height: 100%; overflow: hidden`
    * が当たっていて、当たっていればページごと動きようがない。**はみ出しが出ているのに当たっている**なら、
    * はみ出させているのは `.shell` の外にいるもの (`position: fixed` は塞ぎを
    * すり抜ける)
@@ -193,7 +193,7 @@
       ) ?? "?";
     /*
      * `.shell` を画面ぴったりにする線。ここを越えているかで、`.shell` に当たる規則が変わる。
-     * 二段組の幅 (1000px) のほか、横にしたスマホも 768px から当たる (+layout.svelte の `@media` と同じ条件)
+     * 二段組の幅 (1000px) のほか、横にしたスマホも 768px から当たる (Shell.svelte の `@media` と同じ条件)
      */
     layout = matchMedia("(min-width: 1000px)").matches
       ? "二段組 (1000px 以上)"

@@ -18,7 +18,7 @@ import { reload } from "./reload.svelte";
  * 古い一覧を見せ続けていた。
  *
  * 見えるようになったら、閉じていれば開き直す。閉じていなければ何もしない軽い判定なので、
- * 毎回確かめる。読み直しそのものは `+layout.svelte` が受け持つ。通知を使っていない画面 (番組表・
+ * 毎回確かめる。読み直しそのものは `Shell.svelte` が受け持つ。通知を使っていない画面 (番組表・
  * ルール) も同じように古いままだった
  *
  * ## 取りこぼしは「繋ぎ直したら 1 回読み直す」で埋める
@@ -107,7 +107,7 @@ export function liveUpdates(
     };
     document.addEventListener("visibilitychange", revive);
     // Android の Chrome は凍らせた画面を `resume` で戻す。凍って戻るだけの
-    // 往復では `visibilitychange` が出ないことがある (`+layout.svelte`)
+    // 往復では `visibilitychange` が出ないことがある (`Shell.svelte`)
     document.addEventListener("resume", revive);
     window.addEventListener("pageshow", revive);
     // 回線が戻ったら、定期チェックの周期を待たずにすぐ
