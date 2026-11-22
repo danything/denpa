@@ -4,7 +4,7 @@ import { error } from "@sveltejs/kit";
 import { askedTrack } from "#lib/arib.js";
 import { parseId } from "#lib/id.js";
 import { parseRung } from "#lib/rungs.js";
-import { liveCaptions } from "#lib/server/live.js";
+import { liveCaptions, sideForm } from "#lib/server/live.js";
 
 /**
  * **ライブの字幕と時計をアプリへ流す** (docs/api.md)。`live` を観ているアプリが、字幕 (文字の配置) と時計 (`clock`) を
@@ -21,9 +21,8 @@ import { liveCaptions } from "#lib/server/live.js";
 export function GET({ params, url }) {
   const serviceId = parseId(params.serviceId);
   if (serviceId === null) error(400, "局 ID が不正です");
-  const form = url.searchParams.get("codec") ?? "raw";
-  if (form !== "raw" && form !== "h264" && form !== "av1" && form !== "hevc")
-    error(400, "codec は raw・h264・av1・hevc のどれかです");
+  const form = sideForm(url.searchParams.get("codec"));
+  if (form === null) error(400, "codec は raw・h264・av1・hevc のどれかです");
   const stream = liveCaptions(
     serviceId,
     parseCaptionLanguage(url.searchParams.get("language")),

@@ -40,6 +40,7 @@ const {
   AUTO_START_KEEP,
   loadRecordedBml,
   recordedAutoStart,
+  recordedData,
   saveRecordedBml,
   withProgramInfo,
 } = await import("./recorded-bml");
@@ -417,5 +418,28 @@ describe("recordedAutoStart", () => {
     // 最初のものはまだ覚えている。2 番目は捨てられていて読み直す
     expect(await recordedAutoStart(first)).toBe(true);
     expect(await recordedAutoStart(second)).toBe(false);
+  });
+});
+
+/** 観る画面とアプリ向けの観方 (`playback` の `data`) が使う、録画のデータ放送の様子 */
+describe("recordedData", () => {
+  test("エンコード済みの隣にサイドカーがあれば、入口の自動起動の指定を返す。無ければ null", async () => {
+    const encoded = join(dir, "data.mkv");
+    writeFileSync(encoded, "");
+    const ts = join(dir, "data.ts");
+    writeFileSync(ts, recorded());
+    const placed = {
+      ...recording(T),
+      library_path: encoded,
+      hevc_path: null,
+      alt_path: null,
+    };
+    expect(await recordedData(placed)).toBeNull();
+    await saveRecordedBml(ts, join(dir, "data.bml.jsonl"), placed, 0);
+    expect(await recordedData(placed)).toEqual({ autoStart: true });
+    // 保存先にまだ置いていない録画は見ない
+    expect(
+      await recordedData({ ...placed, library_path: null } as Recording),
+    ).toBeNull();
   });
 });

@@ -221,3 +221,117 @@ test.describe("信頼するネットワークの外からアクセストーク�
     }
   });
 });
+
+/*
+ * **アプリの WebView の Cookie** (`POST /api/device/web`。docs/auth.md「アプリの WebView の Cookie」)。WebView は `Authorization` を
+ * 付けられないので、アクセストークンと引き換えた Cookie で入る。信頼するネットワークの外から、結んだアクセストークンと同じに通ることを見る。
+ * 前段のふりをして `x-forwarded-for` で接続元を変える (ペアリングを済ませるのは中から、Cookie を使うのは外から)
+ */
+test.describe("アプリの WebView の Cookie", () => {
+  test("アクセストークンと引き換えに受け取り、外からでも通る。Cookie では取り直せず、取り消すと効かない", async ({
+    stack,
+  }) => {
+    const closed = await bootClosed(test.info().workerIndex, stack.root, {
+      TRUSTED_NETWORKS: "10.10.0.0/16",
+      TRUSTED_PROXIES: "127.0.0.1",
+    });
+    const inside = { "x-forwarded-for": "10.10.5.9" };
+    const outside = { "x-forwarded-for": "203.0.113.9" };
+    const json = { "content-type": "application/json" };
+    try {
+      const code = await (
+        await fetch(`${closed.appUrl}/api/device/code`, {
+          method: "POST",
+          headers: { ...outside, ...json },
+          body: JSON.stringify({ name: "WebView のテレビ" }),
+        })
+      ).json();
+      // スマホ役が中からボタンを押す (画面のフォームと同じ POST)
+      const approved = await fetch(
+        `${closed.appUrl}/${code.verificationUriComplete}`,
+        {
+          method: "POST",
+          headers: {
+            ...inside,
+            origin: closed.appUrl,
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ code: code.userCode }),
+        },
+      );
+      expect(approved.status).toBe(200);
+      const { token } = await (
+        await fetch(`${closed.appUrl}/api/device/token`, {
+          method: "POST",
+          headers: { ...outside, ...json },
+          body: JSON.stringify({ deviceCode: code.deviceCode }),
+        })
+      ).json();
+      expect(token).toMatch(/^denpa_/);
+      const bearer = { authorization: `Bearer ${token}` };
+
+      // Bearer が無ければ出さない
+      expect(
+        (
+          await fetch(`${closed.appUrl}/api/device/web`, {
+            method: "POST",
+            headers: { ...outside, ...json },
+          })
+        ).status,
+      ).toBe(401);
+      const issued = await fetch(`${closed.appUrl}/api/device/web`, {
+        method: "POST",
+        headers: { ...outside, ...json, ...bearer },
+      });
+      expect(issued.status).toBe(200);
+      const web = (await issued.json()) as {
+        name: string;
+        value: string;
+        maxAge: number;
+      };
+      expect(web).toEqual({
+        name: "denpa_app",
+        value: expect.any(String),
+        maxAge: 30 * 24 * 60 * 60,
+      });
+      const cookie = { cookie: `${web.name}=${web.value}` };
+
+      // 外から Cookie だけで API に入れる
+      expect(
+        (
+          await fetch(`${closed.appUrl}/api/services`, {
+            headers: { ...outside, ...cookie },
+          })
+        ).status,
+      ).toBe(200);
+      // Cookie では取り直せず、アプリも外せない (WebView の中のページに資格を延ばさせない・アプリを外させない)
+      for (const path of ["/api/device/web", "/api/device/logout"])
+        expect(
+          (
+            await fetch(`${closed.appUrl}${path}`, {
+              method: "POST",
+              headers: { ...outside, ...json, ...cookie },
+            })
+          ).status,
+          path,
+        ).toBe(401);
+
+      // アクセストークンを取り消すと、Cookie も効かない
+      expect(
+        (
+          await fetch(`${closed.appUrl}/api/device/logout`, {
+            method: "POST",
+            headers: { ...outside, ...json, ...bearer },
+          })
+        ).status,
+      ).toBe(204);
+      const revoked = await fetch(`${closed.appUrl}/api/services`, {
+        headers: { ...outside, ...cookie },
+      });
+      expect(revoked.status).toBe(401);
+      expect(await revoked.json()).toEqual({ error: "unauthorized" });
+    } finally {
+      await closed.shutdown();
+    }
+  });
+});

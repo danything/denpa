@@ -25,6 +25,8 @@ import {
   captionOutput,
   captionStreams,
   CaptionText,
+  DATA_FEED_BACKLOG,
+  dataFeed,
   NO_SUBTITLE,
   pagesFromMkv,
   peekPmt,
@@ -451,9 +453,10 @@ describe("アプリ向けの字幕 API", () => {
     expect([...out.subarray(13)]).toEqual([1, 2, 3]);
   });
 
-  test("字幕と、選べる字幕の通知と時計の通知だけを通す", async () => {
+  test("字幕と、選べる字幕・時計・自動起動の指定の通知だけを通す", async () => {
     const stream = captionFeed((out) => {
       out.send(CHANNEL.rawTs, 0n, new Uint8Array(188));
+      out.send(CHANNEL.control, 0n, json({ type: "autoStart", on: true }));
       out.send(
         CHANNEL.control,
         0n,
@@ -486,10 +489,66 @@ describe("アプリ向けの字幕 API", () => {
     expect(kinds).toEqual([
       CHANNEL.control,
       CHANNEL.control,
+      CHANNEL.control,
       CHANNEL.captionText,
     ]);
-    // アプリが映しているコマの放送時刻を出すのに使う (実況のコメントを合わせる。docs/api.md)
-    expect(notices).toEqual(["clock", "captions"]);
+    // 時計はアプリが映しているコマの放送時刻を出すのに使う (実況のコメントを合わせる)。自動起動の指定はデータ放送を自動で受信するかに使う (docs/api.md)
+    expect(notices).toEqual(["autoStart", "clock", "captions"]);
+  });
+
+  // データ放送の API (`liveData`) は、データ放送と描く側が使う通知 (カードの番号・Hybridcast) だけを通す。字幕と時計は字幕の API で受ける
+  test("データ放送の API は、データ放送とカードの番号と Hybridcast の通知だけを通す", async () => {
+    const stream = dataFeed((out) => {
+      out.send(CHANNEL.rawTs, 0n, new Uint8Array(188));
+      out.send(CHANNEL.captionText, 90_000n, new Uint8Array([9]));
+      out.send(
+        CHANNEL.control,
+        0n,
+        json({ type: "clock", at: 1, unixMs: 2, now: 3 }),
+      );
+      out.send(CHANNEL.control, 0n, json({ type: "autoStart", on: true }));
+      out.send(CHANNEL.data, 0n, json({ type: "pmt" }));
+      out.send(CHANNEL.control, 0n, json({ type: "card", id: "0" }));
+      out.send(CHANNEL.control, 0n, json({ type: "hybridcast", apps: [] }));
+      out.send(CHANNEL.control, 0n, json({ type: "ended" }));
+      // 閉じたあとは何も通さない
+      out.send(CHANNEL.data, 0n, json({ type: "pmt" }));
+      return () => {};
+    });
+    const body = new Uint8Array(await new Response(stream).arrayBuffer());
+    const view = new DataView(body.buffer);
+    const got: string[] = [];
+    for (let at = 0; at < body.length; at += 4 + view.getUint32(at)) {
+      const payload = body.subarray(at + 13, at + 4 + view.getUint32(at));
+      const { type } = JSON.parse(new TextDecoder().decode(payload)) as {
+        type: string;
+      };
+      got.push(`${body[at + 4]}:${type}`);
+    }
+    expect(got).toEqual([
+      `${CHANNEL.data}:pmt`,
+      `${CHANNEL.control}:card`,
+      `${CHANNEL.control}:hybridcast`,
+    ]);
+  });
+
+  // 繋いだときに覚えているモジュールをまとめて配り直す (読み始める前に溜まる) ので、字幕より多く溜めてよい
+  test("データ放送の API は、字幕の API より多く溜まっても閉じない", () => {
+    expect(DATA_FEED_BACKLOG).toBeGreaterThan(CAPTION_FEED_BACKLOG);
+    let left = 0;
+    let send:
+      ((kind: number, pts: bigint, payload: Uint8Array) => void) | null = null;
+    dataFeed((out) => {
+      send = out.send;
+      return () => left++;
+    });
+    const module = new Uint8Array(1024 * 1024);
+    for (let i = 0; i < CAPTION_FEED_BACKLOG / module.length + 2; i++)
+      send!(CHANNEL.data, 0n, module);
+    expect(left).toBe(0);
+    for (let i = 0; i < DATA_FEED_BACKLOG / module.length + 2; i++)
+      send!(CHANNEL.data, 0n, module);
+    expect(left).toBe(1);
   });
 
   // 映像が終わった (セッションが終わった・エンコードできなくなった) ら、字幕 API も閉じる

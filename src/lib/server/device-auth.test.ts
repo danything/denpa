@@ -7,9 +7,13 @@ const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-device-")), "denpa.db");
 
 const {
+  APP_COOKIE,
+  APP_COOKIE_TTL_MS,
+  APP_COOKIES_PER_TOKEN,
   approve,
   bearerToken,
   CODE_TTL_MS,
+  issueAppCookie,
   issueCode,
   liveTokens,
   MAX_PENDING,
@@ -23,11 +27,12 @@ const {
   sha256,
   sourceKey,
   TOKEN_PREFIX,
+  verifyAppCookie,
   verifyToken,
   viewCode,
 } = await import("./device-auth");
 const { orm } = await import("./db");
-const { apiTokens, deviceCodes } = await import("./schema");
+const { apiTokens, appCookies, deviceCodes } = await import("./schema");
 
 /** 接続元をテストごとに変える (同じ接続元の上限に掛からないように) */
 let sources = 0;
@@ -257,5 +262,70 @@ describe("アクセストークン", () => {
     expect(used()).toBe(at);
     verifyToken(token, at + 60_000);
     expect(used()).toBe(at + 60_000);
+  });
+});
+
+/**
+ * **アプリの WebView に入れる Cookie** (`issueAppCookie`・`verifyAppCookie`)。WebView は `Authorization` を付けられないので、
+ * アクセストークンと引き換えに渡す。アクセストークンに結び、取り消せば効かない
+ */
+describe("アプリの Cookie", () => {
+  function owner(name: string, at: number): number {
+    const { deviceCode, userCode } = pair(name, at);
+    approve(userCode, "trusted-network", at);
+    const got = poll(deviceCode, at);
+    if (!("token" in got)) throw new Error("アクセストークンが出ない");
+    return verifyToken(got.token, at)!.id;
+  }
+
+  test("アクセストークンの持ち主として通り、取り消すと効かない。値は DB に置かない", () => {
+    const at = 11_000_000_000;
+    const id = owner("台所", at);
+    const cookie = issueAppCookie(id, at);
+    expect(cookie.name).toBe(APP_COOKIE);
+    expect(cookie.maxAge).toBe(APP_COOKIE_TTL_MS / 1000);
+    expect(verifyAppCookie(cookie.value, at)).toEqual({ id, name: "台所" });
+    const rows = orm().select().from(appCookies).all();
+    expect(rows.some((r) => r.value_hash === sha256(cookie.value))).toBe(true);
+    expect(rows.some((r) => r.value_hash === cookie.value)).toBe(false);
+    expect(verifyAppCookie("forged", at)).toBeNull();
+
+    revokeToken(id, at);
+    expect(verifyAppCookie(cookie.value, at)).toBeNull();
+  });
+
+  test("使われずに置かれたら切れる。使うたびに期限を延ばす (1 分に 1 度だけ書く)", () => {
+    const at = 12_000_000_000;
+    const id = owner("子ども部屋", at);
+    const cookie = issueAppCookie(id, at);
+    const expires = () =>
+      orm()
+        .select()
+        .from(appCookies)
+        .all()
+        .find((r) => r.value_hash === sha256(cookie.value))?.expires_at;
+    expect(expires()).toBe(at + APP_COOKIE_TTL_MS);
+    verifyAppCookie(cookie.value, at + 30_000);
+    expect(expires()).toBe(at + APP_COOKIE_TTL_MS);
+    // 期限の直前に使えば延びる
+    const late = at + APP_COOKIE_TTL_MS - 1;
+    expect(verifyAppCookie(cookie.value, late)).not.toBeNull();
+    expect(expires()).toBe(late + APP_COOKIE_TTL_MS);
+    // 延びた期限を過ぎたら効かず、片付ける
+    const gone = late + APP_COOKIE_TTL_MS;
+    expect(verifyAppCookie(cookie.value, gone)).toBeNull();
+    pruneCodes(gone);
+    expect(expires()).toBeUndefined();
+  });
+
+  test("アクセストークン 1 本が持てるのは上限まで。古いものから捨てる", () => {
+    const at = 13_000_000_000;
+    const id = owner("縁側", at);
+    const issued = Array.from({ length: APP_COOKIES_PER_TOKEN + 1 }, (_, i) =>
+      issueAppCookie(id, at + i),
+    );
+    expect(verifyAppCookie(issued[0]!.value, at + 10)).toBeNull();
+    for (const cookie of issued.slice(1))
+      expect(verifyAppCookie(cookie.value, at + 10)).not.toBeNull();
   });
 });

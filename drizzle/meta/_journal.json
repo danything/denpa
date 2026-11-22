@@ -316,6 +316,13 @@
       "when": 1795238435831,
       "tag": "0044_ranking-watched",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1795339999267,
+      "tag": "0045_app-cookies",
+      "breakpoints": true
     }
   ]
 }

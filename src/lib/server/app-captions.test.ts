@@ -93,8 +93,13 @@ const { eq } = await import("drizzle-orm");
 const { orm } = await import("./db");
 const { placeServices } = await import("./fake-channels");
 const { recordings, services } = await import("./schema");
-const { CAPTION_PER_RECORDING, liveCaptions, liveStream, recordingCaptions } =
-  await import("./live");
+const {
+  CAPTION_PER_RECORDING,
+  liveCaptions,
+  liveData,
+  liveStream,
+  recordingCaptions,
+} = await import("./live");
 
 const TS = join(dir, "rec.ts");
 // 188 バイトの塊が 100 個 (中身は見ない)
@@ -314,5 +319,31 @@ describe("変換したライブの字幕と時計 (liveCaptions の codec)", () 
     expect(liveCaptions(SERVICE, 1, "h264")).toBeNull();
     await media.cancel();
     await new Response(lowered!).arrayBuffer();
+  });
+});
+
+describe("ライブのデータ放送 (liveData)", () => {
+  // 字幕と同じく、共有する相手が無ければ自分では起動しない。チューナーをデータ放送のためだけに使わない
+  test("流していない局には繋がない", () => {
+    expect(liveData(SERVICE)).toBeNull();
+  });
+
+  // 脇のデータ放送の API もセッションを終えるかの判断に数えない。字幕の API と同じセッションに並んで入れる
+  test("抜けても映像は続き、映像が抜けたら閉じる", async () => {
+    const media = liveStream(SERVICE, "raw") as ReadableStream<Uint8Array>;
+    const first = liveData(SERVICE);
+    expect(first).not.toBeNull();
+    // 映像と違う形式では繋がない (別のセッションのデータ放送になる)
+    expect(liveData(SERVICE, "h264")).toBeNull();
+    const captions = liveCaptions(SERVICE);
+    expect(captions).not.toBeNull();
+    await first!.cancel();
+    // 映像はまだ流れている
+    const second = liveData(SERVICE);
+    expect(second).not.toBeNull();
+    await media.cancel();
+    await new Response(second!).arrayBuffer();
+    await new Response(captions!).arrayBuffer();
+    expect(liveData(SERVICE)).toBeNull();
   });
 });

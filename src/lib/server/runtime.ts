@@ -254,7 +254,7 @@ export function start(): void {
    * 読む側 (`session.find`) が既に無視しているので、消しているのは行だけ
    */
   nowAndEvery(config.reconcileInterval, "sessions", pruneSessions);
-  // 切れたペアリングコードも同じく (device-auth.ts)
+  // 切れたペアリングコードとアプリの Cookie も同じく (device-auth.ts)
   nowAndEvery(config.reconcileInterval, "device-codes", pruneCodes);
 
   /*

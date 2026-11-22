@@ -965,6 +965,31 @@ export const apiTokens = sqliteTable("api_tokens", {
 });
 
 /**
+ * **アプリの WebView に入れる Cookie** (device-auth.ts の `issueAppCookie`)。テレビのアプリがデータ放送のページ (`/embed/data`) を
+ * WebView で開くとき、WebView は `Authorization` を付けられないので、アクセストークンと引き換えにこの Cookie を渡す。
+ *
+ * **アクセストークンに結ぶ** (`token_id`)。アクセストークンを取り消せば、この Cookie も効かない (読むときに `api_tokens` を引く)。
+ * 持つのは値の SHA-256 だけ。期限は使われるたびに延ばす (`expires_at`。1 分に 1 度だけ書く)
+ */
+export const appCookies = sqliteTable(
+  "app_cookies",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    value_hash: text("value_hash").notNull().unique(),
+    token_id: integer("token_id")
+      .notNull()
+      .references(() => apiTokens.id, { onDelete: "cascade" }),
+    created_at: integer("created_at").notNull(),
+    expires_at: integer("expires_at").notNull(),
+  },
+  (t) => [
+    // アクセストークンごとに古いものを捨てるときと、切れたものを片付けるときに引く
+    index("app_cookies_token").on(t.token_id),
+    index("app_cookies_expires").on(t.expires_at),
+  ],
+);
+
+/**
  * **ペアリングの途中** (device-auth.ts。OAuth のデバイス認可 (RFC 8628) と同じ方式)。
  *
  * 端末が持つ `device_code` は推測できない秘密で、持つのは SHA-256 だけ。QR に載る

@@ -37,6 +37,8 @@ import {
 import type { Recording } from "../types";
 import { orm } from "./db";
 import { keepNewest } from "./expiring";
+import { encodedFile } from "./library";
+import { sidecarPaths } from "./metadata";
 import { fillTsHead } from "./recording";
 import { openRecording } from "./recording-io";
 import { programs, services } from "./schema";
@@ -220,6 +222,23 @@ export async function recordedAutoStart(sidecarPath: string): Promise<boolean> {
   // 開いたものを新しい側 (後ろ) へ置き、上限を超えたら古いもの (先頭) から捨てる
   keepNewest(autoStartHeld, sidecarPath, { size, mtime, on }, AUTO_START_KEEP);
   return on;
+}
+
+/**
+ * **録画のデータ放送の様子** (観る画面と、`GET /api/recordings/<id>/playback` の `data`)。取り出したデータ放送 (サイドカー) が無ければ null
+ * (データ放送の無い局・古い録画)、あれば入口に自動起動の指定があるか (`recordedAutoStart`)。中身は `api/recordings/<id>/databroadcast` で別に取る。
+ *
+ * サイドカーは**エンコード済みの時刻で書いてある**ので、まだエンコードしていない録画では見ない。
+ * 映像の無い録画はエンコードせず、保存先の TS (`library_path`) の隣に元の TS の時刻で置く (`recorder.ts`。読み出す API と同じ場所)
+ */
+export async function recordedData(
+  recording: Recording,
+): Promise<{ autoStart: boolean } | null> {
+  const base = encodedFile(recording) ?? recording.library_path;
+  if (base === null) return null;
+  const path = sidecarPaths(base).dataBroadcast;
+  if (!existsSync(path)) return null;
+  return { autoStart: await recordedAutoStart(path) };
 }
 
 /** 変化ログを先頭から読み、どこかの PMT の入口の部品に自動起動の指定があるか (`recordedAutoStart`) */
