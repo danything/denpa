@@ -70,18 +70,16 @@ export async function handle({ event, resolve }) {
    * WebView は `Authorization` を付けられないので、データ放送のページはこれで入る。結んだアクセストークンで入ったのと同じに扱う
    * (`locals.token` も入れるので、アクセストークンでは使えない操作はこれでも断る)。アクセストークンを取り消せば効かない。
    * 通すのは読むものとデータ放送の中継だけ (`appCookieAllows`。WebView の中では放送の文書が動くので、書き込みは絞る)。
+   * **ほかの書き込みは、効く Cookie で来たら 401 で断る。** いつもの認証へ回すと、信頼するネットワークの中では接続元で通ってしまう。
    *
    * 効かない Cookie は見なかったことにして、いつもの認証へ回す。アクセストークンを取り消したことは、アプリが
    * Cookie を取り直すとき (Bearer を出す) に 401 で分かる
    */
   const app = event.cookies.get(APP_COOKIE);
   const appOwner =
-    app === undefined ||
-    app === "" ||
-    !appCookieAllows(event.request.method, pathname)
-      ? null
-      : verifyAppCookie(app);
+    app === undefined || app === "" ? null : verifyAppCookie(app);
   if (appOwner !== null) {
+    if (!appCookieAllows(event.request.method, pathname)) return needsPairing();
     event.locals.user = {
       subject: `token:${appOwner.id}`,
       name: appOwner.name,

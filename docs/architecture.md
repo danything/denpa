@@ -275,8 +275,8 @@ HTML は小さく、重いもの (`_app/immutable/`) は永く持たせたまま
 ### スタイルは止めない
 
 `style-src` には `'unsafe-inline'` を残しています。その場で書くスタイルが多いためです。
-サーバで組んだ HTML の `style` 属性 (Svelte の `style:` と、観る画面の映像の箱などに直に書いたもの) と、
-`Shell.svelte` の @font-face の `<style>`。属性のスタイルは nonce では通せず、hash で通すには
+サーバで組んだ HTML の `style` 属性 (Svelte の `style:` と、観る画面の映像の箱などに直に書いたもの) です。
+属性のスタイルは nonce では通せず、hash で通すには
 `'unsafe-hashes'` と 1 つずつの hash が要るので見合いません。データ放送のエンジンは
 `element.style` (CSSOM) で書くので、これには頼っていません (CSSOM からの書き込みは CSP に掛からない)。
 

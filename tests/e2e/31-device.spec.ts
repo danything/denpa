@@ -316,15 +316,17 @@ test.describe("アプリの WebView の Cookie", () => {
           path,
         ).toBe(401);
 
-      // 書き込みはデータ放送の中継のほかは通さない (WebView の中では放送の文書が動く)
-      expect(
-        (
-          await fetch(`${closed.appUrl}/api/programs/1/record`, {
-            method: "POST",
-            headers: { ...outside, ...json, ...cookie },
-          })
-        ).status,
-      ).toBe(401);
+      // 書き込みはデータ放送の中継のほかは通さない (WebView の中では放送の文書が動く)。
+      // 信頼するネットワークの中からでも、接続元で通さない
+      for (const from of [outside, inside])
+        expect(
+          (
+            await fetch(`${closed.appUrl}/api/programs/1/record`, {
+              method: "POST",
+              headers: { ...from, ...json, ...cookie },
+            })
+          ).status,
+        ).toBe(401);
 
       // アクセストークンを取り消すと、Cookie も効かない
       expect(

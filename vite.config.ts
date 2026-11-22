@@ -104,8 +104,7 @@ export default defineConfig({
           "script-src-attr": ["none"],
           /*
            * スタイルはその場で書くものを許す。サーバで組んだ HTML の `style` 属性 (観る画面の
-           * 映像の箱など)、`+layout.svelte` の @font-face の `<style>`。データ放送のエンジンは
-           * `element.style` (CSSOM) で書くのでこれには頼らない。
+           * 映像の箱など)。データ放送のエンジンは `element.style` (CSSOM) で書くのでこれには頼らない。
            * 止めたいのはスクリプトで、CSS からできるのは見た目と下の *-src の範囲の読み込みまで
            */
           "style-src": ["self", "unsafe-inline"],

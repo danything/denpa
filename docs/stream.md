@@ -2007,7 +2007,7 @@ denpa のデータ放送のページ (`/embed/data`) を開き、アプリが受
 | 証明書   | 確かめない。放送局の通信系サーバは証明書の鎖を最後まで送ってこないことがあり、確かめるとフジの `tvid-sha1.tver-tech.co.jp` が `unable to get local issuer certificate` で失敗する (`doRequest`)。資格情報は何も付けず、素の http も通しているので、確かめないことで増える危険は小さい |
 | 返し方   | 相手の形式のまま返し、`sandbox` の CSP と `nosniff` を付ける (直に開かれても denpa のオリジンの文書にしない)。fetch・XHR 以外の読み込み (ページとして開く・`<img>` など。`sec-fetch-dest` で見る) は繋ぐ前に 403                                                                      |
 | 記録     | 断ったものは何に繋ごうとしたかを残す                                                                                                                                                                                                                                                  |
-| 使える人 | denpa の画面を使える人だけ (信頼するネットワーク・ログイン・アクセストークン。`hooks.server.ts`)                                                                                                                                                                                      |
+| 使える人 | denpa の画面を使える人だけ (信頼するネットワーク・ログイン・アクセストークン・アプリの WebView の Cookie。`hooks.server.ts`)                                                                                                                                                          |
 
 ### 動作範囲の現実的な想定
 

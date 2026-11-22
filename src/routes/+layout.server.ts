@@ -20,13 +20,16 @@ import { updateAvailable } from "#lib/server/update.js";
  *
  * `seasonal` は季節の演出を出すか (世帯の設定。`#lib/season.svelte.ts`)。画面を移るたびに読み直すので、設定で切り替えると次の画面から効く。
  * ログインの前に開ける画面では出さない
+ *
+ * 埋め込みのページ (`/embed/…`) は土台を置かない (`+layout.svelte`) ので、`channelAlert` と `seasonal` を読まない
  */
-export function load({ locals, url }) {
-  const open = isOpenPath(url.pathname);
+export function load({ locals, url, route }) {
+  const bare =
+    isOpenPath(url.pathname) || (route.id?.startsWith("/embed/") ?? false);
   return {
     user: locals.user ?? null,
     update: updateAvailable(),
-    channelAlert: open ? null : channelAlert(),
-    seasonal: open ? false : settings().seasonal,
+    channelAlert: bare ? null : channelAlert(),
+    seasonal: bare ? false : settings().seasonal,
   };
 }
