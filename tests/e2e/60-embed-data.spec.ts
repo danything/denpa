@@ -296,6 +296,15 @@ test.describe("データ放送のページ", () => {
       .poll(async () => lastVideo(await sent(page)))
       .toEqual({ type: "video", rect: "hidden" });
     await expect.poll(clip).toBe("");
+    // object を外すと映像は枠いっぱい。ブラウザと同じく映像はアプリの下のままで、切り抜かない
+    await page
+      .frameLocator("[data-testid=live-hybridcast-app] iframe")
+      .locator("#v")
+      .evaluate((el: HTMLElement) => el.remove());
+    await expect
+      .poll(async () => lastVideo(await sent(page)))
+      .toEqual({ type: "video", rect: null });
+    expect(await clip()).toBe("");
   });
 
   /** 小窓を持つ既定の BML を置いた録画 */
