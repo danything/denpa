@@ -8,6 +8,7 @@ import {
   receiverKey,
   type ShimInit,
   storageKey,
+  videoHole,
 } from "./app";
 
 const INIT: ShimInit = {
@@ -320,5 +321,19 @@ describe("アプリへ渡すイベントメッセージ", () => {
         ]),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("videoHole", () => {
+  test("外の枠から映像の矩形を evenodd で抜く", () => {
+    expect(videoHole({ left: 0.5, top: 0, width: 0.5, height: 0.5 })).toBe(
+      "polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 50% 0%, 50% 50%, 100% 50%, 100% 0%, 50% 0%)",
+    );
+  });
+
+  test("枠からはみ出したぶんは枠の端で止める", () => {
+    expect(videoHole({ left: -0.25, top: 0.75, width: 0.5, height: 0.5 })).toBe(
+      "polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 0% 75%, 0% 100%, 25% 100%, 25% 75%, 0% 75%)",
+    );
   });
 });

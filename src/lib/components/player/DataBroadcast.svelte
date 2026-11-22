@@ -174,6 +174,12 @@
   let running = $state<HybridcastLink | null>(null);
   /** アプリが指定した映像の置き場 (`HybridcastFrame` の `onvideo`) */
   let appVideo: Place = "full";
+  /**
+   * アプリの iframe から切り抜く映像の場所 (`HybridcastFrame` の `hole`)。**映像がページの外にあるとき** (`onvideo`) だけ、
+   * アプリが映像を小窓に置いている間に入る。テレビは映像を WebView の下に映すので、抜かないとアプリの地の色で隠れる。
+   * 枠いっぱい (`"full"`) は抜かない (ブラウザも映像をアプリの下に置いたまま)。隠す (`"hidden"`) も抜かない
+   */
+  let appHole = $state.raw<Exclude<VideoPlace, "hidden" | null> | null>(null);
   /** アプリへキーを渡す関数 (`HybridcastFrame` の `press`) */
   let appPress = $state<((code: number, down: boolean) => void) | null>(null);
   /** アプリへ放送のイベントメッセージを渡す関数 (`HybridcastFrame` の `events`) */
@@ -531,6 +537,7 @@
   function placeVideo(want: boolean): void {
     const where = videoPlace(want);
     if (onvideo !== null) {
+      appHole = running !== null && where !== "hidden" ? where : null;
       // 同じ場所を何度も知らせない (`fit` は枠の大きさが変わるたびに呼ぶ)
       const said = JSON.stringify(where);
       if (said === toldVideo) return;
@@ -980,6 +987,7 @@
         bind:press={appPress}
         bind:events={appEvents}
         bind:note={appNote}
+        hole={appHole}
       />
     {/key}
   {/if}

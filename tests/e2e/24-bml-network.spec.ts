@@ -8,6 +8,7 @@ import {
   fakeDataBroadcast,
   feedData,
   goto,
+  START_APP,
   test,
   wakeControls,
 } from "./helpers";
@@ -410,6 +411,12 @@ test.describe("データ放送の双方向", () => {
         return media === null ? null : getComputedStyle(media).zIndex;
       }),
     ).toBe("6");
+    // ブラウザではアプリの iframe を切り抜かない (切り抜くのは映像がページの外にある `/embed/data` だけ)
+    expect(
+      await page
+        .locator("[data-testid=live-hybridcast-app] iframe")
+        .evaluate((el: HTMLElement) => el.style.clipPath),
+    ).toBe("");
     // object を隠したら映像も出さない (NHK の番組表は画面いっぱいの object を visibility: hidden で置く。出すと覆う)
     await page
       .frameLocator("[data-testid=live-hybridcast-app] iframe")
@@ -609,16 +616,3 @@ navigator.receiverDevice.streamEvent.addGeneralEventMessageListener(function () 
     }
   });
 });
-
-/** d で Hybridcast に対応しているかを訊き、起動を求める BML (結果を画面に書く) */
-const START_APP = [
-  '<p id="hc" style="left:0px;top:0px;width:400px;height:40px;color-index:7;">-</p>',
-  "<script><![CDATA[",
-  "function go() {",
-  '    var s = browser.getBrowserSupport("ARIB", "AITControlledAppEngineFunction", "IPTV-F", "HTML5_ph0");',
-  "    var r = browser.startAITControlledApp(32391, 1);",
-  '    document.getElementById("hc").firstChild.data = "s" + s + "r" + r;',
-  "}",
-  "]]></script>",
-  '<bevent><beitem type="DataButtonPressed" onoccur="go();" subscribe="subscribe"/></bevent>',
-].join("\n");

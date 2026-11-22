@@ -27,6 +27,26 @@ export type { HcState, ShimInit } from "./shim";
 export const VIEWPORT = { width: 1920, height: 1080 } as const;
 
 /**
+ * **アプリの iframe から映像の場所を切り抜く `clip-path`** (`/embed/data` でだけ使う。
+ * [docs/api.md](../../../docs/api.md#hybridcast-のアプリと映像))。テレビは映像を WebView の下に映すので、
+ * アプリが画面全体に地の色を塗ると映像が隠れる。`rect` は iframe に対する割合 (0〜1。左上が 0)。
+ * 外の枠と映像の矩形を evenodd で重ね、矩形の中だけを抜く
+ */
+export function videoHole(rect: {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}): string {
+  const at = (n: number): string => `${Math.min(1, Math.max(0, n)) * 100}%`;
+  const left = at(rect.left);
+  const top = at(rect.top);
+  const right = at(rect.left + rect.width);
+  const bottom = at(rect.top + rect.height);
+  return `polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${left} ${top}, ${left} ${bottom}, ${right} ${bottom}, ${right} ${top}, ${left} ${top})`;
+}
+
+/**
  * 受信機の記憶の置き場 (アプリの配信元のオリジンごと。denpa のほかの記憶とは混ぜない)。テレビのブラウザの
  * localStorage と同じくオリジンで分ける。AIT が名乗る organisation_id・application_id で分けると、
  * 別の配信元のアプリが同じ番号を名乗って、ほかのアプリの記憶を読める。http(s) の URL でないものは

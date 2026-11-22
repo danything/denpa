@@ -1,7 +1,14 @@
 import type { Page } from "@playwright/test";
 
 import { FUJI, MX } from "../fake/services";
-import { dataElement, expect, fakeDataBroadcast, goto, test } from "./helpers";
+import {
+  dataElement,
+  expect,
+  fakeDataBroadcast,
+  goto,
+  START_APP,
+  test,
+} from "./helpers";
 import { sharedDataBroadcast } from "./watch";
 
 /**
@@ -210,6 +217,85 @@ test.describe("データ放送のページ", () => {
     await expect
       .poll(async () => lastVideo(await sent(page)))
       .toEqual({ type: "video", rect: null });
+  });
+
+  /*
+   * **Hybridcast のアプリの iframe から映像の場所を切り抜く** (docs/api.md「Hybridcast のアプリと映像」)。
+   * テレビは映像を WebView の下に映すので、アプリが画面全体を塗ると映像が隠れる。アプリは合成のもの
+   */
+  test("ライブ: Hybridcast のアプリが映像を小窓に置いたら、iframe からその場所を切り抜く", async ({
+    page,
+  }) => {
+    const appUrl = "https://hybridcast.example.jp/app.html";
+    // 画面全体を黒で塗り、右上の 4 分の 1 に映像を置く
+    const app = `<!DOCTYPE html><html><head><title>hc</title></head><body style="margin:0;background:#000">
+<object id="v" type="video/broadcast" style="position:absolute;left:960px;top:0px;width:960px;height:540px"></object>
+<script>document.getElementById('v').bindToCurrentChannel();</script>
+</body></html>`;
+    await page.route("**/api/bml/proxy**", (route) => {
+      const target =
+        new URL(route.request().url()).searchParams.get("url") ?? "";
+      if (target === appUrl)
+        return route.fulfill({
+          status: 200,
+          headers: { "x-bml-relayed": "1", "content-type": "text/html" },
+          body: app,
+        });
+      return route.continue();
+    });
+    await connect(page);
+    await send(
+      page,
+      { type: "init", mode: "live", service: MX.id, open: true },
+      {
+        type: "notice",
+        message: {
+          type: "hybridcast",
+          apps: [
+            {
+              name: "テスト連動",
+              url: appUrl,
+              organisationId: MX.networkId,
+              applicationId: 1,
+              autostart: false,
+            },
+          ],
+        },
+      },
+    );
+    // 開く操作の d で、文書がアプリの起動を求める
+    await feed(page, START_APP);
+    await expect.poll(text(page), { timeout: 15_000 }).toBe("s1r1");
+    await expect(page.getByTestId("live-hybridcast-app")).toHaveAttribute(
+      "data-state",
+      "ready",
+      { timeout: 10_000 },
+    );
+    await expect
+      .poll(async () => lastVideo(await sent(page)))
+      .toEqual({
+        type: "video",
+        rect: { left: 0.5, top: 0, width: 0.5, height: 0.5 },
+      });
+    const iframe = page.locator("[data-testid=live-hybridcast-app] iframe");
+    const clip = () => iframe.evaluate((el: HTMLElement) => el.style.clipPath);
+    // 外の枠から、知らせた映像の場所 (右上の 4 分の 1) を抜く
+    await expect
+      .poll(clip)
+      .toBe(
+        "polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 50% 0%, 50% 50%, 100% 50%, 100% 0%, 50% 0%)",
+      );
+    // 映像を隠したら切り抜かない
+    await page
+      .frameLocator("[data-testid=live-hybridcast-app] iframe")
+      .locator("#v")
+      .evaluate((el: HTMLElement) => {
+        el.style.visibility = "hidden";
+      });
+    await expect
+      .poll(async () => lastVideo(await sent(page)))
+      .toEqual({ type: "video", rect: "hidden" });
+    await expect.poll(clip).toBe("");
   });
 
   /** 小窓を持つ既定の BML を置いた録画 */

@@ -29,6 +29,7 @@
     receiverKey,
     STORAGE_LIMIT,
     storageKey,
+    videoHole,
     VIEWPORT,
   } from "#lib/hybridcast/app.js";
   import type { CompatInit } from "#lib/hybridcast/compat.js";
@@ -66,6 +67,11 @@
     events?: ((message: ESEventUpdatedMessage) => void) | null;
     /** 映像の上に出す読み込みの通知 (bind で受け取る。読み込めたら空)。出すのは `DataBroadcast` を使う画面 (舞台の通知の列) */
     note?: string;
+    /**
+     * iframe から切り抜く映像の場所 (iframe に対する割合。`videoHole`)。**映像がページの外にあるときだけ渡す**
+     * (テレビのアプリが WebView の下に映す。`/embed/data`)。null なら切り抜かない
+     */
+    hole?: { left: number; top: number; width: number; height: number } | null;
   }
 
   let {
@@ -80,6 +86,7 @@
     press = $bindable(null),
     events = $bindable(null),
     note = $bindable(""),
+    hole = null,
   }: Props = $props();
 
   let box = $state<HTMLDivElement | null>(null);
@@ -394,6 +401,7 @@
     style:width="{VIEWPORT.width}px"
     style:height="{VIEWPORT.height}px"
     style:transform={scale}
+    style:clip-path={hole === null ? undefined : videoHole(hole)}
   ></iframe>
 </div>
 

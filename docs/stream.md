@@ -2103,7 +2103,9 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
   (`KeyEvent.VK_*` と、素の名前の `VK_*` も用意。NHK のアプリは `case VK_LEFT:` と書く)
 - アプリが `<object type="video/broadcast">` を置けば、放送の映像をその場所へ縮めて出します。
   **映像はアプリの上に重ねます** (テレビは映像を object の場所に描く。アプリは枠の周りを塗るので、下に敷くと隠れる)。
-  無ければ全面、`stop()`・`release()` を呼んだときと、object が見えない (`visibility: hidden`) ときは出しません
+  無ければ全面、`stop()`・`release()` を呼んだときと、object が見えない (`visibility: hidden`) ときは出しません。
+  テレビのアプリ (`/embed/data`) は映像を WebView の下に映すので、代わりにアプリの iframe から映像の場所を切り抜きます
+  ([api.md](api.md#hybridcast-のアプリと映像))
 
 ### できること・できないこと
 
