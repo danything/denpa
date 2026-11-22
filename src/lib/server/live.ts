@@ -4261,7 +4261,8 @@ export function recordingCaptions(
               out,
               () => proc,
             );
-            // 押し出す側も作り直す (読みかけの PES を前の ffmpeg のぶんとして数えたまま、新しい ffmpeg に足さない)
+            // 押し出す側も作り直す (読みかけの PES を前の ffmpeg のぶんとして数えたまま、新しい ffmpeg に足さない)。
+            // ここは本物の ffmpeg を起こすので単体テストでは通さない。押し出す側の数え方は captions.test.ts で見ている
             flush = new CaptionFlush(program);
             endInput(old);
             old.kill();

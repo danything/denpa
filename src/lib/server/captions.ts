@@ -210,7 +210,7 @@ export class CaptionFlush {
     let at = 0;
     while (at < chunk.length) {
       if (this.filled === 0) {
-        // パケットの先頭から読む。同期バイトでなければ 1 バイトずつ進める (ffmpeg の TS のデマルチプレクサも同期バイトを探し直す)
+        // パケットの先頭から読む。同期バイトでなければ 1 バイトずつ進める (ffmpeg の TS のデマルチプレクサも同期バイトを再探索する)
         if (chunk[at] !== SYNC_BYTE) {
           at++;
           continue;
