@@ -97,6 +97,7 @@ import {
   captionOutput,
   type CaptionShown,
   CaptionText,
+  dataFeed,
   NO_SUBTITLE,
   peekPmt,
   PMT_WAIT,
@@ -1057,8 +1058,8 @@ interface Viewer {
   /** データ放送を出しているか。**求めた人にだけ配る** */
   wantsData: boolean;
   /**
-   * **脇から字幕だけ受け取っている** (アプリ向けの字幕のエンドポイント。`liveCaptions`)。
-   * いてもセッションを終える判断には数えない。映像を観ている人がいなくなったら、字幕のためだけに
+   * **脇から字幕かデータ放送だけ受け取っている** (アプリ向けの字幕とデータ放送のエンドポイント。`liveCaptions`・`liveData`)。
+   * いてもセッションを終える判断には数えない。映像を観ている人がいなくなったら、字幕やデータ放送のためだけに
    * チューナーを使い続けない。終えたら `ended` を伝えて閉じさせる
    */
   side?: boolean;
@@ -1839,12 +1840,12 @@ class Session {
   }
 
   get empty(): boolean {
-    // 脇から字幕だけ受け取っている人は数えない (`Viewer.side`)
+    // 脇から字幕かデータ放送だけ受け取っている人は数えない (`Viewer.side`)
     for (const viewer of this.viewers) if (viewer.side !== true) return false;
     return true;
   }
 
-  /** 映像を観ているのがこの人だけか (`empty` と同じく字幕だけの人は数えない)。抜ければ終わる */
+  /** 映像を観ているのがこの人だけか (`empty` と同じく脇から受け取っている人は数えない)。抜ければ終わる */
   alone(viewer: Viewer): boolean {
     for (const other of this.viewers)
       if (other !== viewer && other.side !== true) return false;
@@ -3425,7 +3426,7 @@ class Session {
     this.aborter.abort();
     this.proc?.kill();
     this.data?.close();
-    // 脇から字幕だけ受け取っている人は、映像が終わったことを知らないので伝えて閉じさせる
+    // 脇から字幕かデータ放送だけ受け取っている人は、映像が終わったことを知らないので伝えて閉じさせる
     for (const viewer of this.viewers)
       if (viewer.side === true) this.tellOne(viewer, { type: "ended" });
     // 選び直しで同じ目印の新しいものが載っていたら、そちらは消さない
@@ -4042,6 +4043,61 @@ export function liveCaptions(
   audio?: string,
   rung: Rung = 0,
 ): ReadableStream<Uint8Array> | null {
+  const session = sideSession(serviceId, form, audio, rung);
+  if (session === undefined) return null;
+  return captionFeed((out) => {
+    const viewer: Viewer = {
+      connection: { send: out.send },
+      ready: false,
+      wantsData: false,
+      side: true,
+      // 第何言語を流すか (`?language=`)。省けば第 1 言語 (今までどおり)
+      language,
+    };
+    session.add(viewer);
+    return () => depart(session, viewer);
+  });
+}
+
+/**
+ * **アプリ向けのライブのデータ放送** (`GET /api/services/<id>/data`。docs/api.md)。ライブの映像 (`liveStream`) を観ているアプリに、
+ * データ放送 (0x30。ブラウザが WebSocket で受けるものと同じ JSON) と、描く側が使う通知 (`card`・`hybridcast`) を流す。
+ *
+ * セッションの探し方と引数は字幕 (`liveCaptions`) と同じで、**いま流しているセッションを脇から共有する**だけ (`Viewer.side`)。
+ * 繋いでいる間が受信の意思で、受信をリクエストした人として入る (`wantsData`)。入ったときに、覚えているものを先に配り直す
+ * (`Session.add` の `refreshData`)。抜けたら、ほかに受信している人がいなければデコードをやめる (`Session.remove`)。
+ * 共有する相手が無ければ null。映像が終われば閉じる。4K の局 (TLV) はデータ放送をデコードしないので、何も来ない
+ */
+export function liveData(
+  serviceId: number,
+  form: LiveCodec | "raw" = "raw",
+  audio?: string,
+  rung: Rung = 0,
+): ReadableStream<Uint8Array> | null {
+  const session = sideSession(serviceId, form, audio, rung);
+  if (session === undefined) return null;
+  return dataFeed((out) => {
+    const viewer: Viewer = {
+      connection: { send: out.send },
+      ready: false,
+      wantsData: true,
+      side: true,
+    };
+    session.add(viewer);
+    return () => depart(session, viewer);
+  });
+}
+
+/**
+ * アプリ向けの字幕とデータ放送 (`liveCaptions`・`liveData`) が脇から共有するセッション。映像 (`liveStream`) に渡したものと同じ
+ * `form`・`audio`・`rung` で探す。無いか、もう終えていれば undefined
+ */
+function sideSession(
+  serviceId: number,
+  form: LiveCodec | "raw",
+  audio: string | undefined,
+  rung: Rung,
+): Session | undefined {
   // 映像 (`liveStream`) と同じ決め方で目印を作る。放送そのままの目印は音声で分けない (`key`)
   /*
    * ケーブルの局の `raw` は、元の TS のまま送るもの (`?playable=` の無い映像) を先に探し、無ければ HEVC の詰め替えに替えうるもの
@@ -4066,19 +4122,7 @@ export function liveCaptions(
       : (sharedSession(want) ??
         sharedSession({ ...want, keepsTs: false }) ??
         switched());
-  if (session === undefined || !session.alive) return null;
-  return captionFeed((out) => {
-    const viewer: Viewer = {
-      connection: { send: out.send },
-      ready: false,
-      wantsData: false,
-      side: true,
-      // 第何言語を流すか (`?language=`)。省けば第 1 言語 (今までどおり)
-      language,
-    };
-    session.add(viewer);
-    return () => depart(session, viewer);
-  });
+  return session?.alive === true ? session : undefined;
 }
 
 /** 録画の字幕を、求められた位置のどれだけ手前から読むか (秒)。**いま出ている字幕も出すため** (字幕は次が来るまで出しっぱなし) */
@@ -5368,4 +5412,12 @@ export function rawEnding(o: {
   if (o.stopped) return "quiet";
   if (o.chase) return "ended";
   return o.fed ? "lost" : "died";
+}
+
+/** 字幕とデータ放送の API (`liveCaptions`・`liveData`) の `?codec=`。省けば `raw`。ほかの値は null (呼ぶ側が 400 で返す) */
+export function sideForm(value: string | null): LiveCodec | "raw" | null {
+  const form = value ?? "raw";
+  return form === "raw" || form === "h264" || form === "av1" || form === "hevc"
+    ? form
+    : null;
 }

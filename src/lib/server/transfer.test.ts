@@ -85,9 +85,19 @@ function seedOld(where: ReturnType<typeof machine>): void {
       expires_at: now + 3_600_000,
     })
     .run();
-  orm()
+  const tv = orm()
     .insert(schema.apiTokens)
     .values({ name: "居間のテレビ", token_hash: "hash", created_at: now })
+    .returning({ id: schema.apiTokens.id })
+    .get();
+  orm()
+    .insert(schema.appCookies)
+    .values({
+      value_hash: "app-cookie-hash",
+      token_id: tv.id,
+      created_at: now,
+      expires_at: now + 3_600_000,
+    })
     .run();
   orm()
     .insert(schema.deviceCodes)
@@ -244,6 +254,8 @@ describe("書き出す", () => {
       (db.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
     expect(n("sessions")).toBe(0);
     expect(n("device_codes")).toBe(0);
+    // アプリの WebView の Cookie も移さない (アプリが取り直す)
+    expect(n("app_cookies")).toBe(0);
     // ニコニコとの連携は移さない (移した先で連携し直す)
     expect(n("niconico_link")).toBe(0);
     // 番組ランキングへの参加も移さない (2 台が同じトークンで送り合わないように)

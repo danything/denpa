@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-
 import { error, fail, redirect } from "@sveltejs/kit";
 import { eq, getTableColumns } from "drizzle-orm";
 
@@ -9,10 +7,9 @@ import { orm } from "#lib/server/db.js";
 import { removeRecording } from "#lib/server/files.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { encodedFile } from "#lib/server/library.js";
-import { sidecarPaths } from "#lib/server/metadata.js";
 import { relative } from "#lib/server/paths.js";
 import { rulerOf } from "#lib/server/playback.js";
-import { recordedAutoStart } from "#lib/server/recorded-bml.js";
+import { recordedData } from "#lib/server/recorded-bml.js";
 import { recordingFromForm, tsHeadOf } from "#lib/server/recording.js";
 import { lastEncodeError, recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
@@ -53,20 +50,13 @@ export async function load({ params, url }) {
     redirect(302, relative(url, `/chase/${id}`));
 
   /*
-   * データ放送を取り出してあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る。
-   * **エンコード済みの時刻で書いてある**ので、まだエンコードしていない録画では出さない。
-   * 映像の無い録画はエンコードせず、保存先の TS (`library_path`) の隣に元の TS の時刻で置く (`recorder.ts`。読み出す API と同じ場所)
-   */
-  const dataBase = encoded ?? recording.library_path;
-  const dataPath =
-    dataBase === null ? null : sidecarPaths(dataBase).dataBroadcast;
-  const hasData = dataPath !== null && existsSync(dataPath);
-  /*
-   * 入口に自動起動の指定があるか (変化ログの PMT。`recordedAutoStart`)。データ放送を自動で受信する端末は、これが true の録画でだけ
+   * データ放送を取り出してあるか (無い局・古い録画では出さない)。中身は d ボタンで別に取る (`recordedData`)。
+   * 入口に自動起動の指定があるか。データ放送を自動で受信する端末は、これが true の録画でだけ
    * 開く前から変化ログを取得する。指定の無い録画の入口は d を押すまで始まらない
    */
-  const autoStart =
-    dataPath !== null && hasData && (await recordedAutoStart(dataPath));
+  const data = await recordedData(recording);
+  const hasData = data !== null;
+  const autoStart = data?.autoStart === true;
 
   // 続きの位置は元の TS の物差しで覚えている。この画面の物差し (`playbackPlan` の `axis`) に直して渡す
   if (recording.resume_ms !== null) {

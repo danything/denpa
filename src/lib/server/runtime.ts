@@ -11,7 +11,7 @@ import { adoptName } from "./agent-name";
 import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
-import { pruneCodes } from "./device-auth";
+import { pruneDeviceAuth } from "./device-auth";
 import { checkDisk } from "./disk";
 import { pump, requeueOrphanedJobs } from "./encoder";
 import { readChannels, sync, syncPending, syncServicesOnly } from "./epg";
@@ -254,8 +254,8 @@ export function start(): void {
    * 読む側 (`session.find`) が既に無視しているので、消しているのは行だけ
    */
   nowAndEvery(config.reconcileInterval, "sessions", pruneSessions);
-  // 切れたペアリングコードも同じく (device-auth.ts)
-  nowAndEvery(config.reconcileInterval, "device-codes", pruneCodes);
+  // 切れたペアリングコードとアプリの Cookie も同じく (device-auth.ts)
+  nowAndEvery(config.reconcileInterval, "device-auth", pruneDeviceAuth);
 
   /*
    * 局ロゴ。放送波から取得するしかないので、持っていない局のぶんを少しずつ取得する。

@@ -18,12 +18,12 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq, gt, inArray, isNull, lte, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lte, type SQL } from "drizzle-orm";
 
 import { normalize } from "./address";
 import { affected, now, orm } from "./db";
 import { randomToken } from "./oidc";
-import { apiTokens, deviceCodes } from "./schema";
+import { apiTokens, appCookies, deviceCodes } from "./schema";
 
 /** コードの寿命 (秒で返すのは `expiresIn`) */
 export const CODE_TTL_MS = 10 * 60 * 1000;
@@ -307,13 +307,107 @@ export function verifyToken(token: string, at = now()): TokenOwner | null {
     )
     .get();
   if (row === undefined) return null;
-  if (row.last_used_at === null || at - row.last_used_at >= TOUCH_INTERVAL_MS) {
+  touchToken(row, at);
+  return { id: row.id, name: row.name };
+}
+
+/** 最後に使った時刻を書く (`TOUCH_INTERVAL_MS` に 1 度だけ) */
+function touchToken(
+  row: { id: number; last_used_at: number | null },
+  at: number,
+): void {
+  if (row.last_used_at !== null && at - row.last_used_at < TOUCH_INTERVAL_MS)
+    return;
+  orm()
+    .update(apiTokens)
+    .set({ last_used_at: at })
+    .where(eq(apiTokens.id, row.id))
+    .run();
+}
+
+/** アプリの WebView に入れる Cookie の名前 (`issueAppCookie`) */
+export const APP_COOKIE = "denpa_app";
+/**
+ * アプリの Cookie が、使われないまま置かれたら切れるまで (ms)。**使われるたびに延ばす** (`verifyAppCookie`)。
+ * ライブのデータ放送はアプリが WebView へ直に渡すので、WebView から denpa へのリクエストが何時間も無いことがある。
+ * 開いたままの WebView で切らさないよう、ログインの控えの既定 (`OIDC_SESSION_TTL` の 30 日) と同じにする
+ */
+export const APP_COOKIE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * アクセストークン 1 本が同時に持てるアプリの Cookie。超えたら古いものから捨てる。
+ * WebView の Cookie はアプリの中で 1 つで、アプリは WebView を作るたびに取り直して上書きする。
+ * 作り直しが重なっても、前の値で出たリクエストが通るぶんだけ残す
+ */
+export const APP_COOKIES_PER_TOKEN = 3;
+
+/**
+ * **アクセストークンと引き換えに、アプリの WebView に入れる Cookie を出す** (`POST /api/device/web`)。
+ * 値は 1 度だけ返し、DB には SHA-256 だけを持つ。`maxAge` は使われないまま置いたら切れるまでの秒
+ */
+export function issueAppCookie(
+  tokenId: number,
+  at = now(),
+): { name: string; value: string; maxAge: number } {
+  const value = randomToken(32);
+  orm().transaction((tx) => {
+    tx.insert(appCookies)
+      .values({
+        value_hash: sha256(value),
+        token_id: tokenId,
+        created_at: at,
+        expires_at: at + APP_COOKIE_TTL_MS,
+      })
+      .run();
+    const old = tx
+      .select({ id: appCookies.id })
+      .from(appCookies)
+      .where(eq(appCookies.token_id, tokenId))
+      .orderBy(desc(appCookies.created_at), desc(appCookies.id))
+      .all()
+      .slice(APP_COOKIES_PER_TOKEN)
+      .map((row) => row.id);
+    if (old.length > 0)
+      tx.delete(appCookies).where(inArray(appCookies.id, old)).run();
+  });
+  return {
+    name: APP_COOKIE,
+    value,
+    maxAge: Math.floor(APP_COOKIE_TTL_MS / 1000),
+  };
+}
+
+/**
+ * アプリの Cookie が有効なら、結んだアクセストークンの持ち主。切れた・知らない・アクセストークンを取り消したものなら null。
+ * 有効なら期限を延ばす (`TOUCH_INTERVAL_MS` に 1 度だけ書く)
+ */
+export function verifyAppCookie(value: string, at = now()): TokenOwner | null {
+  const row = orm()
+    .select({
+      cookie: appCookies.id,
+      expires_at: appCookies.expires_at,
+      id: apiTokens.id,
+      name: apiTokens.name,
+      last_used_at: apiTokens.last_used_at,
+    })
+    .from(appCookies)
+    .innerJoin(apiTokens, eq(apiTokens.id, appCookies.token_id))
+    .where(
+      and(
+        eq(appCookies.value_hash, sha256(value)),
+        gt(appCookies.expires_at, at),
+        isNull(apiTokens.revoked_at),
+      ),
+    )
+    .get();
+  if (row === undefined) return null;
+  if (at + APP_COOKIE_TTL_MS - row.expires_at >= TOUCH_INTERVAL_MS) {
     orm()
-      .update(apiTokens)
-      .set({ last_used_at: at })
-      .where(eq(apiTokens.id, row.id))
+      .update(appCookies)
+      .set({ expires_at: at + APP_COOKIE_TTL_MS })
+      .where(eq(appCookies.id, row.cookie))
       .run();
   }
+  touchToken(row, at);
   return { id: row.id, name: row.name };
 }
 
@@ -344,9 +438,23 @@ export function liveTokens() {
     .all();
 }
 
-/** 切れたコードを片付ける。使い終えたコードも、切れたあとは要らない */
-export function pruneCodes(at = now()): number {
-  return affected(
-    orm().delete(deviceCodes).where(lte(deviceCodes.expires_at, at)),
+/** 切れたペアリングコードとアプリの Cookie を片付ける。使い終えたコードも、切れたあとは要らない */
+export function pruneDeviceAuth(at = now()): number {
+  return (
+    affected(orm().delete(deviceCodes).where(lte(deviceCodes.expires_at, at))) +
+    affected(orm().delete(appCookies).where(lte(appCookies.expires_at, at)))
+  );
+}
+
+/**
+ * **アプリの Cookie で通すリクエストか。** 読むもの (GET・HEAD) と、データ放送の中継 (`/api/bml/`。双方向の送信と Hybridcast の起動の POST) だけ。
+ *
+ * WebView の中のページは放送の文書を動かす。文書は自前のエンジンの中で動き、ページのスクリプトにはならない (CSP。docs/stream.md) が、
+ * それでも破られたときに録画を消す・予約する・設定を書き換えるところまで届かないよう、書き込みはデータ放送が使うものに絞る。
+ * 当たらないリクエストは Cookie を見ずに、いつもの認証へ回す
+ */
+export function appCookieAllows(method: string, pathname: string): boolean {
+  return (
+    method === "GET" || method === "HEAD" || pathname.startsWith("/api/bml/")
   );
 }

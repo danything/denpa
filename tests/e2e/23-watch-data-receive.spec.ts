@@ -61,6 +61,10 @@ test.describe("録画のデータ放送を自動で受信する端末", () => {
     test.setTimeout(180_000);
     const { id, libraryPath } = await recordOne(page, request);
     placeDataBroadcast(libraryPath, SCRIPTED);
+    // アプリ向けの観方にも、入口の自動起動の指定が載る (`playback` の `data`)
+    expect(
+      (await (await request.get(`/api/recordings/${id}/playback`)).json()).data,
+    ).toEqual({ autoStart: true });
     await page.addInitScript(() =>
       localStorage.setItem("player-data-always", "1"),
     );
@@ -146,6 +150,9 @@ test.describe("録画のデータ放送を自動で受信する端末", () => {
     test.setTimeout(180_000);
     const { id, libraryPath } = await recordOne(page, request);
     placeDataBroadcast(libraryPath, undefined, false);
+    expect(
+      (await (await request.get(`/api/recordings/${id}/playback`)).json()).data,
+    ).toEqual({ autoStart: false });
     await page.addInitScript(() =>
       localStorage.setItem("player-data-always", "1"),
     );

@@ -537,6 +537,16 @@ export function appFrame(
 export const CAPTION_FEED_BACKLOG = 8 * 1024 * 1024;
 
 /**
+ * データ放送の API (`dataFeed`) で、読まれないまま溜まってよい量 (バイト)。**字幕より大きく採る。**
+ *
+ * 繋いだときに、覚えているモジュール (`ts/carousel.ts` の `KEEP_MODULES`。256 個まで) をまとめて配り直す。
+ * 配り直すのは応答を返す前 (受け側が読み始める前) なので、全部が一度に溜まる。実機のテレビ朝日では 1 個が約 90 KB で、
+ * 256 個を base64 にすると約 31 MB になる。その倍を採り、繋いだそばから閉じないようにする。
+ * 映像と違って捨てない (落とすと、そのモジュールが次に回ってくるまで画面が欠ける) ので、超えたら閉じてリクエストし直させる
+ */
+export const DATA_FEED_BACKLOG = 64 * 1024 * 1024;
+
+/**
  * 読まれないまま溜まったら、作る側を**待たせる**量 (バイト)。録画の字幕は録画を読む速さで
  * 作れるので、受け側が先読みを止めたら (アプリは持つ枚数に上限がある) 録画を読むのも止める
  * (`CaptionOut.backedUp`)。閉じる量より必ず小さくする
@@ -551,9 +561,9 @@ const CAPTION_PING_MS = 20_000;
 
 const PING = new TextEncoder().encode(JSON.stringify({ type: "ping" }));
 
-/** アプリ向けの字幕 API に流し込む側 (`captionFeed`) */
+/** アプリ向けの字幕 API・データ放送の API に流し込む側 (`captionFeed`・`dataFeed`) */
 export interface CaptionOut {
-  /** WebSocket と同じ形式で 1 フレーム渡す。**字幕 (文字の配置) と、選べる字幕の通知だけ通す** */
+  /** WebSocket と同じ形式で 1 フレーム渡す。**API ごとに決めた種別と通知だけ通す** (`FeedRule`) */
   send(kind: number, pts: bigint, payload: Uint8Array): void;
   /** 終わり (録画を読み切った・セッションが終わった) */
   close(): void;
@@ -561,15 +571,62 @@ export interface CaptionOut {
   backedUp(): boolean;
 }
 
+/** アプリ向けの API が通すもの (`appFeed`)。`error` / `ended` の通知は、どの API でも閉じる合図として受ける */
+interface FeedRule {
+  /** 通す種別 (`CHANNEL`)。通知 (`control`) は `notices` で決める */
+  kinds: readonly number[];
+  /** 通す通知の `type` */
+  notices: readonly string[];
+  /** 読まれないまま溜まってよい量 (バイト) */
+  backlog: number;
+}
+
+/**
+ * 字幕の API が通すもの。字幕 (文字の配置 `0x22`)、選べる字幕の通知 (`captions`)、時計の通知 (`clock`。ライブだけが送る)、
+ * データ放送の入口の自動起動の指定 (`autoStart`。ライブだけが送る)。データ放送を自動で受信する端末は、`autoStart` を見て
+ * データ放送の API を開くかを決める
+ */
+const CAPTION_RULE: FeedRule = {
+  kinds: [CHANNEL.captionText],
+  notices: ["captions", "clock", "autoStart"],
+  backlog: CAPTION_FEED_BACKLOG,
+};
+
+/**
+ * データ放送の API が通すもの。データ放送 (`0x30`。`ResponseMessage` の JSON) と、描く側が使う通知の
+ * カードの番号 (`card`。`getIRDID` に渡す) と Hybridcast (`hybridcast`)
+ */
+const DATA_RULE: FeedRule = {
+  kinds: [CHANNEL.data],
+  notices: ["card", "hybridcast"],
+  backlog: DATA_FEED_BACKLOG,
+};
+
 /**
  * アプリ向けの字幕 API を作る。中身を作る側 (`open`) は、閉じるときの後始末を返す。
  *
- * 通すのは字幕 (文字の配置 `0x22`) と、選べる字幕の通知 (`0x40` の `captions`)、時計の通知 (`clock`。ライブだけが送る) だけ。
- * `error` / `ended` の通知が来たら閉じる。ほかの通知・データ放送・映像は捨てる
+ * 通すのは `CAPTION_RULE` のものだけ。`error` / `ended` の通知が来たら閉じる。ほかの通知・データ放送・映像は捨てる
  * (映像は同じ URL の隣のエンドポイント (ライブの `live`、追っかけの `chase`) で受け取っている)
  */
 export function captionFeed(
   open: (out: CaptionOut) => () => void,
+): ReadableStream<Uint8Array> {
+  return appFeed(open, CAPTION_RULE);
+}
+
+/**
+ * アプリ向けのデータ放送の API (`GET /api/services/<id>/data`。`live.ts` の `liveData`) を作る。
+ * 通すのは `DATA_RULE` のものだけで、ほかは `captionFeed` と同じ
+ */
+export function dataFeed(
+  open: (out: CaptionOut) => () => void,
+): ReadableStream<Uint8Array> {
+  return appFeed(open, DATA_RULE);
+}
+
+function appFeed(
+  open: (out: CaptionOut) => () => void,
+  rule: FeedRule,
 ): ReadableStream<Uint8Array> {
   let closed = false;
   let detach: (() => void) | null = null;
@@ -586,8 +643,7 @@ export function captionFeed(
       start(controller) {
         // 読まない相手に積み続けない。閉じれば受け側はリクエストし直す
         const push = (kind: number, pts: bigint, payload: Uint8Array) => {
-          if ((controller.desiredSize ?? 0) < -CAPTION_FEED_BACKLOG)
-            return out.close();
+          if ((controller.desiredSize ?? 0) < -rule.backlog) return out.close();
           controller.enqueue(appFrame(kind, pts, payload));
         };
         const out: CaptionOut = {
@@ -599,8 +655,8 @@ export function captionFeed(
               ) as Notice;
               if (notice.type === "error" || notice.type === "ended")
                 return out.close();
-              if (notice.type !== "captions" && notice.type !== "clock") return;
-            } else if (kind !== CHANNEL.captionText) {
+              if (!rule.notices.includes(notice.type)) return;
+            } else if (!rule.kinds.includes(kind)) {
               return;
             }
             push(kind, pts, payload);
