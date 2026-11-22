@@ -10,6 +10,7 @@ const {
   APP_COOKIE,
   APP_COOKIE_TTL_MS,
   APP_COOKIES_PER_TOKEN,
+  appCookieAllows,
   approve,
   bearerToken,
   CODE_TTL_MS,
@@ -328,4 +329,15 @@ describe("アプリの Cookie", () => {
     for (const cookie of issued.slice(1))
       expect(verifyAppCookie(cookie.value, at + 10)).not.toBeNull();
   });
+});
+
+// WebView の中では放送の文書が動くので、Cookie で通す書き込みはデータ放送の中継だけにする
+test("アプリの Cookie で通すのは、読むものとデータ放送の中継だけ", () => {
+  expect(appCookieAllows("GET", "/api/recordings")).toBe(true);
+  expect(appCookieAllows("HEAD", "/api/recordings/1/file")).toBe(true);
+  expect(appCookieAllows("POST", "/api/bml/post")).toBe(true);
+  expect(appCookieAllows("POST", "/api/bml/hc")).toBe(true);
+  expect(appCookieAllows("POST", "/api/programs/1/record")).toBe(false);
+  expect(appCookieAllows("DELETE", "/api/recordings/1")).toBe(false);
+  expect(appCookieAllows("POST", "/settings/integrations")).toBe(false);
 });

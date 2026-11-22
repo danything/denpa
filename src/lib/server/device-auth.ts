@@ -445,3 +445,16 @@ export function pruneCodes(at = now()): number {
     affected(orm().delete(appCookies).where(lte(appCookies.expires_at, at)))
   );
 }
+
+/**
+ * **アプリの Cookie で通すリクエストか。** 読むもの (GET・HEAD) と、データ放送の中継 (`/api/bml/`。双方向の送信と Hybridcast の起動の POST) だけ。
+ *
+ * WebView の中のページは放送の文書を動かす。文書は自前のエンジンの中で動き、ページのスクリプトにはならない (CSP。docs/stream.md) が、
+ * それでも破られたときに録画を消す・予約する・設定を書き換えるところまで届かないよう、書き込みはデータ放送が使うものに絞る。
+ * 当たらないリクエストは Cookie を見ずに、いつもの認証へ回す
+ */
+export function appCookieAllows(method: string, pathname: string): boolean {
+  return (
+    method === "GET" || method === "HEAD" || pathname.startsWith("/api/bml/")
+  );
+}

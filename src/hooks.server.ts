@@ -15,6 +15,7 @@ import {
 } from "#lib/server/auth.js";
 import {
   APP_COOKIE,
+  appCookieAllows,
   bearerToken,
   verifyAppCookie,
   verifyToken,
@@ -68,13 +69,18 @@ export async function handle({ event, resolve }) {
    * **アプリの WebView の Cookie** (`denpa_app`。`POST /api/device/web` がアクセストークンと引き換えに出す)。
    * WebView は `Authorization` を付けられないので、データ放送のページはこれで入る。結んだアクセストークンで入ったのと同じに扱う
    * (`locals.token` も入れるので、アクセストークンでは使えない操作はこれでも断る)。アクセストークンを取り消せば効かない。
+   * 通すのは読むものとデータ放送の中継だけ (`appCookieAllows`。WebView の中では放送の文書が動くので、書き込みは絞る)。
    *
    * 効かない Cookie は見なかったことにして、いつもの認証へ回す。アクセストークンを取り消したことは、アプリが
    * Cookie を取り直すとき (Bearer を出す) に 401 で分かる
    */
   const app = event.cookies.get(APP_COOKIE);
   const appOwner =
-    app === undefined || app === "" ? null : verifyAppCookie(app);
+    app === undefined ||
+    app === "" ||
+    !appCookieAllows(event.request.method, pathname)
+      ? null
+      : verifyAppCookie(app);
   if (appOwner !== null) {
     event.locals.user = {
       subject: `token:${appOwner.id}`,
