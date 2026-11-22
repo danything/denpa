@@ -23,7 +23,7 @@ const {
   normalizeUserCode,
   poll,
   POLL_INTERVAL_MS,
-  pruneCodes,
+  pruneDeviceAuth,
   revokeToken,
   sha256,
   sourceKey,
@@ -141,7 +141,7 @@ describe("ペアリングの流れ", () => {
     const later = at + CODE_TTL_MS;
     expect(approve(userCode, "trusted-network", later)?.state).toBe("expired");
     expect(poll(deviceCode, later)).toEqual({ error: "expired_token" });
-    expect(pruneCodes(later)).toBeGreaterThan(0);
+    expect(pruneDeviceAuth(later)).toBeGreaterThan(0);
     expect(viewCode(userCode, later)).toBeNull();
   });
 
@@ -315,7 +315,7 @@ describe("アプリの Cookie", () => {
     // 延びた期限を過ぎたら効かず、片付ける
     const gone = late + APP_COOKIE_TTL_MS;
     expect(verifyAppCookie(cookie.value, gone)).toBeNull();
-    pruneCodes(gone);
+    pruneDeviceAuth(gone);
     expect(expires()).toBeUndefined();
   });
 

@@ -438,8 +438,8 @@ export function liveTokens() {
     .all();
 }
 
-/** 切れたコードを片付ける。使い終えたコードも、切れたあとは要らない。切れたアプリの Cookie も同じく */
-export function pruneCodes(at = now()): number {
+/** 切れたペアリングコードとアプリの Cookie を片付ける。使い終えたコードも、切れたあとは要らない */
+export function pruneDeviceAuth(at = now()): number {
   return (
     affected(orm().delete(deviceCodes).where(lte(deviceCodes.expires_at, at))) +
     affected(orm().delete(appCookies).where(lte(appCookies.expires_at, at)))

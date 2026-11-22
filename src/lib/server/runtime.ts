@@ -11,7 +11,7 @@ import { adoptName } from "./agent-name";
 import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
-import { pruneCodes } from "./device-auth";
+import { pruneDeviceAuth } from "./device-auth";
 import { checkDisk } from "./disk";
 import { pump, requeueOrphanedJobs } from "./encoder";
 import { readChannels, sync, syncPending, syncServicesOnly } from "./epg";
@@ -255,7 +255,7 @@ export function start(): void {
    */
   nowAndEvery(config.reconcileInterval, "sessions", pruneSessions);
   // 切れたペアリングコードとアプリの Cookie も同じく (device-auth.ts)
-  nowAndEvery(config.reconcileInterval, "device-codes", pruneCodes);
+  nowAndEvery(config.reconcileInterval, "device-auth", pruneDeviceAuth);
 
   /*
    * 局ロゴ。放送波から取得するしかないので、持っていない局のぶんを少しずつ取得する。
