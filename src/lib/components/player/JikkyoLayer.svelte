@@ -6,7 +6,6 @@
   import type { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import {
     fontSize,
-    laneCount,
     Lanes,
     lead,
     lineHeight,
@@ -25,20 +24,22 @@
    * - 行・字の大きさは映像の枠 (16:9 に収めた所。字幕の面と同じ) で決める。重ねる順は 映像 → 操作バーの影 → 実況 → 字幕 → 操作バーのボタン
    *   (影に潜ると暗く欠けて見える。重なりの順は `ControlBar`)
    * - **アンビエントの光が枠の外に見えている間は、流れるものは光の範囲 (舞台の `STAGE_OUTSIDE`) の右の端から入り、左の端まで流れる。**
-   *   行は枠と同じ高さのまま、枠を渡る速さも同じ (`lanes.ts` の `Outside`)。枠の外のぶんは同じものをもう 1 つ、
+   *   縦の場所は枠の中と同じまま、外もそのコメントの速さで流れる (`lanes.ts` の `Outside`)。枠の外のぶんは同じものをもう 1 つ、
    *   舞台の外の所に描く (ウィンドウの端から端まで。枠の下・光と右の列の上で、ポインタの操作は受けない。枠の中の 1 つは字幕と操作バーの下のまま)。2 つは同じ時に足すので、同じ動きで流れる。
    *   外へ出すのは枠が舞台の幅いっぱいのときだけ (データ放送の小窓などでは、枠と舞台の端の間で欠けて見える)
-   * - 録画 (`ahead`) は外を渡るぶん早く流し始め、枠の右の端に着く時刻を外が無いときと同じにする。ライブは届いたときに
+   * - 録画 (`ahead`) は外を渡るぶん (コメントごとの速さで決まる) 早く流し始め、枠の右の端に着く時刻を外が無いときと同じにする。ライブは届いたときに
    *   外の右の端から流すので、枠に入るのがそのぶん遅れる
    * - 動きは CSS の `translateX` だけ (JS では動かさない)。止めたら `animation-play-state: paused`、
    *   速さを変えたら長さを割る。流し終えたら外す
-   * - 色・位置・大きさはコメントのコマンドどおり (`command.ts`。既定は白で右から左へ)。`ue`・`shita` は枠の中の上・下の行に 3 秒止める
+   * - 色・位置・大きさはコメントのコマンドどおり (`command.ts`。既定は白で右から左へ)。`ue`・`shita` は枠の中の上・下の端から積んで 3 秒止める
    *   (先まで取ったものは時刻が来るまで待たせる)。止めるもので枠より広いものは、枠に収まるまで字を縮める。
    *   透明度 0.5。読み上げには出さない
-   * - 動きを減らす設定では流さず、上の行に 3 秒置いて消す (`shita` は下の行)
+   * - 動きを減らす設定では流さず、上の端から積んで 3 秒置いて消す (`shita` は下の端から)
    *   (長さは `!important` で書く。Pico は動きを減らす設定で `animation-duration` を 1ms にするので、置いたものがすぐ消えていた)
    * - この端末から書き込んだものは、字の先頭に短い縦線 (`mine-line`。映像の上のオンと同じ空色)
-   * - 同時に流すのは 60 件まで (`data-lite` の端末では 15 件)。空いた行が無ければ捨てる
+   * - 決まった行は持たず、字の高さぶんの場所を上から空いた所に積む。1 件は枠を 4 秒で渡り、長いものほど速い。
+   *   空いた所が無ければ、くじで選んだ高さに重ねる (どれもニコニコと同じ。`lanes.ts`)
+   * - 同時に流すのは 60 件まで (`data-lite` の端末では 15 件)。超えたものは捨てる
    * - 切り抜きは、いま枠に見えているものを見えている位置のまま写す (`snapshot.ts` の `commentLayer`。枠は `data-frame` で探す。
    *   外の写しは入らない)
    */
@@ -59,7 +60,10 @@
   interface Item {
     id: number;
     text: string;
-    lane: number;
+    /** 上の端 (枠の上から、行の高さを 1 として。`lanes.ts`) */
+    top: number;
+    /** 縦に取る場所 (行の高さを 1 として。字の大きさの倍率) */
+    rows: number;
     /** 流れ終わるまで (放送時刻の ms) */
     duration: number;
     width: number;
@@ -90,7 +94,7 @@
   let nextId = 0;
   let reduced = false;
   let most = 60;
-  /** 止めるもので、先まで取ったために時刻がまだ来ていないもの */
+  /** 先まで取ったために、流し始める時刻がまだ来ていないもの (`startOf`) */
   let waiting: Comment[] = [];
 
   const size = $derived(fontSize(frame.height));
@@ -109,7 +113,7 @@
   function measure(): void {
     if (box === null) return;
     frame = fitRect(box.clientWidth, box.clientHeight, 16, 9);
-    lanes.resize(laneCount(frame.height));
+    lanes.resize(frame.height / lineHeight(frame.height));
     around = surround(box);
   }
 
@@ -181,6 +185,31 @@
     return reduced || comment.style?.place !== undefined;
   }
 
+  /** 字の大きさと幅 (px)。止めるものは枠に収める (流れるものは長くても流れきる) */
+  function sizeOf(
+    comment: Comment,
+    still: boolean,
+  ): { px: number; width: number } {
+    let px = size * sizeScale(comment.style?.size);
+    let width = textWidth(comment.text, px);
+    if (still && width > frame.width) {
+      px *= frame.width / width;
+      width = frame.width;
+    }
+    return { px, width };
+  }
+
+  /**
+   * 流し始める放送時刻。止めるものはその時刻、録画の流れるものは外を渡るぶん (速さはコメントの幅で決まる) 手前。
+   * ライブの流れるものは届いたときにすぐ流す
+   */
+  function startOf(comment: Comment, path: Outside): number {
+    if (stillOf(comment)) return comment.at;
+    if (!ahead) return Number.NEGATIVE_INFINITY;
+    const { width } = sizeOf(comment, false);
+    return comment.at - lead(frame.width, width, path.right);
+  }
+
   function tick(): void {
     const w = air();
     if (w === null || frame.width <= 0) return;
@@ -188,43 +217,39 @@
       ? NO_OUTSIDE
       : { right: around.right, left: around.left };
     const trail = path.right > 0 || path.left > 0 ? outer : null;
+    // 先まで取るのは、いちばん遅い (幅 0 の) ものが外を渡る長さ
     const { comments, jumped } = feed.take(
       w,
-      ahead ? lead(frame.width, path.right) : 0,
+      ahead ? lead(frame.width, 0, path.right) : 0,
     );
     if (jumped) {
       items = [];
       lanes.clear();
       waiting = [];
     }
-    // 止めるものは時刻が来てから出す (流れるものは外を渡るぶん先に出す)
-    const due = waiting.filter((c) => c.at <= w);
-    if (due.length > 0) waiting = waiting.filter((c) => c.at > w);
-    for (const comment of comments) {
-      if (stillOf(comment) && comment.at > w) waiting.push(comment);
-      else due.push(comment);
+    const due: Comment[] = [];
+    const later: Comment[] = [];
+    for (const comment of [...waiting, ...comments]) {
+      (startOf(comment, path) <= w ? due : later).push(comment);
     }
+    waiting = later;
     if (due.length === 0) return;
     const added: Item[] = [];
     for (const comment of due) {
       if (items.length + added.length >= most) break;
       const style = comment.style ?? {};
       const still = stillOf(comment);
-      let px = size * sizeScale(style.size);
-      let width = textWidth(comment.text, px);
-      // 止めるものは枠に収める (流れるものは長くても流れきる)
-      if (still && width > frame.width) {
-        px *= frame.width / width;
-        width = frame.width;
-      }
+      const { px, width } = sizeOf(comment, still);
+      const rows = px / size;
       const flow = still
-        ? lanes.hold(w, style.place === "shita" ? "bottom" : "top")
-        : lanes.flow(w, width, frame.width, px, path);
+        ? lanes.hold(w, style.place === "shita" ? "bottom" : "top", rows)
+        : lanes.flow(w, width, frame.width, px, rows, path);
       if (flow === null) continue;
       added.push({
         id: nextId++,
         text: comment.text,
-        lane: flow.lane,
+        top: flow.top,
+        rows,
         duration: flow.duration,
         width,
         still,
@@ -259,7 +284,8 @@
     style:font-size={item.size === size ? undefined : `${item.size}px`}
     style:color={item.color}
     data-testid={testid}
-    style:top="{(item.lane + 0.5) * line}px"
+    style:top="{item.top * line}px"
+    style:line-height={item.rows === 1 ? undefined : `${item.rows * line}px`}
     style:--from="{frame.width + item.path.right}px"
     style:--to="{-item.width - item.path.left}px"
     style:animation-duration|important="{item.duration / Math.max(rate, 0.1)}ms"

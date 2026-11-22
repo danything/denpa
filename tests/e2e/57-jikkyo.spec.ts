@@ -158,15 +158,15 @@ test.describe("ライブの実況の色・位置・大きさ", () => {
       await expect(comment).toHaveText("赤い上の字", { timeout: 20_000 });
       await expect(comment).toHaveClass(/\bstill\b/);
       await expect(comment).toHaveCSS("color", "rgb(255, 0, 0)");
-      // 大きい (中の 1.25 倍)
+      // 大きい (中の 39/24 倍。ニコニコと同じ比)
       expect(
         await comment.evaluate(
           (el) =>
             parseFloat(getComputedStyle(el).fontSize) /
             parseFloat(getComputedStyle(el.parentElement!).fontSize),
         ),
-      ).toBeCloseTo(1.25);
-      // 上の行から積む (いちばん上のものは枠の上の端の近く)。止めたものは 3 秒残る
+      ).toBeCloseTo(39 / 24);
+      // 上の端から積む (いちばん上のものは枠の上の端の近く)。止めたものは 3 秒残る
       const frame = (await page.getByTestId("jikkyo-layer").boundingBox())!;
       const tops = await page
         .getByTestId("jikkyo-comment")
@@ -289,7 +289,7 @@ test.describe("アンビエントの光の上を流れる実況", () => {
           { timeout: 20_000 },
         )
         .toBe(true);
-      // 写しは枠の行と同じ高さ
+      // 写しは枠の中のものと同じ高さ
       const rows = await page.evaluate(() => {
         const tops = (testid: string) =>
           [
