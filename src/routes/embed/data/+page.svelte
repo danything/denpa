@@ -161,7 +161,7 @@
     }
   }
 
-  /** 文書が別の局へ選局したい (epgTune)。一覧にある局ならアプリに選局を頼んで true。録画の再生中は断る */
+  /** 文書が別の局へ選局したい (epgTune)。一覧にある局ならアプリに選局をリクエストして true。一覧に無い局は false だけを返す (ライブの画面と同じ。文書が自分で案内する)。録画の再生中は断る */
   function tune(target: Service): boolean {
     if (mode !== "live") {
       post({ type: "toast", text: "録画の再生中は選局できません" });

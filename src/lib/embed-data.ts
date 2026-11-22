@@ -2,7 +2,7 @@
  * **データ放送のページ (`/embed/data`) とテレビのアプリの間のメッセージ。** 約束は [docs/api.md](../../docs/api.md#データ放送のページ-embeddata) に書いてある。
  *
  * アプリは映像を自分で映し (ExoPlayer)、その上に透明な WebView でこのページを重ねる。ページはデータ放送を描き、
- * 映像の場所・選局・音声の切り替えをアプリへ頼む。間は MessagePort 1 本で、どちらの向きも 1 通が JSON の文字列 1 つ
+ * 映像の場所・選局・音声の切り替えをアプリへリクエストする。間は MessagePort 1 本で、どちらの向きも 1 通が JSON の文字列 1 つ
  */
 
 import type { ResponseMessage } from "@danything/arib/bml-protocol";
@@ -172,7 +172,10 @@ export function readIncoming(data: unknown): Incoming | null {
   }
 }
 
-/** アプリが中継する 0x40 の通知 (`notice`) のうち、ページが読むもの。カードの番号と Hybridcast のアプリ */
+/**
+ * アプリが中継する 0x40 の通知 (`notice`) のうち、ページが読むもの。カードの番号と Hybridcast のアプリ。
+ * アプリの一覧はブラウザのライブと同じく、denpa のサーバが送ったものをそのまま使う (アプリは中継するだけ)。開くときは `HybridcastFrame` が sandbox の iframe に入れる
+ */
 export function readNotice(
   message: Record<string, unknown>,
 ):
@@ -187,7 +190,7 @@ export function readNotice(
 }
 
 /**
- * **アプリが知らせた再生の時刻から、いまの時刻を出す。** 知らせを受けた時点の `{air, pos, rate, paused}` と
+ * **アプリが知らせた再生の時刻から、いまの時刻を出す。** 通知を受けた時点の `{air, pos, rate, paused}` と
  * `performance.now()` を覚え、止まっていなければ経った時間 × 速さを足す。アプリは変わったとき (シーク・一時停止・速さ) と、
  * ずれを直すために数秒ごとに送る
  */
