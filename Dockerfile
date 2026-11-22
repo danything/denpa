@@ -419,7 +419,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /mpeg2
 # (エージェントを同じコンテナに入れる denpa-aio は libssl を要るので、あちらで足す。.github/aio.Dockerfile)。
 # その段が「土台にもうあるライブラリ」を見分けるのにも使うので、段に名前を付けておく
 # ---------------------------------------------------------------------------
-FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:3a2dbf10c2fdafe5865e2b03a4a3b9b23f2e280229a81730415379b76dc70592 AS distroless
+FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:f21fdfe4ede467d9ea8a6caaec1f8381ea4502243a3e8bb1c43df80c6fbaaeae AS distroless
 
 # ---------------------------------------------------------------------------
 # 本番イメージへ写すライブラリを集める段。**本番イメージにはシェルも apt も無い**ので、
