@@ -175,11 +175,12 @@ const PRIVATE_STREAM_1 = 0xbd;
  *
  * ffmpeg の CLI には、パケットごとに塊を閉じさせる指定が無い。そこで、字幕の PES が終わったところ (PES_packet_length で数える) に、
  * 同じ PID・同じ PTS で中身の無い字幕の PES (`FLUSH_DATA`) を 1 つ足し、ffmpeg に次のパケットを渡す。
- * 足した 1 枚は次の字幕まで ffmpeg の中に残るが、読み捨てるので困らない。
+ * 足した 1 枚は次の字幕まで ffmpeg の中に残るが、読み捨てるので、デコードの結果は変わらない。
  *
  * - 足すのは PMT で字幕と分かる PID (`captionPids`) だけ。字幕の PMT を読むまでは何もしない
  * - 足すパケットは適応フィールドの不連続の印を立て、連続性カウンタをその PID の直前のものと同じにする。
- *   ffmpeg は印のあるパケットでは数え直し、次の元のパケットを続きとして読むので、元のパケットは書き換えない
+ *   ffmpeg の TS のデマルチプレクサは、印のあるパケットでは連続性カウンタを数え直し (ISO/IEC 13818-1 の discontinuity_indicator。
+ *   libavformat/mpegts.c の `handle_packet`。ffmpeg 9.1 で確かめた)、次の元のパケットを続きとして読む。元のパケットは書き換えない
  * - PTS の無い PES と、長さが 0 (長さを書いていない) の PES には足さない
  * - 塊は TS のパケットの切れ目で割れていなくてよい。届いたバイトはその場で返し、足すのはパケットが終わったところ
  * - 足すものが無い塊は、渡されたものをそのまま返す (新しく作らない)
@@ -191,19 +192,25 @@ export class CaptionFlush {
   private filled = 0;
   /** 字幕の PID ごとの、読みかけの PES (残りのバイト数と PTS) */
   private readonly open = new Map<number, { rest: number; pts: number }>();
+  /** 局が分からず、何も足さない */
+  private readonly off: boolean;
 
-  /** @param program 放送が名乗っている番号。その局の PMT から字幕の PID を読む */
+  /**
+   * @param program 放送が名乗っている番号。その局の PMT から字幕の PID を読む。0 以下 (局が分からない) なら何も足さない
+   */
   constructor(program: number) {
     this.pmt = new PmtWatch(program, captionPids);
+    this.off = program <= 0;
   }
 
   feed(chunk: Uint8Array): Uint8Array {
+    if (this.off) return chunk;
     /** 足すパケットと、塊の中で足す位置 (その位置のバイトの前) */
     const inserts: [number, Uint8Array][] = [];
     let at = 0;
     while (at < chunk.length) {
       if (this.filled === 0) {
-        // パケットの先頭から読む。同期バイトでなければ 1 バイトずつ進める (ffmpeg も同期バイトを探し直す)
+        // パケットの先頭から読む。同期バイトでなければ 1 バイトずつ進める (ffmpeg の TS のデマルチプレクサも同期バイトを探し直す)
         if (chunk[at] !== SYNC_BYTE) {
           at++;
           continue;

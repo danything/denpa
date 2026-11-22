@@ -877,6 +877,11 @@ describe("字幕を押し出す (CaptionFlush)", () => {
     expect(flush.feed(input)).toBe(input);
   });
 
+  test("局が分からなければ (0 以下) 何も足さない", () => {
+    const input = stream(tables(), caption(0));
+    expect(new CaptionFlush(0).feed(input)).toBe(input);
+  });
+
   test("足したコマはデコードしない", () => {
     const text = new CaptionText();
     expect(text.feed({ at: 1000, data: FLUSH_DATA })).toEqual([]);
