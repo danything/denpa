@@ -7,6 +7,7 @@ import {
   programMap,
   stream,
 } from "@danything/arib/synth";
+import { packetizePes, pes } from "@danything/arib/synth-av";
 import {
   captionMkv as mkv,
   encodeAribText,
@@ -21,12 +22,14 @@ import {
   CAPTION_FEED_BACKLOG,
   CAPTION_FEED_HOLD,
   captionFeed,
+  CaptionFlush,
   type CaptionOut,
   captionOutput,
   captionStreams,
   CaptionText,
   DATA_FEED_BACKLOG,
   dataFeed,
+  FLUSH_DATA,
   NO_SUBTITLE,
   pagesFromMkv,
   peekPmt,
@@ -779,3 +782,120 @@ describe("字幕の言語", () => {
 function text_(language: number, body: string): Uint8Array {
   return text(encodeAribText(body), language);
 }
+
+/*
+ * ffmpeg の Matroska は字幕の 1 枚を次のパケットが来るまで書き出さない。字幕の PES が終わるたびに、中身の無い字幕の PES を足して押し出す
+ */
+describe("字幕を押し出す (CaptionFlush)", () => {
+  const CAPTION_PID = 0x130;
+  const PTS = 2 ** 32 + 123_456;
+  const tables = () => head([[0x06, CAPTION_PID, captionDescriptors()]]);
+  /** 字幕の PES (`length` バイトの本文) を TS のパケットにしたもの */
+  const caption = (counter: number, length = 20, pid = CAPTION_PID) =>
+    packetizePes(
+      pid,
+      pes(0xbd, PTS, new Uint8Array(length).fill(0x41)),
+      counter,
+    ).packets;
+  const packetsOf = (ts: Uint8Array) =>
+    Array.from({ length: ts.length / 188 }, (_, i) =>
+      ts.subarray(i * 188, (i + 1) * 188),
+    );
+  const pidOf = (p: Uint8Array) => ((p[1]! & 0x1f) << 8) | p[2]!;
+
+  test("字幕の PES が終わったところに、同じ PID・同じ PTS の中身の無い PES を 1 つ足す", () => {
+    const flush = new CaptionFlush(SERVICE);
+    const input = stream(
+      tables(),
+      caption(5),
+      packetize(VIDEO_PID, new Uint8Array(10)),
+    );
+    const out = packetsOf(flush.feed(input));
+    expect(out).toHaveLength(packetsOf(input).length + 1);
+    const at = out.findIndex((p) => pidOf(p) === CAPTION_PID);
+    const added = out[at + 1]!;
+    expect(pidOf(added)).toBe(CAPTION_PID);
+    // 新しい PES の先頭。適応フィールドに不連続の印、連続性カウンタは直前の字幕のパケットと同じ
+    expect(added[1]! & 0x40).toBe(0x40);
+    expect(added[5]! & 0x80).toBe(0x80);
+    expect(added[3]! & 0x0f).toBe(5);
+    const payload = added.subarray(5 + added[4]!);
+    expect([...payload.subarray(0, 4)]).toEqual([0x00, 0x00, 0x01, 0xbd]);
+    expect((payload[4]! << 8) | payload[5]!).toBe(payload.length - 6);
+    expect([...payload.subarray(payload.length - FLUSH_DATA.length)]).toEqual([
+      ...FLUSH_DATA,
+    ]);
+    // PTS は元の字幕と同じ (33 ビット)
+    const original = out[at]!.subarray(5 + out[at]![4]!);
+    expect([...payload.subarray(9, 14)]).toEqual([...original.subarray(9, 14)]);
+    // 足したもののほかは元のまま
+    expect(out.filter((p) => p !== added).map((p) => [...p])).toEqual(
+      packetsOf(input).map((p) => [...p]),
+    );
+  });
+
+  test("いくつものパケットにまたがる PES は、最後のパケットのあとに足す", () => {
+    const flush = new CaptionFlush(SERVICE);
+    const long = caption(0, 400);
+    expect(packetsOf(long).length).toBe(3);
+    const out = packetsOf(flush.feed(stream(tables(), long)));
+    const pids = out.map(pidOf).filter((pid) => pid === CAPTION_PID);
+    expect(pids).toHaveLength(4);
+    expect(out.at(-1)![5]! & 0x80).toBe(0x80);
+  });
+
+  test("パケットの切れ目と関係なく割って届いても、同じ位置に足す", () => {
+    const input = stream(
+      tables(),
+      caption(0),
+      caption(1),
+      packetize(VIDEO_PID, new Uint8Array(10)),
+    );
+    const whole = new CaptionFlush(SERVICE).feed(input);
+    const flush = new CaptionFlush(SERVICE);
+    const parts: Uint8Array[] = [];
+    for (let at = 0; at < input.length; at += 77)
+      parts.push(flush.feed(input.subarray(at, at + 77)));
+    expect([...stream(...parts)]).toEqual([...whole]);
+    expect(whole.length).toBe(input.length + 2 * 188);
+  });
+
+  test("足すものが無ければ渡したものをそのまま返す", () => {
+    const flush = new CaptionFlush(SERVICE);
+    const input = stream(tables(), packetize(VIDEO_PID, new Uint8Array(10)));
+    expect(flush.feed(input)).toBe(input);
+  });
+
+  test("PMT を読むまでと、字幕でない PID には足さない", () => {
+    const before = new CaptionFlush(SERVICE);
+    const early = caption(0);
+    expect(before.feed(early)).toBe(early);
+    // 文字スーパー (部品タグ 0x38) の PES には足さない
+    const flush = new CaptionFlush(SERVICE);
+    const superimpose = head([[0x06, 0x138, captionDescriptors(0x38)]]);
+    const input = stream(superimpose, caption(0, 20, 0x138));
+    expect(flush.feed(input)).toBe(input);
+  });
+
+  test("局が分からなければ (0 以下) 何も足さない", () => {
+    const input = stream(tables(), caption(0));
+    expect(new CaptionFlush(0).feed(input)).toBe(input);
+  });
+
+  test("reset で読みかけの PES を忘れ、パケットの切れ目は覚えたまま", () => {
+    const flush = new CaptionFlush(SERVICE);
+    const long = caption(0, 400);
+    const first = stream(tables(), long.subarray(0, 188 + 50));
+    expect(flush.feed(first)).toBe(first);
+    flush.reset();
+    // 続きを渡しても、忘れた PES には足さない。次の PES には足す
+    const rest = long.subarray(188 + 50);
+    expect(flush.feed(rest)).toBe(rest);
+    expect(flush.feed(caption(3)).length).toBe(2 * 188);
+  });
+
+  test("足したコマはデコードしない", () => {
+    const text = new CaptionText();
+    expect(text.feed({ at: 1000, data: FLUSH_DATA })).toEqual([]);
+  });
+});

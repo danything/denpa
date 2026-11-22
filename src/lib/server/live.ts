@@ -93,6 +93,7 @@ import { placesOfService, serviceChannel } from "./agent-channels";
 import type { Place } from "./agent-order";
 import {
   captionFeed,
+  CaptionFlush,
   type CaptionOut,
   captionOutput,
   type CaptionShown,
@@ -2388,7 +2389,7 @@ class Session {
         let trouble: unknown = null;
         const watching = this.watch(proc);
         const running = Promise.all([
-          this.pump(stream, proc, feed === null),
+          this.pump(stream, proc, feed === null, side !== null),
           this.drain(proc),
           watching,
           side === null ? Promise.resolve() : this.subtitles(side.read(proc)),
@@ -2899,6 +2900,8 @@ class Session {
     proc: ReturnType<typeof Bun.spawn>,
     /** リーダーを自分で閉じるか。ライブは起こし直しても使い回すので閉じない (`runEncode`) */
     own: boolean,
+    /** この ffmpeg に字幕の出口があるか。あれば字幕を押し出すものを足す (`CaptionFlush`) */
+    captions: boolean,
   ): Promise<void> {
     const writer = proc.stdin as import("bun").FileSink;
     // この ffmpeg が無音を流しているか。起こし直して切り替わっても、止めるのはこの ffmpeg のときの値で決める (`finally`)
@@ -2910,6 +2913,8 @@ class Session {
     const mmt = this.transport === "tlv" ? new MmtLive(this.program) : null;
     const filter =
       mmt === null && this.program > 0 ? new ServiceFilter(this.program) : null;
+    const flush =
+      captions && filter !== null ? new CaptionFlush(this.program) : null;
     /** この ffmpeg を起こしてから、映像・音声・字幕の並びが変わったか */
     const streams = new StreamsWatch();
     /** 先頭から読んだ量 (バイト)。追っかけで作り直したところを覚えるのに使う (`restart`) */
@@ -2960,7 +2965,7 @@ class Session {
         // 無音を流しているときは、ffmpeg は TS を読まない (`encodeArgs` の `silent`)。データ放送などへ分けるだけ
         if (out.length === 0 || silent) continue;
         // **書けたことを待つ** (上の説明)。待たないと、失敗したときに受け止める先がない
-        await writer.write(out);
+        await writer.write(flush === null ? out : flush.feed(out));
         await writer.flush();
       }
     } finally {
@@ -3647,7 +3652,7 @@ class Session {
       })
       .catch(() => undefined);
     void this.subtitles(pipe).catch(() => undefined);
-    return new RawCaptions(proc);
+    return new RawCaptions(proc, this.program);
   }
 }
 
@@ -3662,11 +3667,20 @@ class Session {
 class RawCaptions {
   private busy = false;
   private dead = false;
+  /** 字幕を押し出すものを足す (`CaptionFlush`)。書かずに捨てる塊も通して、PES の切れ目を数え続ける */
+  private readonly flush: CaptionFlush;
 
-  constructor(private readonly proc: ReturnType<typeof Bun.spawn>) {}
+  constructor(
+    private readonly proc: ReturnType<typeof Bun.spawn>,
+    program: number,
+  ) {
+    this.flush = new CaptionFlush(program);
+  }
 
-  feed(data: Uint8Array): void {
-    if (this.busy || this.dead) return;
+  feed(chunk: Uint8Array): void {
+    if (this.dead) return;
+    const data = this.flush.feed(chunk);
+    if (this.busy) return;
     this.busy = true;
     const writer = this.proc.stdin as import("bun").FileSink;
     // **返りは必ず受ける** (捨てた Promise が reject されると bun ごと落ちる。`Session.pump`)
@@ -4227,6 +4241,8 @@ export function recordingCaptions(
      */
     const filter = program > 0 ? new ServiceFilter(program) : null;
     const streams = new StreamsWatch();
+    // 字幕を押し出すものを足す (`CaptionFlush`。追っかけで録れているところまで読みきったとき、次の字幕まで待たせない)
+    const flush = new CaptionFlush(program);
     void (async () => {
       try {
         for (;;) {
@@ -4245,11 +4261,14 @@ export function recordingCaptions(
               out,
               () => proc,
             );
+            // 読みかけの PES を忘れる (前の ffmpeg のぶんとして数えたまま、新しい ffmpeg に足さない)。パケットの切れ目は覚えたまま。
+            // ここは本物の ffmpeg を起こすので単体テストでは通さない。押し出す側の数え方は captions.test.ts で見ている
+            flush.reset();
             endInput(old);
             old.kill();
           }
           const writer = proc.stdin as import("bun").FileSink;
-          await writer.write(value);
+          await writer.write(flush.feed(value));
           await writer.flush();
         }
       } finally {
