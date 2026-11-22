@@ -6,7 +6,6 @@
   import type { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import {
     fontSize,
-    laneCount,
     Lanes,
     lead,
     lineHeight,
@@ -25,20 +24,21 @@
    * - 行・字の大きさは映像の枠 (16:9 に収めた所。字幕の面と同じ) で決める。重ねる順は 映像 → 操作バーの影 → 実況 → 字幕 → 操作バーのボタン
    *   (影に潜ると暗く欠けて見える。重なりの順は `ControlBar`)
    * - **アンビエントの光が枠の外に見えている間は、流れるものは光の範囲 (舞台の `STAGE_OUTSIDE`) の右の端から入り、左の端まで流れる。**
-   *   行は枠と同じ高さのまま、外もそのコメントの速さで流れる (`lanes.ts` の `Outside`)。枠の外のぶんは同じものをもう 1 つ、
+   *   縦の場所は枠の中と同じまま、外もそのコメントの速さで流れる (`lanes.ts` の `Outside`)。枠の外のぶんは同じものをもう 1 つ、
    *   舞台の外の所に描く (ウィンドウの端から端まで。枠の下・光と右の列の上で、ポインタの操作は受けない。枠の中の 1 つは字幕と操作バーの下のまま)。2 つは同じ時に足すので、同じ動きで流れる。
    *   外へ出すのは枠が舞台の幅いっぱいのときだけ (データ放送の小窓などでは、枠と舞台の端の間で欠けて見える)
    * - 録画 (`ahead`) は外を渡るぶん (コメントごとの速さで決まる) 早く流し始め、枠の右の端に着く時刻を外が無いときと同じにする。ライブは届いたときに
    *   外の右の端から流すので、枠に入るのがそのぶん遅れる
    * - 動きは CSS の `translateX` だけ (JS では動かさない)。止めたら `animation-play-state: paused`、
    *   速さを変えたら長さを割る。流し終えたら外す
-   * - 色・位置・大きさはコメントのコマンドどおり (`command.ts`。既定は白で右から左へ)。`ue`・`shita` は枠の中の上・下の行に 3 秒止める
+   * - 色・位置・大きさはコメントのコマンドどおり (`command.ts`。既定は白で右から左へ)。`ue`・`shita` は枠の中の上・下の端から積んで 3 秒止める
    *   (先まで取ったものは時刻が来るまで待たせる)。止めるもので枠より広いものは、枠に収まるまで字を縮める。
    *   透明度 0.5。読み上げには出さない
-   * - 動きを減らす設定では流さず、上の行に 3 秒置いて消す (`shita` は下の行)
+   * - 動きを減らす設定では流さず、上の端から積んで 3 秒置いて消す (`shita` は下の端から)
    *   (長さは `!important` で書く。Pico は動きを減らす設定で `animation-duration` を 1ms にするので、置いたものがすぐ消えていた)
    * - この端末から書き込んだものは、字の先頭に短い縦線 (`mine-line`。映像の上のオンと同じ空色)
-   * - 1 件は枠を 4 秒で渡り、長いものほど速い。空いた行が無ければ、くじで選んだ行に重ねる (どちらもニコニコと同じ。`lanes.ts`)
+   * - 決まった行は持たず、字の高さぶんの場所を上から空いた所に積む。1 件は枠を 4 秒で渡り、長いものほど速い。
+   *   空いた所が無ければ、くじで選んだ高さに重ねる (どれもニコニコと同じ。`lanes.ts`)
    * - 同時に流すのは 60 件まで (`data-lite` の端末では 15 件)。超えたものは捨てる
    * - 切り抜きは、いま枠に見えているものを見えている位置のまま写す (`snapshot.ts` の `commentLayer`。枠は `data-frame` で探す。
    *   外の写しは入らない)
@@ -60,7 +60,10 @@
   interface Item {
     id: number;
     text: string;
-    lane: number;
+    /** 上の端 (枠の上から、行の高さを 1 として。`lanes.ts`) */
+    top: number;
+    /** 縦に取る場所 (行の高さを 1 として。字の大きさの倍率) */
+    rows: number;
     /** 流れ終わるまで (放送時刻の ms) */
     duration: number;
     width: number;
@@ -110,7 +113,7 @@
   function measure(): void {
     if (box === null) return;
     frame = fitRect(box.clientWidth, box.clientHeight, 16, 9);
-    lanes.resize(laneCount(frame.height));
+    lanes.resize(frame.height / lineHeight(frame.height));
     around = surround(box);
   }
 
@@ -237,14 +240,16 @@
       const style = comment.style ?? {};
       const still = stillOf(comment);
       const { px, width } = sizeOf(comment, still);
+      const rows = px / size;
       const flow = still
-        ? lanes.hold(w, style.place === "shita" ? "bottom" : "top")
-        : lanes.flow(w, width, frame.width, px, path);
+        ? lanes.hold(w, style.place === "shita" ? "bottom" : "top", rows)
+        : lanes.flow(w, width, frame.width, px, rows, path);
       if (flow === null) continue;
       added.push({
         id: nextId++,
         text: comment.text,
-        lane: flow.lane,
+        top: flow.top,
+        rows,
         duration: flow.duration,
         width,
         still,
@@ -279,7 +284,8 @@
     style:font-size={item.size === size ? undefined : `${item.size}px`}
     style:color={item.color}
     data-testid={testid}
-    style:top="{(item.lane + 0.5) * line}px"
+    style:top="{item.top * line}px"
+    style:line-height={item.rows === 1 ? undefined : `${item.rows * line}px`}
     style:--from="{frame.width + item.path.right}px"
     style:--to="{-item.width - item.path.left}px"
     style:animation-duration|important="{item.duration / Math.max(rate, 0.1)}ms"

@@ -289,7 +289,7 @@ test.describe("アンビエントの光の上を流れる実況", () => {
           { timeout: 20_000 },
         )
         .toBe(true);
-      // 写しは枠の行と同じ高さ
+      // 写しは枠の中のものと同じ高さ
       const rows = await page.evaluate(() => {
         const tops = (testid: string) =>
           [
