@@ -1489,3 +1489,16 @@ export async function takeClip(page: Page, button: string): Promise<ClipJson> {
     page.off("download", count);
   }
 }
+
+/** d で Hybridcast に対応しているかを訊き、起動を求める BML (結果を画面に書く) */
+export const START_APP = [
+  '<p id="hc" style="left:0px;top:0px;width:400px;height:40px;color-index:7;">-</p>',
+  "<script><![CDATA[",
+  "function go() {",
+  '    var s = browser.getBrowserSupport("ARIB", "AITControlledAppEngineFunction", "IPTV-F", "HTML5_ph0");',
+  "    var r = browser.startAITControlledApp(32391, 1);",
+  '    document.getElementById("hc").firstChild.data = "s" + s + "r" + r;',
+  "}",
+  "]]></script>",
+  '<bevent><beitem type="DataButtonPressed" onoccur="go();" subscribe="subscribe"/></bevent>',
+].join("\n");
