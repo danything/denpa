@@ -320,6 +320,39 @@ public class It930xDeviceTests
         await Assert.That(opened).Contains("ブリッジ: 残りのバッファ");
     }
 
+    /// <summary>
+    /// **溢れの記録には、その前に溢れを読んだときの操作と、そこからの時間と、そのときの値を添える。** 溢れは選局や止めるときにしか読まないので、
+    /// 初めて立ったのがどの操作のあとからどの操作までの間かを、記録から分けるため。閉じて開き直しても、このプロセスで前に読んだものと比べる
+    /// </summary>
+    [Test]
+    public async Task 溢れの記録には前に溢れを読んだときの操作と値を添える()
+    {
+        var clock = new FakeClock();
+        var (usb, _, _) = Fake();
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-82", clock), () => It930xDevice.CloseIfIdle("9-82", TimeSpan.Zero));
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("T27")!);
+            // 流している間に全体の溢れが立つ。TS を止めるときに読む
+            usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+        // 電源を入れ直さずに開き直す
+        var (again, _, _) = Fake();
+        again.Registers[It930xBridge.SysBufOverflow] = 1;
+        var device = Open(again, "9-82", clock);
+        device.Release();
+        It930xDevice.CloseIfIdle("9-82", TimeSpan.Zero);
+        var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-82")).ToList();
+        var stopped = lines.Single(text => text.Contains("受信機 0 の TS を止めるときに TS のバッファが溢れていました"));
+        await Assert.That(stopped).Contains("ms 前 (受信機 0 の TS を流し始めるとき) で、そのときは溢れていませんでした");
+        var opened = lines.Single(text => text.Contains("開いたときに TS のバッファが溢れていました"));
+        await Assert.That(opened).Contains("ms 前 (閉じるとき) で、そのときは全体の溢れ (0xDA39) 1、入力ごとの溢れ (0xDA57・0xDA8B〜) 0 0 0 0 0 でした");
+    }
+
     [Test]
     public async Task 開いたときの溢れは_機材ごとに_1_回だけ_denpa_に送る()
     {
@@ -468,7 +501,7 @@ public class It930xDeviceTests
 
     /// <summary>
     /// **全体の溢れが立ったままで TS が届かなければ、断る前に受信を 1 回やり直す** (IT930x の仕様書 6.4 の受信の始めの手順。仕様書 6.5 はブリッジの側で戻す操作をこれだけと書く)。
-    /// 転送要求を取り消してから、バッファを捨て、EP 0x84 をリセットして出し直す。入力は開けたままで触らない。やり直したあとに届けば、その機材を使い続ける
+    /// 入力を閉じ、転送要求を取り消してから、バッファを捨て、EP 0x84 をリセットして出し直し、入力を開け直す。やり直したあとに届けば、その機材を使い続ける
     /// </summary>
     [Test]
     public async Task 全体の溢れが立ったままで_TS_が届かなければ受信をやり直し_届けば使い続ける()
@@ -492,14 +525,18 @@ public class It930xDeviceTests
             await Assert.That(tuner.Device!.Jammed).IsNull();
             List<string> log;
             lock (usb.Log) log = [.. usb.Log];
-            // 転送要求を取り消し (TS 閉じる)、バッファを捨て、EP 0x84 をリセットしてから出し直す。入力の開閉には書かない
-            var stopped = log.FindIndex(log.IndexOf("W DA5A=1F"), line => line == "TS 閉じる");
+            // 入力を閉じてから転送要求を取り消し (TS 閉じる)、バッファを捨て、EP 0x84 をリセットして出し直し、入力を開け直す
+            var opened = log.IndexOf("W DA5A=1F");
+            var stopped = log.FindIndex(opened, line => line == "TS 閉じる");
             await Assert.That(stopped).IsGreaterThan(-1);
+            await Assert.That(log.Skip(opened + 1).Take(stopped - opened - 1).Where(TsRouteWrite))
+                .IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
             await Assert.That(log.Skip(stopped + 1).Take(8)).IsEquivalentTo(new[]
             {
                 "R DA1D 1", "W DA1D=01", "TS R 512", "TS R 0", "R DA1D 1", "W DA1D=00", "CLEAR_HALT 84", $"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}",
             });
-            await Assert.That(log.Skip(stopped).Any(line => line.StartsWith("W DA4", StringComparison.Ordinal) || line.StartsWith("W DA50", StringComparison.Ordinal))).IsFalse();
+            await Assert.That(log.Skip(stopped + 9).Where(TsRouteWrite).Take(6))
+                .IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
             var buffer = new byte[188];
             var got = 0;
             while (got < buffer.Length) got += tuner.Output.Read(buffer, got, buffer.Length - got);

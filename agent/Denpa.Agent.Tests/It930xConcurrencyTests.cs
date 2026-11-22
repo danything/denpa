@@ -13,6 +13,9 @@ public partial class It930xConcurrencyTests
 {
     private static readonly It930xModel Pe = It930x.Find(0x0511, 0x024E)!;
 
+    /// <summary>入力を全部閉じて EP 0x84 をリセットする書き込み (DRV_ResetRxPort の閉じる側。It930xBridge.DisableTsInputs)</summary>
+    private static readonly string[] InputsClosed = ["W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00"];
+
     /// <summary>スレッドを待つ長さ。これを過ぎたら固まったとみなす</summary>
     private static readonly TimeSpan Stuck = TimeSpan.FromSeconds(30);
 
@@ -375,8 +378,12 @@ public partial class It930xConcurrencyTests
         }
     }
 
+    /// <summary>
+    /// **受信をやり直すときは、入力を閉じてから転送要求を取り消し、受信の始めの手順のあとで入力を開け直す。**
+    /// 前は入力を開けたまま転送要求を取り消し、受信機が TS を出している間に EP 0x84 を誰も読まない間ができた (PX-W3PE5。2026-11-22。#1578)
+    /// </summary>
     [Test]
-    public async Task 受信をやり直すときは転送要求を取り消してから受信の始めの手順をし_入力には触らない()
+    public async Task 受信をやり直すときは入力を閉じてから転送要求を取り消し_受信の始めの手順のあとで開け直す()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
@@ -391,11 +398,19 @@ public partial class It930xConcurrencyTests
             tuner.RestartStream();
             List<string> log;
             lock (usb.Log) log = [.. usb.Log.Skip(from)];
-            // IT930x の仕様書 6.4: 転送要求を取り消す → 0xDA1D の bit0 ← 1、EP 0x84 を読む、bit0 ← 0 → EP 0x84 のリセット → 転送要求を出す。入力の開閉は書かない
-            await Assert.That(log).IsEquivalentTo(new[]
+            var cancelled = log.IndexOf("TS 閉じる");
+            var submitted = log.IndexOf($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}");
+            // 転送要求を取り消す前に、入力を全部閉じて EP 0x84 をリセットした (DRV_ResetRxPort の閉じる側。機材を閉じるときと同じ順)
+            await Assert.That(log.Take(cancelled).Where(It930xDeviceTests.TsRouteWrite))
+                .IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+            // IT930x の仕様書 6.4: 0xDA1D の bit0 ← 1、EP 0x84 を読む、bit0 ← 0 → EP 0x84 のリセット → 転送要求を出す
+            await Assert.That(log.Skip(cancelled).Take(submitted - cancelled + 1)).IsEquivalentTo(new[]
             {
                 "TS 閉じる", "R DA1D 1", "W DA1D=01", "TS R 512", "TS R 0", "R DA1D 1", "W DA1D=00", "CLEAR_HALT 84", $"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}",
             });
+            // 転送要求を出したあとで、使う入力を開け直した
+            await Assert.That(log.Skip(submitted + 1).Where(It930xDeviceTests.TsRouteWrite))
+                .IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
             await Assert.That(Flowing(tuner)).IsTrue();
         }
         finally
@@ -423,11 +438,11 @@ public partial class It930xConcurrencyTests
             Assert.Throws<It930xException>(() => device.RestartStream("テスト"));
             usb.OnNote = null;
             await Assert.That(device.Faulted).IsTrue();
-            // 転送要求を出し直さず、入力を全部閉じて EP 0x84 をリセットした (読む側がいないまま入力に TS を入れない)
+            // やり直しの始めに入力を閉じ、失敗したあとも閉じ直した。転送要求も入力も出し直さない (読む側がいないまま入力に TS を入れない)
             List<string> log;
             lock (usb.Log) log = [.. usb.Log.Skip(from)];
             await Assert.That(log).DoesNotContain($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}");
-            await Assert.That(log.Where(It930xDeviceTests.TsRouteWrite)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+            await Assert.That(log.Where(It930xDeviceTests.TsRouteWrite)).IsEquivalentTo(InputsClosed.Concat(InputsClosed).ToArray());
         }
         finally
         {
@@ -468,9 +483,9 @@ public partial class It930xConcurrencyTests
             await Assert.That(device.Faulted).IsTrue();
             List<string> log;
             lock (usb.Log) log = [.. usb.Log.Skip(from)];
-            // 転送要求は出し直さず、入力を全部閉じた。次のやり直しもしない
+            // やり直しの始めに入力を閉じ、止まらなかったあとも閉じ直した。転送要求は出し直さず、入力も開け直さない。次のやり直しもしない
             await Assert.That(log).DoesNotContain($"TS {It930xBridge.TsRequestSize} {It930xBridge.TsDepth}");
-            await Assert.That(log.Where(It930xDeviceTests.TsRouteWrite)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+            await Assert.That(log.Where(It930xDeviceTests.TsRouteWrite)).IsEquivalentTo(InputsClosed.Concat(InputsClosed).ToArray());
             await Assert.That(device.RestartStream("テスト")).IsFalse();
         }
         finally

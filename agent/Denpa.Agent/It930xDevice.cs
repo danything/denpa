@@ -632,7 +632,7 @@ public sealed class It930xDevice
     /// <para>
     /// 仕様書の公開の実装は、受信している受信機が 0 から 1 になるたびにこれをし、最後の受信機が止めるときに転送要求を取り消す。
     /// こちらは機材を開いている間ずっと転送要求を出しておくので、機材を開くたびと、受信をやり直すとき (<see cref="RestartStream"/>) にする。
-    /// 開くときは入力を閉じたままで捨てる (PLEX の公開ドライバーと同じ時期。仕様書 6.4 の [P])
+    /// 開くときも受信をやり直すときも、入力を閉じたままで捨てる (開くときは PLEX の公開ドライバーと同じ時期。仕様書 6.4 の [P])
     /// </para>
     /// <para>
     /// **捨てる読み出しで何も届かなくても、受信は始める** (仕様書の公開の実装は受信の開始を失敗にする。仕様書と違う所)。
@@ -695,24 +695,43 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 受信をやり直す (IT930x の仕様書 6.4・6.5)。転送要求を全部取り消してから、受信を始める手順 (<see cref="StartStream"/>) をする。入力は開けたままで触らない。
-    /// 仕様書の公開の実装で、溢れたあとにブリッジの側で戻す操作は受信の始めのバッファを捨てることだけで、そのあと TS が戻るかは確かめられていない (仕様書 12)。
+    /// 受信をやり直す (IT930x の仕様書 6.4・6.5)。入力を開けていれば全部閉じ (<see cref="CloseInputs"/>)、転送要求を全部取り消してから、受信を始める手順 (<see cref="StartStream"/>) をし、
+    /// 閉じた入力を開け直す。仕様書の公開の実装で、溢れたあとにブリッジの側で戻す操作は受信の始めのバッファを捨てることだけで、そのあと TS が戻るかは確かめられていない (仕様書 12)。
     /// 流しているほかの受信機の TS も、その間は欠ける。閉じた機材・読み出しが失敗した機材では何もせずに false を返す。
     /// 途中で失敗したら、読む側のいない入力を閉じ、機材を使えないものにしてから例外を送出する
     /// </summary>
+    /// <remarks>
+    /// **入力を閉じてから読み出しを止める** (閉じるとき (<see cref="Close"/>) と同じ順)。前は入力を開けたまま読み出しを止め、受信機が TS を出している間に、
+    /// 転送要求を取り消してから出し直すまで (読み出しが止まるのを待つ最大 200 ms と、バッファを捨てる読み出しの最大 2 秒) EP 0x84 を誰も読まなかった。
+    /// 仕様書 6.4 の公開の実装が受信の始めの手順をするのは、受信している受信機が 0 から 1 になるとき (ほかの受信機が流していないとき) だけ。
+    /// PX-W3PE5 で、やり直したあとに、確かめていた受信機の入力の溢れが立った (2026-11-22。#1578)。やり直しがその溢れを立てたと推定している (確かめてはいない)。
+    /// 閉じたあとは、開くときと同じく入力を閉じたままバッファを捨てる (<see cref="StartStream"/>)
+    /// </remarks>
     /// <param name="why">記録に出すきっかけ (「受信機 0 の TS が届かないため」)</param>
     public bool RestartStream(string why)
     {
         lock (_gate)
         {
             if (_closed || _faulted) return false;
-            Log.Write($"[{Label}] {why}、受信をやり直します (転送要求を取り消し、ブリッジの TS のバッファを捨て、EP 0x84 をリセットして出し直す)");
+            Log.Write($"[{Label}] {why}、受信をやり直します (入力を閉じ、転送要求を取り消し、ブリッジの TS のバッファを捨て、EP 0x84 をリセットして出し直し、入力を開け直す)");
             try
             {
                 // 欠けを数えているほかの受信機は、ここから数え直す (It930xTuner.Watch)。止める前に足すので、やり直しの飛びは数え直したあとに来る
                 Interlocked.Increment(ref _restarts);
+                if (_inputsOpen)
+                {
+                    if (!CloseInputs()) throw new IOException($"{Label} の TS の入力を閉じられませんでした");
+                    // やり直す前の溢れを記録に残す (このあとに読む溢れと比べ、やり直しの間に立ったのかを分ける)
+                    WatchOverflow("受信をやり直すために TS の入力を閉じたとき");
+                }
                 if (!StopReader()) throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しを止められませんでした");
                 StartStream();
+                if (_inputsOpen)
+                {
+                    Bridge.EnableTsInputs();
+                    // 開け直す前後に読み出しが失敗していたら、読む側のいない入力を開けたままにしない (下で閉じる。OpenInputs と同じ)
+                    if (_faulted) throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しが、受信をやり直している間に失敗しました");
+                }
                 return true;
             }
             catch (Exception error) when (error is IOException or ObjectDisposedException)
@@ -769,6 +788,7 @@ public sealed class It930xDevice
     {
         var overflow = Bridge.ReadOverflow();
         _overflow = overflow;
+        var previous = Remember(overflow, "開くとき");
         if (!overflow.Any)
         {
             // 電源を入れ直して戻った機材は、また溢れたら denpa に送り直す
@@ -786,9 +806,10 @@ public sealed class It930xDevice
             status = $"ブリッジの TS の経路の状態を読めませんでした ({error.Message})";
         }
         var firmware = rebooted ? "開いたとき、前のファームウェアが動いていました (REBOOT した)" : "開いたとき、ファームウェアは動いていませんでした";
-        FaultOnce("open", $"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{firmware}。{status}。TS の経路をリセットし直します");
+        FaultOnce("open", $"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{firmware}。{status}。{previous}。TS の経路をリセットし直します");
         overflow = Bridge.ResetTs();
         _overflow = overflow;
+        Remember(overflow, "開くときに TS の経路をリセットし直したあと");
         if (!overflow.Any) ForgetFaults();
         Log.Write(overflow switch
         {
@@ -910,6 +931,7 @@ public sealed class It930xDevice
     {
         var before = _overflow;
         _overflow = overflow;
+        var previous = Remember(overflow, when);
         if (overflow.SameAs(before)) return overflow;
         if (!overflow.Any && before is not { Any: true }) return overflow;
         // 全体の溢れが前から立っていて、TS が届くと確かめていなければ、EP 0x84 から TS が出ずに入力にも溜まって溢れたと読む。読み出しの遅れとは分ける (PX-MLT8PE。2026-11-12)
@@ -923,11 +945,37 @@ public sealed class It930xDevice
             Log.Write($"[{Label}] {when}に TS のバッファの溢れが下りていました");
             return overflow;
         }
-        var line = $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}。読み出しのスレッドが EP 0x84 の読み出しを離れていた時間は、いちばん長くて {away} ms です";
+        var line = $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}。読み出しのスレッドが EP 0x84 の読み出しを離れていた時間は、いちばん長くて {away} ms です。{previous}";
         // 溢れていなかったところから溢れたときと、全体の溢れが新しく立ったときは denpa に送って残させる (溢れた瞬間の記録)。立ったままの値が変わっただけなら記録に出すだけ
         if (before is not { Any: true } || (overflow.System && !before.System)) Log.Fault(line);
         else Log.Write(line);
         return overflow;
+    }
+
+    /// <summary>
+    /// USB のポートごとの、最後に溢れを読んだときの操作・時刻 (<see cref="Environment.TickCount64"/>)・値 (<see cref="Remember"/>)。
+    /// 機材を閉じて開き直しても残す (開いたときの溢れを、このプロセスで前に閉じたときと比べるため)
+    /// </summary>
+    private static readonly Dictionary<string, (string When, long AtMs, It930xOverflow Overflow)> LastReads = [];
+
+    /// <summary>
+    /// 読んだ溢れを、このポートで最後に読んだものとして覚え、その前に読んだときのことを記録に添える文にして返す
+    /// (「前に溢れを読んだのは 1200 ms 前 (受信機 2 の TS を流し始めるとき) で、そのときは溢れていませんでした」)。
+    /// 溢れは選局や止めるときにしか読まないので、初めて立ったのが、前に読んだときからこの操作までの間だと記録から分かるようにする
+    /// </summary>
+    private string Remember(It930xOverflow overflow, string when)
+    {
+        var now = Environment.TickCount64;
+        bool found;
+        (string When, long AtMs, It930xOverflow Overflow) last;
+        lock (LastReads)
+        {
+            found = LastReads.TryGetValue(Port, out last);
+            LastReads[Port] = (when, now, overflow);
+        }
+        if (!found) return "このプロセスでは、前に溢れを読んでいません";
+        var state = last.Overflow.Any ? $"{last.Overflow} でした" : "溢れていませんでした";
+        return $"前に溢れを読んだのは {now - last.AtMs} ms 前 ({last.When}) で、そのときは{state}";
     }
 
     /// <summary>溢れた入力の受信機 (「、受信機 2」)</summary>
