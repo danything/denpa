@@ -718,10 +718,12 @@ public sealed class It930xDevice
             {
                 // 欠けを数えているほかの受信機は、ここから数え直す (It930xTuner.Watch)。止める前に足すので、やり直しの飛びは数え直したあとに来る
                 Interlocked.Increment(ref _restarts);
+                // 入力をまだ開けていない (受信機を開く前に --tune などから呼ばれた) ときは、TS が入らないので閉じも開け直しもしない
                 if (_inputsOpen)
                 {
                     if (!CloseInputs()) throw new IOException($"{Label} の TS の入力を閉じられませんでした");
                     // やり直す前の溢れを記録に残す (このあとに読む溢れと比べ、やり直しの間に立ったのかを分ける)
+                    // 入力を閉じても溢れの印は消えない (DRV_ResetRxPort でも消えなかった。PX-MLT5PE。2026-11-11。It930xBridge.ResetTs)
                     WatchOverflow("受信をやり直すために TS の入力を閉じたとき");
                 }
                 if (!StopReader()) throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読み出しを止められませんでした");
@@ -954,7 +956,8 @@ public sealed class It930xDevice
 
     /// <summary>
     /// USB のポートごとの、最後に溢れを読んだときの操作・時刻 (<see cref="Environment.TickCount64"/>)・値 (<see cref="Remember"/>)。
-    /// 機材を閉じて開き直しても残す (開いたときの溢れを、このプロセスで前に閉じたときと比べるため)
+    /// 機材を閉じて開き直しても残す (開いたときの溢れを、このプロセスで前に閉じたときと比べるため)。
+    /// プロセスで 1 つなので、テストは機材ごとに別のポートの名前を使う (並んで走るほかのテストの読みと混ぜない)
     /// </summary>
     private static readonly Dictionary<string, (string When, long AtMs, It930xOverflow Overflow)> LastReads = [];
 
