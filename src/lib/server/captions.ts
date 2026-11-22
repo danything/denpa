@@ -203,6 +203,14 @@ export class CaptionFlush {
     this.off = program <= 0;
   }
 
+  /**
+   * 読みかけの PES を忘れる (字幕を写す ffmpeg を起こし直したとき)。パケットの切れ目 (読みかけのパケット) は覚えたままにする。
+   * 途中から読む塊はパケットの切れ目から始まるとは限らないので、作り直すと同期バイトを探し直すことになる
+   */
+  reset(): void {
+    this.open.clear();
+  }
+
   feed(chunk: Uint8Array): Uint8Array {
     if (this.off) return chunk;
     /** 足すパケットと、塊の中で足す位置 (その位置のバイトの前) */

@@ -4242,7 +4242,7 @@ export function recordingCaptions(
     const filter = program > 0 ? new ServiceFilter(program) : null;
     const streams = new StreamsWatch();
     // 字幕を押し出すものを足す (`CaptionFlush`。追っかけで録れているところまで読みきったとき、次の字幕まで待たせない)
-    let flush = new CaptionFlush(program);
+    const flush = new CaptionFlush(program);
     void (async () => {
       try {
         for (;;) {
@@ -4261,9 +4261,9 @@ export function recordingCaptions(
               out,
               () => proc,
             );
-            // 押し出す側も作り直す (読みかけの PES を前の ffmpeg のぶんとして数えたまま、新しい ffmpeg に足さない)。
+            // 読みかけの PES を忘れる (前の ffmpeg のぶんとして数えたまま、新しい ffmpeg に足さない)。パケットの切れ目は覚えたまま。
             // ここは本物の ffmpeg を起こすので単体テストでは通さない。押し出す側の数え方は captions.test.ts で見ている
-            flush = new CaptionFlush(program);
+            flush.reset();
             endInput(old);
             old.kill();
           }

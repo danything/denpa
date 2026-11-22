@@ -882,6 +882,18 @@ describe("字幕を押し出す (CaptionFlush)", () => {
     expect(new CaptionFlush(0).feed(input)).toBe(input);
   });
 
+  test("reset で読みかけの PES を忘れ、パケットの切れ目は覚えたまま", () => {
+    const flush = new CaptionFlush(SERVICE);
+    const long = caption(0, 400);
+    const first = stream(tables(), long.subarray(0, 188 + 50));
+    expect(flush.feed(first)).toBe(first);
+    flush.reset();
+    // 続きを渡しても、忘れた PES には足さない。次の PES には足す
+    const rest = long.subarray(188 + 50);
+    expect(flush.feed(rest)).toBe(rest);
+    expect(flush.feed(caption(3)).length).toBe(2 * 188);
+  });
+
   test("足したコマはデコードしない", () => {
     const text = new CaptionText();
     expect(text.feed({ at: 1000, data: FLUSH_DATA })).toEqual([]);
