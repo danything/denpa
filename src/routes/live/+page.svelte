@@ -556,7 +556,7 @@
 
 <!--
   映像を左、局を右 (YouTube の再生画面と同じ形)。広い画面ではページごとスクロールさせず、動くのは右の一覧だけ
-  (`+layout.svelte` の `fill`)。1000px 未満では縦に積む
+  (`Shell.svelte` の `fill`)。1000px 未満では縦に積む
 -->
 <PlayerLayout testid="live">
   <!-- 舞台と映像の束は追っかけと共通 (PlayerStage / MediaStack) -->

@@ -1006,7 +1006,7 @@
       見出しの裏に半分隠れたマスを見えているとみなして動かない (e2e では 3 時台に
       翌日の 4:00 のマスを押すと、真ん中が見出しに当たって詳細が開かなかった)
 
-      **表の箱の縦のスクロールで、スマホの形の操作の 1 行を出し入れする** (下のタブは出したまま。`data-retract-scroll`。`+layout.svelte`)
+      **表の箱の縦のスクロールで、スマホの形の操作の 1 行を出し入れする** (下のタブは出したまま。`data-retract-scroll`。`Shell.svelte`)
 
       **`aria-busy` は骨組みの間だけ。描いている途中は `data-drawing` で示す。**
       Pico と `app.css` には `button[aria-busy="true"] > *` のような規則があり、`aria-busy` を付け外しすると
@@ -1500,7 +1500,7 @@
     /* 中の貼り付くもの (`z-index`) を箱の中に閉じ込め、上に重ねる操作の 1 行より下にする */
     isolation: isolate;
     /*
-     * スクロール量をヘッダーへ渡す (`+layout.svelte` の `.navbar` と `app.css` の `.guide-bar` がこれで浮く)。
+     * スクロール量をヘッダーへ渡す (`Shell.svelte` の `.navbar` と `app.css` の `.guide-bar` がこれで浮く)。
      * 横のスクロール量 `--guide-x` は、時の列と左上の角が浮くのに使う (下の `.corner`・`.hour::before`)
      */
     scroll-timeline:

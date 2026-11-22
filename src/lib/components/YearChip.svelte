@@ -6,7 +6,7 @@
 
   /**
    * **「denpa の 1 年」のチップ** (1 月 1〜7 日、録画の一覧の上。docs/screens.md「季節の演出」)。
-   * 押すと去年の数のダイアログ (`YearDialog`) を開き、✕ で閉じるとその年はどの端末にも出さない (`+layout.svelte`)
+   * 押すと去年の数のダイアログ (`YearDialog`) を開き、✕ で閉じるとその年はどの端末にも出さない (`Shell.svelte`)
    */
   let {
     year,

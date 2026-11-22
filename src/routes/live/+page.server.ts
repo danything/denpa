@@ -174,7 +174,7 @@ export function load(event) {
   // データ放送に渡す郵便番号と都道府県。家の場所は端末では変わらないので、置き場はサーバ
   return {
     channels,
-    /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
+    /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `Shell.svelte`) */
     channelNotice: channelNotice(
       serviceCounts(),
       listedServices(),

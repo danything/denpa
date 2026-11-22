@@ -13,12 +13,12 @@
 
   /**
    * 新しいバージョンが出ていれば、それがある「その他」(`general#version`) に点を付ける。
-   * 下のタブ・ヘッダーの「設定」の点 (`routes/+layout.svelte` の `fresh`) からここまでをたどれるように
+   * 下のタブ・ヘッダーの「設定」の点 (`routes/Shell.svelte` の `fresh`) からここまでをたどれるように
    */
   const freshGroup = $derived(data.update === null ? null : "general");
   /**
    * チャンネルのお知らせがあれば、文を出す「受信」(`reception#channels`) に印を付ける (`app.css` の `.alert-dot`)。
-   * 下のタブの「設定」の印 (`routes/+layout.svelte` の `entryMark`) からここまでをたどれるように
+   * 下のタブの「設定」の印 (`routes/Shell.svelte` の `entryMark`) からここまでをたどれるように
    */
   const alert = $derived(data.channelAlert);
 
@@ -34,7 +34,7 @@
   let main = $state<HTMLElement>();
 
   /**
-   * **グループを移ったら先頭に戻す。** スクロールするのはどの幅でも window (`routes/+layout.svelte` の `FILLED` に入れない)。
+   * **グループを移ったら先頭に戻す。** スクロールするのはどの幅でも window (`routes/Shell.svelte` の `FILLED` に入れない)。
    * 先頭へは SvelteKit も戻すが、節へ滑らかにスクロールする設定 (下の `scroll-behavior`) のせいで、前のグループの下から先頭までスクロールする途中が見える。
    * 戻る・進むはブラウザが前の位置へ帰すので触らない。`#<節>` 付きで来たらその節へ (飛ぶ途中を見せても意味が無いので、ここも滑らかにしない)
    */
@@ -165,7 +165,7 @@
   **グループごとに 1 つの画面** (`/settings/<グループ>`) で、節は上から積む。節を押すとそこへ滑らかにスクロールし、
   スクロールしていくと左の一覧で見えている節に印が付く。並びは `#lib/settings-sections.ts`。
 
-  **横に並べはじめる幅は 768px** で、映像の画面の二段組の 1000px ([+layout.svelte](../+layout.svelte) の `FILLED` の上の説明) より手前。768〜999px は下のタブの形のまま左の一覧を残す。
+  **横に並べはじめる幅は 768px** で、映像の画面の二段組の 1000px ([Shell.svelte](../Shell.svelte) の `FILLED` の上の説明) より手前。768〜999px は下のタブの形のまま左の一覧を残す。
   並べたときの形は下の style。左の列と右とは線で分けない (地は同じで、右の列を真ん中に寄せた余白で分かれる)。
 
   **狭い画面では一覧と中身を切り替える。** `/settings` はグループの一覧だけ、押すとその画面と「← 設定」、
@@ -446,7 +446,7 @@
   /*
    * **節の操作の 1 行 (`.section-bar`) は、見えている節のものだけを節へ飛ぶ行のすぐ上に浮かべる** (ボタンは下に。
    * 形は `app.css` の `.dock`。節へ飛ぶ行のぶん `--dock-gap` を足して上げる)。ほかの節のものは隠す。はみ出す分は横にスクロールする (節へ飛ぶ行と同じ)。
-   * 低い画面で読んでいる間は、節へ飛ぶ行と一緒に引っ込む (`routes/+layout.svelte` の `data-retract`)
+   * 低い画面で読んでいる間は、節へ飛ぶ行と一緒に引っ込む (`routes/Shell.svelte` の `data-retract`)
    */
   :global(:where(html[data-phone]))
     .main-inner

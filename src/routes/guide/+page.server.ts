@@ -39,7 +39,7 @@ export function load({ url, cookies }) {
 
   /*
    * 局の数 (種別ごと)。選んでいる種別に局が無ければ、表の真ん中にスキャンの案内を出す。
-   * そのときは上の案内 (`+layout.svelte`) を出さない。同じことを 2 度言わない
+   * そのときは上の案内 (`Shell.svelte`) を出さない。同じことを 2 度言わない
    */
   const counts = serviceCounts();
   const typeEmpty = (counts[type] ?? 0) === 0;

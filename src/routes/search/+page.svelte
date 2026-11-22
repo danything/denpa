@@ -1053,7 +1053,7 @@
   }
   /*
    * スマホの形では書く欄を下から出すボタンを、下のタブの上に浮かせる。地も線も敷かず、ボタン (主のボタン) だけが浮く
-   * (浮きの上に浮きを重ねない。docs/design.md)。低い画面で読んでいる間は引っ込む (`+layout.svelte` の `data-retract`)。
+   * (浮きの上に浮きを重ねない。docs/design.md)。低い画面で読んでいる間は引っ込む (`Shell.svelte` の `data-retract`)。
    * 結果の一覧の最後の行が隠れないよう、ボタンの高さぶんの余白を下に足す
    */
   :global(:where(html[data-phone])) .drafting > .search-page {
