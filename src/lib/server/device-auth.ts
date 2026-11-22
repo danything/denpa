@@ -451,7 +451,7 @@ export function pruneDeviceAuth(at = now()): number {
  *
  * WebView の中のページは放送の文書を動かす。文書は自前のエンジンの中で動き、ページのスクリプトにはならない (CSP。docs/stream.md) が、
  * それでも破られたときに録画を消す・予約する・設定を書き換えるところまで届かないよう、書き込みはデータ放送が使うものに絞る。
- * 当たらないリクエストは Cookie を見ずに、いつもの認証へ回す
+ * 当たらないリクエストは、効く Cookie で来たら hooks が 401 で断る (いつもの認証へ回すと、信頼するネットワークの中では接続元で通る)
  */
 export function appCookieAllows(method: string, pathname: string): boolean {
   return (
