@@ -7,7 +7,7 @@ import type { EncodedSource } from "#lib/ts/playback.js";
 import type { Recording } from "#lib/types.js";
 
 import { config } from "./config";
-import { parseTitle, sanitizeFileName } from "./title";
+import { sanitizeFileName } from "./title";
 
 export interface LibraryNameInput {
   id: number;
@@ -20,19 +20,6 @@ export interface LibraryNameInput {
   hevc_path?: string | null;
   /** H.264 の置き場所 (主でないとき)。これも「自分自身」なので衝突と読まない */
   alt_path?: string | null;
-}
-
-/**
- * **シリーズのフォルダ名。** エンコードしたものはこの名前のフォルダに並ぶ (下の `libraryRelPath`)。
- *
- * 録画一覧の「まとめて表示」も同じ名前でまとめる。画面だけ別の見分け方をすると、
- * ディスクでは 1 つのフォルダなのに一覧では 2 つに割れる (またはその逆) ことが起きる。
- * シリーズ名を持たない行 (録り逃し・古い取り込み) は番組名から切り出す
- * (録るときと同じ `parseTitle`)。**ここだけはディスクと違う。** エンコードするときは空のまま
- * `untitled/` に入るが、一覧で無関係な番組が 1 つにまとまっても探しにくいだけなので、一覧では切り出す
- */
-export function seriesFolder(series: string, name: string): string {
-  return sanitizeFileName(series === "" ? parseTitle(name).series : series);
 }
 
 /**

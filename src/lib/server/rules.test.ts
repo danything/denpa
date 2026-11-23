@@ -13,6 +13,11 @@ import {
   type PaidAllowed,
   prefillFrom,
 } from "./rules";
+import { headKey } from "./series";
+import { headsForTest } from "./series-heads";
+
+// 学んだ先頭は無いものとして始める (DB を読まない。先頭を使うテストはそこで決める)
+headsForTest([]);
 
 /**
  * ルールの判定。DB には触らない (matches は純粋関数にしてある)。
@@ -258,6 +263,20 @@ describe("録画からルールを作る", () => {
     expect(prefillFrom({ ...recording, genre_detail: null })).toEqual({
       keyword: "テストアニメ",
     });
+  });
+
+  test("学んだ先頭があれば、そこで切った名前をキーワードにする (「まとめて表示」と同じ名前)", () => {
+    headsForTest([headKey(["おんがく交差点"])]);
+    try {
+      expect(
+        prefillFrom({
+          ...recording,
+          name: "おんがく交差点【民族楽器の名曲集】🈑",
+        })?.keyword,
+      ).toBe("おんがく交差点");
+    } finally {
+      headsForTest([]);
+    }
   });
 
   test("鍵括弧の作品名に編が続くタイトルは、作品名だけをキーワードにする", () => {

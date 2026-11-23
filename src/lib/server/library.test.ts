@@ -13,8 +13,8 @@ import { encodedCodec } from "../encoded-codec";
 const { config } = await import("./config");
 config.encodedDir = mkdtempSync(join(tmpdir(), "denpa-lib-"));
 
-const { libraryPath, encodedPath, libraryFamily, seriesFolder } =
-  await import("./library");
+const { sanitizeFileName } = await import("./title");
+const { libraryPath, encodedPath, libraryFamily } = await import("./library");
 
 /** 2026-08-03 22:30 開始の録画 */
 function recording(
@@ -128,25 +128,13 @@ describe("保存先での名前", () => {
   });
 });
 
-describe("シリーズのフォルダ名 (一覧の「まとめて表示」も同じ名前でまとめる)", () => {
-  test("エンコードしたものを置くフォルダと同じ名前になる", () => {
-    const rec = recording();
+describe("シリーズのフォルダ名", () => {
+  test("シリーズ名をファイル名と同じに寄せた名前のフォルダに置く (「まとめて表示」も同じ寄せ方)", () => {
+    const rec = { ...recording(), series: "番組: 特別編" };
     expect(dirname(libraryPath(rec, ".mkv"))).toBe(
-      join(config.encodedDir, seriesFolder(rec.series, "")),
+      join(config.encodedDir, sanitizeFileName(rec.series)),
     );
-  });
-
-  test("ファイル名に使えない文字はエンコードするときと同じに落とす", () => {
-    expect(seriesFolder("番組: 特別編", "")).toBe("番組 特別編");
-  });
-
-  test("シリーズ名が無ければ番組名から切り出す (話数・副題・記号を落とす)", () => {
-    expect(seriesFolder("", "【新】テストアニメ #12 決戦[字]")).toBe(
-      "テストアニメ",
-    );
-    expect(seriesFolder("", "テストアニメ 第3話「出会い」")).toBe(
-      "テストアニメ",
-    );
+    expect(sanitizeFileName(rec.series)).toBe("番組 特別編");
   });
 });
 

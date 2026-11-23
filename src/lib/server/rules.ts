@@ -42,8 +42,10 @@ import {
   rules as ruleTable,
   services,
 } from "./schema";
+import { seriesNames } from "./series";
+import { seriesName } from "./series-heads";
 import { settings } from "./settings";
-import { parseTitle, searchable, withoutSeason, withoutSlot } from "./title";
+import { searchable, withoutSeason } from "./title";
 
 /** 空の並びは「指定なし」。NULL と同じに扱う */
 function nonEmpty<T>(list: T[] | null): T[] | null {
@@ -335,13 +337,15 @@ interface RuleSource {
 }
 
 /**
- * シリーズ名。**録画でもいまの番組名から切り出す。** 録画の `series` は録ったときの
- * 切り出し方のままで、`「東京リベンジャーズ」三天戦争編` のように鍵括弧ごと残っているものがある
+ * シリーズ名。**録画でもいまの番組名から決める** (`series-heads.seriesName`。「まとめて表示」と同じ名前)。
+ * 録画の `series` は録ったときの決め方のままで、`「東京リベンジャーズ」三天戦争編` のように鍵括弧ごと残っているものや、
+ * あとで学んだ先頭 (`ダークサイドミステリー`) で切られていないものがある。
+ * 開いた番組の「ルールを作る」(`GroupHead.svelte`) も、まとまりのほかの回に当たる名前になる
  */
 function seriesOf(source: Pick<RuleSource, "name">): string {
   return source.name.trim() === ""
     ? ""
-    : withoutSeason(withoutSlot(parseTitle(source.name).series.trim()));
+    : withoutSeason(seriesName(source.name).trim());
 }
 
 /**
@@ -550,17 +554,18 @@ function historyEpisodes(): Taken {
 /**
  * **当たった放送と同じシリーズの録画** (「前の回は録らない」の相手。`episode.earlierAirings`)。
  * **期間で切らない。** 1 期を数か月前に録り終え、2 期の頃に別の局で 1 期が流れる、を外したい。
- * 全部の録画を読むと録画の数だけ重くなるので、当たった放送のシリーズ名 (`recordings.series`。
- * 録るときに `parseTitle` で入れたもの) で引く (索引 `recordings_series`)。全角・半角のどちらで
- * 入っていても当たるよう両方で引き、同じシリーズかは `earlierAirings` が回の読み方で決める。
- * 失敗した録画は数えない。消したもの (行が残っている間) は数える
+ * 全部の録画を読むと録画の数だけ重くなるので、当たった放送のシリーズ名 (`recordings.series`) で引く (索引 `recordings_series`)。
+ * 同じシリーズかは `earlierAirings` が回の読み方で決める。失敗した録画は数えない。消したもの (行が残っている間) は数える。
+ *
+ * **列に入りうる名前を全部引く** (`seriesNames`)。列は録ったときの決め方のままで、決め方を変える前の
+ * `parseTitle` の名前・枠の名前 (`アニメ　`) を外した名前・そのとき学んでいた先頭で切った名前のどれかが入っている。
+ * 1 つでも引き漏らすと、前の回を録ったのに見落として二重に録る
  */
 function seriesEpisodes(list: readonly Described[]): Taken {
   const names = new Set<string>();
-  for (const { name } of list) {
-    names.add(parseTitle(name).series);
-    names.add(parseTitle(toHalfWidth(name)).series);
-  }
+  for (const { name } of list)
+    for (const each of [name, toHalfWidth(name)])
+      for (const series of seriesNames(each)) names.add(series);
   const taken: Taken = [];
   // SQLite の引数の数には上限がある。シリーズ名は多くても数百なので、刻んで引く
   const all = [...names];
