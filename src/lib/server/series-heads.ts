@@ -4,7 +4,7 @@
  * - `seriesName` / `seriesParts` は、表 (`series_heads`) の写しをメモリに持って当てる。写しは最初に呼ばれたときに同期で読む
  *   (起動して最初の `epg.settle` より前に録り始めても、前と同じ名前になる)
  * - 学び直す (`relearn`) のは番組表を取得し終えたとき (`epg.settle` が `scheduleRelearn` を呼ぶ)。
- *   `epg.settle` の外で、`LEARN_STEP` 行ごとに手を離しながら動かす。**控えも録画も変わっていなければ学ばない**
+ *   `epg.settle` の外で、`LEARN_STEP` 行ごとにイベントループに戻りながら動かす。**控えも録画も変わっていなければ学ばない**
  * - `runtime.ts` が `enableRelearn` を呼ぶまでは学ばない (単体テストと `DENPA_AUTOSTART=0` は表を読むだけ)
  */
 import { and, asc, count, eq, gt, inArray, lt, max, ne } from "drizzle-orm";
@@ -38,10 +38,19 @@ export const SERIES_KEEP_DAYS = 90;
 export const SERIES_HOLD_DAYS = 14;
 
 let heads: Set<string> | null = null;
+/** 番組名ごとの切り方 (一覧は表示のたびに全部の行を切るので覚えておく)。先頭が変わったら捨てる */
+const splits = new Map<string, { series: string; rest: string }>();
+/** 覚える番組名の数の上限。超えたら全部捨てて覚え直す */
+const SPLITS_MAX = 20_000;
+
+function useHeads(keys: Iterable<string>): void {
+  heads = new Set(keys);
+  splits.clear();
+}
 
 /** 表の先頭を読み直す (起動時に 1 度。学び直したあとは `relearn` が入れ替える) */
 export function reloadHeads(): void {
-  heads = new Set(
+  useHeads(
     orm()
       .select({ key: seriesHeads.key })
       .from(seriesHeads)
@@ -50,9 +59,19 @@ export function reloadHeads(): void {
   );
 }
 
-function currentHeads(): ReadonlySet<string> {
+/** 単体テストで、DB を読まずに先頭を決める */
+export function headsForTest(keys: Iterable<string>): void {
+  useHeads(keys);
+}
+
+function split(name: string): { series: string; rest: string } {
   if (heads === null) reloadHeads();
-  return heads!;
+  const known = splits.get(name);
+  if (known !== undefined) return known;
+  if (splits.size >= SPLITS_MAX) splits.clear();
+  const result = splitSeries(name, heads!);
+  splits.set(name, result);
+  return result;
 }
 
 /**
@@ -63,7 +82,7 @@ export function seriesParts(
   name: string,
   subtitle: string,
 ): { series: string; subtitle: string } {
-  const { series, rest } = splitSeries(name, currentHeads());
+  const { series, rest } = split(name);
   return {
     series,
     subtitle: [rest, subtitle].filter((part) => part !== "").join(" "),
@@ -72,7 +91,7 @@ export function seriesParts(
 
 /** **番組のシリーズ名。** 録画のフォルダ名・「まとめて表示」・「ルールを作る」の下書きはどれもこれで決める */
 export function seriesName(name: string): string {
-  return splitSeries(name, currentHeads()).series;
+  return split(name).series;
 }
 
 let enabled = false;
@@ -131,7 +150,8 @@ function seen(
   into: Map<string, Seen>,
   serviceName: string,
   name: string,
-  movieOnly: boolean,
+  /** ジャンルが映画だけか。ジャンルを持たない行 (録画・引き継いだ履歴) は null で、印を変えない */
+  movieOnly: boolean | null,
 ): void {
   const station = stationKey(serviceName);
   if (station === null || name.trim() === "") return;
@@ -140,8 +160,18 @@ function seen(
   const key = `${station}\t${series}`;
   const entry = into.get(key);
   if (entry === undefined)
-    into.set(key, { station, series, title, titles: 1, movieOnly });
-  else if (entry.titles === 1 && entry.title !== title) entry.titles = 2;
+    into.set(key, {
+      station,
+      series,
+      title,
+      titles: 1,
+      movieOnly: movieOnly ?? false,
+    });
+  else {
+    if (entry.titles === 1 && entry.title !== title) entry.titles = 2;
+    // 映画だけの印は、見た番組がどれも映画だけのときだけ (混ざっていたら外す)
+    if (movieOnly !== null) entry.movieOnly &&= movieOnly;
+  }
 }
 
 /** 番組表で書き換わった番組を控えに足す。控えの中身 (行・回の種類・映画の印) が変わったら true */
@@ -159,6 +189,8 @@ async function observe(at: number): Promise<boolean> {
     .orderBy(asc(programs.id))
     .all();
   const batch = new Map<string, Seen>();
+  // 書き終えてから進める。途中で失敗したら、次は同じ番組から読み直す
+  let through = observedThrough;
   for (const row of rows) {
     const genres = row.genres ?? [];
     seen(
@@ -167,19 +199,19 @@ async function observe(at: number): Promise<boolean> {
       row.name,
       genres.length > 0 && genres.every((genre) => genre === 6),
     );
-    observedThrough = Math.max(observedThrough, row.updated_at);
+    through = Math.max(through, row.updated_at);
   }
   let changed = false;
   const entries = [...batch.values()];
   for (let i = 0; i < entries.length; i += LEARN_STEP) {
-    orm().transaction(() => {
+    orm().transaction((tx) => {
       for (const entry of entries.slice(i, i + LEARN_STEP)) {
         const same = and(
           eq(seriesTitles.station, entry.station),
           eq(seriesTitles.series, entry.series),
         );
         const inserted = affected(
-          orm()
+          tx
             .insert(seriesTitles)
             .values({
               station: entry.station,
@@ -196,7 +228,7 @@ async function observe(at: number): Promise<boolean> {
           continue;
         }
         const more = affected(
-          orm()
+          tx
             .update(seriesTitles)
             .set({ titles: 2 })
             .where(
@@ -209,18 +241,22 @@ async function observe(at: number): Promise<boolean> {
               ),
             ),
         );
-        const movie = affected(
-          orm()
-            .update(seriesTitles)
-            .set({ movie_only: entry.movieOnly })
-            .where(and(same, ne(seriesTitles.movie_only, entry.movieOnly))),
-        );
+        // 映画だけの印は外すだけ (一度でもほかのジャンルで流れたら、映画だけの番組ではない)。行ったり来たりして毎回学び直さない
+        const movie = entry.movieOnly
+          ? 0
+          : affected(
+              tx
+                .update(seriesTitles)
+                .set({ movie_only: false })
+                .where(and(same, eq(seriesTitles.movie_only, true))),
+            );
         if (more + movie > 0) changed = true;
-        orm().update(seriesTitles).set({ last_seen: at }).where(same).run();
+        tx.update(seriesTitles).set({ last_seen: at }).where(same).run();
       }
     });
     await pause();
   }
+  observedThrough = through;
   return changed;
 }
 
@@ -255,8 +291,8 @@ export async function relearn(): Promise<boolean> {
   );
   if (pruned > 0) changed = true;
   const mark = inputMark();
+  // 覚えるのは学び終えてから。途中で失敗したら、入力が変わらなくても次に学び直す
   if (!changed && mark === lastInput) return false;
-  lastInput = mark;
 
   // 読む順を決めておく (学ぶ結果は順に依らないが、同じ控えからは同じ並びで学ぶ)
   const merged = new Map<string, Seen>();
@@ -280,7 +316,7 @@ export async function relearn(): Promise<boolean> {
     .where(ne(recordings.state, "failed"))
     .orderBy(asc(recordings.id))
     .all())
-    seen(merged, row.service_name, row.name, false);
+    seen(merged, row.service_name, row.name, null);
   for (const row of orm()
     .select({
       name: recordedHistory.name,
@@ -289,7 +325,7 @@ export async function relearn(): Promise<boolean> {
     .from(recordedHistory)
     .orderBy(asc(recordedHistory.id))
     .all())
-    seen(merged, row.service_name, row.name, false);
+    seen(merged, row.service_name, row.name, null);
   await pause();
 
   const rows: SeriesRow[] = [...merged.values()].map(
@@ -338,7 +374,8 @@ export async function relearn(): Promise<boolean> {
       .all()
       .map(({ key }) => key);
   });
-  heads = new Set(kept);
+  lastInput = mark;
+  useHeads(kept);
   console.log(
     `[series] シリーズの先頭を学びました: ${kept.length} (控え ${rows.length} 行・${Math.round(performance.now() - started)} ms)`,
   );
@@ -350,4 +387,5 @@ export function forgetForTest(): void {
   observedThrough = 0;
   lastInput = null;
   heads = null;
+  splits.clear();
 }

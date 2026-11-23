@@ -1099,6 +1099,37 @@ describe("前の回は録らない", () => {
     expect(reservations().map((r) => r.program_id)).toEqual([13, 21]);
   });
 
+  test("録画の列が決め方を変える前の名前でも引く (枠の名前つき・回のタイトルつき・学んだ先頭)", () => {
+    for (const series of [
+      "アニメ　テストアニメ　回のタイトル",
+      "テストアニメ　回のタイトル",
+      "テストアニメ",
+    ]) {
+      reset();
+      rule(1, "テストアニメ", true, 1, false, true);
+      const at = base - 30 * DAY;
+      orm()
+        .insert(recordings)
+        .values({
+          service_id: SERVICE,
+          service_name: "TOKYO MX1",
+          name: "アニメ　テストアニメ　回のタイトル #4",
+          series,
+          start_at: at,
+          end_at: at + HOUR,
+          finished_at: at + HOUR,
+          created_at: now(),
+          updated_at: now(),
+        })
+        .run();
+      program(1, "アニメ　テストアニメ　回のタイトル #1");
+      program(5, "アニメ　テストアニメ　回のタイトル #5", HOUR);
+
+      applyRules();
+      expect(reservations().map((r) => r.program_id)).toEqual([5]);
+    }
+  });
+
   test("録らない放送は相手にしない: 6 話がコピー禁止なら、そのあとの別の局の 5 話は外さない", () => {
     reset();
     sub(400211, "BS11", "BS09_0", "BS");

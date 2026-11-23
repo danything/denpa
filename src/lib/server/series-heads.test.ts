@@ -177,3 +177,19 @@ describe("relearn", () => {
     );
   });
 });
+
+describe("relearn (失敗したとき)", () => {
+  test("学び終える前に失敗したら、入力が変わらなくても次に学び直す", async () => {
+    const { sql } = await import("drizzle-orm");
+    program(1, "おんがく交差点【A】");
+    program(1, "おんがく交差点【B】");
+    orm().run(sql`ALTER TABLE series_heads RENAME TO series_heads_away`);
+    try {
+      await expect(relearn()).rejects.toThrow();
+    } finally {
+      orm().run(sql`ALTER TABLE series_heads_away RENAME TO series_heads`);
+    }
+    expect(await relearn()).toBe(true);
+    expect(seriesName("おんがく交差点【C】")).toBe("おんがく交差点");
+  });
+});

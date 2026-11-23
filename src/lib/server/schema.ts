@@ -1212,7 +1212,7 @@ export const seriesTitles = sqliteTable(
     title: text("title").notNull(),
     /** 見た回の種類。1 か 2 */
     titles: integer("titles").notNull(),
-    /** ジャンルが映画だけの番組か (最後に見たもの) */
+    /** 見た番組がどれもジャンルが映画だけだったか (一度でもほかのジャンルで流れたら外す) */
     movie_only: flag("movie_only")
       .notNull()
       .default(sql`0`),

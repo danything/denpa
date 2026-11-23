@@ -150,6 +150,19 @@ function isLabel(segment: string): boolean {
   );
 }
 
+/**
+ * 先頭のキーで切れ端をつなぐ字。`keyOf` は `/` を空白に寄せて消すので、キーの中には出ない。
+ * 字をそのままつなぐと、`ab`+`c` と `a`+`bc` が同じキーになる
+ */
+const KEY_SEP = "/";
+const joined = (prefix: string, key: string) =>
+  prefix === "" ? key : `${prefix}${KEY_SEP}${key}`;
+
+/** 切れ端のキーをつないだ、先頭のキー (`series_heads.key`) */
+export function headKey(segments: readonly string[]): string {
+  return segments.map(keyOf).join(KEY_SEP);
+}
+
 /** 3 文字未満の先頭は採らない (`映画『冬の華』` の「映画」) */
 const MIN_HEAD = 3;
 
@@ -192,7 +205,7 @@ export interface Learned {
   frames: Set<string>;
 }
 
-/** 学んでいる間に、何行ごとに手を離すか (`series-heads.relearn` が間にほかの処理を挟む) */
+/** 学んでいる間に、何行ごとに yield するか (`series-heads.relearn` がイベントループに戻り、ほかの処理を先に動かす) */
 export const LEARN_STEP = 2000;
 
 /**
@@ -244,7 +257,7 @@ export function* learnSteps(
     let steadyKids = 0;
     for (const [key, kid] of at.kids) {
       if (steady(kid)) steadyKids++;
-      walkFrames(kid, prefix + key);
+      walkFrames(kid, joined(prefix, key));
     }
     if (prefix !== "" && steadyKids >= 2) frames.add(prefix);
   };
@@ -265,7 +278,7 @@ export function* learnSteps(
     for (let k = 0; k < segments.length - 1; k++) {
       const segment = segments[k]!;
       at = at.kids.get(keyOf(segment))!;
-      prefix += keyOf(segment);
+      prefix = joined(prefix, keyOf(segment));
       raw += segment;
       const child = at.kids.get(keyOf(segments[k + 1]!))!;
       if (steady(child)) continue;
@@ -295,7 +308,7 @@ export function* learnSteps(
     if (cut !== null) heads.add(cut);
     else {
       const keys = item.segments.map(keyOf);
-      wholes.push(keys.map((_, i) => keys.slice(0, i + 1).join("")));
+      wholes.push(keys.map((_, i) => keys.slice(0, i + 1).join(KEY_SEP)));
     }
     if (++n % LEARN_STEP === 0) yield;
   }
@@ -348,9 +361,9 @@ export function splitSeries(
   const segments = withoutSen(segmentsOf(strict), (key) => heads.has(key));
   let prefix = "";
   let raw = "";
-  let best: { series: string; rest: string } | null = null;
-  segments.forEach((segment, k) => {
-    prefix += keyOf(segment);
+  let best = { series: strict, rest: "" };
+  for (const [k, segment] of segments.entries()) {
+    prefix = joined(prefix, keyOf(segment));
     raw += segment;
     if (heads.has(prefix))
       best = {
@@ -361,6 +374,6 @@ export function splitSeries(
           .replace(/^[\s　]+/, "")
           .trim(),
       };
-  });
-  return best ?? { series: strict, rest: "" };
+  }
+  return best;
 }
