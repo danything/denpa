@@ -23,7 +23,7 @@
         <!-- 形は static/favicon.svg と同じ電波塔。作り直すのは dotnet run tray/Denpa.Tray/make-icon.cs tray/Denpa.Tray/denpa.ico -->
         <ApplicationIcon>denpa.ico</ApplicationIcon>
         <!--
-            バージョン。リリースでは `-p:Version=<v を落としたタグ> -p:InformationalVersion=<タグ>` で上書きして組む (release.yml)。
+            バージョン。リリースでは `-p:Version=<v を落としたタグ> -p:InformationalVersion=<タグ>` で上書きして組む (windows-agent.yml)。
             `+コミット` は足さない
         -->
         <InformationalVersion>dev</InformationalVersion>

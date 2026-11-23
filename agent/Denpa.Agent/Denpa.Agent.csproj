@@ -24,7 +24,7 @@
         <!--
             バージョン。リリースでは `-p:InformationalVersion=<タグ>` で上書きして組む (macOS・Windows・Android。
             Linux のイメージは組み直さないので DENPA_VERSION で知る。About.cs)。`+コミット` は足さない。
-            Windows はファイルバージョンにも出るように `-p:Version=<v を落としたタグ>` も渡す (release.yml)
+            Windows はファイルバージョンにも出るように `-p:Version=<v を落としたタグ>` も渡す (windows-agent.yml)
         -->
         <InformationalVersion>dev</InformationalVersion>
         <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>

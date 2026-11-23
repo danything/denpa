@@ -5,7 +5,7 @@
 #
 # wdi-simple は Zadig と同じ libwdi のコマンドライン版で、install.ps1 -WinUsb がチューナーのドライバを WinUSB に
 # 替えるのに使う (docs/install-windows.md)。**libwdi のリリースには Zadig しか無い**ので、ここでビルドして
-# エージェントの zip に入れる (.github/workflows/release.yml・test.yml)。上流の CI (.github/workflows/vs2022.yml) と
+# エージェントの zip に入れる (.github/workflows/windows-agent.yml・test.yml)。上流の CI (.github/workflows/vs2022.yml) と
 # 同じ手順で、違うのは次の 3 つ。
 #   - x64 の Release だけをビルドする
 #   - 埋め込むドライバを WinUSB だけにする (libusb-win32 と libusbK のファイルは取ってこない。msvc/config.h を書き換える)
