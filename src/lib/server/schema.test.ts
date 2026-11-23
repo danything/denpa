@@ -25,6 +25,9 @@ interface Column {
   hidden: number;
 }
 
+/**
+ * drizzle の表。FTS5 の仮想表 (`schema.CAPTION_FTS`) とその裏の表 (`caption_fts_data` など) は、手で書いたマイグレーションが作るので除く
+ */
 function tables(db: Database): string[] {
   return (
     db
@@ -33,7 +36,13 @@ function tables(db: Database): string[] {
                  AND name NOT LIKE 'sqlite_%' AND name != '__drizzle_migrations' ORDER BY name`,
       )
       .all() as { name: string }[]
-  ).map((row) => row.name);
+  )
+    .map((row) => row.name)
+    .filter(
+      (name) =>
+        name !== schema.CAPTION_FTS &&
+        !name.startsWith(`${schema.CAPTION_FTS}_`),
+    );
 }
 
 function columns(db: Database, table: string): Map<string, Column> {
@@ -87,6 +96,13 @@ const defined = Object.values(schema).flatMap((value) =>
 describe("schema.ts と drizzle/", () => {
   test("テーブルの一覧が同じ", () => {
     expect(defined.map(getTableName).sort()).toEqual(tables(migrated()));
+  });
+
+  test("字幕のインデックス (FTS5 の仮想表) は手で書いたマイグレーションが作る", () => {
+    const row = migrated()
+      .query("SELECT sql FROM sqlite_master WHERE name = ?")
+      .get(schema.CAPTION_FTS) as { sql: string } | null;
+    expect(row?.sql).toContain("USING fts5");
   });
 
   for (const table of defined) {

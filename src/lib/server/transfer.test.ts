@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { count } from "drizzle-orm";
+import { count, sql } from "drizzle-orm";
 
 /**
  * denpa を別の機械へ移す (`transfer.ts`)。
@@ -44,6 +44,8 @@ function use(where: { data: string; encoded: string; raw: string }): void {
 const { orm } = await import("./db");
 const schema = await import("./schema");
 const transfer = await import("./transfer");
+const captionIndex = await import("./caption-index");
+const { captionGrams, captionKey } = await import("./caption-key");
 
 const now = Date.now();
 
@@ -63,7 +65,7 @@ function seedOld(where: ReturnType<typeof machine>): void {
     .run();
   mkdirSync(join(where.encoded, "シリーズ"), { recursive: true });
   writeFileSync(join(where.encoded, "シリーズ", "第1話.mkv"), "video");
-  orm()
+  const recording = orm()
     .insert(schema.recordings)
     .values({
       service_id: 1,
@@ -75,7 +77,13 @@ function seedOld(where: ReturnType<typeof machine>): void {
       created_at: now,
       updated_at: now,
     })
-    .run();
+    .returning()
+    .get();
+  // 字幕のインデックス (FTS5 の仮想表) も中身を入れて写す (取り込みの確かめで落ちないか)
+  captionIndex.writeCaptionIndex(recording, {
+    state: "done",
+    lines: [{ at_ms: 1000, language: 1, text: "移す字幕" }],
+  });
   orm()
     .insert(schema.sessions)
     .values({
@@ -401,6 +409,12 @@ describe("取り込む", () => {
 
     expect(transfer.swapAtBoot()).toBe(true);
     expect(orm().select().from(schema.rules).all()[0]?.name).toBe("移すルール");
+    // 字幕のインデックスも引ける
+    expect(
+      orm().all(
+        sql`SELECT rowid FROM caption_fts WHERE caption_fts MATCH ${`"${captionGrams(captionKey("移す字幕").key)}"`}`,
+      ).length,
+    ).toBe(1);
     const [rec] = orm().select().from(schema.recordings).all();
     // 置き場からの相対で持っているので、この機械の置き場で引ける
     expect(rec?.library_path).toBe(

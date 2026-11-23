@@ -10,6 +10,7 @@ import { startDiscovery } from "./agent-mdns";
 import { adoptName } from "./agent-name";
 import { type Agent, listAgents, syncEnvAgentsOnBoot } from "./agents";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
+import { startCaptionIndex, stopCaptionIndex } from "./caption-index";
 import { config } from "./config";
 import { pruneDeviceAuth } from "./device-auth";
 import { checkDisk } from "./disk";
@@ -234,6 +235,12 @@ export function start(): void {
   nowAndEvery(config.reconcileInterval, "prune", pruneHistory);
   // 送りかけのまま放っておかれた取り込みも、同じ周期で片付ける (transfer.ts)
   nowAndEvery(config.reconcileInterval, "transfer", pruneTransfer);
+
+  /*
+   * **録画の字幕を、字幕で探せるようにする** (caption-index.ts)。すでにある録画も 1 本ずつ後から埋める。
+   * 起動から 1 分待ってから始め、1 本読むたびに同じだけ待つ
+   */
+  startCaptionIndex();
 
   /*
    * 番組名を半角に寄せて取り込んでいた頃の録画を、元の TS の EIT から放送のとおりの幅に戻す
@@ -461,6 +468,8 @@ function stop(): void {
   unlisten.clear();
   // Mac: 録画の前に起こす予約を取り消す (止まった本体のために起こさない。power.ts)
   forgetWake();
+  // 字幕のインデックスを後から埋める仕事も止める (読んでいる ffmpeg も止める。caption-index.ts)
+  stopCaptionIndex();
   started = false;
 }
 

@@ -24,6 +24,7 @@ import {
 import { HW_CODECS, type HwCodec } from "#lib/hw.js";
 
 import type { Recording } from "../types";
+import { dropCaptionIndex, pruneCaptionIndex } from "./caption-index";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
@@ -77,6 +78,8 @@ export function deleteRecordingFiles(
     })
     .where(eq(recordings.id, recording.id))
     .run();
+  // 字幕のインデックスも消す (消した録画は検索に出さない。`caption-index.ts`)
+  dropCaptionIndex(recording.id);
   // 切り抜きは残す (撮ったときの番組名を持っている)。録画への行き先だけ外す
   orm()
     .update(clips)
@@ -551,6 +554,8 @@ export function pruneHistory(): {
       ),
     )
     .run();
+  // 字幕のインデックスも (消すときに消しているはずのものの念のため。FTS5 の行を先に消す。`caption-index.pruneCaptionIndex`)
+  pruneCaptionIndex();
 
   /*
    * 終わったエンコードの記録も期限を切る (録画の行が残っていても)。

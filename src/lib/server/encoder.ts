@@ -34,6 +34,7 @@ import {
   type Recording,
   undecodableReason,
 } from "../types";
+import { dropCaptionIndex, kickCaptionIndex } from "./caption-index";
 import {
   chapterArgs,
   chapterMetadata,
@@ -2363,6 +2364,12 @@ async function runJob(jobId: number): Promise<void> {
     .set(keep ? finished : { ...finished, ts_path: null })
     .where(eq(recordings.id, recording.id))
     .run();
+  /*
+   * **字幕のインデックスは作り直す** (`caption-index.ts`)。同じ名前に再エンコードするとファイルの列が変わらず、
+   * 読んだときと比べても作り直しに気づけないので、ここで消す。消したら後から埋める仕事がすぐ読む
+   */
+  dropCaptionIndex(recording.id);
+  kickCaptionIndex();
 }
 
 /**
