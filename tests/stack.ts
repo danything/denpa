@@ -45,6 +45,8 @@ export interface Stack {
   webhookUrl: string;
   rawDir: string;
   encodedDir: string;
+  /** 録画ファイルの取り込みで指せるフォルダ (`IMPORT_DIRS`) */
+  importDir: string;
   /** 偽の EPGStation (`tests/fake/epgstation.ts`)。引き継ぎの画面から繋ぐ先 */
   epgstationUrl: string;
   /** 偽の EpgTimerSrv (`tests/fake/edcb.ts`) の宛先 `127.0.0.1:<port>`。EDCB からの引き継ぎで繋ぐ先 */
@@ -203,6 +205,8 @@ export async function boot(
     hubUrl: `http://127.0.0.1:${hubPort}`,
     rawDir: `${root}/raw`,
     encodedDir: `${root}/encoded`,
+    // DB の置き場 (`root`) の外に置く。DB の置き場と重なるフォルダは取り込めない (`ts-import.resolveFolder`)
+    importDir: `${TEST_ROOT}/import-w${index}`,
     failFile: `${root}/fail-encode`,
     failEncoderFile: `${root}/fail-encoder`,
     slowFile: `${root}/slow-encode`,
@@ -220,6 +224,7 @@ export async function boot(
 
   rmSync(root, { recursive: true, force: true });
   mkdirSync(stack.rawDir, { recursive: true });
+  mkdirSync(stack.importDir, { recursive: true });
   mkdirSync(stack.encodedDir, { recursive: true });
   mkdirSync(stack.hwDir, { recursive: true });
 
@@ -273,6 +278,7 @@ export async function boot(
       DENPA_DB: `${root}/denpa.db`,
       RAW_DIR: stack.rawDir,
       ENCODED_DIR: stack.encodedDir,
+      IMPORT_DIRS: stack.importDir,
       FFMPEG: "./tests/fake/ffmpeg.sh",
       // 選局もスクランブル解除もスキャンも、窓口はここ 1 つ
       TUNER_AGENT_URL: stack.tunerAgentUrl,

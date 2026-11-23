@@ -40,6 +40,7 @@ export const SETTINGS_GROUPS = [
       { slug: "ranking", label: "番組ランキング" },
       { slug: "migrate", label: "EPGStation からの引き継ぎ" },
       { slug: "migrate-edcb", label: "EDCB からの引き継ぎ" },
+      { slug: "ts-import", label: "録画ファイルの取り込み" },
       { slug: "transfer", label: "denpa を別の機械へ移す" },
     ],
   },

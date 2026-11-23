@@ -120,9 +120,13 @@ describe("0039_agent-channels", () => {
     const agent = orm().select().from(agents).get()!;
     const after = new Database(config.dbPath);
     expect(rows(after, "reservations")).toEqual(before.reservations);
-    // 上げたあとの録画には、録ったエージェントの列 (0040) が null で足される
+    // 上げたあとの録画には、録ったエージェントの列 (0040) と取り込んだ元の TS の列 (0049) が null で足される
     expect(rows(after, "recordings")).toEqual(
-      before.recordings.map((row) => ({ ...row, agent_id: null })),
+      before.recordings.map((row) => ({
+        ...row,
+        agent_id: null,
+        imported_ts: null,
+      })),
     );
     expect(rows(after, "services")).toEqual(
       before.services.map((row) => ({

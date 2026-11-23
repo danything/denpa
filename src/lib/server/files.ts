@@ -23,6 +23,7 @@ import {
 
 import { HW_CODECS, type HwCodec } from "#lib/hw.js";
 
+import { ownsTs } from "../source";
 import type { Recording } from "../types";
 import { dropCaptionIndex, pruneCaptionIndex } from "./caption-index";
 import { config } from "./config";
@@ -62,7 +63,8 @@ export function deleteRecordingFiles(
     removeSidecars(path);
     pruneEmptyDirs(path);
   }
-  removeIfExists(recording.ts_path);
+  // 取り込んだ TS はユーザーのファイルなので消さない (`source.ownsTs`)。行の `ts_path` だけ外す
+  if (ownsTs(recording)) removeIfExists(recording.ts_path);
   // 失敗した録画を消したときに理由を上書きすると、なぜ失敗したのかが分からなくなる。
   // 元の理由があるならそちらを残す
   orm()

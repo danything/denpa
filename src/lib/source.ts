@@ -1,8 +1,8 @@
 /**
  * 録画のファイルの見分け方 (元の録画の拡張子・再エンコードの元・配るファイルの名指し・CM の再検出)。画面とサーバの両方で使う。
  *
- * 再エンコードの元にできるのは**作業領域の元の TS だけ** (`ts_path`)。エンコード済みを元にエンコードし直しても
- * 画質は戻らないので、元が無いものには再エンコードを出さない。引き継いだ録画も同じで、
+ * 再エンコードの元にできるのは**元の TS だけ** (`ts_path`。作業領域の TS と、ほかのソフトで録って取り込んだ元の場所の TS)。
+ * エンコード済みを元にエンコードし直しても画質は戻らないので、元が無いものには再エンコードを出さない。引き継いだ録画も同じで、
  * EPGStation 側でエンコードが済んでいなかったものは移行のときに作業領域へ入る。
  */
 
@@ -23,6 +23,14 @@ export const RECORDED_EXT: Record<Transport, string> = {
  */
 export function recordedTransport(path: string): Transport {
   return /\.mmts$/i.test(path) ? "tlv" : "ts";
+}
+
+/**
+ * **denpa が元の TS (`ts_path`) を消したり書き換えたりしてよいか。** ほかのソフトで録って取り込んだ TS (`imported_ts`) は
+ * ユーザーのファイルなので、削除・エンコードのあと・復号のどれでも触らない (`server/ts-import.ts`)
+ */
+export function ownsTs(recording: { imported_ts: string | null }): boolean {
+  return recording.imported_ts === null;
 }
 
 /** エンコードの元にできるファイル。無ければ null */

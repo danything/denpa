@@ -15,6 +15,8 @@ const { config } = await import("./config");
 config.dbPath = join(root, "denpa.db");
 config.cmLogoDir = join(root, "logos");
 config.encodedDir = join(root, "encoded");
+// 元の TS (`a.mmts`) は作業領域に置く。置き場の外の TS の作業ファイルは作業領域の下に作るので (`fsx.scratchBase`)、既定の /media/raw を見に行かせない
+config.rawDir = root;
 config.ffmpeg = "tests/fake/ffmpeg.sh";
 config.ffprobe = join(root, "no-ffprobe");
 mkdirSync(config.encodedDir, { recursive: true });
