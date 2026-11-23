@@ -12,8 +12,8 @@ name: Windows agent
 # (`asicen` のジョブ。agent/asicen/build.sh --windows)。**ASICEN のファームウェア (asicen-loader.bin) は入れない** (利用者が置く。docs/licenses.md)。
 #
 # **署名するのは 2 つの exe だけ** (wdi-simple.exe は上流の libwdi のソースから組むものなので、SignPath Foundation の条件で署名しない。
-# denpa-asicen.exe も送らない。GPL-2.0 の上流 (asicen-userland と、px4_drv から来た部分) を中に入れたもので、
-# 署名して「denpa のもの」と保証する範囲に入れない。README「Code signing policy」・docs/install-windows.md「コード署名」)。
+# denpa-asicen.exe も送らない。中身のほとんどが GPL-2.0 の上流 (asicen-userland と、px4_drv から来た部分を含む px4-userland) のコードで、
+# denpa のチームが保守しているソースではないため。README「Code signing policy」・docs/install-windows.md「コード署名」)。
 # 2 つだけを入れた artifact を置いて SignPath に送り、承認されて署名したものが返ってから zip を組む。
 # SignPath の側の決まり (製品名・製品バージョン) は .signpath/artifact-configurations/windows-agent.xml。
 #
@@ -217,7 +217,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # 署名に送らない子プロセス。zip の asicen/ に入れる (エージェントが実行ファイルの隣の asicendenpa-asicen.exe を起動する。Asicen.cs)
+      # 署名に送らない子プロセス。zip の asicen/ に入れる (エージェントが実行ファイルの隣の asicen\denpa-asicen.exe を起動する。Asicen.cs)
       - name: Download denpa-asicen.exe
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
