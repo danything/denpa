@@ -418,6 +418,13 @@ describe("エンコード", () => {
     expect(later.id).toBeGreaterThan(again.id);
   });
 
+  test("`..` で始まる名前のフォルダは中", async () => {
+    const { within } = await import("./fsx");
+    expect(within(importDir, join(importDir, "..foo", "a.m2ts"))).toBe(true);
+    expect(within(importDir, join(importDir, "..", "a.m2ts"))).toBe(false);
+    expect(within(importDir, `${importDir}2`)).toBe(false);
+  });
+
   test("置き場の外の TS の作業ファイルは RAW_DIR の下に作る", () => {
     const outside = join(importDir, "a.m2ts");
     const base = scratchBase(outside);

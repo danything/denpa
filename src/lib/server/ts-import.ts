@@ -227,7 +227,7 @@ async function collect(folder: string): Promise<string[] | null> {
   return (await walk(folder)) ? found : null;
 }
 
-/** 読んだ結果を覚えておく。パス・大きさ・更新時刻が同じなら読み直さない (下見のあとの取り込みで同じファイルを読まない) */
+/** 読んだ結果のキャッシュ。パス・大きさ・更新時刻が同じなら読み直さない (下見のあとの取り込みで同じファイルを読まない) */
 const factsCache = new Map<
   string,
   { size: number; mtime: number; facts: TsFacts | null }
@@ -501,6 +501,12 @@ async function run(
     for (const path of files) {
       if (signal.aborted) {
         status_.state = "canceled";
+        return;
+      }
+      // 別の機械へ移す書き出し・取り込みが始まったら止める (取り込みは DB を丸ごと入れ替えるので、ここで入れた行が残らない)
+      if (transferBusy()) {
+        status_.state = "failed";
+        status_.error = BUSY_MESSAGE;
         return;
       }
       status_.current = relative(folder, path);

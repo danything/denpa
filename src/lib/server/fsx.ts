@@ -8,7 +8,7 @@ import {
   statSync,
   unlinkSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import { config } from "./config";
 
@@ -65,7 +65,10 @@ export function fileSize(path: string): number | null {
 /** `path` が `root` そのものか、その下か。名前の先頭が同じだけの隣のフォルダ (`/media/raw2`) は外 */
 export function within(root: string, path: string): boolean {
   const rel = relative(root, path);
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  return (
+    rel === "" ||
+    (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+  );
 }
 
 /**
