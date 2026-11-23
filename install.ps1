@@ -942,6 +942,9 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [s
         Say "(LAN から繋ぐなら、Windows ファイアウォールでポート $Port への受信を許してください)"
         return
     }
+    # 外へ繋ぐことを、入れるときに見せる (README の「Code signing policy」の Privacy。SignPath Foundation の条件)
+    Say 'denpa は起動したときと 1 時間ごとに、新しいバージョンを確かめるために GitHub に繋ぎます (GitHub に見えるのは、この PC の IP と denpa のバージョンです)'
+    Say 'ほかに外へ繋ぐものは https://github.com/danything/denpa#privacy にあります'
     # 管理者の窓から開くとブラウザまで管理者で動くので、エクスプローラーに開かせる (ログインしている人のブラウザで開く)
     if (-not $NoOpen) { Start-Process "$env:WINDIR\explorer.exe" $Url }
 }

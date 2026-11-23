@@ -250,6 +250,32 @@ NAS のユーザーと Windows のユーザーが違うときは、そのユー�
 ファイルはブラウザでダウンロードされます。録画のフォルダ (`~/Videos/denpa/library`・`~/Videos/denpa/recorded`) は自分で写します
 ([migrate.md](migrate.md#別の機械へ移す))。
 
+## コード署名
+
+**エージェントの zip にある `denpa-agent.exe` と `denpa-tray.exe` を、SignPath Foundation の証明書でリリースのたびに署名する予定です。今のリリースはまだ署名していません。**
+役割とプライバシーの決まりは、README の [Code signing policy](../README.md#code-signing-policy) にあります。
+
+署名するのは、このリポジトリのソースとビルドの手順から CI で組んだ実行ファイルだけです。
+SignPath Foundation の[条件](https://signpath.org/terms)が、チームが保守しているソースから組んだものだけを署名し、上流 (upstream) のバイナリは署名しないとしているためです。
+署名しない上流のバイナリを同じ配布物に入れることは、条件で認められています。
+
+| ファイル                                                   | zip          | 署名     | 理由                                                                                                             |
+| ---------------------------------------------------------- | ------------ | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `denpa-agent.exe`                                          | エージェント | する予定 | 自分たちのソース (`agent/Denpa.Agent`) から組む                                                                  |
+| `denpa-tray.exe`                                           | エージェント | する予定 | 自分たちのソース (`tray/Denpa.Tray`) から組む                                                                    |
+| `libwdi/wdi-simple.exe`                                    | エージェント | しない   | libwdi の上流のソースを、ビルドの設定だけ変えて組む ([licenses.md](licenses.md#windows-に入れるもの-installps1)) |
+| `bun.exe`                                                  | 本体         | しない   | bun の公式のリリースをそのまま入れる (bun の署名が付いている)                                                    |
+| `ffmpeg/ffmpeg.exe`・`ffmpeg/ffprobe.exe`                  | 本体         | しない   | FFmpeg の上流のソースにパッチを当てて組む。下に理由                                                              |
+| `ffmpeg/` の DLL (x264・dav1d・MinGW-w64 のランタイムなど) | 本体         | しない   | MSYS2 のパッケージのまま入れる                                                                                   |
+
+- ffmpeg を署名しないのは、上流を直したビルドを署名してよいのが、上流が署名したビルドを出していて、見える形の fork から組むときだけだからです。
+  FFmpeg は Windows の署名したビルドを出しておらず、denpa は fork ではなく上流の tarball にパッチ (`patches/`) を当てて組みます。
+  製品名をプロジェクトの名前 (`denpa`) にする条件も、ffmpeg.exe には合いません
+- 本体の zip には自分たちで組んだ実行ファイルが無いので、本体の zip には署名するものがありません
+- 署名する 2 つの製品名は、条件に合わせてプロジェクトの名前 `denpa` にしています (csproj の `Product`)。製品バージョンはリリースのタグ、ファイルバージョンは `v` を落としたタグです
+- エージェントにはチューナーのファームウェア (IT930x・Siano・DiB0700) を埋め込んでいます ([licenses.md](licenses.md#チューナーエージェントに同梱するファームウェア))。
+  条件の「オープンソースでない部品を含まない」に当たるかは、署名を始める前に SignPath に申告して確かめる予定です
+
 ## 使えるもの
 
 - **IT930x の機材** (PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P、PX-Q3U4 / PX-W3U4、PX-M1UR / PX-S1UR など)。エージェントが WinUSB で USB を直に持ちます (内蔵カードリーダーも読みます)。
