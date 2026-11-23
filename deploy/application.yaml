@@ -53,7 +53,7 @@ spec:
         # 手で触らない
         imageMarks:
           denpa: sha-abe8360a1f6b
-          agent: sha-72f64ecba187
+          agent: sha-661e14cde270
 
         denpa:
           # LAN から来たときだけ何も聞かずに通す (docs/auth.md)
