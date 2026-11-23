@@ -77,6 +77,7 @@ mkdir "$work/src"
 tar -xzf "$work/$source_archive" -C "$work/src"
 
 # libusb は同梱の 1.0.30 を静的ライブラリにして中に入れる (上流の配布物と同じ。コンテナには udev が無い)
+# 空の配列は ${a[@]+"${a[@]}"} で渡す (macOS の bash 3.2 は set -u で空の配列を未定義とみなす)
 cmake_args=()
 libusb_env=()
 libusb_host=()
@@ -119,7 +120,7 @@ cp -pR "$work/src/third_party/libusb-1.0.30" "$work/libusb"
 (
   cd "$work/libusb"
   # 依存の追跡は切らない (切ると Windows の資源ファイルを llvm-rc が組めない)
-  env "${libusb_env[@]}" CFLAGS="-O2 -fPIC" ./configure "${libusb_host[@]}" --prefix="$work/prefix" --libdir="$work/prefix/lib" \
+  env ${libusb_env[@]+"${libusb_env[@]}"} CFLAGS="-O2 -fPIC" ./configure ${libusb_host[@]+"${libusb_host[@]}"} --prefix="$work/prefix" --libdir="$work/prefix/lib" \
     --disable-shared --enable-static --with-pic --disable-udev --disable-examples-build --disable-tests-build \
     > "$work/libusb-configure.log" || { cat "$work/libusb-configure.log" >&2; exit 1; }
   make -j"$jobs" > /dev/null
@@ -133,7 +134,7 @@ cmake -S "$here" -B "$work/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DASICEN_SOURCE="$work/src/repository" \
   -DASICEN_LIBUSB_INCLUDE_DIR="$work/prefix/include/libusb-1.0" \
   -DASICEN_LIBUSB_LIBRARY="$work/prefix/lib/libusb-1.0.a" \
-  -DDENPA_ASICEN_MOCK="$mock" "${cmake_args[@]}"
+  -DDENPA_ASICEN_MOCK="$mock" ${cmake_args[@]+"${cmake_args[@]}"}
 cmake --build "$work/build" --target denpa-asicen -j "$jobs"
 
 mkdir -p "$out/licenses"

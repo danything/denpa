@@ -190,10 +190,18 @@ public sealed class AsicenChild
         switch (first.Kind)
         {
             case 'O':
-                var root = JsonNode.Parse(first.Body) as JsonObject ?? throw new IOException("開いた筐体の知らせが読めません");
-                child.Model = root["model"]?.GetValue<string>() ?? "";
-                child.Systems = [.. (root["systems"] as JsonArray ?? []).Select(node => node?.GetValue<int>() ?? 0)];
-                child.Lnb = root["lnb"]?.GetValue<bool>() ?? false;
+                try
+                {
+                    var root = JsonNode.Parse(first.Body) as JsonObject ?? throw new FormatException("object ではありません");
+                    child.Model = root["model"]?.GetValue<string>() ?? "";
+                    child.Systems = [.. (root["systems"] as JsonArray ?? []).Select(node => node?.GetValue<int>() ?? 0)];
+                    child.Lnb = root["lnb"]?.GetValue<bool>() ?? false;
+                }
+                catch (Exception error) when (error is System.Text.Json.JsonException or InvalidOperationException or FormatException)
+                {
+                    child.Kill();
+                    throw new AsicenError(255, $"開いた筐体の知らせが読めません ({error.Message})");
+                }
                 return child;
             case 'L':
                 Log.Write($"[{name}] {Encoding.UTF8.GetString(first.Body)}");
