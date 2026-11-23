@@ -220,7 +220,7 @@ public sealed partial class UsbBrokerTests
 
         // 並べた順と逆に指定しても、指定した順に並ぶ
         int[] numbers = [];
-        using var child = AsicenUserland.Start("/bin/sh", fds =>
+        using var child = AsicenChild.Start("/bin/sh", fds =>
         {
             numbers = [.. fds];
             return ["-c", string.Join("; ", fds.Select(fd => $"readlink /proc/self/fd/{fd}"))];

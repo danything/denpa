@@ -468,7 +468,7 @@ public sealed class Zd1jTuner : ITuneDevice
 
 /// <summary>
 /// TS を 1 回流すぶん。EP 0x81 の転送要求を 16 本出しっぱなしにして、192 バイトの単位から取り出し、
-/// <see cref="Pipe"/> (8 MB) に詰める。読み出し側は <see cref="DeviceStream"/> (asicend から受けるときと同じ形)
+/// <see cref="Pipe"/> (8 MB) に詰める。読み出し側は <see cref="DeviceStream"/> (asicen-userland から受けるときと同じ形)
 /// </summary>
 internal sealed class Zd1jStream
 {

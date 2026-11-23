@@ -29,22 +29,4 @@ public static partial class Interop
         kill(-pid, Sigterm);
         _ = Task.Delay(KillGrace).ContinueWith(_ => kill(-pid, Sigkill), TaskScheduler.Default);
     }
-
-    /// <summary>
-    /// 1 つのプロセスに SIGTERM。**待たない。**
-    ///
-    /// <para>
-    /// asicend は SIGTERM で後片付けをしてから終わるので、
-    /// まず SIGTERM を送り、終わらなければ呼んだ側が SIGKILL を送る (Asicen.cs)
-    /// </para>
-    ///
-    /// <para>
-    /// **Windows では何もしない。** SIGTERM に当たるものが無く (Ctrl+C の合図は同じコンソールの
-    /// プロセスグループにしか送れない)、呼んだ側が猶予のあとで <c>Kill</c> (TerminateProcess) にする
-    /// </para>
-    /// </summary>
-    public static void Terminate(int pid)
-    {
-        if (!OperatingSystem.IsWindows()) kill(pid, Sigterm);
-    }
 }

@@ -22,7 +22,7 @@ namespace Denpa.Agent;
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
 /// <item><see cref="It930xTuner"/> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など)。エージェントが USB を直に持ち、機材を初めての選局で開いたまま受信機ごとに選局し直す (It930xDevice.cs)</item>
-/// <item><see cref="AsicenTuner"/> … asicen-userland の機材 (PX-W3U3 など。試験的)。<c>asicend</c> が持ち、選局のたびに受信機を取り直す (AsicenUdtv.cs)</item>
+/// <item><see cref="AsicenTuner"/> … asicen-userland の機材 (PX-W3U3 など。試験的)。子プロセス (denpa-asicen) が持ち、選局のたびに受信機を取り直す (AsicenTuner.cs・AsicenChild.cs)</item>
 /// <item><see cref="SianoTuner"/> … Siano の機材 (PX-S1UD などをカーネルに使わせていないとき)。エージェントが USB を直に持ち、機材を開いたまま選局のメッセージを送り直す (Siano.cs)</item>
 /// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
 /// <item><see cref="Dt295NativeTuner"/> … PIXELA PIX-DT295。エージェントが USB を直に持ち、機材を初めての選局で開いたまま選局し直す (Dt295NativeTuner.cs)</item>
@@ -119,7 +119,7 @@ internal static unsafe partial class Sys
 
     /// <summary>
     /// <c>O_CLOEXEC</c>。Linux は 0x80000、macOS は 0x1000000。.NET の Process.Start は付いていない fd を閉じないので、
-    /// 付けずに開くと、あとから起動した asicend がデバイスを開いたまま持ち続け、閉じたあとに開き直すと Device or resource busy になる
+    /// 付けずに開くと、あとから起動した子プロセスがデバイスを開いたまま持ち続け、閉じたあとに開き直すと Device or resource busy になる
     /// </summary>
     public static readonly int CloseOnExec = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
 
@@ -178,7 +178,7 @@ internal static unsafe partial class Sys
 }
 
 /// <summary>
-/// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。asicend (<see cref="AsicenStream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
+/// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。asicen-userland (<see cref="AsicenStream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
 /// PIX-DT295 (<see cref="Dt295NativeStream"/>)、Siano (<see cref="SianoStream"/>)、IT930x (<see cref="It930xTsOutput"/>) の TS のストリームが使う。OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った)
 /// </summary>
 internal static class TsBuffer
@@ -258,7 +258,7 @@ internal static class TsBuffer
 /// </para>
 ///
 /// <para>
-/// fd で読むのは DVB の dvr だけ。asicend・CECH-ZD1 J・PIX-DT295・Siano・IT930x の機材から受けた TS は、
+/// fd で読むのは DVB の dvr だけ。asicen-userland・CECH-ZD1 J・PIX-DT295・Siano・IT930x の機材から受けた TS は、
 /// どの OS でも fd を使わずに Pipe で受ける (<see cref="Piped"/>。Windows には poll が無い)。
 /// </para>
 /// </summary>

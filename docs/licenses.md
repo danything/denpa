@@ -2,7 +2,8 @@
 
 denpa 自身は **AGPL-3.0-or-later** ([LICENSE](../LICENSE)) です。ただし `packages/arib/` (npm の `@danything/arib`。
 denpa のリリースといっしょに出す) は **MIT** ([packages/arib/LICENSE](../packages/arib/LICENSE)) です。
-チューナーエージェント (`agent/`) は **MPL-2.0** ([agent/LICENSE](../agent/LICENSE)) です。ここには、**コンテナ
+チューナーエージェント (`agent/`) は **MPL-2.0** ([agent/LICENSE](../agent/LICENSE)) で、ASICEN 系の機材の子プロセス (`agent/asicen/`。asicen-userland を組み込んだ別のプログラム) だけが **GPL-2.0-only** です。
+エージェントとはやりとりするだけの別のプログラムなので、エージェントは MPL-2.0 のままです ([下](#asicen-の子プロセス))。ここには、**コンテナ
 イメージに同梱して配っているもの・リポジトリに写してあるもの・ブラウザへ配る束に
 入るもの**を、出どころとライセンスごとに並べます。README の「ライセンス」はこの入口です。
 
@@ -68,25 +69,28 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 .NET の Native AOT で 1 つのバイナリにしてあり、
 **NuGet の依存は 0** (JSON はランタイムの `System.Text.Json`)。
 
-| 名前                                                                                              | 何に                                                                                                                                                                                                                                                                                             | 出どころ                                                                                                          | ライセンス                                                                                                                                                                                                                                                                              |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| .NET 11 ランタイムと ASP.NET Core (Kestrel。AOT でバイナリに埋まる)                               | エージェント本体                                                                                                                                                                                                                                                                                 | <https://github.com/dotnet/runtime>・<https://github.com/dotnet/aspnetcore>                                       | MIT                                                                                                                                                                                                                                                                                     |
-| asicen-userland (`/opt/asicen-userland`。上流のプレリリース v1.0.0-beta。Linux の amd64 と arm64) | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。`asicend` / `asicenctl` を子プロセスで起動する (配布物に入っている `asicen-ts` は使わない。pcscd 用 IFD ハンドラと mdev の設定は入れない)。エージェントは asicend とソケットで通信するだけで、コードは取り込んでいない | <https://github.com/Khronos31/asicen-userland>                                                                    | **GPL-2.0** (px4-userland 由来の GPL-2.0-only と GPL-2.0-or-later の組み合わせ。静的リンクの libusb は LGPL-2.1+、musl と GCC ランタイムもそれぞれの条件。配布物の `LICENSE`・`THIRD_PARTY_NOTICES.md`・`DEPENDENCY-NOTICE.txt`・`licenses/`・`libusb/`・`toolchain/` を同梱のまま置く) |
-| ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト)          | 挿した直後の PX-W3U3 などに asicend が流し込む                                                                                                                                                                                                                                                   | asicen-userland の配布アーカイブに入っているものをそのまま ([表の下](#asicen-のファームウェアを同梱している判断)) | **ライセンス無し・再配布の許諾は確かめられていない。** 上流と同じ判断で同梱している                                                                                                                                                                                                     |
-| 土台 (glibc・libssl・ca-certificates・libstdc++・tzdata)                                          | エージェントを動かす。libssl はエージェントのポートの HTTPS (denpa と証明書で確かめ合う) で常に使い、`CARD_URL` を https で指したときにも使う。ca-certificates はその相手の証明書の検証                                                                                                          | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ)                                 | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、OpenSSL は Apache-2.0、ca-certificates は MPL-2.0、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、tzdata はパブリックドメイン                                                                                    |
+| 名前                                                                                                                                | 何に                                                                                                                                                                                    | 出どころ                                                                                                        | ライセンス                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| .NET 11 ランタイムと ASP.NET Core (Kestrel。AOT でバイナリに埋まる)                                                                 | エージェント本体                                                                                                                                                                        | <https://github.com/dotnet/runtime>・<https://github.com/dotnet/aspnetcore>                                     | MIT                                                                                                                                                                                                                                                                                                                                             |
+| ASICEN の子プロセス (`/opt/asicen-userland/denpa-asicen`。上流のプレリリース v1.0.0-beta のソースから組む。Linux の amd64 と arm64) | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。エージェントが筐体ごとに起動する別のプログラム。上流の部品をつなぐ所 (`agent/asicen/`) は denpa が書いたもの  | <https://github.com/Khronos31/asicen-userland> のソースのアーカイブ (dtv-userland-core と libusb 1.0.30 を同梱) | **GPL-2.0-only** (上流は GPL-2.0-only と GPL-2.0-or-later の組み合わせ、`agent/asicen/` は GPL-2.0-only、dtv-userland-core の核は MIT、静的リンクの libusb は LGPL-2.1+)。**エージェントとは別のプログラムで、エージェントは MPL-2.0 のまま** ([下](#asicen-の子プロセス))。ライセンスの文書とソースの入手先は `/opt/asicen-userland/licenses/` |
+| ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト)                                            | 挿した直後の PX-W3U3 などに子プロセスが流し込む                                                                                                                                         | asicen-userland の配布物に入っているものをそのまま ([表の下](#asicen-のファームウェア))                         | **ライセンス無し・再配布の許諾は確かめられていない。** 上流と同じ判断で同梱している                                                                                                                                                                                                                                                             |
+| 土台 (glibc・libssl・ca-certificates・libstdc++・tzdata)                                                                            | エージェントを動かす。libssl はエージェントのポートの HTTPS (denpa と証明書で確かめ合う) で常に使い、`CARD_URL` を https で指したときにも使う。ca-certificates はその相手の証明書の検証 | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ)                               | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、OpenSSL は Apache-2.0、ca-certificates は MPL-2.0、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、tzdata はパブリックドメイン                                                                                                                                            |
 
 IT930x・Siano・DiB0700 のファームウェアは、エージェントの実行ファイルに埋め込んであります ([下](#チューナーエージェントに同梱するファームウェア))。
 
 [px4-userland](https://github.com/Khronos31/px4-userland)・[siano-userland](https://github.com/Khronos31/siano-userland)・[asicen-userland](https://github.com/Khronos31/asicen-userland) (@Khronos31) は、
 ホストにドライバを入れずにチューナーを使う形を先に示してくれた仕事です。このうち asicen-userland を、上の表のとおり同梱しています。
 
-### ASICEN のファームウェアを同梱している判断
+### ASICEN のファームウェア
 
 **ASICEN のファームウェア (`asicen-loader.bin`) は、再配布の許諾を確かめられていません。上流と同じ判断で、エージェントのイメージと Android のアプリに同梱しています。**
+**Windows と Mac のエージェントの配布物には入れません** (PLEX に許諾を問い合わせています。SignPath で署名する配布物に、許諾の分からないものを入れないため)。
+Windows と Mac では、利用者が tuners.json の隣の `firmware/` に置いたものを使います (Xbox One Digital TV Tuner の復調のファームウェアと同じ。[tuners.md](tuners.md#ファームウェア))。
 権利を持つ人から申し出があれば外します。分かっている事実は次のとおりです。
 
 - ファームウェアは、PLEX の Windows 用ドライバ (`Loader.sys`) から上流 ([Khronos31/asicen-userland](https://github.com/Khronos31/asicen-userland)) が取り出した 16,384 バイトのイメージです。
-  上流の配布アーカイブに入っているものをそのまま使います。イメージと APK を組むときに、SHA-256 が `5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a` であることを確かめます (`agent/Dockerfile`・`.github/asicen-android.sh`)
+  上流の配布アーカイブに入っているものをそのまま使います。イメージと APK を組むときに、SHA-256 が `5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a` であることを確かめます (`agent/asicen/build.sh`)。
+  利用者が置いたものも、エージェントが同じ SHA-256 かを確かめてから使います
 - チップの会社 ASICEN (昇亮科技股份有限公司 / Asicen Technology、台湾) は解散し、2017-02-23 に清算が完結したと登記されています。
   台湾の会社情報サイト (<https://www.twincn.com/item.aspx?no=80342850>) の記載で、経済部の公式の登記では確かめていません
 - PLEX は 2026-11 の時点で、公式サイトの「旧製品ドライバ」のページ (<https://plex-net.co.jp/old-driver/>) で PX-W3U3・PX-W3U3 V2・PX-S3U2 の Windows 用ドライバを配っています。
@@ -94,6 +98,34 @@ IT930x・Siano・DiB0700 のファームウェアは、エージェントの実�
 - PLEX が以前配っていた Linux 用ドライバのモジュールには `license=GPL` の表示があり、同じファームウェアが埋め込まれています。
   それだけではファームウェア自体のライセンスは決まりません (上流の `NOTICES.md` の整理)
 - 上流が添える通知 (`licenses/VENDOR-FIRMWARE-NOTICE.txt` など) は、配布物のままイメージ (`/opt/asicen-userland/licenses/`) と APK (`assets/licenses/asicen-userland/`) に置いてあります
+- ファームウェアは機材に送るデータで、ホストで実行するコードではありません。GPL の及ぶ範囲の外の部品として扱います (上流の `NOTICES.md` も同じ)
+
+### ASICEN の子プロセス
+
+**ASICEN 系の機材は、エージェントとは別のプログラム `denpa-asicen` (GPL-2.0-only) が扱います。エージェント (MPL-2.0) はそれを子プロセスとして起動し、
+標準入出力で選局の要求・状態・TS だけをやりとりします** ([agent.md](agent.md#asicen-userland-の作り))。
+FSF は、パイプ・ソケット・コマンドラインの引数でのやりとりを、別のプログラムどうしの通信として扱っています (GPL の FAQ の「aggregate」と「plug-in」の項)。
+やりとりする中身は、短い文の命令と、番号・機種の名前・受信機の方式の JSON と、放送の TS だけで、互いの内部の構造は渡しません。
+
+- `denpa-asicen` は `agent/asicen/` (GPL-2.0-only。[agent/asicen/COPYING](../agent/asicen/COPYING)) と、上流の asicen-userland・dtv-userland-core・libusb を 1 つの実行ファイルにしたものです。
+  asicen-userland には GPL-2.0-only のファイルと GPL-2.0-or-later のファイルがあり、取り込んだ px4-userland (`third_party/px4-userland/`。px4_drv から来た部分を含む) は GPL-2.0-only です。
+  そのため `denpa-asicen` は全体を GPL-2.0-only の条件で配ります。上流のファイルは変えずに使い、`agent/asicen/` に写した上流の手順はその場所のコメントに書いてあります
+- 中に入れるもののうち、dtv-userland-core の核 (MIT)、libusb (LGPL-2.1+。静的リンク。組み合わせ全体のソースと組み方を出すので、組み直しの条件も満たす)、
+  C++ の実行時ライブラリ (Linux は libstdc++ と libgcc_s を読む。GCC Runtime Library Exception。Android と Windows は LLVM の libc++ を静的に入れる。Apache-2.0 WITH LLVM-exception。
+  Windows は mingw-w64 の実行時ライブラリと winpthreads も静的に入れる。MIT 系) は GPL-2.0 の条件と組み合わせられます。OpenSSL は入れません
+- **エージェントには GPL のコードを入れません。** エージェントの C# は MPL-2.0 のままで、上流の表や値も写していません。
+  エージェントが使う OpenSSL (Apache-2.0。Linux のイメージは土台の libssl、Android は静的リンク) と .NET のランタイムは、エージェントのプロセスにだけ入ります
+- 配布物 (Linux のイメージ・`denpa-aio`・Windows の zip・Mac の tar.gz・Android の APK) には、エージェントと `denpa-asicen` を別の実行ファイルとして並べて入れます (GPL-2.0 §2 の「同じ媒体に入れただけ」の集まり)。
+  置き場は、イメージが `/opt/asicen-userland/`、Windows と Mac がエージェントの隣の `asicen/`、APK が `lib/<ABI>/libdenpa_asicen.so` (jniLibs は `lib*.so` の名前しか展開されないため) です
+- **対応するソース**: `agent/asicen/` はリリースのタグのソースにあり、リリースに `denpa-asicen-<バージョン>-source.tar.gz` (`agent/asicen/` だけを固めたもの) も添えます。
+  asicen-userland・dtv-userland-core・libusb は上流のソースのアーカイブ (SHA-256 は `agent/asicen/build.sh`) で、上流の置き場だけに頼らず、同じアーカイブを denpa のリリースにも添えます (`release.yml` の `asicen-source`)。
+  組み方は `agent/asicen/build.sh` です。入手先は、どの配布物でも `denpa-asicen` の隣の `licenses/SOURCE.txt` (APK は `assets/licenses/asicen-userland/SOURCE.txt`) に書いてあります
+- Windows の `denpa-asicen.exe` は SignPath の署名に送りません (理由は [install-windows.md](install-windows.md#コード署名))
+
+**エージェントと同じプロセスに入れる形で起きる OpenSSL との組み合わせの問題は、この形で解きました。**
+同じプロセスでは、GPL-2.0-only のコードと、OpenSSL (Apache-2.0) や .NET のランタイムに入っている Apache-2.0 のコードが 1 つのプログラムになり、FSF はこの組み合わせを認めていません。
+OpenSSL を外しても .NET のランタイムの Apache-2.0 の部分が残るので、GPL のコードを別のプログラムに分けました。いまは、GPL の条件の及ぶ `denpa-asicen` に OpenSSL も Apache-2.0 のコードも入らず、
+エージェントに GPL のコードは入りません。
 
 ### チューナーエージェントに同梱するファームウェア
 
@@ -127,7 +159,7 @@ Xbox One Digital TV Tuner をエージェントが USB で直に動かす層 (`X
 
 リリースに添えた `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリと、メニューバーのアプリ `denpa-tray`。
 `denpa-tray` は denpa 本体と同じ AGPL-3.0 で、Swift で書き、OS の AppKit だけを使う) を入れます。
-ファームウェア (IT930x・Siano・DiB0700) はエージェントに埋め込んであり、Siano と DiB0700 の許諾の文面 (`LICENCE.siano`・`LICENSE.dib0700`) を tar.gz に添えています。asicen-userland は入れません (上流には Mac 用の配布物があるが、エージェントが対応していない)。
+ファームウェア (IT930x・Siano・DiB0700) はエージェントに埋め込んであり、Siano と DiB0700 の許諾の文面 (`LICENCE.siano`・`LICENSE.dib0700`) を tar.gz に添えています。ASICEN 系の機材の子プロセス (`asicen/denpa-asicen`。GPL-2.0-only の別のプログラム。ad-hoc で署名する) と、そのライセンスの文書・対応するソースの入手先 (`asicen/licenses/`) も入れます ([上](#asicen-の子プロセス))。ASICEN のファームウェアは入れません (利用者が置く。[上](#asicen-のファームウェア))。
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
 
 **denpa 本体は、リリースに添えた `denpa-<バージョン>-darwin-arm64.tar.gz` を入れます** ([.github/workflows/macos-server.yml](../.github/workflows/macos-server.yml))。
@@ -150,7 +182,7 @@ ffprobe は ffmpeg と同じソースから、読む部品 (デコーダ・デ�
 リリースに添えた `denpa-agent-<バージョン>-windows-x64.zip` (`denpa-agent.exe` と、通知領域のアイコンの `denpa-tray.exe`。
 `denpa-tray.exe` は denpa 本体と同じ AGPL-3.0 の .NET の Native AOT のバイナリで、依存は足していない) を入れます。
 ファームウェア (IT930x・Siano・DiB0700) は Mac と同じくエージェントに埋め込んであり、Siano と DiB0700 の許諾の文面 (`LICENCE.siano`・`LICENSE.dib0700`) を zip に添えています。
-asicen-userland は入れません (上流には Windows 用の配布物があるが、エージェントが対応していない)。カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
+ASICEN 系の機材の子プロセス (`asicen\denpa-asicen.exe`。GPL-2.0-only の別のプログラム。Linux から llvm-mingw で組む。署名しない) と、そのライセンスの文書・対応するソースの入手先 (`asicen\licenses\`) も入れます ([上](#asicen-の子プロセス))。ASICEN のファームウェアは入れません (利用者が置く。[上](#asicen-のファームウェア))。カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
 
 **同じ zip の `libwdi/` に、libwdi の `wdi-simple.exe` を別の実行ファイルとして入れます** (`install.ps1 -WinUsb` がチューナーのドライバを WinUSB に替えるときに起動する。
 エージェントにはリンクしていない)。libwdi のリリースには Zadig しか無いので、タグとコミットを決めたソースからリリースのたびにビルドします
@@ -199,16 +231,10 @@ APK に入る依存は、Kotlin で書くと付いてくる下の 2 つだけで
 Android には OpenSSL が無いので、土台の libssl の代わりに OpenSSL を静的に入れます。
 Siano と DiB0700 のファームウェアの許諾の文面 (`LICENCE.siano`・`LICENSE.dib0700`) と OpenSSL の `LICENSE.txt` (`LICENSE.openssl` の名前で) は、APK の `assets/licenses/` に入れています。
 
-asicen-userland は、上流の Android 向けのビルド (Termux 用の `android-aarch64`・`android-x86_64`) の `asicend`・`asicenctl` を組み直さずに、
-`lib/<ABI>/libasicend.so`・`libasicenctl.so` の名前で入れます (`.github/asicen-android.sh`。アーカイブの SHA-256 を固定して取る)。
-バージョンはイメージと同じ v1.0.0-beta で、上流がコミット `ed215c847979634245fb6a189c582831c462cf44` から組んだものです (模擬のデーモンを組む CI の `ASICEN_USERLAND_REF` と同じ。ずれていれば組むのが止まる)。
-**GPL-2.0 の実行ファイルをそのまま配るので、対応するソースの入手先を添えます。** ソースは上流のリリースの
-[`asicen-userland-1.0.0-source.tar.gz`](https://github.com/Khronos31/asicen-userland/releases/download/v1.0.0-beta/asicen-userland-1.0.0-source.tar.gz)
-(SHA-256 `3d9f4a67786921e27dc3fcc866bb708b9ac911358a7c9024fccf0685adb747a3`) で、同じ入手先を APK の `assets/licenses/asicen-userland/SOURCE.txt` に書いてあります。
-配布物の `LICENSE`・`THIRD_PARTY_NOTICES.md`・`DEPENDENCY-NOTICE.txt` (`DEPENDENCY-NOTICE-android-aarch64.txt` の名前で)・`libusb/COPYING` (`COPYING.libusb`)・
-`licenses/VENDOR-FIRMWARE-NOTICE.txt`・`ndk/NOTICE` (`NOTICE.ndk`)・`ndk/NOTICE.toolchain` (`NOTICE.ndk-toolchain`) も同じ置き場に入れています。
-エージェントは asicend とソケットで通信するだけで、コードは取り込んでいません (イメージと同じ)。ファームウェアは実行しないので `assets/asicen/asicen-loader.bin` に入れ、
-アプリが起動のときに書き出します。扱いはイメージと同じです ([表の上](#asicen-のファームウェアを同梱している判断))。
+ASICEN 系の機材の子プロセスは、イメージと同じ `agent/asicen/build.sh` で NDK を使って組んだ実行ファイルを `lib/<ABI>/libdenpa_asicen.so` の名前で入れます (CI がエージェントと同じジョブで組む)。
+エージェントとは別のプログラムで、エージェントが起動します ([上](#asicen-の子プロセス))。
+ライセンスの文書と対応するソースの入手先 (`SOURCE.txt`) は `assets/licenses/asicen-userland/` に入れています。ファームウェアは `assets/asicen/asicen-loader.bin` に入れ、
+アプリが起動のときに書き出します。扱いはイメージと同じです ([上](#asicen-のファームウェア))。
 
 bun は、公式のリリースの Android 向けのビルド (`bun-linux-aarch64-android.zip`) の実行ファイルを組み直さずに、`lib/<ABI>/libbun.so` の名前で入れます
 (`.github/bun-android.sh`。アーカイブは同じリリースの SHASUMS256.txt で確かめる)。CI のエミュレータ用の x86_64 の APK には `bun-linux-x64-android-baseline.zip` を入れます。
@@ -224,22 +250,22 @@ SVT-AV1・Opus・x264・dav1d・zimg と NDK の libc++ (zimg が使う) は lib
 ソースはどれも上流の配布物のままで、入手先は Mac と同じです (FFmpeg・SVT-AV1・Opus は上流の tarball、x264 はコミット、dav1d と zimg はバージョン)。
 MediaCodec (GPU でのエンコード)・zlib は Android の一部 (`libmediandk.so`・`libz.so`) を呼ぶので、APK には入れません。
 
-| 名前                                                                           | 何に                                                                                                         | 出どころ                                                                                             | ライセンス                                                                                                                                                       |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ASP.NET Core (linux の実行時パックの IL を AOT で埋める)                       | エージェントのポートの HTTPS (Kestrel)                                                                       | <https://github.com/dotnet/aspnetcore>                                                               | MIT                                                                                                                                                              |
-| OpenSSL (NDK で組み、静的リンク)                                               | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき                                            | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`)             | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、APK に入れて一緒に配る                                                                              |
-| asicen-userland (上流の Android 向けのビルド。v1.0.0-beta)                     | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。エージェントが子プロセスで起動する | <https://github.com/Khronos31/asicen-userland> のリリースの `asicen-userland-1.0.0-android-*.tar.gz` | **GPL-2.0**。静的リンクの libusb 1.0.30 は LGPL-2.1+、NDK の libc++ はそれぞれの条件。ソースの入手先と配布物の文書を `assets/licenses/asicen-userland/` に入れる |
-| Bun (`lib/<ABI>/libbun.so`。公式のリリースの Android 向けのビルド)             | denpa 本体を動かす                                                                                           | <https://github.com/oven-sh/bun>                                                                     | MIT (中の JavaScriptCore は LGPL-2.1)。`assets/licenses/bun/LICENSE.md`                                                                                          |
-| FFmpeg (`lib/<ABI>/libffmpeg.so`・`libffprobe.so` と libav*。CI が NDK で組む) | 上のイメージの ffmpeg と同じ                                                                                 | <https://ffmpeg.org>                                                                                 | イメージと同じく `--enable-gpl --enable-version3` で、全体は GPL-3.0-or-later。`assets/licenses/ffmpeg/`                                                         |
-| SVT-AV1・Opus・x264・dav1d・zimg (ソースから組み、libav* に静的リンク)         | 上の Mac の表と同じ                                                                                          | 上の Mac の表と同じ                                                                                  | 上の Mac の表と同じ。`assets/licenses/ffmpeg/<名前>/`                                                                                                            |
-| NDK の libc++ (静的リンク)                                                     | zimg (C++)                                                                                                   | <https://android.googlesource.com/toolchain/llvm-project>                                            | Apache-2.0 WITH LLVM-exception                                                                                                                                   |
-| ASICEN ファームウェア (`assets/asicen/asicen-loader.bin`)                      | 挿した直後の PX-W3U3 などに asicend が流し込む                                                               | 上の Android 版のアーカイブに入っているものをそのまま (SHA-256 はイメージと同じ)                     | **ライセンス無し・再配布の許諾は確かめられていない。** イメージと同じ判断で同梱している ([上](#asicen-のファームウェアを同梱している判断))                       |
+| 名前                                                                           | 何に                                                                                                           | 出どころ                                                                                 | ライセンス                                                                                                                                 |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| ASP.NET Core (linux の実行時パックの IL を AOT で埋める)                       | エージェントのポートの HTTPS (Kestrel)                                                                         | <https://github.com/dotnet/aspnetcore>                                                   | MIT                                                                                                                                        |
+| OpenSSL (NDK で組み、静的リンク)                                               | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき                                              | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`) | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、APK に入れて一緒に配る                                                        |
+| ASICEN の子プロセス (`lib/<ABI>/libdenpa_asicen.so`。NDK で組む)               | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。エージェントが起動する別のプログラム | <https://github.com/Khronos31/asicen-userland> のソースのアーカイブ (イメージと同じ)     | **GPL-2.0-only** (イメージと同じ。NDK の libc++ を静的に入れる)。エージェントは MPL-2.0 のまま。`assets/licenses/asicen-userland/`         |
+| Bun (`lib/<ABI>/libbun.so`。公式のリリースの Android 向けのビルド)             | denpa 本体を動かす                                                                                             | <https://github.com/oven-sh/bun>                                                         | MIT (中の JavaScriptCore は LGPL-2.1)。`assets/licenses/bun/LICENSE.md`                                                                    |
+| FFmpeg (`lib/<ABI>/libffmpeg.so`・`libffprobe.so` と libav*。CI が NDK で組む) | 上のイメージの ffmpeg と同じ                                                                                   | <https://ffmpeg.org>                                                                     | イメージと同じく `--enable-gpl --enable-version3` で、全体は GPL-3.0-or-later。`assets/licenses/ffmpeg/`                                   |
+| SVT-AV1・Opus・x264・dav1d・zimg (ソースから組み、libav* に静的リンク)         | 上の Mac の表と同じ                                                                                            | 上の Mac の表と同じ                                                                      | 上の Mac の表と同じ。`assets/licenses/ffmpeg/<名前>/`                                                                                      |
+| NDK の libc++ (静的リンク)                                                     | zimg (C++)                                                                                                     | <https://android.googlesource.com/toolchain/llvm-project>                                | Apache-2.0 WITH LLVM-exception                                                                                                             |
+| ASICEN ファームウェア (`assets/asicen/asicen-loader.bin`)                      | 挿した直後の PX-W3U3 などに子プロセスが流し込む                                                                | イメージと同じ上流の配布物から、そのまま (SHA-256 も同じ)                                | **ライセンス無し・再配布の許諾は確かめられていない。** イメージと同じ判断で同梱している ([上](#asicen-のファームウェアを同梱している判断)) |
 
 ### `denpa-aio`
 
 上の `denpa` に、`denpa-agent` の実行ファイルと `/opt/asicen-userland`・Siano と DiB0700 の許諾の文面 (`/usr/share/doc/denpa-agent/`)
 と、エージェントの土台の libssl・libcrypto・libzstd (それぞれの status.d と copyright も) を写しただけのもの (`.github/aio.Dockerfile`)。
-中身もライセンスも上の 2 つと同じです (OpenSSL は Apache-2.0、zstd は BSD)。
+中身もライセンスも上の 2 つと同じです (OpenSSL は Apache-2.0、zstd は BSD)。ASICEN の子プロセスも同じものを写します ([上](#asicen-の子プロセス))。
 
 ## リポジトリに写してあるもの・借りた表
 

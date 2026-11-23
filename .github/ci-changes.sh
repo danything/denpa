@@ -19,7 +19,7 @@
 # | 名前    | 中身を回すジョブ                                                          | true にするファイル                                      |
 # | ------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
 # | e2e     | e2e (1)〜(10)                                                             | 下の「E2E と関係ないもの」以外の全部                     |
-# | windows | agent-windows・agent-windows-install                                      | エージェント・Windows の通知領域のアプリ・install.ps1    |
+# | windows | agent-windows・agent-windows-install・agent-asicen-windows                 | エージェント・Windows の通知領域のアプリ・install.ps1    |
 # | macos   | agent-macos・tray-macos                                                   | エージェント・Mac のメニューバーのアプリ・install.sh     |
 # | android | agent-android                                                             | エージェント・Android のアプリ・組んで確かめる部品・ffmpeg |
 # | bundle  | server-windows-bundle・server-windows・server-macos-bundle・server-macos | 配布物の組み方・ffmpeg・入れ方・native-smoke が使うもの |

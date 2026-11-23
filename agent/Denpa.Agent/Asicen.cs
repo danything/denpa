@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -9,30 +8,21 @@ namespace Denpa.Agent;
 /// (PLEX PX-W3U3 など。ASICEN 系)。**試験的。上流の v1.0.0-beta (プレリリース) に合わせた実装で、実機では確かめていない。**
 ///
 /// <para>
-/// **配布物が無ければ何もしない** (<see cref="Installed"/>)。機材は <c>asicend --list-json</c> で見つけ (<see cref="Enclosures"/>)、
-/// 筐体ごとに <c>asicend</c> を 1 つ起動して (<see cref="AsicenDaemon"/>)、制御ソケットで UDTV 1.0 を送る (AsicenUdtv.cs)。
-/// 作りは docs/agent.md「asicen-userland の作り」。
-/// </para>
-///
-/// <para>
-/// 元にしたもの: 上流の README・リリースノート、dtv-userland-core v1.0.3 の docs/external-contract-1.0.0.md と docs/json-discovery.md、
-/// 配布物のコマンドの <c>--help</c>・<c>--models</c>・<c>--list-json</c> の出力、模擬のデーモン (asicend-mock) に対する
-/// 公式のクライアントの出力。**上流のソースは読んでいない。** 機材をつないだときの <c>--list-json</c> の出力は観察していない
-/// (文書の例から書いた)。上流がバージョンを上げると動かなくなることがある。
+/// **asicen-userland を組み込んだ子プロセス (denpa-asicen。GPL-2.0-only) に機材を任せる** (<see cref="AsicenChild"/>)。子プロセスが無ければ何もしない
+/// (<see cref="Installed"/>)。機材は <c>asicend --list-json</c> と同じ JSON で見つけ (<see cref="Enclosures"/>)、
+/// 筐体ごとに 1 度開いて (<see cref="AsicenEnclosure"/>)、受信機ごとに選局する (<see cref="AsicenTuner"/>)。作りは docs/agent.md「asicen-userland の作り」。
 /// </para>
 ///
 /// <para>
 /// **USB の serial が無いので、ポートで見分ける。** USB 機能が 2 つの機種 (PX-W3U2・PX-W3U3・PX-W3U3 V2) は内蔵ハブの
 /// <c>.1</c> と <c>.2</c> に 1 つずつ現れるので、筐体の名前は内蔵ハブのポート (<c>1-2</c>) にする。USB 機能が 1 つの機種
-/// (PX-S3U・PX-S3U2) は、その機能のポートを名前にする。名前は <c>asicend --instance</c> とソケットの置き場にもそのまま使う。
-/// **ポートを変えると別のチューナーになる。** 設定の <c>device</c> は <c>asicen:&lt;ポート&gt;:&lt;受信機&gt;</c> (<c>asicen:1-2:1</c>)。
+/// (PX-S3U・PX-S3U2) は、その機能のポートを名前にする。**ポートを変えると別のチューナーになる。**
+/// 設定の <c>device</c> は <c>asicen:&lt;ポート&gt;:&lt;受信機&gt;</c> (<c>asicen:1-2:1</c>)。
 /// </para>
 ///
 /// <para>
-/// **Android (アプリから USB を受け取るとき。<see cref="BrokerUsbHost"/>) は、機材を開くのも並べるのもアプリ。** asicend は libusb で機材を
-/// 並べられないので、<c>--list-json</c> の代わりに受け取った機材の VID・PID から筐体を組み (<see cref="Group"/>)、
-/// 受け取った fd を継がせて <c>asicend --fd</c> で起動する (<see cref="BrokerUsbHost.Lend"/>)。実行ファイルは APK の
-/// <c>libasicend.so</c>・<c>libasicenctl.so</c> (<see cref="Bin"/>)。
+/// **Android (アプリから USB を受け取るとき。<see cref="BrokerUsbHost"/>) は、機材を開くのも並べるのもアプリ。** 子プロセスは libusb で機材を
+/// 並べられないので、受け取った機材の VID・PID から筐体を組み (<see cref="Group"/>)、受け取った fd を子プロセスに継がせて開く (<see cref="BrokerUsbHost.Lend"/>)。
 /// </para>
 /// </summary>
 public static class AsicenUserland
@@ -40,41 +30,58 @@ public static class AsicenUserland
     /// <summary>設定の <c>device</c> の接頭辞</summary>
     public const string Scheme = "asicen:";
 
-    /// <summary>配布アーカイブを展開した場所 (Dockerfile)。v1.0.0-beta のアーカイブはフォルダ分けが無く、実行ファイルは直下にある</summary>
+    /// <summary>
+    /// 子プロセスとファームウェアの置き場。<c>ASICEN_USERLAND_DIR</c> があればそれ (Android はアプリの nativeLibraryDir)。
+    /// 無ければ Linux は <c>/opt/asicen-userland</c> (agent/Dockerfile)、Windows と macOS はエージェントの実行ファイルの隣の <c>asicen/</c>
+    /// </summary>
     public static string Dir =>
-        Environment.GetEnvironmentVariable("ASICEN_USERLAND_DIR") ?? "/opt/asicen-userland";
+        Environment.GetEnvironmentVariable("ASICEN_USERLAND_DIR")
+        ?? (OperatingSystem.IsLinux() ? "/opt/asicen-userland" : Path.Combine(AppContext.BaseDirectory, "asicen"));
+
+    /// <summary>ファームウェアのファイルの名前</summary>
+    public const string FirmwareName = "asicen-loader.bin";
 
     /// <summary>
-    /// ASICEN のファームウェア。**上流の配布アーカイブに入っているものをそのまま使う** (Dockerfile)。
+    /// 確かめたファームウェアの SHA-256 (上流 v1.0.0-beta の配布物のもの。agent/asicen/build.sh の ASICEN_FIRMWARE_SHA256 と同じ)。
+    /// **中身は読まずに、無改変のものかだけを確かめる**
+    /// </summary>
+    internal const string FirmwareSha256 = "5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a";
+
+    /// <summary>
+    /// ASICEN のファームウェア。挿した直後の機材は「ファームウェア待ち」で現れ、開くときに子プロセスが流し込む
+    /// (asicend と同じく、ファームウェアのファイルは必須)。
     ///
     /// <para>
-    /// 挿した直後の機材は「ファームウェア待ち」で現れ、asicend が起動するときに流し込む (<c>--firmware</c> は必須。上流 README)。
-    /// 再配布の許諾は確かめられていない。上流と同じ判断でイメージに同梱している (docs/licenses.md「ASICEN のファームウェアを同梱している判断」)。
+    /// <c>ASICEN_FIRMWARE</c> があればそれ (Android はアプリが書き出したもの)。無ければ tuners.json の隣の <c>firmware/</c> に利用者が置いたもの、
+    /// 次に <see cref="Dir"/> の <c>firmware/</c> (Linux のイメージに同梱したもの) の順に探す。
+    /// **Windows と macOS の配布物には同梱しない** (再配布の許諾を確かめている途中。docs/licenses.md「ASICEN のファームウェア」)。
+    /// 無ければ置き場として tuners.json の隣の <c>firmware/</c> を返す (<see cref="FirmwareProblem"/> が理由を出す)
     /// </para>
     /// </summary>
-    public static string Firmware =>
-        Environment.GetEnvironmentVariable("ASICEN_FIRMWARE") ?? Path.Combine(Dir, "firmware", "asicen-loader.bin");
-
-    /// <summary>asicend がソケットを置く場所 (この下に <c>asicen-userland/v1/&lt;ポート&gt;/</c>)</summary>
-    public static string RuntimeDir =>
-        Environment.GetEnvironmentVariable("ASICEN_RUNTIME_DIR") ?? "/run/asicen-userland";
-
-    /// <summary>
-    /// 実行ファイルの場所。配布アーカイブは直下。<c>bin/</c> の下にあればそちら。Android のアプリは <c>lib&lt;名前&gt;.so</c> の名前で
-    /// nativeLibraryDir に置く (APK の jniLibs に入れたものしか実行できない)
-    /// </summary>
-    public static string Bin(string dir, string name)
+    public static string Firmware
     {
-        foreach (var path in (string[])[Path.Combine(dir, "bin", name), Path.Combine(dir, $"lib{name}.so")])
+        get
         {
-            if (File.Exists(path)) return path;
+            if (Environment.GetEnvironmentVariable("ASICEN_FIRMWARE") is { Length: > 0 } given) return given;
+            string[] places = [Path.Combine(Config.FromEnvironment().Dir, "firmware", FirmwareName), Path.Combine(Dir, "firmware", FirmwareName)];
+            return places.FirstOrDefault(File.Exists) ?? places[0];
         }
-        return Path.Combine(dir, name);
     }
 
-    /// <summary>配布物が入っているか。**入っていなければ機材を挙げない**</summary>
-    public static bool Installed =>
-        OperatingSystem.IsLinux() && File.Exists(Bin(Dir, "asicend")) && File.Exists(Bin(Dir, "asicenctl"));
+    /// <summary>ファームウェアが使えない理由 (無い・中身が違う)。使えれば null</summary>
+    /// <param name="sha256">確かめる SHA-256 (テストは置いたファイルのものを渡す)</param>
+    internal static string? FirmwareProblem(string path, string sha256 = FirmwareSha256)
+    {
+        if (!File.Exists(path))
+        {
+            return $"ファームウェアがありません: {path} (Windows と macOS では利用者が置きます。docs/tuners.md「PX-W3U3 など」)";
+        }
+        var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
+        return sha == sha256 ? null : $"{path} は確かめたファームウェアと違います (SHA-256 {sha})";
+    }
+
+    /// <summary>子プロセスを使えるか。**使えなければ機材を挙げない**</summary>
+    public static bool Installed => AsicenChild.Available;
 
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
@@ -88,17 +95,14 @@ public static class AsicenUserland
         return (parts[0], receiver);
     }
 
-    /// <summary>
-    /// ポート (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形式で、asicend の <c>--instance</c> に
-    /// そのまま通る (英数字で始まる、英数字と <c>_ . -</c>、64 文字まで。external-contract §3.2.1)
-    /// </summary>
+    /// <summary>ポート (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形式</summary>
     internal static bool ValidId(string id) => id.Length <= 64 && UsbSysfs.IsPort(id);
 
     /// <summary>画面に出す名前</summary>
     public static string Name(string model, string id, int receiver) => $"{model} {id} #{receiver}";
 
     /// <summary>
-    /// 上流が見分ける機種 (上流 README の表と <c>asicend --models</c>)。受信機の並びは README と、模擬の <c>asicenctl list</c> の出力。
+    /// 上流が見分ける機種 (上流 README の表と <c>asicend --models</c>)。受信機の並びは README と上流の LIST の応答。
     /// </summary>
     /// <param name="Functions">USB 機能の数</param>
     /// <param name="Systems">受信機ごとの方式 (番号順。<c>ISDB-T</c>・<c>ISDB-S</c> をコンマで並べる)</param>
@@ -135,19 +139,11 @@ public static class AsicenUserland
         return new AsicenReceiver(number, names.Contains("ISDB-T"), names.Contains("ISDB-S"));
     }
 
-    /// <summary><c>key=value</c> を空白で並べた 1 行を割る (<c>asicenctl list</c> の受信機の行)。同じキーが 2 度あれば最初のもの</summary>
-    internal static Dictionary<string, string> Fields(string line) => line
-        .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-        .Select(field => field.Split('=', 2))
-        .Where(pair => pair.Length == 2)
-        .GroupBy(pair => pair[0], StringComparer.Ordinal)
-        .ToDictionary(group => group.Key, group => group.First()[1], StringComparer.Ordinal);
-
-    /// <summary>筐体 1 台。<see cref="Ports"/> は USB 機能のポート (asicend の <c>--device usb:</c> に渡す)</summary>
+    /// <summary>筐体 1 台。<see cref="Ports"/> は USB 機能のポート (子プロセスの <c>--device usb:</c> に渡す)</summary>
     public sealed record Enclosure(string Id, string Model, IReadOnlyList<string> Ports, IReadOnlyList<AsicenReceiver> Receivers);
 
-    /// <summary>動いている asicend に問い合わせた機種と受信機 (<c>asicenctl list</c>)</summary>
-    public sealed record Listed(string Model, IReadOnlyList<AsicenReceiver> Receivers);
+    /// <summary>開いた筐体の機種と受信機 (子プロセスが知らせたもの)。<paramref name="Lnb"/> は LNB の給電を操作できるか</summary>
+    public sealed record Listed(string Model, IReadOnlyList<AsicenReceiver> Receivers, bool Lnb);
 
     /// <summary>
     /// 筐体の名前。USB 機能が 2 つなら同じ内蔵ハブの <c>.1</c> と <c>.2</c> のはずで、そのハブのポート。1 つならそのポート。
@@ -165,8 +161,8 @@ public static class AsicenUserland
     private static string? HubOf(string port) => port.LastIndexOf('.') is var dot and > 0 ? port[..dot] : null;
 
     /// <summary>
-    /// <c>asicend --list-json</c> の出力 (dtv-userland-core の docs/json-discovery.md の <c>userland.discovery</c> 1.0) を読む。
-    /// **使うのは <c>status=ready</c> で、機種が <see cref="Models"/> にあり、USB 機能の数が合う筐体だけ。**
+    /// 子プロセスの <c>--list-json</c> (<c>asicend --list-json</c> と同じ。dtv-userland-core の docs/json-discovery.md の
+    /// <c>userland.discovery</c> 1.0) を読む。**使うのは <c>status=ready</c> で、機種が <see cref="Models"/> にあり、USB 機能の数が合う筐体だけ。**
     ///
     /// <para>
     /// **バージョンを固定する。** <c>producer</c> が asicen 1.0.0 でなければ、機材を挙げずに理由を残す。
@@ -185,10 +181,10 @@ public static class AsicenUserland
         var producer = root["producer"] as JsonObject;
         var product = Text(producer, "product");
         var version = Text(producer, "version");
-        if (Text(schema, "name") != "userland.discovery" || Number(schema, "major") != 1 || product != "asicen" || version != Udtv.Version)
+        if (Text(schema, "name") != "userland.discovery" || Number(schema, "major") != 1 || product != "asicen" || version != AsicenChild.Version)
         {
-            warn($"asicend --list-json が {product} {version} ({Text(schema, "name")} {Number(schema, "major")}) です。"
-                + $"対応を確かめたのは asicen {Udtv.Version} (userland.discovery 1) だけなので、ASICEN の機材は使いません");
+            warn($"ASICEN の機材の一覧が {product} {version} ({Text(schema, "name")} {Number(schema, "major")}) です。"
+                + $"対応を確かめたのは asicen {AsicenChild.Version} (userland.discovery 1) だけなので、ASICEN の機材は使いません");
             return [];
         }
 
@@ -209,7 +205,7 @@ public static class AsicenUserland
             }
             if (status != "ready")
             {
-                warn($"{model.Name} ({where}) は使えません (asicend --list-json: status={status})");
+                warn($"{model.Name} ({where}) は使えません (状態: {status})");
                 continue;
             }
             if (ports.Count != model.Functions || ports.Count != devices.Count || IdOf(ports) is not { } id)
@@ -247,61 +243,54 @@ public static class AsicenUserland
         obj is not null && obj.TryGetPropertyValue(key, out var node) && node is JsonValue value && value.TryGetValue<int>(out var number) ? number : null;
 
     /// <summary>
-    /// <c>asicenctl list</c> の出力を読む。**観察した形式: <c>model=PX-W3U3</c> の行と、受信機ごとの
-    /// <c>receiver=0 device=1 local=0 system=ISDB-S</c> の行** (PX-S3U は <c>system=ISDB-T,ISDB-S</c>)。
-    /// 機種が <see cref="Models"/> に無いか、受信機が 1 つも読めなければ null
+    /// 挿さっている筐体 (ファームウェア待ちのものには先に流し込む)。子プロセスが無ければ空。
+    /// Android はアプリから受け取った機材から、ほかは子プロセスの <c>--list-json</c> から組む (USB のポートの名前は libusb のもの。
+    /// Windows と macOS でもエージェントの USB の扱いとは混ぜない)
     /// </summary>
-    public static Listed? ParseList(string output, Action<string> warn)
-    {
-        string? model = null;
-        var receivers = new List<AsicenReceiver>();
-        foreach (var raw in output.Split('\n'))
-        {
-            var line = raw.Trim();
-            // 機種の名前は空白を含む (PX-W3U3 V2) ので、行の残りを全部取る
-            if (line.StartsWith("model=", StringComparison.Ordinal))
-            {
-                model = line["model=".Length..];
-                continue;
-            }
-            var fields = Fields(line);
-            if (!fields.TryGetValue("receiver", out var index) || !fields.TryGetValue("system", out var system)) continue;
-            if (int.TryParse(index, out var number) && model is not null && Receiver(number, [system], warn) is { } receiver) receivers.Add(receiver);
-        }
-        if (model is null || Models.All(known => known.Name != model))
-        {
-            warn($"asicenctl list の機種 {model ?? "(なし)"} は、対応を確かめた機種ではありません");
-            return null;
-        }
-        return receivers.Count == 0 ? null : new Listed(model, receivers);
-    }
-
-    /// <summary>挿さっている筐体 (ファームウェア待ちのものには先に流し込む)。配布物が無ければ空</summary>
     public static List<Enclosure> Enclosures(Action<string>? warn = null)
     {
         warn ??= Log.Write;
         if (!Installed) return [];
-        Boot(warn);
-        if (UsbHost.Current is BrokerUsbHost broker) return Group(Scan(broker), warn);
-        var (code, output) = Shell.Run(Bin(Dir, "asicend"), ["--list-json"], TimeSpan.FromSeconds(15));
-        if (code != 0)
+        if (UsbHost.Current is BrokerUsbHost broker)
         {
-            warn($"ASICEN の機材を挙げられません (asicend --list-json exit {code}: {output})");
-            return [];
+            Boot(Scan(broker), warn);
+            return Group(Scan(broker), warn);
         }
         try
         {
-            return ParseDiscovery(output, warn);
+            var json = AsicenChild.ListJson();
+            if (Boot(FunctionsIn(json), warn)) json = AsicenChild.ListJson();
+            return ParseDiscovery(json, warn);
+        }
+        catch (IOException error)
+        {
+            warn(error.Message);
+            return [];
         }
         catch (Exception error) when (error is JsonException or FormatException)
         {
-            warn($"asicend --list-json の応答が読めません ({error.Message})");
+            warn($"ASICEN の機材の一覧が読めません ({error.Message})");
             return [];
         }
     }
 
+    /// <summary>一覧の JSON に出てくる USB 機能 (筐体にまとまったものと、まとまらなかったもの)。ファームウェア待ちを見つけるのに使う</summary>
+    internal static List<Function> FunctionsIn(string json)
+    {
+        var line = json.Split('\n').Select(raw => raw.Trim()).FirstOrDefault(raw => raw.StartsWith('{'))
+            ?? throw new FormatException("JSON の文書がありません");
+        var root = JsonNode.Parse(line) as JsonObject ?? throw new FormatException("JSON の文書が object ではありません");
+        var devices = (root["enclosures"] as JsonArray ?? []).OfType<JsonObject>()
+            .SelectMany(enclosure => (enclosure["devices"] as JsonArray ?? []).OfType<JsonObject>())
+            .Concat((root["ungrouped_usb_devices"] as JsonArray ?? []).OfType<JsonObject>());
+        return [.. devices
+            .Select(device => (Usb: Text(device, "usb"), Port: Text(device, "port")))
+            .Where(device => device.Usb is not null && device.Port is not null)
+            .Select(device => new Function(device.Usb!, device.Port!, Loaders.Contains(device.Usb)))];
+    }
+
     /// <summary>ファームウェア待ちの USB ID (上流の HARDWARE-VALIDATION.md)</summary>
-    private static readonly string[] Loaders = ["1738:5211", "1738:5216"];
+    internal static readonly string[] Loaders = ["1738:5211", "1738:5216"];
 
     /// <summary>USB 機能 1 つ (USB のデバイス 1 つ)</summary>
     public sealed record Function(string Usb, string Port, bool Loader)
@@ -320,9 +309,8 @@ public static class AsicenUserland
     internal static IReadOnlyList<UsbId> UsbIds => [.. Loaders.Concat(Models.Select(model => model.Usb)).Select(UsbId.Parse).Distinct()];
 
     /// <summary>
-    /// ASICEN の USB 機能を探す (<see cref="UsbIds"/>)。Linux はファームウェア待ちの機材を見つけるためだけに使い (<see cref="Boot"/>)、
-    /// Android は筐体もここから組む (<see cref="Group"/>)。ID の読めないデバイスは飛ばす。
-    /// カーネルのドライバが使っているものも並べる (流し込むかは asicend が決める)
+    /// ASICEN の USB 機能を探す (<see cref="UsbIds"/>)。Android (アプリから受け取った機材) だけで使い、ファームウェア待ちの機材も
+    /// 筐体もここから組む (<see cref="Boot"/>・<see cref="Group"/>)。カーネルのドライバが使っているものも並べる (流し込むかは子プロセスが決める)
     /// </summary>
     public static List<Function> Scan(IUsbHost host)
     {
@@ -336,9 +324,9 @@ public static class AsicenUserland
     }
 
     /// <summary>
-    /// ファームウェア待ちの USB 機能を、asicend に渡す組にまとめる。**同じハブの <c>.1</c> と <c>.2</c> に ASICEN の USB 機能が
+    /// ファームウェア待ちの USB 機能を、子プロセスに渡す組にまとめる。**同じハブの <c>.1</c> と <c>.2</c> に ASICEN の USB 機能が
     /// 2 つあれば 1 つの筐体とみなして両方を、そうでなければその機能だけを渡す。** ファームウェア待ちの間は機種が分からないので、
-    /// 外付けのハブの <c>.1</c> と <c>.2</c> に USB 機能が 1 つの機種を 2 台挿したときは見分けられない (asicend が断り、理由が記録に残る)
+    /// 外付けのハブの <c>.1</c> と <c>.2</c> に USB 機能が 1 つの機種を 2 台挿したときは見分けられない (子プロセスが断り、理由が記録に残る)
     /// </summary>
     internal static List<(string Id, IReadOnlyList<string> Ports)> Waiting(IReadOnlyList<Function> functions)
     {
@@ -354,9 +342,9 @@ public static class AsicenUserland
     }
 
     /// <summary>
-    /// 動いている USB 機能を筐体にまとめる (Android。<c>asicend --list-json</c> の代わり)。**USB 機能が 2 つの機種は、同じ内蔵ハブの
+    /// 動いている USB 機能を筐体にまとめる (Android。一覧の JSON の代わり)。**USB 機能が 2 つの機種は、同じ内蔵ハブの
     /// <c>.1</c> と <c>.2</c> に同じ ID の機能が揃ったときだけ 1 つの筐体にする。** 受信機は機種の表 (<see cref="Models"/>) のもので、
-    /// asicend が起動したあとは <c>asicenctl list</c> のものに替わる。
+    /// 開いたあとは子プロセスが知らせたものに替わる。
     /// ポートの名前を作れないカーネル (5.3 より前。名前が <c>001-004</c>) では内蔵ハブが分からず、USB 機能が 2 つの機種は使えない
     /// </summary>
     internal static List<Enclosure> Group(IReadOnlyList<Function> functions, Action<string> warn)
@@ -391,77 +379,10 @@ public static class AsicenUserland
     private static List<AsicenReceiver> Receivers(Model model, Action<string> warn) =>
         [.. model.Systems.Select((systems, index) => Receiver(index, [systems], warn)).OfType<AsicenReceiver>()];
 
-    /// <summary>
-    /// asicend のソケットのパスが <c>sun_path</c> に収まるか。**収まらなければ起動しない** (asicend が断る前に、理由を記録に出す)。
-    /// Android の置き場 (<c>&lt;dataDir&gt;/r/asicen-userland/v1/&lt;筐体&gt;/control.sock</c>) は 80 バイトほど
-    /// </summary>
-    internal static void CheckSocketPath(string runtimeDir, string id)
-    {
-        var socket = UdtvControl.Endpoint(runtimeDir, id, "control.sock");
-        var length = System.Text.Encoding.UTF8.GetByteCount(socket);
-        if (length > MaxSocketPath)
-        {
-            throw new IOException($"asicend のソケットのパス {socket} が {length} バイトで、上限の {MaxSocketPath} バイトを超えるので起動しません"
-                + " (ASICEN_RUNTIME_DIR を短い置き場にしてください)");
-        }
-    }
-
-    /// <summary>
-    /// UNIX ドメインソケットのパスの上限 (Linux の <c>sun_path</c> は終わりの NUL を含めて 108 バイト)。
-    /// 超えるパスでは、asicend は起動のときに断る
-    /// </summary>
-    internal const int MaxSocketPath = 107;
-
-    /// <summary>
-    /// asicend のランタイムルートを作る。asicend は下の階層しか作らない決まりで、持ち主だけが使えるもの (0700) を求める
-    /// </summary>
-    internal static void CreateRuntimeDir(string runtimeDir)
-    {
-        Directory.CreateDirectory(runtimeDir);
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(runtimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
-    }
-
-    /// <summary>
-    /// asicend を起動する。標準出力と標準エラーは受け取る。
-    /// fd を継がせて起動するときは、<paramref name="lend"/> で継がせる fd の複製を作り、その番号から <paramref name="args"/> で引数を組む。
-    /// 複製は起動し終えたところで閉じる (子プロセスは自分の写しを持つ)。起動できなかったときも閉じる。
-    ///
-    /// <para>
-    /// **複製を作ってから起動し終えるまでは、ほかの子プロセスを起動しない** (<see cref="Shell.SpawnGate"/>。複製を作るのもこのロックの中)。
-    /// 同じ時にほかの子プロセスを起動すると、その子も同じ fd を継ぐ (.NET の Process.Start は close-on-exec の無い fd を閉じない)。
-    /// asicend が別の筐体の fd を持ち続けると、その筐体の USB の確保が外れない。エージェントの子プロセスはどれも <see cref="Shell.Start"/> で起動し、同じロックを取る
-    /// </para>
-    /// </summary>
-    internal static Process Start(string program, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, Func<InheritedFds>? lend)
-    {
-        lock (Shell.SpawnGate)
-        {
-            using var inherit = lend?.Invoke();
-            var start = new ProcessStartInfo(program, args(inherit?.Numbers ?? []))
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                // 診断は UTF-8 (パスに日本語が入りうる)
-                StandardErrorEncoding = System.Text.Encoding.UTF8,
-                UseShellExecute = false,
-            };
-            return Shell.Start(start);
-        }
-    }
-
-    /// <summary>入っている asicend のバージョンを記録に出す (起動したとき。Android では、アプリの子プロセスから起動できるかもここで分かる)</summary>
-    public static void LogVersion()
-    {
-        if (!Installed) return;
-        var asicend = Bin(Dir, "asicend");
-        var (code, output) = Shell.Run(asicend, ["--version"], TimeSpan.FromSeconds(10));
-        Log.Write(code == 0
-            ? $"asicen-userland: {output} ({asicend})"
-            : $"asicen-userland: {asicend} --version が通りません (exit {code}: {output})。ASICEN の機材は使えません");
-    }
+    /// <summary>起動したときに、子プロセスを使えるかを記録に出す。Android では、アプリの子プロセスから起動できるかもここで分かる</summary>
+    public static void LogVersion() => Log.Write(Installed
+        ? $"asicen-userland: {AsicenChild.Version} の子プロセスを使います ({AsicenChild.Program})"
+        : $"asicen-userland: 使いません ({AsicenChild.Problem})");
 
     private static readonly Lock BootGate = new();
 
@@ -469,92 +390,59 @@ public static class AsicenUserland
     private static readonly HashSet<string> Booted = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// ファームウェア待ちの機材に流し込む。**asicend を 1 度起動して ready まで待ち、止める** (流し込むのは asicend。上流 README)。
+    /// ファームウェア待ちの機材に流し込む。**子プロセスで 1 度開いて閉じる** (流し込むのは子プロセス。開くときに流し込み、つながり直すのを待つ)。
     ///
     /// <para>
-    /// 設定に書いてある筐体は、asicend を起動したときに流し込まれる。ここで扱うのは、まだ設定に無い機材を自動検出で挙げるとき。
+    /// 設定に書いてある筐体は、開くときに流し込まれる。ここで扱うのは、まだ設定に無い機材を自動検出で挙げるとき。
     /// ファームウェア待ちの間は機種も受信機も分からないので、流し込んでから一覧を取る。
-    /// **ファームウェアが無ければ流さずに「ファームウェアがありません」と残す。** すでに asicend が動いている筐体は飛ばす。
+    /// **ファームウェアが無ければ流さずに「ファームウェアがありません」と残す。** すでに開いている筐体は飛ばす。
+    /// Android は流し込んだあとの機材を追えないので、流し込んだら閉じる。つながり直した機材は別の VID・PID でアプリから届く
+    /// 流し込んだ筐体があれば true (一覧を取り直す)
     /// </para>
     /// </summary>
-    internal static void Boot(Action<string> warn)
+    internal static bool Boot(IReadOnlyList<Function> functions, Action<string> warn)
     {
+        var loaded = false;
         lock (BootGate)
         {
-            var waiting = Waiting(Scan(UsbHost.Current));
+            var waiting = Waiting(functions);
             Booted.IntersectWith(waiting.Select(enclosure => enclosure.Id));
             foreach (var (id, ports) in waiting)
             {
-                if (AsicenDaemon.For(id).Running || !Booted.Add(id)) continue;
+                if (AsicenEnclosure.For(id).Opened || !Booted.Add(id)) continue;
                 var where = string.Join(" / ", ports);
-                if (!File.Exists(Firmware))
+                if (FirmwareProblem(Firmware) is { } problem)
                 {
-                    warn($"ファームウェアがありません: {Firmware} (asicen-userland の配布物に入っていませんでした)。"
-                        + $"ファームウェア待ちの ASICEN の機材 (USB {where}) は使えません");
+                    warn($"{problem}。ファームウェア待ちの ASICEN の機材 (USB {where}) は使えません");
                     continue;
                 }
-                if (OperatingSystem.IsLinux() && UsbHost.Current is BrokerUsbHost broker)
-                {
-                    Load(broker, id, ports, where, warn);
-                    continue;
-                }
-                var loader = new AsicenDaemon(id, Dir, RuntimeDir, () => new(AsicenDaemon.Arguments(ports, Firmware, allowLnb: false)));
+                var loader = new AsicenEnclosure(id, () => AsicenEnclosure.Hardware(ports, Firmware, allowLnb: false, Lend()));
                 try
                 {
-                    loader.Ensure();
-                    Log.Write($"[asicend {id}] ファームウェアを流し込みました");
+                    loader.Open();
+                    Log.Write($"[asicen {id}] ファームウェアを流し込みました");
+                    loaded = true;
                 }
-                catch (Exception error) when (StartFailure(error))
+                catch (AsicenLoaded)
+                {
+                    Log.Write($"[asicen {id}] ファームウェアを流し込みました。つながり直した機材はアプリから届きます");
+                }
+                catch (IOException error)
                 {
                     warn($"ASICEN の機材 (USB {where}) にファームウェアを流し込めません ({error.Message})");
                 }
                 finally
                 {
-                    loader.Stop();
+                    loader.Close();
                 }
             }
         }
+        return loaded;
     }
 
-    /// <summary>流し込みを待つ上限。16 KB を送るだけなので数秒で済む</summary>
-    private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(30);
-
-    /// <summary>
-    /// Android のファームウェア待ちの機材に流し込む。**<c>asicend --fd … --firmware …</c> を起動し、終わるまで待つ。**
-    /// <c>--fd</c> の asicend は、流し込んだあとにつながり直した機材を追えないので、流し込んだら終わる (上流 README)。
-    /// つながり直した機材は別の VID・PID でアプリから届き (<c>attached</c>)、探し直したときに <see cref="AsicenDaemon"/> が起動する。
-    /// 終了コードは見ずに、asicend の出力を記録に出す
-    /// </summary>
-    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    private static void Load(BrokerUsbHost broker, string id, IReadOnlyList<string> ports, string where, Action<string> warn)
-    {
-        try
-        {
-            CheckSocketPath(RuntimeDir, id);
-            CreateRuntimeDir(RuntimeDir);
-            using var process = Start(
-                Bin(Dir, "asicend"),
-                fds => [.. AsicenDaemon.FdArguments(fds, Firmware, allowLnb: false), "--runtime-dir", RuntimeDir, "--instance", id],
-                () => broker.Lend(ports));
-            var stdout = process.StandardOutput.ReadToEndAsync();
-            var stderr = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(LoadTimeout))
-            {
-                Interop.Terminate(process.Id);
-                if (!process.WaitForExit(TimeSpan.FromSeconds(10))) process.Kill();
-                process.WaitForExit();
-                warn($"ASICEN の機材 (USB {where}) への流し込みが {LoadTimeout.TotalSeconds:0} 秒で終わらないので止めました");
-                return;
-            }
-            var output = $"{stdout.GetAwaiter().GetResult()}{stderr.GetAwaiter().GetResult()}".Trim();
-            Log.Write($"[asicend {id}] ファームウェアの流し込みで asicend が終了しました (exit {process.ExitCode}: {output})。"
-                + "流し込めていれば、機材がつながり直してアプリから届きます");
-        }
-        catch (Exception error) when (StartFailure(error))
-        {
-            warn($"ASICEN の機材 (USB {where}) にファームウェアを流し込めません ({error.Message})");
-        }
-    }
+    /// <summary>Android ならアプリから受け取った fd を子プロセスに継がせる手段</summary>
+    internal static Func<IReadOnlyList<string>, InheritedFds>? Lend() =>
+        OperatingSystem.IsLinux() && UsbHost.Current is BrokerUsbHost broker ? broker.Lend : null;
 
     /// <summary>挿さっている筐体の受信機を、設定に書くのと同じ形式で返す</summary>
     public static List<TunerSpec> Detect()
@@ -563,20 +451,13 @@ public static class AsicenUserland
         {
             return Specs(Enclosures());
         }
-        catch (Exception error) when (StartFailure(error))
+        catch (IOException error)
         {
             // 自動検出のほかの機材 (CECH-ZD1 J・PIX-DT295・IT930x) まで並ばなくならないように、ここで止める
             Log.Write($"ASICEN の機材を探せませんでした ({error.Message})");
             return [];
         }
     }
-
-    /// <summary>
-    /// asicend を起動する・ソケットの置き場を作るときの、機材や配布物の側の失敗 (起動できない実行ファイルは <see cref="System.ComponentModel.Win32Exception"/>、
-    /// 作れない置き場は <see cref="UnauthorizedAccessException"/>)
-    /// </summary>
-    private static bool StartFailure(Exception error) =>
-        error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception;
 
     /// <summary>筐体ごとの受信機を設定の形式に (受けられる方式の無い受信機は除く)</summary>
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
@@ -587,42 +468,20 @@ public static class AsicenUserland
                 Name(enclosure.Model, enclosure.Id, receiver.Index), receiver.Types, false, Device(enclosure.Id, receiver.Index)))),
     ];
 
-    /// <summary>設定に出てくる筐体 (<c>device</c> が <c>asicen:</c> のもの)。asicend を起動する対象</summary>
+    /// <summary>設定に出てくる筐体 (<c>device</c> が <c>asicen:</c> のもの)。開く対象</summary>
     public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => specs
         .Where(spec => !spec.Disabled && spec.Device is not null)
         .Select(spec => Parse(spec.Device!)?.Id)
         .OfType<string>()
         .Distinct(StringComparer.Ordinal);
 
-    private static volatile HashSet<string> _lnb = [];
-
-    /// <summary>
-    /// 設定を控える。**LNB 15V と書いた受信機がある筐体だけ、asicend に給電を許可して起動する** (<c>--allow-lnb-power</c>)。
-    /// asicend を起動する前 (<see cref="AsicenDaemon.Prepare"/> の前) に呼ぶ
-    /// </summary>
-    public static void Configure(IEnumerable<TunerSpec> specs) => _lnb =
-    [
-        .. specs.Where(spec => !spec.Disabled && spec.Lnb == "15v" && spec.Device is not null)
-            .Select(spec => Parse(spec.Device!)?.Id).OfType<string>(),
-    ];
-
-    /// <summary>設定で LNB 15V と書いた受信機がある筐体か</summary>
-    public static bool WantsLnb(string id) => _lnb.Contains(id);
-
     /// <summary>受信機 1 つを開く</summary>
-    public static ITuneDevice Open(string id, int receiver, string? lnb, string? name = null) => new AsicenTuner(
-        id, receiver, lnb, RuntimeDir,
-        () =>
-        {
-            var daemon = AsicenDaemon.For(id);
-            daemon.Ensure();
-            return daemon.Listed;
-        },
-        name);
+    public static ITuneDevice Open(string id, int receiver, string? lnb, string? name = null) =>
+        new AsicenTuner(AsicenEnclosure.For(id), receiver, lnb, name);
 }
 
 /// <summary>
-/// 受信機 1 つ。**asicend に問い合わせたもの** (<see cref="AsicenUserland.ParseList"/>)。
+/// 受信機 1 つ。**子プロセスが知らせたもの** (<see cref="AsicenEnclosure.Listed"/>)。
 ///
 /// <para>
 /// 受信機ごとに地上波か衛星かが決まっていて、1 つの受信機で両方を受けられる機種もある。
@@ -636,12 +495,10 @@ public sealed record AsicenReceiver(int Index, bool Terrestrial, bool Satellite)
     public bool Accepts(ChannelTable.Tuning tuning) => tuning.Satellite ? Satellite : Terrestrial;
 
     /// <summary>
-    /// 筐体に問い合わせた受信機と、要求された選局が合っているか。**合わなければ asicend に送る前に断る。**
-    /// 受信機を問い合わせられていなければ (<paramref name="receivers"/> が null) 見ずに通す (合わなければ asicend が断る)
+    /// 筐体に問い合わせた受信機と、要求された選局が合っているか。**合わなければ子プロセスに渡す前に断る**
     /// </summary>
-    public static void Check(IReadOnlyList<AsicenReceiver>? receivers, int index, ChannelTable.Tuning tuning)
+    public static void Check(IReadOnlyList<AsicenReceiver> receivers, int index, ChannelTable.Tuning tuning)
     {
-        if (receivers is null) return;
         var receiver = receivers.FirstOrDefault(r => r.Index == index)
             ?? throw new IOException(
                 $"受信機 {index} はありません (この筐体にあるのは {string.Join(", ", receivers.Select(r => r.Index))})");
@@ -653,292 +510,243 @@ public sealed record AsicenReceiver(int Index, bool Terrestrial, bool Satellite)
     }
 }
 
-/// <summary>
-/// <c>asicend</c> 1 つ。**筐体 1 台につき 1 つ、使う受信機がある間だけ動かす。**
+/// 子プロセスで開いた筐体 1 台。**筐体 1 台につき子プロセスを 1 つ起動し、使う受信機がある間だけ開いておく。**
 ///
 /// <para>
-/// 起動するのは最初に要ったとき (起動時の <see cref="Prepare"/> か、初めての選局)。
-/// ファームウェアを流し込んでから ready になるので、数秒かかる。
-/// 終了していたら次に要ったときに起動し直す。受信機を全部使わない設定にしたら止める (<see cref="Prepare"/>)。
+/// 開くのは最初に要ったとき (起動時の <see cref="Prepare"/> か、初めての選局)。ファームウェア待ちなら流し込んでから開くので、数秒かかる。
+/// 受信機を全部使わない設定にしたら閉じて USB を手放す (<see cref="Prepare"/>)。機材が抜けた・USB の読み書きに失敗した印
+/// (<see cref="MarkLost"/>) があるか、子プロセスが終わっていれば (落ちた)、次に要ったときに閉じて起動し直す。
 /// </para>
 ///
 /// <para>
-/// 起動は <c>asicend --device usb:&lt;ポート&gt;[,&lt;ポート&gt;] --firmware &lt;ファイル&gt; [--allow-lnb-power] --runtime-dir … --instance &lt;筐体の名前&gt;</c>
-/// (上流 README と <c>asicend --help</c>)。ファームウェア待ちの機材には、asicend が起動するときに流し込む。
-/// Android は <c>--device</c> の代わりに <c>--fd &lt;番号&gt;</c> (USB 機能が 2 つなら 2 回。<c>.1</c> が先) で、受け取った fd を継がせる。
-/// ready は <c>asicenctl list</c> が通ることで見て、その出力から機種と受信機を読む (<see cref="Listed"/>)。
+/// 開くときの引数は asicend と同じ: <c>--device usb:&lt;ポート&gt;[,&lt;ポート&gt;] --firmware &lt;ファイル&gt; [--allow-lnb-power]</c>。
+/// Android は <c>--device</c> の代わりに <c>--fd &lt;番号&gt;</c> (USB 機能が 2 つなら 2 回。<c>.1</c> が先) で、受け取った fd を子プロセスに継がせる。
 /// </para>
 /// </summary>
-/// <param name="select">
-/// どの機材を使うかの引数と継がせる fd (<see cref="Hardware"/>)。起動する直前に呼ぶ。使えなければ IOException を送出する。テストは模擬のデーモンの引数を返す
-/// </param>
-/// <param name="program">起動する実行ファイルの名前。テストは模擬 (<c>asicend-mock</c>)</param>
-public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<AsicenDaemon.Selection> select, string program = "asicend")
+/// <param name="select">開く直前に呼ぶ。どの機材を開くかの引数 (<see cref="Hardware(string, string, Func{IEnumerable{AsicenUserland.Enclosure}}, Func{IReadOnlyList{string}, InheritedFds}, string)"/>)。使えなければ IOException を送出する</param>
+/// <param name="open">子プロセスで開く (<see cref="AsicenChild.Open"/>)。テストは偽の機材を開く</param>
+public sealed class AsicenEnclosure(string id, Func<AsicenEnclosure.Selection> select, Func<IReadOnlyList<string>, AsicenChild?>? open = null)
 {
     private static readonly Lock Registry = new();
-    private static readonly Dictionary<string, AsicenDaemon> All = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, AsicenEnclosure> All = new(StringComparer.Ordinal);
 
-    /// <summary>ready を待つ上限。ファームウェアの流し込みは数秒で済む</summary>
-    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(30);
+    public string Id { get; } = id;
 
-    /// <summary>止めるときに後片付けを待つ上限。過ぎたら Kill</summary>
-    private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(10);
-
-    private string Id { get; } = id;
-    private readonly Lock _gate = new();
-    private Process? _process;
-    private volatile string _stderr = "";
-
-    public bool Running
-    {
-        get
-        {
-            // 止める側 (Stop) が _gate の中で Dispose するので、読んだあとに破棄されていたら止まったものとする
-            var process = _process;
-            try
-            {
-                return process is { HasExited: false };
-            }
-            catch (InvalidOperationException)
-            {
-                return false;
-            }
-        }
-    }
+    /// <summary>開く・閉じる・使っている数を守る (<see cref="Monitor"/> で待つので object)</summary>
+    private readonly object _gate = new();
+    private AsicenChild? _child;
+    private int _users;
+    private volatile bool _lost;
 
     /// <summary>
-    /// asicend に渡す、機材を選ぶ引数。<paramref name="Lend"/> があれば (Android)、起動する直前にそれで fd の複製を作って継がせ、
-    /// その番号を <c>--fd</c> にして <paramref name="Args"/> の前に足す (<see cref="FdOptions"/>)
+    /// 子プロセスに渡す、機材を選ぶ引数。<paramref name="Lend"/> があれば (Android)、起動する直前にそれで fd の複製を作り、
+    /// その番号を <c>--fd</c> にして <paramref name="Args"/> の前に足す。<paramref name="AllowLnb"/> は給電を許可して開くか
     /// </summary>
-    public sealed record Selection(string[] Args, Func<InheritedFds>? Lend = null);
+    public sealed record Selection(string[] Args, Func<InheritedFds>? Lend = null, bool AllowLnb = false);
 
-    public static AsicenDaemon For(string id) => For(id, () => new AsicenDaemon(
-        id, AsicenUserland.Dir, AsicenUserland.RuntimeDir,
-        () => Hardware(
-            id, AsicenUserland.Firmware, AsicenUserland.WantsLnb(id), () => AsicenUserland.Enclosures(_ => { }),
-            OperatingSystem.IsLinux() && UsbHost.Current is BrokerUsbHost broker ? broker.Lend : null)));
+    /// <summary>開いているか (子プロセスが動いているか)。**ロックを取らない** (開いている途中の筐体のロックを、ほかの筐体を開く Boot が待たないように)</summary>
+    public bool Opened => Volatile.Read(ref _child) is { Exited: false };
 
-    /// <summary>筐体の asicend。まだ無ければ <paramref name="create"/> で作って控える (テストは模擬の実行ファイルを渡す)</summary>
-    internal static AsicenDaemon For(string id, Func<AsicenDaemon> create)
+    /// <summary>開いた筐体の機種と受信機。開くまで null</summary>
+    public AsicenUserland.Listed? Listed { get; private set; }
+
+    public static AsicenEnclosure For(string id) => For(id, () => new AsicenEnclosure(
+        id,
+        () => Hardware(id, AsicenUserland.Firmware, () => AsicenUserland.Enclosures(_ => { }), AsicenUserland.Lend())));
+
+    /// <summary>筐体の 1 つ。まだ無ければ <paramref name="create"/> で作って控える (テストは偽の機材を開くものを渡す)</summary>
+    internal static AsicenEnclosure For(string id, Func<AsicenEnclosure> create)
     {
         lock (Registry)
         {
-            if (!All.TryGetValue(id, out var daemon))
+            if (!All.TryGetValue(id, out var enclosure))
             {
-                daemon = create();
-                All[id] = daemon;
+                enclosure = create();
+                All[id] = enclosure;
             }
-            return daemon;
+            return enclosure;
         }
     }
 
     /// <summary>
-    /// 挙げた筐体ぶん起動して ready まで待ち、**挙げなかった筐体の asicend は止める。**
-    /// 起動時と、チューナーの設定を書き換えたときと、機材を挿したとき。
+    /// 挙げた筐体を開き、**挙げなかった筐体は閉じる。** 起動時と、チューナーの設定を書き換えたときと、機材を挿したとき。
     ///
     /// <para>
-    /// **起動できなくても止まらない。** 筐体が抜けている・ファームウェアが無い、は
-    /// その筐体だけの話で、他のチューナー (PT3 など) は変わらず使える。
-    /// 理由は記録に残し、選局のときにもう一度試す。
+    /// **開けなくても止まらない。** 筐体が抜けている・ファームウェアが無い、はその筐体だけの話で、他のチューナー (PT3 など) は
+    /// 変わらず使える。理由は記録に残し、選局のときにもう一度試す。
     /// </para>
     ///
     /// <para>
-    /// **受信機を全部使わない設定にした筐体は、asicend を止めて USB を手放す。** 動いたままだと、ほかのソフトに
-    /// 機材を渡せない (docs/switch.md「並べて動かすとき」)。使う設定に戻せば、ここか次の選局で起動し直す。
-    /// 起動したときに使う受信機の無い筐体を起動しないのと同じ
+    /// **受信機を全部使わない設定にした筐体は、閉じて USB を手放す。** 開いたままだと、ほかのソフトに機材を渡せない
+    /// (docs/switch.md「並べて動かすとき」)。使う設定に戻せば、ここか次の選局で開き直す。
     /// </para>
     /// </summary>
-    public static void Prepare(IReadOnlyCollection<string> ids, Func<string, AsicenDaemon> daemon)
+    public static void Prepare(IReadOnlyCollection<string> ids, Func<string, AsicenEnclosure> enclosure)
     {
-        List<AsicenDaemon> unused;
-        lock (Registry) unused = [.. All.Values.Where(target => target.Running && !ids.Contains(target.Id))];
+        List<AsicenEnclosure> unused;
+        lock (Registry) unused = [.. All.Values.Where(target => target.Opened && !ids.Contains(target.Id))];
         foreach (var target in unused)
         {
-            target.Write("使う受信機が無くなったので止めます");
-            target.Stop();
+            target.Write("使う受信機が無くなったので閉じます");
+            target.Close();
         }
 
         foreach (var id in ids)
         {
-            var target = daemon(id);
+            var target = enclosure(id);
             try
             {
-                target.Ensure();
+                target.Open();
             }
-            catch (Exception error)
+            catch (IOException error)
             {
                 target.Write(error.Message);
             }
         }
     }
 
-    public static void StopAll()
+    public static void CloseAll()
     {
-        List<AsicenDaemon> daemons;
-        lock (Registry) daemons = [.. All.Values];
-        foreach (var daemon in daemons) daemon.Stop();
+        List<AsicenEnclosure> enclosures;
+        lock (Registry) enclosures = [.. All.Values];
+        foreach (var enclosure in enclosures) enclosure.Close();
     }
 
-    private void Write(string message) => Log.Write($"[asicend {Id}] {message}");
+    private void Write(string message) => Log.Write($"[asicen {Id}] {message}");
 
-    /// <summary>動いている asicend に問い合わせた機種と受信機。ready になるまで、問い合わせられなかったときも null</summary>
-    public AsicenUserland.Listed? Listed { get; private set; }
-
-    /// <summary>いまの asicend を給電を許可して起動したか</summary>
-    private bool _allowsLnb;
-
-    /// <summary>asicend に渡す、機材を選ぶ引数</summary>
+    /// <summary>子プロセスに渡す、機材を選ぶ引数 (asicend と同じ)</summary>
     internal static string[] Arguments(IReadOnlyList<string> ports, string firmware, bool allowLnb) =>
         ["--device", $"usb:{string.Join(',', ports)}", "--firmware", firmware, .. allowLnb ? ["--allow-lnb-power"] : Array.Empty<string>()];
 
     /// <summary>
-    /// 継がせた fd で機材を選ぶ引数 (Android)。<c>--fd</c> は 2 つまでで、先が USB 機能の <c>.1</c>。
-    /// **ファームウェアは動いている機材にも渡す** (<c>--firmware</c> は必須。動いている機材には流し込まない。上流 README)
+    /// 継がせた fd で機材を選ぶ引数 (Android)。<c>--fd</c> は起動するときに前に足す (<see cref="FdOptions"/>)。
+    /// **ファームウェアは動いている機材にも渡す** (<c>--firmware</c> は必須。動いている機材には流し込まない)
     /// </summary>
-    internal static string[] FdArguments(IReadOnlyList<int> fds, string firmware, bool allowLnb) =>
-        [.. FdOptions(fds), "--firmware", firmware, .. allowLnb ? ["--allow-lnb-power"] : Array.Empty<string>()];
+    internal static string[] FdArguments(string firmware, bool allowLnb) =>
+        ["--firmware", firmware, .. allowLnb ? ["--allow-lnb-power"] : Array.Empty<string>()];
 
-    /// <summary>継がせた fd の <c>--fd &lt;番号&gt;</c> を並べたもの (無ければ空)</summary>
+    /// <summary>継がせる fd の <c>--fd &lt;番号&gt;</c> を並べたもの (無ければ空)。2 つまでで、先が USB 機能の <c>.1</c></summary>
     internal static string[] FdOptions(IReadOnlyList<int> fds) =>
         [.. fds.SelectMany(fd => (string[])["--fd", fd.ToString(System.Globalization.CultureInfo.InvariantCulture)])];
 
     /// <summary>
-    /// 本物の機材を使う引数。**ファームウェアが無ければ起動しない** (asicend が <c>--firmware</c> を必須にしている)。
-    /// 給電を許可するのは、設定に LNB 15V があり、上流が給電に対応としている機種のときだけ。
-    /// <paramref name="lend"/> があれば (Android)、筐体の USB 機能の fd を継がせる (複製を作るのは起動する直前。<see cref="AsicenUserland.Start"/>)
+    /// ポートを決めた機材を開く引数。<paramref name="lend"/> があれば (Android) fd を継がせる
+    /// </summary>
+    internal static Selection Hardware(IReadOnlyList<string> ports, string firmware, bool allowLnb, Func<IReadOnlyList<string>, InheritedFds>? lend) =>
+        lend is null
+            ? new Selection(Arguments(ports, firmware, allowLnb), null, allowLnb)
+            : new Selection(FdArguments(firmware, allowLnb), () => lend(ports), allowLnb);
+
+    /// <summary>
+    /// 本物の機材を開く引数。**ファームウェアが無い・確かめたものと違えば開かない** (asicend と同じく必須)。
+    /// 給電を許可するのは、上流が給電に対応としている機種のときだけ (給電するのは、設定に LNB 15V と書いた受信機の衛星の選局だけ。<see cref="AsicenTuner"/>)
     /// </summary>
     internal static Selection Hardware(
-        string id, string firmware, bool wantsLnb, Func<IEnumerable<AsicenUserland.Enclosure>> enclosures,
-        Func<IReadOnlyList<string>, InheritedFds>? lend = null)
+        string id, string firmware, Func<IEnumerable<AsicenUserland.Enclosure>> enclosures,
+        Func<IReadOnlyList<string>, InheritedFds>? lend = null, string sha256 = AsicenUserland.FirmwareSha256)
     {
-        if (!File.Exists(firmware))
-        {
-            throw new IOException($"ファームウェアがありません: {firmware} (asicen-userland の配布物に入っていませんでした)");
-        }
+        if (AsicenUserland.FirmwareProblem(firmware, sha256) is { } problem) throw new IOException(problem);
         var enclosure = enclosures().FirstOrDefault(found => found.Id == id)
             ?? throw new IOException($"ASICEN の筐体 {id} が見つかりません (抜けたか、USB ポートを変えた?)");
-        var allowLnb = wantsLnb && AsicenUserland.PowersLnb(enclosure.Model);
-        if (lend is null) return new Selection(Arguments(enclosure.Ports, firmware, allowLnb));
-        return new Selection(FdArguments([], firmware, allowLnb), () => lend(enclosure.Ports));
+        return Hardware(enclosure.Ports, firmware, AsicenUserland.PowersLnb(enclosure.Model), lend);
     }
 
-    /// <summary>
-    /// 動いていなければ起動して ready まで待つ。駄目なら理由を添えて例外を送出する。
-    /// ランタイムルートはここで作る (<see cref="AsicenUserland.CreateRuntimeDir"/>)
-    /// </summary>
-    public void Ensure()
+    /// <summary>開いていなければ開く。駄目なら理由を添えて IOException。ファームウェアを流し込んだだけ (Android) なら <see cref="AsicenLoaded"/></summary>
+    public void Open()
     {
-        if (Running)
+        lock (_gate) OpenLocked();
+    }
+
+    private void OpenLocked()
+    {
+        if (_child is { Exited: false } && !_lost) return;
+        if (_child is not null)
         {
-            // 設定で LNB 15V を足したとき。給電は起動するときにしか許可できないので、起動し直す (この筐体のストリームは 1 度止まる)
-            if (_allowsLnb || !AsicenUserland.WantsLnb(Id) || Listed is null || !AsicenUserland.PowersLnb(Listed.Model)) return;
-            Write("設定に LNB 15V が足されたので、給電を許可して起動し直します");
-            Stop();
+            Write(_child.Exited
+                ? "denpa-asicen が終了していたので、起動し直します"
+                : "機材が抜けたか USB の読み書きに失敗したので、開き直します");
+            CloseLocked();
         }
-        var asicend = AsicenUserland.Bin(dir, program);
-        if (!File.Exists(asicend)) throw new IOException($"asicen-userland が入っていません: {asicend}");
-        AsicenUserland.CheckSocketPath(runtimeDir, Id);
-        // 機材を並べるのはロックの外で
-        var (args, lend) = select();
+        // 機材を並べる (fd の複製は起動する直前に作る)
+        var (args, lend, allowLnb) = select();
+        AsicenChild? opened;
+        try
+        {
+            opened = open is null ? AsicenChild.Open($"asicen {Id}", args, lend) : open(args);
+        }
+        catch (AsicenError error)
+        {
+            throw new IOException($"開けません: {error.Message}{Hint(error.Code)}", error);
+        }
+        _child = opened ?? throw new AsicenLoaded();
+        _lost = false;
+        var receivers = opened.Systems
+            .Select((systems, index) => new AsicenReceiver(index, (systems & AsicenChild.IsdbT) != 0, (systems & AsicenChild.IsdbS) != 0))
+            .ToList();
+        // 偽の機材 (テスト) は引数で開かないので、給電は機材が操作できるかだけで決まる
+        Listed = new AsicenUserland.Listed(opened.Model, receivers, opened.Lnb && (allowLnb || open is not null));
+        Write($"{Listed.Model} を開きました。受信機 {receivers.Count} つ: "
+            + string.Join(", ", receivers.Select(receiver => $"#{receiver.Index} {string.Join("/", receiver.Types)}")));
+    }
+
+    /// <summary>開いた筐体で <paramref name="action"/> を呼ぶ (開いていなければ開く)。呼んでいる間は閉じない</summary>
+    public T Use<T>(Func<AsicenChild, AsicenUserland.Listed, T> action)
+    {
+        AsicenChild child;
+        AsicenUserland.Listed listed;
         lock (_gate)
         {
-            // 待つ間にほかの受信機の選局が起動していれば、その asicend と問い合わせた受信機をそのまま使う
-            if (Running) return;
-            _process?.Dispose();
-            _process = null;
-            // asicend は止まるときに給電を切る。前の給電の要求は消して、次の選局でオンにし直す
-            AsicenLnb.Forget(Id);
-            Listed = null;
-            _allowsLnb = args.Contains("--allow-lnb-power");
-
-            AsicenUserland.CreateRuntimeDir(runtimeDir);
-            var process = AsicenUserland.Start(
-                asicend, fds => [.. FdOptions(fds), .. args, "--runtime-dir", runtimeDir, "--instance", Id], lend);
-            _process = process;
-            _stderr = "";
-            _ = Task.Run(async () =>
-            {
-                // 診断は全部 stderr に来る
-                using var reader = process.StandardError;
-                while (await reader.ReadLineAsync() is { } line)
-                {
-                    _stderr = line;
-                    Write(line);
-                }
-            });
-            _ = process.StandardOutput.ReadToEndAsync();
-
-            var deadline = DateTime.UtcNow + ReadyTimeout;
-            while (DateTime.UtcNow < deadline)
-            {
-                if (process.HasExited)
-                {
-                    throw new IOException($"asicend が終了しました (exit {process.ExitCode}: {_stderr}){Hint(process.ExitCode)}");
-                }
-                var (code, listed) = Control("list", TimeSpan.FromSeconds(5));
-                if (code == 0)
-                {
-                    Write("ready");
-                    Read(listed);
-                    return;
-                }
-                Thread.Sleep(500);
-            }
-
-            Stop();
-            throw new IOException($"asicend が {ReadyTimeout.TotalSeconds} 秒以内に ready になりません ({_stderr})");
+            OpenLocked();
+            child = _child!;
+            listed = Listed!;
+            _users++;
         }
-    }
-
-    /// <summary>ready になった asicend の <c>asicenctl list</c> の出力から、機種と受信機を控える</summary>
-    private void Read(string listed)
-    {
-        Listed = AsicenUserland.ParseList(listed, Write);
-        if (Listed is null)
+        try
         {
-            Write($"機種と受信機を問い合わせられません (asicenctl list: {listed})");
-            return;
+            return action(child, listed);
         }
-        Write($"{Listed.Model} 受信機 {Listed.Receivers.Count} つ: "
-            + string.Join(", ", Listed.Receivers.Select(receiver => $"#{receiver.Index} {string.Join("/", receiver.Types)}")));
+        finally
+        {
+            lock (_gate)
+            {
+                _users--;
+                Monitor.PulseAll(_gate);
+            }
+        }
     }
+
+    /// <summary>機材が抜けた・USB の読み書きに失敗した・子プロセスが終わった。次に要ったときに閉じて起動し直す</summary>
+    public void MarkLost() => _lost = true;
 
     /// <summary>
-    /// 止める。**SIGTERM で。** asicend は合図を受けると
-    /// 後片付け (LNB を 0V に戻す・socket を消す) をしてから終わる。Kill だとそこが保証されない
+    /// 閉じる。**使っている途中 (<see cref="Use"/>) なら終わるのを待つ。** 流している TS が残っていれば、子プロセスはそれを止めたときに後片付けを終える
+    /// (LNB を 0 V に戻し、USB を手放して終わる)
     /// </summary>
-    public void Stop()
+    public void Close()
     {
-        lock (_gate)
-        {
-            var process = _process;
-            _process = null;
-            if (process is null) return;
-            if (!process.HasExited)
-            {
-                Interop.Terminate(process.Id);
-                if (!process.WaitForExit(StopGrace))
-                {
-                    Write($"{StopGrace.TotalSeconds:F0} 秒で終わらないので強制終了します");
-                    process.Kill();
-                }
-            }
-            process.Dispose();
-        }
+        lock (_gate) CloseLocked();
     }
 
-    /// <summary>asicend の終了コード (external-contract §3.7) に、どうすればいいかを添える</summary>
+    private void CloseLocked()
+    {
+        while (_users > 0) Monitor.Wait(_gate);
+        if (_child is null) return;
+        _child.Close();
+        _child = null;
+        Listed = null;
+    }
+
+    /// <summary>開けなかった理由 (上流の Error) に、どうすればいいかを添える</summary>
     private static string Hint(int code) => code switch
     {
-        2 => "。引数かランタイムルートが合いません",
-        3 => "。筐体が見つからないか開けません (抜けたか、ほかのソフトが使っている?)",
-        4 => "。同じ筐体の asicend がほかに動いています",
-        7 => "。USB の読み書きに失敗しました (抜けた?)",
+        AsicenChild.InvalidArgument => "。機材の組み合わせが合いません",
+        3 or 5 => "。筐体が見つからないか開けません (抜けたか、ほかのソフトが使っている?)",
+        AsicenChild.Busy => "。ほかのソフトが使っています",
+        AsicenChild.UsbIo or AsicenChild.Disconnected => "。USB の読み書きに失敗しました (抜けた? Windows ではドライバが WinUSB か)",
         10 => "。ファームウェアを受け付けません",
         _ => "",
     };
-
-    /// <summary><c>asicenctl</c>。筐体はソケットの置き場の名前 (<c>--instance</c>) で呼ぶ (serial が無い)</summary>
-    private (int Code, string Output) Control(string command, TimeSpan timeout) => Shell.Run(
-        AsicenUserland.Bin(dir, "asicenctl"), ["--runtime-dir", runtimeDir, "--instance", Id, command], timeout);
 }
+
+/// <summary>ファームウェア待ちの機材に流し込んだだけで、開いていない (Android。つながり直した機材は別の VID・PID でアプリから届く)</summary>
+public sealed class AsicenLoaded() : IOException("ファームウェアを流し込みました。機材がつながり直すのを待ちます");

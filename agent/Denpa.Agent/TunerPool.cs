@@ -376,7 +376,7 @@ public sealed class TunerPool(
                     /*
                      * **合っていても、続いていなければ選局し直す。** DVB は合ったまま
                      * だが、asicen-userland は利用者がいなくなると TS のストリームを閉じる
-                     * (受信機は取ったまま。AsicenUdtv.cs)。合っている印だけ残っていて中身が無い場合を、合っているとみなさない
+                     * (受信機は取ったまま。AsicenTuner.cs)。合っている印だけ残っていて中身が無い場合を、合っているとみなさない
                      */
                     if (held.Channel != channel || !held.Device.Tuned)
                     {

@@ -71,7 +71,7 @@ APK はリリースに `denpa-<バージョン>-android-arm64.apk` として添�
 
 ## ASICEN 系の機材を挿す (試験的)
 
-PX-W3U3・PX-W3U2・PX-W3U3 V2・PX-S3U2・PX-S3U は、APK に入れた asicen-userland で動かします。**Android でも Linux でも、実機では確かめていません**
+PX-W3U3・PX-W3U2・PX-W3U3 V2・PX-S3U2・PX-S3U は、APK に入れた ASICEN の子プロセス (asicen-userland を組み込んだもの) をエージェントが起動して動かします。**Android でも Linux でも、実機では確かめていません**
 ([tuners.md](tuners.md#px-w3u3-など-asicen-userland試験的))。
 
 1. 機材を挿すと、「denpa を開きますか」と聞かれます。「常にこのアプリで開く」に印を付けて「OK」を選びます。
@@ -82,7 +82,7 @@ PX-W3U3・PX-W3U2・PX-W3U3 V2・PX-S3U2・PX-S3U は、APK に入れた asicen-
 - USB 機能が 2 つの機種 (PX-W3U2・PX-W3U3・PX-W3U3 V2) は、端末のカーネルが 5.3 以上のときだけ使えます。古いカーネルでは、同じ機材の 2 つの機能を見分けられないためです。
   PX-S3U2・PX-S3U は古いカーネルでも使えます
 - 内蔵カードリーダーは使えません。B-CAS カードは USB のカードリーダーで使います
-- 動かないときは、`adb logcat -s denpa-agent` の `asicend` と `asicen` の行に理由が出ます
+- 動かないときは、`adb logcat -s denpa-agent` の `asicen` の行に理由が出ます。asicen-userland 自身の診断も、子プロセスの標準エラーからエージェントが写して同じ所に出します
 
 ## 環境変数を足す (`denpa.env`)
 
@@ -141,7 +141,6 @@ adb push denpa.env /sdcard/Android/data/io.github.danything.denpa/files/denpa.en
 | `files/denpa/server/` | APK から書き出した denpa 本体 (アプリ・フォント・デコーダ)。上げると入れ替わる                                                                                                                                           |
 | `u`                   | アプリが USB の機材を渡すソケット (`USB_BROKER`)                                                                                                                                                                         |
 | `files/asicen/`       | ASICEN 系のファームウェア (`asicen-loader.bin`。APK から書き出したもの)                                                                                                                                                  |
-| `r`                   | asicend のソケット (`ASICEN_RUNTIME_DIR`)                                                                                                                                                                                |
 
 ## 確かめる
 
@@ -150,5 +149,5 @@ adb push denpa.env /sdcard/Android/data/io.github.danything.denpa/files/denpa.en
 - PC から `adb logcat -s denpa denpa-agent denpa-server` でログを見られます。`denpa` はアプリ、`denpa-agent` はエージェント、`denpa-server` は denpa 本体の出力です
 
 **実機ではまだ確かめていません。** エミュレータ (x86_64 の API 29・35・36) で確かめたのは、常駐サービス・通知・エージェントの起動と応答・アプリからエージェントへ fd を渡すこと・
-エージェントが asicend を起動して fd を継がせること・denpa 本体が起動してエージェントと組み、画面が開くこと・bun から ffmpeg・ffprobe を流せること・更新・「終了」・端末の起動までです
+エージェントが ASICEN の子プロセスを起動して fd を継がせること・denpa 本体が起動してエージェントと組み、画面が開くこと・bun から ffmpeg・ffprobe を流せること・更新・「終了」・端末の起動までです
 ([development.md](development.md#android-のアプリ))。チューナーを挿して映るかと、画面を消したまま LAN から届くかは、実機で確かめる必要があります。

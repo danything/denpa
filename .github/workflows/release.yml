@@ -259,7 +259,9 @@ jobs:
           dotnet-version: "11.0.100"
 
       # 名前はタグから `v` を落としたバージョンで (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
-      # 中身はエージェントとメニューバーのアプリ (tray/mac。ad-hoc で署名する) の実行ファイル 2 個と、エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 (LICENCE.siano・LICENSE.dib0700)。
+      # 中身はエージェントとメニューバーのアプリ (tray/mac。ad-hoc で署名する) の実行ファイル 2 個と、エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 (LICENCE.siano・LICENSE.dib0700)、
+      # ASICEN 系の機材の子プロセス (asicen/denpa-asicen。GPL-2.0-only。ad-hoc で署名する) とそのライセンスの文書・対応するソースの入手先 (asicen/licenses/)。
+      # **ASICEN のファームウェア (asicen-loader.bin) は入れない** (利用者が置く。docs/licenses.md)。
       # .sha256 は install.sh が確かめる
       - name: Build
         id: build
@@ -270,12 +272,15 @@ jobs:
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -p:InformationalVersion="$tag" -o out
           swift build -c release --package-path tray/mac
           cp "$(swift build -c release --package-path tray/mac --show-bin-path)/denpa-tray" out/denpa-tray
+          # 子プロセスは agent/asicen/build.sh で組む (上流のバージョンと SHA-256 はそこ。libusb は IOKit の経路で中に入る)
+          command -v ninja > /dev/null || brew install ninja > /dev/null
+          bash agent/asicen/build.sh out/asicen
           # ad-hoc 署名 (curl で取ったものには隔離の印が付かないので、Developer ID の署名と公証は要らない。docs/install-mac.md)
           codesign --force --sign - out/denpa-agent out/denpa-tray
           asset="denpa-agent-${tag#v}-darwin-arm64.tar.gz"
           # Siano と DiB0700 のファームウェアはエージェントに埋め込んである。許諾の文面を添える (agent/Denpa.Agent/firmware/README.md)
           cp agent/Denpa.Agent/firmware/LICENCE.siano agent/Denpa.Agent/firmware/LICENSE.dib0700 out/
-          tar -czf "$asset" -C out denpa-agent denpa-tray LICENCE.siano LICENSE.dib0700
+          tar -czf "$asset" -C out denpa-agent denpa-tray asicen LICENCE.siano LICENSE.dib0700
           shasum -a 256 "$asset" > "$asset.sha256"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
@@ -477,6 +482,37 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$TAG" dist/denpa-*-android-arm64.apk dist/denpa-*-android-arm64.apk.sha256 --clobber -R "${{ github.repository }}"
+
+  # **ASICEN の子プロセス (denpa-asicen。GPL-2.0-only) の対応するソースも添える。** イメージ・Windows と Mac のエージェント・Android のアプリは、
+  # asicen-userland を組み込んだ子プロセスを一緒に配るので、上流のソースのアーカイブを上流の置き場だけに頼らずにリリースに置き、
+  # `agent/asicen/` だけを固めたもの (denpa-asicen-<バージョン>-source.tar.gz) も添える (docs/licenses.md「ASICEN の子プロセス」)。
+  # 上流のバージョンと SHA-256 は agent/asicen/build.sh のもの
+  asicen-source:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version=$(sed -nE 's/^ASICEN_USERLAND_VERSION=(.+)$/\1/p' agent/asicen/build.sh)
+          sum=$(sed -nE 's/^ASICEN_SOURCE_SHA256=([0-9a-f]{64})$/\1/p' agent/asicen/build.sh)
+          archive="asicen-userland-${version%%-*}-source.tar.gz"
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$archive" \
+            "https://github.com/Khronos31/asicen-userland/releases/download/v$version/$archive"
+          echo "$sum  $archive" | sha256sum -c -
+          own="denpa-asicen-${TAG#v}-source.tar.gz"
+          tar -czf "$own" agent/asicen
+          gh release upload "$TAG" "$archive" "$own" --clobber -R "${{ github.repository }}"
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart のバージョン (Chart.yaml の version) とアプリのバージョン (appVersion) をリリースの

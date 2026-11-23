@@ -151,9 +151,12 @@ Docker Desktop か OrbStack を起動するよう表示します。途中で止�
 
 ## Linux と違うところ
 
-- **チューナーは IT930x の機材 (PX-MLT5 系・PX-Q3U4 など)・PX-S1UD・Sony CECH-ZD1 J・PIXELA PIX-DT295・Xbox One Digital TV Tuner (ケーブルだけ) だけ。** macOS には DVB が無いので、
+- **チューナーは IT930x の機材 (PX-MLT5 系・PX-Q3U4 など)・PX-S1UD・Sony CECH-ZD1 J・PIXELA PIX-DT295・Xbox One Digital TV Tuner (ケーブルだけ)・PX-W3U3 などの ASICEN 系 (試験的) だけ。** macOS には DVB が無いので、
   PT2/PT3 のような PCI の機材は使えません。IT930x の機材 ([tuner-it930x.md](tuner-it930x.md)) と PX-S1UD ([tuner-px-s1ud.md](tuner-px-s1ud.md)) と CECH-ZD1 J と PIX-DT295 と Xbox One Digital TV Tuner ([tuner-xbox-one.md](tuner-xbox-one.md)) はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
-  Mac の実機ではまだ確かめていません)
+  Mac の実機ではまだ確かめていません)。
+  ASICEN 系は、エージェントの隣の子プロセス (`bin/asicen/denpa-asicen`。asicen-userland を組み込んだもの) が IOKit の経路の libusb で開きます。
+  ファームウェア (`asicen-loader.bin`) は配布物に入っていないので、`~/denpa/config/firmware/` に置きます。実機では確かめていません
+  ([tuners.md](tuners.md#px-w3u3-など-asicen-userland試験的))
 - **カードリーダー**: IT930x の機材の内蔵リーダーと、CECH-ZD1 J の差し込み口は、エージェントが直に読みます (PX-Q3 系は、Mac ではカードスロットのある側を見分けられないので、2 つの USB デバイスの内蔵リーダーが両方並びます)。USB のリーダーは
   usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
   (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます ([読めないとき](#カードが読めないとき))。動いている間はリーダーを

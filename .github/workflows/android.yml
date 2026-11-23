@@ -7,13 +7,13 @@ name: Android
 # 1. OpenSSL を NDK で静的ライブラリに組む (.github/openssl-android.sh)。**組んだものは actions/cache に置き、バージョン・組み方・NDK が
 #    変わるまで使い回す**
 # 2. エージェントを NDK の clang で組む。ASP.NET Core は linux の実行時パックの IL を使わせる (csproj の説明)
-# 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。asicen-userland の上流の Android 向けのビルドも
-#    `libasicend.so`・`libasicenctl.so` の名前で入れる (.github/asicen-android.sh。SHA-256 を固定して取る)。CI は両方の ABI を入れ、
+# 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。2 と一緒に NDK で組んだ ASICEN 系の機材の
+#    子プロセス (denpa-asicen。asicen-userland を組み込んだもの) も `libdenpa_asicen.so` の名前で入れる (.github/asicen-android.sh)。CI は両方の ABI を入れ、
 #    lint と単体テストも流し、R8 で縮める release も debug の鍵で組む。リリースは arm64 だけを入れ、リリースの鍵で署名する。
 #    bun の公式の Android 向けのビルドも `libbun.so` の名前で入れる (.github/bun-android.sh。バージョンは Dockerfile の oven/bun)。x86_64 は CI のエミュレータ用。
 #    ffmpeg・ffprobe は NDK で組み (.github/ffmpeg-android.sh。2 と並べて流す)、`libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリを入れる。
 #    denpa 本体 (Dockerfile の native-files 段) を `assets/server.zip` に入れる。常駐サービスが書き出して bun で起動する
-# 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・asicend の起動・
+# 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・ASICEN の子プロセスの起動・
 #    bun の起動・ffmpeg と ffprobe (tests/native-smoke.ts を bun で流す)・denpa 本体の起動とエージェントと組むこと・更新・「終了」・端末の起動を確かめる (.github/android-app-smoke.sh)。
 #    arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)。リリースでは流さない (同じコミットを main で確かめてある)
 #
@@ -120,6 +120,25 @@ jobs:
           # OpenSSL のライセンスの文書を一緒に渡し、APK に入れる (android/app/build.gradle.kts の DENPA_AGENT_LICENSES)
           cp openssl-out/LICENSE.txt out/LICENSE.openssl
 
+      # ASICEN 系の機材の子プロセス (denpa-asicen。asicen-userland を組み込んだもの。試験的) を、同じ NDK で組む (agent/asicen/build.sh)。
+      # ファームウェアとライセンスの文書も一緒に渡し、アプリを組むところで APK に並べる (.github/asicen-android.sh)
+      - name: Build denpa-asicen (${{ matrix.abi }})
+        run: |
+          set -euo pipefail
+          command -v ninja > /dev/null || { sudo apt-get update && sudo apt-get install --no-install-recommends -y ninja-build; }
+          ANDROID_NDK_HOME="$ANDROID_NDK_ROOT" bash agent/asicen/build.sh out/asicen --android "${{ matrix.abi }}" --firmware
+          readelf="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          program=out/asicen/denpa-asicen
+          # 位置に依らない実行ファイル (PIE)。libc++ は静的に入れる。繋ぐのは Android にあるものだけ。LOAD は 16 KB 以上に揃える
+          $readelf -h "$program" | grep -E 'Type: +DYN'
+          needed=$($readelf -d "$program" | sed -nE 's/.*\(NEEDED\).*\[(.+)\]/\1/p' | sort | tr '\n' ' ')
+          echo "NEEDED: $needed"
+          for lib in $needed; do
+            case "$lib" in libc.so | libm.so | libdl.so | liblog.so) ;; *) echo "::error::$lib を繋いでいます"; exit 1 ;; esac
+          done
+          for align in $($readelf -lW "$program" | awk '$1 == "LOAD" { print $NF }'); do test "$((align))" -ge 16384; done
+          ls -lR out/asicen
+
       - name: Upload agent
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -127,6 +146,7 @@ jobs:
           path: |
             out/denpa-agent
             out/LICENSE.openssl
+            out/asicen/
           retention-days: 3
 
   # ffmpeg・ffprobe と libav* を NDK で組む (.github/ffmpeg-android.sh)。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段・patches/・
@@ -357,7 +377,7 @@ jobs:
           cp ../agent-out/x86_64/denpa-agent agent-libs/x86_64/libdenpa_agent.so
           cp ../agent-out/arm64/LICENSE.openssl agent-licenses/
           # asicen-userland は android/asicen-userland/ に (android/app/build.gradle.kts の DENPA_ASICEN)
-          bash ../.github/asicen-android.sh asicen-userland arm64 x86_64
+          bash ../.github/asicen-android.sh asicen-userland ../agent-out arm64 x86_64
           # bun は android/bun/ に (android/app/build.gradle.kts の DENPA_BUN)
           bash ../.github/bun-android.sh bun arm64 x86_64
           # release は R8 で縮めたものが組めるかを見る (鍵を渡さないので debug の鍵で署名される)
@@ -366,7 +386,7 @@ jobs:
           for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
             unzip -l "$apk" > apk.txt
             for abi in arm64-v8a x86_64; do
-              for lib in libdenpa_agent libasicend libasicenctl libbun libffmpeg libffprobe libavcodec libavdevice libavfilter libavformat libavutil libswresample libswscale; do grep -E " lib/$abi/$lib\.so$" apk.txt; done
+              for lib in libdenpa_agent libdenpa_asicen libbun libffmpeg libffprobe libavcodec libavdevice libavfilter libavformat libavutil libswresample libswscale; do grep -E " lib/$abi/$lib\.so$" apk.txt; done
             done
             grep -E ' assets/asicen/asicen-loader\.bin$' apk.txt
             grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
@@ -374,7 +394,7 @@ jobs:
             grep -E ' assets/licenses/LICENSE$' apk.txt
             grep -E ' assets/licenses/bun/LICENSE\.md$' apk.txt
             grep -E ' assets/licenses/ffmpeg/(SOURCE\.txt|versions\.txt|ffmpeg/COPYING\.GPLv3|x264/COPYING)$' apk.txt | wc -l | grep -qx 4
-            grep -E ' assets/licenses/asicen-userland/(LICENSE|SOURCE\.txt|COPYING\.libusb|VENDOR-FIRMWARE-NOTICE\.txt)$' apk.txt | wc -l | grep -qx 4
+            grep -E ' assets/licenses/asicen-userland/(COPYING|SOURCE\.txt|COPYING\.libusb|VENDOR-FIRMWARE-NOTICE\.txt)$' apk.txt | wc -l | grep -qx 4
             # denpa 本体 (debug にも release にも入る)
             grep -E ' assets/server\.zip$' apk.txt
           done
@@ -416,14 +436,14 @@ jobs:
           mkdir -p agent-libs/arm64-v8a agent-licenses
           cp ../agent-out/arm64/denpa-agent agent-libs/arm64-v8a/libdenpa_agent.so
           cp ../agent-out/arm64/LICENSE.openssl agent-licenses/
-          bash ../.github/asicen-android.sh asicen-userland arm64
+          bash ../.github/asicen-android.sh asicen-userland ../agent-out arm64
           bash ../.github/bun-android.sh bun arm64
           ./gradlew assembleRelease --console=plain
           rm -f "$RUNNER_TEMP/release.p12"
           apk=app/build/outputs/apk/release/app-release.apk
           # 入っているネイティブのライブラリは arm64 のエージェントと asicen-userland と bun と ffmpeg だけ。ファームウェアとライセンスの文書も入っていること
           unzip -l "$apk" > apk.txt
-          test "$(grep -oE ' lib/[^ ]+$' apk.txt | sort | tr '\n' ' ')" = " lib/arm64-v8a/libasicenctl.so  lib/arm64-v8a/libasicend.so  lib/arm64-v8a/libavcodec.so  lib/arm64-v8a/libavdevice.so  lib/arm64-v8a/libavfilter.so  lib/arm64-v8a/libavformat.so  lib/arm64-v8a/libavutil.so  lib/arm64-v8a/libbun.so  lib/arm64-v8a/libdenpa_agent.so  lib/arm64-v8a/libffmpeg.so  lib/arm64-v8a/libffprobe.so  lib/arm64-v8a/libswresample.so  lib/arm64-v8a/libswscale.so "
+          test "$(grep -oE ' lib/[^ ]+$' apk.txt | sort | tr '\n' ' ')" = " lib/arm64-v8a/libavcodec.so  lib/arm64-v8a/libavdevice.so  lib/arm64-v8a/libavfilter.so  lib/arm64-v8a/libavformat.so  lib/arm64-v8a/libavutil.so  lib/arm64-v8a/libbun.so  lib/arm64-v8a/libdenpa_agent.so  lib/arm64-v8a/libdenpa_asicen.so  lib/arm64-v8a/libffmpeg.so  lib/arm64-v8a/libffprobe.so  lib/arm64-v8a/libswresample.so  lib/arm64-v8a/libswscale.so "
           grep -E ' assets/asicen/asicen-loader\.bin$' apk.txt
           grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
           grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt

@@ -6,10 +6,14 @@ name: Windows agent
 # 署名を試すために、Actions の画面から手でも流せる (workflow_dispatch)。PR の CI (test.yml) は呼ばない。
 #
 # zip の中身は `denpa-agent.exe`、通知領域のアイコンの `denpa-tray.exe` (tray/Denpa.Tray)、wdi-simple.exe とそのライセンスの文書を入れた
-# `libwdi/`、エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 `LICENCE.siano`・`LICENSE.dib0700`。
-# Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーで組む。
+# `libwdi/`、エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 `LICENCE.siano`・`LICENSE.dib0700`、
+# ASICEN 系の機材の子プロセス `asicen/denpa-asicen.exe` とそのライセンスの文書・対応するソースの入手先 `asicen/licenses/`。
+# Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーで組む。denpa-asicen.exe は Linux から llvm-mingw で組む
+# (`asicen` のジョブ。agent/asicen/build.sh --windows)。**ASICEN のファームウェア (asicen-loader.bin) は入れない** (利用者が置く。docs/licenses.md)。
 #
-# **署名するのは 2 つの exe だけ** (wdi-simple.exe は上流の libwdi のソースから組むものなので、SignPath Foundation の条件で署名しない)。
+# **署名するのは 2 つの exe だけ** (wdi-simple.exe は上流の libwdi のソースから組むものなので、SignPath Foundation の条件で署名しない。
+# denpa-asicen.exe も送らない。中身のほとんどが GPL-2.0 の上流 (asicen-userland と、px4_drv から来た部分を含む px4-userland) のコードで、
+# denpa のチームが保守しているソースではないため。README「Code signing policy」・docs/install-windows.md「コード署名」)。
 # 2 つだけを入れた artifact を置いて SignPath に送り、承認されて署名したものが返ってから zip を組む。
 # SignPath の側の決まり (製品名・製品バージョン) は .signpath/artifact-configurations/windows-agent.xml。
 #
@@ -54,7 +58,33 @@ permissions:
   contents: read
 
 jobs:
+  # ASICEN 系の機材の子プロセス (denpa-asicen.exe。GPL-2.0-only) を Linux から llvm-mingw で組む。上流のバージョンと SHA-256 は build.sh。
+  # ファームウェアは入れない (--firmware を付けない。build.sh も Windows では断る)
+  asicen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build denpa-asicen.exe
+        run: |
+          sudo apt-get update && sudo apt-get install --no-install-recommends -y cmake ninja-build make xz-utils
+          bash agent/asicen/build.sh out/asicen --windows
+          ls -lR out/asicen
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-asicen-windows-x64
+          path: out/asicen/
+          if-no-files-found: error
+          retention-days: 3
+
   build:
+    needs: asicen
     runs-on: windows-latest
     environment: signpath
     # 承認を待つ上限 (60 分) とビルドのぶん
@@ -187,6 +217,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # 署名に送らない子プロセス。zip の asicen/ に入れる (エージェントが実行ファイルの隣の asicen\denpa-asicen.exe を起動する。Asicen.cs)
+      - name: Download denpa-asicen.exe
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-asicen-windows-x64
+          path: out/asicen
+
       # .sha256 は shasum と同じ形式 (install.ps1 が確かめる)
       - name: Zip
         id: zip
@@ -198,7 +235,7 @@ jobs:
           asset="denpa-agent-${TAG#v}-windows-x64.zip"
           # Siano と DiB0700 のファームウェアはエージェントに埋め込んである。許諾の文面を添える (agent/Denpa.Agent/firmware/README.md)
           cp agent/Denpa.Agent/firmware/LICENCE.siano agent/Denpa.Agent/firmware/LICENSE.dib0700 out/
-          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe, out/libwdi, out/LICENCE.siano, out/LICENSE.dib0700 -DestinationPath '$asset'"
+          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe, out/libwdi, out/asicen, out/LICENCE.siano, out/LICENSE.dib0700 -DestinationPath '$asset'"
           sha256sum "$asset" > "$asset.sha256"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
 

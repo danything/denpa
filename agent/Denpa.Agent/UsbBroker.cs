@@ -76,7 +76,7 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
     }
 
     /// <summary>
-    /// そのポートの機材の fd を、子プロセスに継がせる形 (close-on-exec の無い複製) で返す。asicend の <c>--fd</c> に渡す (Asicen.cs)。
+    /// そのポートの機材の fd を、子プロセスに継がせる形 (close-on-exec の無い複製) で返す。denpa-asicen の <c>--fd</c> に渡す (Asicen.cs)。
     /// 並びは <paramref name="ports"/> の順。受け取っていないポートがあれば <see cref="IOException"/>
     /// </summary>
     public InheritedFds Lend(IReadOnlyList<string> ports)
@@ -594,7 +594,7 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
 
 /// <summary>
 /// 子プロセスに継がせる fd (Android でアプリから受け取った USB の機材)。**close-on-exec の無い複製**で、
-/// <see cref="AsicenUserland.Start"/> が起動し終えたら閉じる。受け取った元の fd は <see cref="BrokerUsbHost"/> が持ち続ける。
+/// <see cref="AsicenChild.Start"/> が起動し終えたら閉じる。受け取った元の fd は <see cref="BrokerUsbHost"/> が持ち続ける。
 ///
 /// <para>
 /// .NET 11 の <c>ProcessStartInfo.InheritedHandles</c> は使わない。ほかの fd を閉じるのに <c>close_range</c> (Linux 5.9 から) を使い、

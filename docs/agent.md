@@ -13,7 +13,7 @@
 - **選局そのもの**: DVB はデバイスを ioctl で直接操作します
   ([下記](#net-で書き直すまで-経緯と実測))。PX-MLT5 系・PX-Q3U4 などの IT930x の機材と、CECH-ZD1 J と PIX-DT295 はエージェントが USB を直に持ちます
   ([下記](#it930x-の機材を直に持つ作り)、[下記](#cech-zd1-j-の作り)、[下記](#pix-dt295-の作り))。
-  PX-W3U3 などは同梱の asicen-userland に扱わせます (試験的。実機では確かめていない。[下記](#asicen-userland-の作り))。
+  PX-W3U3 などは、asicen-userland を組み込んだ子プロセス (denpa-asicen。GPL-2.0-only) が扱います (試験的。実機では確かめていない。[下記](#asicen-userland-の作り))。
   PX-S1UD も、カーネルが使っていなければエージェントが USB を直に持ちます (実機の報告は macOS の 1 件だけ。[下記](#siano-の機材を直に持つ作り-実機で確かめていない))。
   Xbox One Digital TV Tuner (ケーブルだけ) も同じです (実機では確かめていない。[下記](#xbox-one-digital-tv-tuner-の作り-実機で確かめていない))
 
@@ -384,7 +384,7 @@ chart の既定の猶予は `SHUTDOWN_WAIT` の 6 時間に 5 分を足した 21
 | 選局 1 回                                              | チューナーの名前。そのあとにチャンネルと「: 」を続ける              | `[PLEX PX-MLT5PE 4-12.1 #0] T27: 同期しなかったので (…)` |
 | 機材 (筐体。受信機が 1 つの機材は、機材を開く側の処理) | 機種名とポート                                                      | `[PLEX PX-MLT5PE 4-12.1]`、`[PLEX PX-S1UD 1-2]`          |
 | USB の層 (`UsbFsDevice` など)                          | `usb` とポート。この層は機種を扱わない                              | `[usb 1-2]`                                              |
-| asicend                                                | `asicend` と筐体の名前                                              | `[asicend 1-2]`                                          |
+| asicen-userland の筐体                                 | `asicen` と筐体の名前                                               | `[asicen 1-2]`                                           |
 | カードリーダー                                         | カードリーダーの名前                                                | `[PLEX PX-MLT5PE 4-12.1 Card Reader]`                    |
 
 - 検出したチューナーの名前は「機種名 ポート」(受信機が複数あれば後ろに「#受信機」) なので、名前を変えていなければ、チューナーの行と機材の行を並べて読めます
@@ -396,7 +396,7 @@ chart の既定の猶予は `SHUTDOWN_WAIT` の 6 時間に 5 分を足した 21
 設定に持つのはデバイスと種別と LNB だけで、選局の仕方はエージェントが決めます。
 画面から自由な文字列を受け取ると、**denpa に入れた人がチューナー側で好きな
 コマンドを走らせられます** (しかもあちらは機材に触れる。Helm では `privileged`)。
-設定の文字列をコマンドとして起動するのは、適合テストの `FAKE_TUNE` (環境変数) だけです。ほかに起動するのは、決まったプログラム (asicend・asicenctl、macOS の `scutil` など) を決まった引数でだけです。
+設定の文字列をコマンドとして起動するのは、適合テストの `FAKE_TUNE` (環境変数) だけです。ほかに起動するのは、決まったプログラム (macOS の `scutil` など) を決まった引数でだけです。
 
 **チューナーは書かなくても動きます** (`DeviceProbe.Detect`)。定義が無ければ挿さって
 いるものを見つけ、地上波か衛星かまで判別します。
@@ -405,7 +405,7 @@ chart の既定の猶予は `SHUTDOWN_WAIT` の 6 時間に 5 分を足した 21
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | DVB                       | `/dev/dvb/*` を開いて `DTV_ENUM_DELSYS` で受けられる方式を問い合わせる (実機の PT3 で adapter0/2 が ISDB-S、adapter1/3 が ISDB-T)。sysfs にはこれを返す項目が無い。DVB-C があればケーブルも受けられる ([下記](#dvb-の機材で-isdb-c-を受ける-実機で確かめていない)) |
 | Siano の機材              | Linux は `/sys/bus/usb/devices` の USB ID、Windows・macOS は OS に問い合わせる。並べるだけで開かない ([下記](#siano-の機材を直に持つ作り-実機で確かめていない))                                                                                                    |
-| asicen-userland           | `asicend --list-json` に問い合わせる。Android は受け取った機材の USB ID から組む (試験的。配布物が無ければ挙げない。[下記](#asicen-userland-の作り))                                                                                                               |
+| asicen-userland           | ライブラリの一覧 (`asicend --list-json` と同じ JSON) に問い合わせる。Android は受け取った機材の USB ID から組む (試験的。ライブラリが無ければ挙げない。[下記](#asicen-userland-の作り))                                                                            |
 | CECH-ZD1 J                | Linux は `/sys/bus/usb/devices` の USB ID、Windows・macOS は OS に問い合わせる。並べるだけで開かない ([下記](#cech-zd1-j-の作り))                                                                                                                                  |
 | PIX-DT295                 | CECH-ZD1 J と同じ。開くと機材に設定を書くので並べるだけ ([tuners.md](tuners.md#pixela-pix-dt295))                                                                                                                                                                  |
 | IT930x の機材             | CECH-ZD1 J と同じ。開くとファームウェアを起動して電源を入れるので並べるだけ ([下記](#it930x-の機材を直に持つ作り))                                                                                                                                                 |
@@ -521,7 +521,7 @@ ioctl は通り、同期しないだけなので気付きにくい。
 
 形式は `{ "locked": true, "cn": 25.3, "unit": "dB", "atTune": false, "strengthDbm": -35.3 }`。`unit` が `raw` なら `cn` は DVB のドライバが返した相対値 (0〜65535) のままで、dB ではありません。
 `strengthDbm` は電波の強度 (dBm) で、dBm で返す機材 (DVB のドライバが `FE_SCALE_DECIBEL` で返すもの・CECH-ZD1 J・IT930x の機材のうち CXD2856ER の機種の地上波と J.83B と ISDB-C・Siano の機材) だけ入り、ほかは null (IT930x の機材では、衛星の強度は dBm と言えないので入れない)。古いエージェントは `strengthDbm` を返さないので、サーバは無いものも null と同じに読む (古いサーバは読まずに捨てる)。
-`atTune` は選局したときに確かめた値で、受信中は読み直しません (asicend。同期したかだけで、`cn` は null)。測れない機材と空いているチューナーは `signal: null` です。どの機材で何が出るかは [tuners.md](tuners.md#信号レベル)。
+`atTune` は選局したときに確かめた値で、受信中は読み直しません (asicen-userland の機材。同期したかだけで、`cn` は null)。測れない機材と空いているチューナーは `signal: null` です。どの機材で何が出るかは [tuners.md](tuners.md#信号レベル)。
 
 ### DVB の機材で ISDB-C を受ける (実機で確かめていない)
 
@@ -595,7 +595,7 @@ asicen-userland の機材。Linux ではファームウェア待ちだけ) と�
 - 読めない行と、fd の付いていない `attached`、`name`・`vendor`・`product` が読めないかポートの名前を作れない `attached` は、記録に出して捨てます。
   64 KiB を超える行を送ってきた接続は切ります
 - `USB_BROKER` があるときは、`TUNERS_FILE` などが無いときの置き場も `/config` ではなく `DENPA_HOME` の `config` です
-- asicen-userland の機材はエージェントが開かず、受け取った fd の複製を asicend に継がせます ([下記](#asicen-userland-の作り))
+- asicen-userland の機材はエージェントが開かず、受け取った fd の複製をライブラリに渡します ([下記](#asicen-userland-の作り))
 
 ### Siano の機材を直に持つ作り (実機で確かめていない)
 
@@ -647,56 +647,72 @@ asicen-userland の機材。Linux ではファームウェア待ちだけ) と�
 
 いまの様子・設定・ファームウェアは [tuners.md](tuners.md#px-w3u3-など-asicen-userland試験的)。
 
-**上流のプレリリース v1.0.0-beta に固定した実装です。実機では確かめていません。** 確かめたのは、上流の模擬のデーモン (`asicend-mock`) との通信までです。
+**上流のプレリリース v1.0.0-beta に固定した実装です。実機では確かめていません。** 確かめたのは、偽の機材で組んだ子プロセスを Linux・Windows・macOS で起動し、選局から TS を受け取るまでです。
 
-- **asicend と UDTV 1.0 で通信します** (`AsicenUdtv.cs`)。
-  ソケットは `<ランタイム>/asicen-userland/v1/<筐体の名前>/` の `control.sock` (要求と応答) と `stream.sock` (TS)。
-  同梱の `asicen-ts` (1 回 1 チャンネルの CLI) は使いません
-- **形式の出どころは 2 つです。** ヘッダ、HELLO と ACQUIRE、LNB の給電 (LNB_POWER)、型の符号化、手順は、上流の dtv-userland-core の契約の文書
-  (`docs/external-contract-1.0.0.md`・`wire-subset.md`・`wire-records.md`・`control-client.md`) にあります。
-  **文書に無い部分 (操作の番号、選局・開始・停止・TS のレコードのバイト配置、エラーの中身) は、配布物の公式のクライアント (`asicen-ts`・`asicenctl`) と
-  模擬のデーモンの間に中継を挟み、通信を記録して起こしました。上流のソースは読んでいません。** 模擬のデーモンは配布物に入っていないので、
-  v1.0.0-beta のソースから組んだだけです。起こした形式と、欄ごとの確かさ (文書にある・記録で確かめた・推定・不明) は、
-  リポジトリの外の仕様書 (denpa-spec の `asicen-udtv/spec.md`) に書いてあります
-- **推測を機材に送らないための決まり** (`AsicenUdtv.cs` の冒頭):
-  - 意味を確かめていない欄には、公式のクライアントが送っていたバイト列をそのまま送る。値を変えて送るのは、記録で意味を確かめた欄
-    (受信機の番号・方式・周波数・TSID とスロット・時間切れ) だけ
-  - **バージョンを固定する。** HELLO の応答が asicen-userland 1.0.0 (UDTV 1.0) でなければ、その先を送らずに断る。`asicend --list-json` の
-    `producer` が asicen 1.0.0 でなければ、機材を挙げない。上流がバージョンを上げると動かなくなることがある
-  - 応答の長さや値が記録と違えば、読み進めずに失敗にする (`UdtvShapeError`。応答の先頭を理由に添える)
-- **選局のたびに、公式のクライアントと同じ並びを最初から送ります** (`AsicenTuner`)。繋ぐ → HELLO → LIST → STATUS → ACQUIRE → TUNE → START →
-  (stream.sock で) ATTACH_STREAM → TS_DATA。止めるときは STOP → STREAM_END を待つ → RELEASE → 閉じる。
-  受信機を取ったまま選局し直す並びは公式のクライアントが送らないので使わず、局を替えるたびに受信機を返して取り直します。
-  選局が失敗したときは、公式のクライアントと同じく何も送らずに接続を閉じます (受信機は asicend が返す)
-- **機材は `asicend --list-json` で見つけます** (`AsicenUserland.Enclosures`。dtv-userland-core の `docs/json-discovery.md` の形式。Android は下記)。
+```
+エージェント (MPL-2.0)                                      denpa-asicen (GPL-2.0-only。筐体ごとに 1 つ)
+AsicenTuner ── AsicenEnclosure ── AsicenChild  ─ 標準入力:  tune・stop の命令 ─▶  main.cpp ── denpa_asicen.cpp ── asicen-userland
+                                               ◀ 標準出力: 開いた・選局の結果・TS ─              (エンジン・libusb)
+```
+
+- **ASICEN の機材は、エージェントとは別のプログラムの子プロセス `denpa-asicen` が扱います** (`AsicenChild.cs`)。
+  子プロセスは `agent/asicen/` の小さな C++ のプログラム (`main.cpp` と `denpa_asicen.cpp`) で、上流のソースのアーカイブ (libusb と dtv-userland-core を同梱) と一緒に 1 つの実行ファイルに組みます。
+  **`agent/asicen/` は GPL-2.0-only** で、エージェントの C# のソースは MPL-2.0 のままです (配り方は [licenses.md](licenses.md#asicen-の子プロセス))。
+  機材を開くのも USB を読み書きするのも子プロセスで、エージェントは上流の表や値を持ちません
+- **やりとりは選局の要求・状態・TS だけです** (プロトコル 1。`main.cpp` の冒頭に決まりを書いています)。
+  - エージェント → 子プロセス (標準入力。1 行に 1 つ): `tune <ストリーム> <受信機> <方式> <Hz> <TSID> <スロット> <LNB の電圧> <待つ ms>` と `stop <ストリーム>`。
+    標準入力を閉じると、子プロセスはストリームを全部止め、筐体を閉じて (LNB を 0 V に戻して USB を手放して) 終わります
+  - 子プロセス → エージェント (標準出力): 8 バイトの見出し (種類・ストリーム・中身の長さ) と中身。種類は、開いた (機種・受信機ごとの方式・LNB を操作できるかの JSON)、
+    開けない (上流の Error の番号とメッセージ)、流し込んだだけ、選局の結果、TS、ストリームの終わり (上流の `TunerStreamTerminal`)、止めた (受信機を返し終えた)
+  - 上流の診断と子プロセスのメッセージは標準エラーに出し、エージェントが記録に写します
+  - 起動するときの引数は asicend と同じ `--device usb:<ポート>[,<ポート>] --firmware <ファイル> [--allow-lnb-power]` (Android は下記) です。
+    ほかに `--version` (プロトコルと上流のバージョンを出す)・`--list-json` (`asicend --list-json` と同じ JSON)・`--mock <受信機の数>` (テスト用に組んだものだけ) があります
+- **子プロセスの中は上流のデーモン (`asicend`) と同じ組み方です** (`denpa_asicen.cpp`)。上流にライブラリとして使える API (dtv-userland-core の契約の文書の L3) はまだ無いので、ここで部品をつなぎます
+  - 起動の手順 (引数の読み方、ファームウェアの流し込みとつながり直すのを待つこと、筐体の組み合わせの確かめ、USB の確保) は、上流の `userland/tools/asicend_hardware.cpp` をファイルごと読み込んでその中の関数を使い、
+    手順の本体 (`run_asicend_hardware`) だけを写して、最後のソケットの待ち受けの代わりに確保した機材を返すように直しました。上流のファイルは変えません
+  - エンジン: 機材 (`LibusbW3u3Hardware`) → 取り込み (`HardwareStreamService`) → 受信機の取り合いと選局 (dtv-userland-core の `TunerService`)。
+    選局はデーモンと同じ Hz の受け付け (方式と LNB を確かめてから受け付けに渡す。上流の `prepare_tune_hz` はスロットの数をプロファイルで縛り、スロットで選ぶ CS がいつも断られるので使いません)。
+    ストリームはエンジンの従来の入口 (取得 → 選局 → 開始 → 取り込みにつなぐ → 読む → 止める → 返す) を使い、選局 1 回ぶんを子プロセスの中の 1 つのスレッドで回します
+  - 写さないもの: 同じ筐体のデーモンを 1 つに絞るためのロック (同じ筐体をほかのソフトが使っていれば、USB の確保が断る) と、シグナルのハンドラ
+  - 上流のバージョンを上げるときは、写した手順を上流の `run_asicend_hardware` と比べ直します (`agent/asicen/build.sh` の冒頭)
+- **起動・停止・落ちたときの起動し直しはエージェントが持ちます** (`AsicenEnclosure`)。子プロセスは筐体 1 台につき 1 つで、開くのはエージェントの起動時か最初の選局です。
+  使う受信機が無い筐体は標準入力を閉じて終わらせ、USB を手放します (ほかのソフトに機材を渡せるように。[switch.md](switch.md#並べて動かすとき))。5 秒で終わらなければ止めます。
+  **子プロセスが落ちてもエージェントは落ちません。** 流していた TS は「子プロセスが終了しました」で終わり、次に要ったときに起動し直します。
+  選局が USB の読み書きの失敗か切断で断られた・TS が切断で止まった筐体も、次に要ったときに起動し直します (抜き差し)
+- **子プロセスが無い・`--version` のプロトコルか上流のバージョンが合わなければ、ASICEN の機材を挙げません。** 理由は起動したときに記録に出します (`AsicenUserland.LogVersion`)。
+  置き場は Linux のイメージが `/opt/asicen-userland/denpa-asicen`、Windows と macOS がエージェントの実行ファイルの隣の `asicen/` (`denpa-asicen.exe`・`denpa-asicen`)、Android が `lib/<ABI>/libdenpa_asicen.so` です
+- **機材は子プロセスの一覧 (`--list-json`) で見つけます** (`AsicenUserland.Enclosures`。dtv-userland-core の `docs/json-discovery.md` の形式。Android は下記)。
+  USB のポートの名前は子プロセスの libusb のもので、Windows と macOS でもエージェントの USB の扱いとは混ぜません。
   使うのは上流が見分ける 5 機種 (`AsicenUserland.Models`) で、状態が `ready`、USB 機能の数が機種と合う筐体だけ。
   機材をつないだときの出力は見ていないので、読み方は文書の例から書きました。受信機が出力に無ければ、機種の表の並びを使います。
   筐体の名前は USB のポートから作ります (USB 機能が 2 つなら内蔵ハブのポート、1 つならその機能のポート)
-- **asicend は筐体 1 台につき 1 つ、エージェントの起動時に立ち上げます** (`AsicenDaemon`)。使う受信機が無い筐体の asicend は止めて USB を手放します (ほかのソフトに機材を渡せるように。[switch.md](switch.md#並べて動かすとき))。
-  引数は `--device usb:<ポート>[,<ポート>] --firmware <ファイル> --runtime-dir … --instance <筐体の名前>` (Android は下記)。
-  ready は `asicenctl list` が通ることで見て、その出力から機種と受信機を読みます
-- **ファームウェアは asicend が流し込みます。** 設定に書いてある筐体は、起動したときに流し込まれます。まだ設定に無いファームウェア待ちの機材
-  (USB ID `1738:5211`・`1738:5216` で探す) は、asicend を 1 度起動して流し込ませ、止めてから一覧を取ります (`AsicenUserland.Boot`)。
-  ファームウェア待ちの間は機種も受信機も分からないためです
-- **LNB の給電は LNB_POWER だけで操作します** (`AsicenLnb`。`asicenctl lnb-on`・`lnb-off` と同じやり取り)。選局の要求の中身は、給電するときも変えません。
-  設定に `15v` と書いた受信機がある筐体で、機種が PX-W3U2・PX-W3U3・PX-W3U3 V2 のときだけ、asicend に `--allow-lnb-power` を渡します。
-  給電が要るチューナーが衛星を選局するときにオンにし、そのチューナーを全部閉じたらオフにします。PX-S3U・PX-S3U2 は給電せずに選局し、理由を画面に出します
-- **内蔵カードリーダーは扱いません** (`CardLinks.All` に入れない)。カードの操作は形式が契約の文書に無く、模擬のデーモンがカードに対応していないので、
-  通信を記録できませんでした。B25 は今までどおりエージェントが復号し、カードは USB のリーダーで読みます ([下記](#b25-の復号もカードリーダーも自前))
-- **Android は、アプリから受け取った機材の fd を asicend に継がせます** (`USB_BROKER` があるとき。[上記](#android-でアプリから-usb-を受け取る))。
-  - 筐体は `--list-json` でなく、受け取った機材の USB ID とポートから組みます (`AsicenUserland.Group`)。USB 機能が 2 つの機種は、同じ内蔵ハブの `.1` と `.2` に同じ ID が揃ったときだけ 1 台にします。
+- **選局のたびに受信機を取り直します** (`AsicenTuner`)。取る・選局して同期を待つ・流し始める、を `tune` の命令 1 つで行い、局を替えるときは `stop` で受信機を返してから取り直します。
+  同期しなければ「同期しませんでした」で断ります。受信機と方式が合わない選局は、子プロセスに渡す前に断ります
+- **TS は子プロセスの標準出力からストリームごとに振り分けて溜め** (`AsicenChannel`)、読み取りのスレッドが `Pipe` に詰めます (`AsicenStream`。待つのは 200 ms ずつ)。
+  読まれずに 64 MB 溜まったストリームは、読み出しが追いつかないとして止めます (子プロセスの書き込みを止めて、ほかの受信機の TS まで止めないため)。
+  筐体を閉じたあとも、残ったストリームは止めるまで動き、全部止めたときに子プロセスを終わらせます
+- **ファームウェアは子プロセスが流し込みます。** 設定に書いてある筐体は、開くときに流し込まれます。まだ設定に無いファームウェア待ちの機材
+  (USB ID `1738:5211`・`1738:5216` で探す) は、1 度開いて流し込ませ、閉じてから一覧を取り直します (`AsicenUserland.Boot`)。
+  ファームウェア待ちの間は機種も受信機も分からないためです。渡す前に、ファイルの SHA-256 が確かめたものと同じかを見ます (中身は読みません)
+- **LNB の給電は選局の要求に載せます。** 設定に `15v` と書いた受信機の衛星の選局だけ 15 V を載せ、受信機ごとの要求は子プロセスの中のエンジンが数えて、最後の受信機を返したら切ります。
+  `--allow-lnb-power` を渡して開くのは、上流が給電に対応としている機種 (PX-W3U2・PX-W3U3・PX-W3U3 V2) だけです。PX-S3U・PX-S3U2 は給電せずに選局し、理由を画面に出します
+- **内蔵カードリーダーは扱いません** (`CardLinks.All` に入れない)。B25 は今までどおりエージェントが復号し、カードは USB のリーダーで読みます ([下記](#b25-の復号もカードリーダーも自前))
+- **Windows は libusb の WinUSB の経路で開きます。** 機材のドライバを WinUSB に替える必要があり、`install.ps1 -WinUsb` の対象 (`WinUsbTargets`) に 5 機種とファームウェア待ちの ID を入れています。
+  macOS は IOKit の経路で、ドライバを替える必要はありません
+- **Android は、アプリから受け取った機材の fd を子プロセスに継がせます** (`USB_BROKER` があるとき。[上記](#android-でアプリから-usb-を受け取る))。
+  - 筐体は一覧の JSON でなく、受け取った機材の USB ID とポートから組みます (`AsicenUserland.Group`)。USB 機能が 2 つの機種は、同じ内蔵ハブの `.1` と `.2` に同じ ID が揃ったときだけ 1 台にします。
     名前からポートを作ったとき (`001-004`。カーネルが 5.3 より前) は内蔵ハブが分からないので、2 つの機種は使いません
-  - 引数は `--device` の代わりに `--fd <番号>` (USB 機能ごと。`.1` が先) です。fd は `fcntl(F_DUPFD)` で close-on-exec の無い複製を作って継がせ、起動し終えたら複製を閉じます (`InheritedFds`・`BrokerUsbHost.Lend`)。
-    .NET 11 の `ProcessStartInfo.InheritedHandles` は使いません。ほかの fd を閉じるのに `close_range` (Linux 5.9 から) を使い、それより古いカーネルでは起動できない (ENOTSUP) ためです。
-    複製を作ってから起動し終えるまでは、ほかの常駐を起動しません (同じ時に起動した子も同じ fd を継ぐため。`AsicenUserland.Start`)
-  - ファームウェア待ちの機材には `asicend --fd … --firmware …` を起動し、終わるまで待ちます。`--fd` の asicend はつながり直した機材を追えず、流し込んだら終わるためです (上流の README)。
-    つながり直した機材はアプリから `attached` で届き、探し直したときに起動します。終了コードは見ずに、asicend の出力を記録に出します
-  - 実行ファイルは APK の `lib<名前>.so` (`AsicenUserland.Bin`)。アプリが `ASICEN_USERLAND_DIR` に nativeLibraryDir、`ASICEN_FIRMWARE` に書き出したファームウェア、
-    `ASICEN_RUNTIME_DIR` に `<dataDir>/r` を渡します。制御ソケットのパスが `sun_path` (108 バイト) に収まらないときは、asicend を起動せずに理由を記録に出します (`AsicenUserland.CheckSocketPath`)
-  - 起動したときに `asicend --version` を記録に出します (`AsicenUserland.LogVersion`。Linux も同じ)。Android では、アプリの子プロセスから起動できるかもこれで分かります
-- **テスト** (`AsicenTests.cs`): 記録したバイト列 (`AsicenRecorded`) のとおりに応答する偽の asicend に対する単体テストと、上流の模擬のデーモンと通信するテスト
-  (`AsicenMockTests`。CI では `agent-asicen-mock` が v1.0.0-beta のコミットを組んで回す)。**模擬は実機ではありません**。
-  Android の起動の仕方は、模擬の前に挟んだシェルのスクリプトが継いだ fd を確かめるテストと、`UsbBrokerTests` の `Lend` のテスト、エミュレータ (`.github/android-app-smoke.sh`) で見ます
+  - 引数は `--device` の代わりに `--fd <番号>` (USB 機能ごと。`.1` が先) です。fd は close-on-exec の無い複製を作って継がせ、起動し終えたら閉じます (`InheritedFds`・`BrokerUsbHost.Lend`)。
+    複製を作ってから起動し終えるまでは、ほかの子プロセスを起動しません (`Shell.SpawnGate`。ほかの子が同じ fd を継がないように)
+  - ファームウェア待ちの機材は、`--fd … --firmware …` で開くと流し込んだだけで終わります。`--fd` ではつながり直した機材を追えないためです (上流の README)。
+    つながり直した機材はアプリから `attached` で届き、探し直したときに開きます
+  - アプリが `ASICEN_USERLAND_DIR` に nativeLibraryDir、`ASICEN_FIRMWARE` に書き出したファームウェアを渡します
+- **テスト**: `AsicenTests.cs` の `AsicenTests` は一覧の読み方・筐体の名前・開く引数・ファームウェアの確かめ、`AsicenChildTests` は偽の機材で組んだ子プロセス (`build.sh --mock`) を起動し、
+  選局・選局し直し・2 つの受信機を同時に流す・筐体を閉じたあとのストリーム・開き直し・子プロセスが落ちたときの起動し直しを通します。
+  CI は Linux (`agent-asicen-mock`)、Windows (`agent-asicen-windows`。Linux から llvm-mingw で組んだもの)、macOS (`agent-macos`) で流します。
+  偽の機材は上流の模擬 (`MockTunerBackend`) と null パケットを出す取り込みで、エンジンと `HardwareStreamService` は本物です。**偽の機材は実機ではありません**。
+  子プロセスが実行イメージの土台で動くことは、イメージを組むときに `denpa-agent --asicen-check` で確かめます。
+  Android の fd の継がせ方は `UsbBrokerTests` と、エミュレータ (`.github/android-app-smoke.sh`) で見ます
 
 ### CECH-ZD1 J の作り
 

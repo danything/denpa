@@ -115,8 +115,9 @@ NAS にはそのユーザーの資格情報で繋ぎます。SYSTEM は NAS の�
 | 「対応しているチューナーが挿さっていません」 | チューナーを挿して流し直す。デバイス マネージャーにも出ないときは、ケーブルとポートを変える                         |
 | 「wdi-simple.exe の終了コード …」            | 機材を挿し直して流し直す。終了コードは libwdi のエラーの番号 (`wdi_error`)。それでも替えられないときは Zadig を使う |
 
-**対象の機材は、エージェントに問い合わせて決めます。** エージェントが USB を直に持つ機材 (IT930x の機材・CECH-ZD1 J・PIX-DT295・PX-S1UD などの Siano の機材・Xbox One Digital TV Tuner) の USB ID は
-`denpa-agent --usb-ids` が返します。
+**対象の機材は、エージェントに問い合わせて決めます。** エージェントが USB を直に持つ機材 (IT930x の機材・CECH-ZD1 J・PIX-DT295・PX-S1UD などの Siano の機材・Xbox One Digital TV Tuner)と、
+ASICEN 系の機材の子プロセスが開く機材 (PX-W3U3 などの 5 機種と、挿した直後のファームウェア待ちの `1738:5211`・`1738:5216`) の USB ID は `denpa-agent --usb-ids` が返します。
+ASICEN 系はファームウェア待ちの ID と、流し込んだあとの機種の ID の両方を替えます (挿し直すと ID が変わるので、流し込んだあとにもう一度 `-WinUsb` を流します)。
 install.ps1 は USB ID の表を持ちません。
 
 **Zadig で替えるときは**、Options → List All Devices → チューナーを選んで WinUSB → Replace Driver の順に操作します。結果は `-WinUsb` と同じです。
@@ -264,6 +265,7 @@ SignPath Foundation の[条件](https://signpath.org/terms)が、チームが保
 | `denpa-agent.exe`                                          | エージェント | する予定 | 自分たちのソース (`agent/Denpa.Agent`) から組む                                                                  |
 | `denpa-tray.exe`                                           | エージェント | する予定 | 自分たちのソース (`tray/Denpa.Tray`) から組む                                                                    |
 | `libwdi/wdi-simple.exe`                                    | エージェント | しない   | libwdi の上流のソースを、ビルドの設定だけ変えて組む ([licenses.md](licenses.md#windows-に入れるもの-installps1)) |
+| `asicen/denpa-asicen.exe`                                  | エージェント | しない   | ASICEN 系の機材の子プロセス。GPL-2.0 の上流 (asicen-userland) を中に入れたもの。下に理由                         |
 | `bun.exe`                                                  | 本体         | しない   | bun の公式のリリースをそのまま入れる (bun の署名が付いている)                                                    |
 | `ffmpeg/ffmpeg.exe`・`ffmpeg/ffprobe.exe`                  | 本体         | しない   | FFmpeg の上流のソースにパッチを当てて組む。下に理由                                                              |
 | `ffmpeg/` の DLL (x264・dav1d・MinGW-w64 のランタイムなど) | 本体         | しない   | MSYS2 のパッケージのまま入れる                                                                                   |
@@ -271,6 +273,11 @@ SignPath Foundation の[条件](https://signpath.org/terms)が、チームが保
 - ffmpeg を署名しないのは、上流を直したビルドを署名してよいのが、上流が署名したビルドを出していて、見える形の fork から組むときだけだからです。
   FFmpeg は Windows の署名したビルドを出しておらず、denpa は fork ではなく上流の tarball にパッチ (`patches/`) を当てて組みます。
   製品名をプロジェクトの名前 (`denpa`) にする条件も、ffmpeg.exe には合いません
+- `denpa-asicen.exe` を署名に送らないのは、中身のほとんどが上流 (asicen-userland と、それが取り込んだ px4-userland。px4_drv から来た部分を含む) のコードで、
+  denpa のチームが保守しているソースではないからです。denpa が書いたのはつなぐ所 (`agent/asicen/`) だけで、上流のコードを直したものでもありません。
+  上流は Windows の署名したビルドを出していないので、「上流を直したビルド」の扱いにも当たりません。
+  署名しないので、Windows の Smart App Control をオンにした PC では、エージェントが起動するときに断られることがあります。そのときは ASICEN 系の機材だけが使えず、
+  理由がエージェントの記録に出ます (ほかのチューナーは変わらず使える)
 - 本体の zip には自分たちのソースから組んだ実行ファイルが無いので、署名するものがありません
 - 署名する 2 つの製品名は、条件に合わせてプロジェクトの名前 `denpa` にしています (csproj の `Product`)。製品バージョンはリリースのタグ、ファイルバージョンは `v` を落としたタグです
 - エージェントにはチューナーのファームウェア (IT930x・Siano・DiB0700) を埋め込んでいます ([licenses.md](licenses.md#チューナーエージェントに同梱するファームウェア))。
@@ -293,11 +300,14 @@ SignPath Foundation の[条件](https://signpath.org/terms)が、チームが保
   ([tuners.md](tuners.md#pixela-pix-dt295))
 - **Microsoft Xbox One Digital TV Tuner** (ケーブルだけ)。エージェントが WinUSB で USB を直に持ちます。`045e:02d5` のドライバを WinUSB に替え、
   復調のファームウェアを `~/denpa/config/firmware/` に置きます。実機では確かめていません ([tuner-xbox-one.md](tuner-xbox-one.md))
+- **PX-W3U3 など (ASICEN 系。試験的)**。エージェントの隣の子プロセス (`asicen\denpa-asicen.exe`。asicen-userland を組み込んだもの) が libusb の WinUSB の経路で開きます。
+  5 機種とファームウェア待ちの ID のドライバを WinUSB に替え、ファームウェア (`asicen-loader.bin`) を `~/denpa/config/firmware/` に置きます (配布物には入っていません)。
+  実機では確かめていません ([tuners.md](tuners.md#px-w3u3-など-asicen-userland試験的))
 - ドライバは `install.ps1 -WinUsb` で WinUSB に替えます ([チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える)。Zadig でも替えられます)。
   **PX-Q3 系と PX-MLT8PE は USB の機材が 2 つ並ぶので、両方とも替えます** (`-WinUsb` は挿さっている対応機材をまとめて替える)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに選局が失敗し、そう添えて返します
   (エージェントは WinUSB で機材を開くので、WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
-- IT930x・Siano・CECH-ZD1 J・PIX-DT295・Xbox One Digital TV Tuner の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
+- IT930x・Siano・CECH-ZD1 J・PIX-DT295・Xbox One Digital TV Tuner・ASICEN 系の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
   `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。IT930x の機材の内蔵リーダーと CECH-ZD1 J の差し込み口も
@@ -308,7 +318,6 @@ SignPath Foundation の[条件](https://signpath.org/terms)が、チームが保
 ## 使えないもの
 
 - PT2/PT3 などの DVB の機材は使えません。Windows に DVB はありません
-- PX-W3U3 など (asicen-userland) は使えません。エージェントが対応しているのは Linux と Android だけです
 - **止めるときに録画を待てません。** Windows にはプロセスに「止まれ」を伝える手 (SIGTERM) が無く、
   止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが、
   再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)

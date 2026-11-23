@@ -204,9 +204,10 @@ Free code signing provided by [SignPath.io](https://about.signpath.io), certific
 Code signing is planned and has not started yet: current releases are not signed.
 Once it starts, `denpa-agent.exe` and `denpa-tray.exe` in `denpa-agent-<version>-windows-x64.zip` are signed for every release.
 Upstream binaries (bun, FFmpeg and its DLLs, libwdi's `wdi-simple.exe`) are shipped as they are and are not signed with this certificate.
+`asicen\denpa-asicen.exe` (the GPL-2.0 child process for ASICEN tuners, built from asicen-userland) is not signed either: it is built from upstream code that this project does not maintain.
 
 Windows のエージェントの zip にある `denpa-agent.exe` と `denpa-tray.exe` を、SignPath Foundation の証明書でリリースのたびに署名する予定です。
-**今のリリースはまだ署名していません。** 上流のもの (bun・FFmpeg と DLL・libwdi の `wdi-simple.exe`) は署名しません。
+**今のリリースはまだ署名していません。** 上流のもの (bun・FFmpeg と DLL・libwdi の `wdi-simple.exe`) と、asicen-userland から組む ASICEN の子プロセス (`asicen\denpa-asicen.exe`) は署名しません。
 署名するものと、しないものの判断は [docs/install-windows.md](docs/install-windows.md#コード署名) にあります。
 
 ### Privacy
@@ -240,3 +241,5 @@ denpa のサーバは、起動したときと 1 時間ごとに、新しいバ�
 
 チューナーエージェント (`agent/`) だけは **MPL-2.0** ([agent/LICENSE](agent/LICENSE))。ほかのソフトに組み込んだり一緒に配ったりできる一方で、
 エージェントのファイルを直して配るなら、そのファイルは同じ条件で公開してください。
+ASICEN 系の機材の子プロセス (`agent/asicen/`。asicen-userland を組み込んだ `denpa-asicen`) は **GPL-2.0-only** の別のプログラムで、
+エージェントとは標準入出力でやりとりするだけなので、エージェントは MPL-2.0 のままです ([docs/licenses.md](docs/licenses.md#asicen-の子プロセス))。

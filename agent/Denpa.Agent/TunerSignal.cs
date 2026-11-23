@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// <param name="Locked">復調がロックしているか</param>
 /// <param name="Cn">C/N。測れなければ null</param>
 /// <param name="Unit"><c>dB</c> か <c>raw</c> (<see cref="Db"/>・<see cref="Raw"/>)</param>
-/// <param name="AtTune">選局したときに確かめた値で、受信中は読み直さない。asicen-userland の機材は C/N を取れず、選局の応答で同期したかだけを返す (C/N は null。AsicenUdtv.cs)</param>
+/// <param name="AtTune">選局したときに確かめた値で、受信中は読み直さない。asicen-userland の機材は C/N を取れず、選局で同期したかだけを返す (C/N は null。AsicenTuner.cs)</param>
 /// <param name="StrengthDbm">
 /// 電波の強度 (dBm)。dBm で返す機材 (DVB のドライバが <c>FE_SCALE_DECIBEL</c> で返すもの、DiB8000 の表、IT930x の機材のうち CXD2856ER の機種の地上波・J.83B・ISDB-C、Siano の機材) だけで、ほかは null。
 /// 機材ごとに校正されておらず、機種どうしでは比べられない。JSON の <c>strengthDbm</c> は後から足したもので、古いサーバは読まずに捨てる

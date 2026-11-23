@@ -18,7 +18,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。
- *   asicen-userland の機材は同梱のものに USB を扱わせる (Asicen.cs)。IT930x の機材と CECH-ZD1 J と PIX-DT295 と Siano の機材 (PX-S1UD など) と Xbox One Digital TV Tuner は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs / Siano.cs / XboxOne.cs)
+ *   asicen-userland の機材は、同梱の子プロセス (denpa-asicen) に USB を扱わせる (Asicen.cs)。IT930x の機材と CECH-ZD1 J と PIX-DT295 と Siano の機材 (PX-S1UD など) と Xbox One Digital TV Tuner は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs / Siano.cs / XboxOne.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM と、契約の更新に要る CAT・EMM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -38,6 +38,17 @@ if (OperatingSystem.IsWindows()) Console.OutputEncoding = Encoding.UTF8;
 if (args is ["--version"])
 {
     Console.WriteLine(About.Version);
+    return 0;
+}
+// asicen-userland の子プロセスを使えるかを出して終わる。使えなければ exit 1 (イメージを組むときに、実行イメージの土台で子プロセスが動くことを確かめる。agent/Dockerfile)
+if (args is ["--asicen-check"])
+{
+    if (!AsicenUserland.Installed)
+    {
+        Console.Error.WriteLine($"asicen-userland: {AsicenChild.Problem}");
+        return 1;
+    }
+    Console.WriteLine($"asicen-userland {AsicenChild.Version} ({AsicenChild.Program})");
     return 0;
 }
 // エージェントが USB を直に持つ機材の USB ID を出して終わる。install.ps1 -WinUsb が読む (WinUsbTargets.cs)
@@ -203,21 +214,20 @@ var tune = new TuneOptions(Config.Given("FAKE_TUNE"));
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 
 /*
- * **asicen-userland の筐体の asicend を起動する。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
- * 使う受信機が無くなった筐体の asicend は止める (AsicenDaemon.Prepare)。
+ * **asicen-userland の筐体を開く (筐体ごとに子プロセスを起動する)。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
+ * 使う受信機が無くなった筐体は閉じる (AsicenEnclosure.Prepare)。
  * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
-var daemonsGate = new Lock();
-// 止めるときに asicend を止めたら立てる。そのあとの抜き差しや設定の書き換えで起動し直さない
-var daemonsStopped = false;
-void PrepareDaemons()
+var asicenGate = new Lock();
+// 止めるときに筐体を閉じたら立てる。そのあとの抜き差しや設定の書き換えで開き直さない
+var asicenClosed = false;
+void PrepareAsicen()
 {
-    lock (daemonsGate)
+    lock (asicenGate)
     {
-        if (daemonsStopped) return;
-        // asicen-userland の筐体の asicend (Asicen.cs)。配布物が無ければ顔ぶれにも出ない。LNB 15V の設定は起動の引数に効くので先に控える
-        AsicenUserland.Configure(pool.Tuners);
-        AsicenDaemon.Prepare([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For);
+        if (asicenClosed) return;
+        // asicen-userland の筐体 (Asicen.cs)。子プロセスが無ければ顔ぶれにも出ない
+        AsicenEnclosure.Prepare([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenEnclosure.For);
     }
 }
 
@@ -262,7 +272,7 @@ void Rescan()
             ApplyTuners([.. written, .. added]);
         }
     }
-    PrepareDaemons();
+    PrepareAsicen();
 }
 
 var builder = WebApplication.CreateSlimBuilder(args);
@@ -577,8 +587,8 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     {
         lock (tunersGate) ApplyTuners([.. next.OfType<TunerSpec>()]);
     });
-    // 新しく書かれた筐体があれば asicend を起動する。数秒かかるので応答は待たせない
-    _ = Task.Run(PrepareDaemons);
+    // 新しく書かれた筐体があれば開く。数秒かかるので応答は待たせない
+    _ = Task.Run(PrepareAsicen);
     await Respond.Write(http, TunerList());
 });
 
@@ -767,8 +777,8 @@ app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
 
 /*
- * **asicend は背景で起動する。** ready までファームウェアの流し込みで
- * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の API (= PT3 など他の
+ * **asicen-userland の筐体は背景で開く。** ファームウェアの流し込みとつながり直すのを待つので
+ * 数秒、駄目な筐体ならもっと待つので、ここで待つと HTTP の API (= PT3 など他の
  * チューナーの提供) まで遅れる。筐体が無ければ何もしない。
  *
  * **手元のカードは起動したときに開いておく** (LocalCard.Warm)。最初の選局がカードを開くのを待たない。
@@ -778,7 +788,7 @@ if (cardUrl is not { Length: > 0 } || sharing is not null) _ = Task.Run(Keys.Loc
 _ = Task.Run(() =>
 {
     AsicenUserland.LogVersion();
-    PrepareDaemons();
+    PrepareAsicen();
 });
 
 /*
@@ -824,11 +834,11 @@ app.Lifetime.ApplicationStopped.Register(() => StopSteps.Run(
     ("CECH-ZD1 J を閉じる", Zd1jBoard.CloseAll),
     // PIX-DT295 は書いた設定を戻してから閉じる (カードのために開いていても)
     ("PIX-DT295 を閉じる", Dt295NativeDevice.CloseAll),
-    // 利用者を全部離してから asicend を止める。SIGTERM で LNB を 0V に戻して終わる
-    ("asicend を止める", () =>
+    // 利用者を全部離してから asicen-userland の筐体を閉じる。子プロセスが LNB を 0V に戻して USB を手放し、終わる
+    ("asicen-userland の筐体を閉じる", () =>
     {
-        lock (daemonsGate) daemonsStopped = true;
-        AsicenDaemon.StopAll();
+        lock (asicenGate) asicenClosed = true;
+        AsicenEnclosure.CloseAll();
     })));
 
 /*
