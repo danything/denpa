@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -54,6 +55,8 @@ export function sqliteSmoke(work: string): void {
   );
   expectRows('"東京 京都"', []);
   const copy = join(work, "sqlite-smoke.db");
+  // VACUUM INTO は写す先があると失敗する (同じ作業場所で流し直したとき)
+  rmSync(copy, { force: true });
   db.query("VACUUM INTO ?").run(copy);
   const copied = new Database(copy);
   copied.exec("PRAGMA trusted_schema = OFF");

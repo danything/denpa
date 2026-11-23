@@ -90,6 +90,13 @@ describe("録画の字幕を取り出す", () => {
     expect((await pending).kind).toBe("failed");
   });
 
+  test("溜める量の上限を超えたら ffmpeg を止め、失敗にする", async () => {
+    fake("huge", ["head -c 40000000 /dev/zero", "sleep 30"]);
+    const started = Date.now();
+    expect((await extractCaptions(source(true))).kind).toBe("failed");
+    expect(Date.now() - started).toBeLessThan(20_000);
+  });
+
   test("4K の局の隣に置いた文字の配置を読む", async () => {
     const path = join(dir, "x.captions.json");
     writeFileSync(

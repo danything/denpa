@@ -134,14 +134,22 @@ async function ffmpegPages(
   const parts: Uint8Array[] = [];
   let size = 0;
   let over = false;
+  // 上限を超えたらその場で ffmpeg を止める (壊れたファイルで時間切れまで読ませない)
+  const stop = new AbortController();
+  const signal =
+    options.signal === undefined
+      ? stop.signal
+      : AbortSignal.any([options.signal, stop.signal]);
   const { code, stderr } = await run([config.ffmpeg, ...argv], {
     timeoutMs: ts ? TIMEOUT_TS : TIMEOUT,
-    signal: options.signal,
+    signal,
     lowPriority: options.lowPriority === true,
     stderr: true,
     onStdout: (chunk) => {
+      if (over) return;
       if (size + chunk.length > LIMIT) {
         over = true;
+        stop.abort();
         return;
       }
       parts.push(chunk);
