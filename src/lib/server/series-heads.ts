@@ -4,7 +4,7 @@
  * - `seriesName` / `seriesParts` は、表 (`series_heads`) の写しをメモリに持って当てる。写しは最初に呼ばれたときに同期で読む
  *   (起動して最初の `epg.settle` より前に録り始めても、前と同じ名前になる)
  * - 学び直す (`relearn`) のは番組表を取得し終えたとき (`epg.settle` が `scheduleRelearn` を呼ぶ)。
- *   `epg.settle` の外で、`LEARN_STEP` 行ごとにイベントループに戻りながら動かす。**控えも録画も変わっていなければ学ばない**
+ *   `epg.settle` の外で、`LEARN_STEP` 行ごとに `setImmediate` で処理を区切って動かす。**控えも録画も変わっていなければ学ばない**
  * - `runtime.ts` が `enableRelearn` を呼ぶまでは学ばない (単体テストと `DENPA_AUTOSTART=0` は表を読むだけ)
  */
 import { and, asc, count, eq, gt, inArray, lt, max, ne } from "drizzle-orm";
@@ -136,6 +136,8 @@ const pause = () => new Promise<void>((resolve) => setImmediate(resolve));
 let observedThrough = 0;
 /** 前に学んだときの録画と引き継いだ履歴 (変わっていなければ、控えが変わらない限り学ばない) */
 let lastInput: string | null = null;
+/** 控えが変わったのに、まだ学び終えていない (学ぶ途中で失敗しても、次に学び直す) */
+let unlearned = false;
 
 /** 控えの 1 行 (局と名前の組) にまとめたもの */
 interface Seen {
@@ -292,7 +294,8 @@ export async function relearn(): Promise<boolean> {
   if (pruned > 0) changed = true;
   const mark = inputMark();
   // 覚えるのは学び終えてから。途中で失敗したら、入力が変わらなくても次に学び直す
-  if (!changed && mark === lastInput) return false;
+  if (changed) unlearned = true;
+  if (!unlearned && mark === lastInput) return false;
 
   // 読む順を決めておく (学ぶ結果は順に依らないが、同じ控えからは同じ並びで学ぶ)
   const merged = new Map<string, Seen>();
@@ -375,6 +378,7 @@ export async function relearn(): Promise<boolean> {
       .map(({ key }) => key);
   });
   lastInput = mark;
+  unlearned = false;
   useHeads(kept);
   console.log(
     `[series] シリーズの先頭を学びました: ${kept.length} (控え ${rows.length} 行・${Math.round(performance.now() - started)} ms)`,
@@ -386,6 +390,7 @@ export async function relearn(): Promise<boolean> {
 export function forgetForTest(): void {
   observedThrough = 0;
   lastInput = null;
+  unlearned = false;
   heads = null;
   splits.clear();
 }

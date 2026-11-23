@@ -193,3 +193,20 @@ describe("relearn (失敗したとき)", () => {
     expect(seriesName("おんがく交差点【C】")).toBe("おんがく交差点");
   });
 });
+
+describe("relearn (控えを書いたあとに失敗したとき)", () => {
+  test("前に学び終えていても、控えの変わったぶんを次に学ぶ", async () => {
+    const { sql } = await import("drizzle-orm");
+    program(1, "おんがく交差点【A】");
+    expect(await relearn()).toBe(true);
+    program(1, "おんがく交差点【B】");
+    orm().run(sql`ALTER TABLE series_heads RENAME TO series_heads_away`);
+    try {
+      await expect(relearn()).rejects.toThrow();
+    } finally {
+      orm().run(sql`ALTER TABLE series_heads_away RENAME TO series_heads`);
+    }
+    expect(await relearn()).toBe(true);
+    expect(seriesName("おんがく交差点【C】")).toBe("おんがく交差点");
+  });
+});

@@ -1193,7 +1193,7 @@ export const rankingWatched = sqliteTable(
 );
 
 /**
- * **番組表で見たシリーズの控え** (`series-heads.ts`)。番組のシリーズ名を学ぶ元 (`series.learnHeads`)。
+ * **番組表で見たシリーズの控え** (番組表で見た番組名を、局と名前の組にまとめた記録。`series-heads.ts`)。番組のシリーズ名を学ぶ元 (`series.learnHeads`)。
  * 番組表の行は終わって 1 日で消え、週 1 回の番組は 9 日分に 1〜2 回しか無いので、ここに貯めてから学ぶ。
  *
  * - 1 行は局と名前 (`series.strictSeries`) の組。回 (番組名) ごとには持たず、回の種類は 2 で頭打ち (`titles`)。
