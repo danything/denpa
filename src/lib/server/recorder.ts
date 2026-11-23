@@ -19,6 +19,7 @@ import {
 } from "../types";
 import { NO_CHANNEL, placesOfService } from "./agent-channels";
 import type { Place } from "./agent-order";
+import { CAPTION_SETTLE, kickCaptionIndex } from "./caption-index";
 import { config } from "./config";
 import { now, orm } from "./db";
 import { aribServiceId, encodeInput, enqueue } from "./encoder";
@@ -794,6 +795,8 @@ function finish(recordingId: number, size: number): void {
     .set({ finished_at: at, ts_size: size, updated_at: at })
     .where(eq(recordings.id, recordingId))
     .run();
+  // 字幕のインデックスは、エンコードを待ち行列に入れ終えたころに読み始める (`caption-index.ts`)
+  kickCaptionIndex(CAPTION_SETTLE);
 
   const recording = recordingById(recordingId)!;
   const reservation =

@@ -47,7 +47,6 @@ const {
   nextRecording,
   pendingCaptionIndex,
   pruneCaptionIndex,
-  recordingOfLine,
   wipeOldVersion,
   writeCaptionIndex,
 } = await import("./caption-index");
@@ -220,7 +219,6 @@ describe("インデックスに書く・消す", () => {
       }),
     ).toBe(true);
     expect(match("東京都の天気")).toEqual([captionLineId(3, 0)]);
-    expect(recordingOfLine(captionLineId(3, 1))).toBe(3);
     // 書き直すと古い行は消える
     writeCaptionIndex(snapshotOf(r), {
       state: "done",
@@ -382,6 +380,22 @@ describe("次に読む録画", () => {
       .where(eq(recordings.id, 20))
       .run();
     expect(nextRecording(settled)?.id).toBe(20);
+  });
+
+  test("録画の行が置き場の中を絶対パスで指していても、読んだあとは読み直さない", () => {
+    addRecording(21);
+    // 古い行・取り込んだ行の形。drizzle を通さずに書く (`mediaPath` を通すと相対に直る)
+    orm().run(
+      sql`UPDATE ${recordings} SET library_path = ${join(config.encodedDir, "abs.mkv")} WHERE id = 21`,
+    );
+    const r = orm()
+      .select()
+      .from(recordings)
+      .where(eq(recordings.id, 21))
+      .get()!;
+    writeCaptionIndex(captionSnapshot(r), { state: "done", lines: [] });
+    expect(nextRecording(settled)).toBeUndefined();
+    expect(pendingCaptionIndex(settled)).toBe(0);
   });
 });
 

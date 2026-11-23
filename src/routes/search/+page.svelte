@@ -119,6 +119,7 @@
   const total = $derived(
     data.programs.total +
       data.recordings.total +
+      data.captions.total +
       data.reservations.total +
       data.rules.total +
       data.clips.total,
@@ -418,7 +419,9 @@
       {/if}
     {:else}
       <p class="summary muted small" role="status" data-testid="search-summary">
-        「<span class="bold">{q}</span>」の検索結果 {total} 件
+        「<span class="bold">{q}</span>」の検索結果 {total}{data.captions.more
+          ? "+"
+          : ""} 件
       </p>
 
       <!-- これからの放送 (番組表)。予約の入口で、右の書く欄の条件で録るかどうかも行に出す -->
@@ -1326,6 +1329,11 @@
     flex-direction: column;
     margin: 0;
     padding: 0;
+    list-style: none;
+  }
+  /* Pico は `li` にも印と余白を付けるので、場面の行からも外す (`.item-list > li` と同じ) */
+  .scenes > li {
+    margin: 0;
     list-style: none;
   }
   .scene {

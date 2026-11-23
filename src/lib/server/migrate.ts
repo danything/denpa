@@ -33,6 +33,7 @@ import { toHalfWidth } from "../fold";
 import { size as formatSize } from "../format";
 import type { Slot } from "../rule-time";
 import { ALL_CHANNEL_TYPES, type Recording } from "../types";
+import { CAPTION_SETTLE, kickCaptionIndex } from "./caption-index";
 import { config } from "./config";
 import { now, orm } from "./db";
 import { freeBytes } from "./disk";
@@ -488,6 +489,8 @@ async function importOne(
   if (!file.raw) {
     await writeThumbnail(to, (recorded.endAt - recorded.startAt) / 1000);
   }
+  // 取り込んだ録画の字幕も、字幕で探せるようにする (録り終えた時刻が取り込んだ時刻なので、読めるのは `CAPTION_SETTLE` 後。`caption-index.ts`)
+  kickCaptionIndex(CAPTION_SETTLE);
   return "imported";
 }
 

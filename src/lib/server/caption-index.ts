@@ -63,7 +63,8 @@ const MIN_GAP = 2_000;
 /** 読むものが無いとき、次に見るまで (エンコードし終えたときは `kickCaptionIndex` ですぐ見る) */
 const IDLE = 10 * 60_000;
 /** 録り終えてから読み始めるまで。録り終えたその場でエンコードを待ち行列に入れるので、その前に元の TS を読まない */
-const SETTLE = 5 * 60_000;
+export const CAPTION_SETTLE = 5 * 60_000;
+const SETTLE = CAPTION_SETTLE;
 /** 読めなかったときに読み直すまで (回ごとに倍にする) と、読み直す回数 */
 const RETRY = 6 * 60 * 60_000;
 const ATTEMPTS = 5;
@@ -77,16 +78,11 @@ export function captionLineId(recordingId: number, seq: number): number {
   return recordingId * PER_RECORDING + seq;
 }
 
-/** その行の ID の録画の ID */
-export function recordingOfLine(id: number): number {
-  return Math.floor(id / PER_RECORDING);
-}
-
 /**
  * 字幕を読むファイル。`.mkv` (エンコード済みの主) があればそれ、無ければ元の TS (置き場に置いた TS も)。どちらも無ければ null。
  * SQL の `EXPECTED` と同じ決め方
  */
-export function expectedFile(
+function expectedFile(
   recording: Pick<Recording, "library_path" | "ts_path">,
 ): string | null {
   const library = recording.library_path;
@@ -341,6 +337,14 @@ export function writeCaptionIndex(
       .values(values)
       .onConflictDoUpdate({ target: captionIndex.recording_id, set: values })
       .run();
+    /*
+     * **ファイルの列は、録画の行の DB の中の形のまま写す** (`needed` が SQL で比べる)。`mediaPath` は置き場の中なら相対に直して書くが、
+     * 録画の行には置き場の中を指す絶対パスのまま入っているものがある (古い行・取り込んだ行)。読んだ値から書くと形が違い、
+     * 毎回「ファイルが変わった」と読み直して、ほかの録画に進まなくなる。行が読んだときのままかは上で確かめてある
+     */
+    tx.run(
+      sql`UPDATE ${captionIndex} SET library_path = (SELECT library_path FROM ${recordings} WHERE id = ${snapshot.id}), ts_path = (SELECT ts_path FROM ${recordings} WHERE id = ${snapshot.id}) WHERE recording_id = ${snapshot.id}`,
+    );
     return true;
   });
 }
@@ -461,20 +465,30 @@ export async function indexRecording(
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null;
+/** `timer` が動く時刻 */
+let dueAt = Infinity;
+/** 読んでいる間に `kickCaptionIndex` で頼まれた時刻 (読み終えたあとに使う) */
+let kickedAt = Infinity;
 let busy = false;
 let stopped = true;
 let abort = new AbortController();
 /** 始める時刻 (`START_DELAY`)。それより前は `kickCaptionIndex` でも始めない */
 let startsAt = 0;
 
-function schedule(ms: number): void {
-  if (timer !== null) clearTimeout(timer);
-  timer = setTimeout(() => void step(), ms);
+/** その時刻に次を見る。もっと早く見る予定があれば、そちらのまま */
+function schedule(at: number): void {
+  if (timer !== null) {
+    if (dueAt <= at) return;
+    clearTimeout(timer);
+  }
+  dueAt = at;
+  timer = setTimeout(() => void step(), Math.max(0, at - Date.now()));
   timer.unref?.();
 }
 
 async function step(): Promise<void> {
   timer = null;
+  dueAt = Infinity;
   if (busy || stopped) return;
   busy = true;
   let wait = IDLE;
@@ -505,7 +519,10 @@ async function step(): Promise<void> {
     console.error(`[caption-index] ${error}`);
   } finally {
     busy = false;
-    if (!stopped) schedule(wait);
+    if (!stopped) {
+      schedule(Math.min(Date.now() + wait, Math.max(kickedAt, Date.now())));
+      kickedAt = Infinity;
+    }
   }
 }
 
@@ -515,13 +532,20 @@ export function startCaptionIndex(): void {
   stopped = false;
   abort = new AbortController();
   startsAt = Date.now() + START_DELAY;
-  schedule(START_DELAY);
+  kickedAt = Infinity;
+  schedule(startsAt);
 }
 
-/** 読むものが増えた (エンコードし終えた) ので、待っていればすぐ次を見る */
-export function kickCaptionIndex(): void {
-  if (stopped || busy || Date.now() < startsAt) return;
-  schedule(0);
+/**
+ * 読むものが増えたので、`delay` ms 後に次を見る (読むものが無くて `IDLE` の間待っていても)。
+ * エンコードし終えた・失敗したときはすぐ、録り終えた・取り込んだときは読めるようになる `CAPTION_SETTLE` 後。
+ * 起動から `START_DELAY` の間は、その時刻まで待つ
+ */
+export function kickCaptionIndex(delay = 0): void {
+  if (stopped) return;
+  const at = Math.max(startsAt, Date.now() + delay);
+  if (busy) kickedAt = Math.min(kickedAt, at);
+  else schedule(at);
 }
 
 /** 止める (`runtime.stop`)。読んでいる ffmpeg も止める。書きかけは 1 つのトランザクションなので残らない */
@@ -530,4 +554,6 @@ export function stopCaptionIndex(): void {
   abort.abort();
   if (timer !== null) clearTimeout(timer);
   timer = null;
+  dueAt = Infinity;
+  kickedAt = Infinity;
 }
