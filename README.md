@@ -215,7 +215,7 @@ Windows のエージェントの zip にある `denpa-agent.exe` と `denpa-tray
 
 ### Privacy
 
-- The signed programs connect only to the denpa server and to the devices on the LAN that the user sets up.
+- The signed programs connect to the denpa server and to the devices on the LAN that the user sets up. The only exception is the update below.
   `denpa-agent.exe` serves the denpa server and, when the user turns on card sharing, other agents on the LAN.
   It announces itself on the LAN with mDNS so that the denpa server can find it (no pairing token or card data in the announcement).
   `denpa-tray.exe` calls only the denpa server (or the agent) on the same PC.
@@ -231,7 +231,7 @@ Windows のエージェントの zip にある `denpa-agent.exe` と `denpa-tray
   and moving from EPGStation or EDCB at the address that the user enters.
   What each service can see is in [docs/architecture.md](docs/architecture.md#端末が外へ繋ぐもの-実況のコメント) (Japanese)
 
-署名する実行ファイルが繋ぐのは、denpa のサーバと、利用者が設定した LAN の機器だけです。エージェントは、denpa のサーバが見つけられるように、mDNS で LAN にサービスを公開します (合言葉とカードの情報は入れない)。通知領域のアイコンは、メニューで更新を選んだときに install.ps1 を流し、GitHub からリリースを取得します。
+署名する実行ファイルは、通知領域のアイコンのメニューで更新を選んだときを除き、denpa のサーバと、利用者が設定した LAN の機器にだけ繋ぎます。更新を選ぶと、通知領域のアイコンが install.ps1 を流し、GitHub からリリースを取得します。エージェントは、denpa のサーバが見つけられるように、mDNS で LAN にサービスを公開します (合言葉とカードの情報は入れない)。
 denpa のサーバは、起動したときと 1 時間ごとに、新しいバージョンを確かめるために GitHub に繋ぎます。GitHub に見えるのは、サーバの IP と denpa のバージョンです。
 データ放送と Hybridcast のアプリが放送局のサーバを求めたときは、denpa のサーバが代わりに取得します (公開のアドレスだけ。名前は `1.1.1.1` と `8.8.8.8` で引く)。設定で止められます。
 ほかの外のサービス (実況のコメント、ニコニコとの連携と番組ランキングの denpa-hub、利用者が入れた Webhook への通知、利用者が設定した OpenID Connect でのログイン、利用者が入れたアドレスの EPGStation・EDCB からの引き継ぎ) は、オンにしたときだけ使います。
