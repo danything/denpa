@@ -262,7 +262,8 @@ export function pickEvent(
   );
   if (from === null || to === null) return timed[0] ?? null;
   let best: EitEvent | null = null;
-  let bestOverlap = 0;
+  // 区間に触れているだけ (重なり 0) の番組も選べるようにする。時刻を 1 回しか読めなかった短いファイルは、区間が点になる
+  let bestOverlap = -1;
   for (const event of timed) {
     const end = event.startAt + (event.duration ?? 0);
     const overlap = Math.min(end, to) - Math.max(event.startAt, from);

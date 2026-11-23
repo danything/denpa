@@ -219,6 +219,12 @@ describe("読み方", () => {
     expect(tsImport.pickEvent(events, T0, T0 + 31.5 * 60_000)?.eventId).toBe(
       11,
     );
+    // 時刻を 1 回しか読めなかった (区間が点) なら、その時刻を含む番組
+    expect(
+      tsImport.pickEvent(events, T0 + 5 * MIN, T0 + 5 * MIN)?.eventId,
+    ).toBe(11);
+    // どれにも掛からなければ選ばない
+    expect(tsImport.pickEvent(events, T0 + 60 * MIN, T0 + 61 * MIN)).toBeNull();
   });
 });
 
