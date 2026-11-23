@@ -64,7 +64,6 @@ const MIN_GAP = 2_000;
 const IDLE = 10 * 60_000;
 /** 録り終えてから読み始めるまで。録り終えたその場でエンコードを待ち行列に入れるので、その前に元の TS を読まない */
 export const CAPTION_SETTLE = 5 * 60_000;
-const SETTLE = CAPTION_SETTLE;
 /** 読めなかったときに読み直すまで (回ごとに倍にする) と、読み直す回数 */
 const RETRY = 6 * 60 * 60_000;
 const ATTEMPTS = 5;
@@ -350,14 +349,14 @@ export function writeCaptionIndex(
 }
 
 /**
- * 字幕を読む録画の条件 (`nextRecording` と `pendingCaptionIndex`)。録り終えて `SETTLE` たち、消していない、エンコードを待っていない、
+ * 字幕を読む録画の条件 (`nextRecording` と `pendingCaptionIndex`)。録り終えて `CAPTION_SETTLE` たち、消していない、エンコードを待っていない、
  * 読むファイルがあって 4K の局の元の録画 (`.mmts`) でない。そのうえで、まだ読んでいないか、読んだときとファイルの列・捨てた先頭・作り方が違うか、
  * 読み直す時刻を過ぎたもの
  */
 function needed(at: number) {
   return and(
     isNotNull(recordings.finished_at),
-    lte(recordings.finished_at, at - SETTLE),
+    lte(recordings.finished_at, at - CAPTION_SETTLE),
     isNull(recordings.deleted_at),
     sql`${activeEncodeJobId(recordings.id)} IS NULL`,
     sql`${EXPECTED} IS NOT NULL`,
