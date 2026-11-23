@@ -4,6 +4,7 @@
 
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
+  import { captionWords } from "#lib/caption-words.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import CloseLink from "#lib/components/player/CloseLink.svelte";
   import ControlBar from "#lib/components/player/ControlBar.svelte";
@@ -50,7 +51,6 @@
     subtitles,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
-  import { captionWords } from "#lib/components/player/snapshot.js";
   import SoundButton from "#lib/components/player/SoundButton.svelte";
   import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
   import { stageTap } from "#lib/components/player/stage-tap.js";

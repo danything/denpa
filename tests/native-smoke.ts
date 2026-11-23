@@ -9,6 +9,7 @@
  * - 同梱の ffmpeg で、denpa が使う経路の主なもの (.github/image-smoke.sh と同じ素材と引数) を流す。
  *   部品を Dockerfile から読んで組んでいるので、足りなければここで落ちる。4K の局の HLG を SDR に直すフィルタ (uhd.HLG_TO_SDR) も流す
  * - 同梱の ffprobe で、TS・m2ts・mkv・mp4・fMP4 (HEVC Main10・AAC・ARIB 字幕、H.264・AV1・Opus) を読めるか (tests/native-ffprobe.ts)
+ * - bun の SQLite で、録画の字幕のインデックス (FTS5) を作って引けるか (tests/native-sqlite.ts)。Mac の bun は OS の SQLite を読む (推定)
  * - GPU のエンコーダ (Windows は NVENC・QSV・AMF、Mac は VideoToolbox) が組み込まれ、denpa が渡すオプションを持つか。
  *   GPU で試せないランナーでは、試しのエンコードが全部落ちて、ソフトウェアでエンコードするか
  * - Android は MediaCodec のエンコーダ (H.264・H.265・AV1) が組み込まれ、NDK の MediaCodec で (JVM の無いプロセスから) エンコードできるか。
@@ -28,6 +29,7 @@ import { holdAwake, macPower, windowsWake } from "../src/lib/server/awake.ts";
 import { sideOutput } from "../src/lib/server/stream.ts";
 import { HLG_TO_SDR } from "../src/lib/server/uhd.ts";
 import { probeSmoke } from "./native-ffprobe.ts";
+import { sqliteSmoke } from "./native-sqlite.ts";
 
 const [root, work] = process.argv.slice(2);
 if (root === undefined || work === undefined) {
@@ -271,6 +273,9 @@ await ff(
 console.log("ffmpeg: ok");
 // ffprobe は ffmpeg と別に、読む部品だけで組んである。denpa が読む形式を、denpa と同じ引数で読めるか
 await probeSmoke(ffprobe, ff, at);
+
+// 録画の字幕のインデックス (FTS5) を、この bun の SQLite で作って引けるか
+sqliteSmoke(work);
 
 /*
  * GPU のエンコーダ。Windows のランナーに GPU は無いのでエンコードは通らない。Mac のランナーでは VideoToolbox が通る。

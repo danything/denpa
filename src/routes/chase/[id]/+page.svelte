@@ -2,6 +2,7 @@
   import { resolve } from "$app/paths";
   import { onMount, untrack } from "svelte";
 
+  import { captionWords } from "#lib/caption-words.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import CloseLink from "#lib/components/player/CloseLink.svelte";
   import ControlBar from "#lib/components/player/ControlBar.svelte";
@@ -42,11 +43,7 @@
     speedRow,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
-  import {
-    captionWords,
-    grabbedFrame,
-    videoFrame,
-  } from "#lib/components/player/snapshot.js";
+  import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
   import SoundButton from "#lib/components/player/SoundButton.svelte";
   import SpeedMenu, {
     SPEED_KEY,

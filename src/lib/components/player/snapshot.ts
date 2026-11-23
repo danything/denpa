@@ -1,5 +1,3 @@
-import type { CaptionPage, CaptionRun } from "@danything/arib/caption-text";
-
 import { CLIP_BYTES_MOST } from "#lib/clips.js";
 import type { Notice } from "#lib/components/Toasts.svelte";
 import { pad } from "#lib/format.js";
@@ -408,31 +406,6 @@ export async function clipForm(
 
 function extensionOf(blob: Blob): string {
   return blob.type === "image/jpeg" ? "jpg" : blob.type.replace("image/", "");
-}
-
-/**
- * 出している字幕の文字 (探すため)。字の並びを上から行ごとにつなぐ。ルビと外字の代わりの「〓」は落とす
- */
-export function captionWords(page: CaptionPage | null): string {
-  if (page === null) return "";
-  const lines = new Map<number, CaptionRun[]>();
-  for (const run of page.runs) {
-    if (run.ruby === true || run.drcs !== undefined) continue;
-    const line = lines.get(run.y) ?? [];
-    line.push(run);
-    lines.set(run.y, line);
-  }
-  return [...lines.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, runs]) =>
-      runs
-        .sort((a, b) => a.x - b.x)
-        .map((run) => run.text)
-        .join("")
-        .trim(),
-    )
-    .filter(Boolean)
-    .join(" ");
 }
 
 /** どこで撮ったか。サーバはこれで番組を引く (`POST /api/clips`) */

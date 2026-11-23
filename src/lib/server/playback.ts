@@ -1864,8 +1864,10 @@ export async function tsChapters(
  */
 export async function captionArgs(recording: Recording): Promise<{
   argv: string[];
-  /** 抜くファイル (エンコード済み)。元の TS から抜くときは null */
-  path: string | null;
+  /** 抜くファイル */
+  path: string;
+  /** `path` がエンコード済みか。元の TS なら false (時刻は元の TS の先頭からの秒) */
+  encoded: boolean;
 } | null> {
   const encoded = encodedFile(recording);
   const out = ["-c:s", "copy", "-f", "matroska", "pipe:1"];
@@ -1880,6 +1882,7 @@ export async function captionArgs(recording: Recording): Promise<{
         ...out,
       ],
       path: encoded,
+      encoded: true,
     };
   }
   const path = tsPathOf(recording);
@@ -1906,7 +1909,8 @@ export async function captionArgs(recording: Recording): Promise<{
       (-presented(ts.head)).toFixed(6),
       ...out,
     ],
-    path: null,
+    path: ts.path,
+    encoded: false,
   };
 }
 
