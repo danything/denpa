@@ -226,7 +226,7 @@ function pcrDelta(from: number, to: number): number {
  * 読んだ部分から結果をまとめる。PAT が読めなければ TS ではないとして null。
  *
  * **局は PAT の 1 つめ。** 2 つ以上あれば、SDT でデジタル TV と名乗り映像を持つ最初のもの、無ければ映像を持つ最初のもの
- * (全部の局を残したまま録る設定のソフトもある。ワンセグやデータ放送の局より、本の局を選ぶ)
+ * (全部の局を残したまま録る設定のソフトもある。ワンセグやデータ放送の局より、主な局を選ぶ)
  */
 function summarize(scan: TsScan, head: Region, tail: Region): TsFacts | null {
   const programs = scan.programs;

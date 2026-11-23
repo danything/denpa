@@ -2664,6 +2664,7 @@ function progressReporter(
  * **取り込んだ録画の最初のジョブか** (1 なら後ろに並べる)。ほかのソフトで録った TS をまとめて取り込むと (`ts-import.ts`)、数千本のエンコードが
  * 待ち行列に入る。id 順のままだと新しく録った録画のエンコードが何日も待たされ、その間に元の TS が `RAW_DIR` に積もって、空きが尽きると録画が失敗する。
  * 取り込んだ録画でも、人が押した再エンコードと CM の再検出 (前のジョブがある) は id 順に並べる
+ * 待っているジョブごとに録画の行 (主キー) と同じ録画の前のジョブ (`encode_jobs_recording`) を 1 回ずつ引くだけなので、数千本が待っていても重くない
  */
 const importedFirstEncode = sql`(SELECT ${recordings.imported_ts} IS NOT NULL FROM ${recordings} WHERE ${recordings.id} = ${encodeJobs.recording_id})
   AND NOT EXISTS (SELECT 1 FROM encode_jobs AS earlier WHERE earlier.recording_id = ${encodeJobs.recording_id} AND earlier.id < ${encodeJobs.id})`;

@@ -205,7 +205,8 @@ export async function boot(
     hubUrl: `http://127.0.0.1:${hubPort}`,
     rawDir: `${root}/raw`,
     encodedDir: `${root}/encoded`,
-    importDir: `${root}/import`,
+    // DB の置き場 (`root`) の外に置く。DB の置き場と重なるフォルダは取り込めない (`ts-import.resolveFolder`)
+    importDir: `${TEST_ROOT}/import-w${index}`,
     failFile: `${root}/fail-encode`,
     failEncoderFile: `${root}/fail-encoder`,
     slowFile: `${root}/slow-encode`,

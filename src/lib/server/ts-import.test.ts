@@ -42,7 +42,7 @@ const { orm } = await import("./db");
 const { encodeJobs, recordings, services } = await import("./schema");
 const tsImport = await import("./ts-import");
 const { readTsFacts } = await import("./ts-import-read");
-const { deleteRecordingFiles } = await import("./files");
+const { deleteRecordingFiles, reconcile } = await import("./files");
 const { nextQueuedJob } = await import("./encoder");
 const { scratchBase } = await import("./fsx");
 
@@ -418,5 +418,14 @@ describe("エンコード", () => {
     expect(base.startsWith(join(config.rawDir, ".import"))).toBe(true);
     const inside = join(config.rawDir, "a.m2ts");
     expect(scratchBase(inside)).toBe(inside);
+  });
+
+  test("落ちたジョブの作業ファイルは置き場の片付けが消す。元の TS には触らない", () => {
+    const source = place(join(importDir, "a.m2ts"), tsBytes());
+    const chapters = `${scratchBase(source)}.99.chapters.txt`;
+    place(chapters, "");
+    reconcile();
+    expect(existsSync(chapters)).toBe(false);
+    expect(existsSync(source)).toBe(true);
   });
 });

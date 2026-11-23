@@ -8,6 +8,8 @@
  *   (`imported_ts`)。中断しても、入れ終えたファイルから続く
  * - 番組は TS の中の SDT・EIT[p/f]・TDT/TOT から決める (`ts-import-read.ts`)。読めなければファイルの名前と更新時刻から作る
  * - 入れた録画は、ふだんの録画と同じく字幕の索引とエンコード (設定どおり。待ち行列では denpa が録ったものより後ろ。`encoder.pump`) に乗る
+ * - **元のフォルダには何も書かない。** サムネイル・データ放送の変化ログはエンコードしたもの (保存先) の隣にだけ置く。エンコードしない録画には作らない
+ *   (`recorder.finish` のように保存先へ移して作ることをしない)。エンコードの作業ファイルは `RAW_DIR/.import/` (`fsx.scratchBase`)
  */
 
 import type { Dirent } from "node:fs";
@@ -240,6 +242,8 @@ async function factsOf(
   if (cached !== undefined && cached.size === size && cached.mtime === mtime)
     return cached.facts;
   const facts = await readTsFacts(path, size);
+  // 別のフォルダを何度も指しても溜め続けない (1 回の実行で見る数を超えたら空ける)
+  if (factsCache.size >= FILE_LIMIT) factsCache.clear();
   factsCache.set(path, { size, mtime, facts });
   return facts;
 }
