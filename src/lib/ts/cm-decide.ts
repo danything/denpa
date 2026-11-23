@@ -621,7 +621,7 @@ function measure(ranges: Range[]): (t: number) => number {
  *
  * **ロゴの区間の外で、後ろが見えずに判断できなかった所 (`logoBlind`) は、長さと後ろを見て数える。** ロゴの判定はそこで
  * 直前の「消えた」を持ち越しているだけで、ロゴが無かったとは言い切れない。CM 1 本 (`UNSEEN_MAX`) より長く続く所は見えた秒に数える
- * (区間の末尾の長い所を番組に数えるのと同じ考え。CM は 15 秒ごとに映像が替わる)。それまでの所は、すぐ後ろ (`BLIND_RISE` 秒まで) で
+ * (区間の末尾の長い所を番組に数えるのと同じ考え。CM は 15 秒ごとに映像が替わる。長さは端のはみ出しを除いて測る。`blindLength`)。それまでの所は、すぐ後ろ (`BLIND_RISE` 秒まで) で
  * ロゴが出たものだけ、見えた秒にもロゴの無い秒にも数えない。白い背景のあいだに番組が戻ったかもしれないため。
  * すぐ後ろでロゴが出ない所は、持ち越した「消えた」のままロゴの無い秒に数える。前後ともロゴが無いので、CM の中の白い場面と見てよい。
  * これも数えないと、番組からロゴが消えた直後の白い CM で番組の秒にロゴの無い秒の減点が付かず、CM の先頭を番組と「CM の前の提供」に
@@ -638,7 +638,7 @@ function measure(ranges: Range[]): (t: number) => number {
  * ロゴの無い秒に数えていた頃は、録画の途中から最後まで映像が欠けた録画 (本番の TBS の 30 分で、18 分 50 秒から後ろ) で、
  * 欠けた 11 分が CM になり、半分以上が CM だとしてロゴの結果を捨てていた
  */
-function logoIndex(input: CmInput, spans: Range[]) {
+function logoIndex(input: CmInput, spans: Range[], joints: number[]) {
   const { duration } = input;
   const sorted = [...spans].sort((a, b) => a.start - b.start);
   const merged: Range[] = [];
@@ -661,12 +661,12 @@ function logoIndex(input: CmInput, spans: Range[]) {
   // 録画の先頭と末尾に入った前後の番組 (番組表の尺の外) は見えたものにしない。そこの CM は尺を問わずに外すため
   const { programStart = 0, programLength = duration } = input;
   const blindLong = intersect(
-    blind.filter((s) => s.end - s.start > UNSEEN_MAX),
+    blind.filter((s) => blindLength(s, joints) > UNSEEN_MAX),
     [{ start: programStart, end: programStart + programLength }],
   );
   const blindShort = blind.filter(
     (s) =>
-      s.end - s.start <= UNSEEN_MAX &&
+      blindLength(s, joints) <= UNSEEN_MAX &&
       merged.some(
         (m) => m.start >= s.end - 1e-6 && m.start - s.end <= BLIND_RISE,
       ),
@@ -732,6 +732,29 @@ const UNSEEN_MAX = 15 + CM_TOLERANCE;
  * 見えないまま持ち越された所の最短 (`UNSEEN_MIN`) と同じく、ロゴの判定の窓のぶん
  */
 const BLIND_RISE = UNSEEN_MIN;
+
+/**
+ * 判断できなかった所の端で、中の継ぎ目からはみ出しても長さに入れない最長 (秒)。いちばん短い告知 (5 秒) に届かないぶんは、
+ * それだけで CM 1 本にも告知にもならない
+ */
+const BLIND_SLIVER = Math.min(...SPOTS);
+
+/**
+ * **判断できなかった所が CM 1 本より長いかは、端のはみ出しを除いて測る** (`logoIndex`)。
+ * 中にある継ぎ目 (無音の切れ目。`joints`) のうち、最初の継ぎ目より前と最後の継ぎ目より後ろが `BLIND_SLIVER` 秒に届かなければ、
+ * そこは長さに入れない。CM は 15 秒より長いものもあり、終わりの白い背景の画面が CM 1 本より少し長く続くことがある。
+ * 全体の長さで測っていた頃は、ロゴが見えた秒に数えて CM を番組にしていた (本番の BS-TBS の映画で、60 秒の通販の CM の
+ * 終わりの 16.5 秒が判断できず、その 1.8 秒目に無音の切れ目があった。休みの最後の 15 秒が番組になった)
+ */
+function blindLength(span: Range, joints: number[]): number {
+  const inner = joints.filter((t) => t > span.start && t < span.end);
+  if (inner.length === 0) return span.end - span.start;
+  const first = Math.min(...inner);
+  const last = Math.max(...inner);
+  const start = first - span.start < BLIND_SLIVER ? first : span.start;
+  const end = span.end - last < BLIND_SLIVER ? last : span.end;
+  return Math.max(0, end - start);
+}
 
 /**
  * **ロゴの区間の末尾の、ロゴが見えないまま持ち越された所。** ロゴの判定 (`logo-detect.readLogo`) は、ロゴが溶けて見えない後ろ
@@ -808,7 +831,11 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
     input,
     silences,
   );
-  const index = logoIndex(input, spans);
+  const index = logoIndex(
+    input,
+    spans,
+    silences.map((b) => b.cuts[0]!),
+  );
   const nodes = candidates(input, index.merged, silences);
   const n = nodes.length;
   const fall = logoChange(input, -1);
