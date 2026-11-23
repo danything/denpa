@@ -60,6 +60,7 @@ import {
   rules,
   services,
 } from "./schema";
+import { seriesParts } from "./series-heads";
 import { parseTitle } from "./title";
 import { busy as transferBusy, BUSY_MESSAGE } from "./transfer";
 
@@ -300,7 +301,13 @@ function placement(
   file: VideoChoice,
   existing: Recording | undefined,
 ) {
-  const parsed = parseTitle(text(recorded.name));
+  /*
+   * シリーズ名は denpa で録るときと同じく学んだ先頭で切る (`series-heads.seriesParts`)。
+   * **取り込む前に学び直さない。** 先頭は denpa の番組表で学ぶので、取り込んだ直後の名前は取り込む前の先頭で決まり、
+   * あとで学んだ先頭が変わってもファイルは動かさない。「まとめて表示」は番組名から決め直すので、まとまりはそろう
+   */
+  const name = text(recorded.name);
+  const parsed = seriesParts(name, parseTitle(name).subtitle);
   /*
    * 元の TS は保存先ではなく作業領域へ置く。
    *

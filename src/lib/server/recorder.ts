@@ -35,6 +35,7 @@ import { fillTsHead, recordingSummary } from "./recording";
 import { appendRecording } from "./recording-io";
 import { duplicateAtStart } from "./rules";
 import { programs, recordings, reservations, rules, services } from "./schema";
+import { seriesParts } from "./series-heads";
 import { settings } from "./settings";
 import { chunks } from "./stream";
 import { parseTitle } from "./title";
@@ -115,13 +116,17 @@ function createRecording(reservation: Reservation): Recording {
    * なので、そのまま写すと**古い名前で保存先に並ぶ**ことがある。
    *
    * 逆に、録り終えたあとは動かさない。番組表の行は 24 時間で消えるうえ、
-   * ファイル名も画面に出す番組情報 (DB) も既に固まっている (docs/data.md)
+   * ファイル名も画面に出す番組情報 (DB) も既に固まっている (docs/data.md)。
+   *
+   * シリーズ名 (= エンコードしたものを置くフォルダ) は学んだ先頭で切る (`series-heads.seriesParts`)。
+   * 録っている間に p/f で名前が変われば切り直し (`refreshFromPf`)、**録り終えたあとは書き換えない**。
+   * あとで学んだ先頭が変わっても、置いたファイルは動かさない (「まとめて表示」は番組名から決め直す)
    */
   const name = program?.name ?? reservation.name;
   const description = program?.description ?? reservation.description;
   // 詳細 (拡張形式) は番組表にしか無い。予約の行は持っていないので program からだけ取る
   const extended = program?.extended ?? null;
-  const parsed = parseTitle(name);
+  const parsed = seriesParts(name, parseTitle(name).subtitle);
   const at = now();
 
   const { id } = orm()
@@ -283,7 +288,8 @@ function refreshFromPf(recording: Recording, event: EitEvent): void {
       .where(eq(programs.id, recording.program_id))
       .run();
   }
-  const parsed = parseTitle(text.name ?? recording.name);
+  const renamed = text.name ?? recording.name;
+  const parsed = seriesParts(renamed, parseTitle(renamed).subtitle);
   orm()
     .update(recordings)
     .set({

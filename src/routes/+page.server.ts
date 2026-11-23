@@ -35,7 +35,6 @@ import { listedServices, serviceCounts } from "#lib/server/epg.js";
 import { emit } from "#lib/server/events.js";
 import { reconcile, removeRecording } from "#lib/server/files.js";
 import { fileSize } from "#lib/server/fsx.js";
-import { seriesFolder } from "#lib/server/library.js";
 import { watchProgress } from "#lib/server/playback.js";
 import { recordingFromForm } from "#lib/server/recording.js";
 import { cancelReservation, restore } from "#lib/server/reservations.js";
@@ -51,8 +50,9 @@ import {
   services,
   TO_RECORD_STATES,
 } from "#lib/server/schema.js";
+import { seriesName } from "#lib/server/series-heads.js";
 import { settings } from "#lib/server/settings.js";
-import { parseTitle } from "#lib/server/title.js";
+import { sanitizeFileName } from "#lib/server/title.js";
 import { cmRedo, encodeSource } from "#lib/source.js";
 import { REVERSED_COOKIE, storedReversed } from "#lib/timeline.js";
 import type {
@@ -117,15 +117,14 @@ interface RecordingRow extends Recording {
 }
 
 /**
- * 「まとめて表示」の単位。**エンコードしたものを置くシリーズのフォルダと同じ名前でまとめる**
- * (`library.seriesFolder`)。見出しに出すのは削る前のシリーズ名
+ * 「まとめて表示」の単位。**番組名からシリーズ名を決め、ファイル名と同じ寄せ方 (`sanitizeFileName`) でまとめる**
+ * (`series-heads.seriesName`)。エンコードしたものを置くフォルダと同じ決め方だが、録画の列 (`recordings.series`) は見ない。
+ * 列は録ったときの名前のままなので、あとで学んだ先頭 (`ダークサイドミステリー`) で前に録った回もまとめるため。
+ * 見出しに出すのは寄せる前のシリーズ名
  */
-function seriesGroup(
-  series: string,
-  name: string,
-): { group_key: string; group_name: string } {
-  const key = seriesFolder(series, name);
-  const shown = (series === "" ? parseTitle(name).series : series).trim();
+function seriesGroup(name: string): { group_key: string; group_name: string } {
+  const shown = seriesName(name).trim();
+  const key = sanitizeFileName(shown);
   // 名前が空白だけのときはフォルダ名 (`untitled`) を出す。見出しが「N 本」だけになるため
   return { group_key: key, group_name: shown === "" ? key : shown };
 }
@@ -229,7 +228,7 @@ export function load({ url, cookies }) {
     .limit(300)
     .all()
     // まとめて表示のキー。予約はシリーズ名を持たないので、番組名から切り出す (録るときと同じ)
-    .map((row) => ({ ...row, ...seriesGroup("", row.name) }));
+    .map((row) => ({ ...row, ...seriesGroup(row.name) }));
 
   // エンコードは録画の行の状態として出す。別のカードにすると、増えるたびに一覧が下へずれる
   const res = alias(reservationTable, "res");
@@ -285,7 +284,7 @@ export function load({ url, cookies }) {
       alt_size: row.alt_path === null ? null : fileSize(row.alt_path),
       job_canceling: row.job_id !== null && isCanceling(row.job_id),
       progress: watchProgress(row),
-      ...seriesGroup(row.series, row.name),
+      ...seriesGroup(row.name),
     }));
 
   /*
@@ -323,7 +322,7 @@ export function load({ url, cookies }) {
     .limit(100)
     .all()
     // 予約はシリーズ名を持たないので、番組名から切り出す (録るときと同じ)
-    .map((row) => ({ ...row, ...seriesGroup("", row.name) }));
+    .map((row) => ({ ...row, ...seriesGroup(row.name) }));
 
   const room = capacity();
 

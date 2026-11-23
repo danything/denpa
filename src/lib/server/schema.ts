@@ -1193,6 +1193,52 @@ export const rankingWatched = sqliteTable(
 );
 
 /**
+ * **番組表で見たシリーズの控え** (`series-heads.ts`)。番組のシリーズ名を学ぶ元 (`series.learnHeads`)。
+ * 番組表の行は終わって 1 日で消え、週 1 回の番組は 9 日分に 1〜2 回しか無いので、ここに貯めてから学ぶ。
+ *
+ * - 1 行は局と名前 (`series.strictSeries`) の組。回 (番組名) ごとには持たず、回の種類は 2 で頭打ち (`titles`)。
+ *   学ぶのに要るのは「2 種類以上あるか」だけなので、毎回の番組名は残さない
+ * - `SERIES_KEEP_DAYS` 日見なかった行は消す (`series-heads.relearn`)。録画になった番組は録画の行から学ぶので、消えても残る
+ * - denpa を別の機械へ移すときの写しにも残す (局は同じ家のアンテナのもの)
+ */
+export const seriesTitles = sqliteTable(
+  "series_titles",
+  {
+    /** 局のキー (`series.stationKey`。局名を半角に寄せて空白を除いたもの) */
+    station: text("station").notNull(),
+    /** 名前 (`series.strictSeries`)。番組名の字のまま */
+    series: text("series").notNull(),
+    /** 最初に見た回のキー (`series.titleKey`)。違う回が来たら `titles` を 2 にする */
+    title: text("title").notNull(),
+    /** 見た回の種類。1 か 2 */
+    titles: integer("titles").notNull(),
+    /** ジャンルが映画だけの番組か (最後に見たもの) */
+    movie_only: flag("movie_only")
+      .notNull()
+      .default(sql`0`),
+    /** 最後に見た時刻 (unix ms) */
+    last_seen: integer("last_seen").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.station, t.series] }),
+    index("series_titles_last_seen").on(t.last_seen),
+  ],
+);
+
+/**
+ * **学んだシリーズの先頭** (`series.learnHeads` の結果)。番組名をこれで切ってシリーズ名にする (`series.splitSeries`)。
+ * 表に持つのは、起動してすぐ録り始めた録画も前と同じフォルダに入れるため (起動のたびに学び直すと、学び終えるまで違う名前になる)。
+ * 学び直して採らなくなった先頭も `SERIES_HOLD_DAYS` 日は残す (番組表の出入りで、まとまりが日によって揺れないように)。
+ * 枠と分かった先頭はすぐ消す
+ */
+export const seriesHeads = sqliteTable("series_heads", {
+  /** 先頭のキー (`series.keyOf` で寄せた切れ端をつないだもの) */
+  key: text("key").primaryKey(),
+  /** 最後に採った時刻 (unix ms) */
+  last_adopted: integer("last_adopted").notNull(),
+});
+
+/**
  * **ロゴを取得した記録** (`logo-record.ts`)。設定の「その他」の「ロゴを集めた結果を記録する」(`recordLogo`) がオンの間だけ、
  * 当たりの中継で待つたびに 1 行足す。衛星のロゴはダウンロードの期間にしか流れず、期間がいつ来るかは分からないので、
  * その来方 (間隔・長さ) を実測で知るためのもの (docs/logo.md「ロゴの取得を記録する」)。

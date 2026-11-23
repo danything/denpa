@@ -45,6 +45,7 @@ import {
   reservations,
   services,
 } from "./schema";
+import { scheduleRelearn } from "./series-heads";
 import { getChannels, programKey, serviceAbilities, serviceKey } from "./tuner";
 
 /**
@@ -979,6 +980,8 @@ export function settle(): SettleResult {
     dropped: rules.dropped,
   };
   emit("programs");
+  // 番組表が動いたので、シリーズの先頭を学び直す (ここでは待たない。`series-heads.relearn`)
+  scheduleRelearn();
   return result;
 }
 

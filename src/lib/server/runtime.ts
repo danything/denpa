@@ -33,6 +33,7 @@ import { restoreWidths } from "./restore-width";
 import { fillSatellites } from "./satellite-lineup";
 import { recheckContracts, tick } from "./scheduler";
 import { forgetRawProbe } from "./scramble";
+import { enableRelearn, reloadHeads } from "./series-heads";
 import { prune as pruneSessions } from "./session";
 import { beginDraining } from "./shutdown";
 import { redeem } from "./tickets";
@@ -152,6 +153,9 @@ export function start(): void {
     open: (connection) => attend(connection),
   });
 
+  // 学んだシリーズの先頭を読む。再開する録画も、前と同じフォルダの名前になる (`series-heads.ts`)
+  reloadHeads();
+
   const recovered = recoverOrphanedRecordings();
   const orphanedJobs = requeueOrphanedJobs();
   if (recovered.resumed > 0 || recovered.failed > 0 || orphanedJobs > 0) {
@@ -174,6 +178,9 @@ export function start(): void {
     );
     return;
   }
+
+  // 番組表を取得し終えるたびに、シリーズの先頭を学び直す (`epg.settle` → `series-heads.scheduleRelearn`)
+  enableRelearn();
 
   /*
    * 局を取り込んで、溜まっている番組表で予約を組み直す。

@@ -337,6 +337,13 @@
       "when": 1795409415562,
       "tag": "0047_caption-fts",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1795413107961,
+      "tag": "0048_series-heads",
+      "breakpoints": true
     }
   ]
 }
