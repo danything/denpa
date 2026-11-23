@@ -374,7 +374,8 @@ async function seed(): Promise<void> {
       p.start_at,
       p.end_at,
       p.audio_type,
-      library,
+      // 本番の行と同じく、置き場からの相対 (`schema.mediaPath` が書く形) で入れる
+      `${series}/${series} - ${stamp(p.start_at)}.mkv`,
       // 大きさは本物の 30 分ものくらい (AV1 で 0.6〜1.1 GB)。置いたファイルは小さい作り物
       Math.round((0.6 + ((i * 37) % 50) / 100) * 1024 ** 3),
       p.end_at + 5_000,

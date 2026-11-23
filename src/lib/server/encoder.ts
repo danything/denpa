@@ -1333,6 +1333,8 @@ function fail(
 ): void {
   markFailed(jobId, reason);
   emit("recordings");
+  // エンコードを待たなくなったので、字幕は元の TS から読める (`caption-index.ts`)
+  kickCaptionIndex();
   notify({
     event: "encode.failed",
     text: `${what}に失敗しました: ${recording.name} (${recording.service_name})`,
@@ -1356,6 +1358,7 @@ function finishCanceled(jobId: number, working: string | null): void {
     .run();
   // 録画の行は触らない。ジョブが消えれば「録画済み」に戻って見える
   emit("recordings");
+  kickCaptionIndex();
 }
 
 /** ジョブを走らせる支度。中止の合図 (`aborts`) を置いて、ジョブと録画の行を引く */
