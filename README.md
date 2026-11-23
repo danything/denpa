@@ -193,10 +193,6 @@ X などの DM での個別の対応は、[GitHub Sponsors](https://github.com/s
 
 <!-- thanks:end -->
 
-**土台にしている仕事**:
-
-- [px4-userland](https://github.com/Khronos31/px4-userland)・[siano-userland](https://github.com/Khronos31/siano-userland)・[asicen-userland](https://github.com/Khronos31/asicen-userland) (@Khronos31) が、ホストにドライバを入れずにチューナーを使う形を先に示してくれました。いまは asicen-userland を同梱しています (PX-W3U3 など。試験的)。
-
 ## Code signing policy
 
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)

@@ -1,7 +1,7 @@
 /**
  * README の謝辞のうち、`<!-- thanks:start -->` と `<!-- thanks:end -->` の間を GitHub の履歴から作り直す。
  * マージされた PR の作者を「手を入れてくれた人」、Issue と Discussion を立てた人を「報告や提案をくれた人」に並べる。
- * 印の外 (特別協賛・土台にしている仕事) は手で書く。
+ * 印の外の特別協賛は手で書く。
  *
  *     GH_TOKEN=$(gh auth token) bun run thanks
  *

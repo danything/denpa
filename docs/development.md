@@ -57,7 +57,7 @@ Issue・Discussion を立てた人を GitHub の履歴から並べたもので�
 Actions の **Thanks** (`.github/workflows/thanks.yml`) が週に 1 回回し、変わっていれば image marks と同じく
 PR を出して自分でマージします。急ぐときは Actions から手で走らせるか、手元で
 `GH_TOKEN=$(gh auth token) bun run thanks` (コンテナの中で) を回して PR にします。
-特別協賛と土台にしている仕事は印の外で、手で書きます。載せない人 (持ち主) は `EXCLUDE` にあります。
+特別協賛は印の外で、手で書きます。載せない人 (持ち主) は `EXCLUDE` にあります。
 
 ## テストの方針
 
