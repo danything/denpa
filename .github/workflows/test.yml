@@ -426,7 +426,6 @@ jobs:
         with:
           dotnet-version: "11.0.100"
 
-      # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
       # ASICEN 系の機材の子プロセス (denpa-asicen) を偽の機材で組む。libusb は IOKit の経路で中に入る (agent/asicen/build.sh)。
       # 下の単体テストが起動して、AsicenChildTests を Mac でも通す
       - name: Build denpa-asicen (mock)
@@ -435,6 +434,7 @@ jobs:
           bash agent/asicen/build.sh asicen-mock --mock
           otool -L asicen-mock/denpa-asicen
 
+      # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
       # 1 本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
       - name: Unit tests (.NET agent)
         timeout-minutes: 8

@@ -27,7 +27,7 @@
       ]
     },
     {
-      "description": "agent/asicen/build.sh の `# renovate:` 付きの変数 (`ASICEN_USERLAND_VERSION=1.0.0-beta`)。エージェントに組み込む asicen-userland のバージョン (Linux のイメージと Android のアプリ)。自動ではマージしない (下の packageRules)",
+      "description": "agent/asicen/build.sh の `# renovate:` 付きの変数 (`ASICEN_USERLAND_VERSION=1.0.0-beta`)。エージェントに組み込む asicen-userland のバージョン (Linux のイメージ、Windows と Mac のエージェントの配布物、Android のアプリ)。自動ではマージしない (下の packageRules)",
       "customType": "regex",
       "managerFilePatterns": ["/^agent/asicen/build\\.sh$/"],
       "matchStrings": [

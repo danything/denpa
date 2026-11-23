@@ -57,7 +57,7 @@ RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet
 #
 # **ファームウェアは上流の配布物に入っているものをそのまま使い** (build.sh が SHA-256 を突き合わせる)、/opt/asicen-userland/firmware/ に置く。
 # **再配布の許諾は確かめられていない。上流と同じ判断で同梱している。権利を持つ人から申し出があれば外す** (docs/licenses.md
-# 「ASICEN のファームウェアを同梱している判断」)。上流が添える通知とライセンスの文書、対応するソースの入手先 (SOURCE.txt) は
+# 「ASICEN のファームウェア」)。上流が添える通知とライセンスの文書、対応するソースの入手先 (SOURCE.txt) は
 # /opt/asicen-userland/licenses/ に置く。**子プロセスは GPL-2.0-only の別のプログラムで、エージェント (MPL-2.0) とは
 # 標準入出力で選局の要求・状態・TS だけをやりとりする** (docs/licenses.md「ASICEN の子プロセス」)
 # ---------------------------------------------------------------------------
