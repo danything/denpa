@@ -22,7 +22,7 @@ namespace Denpa.Agent;
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
 /// <item><see cref="It930xTuner"/> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など)。エージェントが USB を直に持ち、機材を初めての選局で開いたまま受信機ごとに選局し直す (It930xDevice.cs)</item>
-/// <item><see cref="AsicenTuner"/> … asicen-userland の機材 (PX-W3U3 など。試験的)。同梱のライブラリを同じプロセスから呼び、選局のたびに受信機を取り直す (AsicenTuner.cs)</item>
+/// <item><see cref="AsicenTuner"/> … asicen-userland の機材 (PX-W3U3 など。試験的)。子プロセス (denpa-asicen) が持ち、選局のたびに受信機を取り直す (AsicenTuner.cs・AsicenChild.cs)</item>
 /// <item><see cref="SianoTuner"/> … Siano の機材 (PX-S1UD などをカーネルに使わせていないとき)。エージェントが USB を直に持ち、機材を開いたまま選局のメッセージを送り直す (Siano.cs)</item>
 /// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
 /// <item><see cref="Dt295NativeTuner"/> … PIXELA PIX-DT295。エージェントが USB を直に持ち、機材を初めての選局で開いたまま選局し直す (Dt295NativeTuner.cs)</item>
@@ -144,6 +144,15 @@ internal static unsafe partial class Sys
 
     /// <summary>close-on-exec を付けた複製 (<c>fcntl(F_DUPFD_CLOEXEC)</c>)。失敗は負</summary>
     public static int DupCloseOnExec(int fd) => Fcntl(fd, DupFdCloseOnExec, 0);
+
+    /// <summary>F_DUPFD (Linux)</summary>
+    private const int DupFd = 0;
+
+    /// <summary>
+    /// close-on-exec を付けない複製 (<c>fcntl(F_DUPFD)</c>。標準入出力の 0〜2 は避ける)。子プロセスに継がせる fd に使う
+    /// (<see cref="InheritedFds"/>)。失敗は負
+    /// </summary>
+    public static int DupInheritable(int fd) => Fcntl(fd, DupFd, 3);
 
     [LibraryImport("libc", EntryPoint = "poll", SetLastError = true)]
     public static partial int Poll(byte* fds, nuint count, int timeout);

@@ -1,8 +1,0 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
-/* libdenpa_asicen.so が出すシンボル。denpa_asicen.h の関数だけ */
-{
-    global:
-        denpa_asicen_*;
-    local:
-        *;
-};

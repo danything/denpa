@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * denpa のチューナーエージェントが同じプロセスから呼ぶ asicen-userland の入口 (C の関数だけ)。
+ * 子プロセス denpa-asicen (main.cpp) の中で使う asicen-userland の入口 (C の関数だけ)。エージェントからは呼ばない。
  *
  * asicen-userland (https://github.com/Khronos31/asicen-userland。GPL-2.0) の部品を、上流のデーモン (asicend) と
  * 同じ組み方でつなぎ、ソケットの代わりに関数で出す。上流にライブラリの API (L3) はまだ無いので、ここで包む。
@@ -9,8 +9,7 @@
  * 決まり:
  * - 戻り値の int は 0 が成功、それ以外は dtv-userland-core の Error の番号 (TIMEOUT 6、USB_IO 7、DISCONNECTED 8 など)。
  *   名前は denpa_asicen_error_name で引く
- * - ABI は DENPA_ASICEN_ABI で見分ける。関数や意味を変えたら上げる (呼ぶ側は合わなければ使わない)
- * - 同じストリームの read と stop を同時に呼ばない (呼ぶ側の決まり)。ほかの組み合わせは同時に呼んでよい
+ * - 同じストリームの read と stop を同時に呼ばない (main.cpp は選局ごとのスレッドで読んで止める)。ほかの組み合わせは同時に呼んでよい
  */
 #ifndef DENPA_ASICEN_H
 #define DENPA_ASICEN_H
@@ -22,11 +21,7 @@
 extern "C" {
 #endif
 
-#if defined(__GNUC__)
-#define DENPA_ASICEN_API __attribute__((visibility("default")))
-#else
 #define DENPA_ASICEN_API
-#endif
 
 #define DENPA_ASICEN_ABI 1
 

@@ -15,7 +15,7 @@
 #   アプリがそこに繋いで synced を送る
 # - denpa と同じ手順で組み (POST /denpa/pair)、/denpa/about (os が android)・/denpa/tuners (0 台)・/denpa/card が答える
 # - アプリの LocalSocket から、ファイルの fd を付けた attached を送ると、エージェントが fd ごと受け取る (setFileDescriptorsForSend と 1 回の write)
-# - エージェントが APK の asicen-userland のライブラリ (libdenpa_asicen.so) を読み込み、ファームウェア待ちの ID の fd の複製をライブラリに渡す
+# - エージェントが APK の ASICEN の子プロセス (libdenpa_asicen.so。中身は denpa-asicen) を起動でき (--version)、ファームウェア待ちの ID の fd を子プロセスの --fd に継がせる
 # - denpa 本体 (bun。libbun.so) がアプリの子プロセスとして untrusted_app で動き、APK の assets/server.zip を書き出して 3000 番で答える
 #   (/api/health・画面・字・デコーダ)。エージェントは全部のインターフェースで待ち受け (別の機械の denpa も組める)、denpa は 127.0.0.1 からアプリが作った合言葉で組んで、設定の「受信」の
 #   「チューナー」の一覧 (0 台) を読める
@@ -183,11 +183,11 @@ if grep -qF "fd の付いていない attached" "$host/agent-log.txt"; then
   exit 1
 fi
 
-# --- asicen-userland。エージェントが APK のライブラリ (libdenpa_asicen.so) を同じプロセスに読み込める (起動したときに記録に出す)。
-# ファームウェア待ちの ID (1738:5211) でファイルの fd を送ると、エージェントが fd の複製をライブラリに渡して開こうとする。
-# ライブラリは、渡した fd が usbfs でなければ USB_IO で断る (渡していなければ INVALID_ARGUMENT)
+# --- asicen-userland。ASICEN の子プロセス (denpa-asicen) はエージェントの子プロセス (untrusted_app) で起動できる (起動したときに --version を確かめて記録に出す)。
+# ファームウェア待ちの ID (1738:5211) でファイルの fd を送ると、エージェントが fd を継がせて子プロセスを --fd で起動する。
+# 子プロセスは、継いだ fd が usbfs でなければ USB_IO で断る (継いでいなければ INVALID_ARGUMENT)
 echo "=== asicen-userland"
-wait_log "asicen-userland: 1.0.0 を読み込みました"
+wait_log "asicen-userland: 1.0.0 の子プロセスを使います"
 adb shell run-as "$pkg" ls -l files/asicen/asicen-loader.bin | tr -d '\r' | tee "$logs/asicen.txt"
 grep -qE ' 16384 ' "$logs/asicen.txt"
 broadcast ATTACH_FILE --ei vendor 5944 --ei product 21009
@@ -195,9 +195,13 @@ wait_log "アプリから USB の機材を受け取りました: 001-004 (1738:5
 wait_log "にファームウェアを流し込めません"
 adb logcat -d -s denpa-agent | tr -d '\r' | grep -F "にファームウェアを流し込めません" | tee -a "$logs/asicen.txt"
 grep -qF "file descriptor model: USB_IO" "$logs/asicen.txt"
-# SELinux の拒否は記録に残す。API 36 では、/dev/bus/usb の一覧を読むことと、普通のファイルへの usbfs の ioctl が断られる
-# (一覧を読めなくてもライブラリは fd を使うところまで進む。実機の usbfs の fd への ioctl は確かめていない)
-adb logcat -d | tr -d '\r' | grep -E 'avc: +denied' | grep -F 'denpa' | tee "$logs/asicen-avc.txt" || true
+# 子プロセスの SELinux の拒否は記録に残す。API 36 では、/dev/bus/usb の一覧を読むことと、普通のファイルへの usbfs の ioctl が断られる
+# (一覧を読めなくても子プロセスは fd を使うところまで進む。実機の usbfs の fd への ioctl は確かめていない)。実行そのものを断られたら止める
+adb logcat -d | tr -d '\r' | grep -E 'avc: +denied' | grep -F 'libdenpa_asicen' | tee "$logs/asicen-avc.txt" || true
+if grep -qE '\{ (execute|execute_no_trans) \}' "$logs/asicen-avc.txt"; then
+  echo "SELinux が denpa-asicen の実行を断りました" >&2
+  exit 1
+fi
 
 # --- denpa 本体。常駐サービスが APK の assets/server.zip を書き出し、bun をアプリの子プロセス (untrusted_app) で起動する。
 # denpa はエージェントと 127.0.0.1 で、アプリが作った合言葉で組む。adb forward は端末のループバックに繋ぐので、denpa.env の既定の TRUSTED_NETWORKS で通る

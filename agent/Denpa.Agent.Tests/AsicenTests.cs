@@ -3,14 +3,17 @@ using TUnit.Core.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * asicen-userland の機材 (Asicen.cs / AsicenNative.cs / AsicenTuner.cs)。
+ * asicen-userland の機材 (Asicen.cs / AsicenChild.cs / AsicenTuner.cs)。
  *
  * 機材は無い。AsicenTests は機材の見つけ方 (一覧の JSON の読み方、筐体の名前、開く引数) を確かめる。
- * AsicenNativeTests は、偽の機材で組んだライブラリ (agent/asicen/build.sh --mock。ASICEN_LIBRARY で渡す) を読み込み、
- * 選局から TS を受け取って止めるまでを通す。エンジンと HardwareStreamService は本物で、USB の部分だけが偽物。
+ * AsicenChildTests は、偽の機材で組んだ子プロセス (agent/asicen/build.sh --mock。ASICEN_CHILD で渡す) を起動し、
+ * 選局から TS を受け取って止めるまでと、子プロセスが落ちたときを通す。エンジンと HardwareStreamService は本物で、USB の部分だけが偽物。
  */
 public class AsicenTests
 {
+    /// <summary>テストで置く空のファームウェアの SHA-256 (本物の中身は持たない)</summary>
+    private const string EmptySha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
     /// <summary>
     /// 機材をつないだときの一覧の JSON。**観察したものではない。** dtv-userland-core の docs/json-discovery.md の例の形式で組んだ
     /// </summary>
@@ -111,7 +114,7 @@ public class AsicenTests
     }
 
     [Test]
-    public async Task sysfs_からファームウェア待ちの機材を見つけてライブラリに渡す組にまとめる()
+    public async Task sysfs_からファームウェア待ちの機材を見つけて子プロセスに渡す組にまとめる()
     {
         var root = Directory.CreateTempSubdirectory("sysfs");
         try
@@ -146,18 +149,22 @@ public class AsicenTests
             var w3u3 = new AsicenUserland.Enclosure("1-2", "PX-W3U3", ["1-2.1", "1-2.2"], []);
             var s3u2 = new AsicenUserland.Enclosure("1-3", "PX-S3U2", ["1-3"], []);
 
-            var selected = AsicenEnclosure.Hardware("1-2", firmware, () => [w3u3, s3u2]);
+            var selected = AsicenEnclosure.Hardware("1-2", firmware, () => [w3u3, s3u2], null, EmptySha256);
             await Assert.That(selected.Args)
                 .IsEquivalentTo(new[] { "--device", "usb:1-2.1,1-2.2", "--firmware", firmware, "--allow-lnb-power" });
             await Assert.That(selected.AllowLnb).IsTrue();
             // PX-S3U2 は上流が給電の制御を未解明としているので許可しない
-            await Assert.That(AsicenEnclosure.Hardware("1-3", firmware, () => [w3u3, s3u2]).Args)
+            await Assert.That(AsicenEnclosure.Hardware("1-3", firmware, () => [w3u3, s3u2], null, EmptySha256).Args)
                 .IsEquivalentTo(new[] { "--device", "usb:1-3", "--firmware", firmware });
 
-            var gone = Assert.Throws<IOException>(() => AsicenEnclosure.Hardware("9-9", firmware, () => [w3u3]));
+            var gone = Assert.Throws<IOException>(() => AsicenEnclosure.Hardware("9-9", firmware, () => [w3u3], null, EmptySha256));
             await Assert.That(gone!.Message).Contains("見つかりません");
-            var missing = Assert.Throws<IOException>(() => AsicenEnclosure.Hardware("1-2", firmware + ".none", () => [w3u3]));
+            var missing = Assert.Throws<IOException>(() => AsicenEnclosure.Hardware("1-2", firmware + ".none", () => [w3u3], null, EmptySha256));
             await Assert.That(missing!.Message).Contains("ファームウェアがありません");
+            // 置いたファイルが確かめたものと違えば開かない
+            File.WriteAllBytes(firmware, [1, 2, 3]);
+            var wrong = Assert.Throws<IOException>(() => AsicenEnclosure.Hardware("1-2", firmware, () => [w3u3], null, EmptySha256));
+            await Assert.That(wrong!.Message).Contains("確かめたファームウェアと違います");
         }
         finally
         {
@@ -176,19 +183,19 @@ public class AsicenTests
             using var file = File.OpenHandle(firmware);
             var fd = (int)file.DangerousGetHandle();
             var w3u3 = new AsicenUserland.Enclosure("1-2", "PX-W3U3", ["1-2.1", "1-2.2"], []);
-            var borrowed = new List<string>();
-            BorrowedFds Borrow(IReadOnlyList<string> ports)
+            var lent = new List<string>();
+            InheritedFds Lend(IReadOnlyList<string> ports)
             {
-                borrowed.AddRange(ports);
-                return BorrowedFds.Duplicate([.. ports.Select(port => (fd, port))]);
+                lent.AddRange(ports);
+                return InheritedFds.Duplicate([.. ports.Select(port => (fd, port))]);
             }
 
-            var selection = AsicenEnclosure.Hardware("1-2", firmware, () => [w3u3], Borrow);
-            // 複製を作るのは開く直前。選んだだけでは作らない
-            await Assert.That(borrowed).IsEmpty();
+            var selection = AsicenEnclosure.Hardware("1-2", firmware, () => [w3u3], Lend, EmptySha256);
+            // 複製を作るのは起動する直前。選んだだけでは作らない
+            await Assert.That(lent).IsEmpty();
             await Assert.That(selection.Args).IsEquivalentTo(new[] { "--firmware", firmware, "--allow-lnb-power" });
-            using var fds = selection.Borrow!();
-            await Assert.That(borrowed).IsEquivalentTo(new[] { "1-2.1", "1-2.2" });
+            using var fds = selection.Lend!();
+            await Assert.That(lent).IsEquivalentTo(new[] { "1-2.1", "1-2.2" });
             await Assert.That(fds.Numbers.Count).IsEqualTo(2);
             await Assert.That(fds.Numbers.All(number => number != fd)).IsTrue();
             var (first, second) = (fds.Numbers[0].ToString(), fds.Numbers[1].ToString());
@@ -242,37 +249,36 @@ public class AsicenTests
     }
 
     [Test]
-    public async Task ライブラリが無ければ何も挙げない()
+    public async Task 子プロセスが無ければ何も挙げない()
     {
-        if (Environment.GetEnvironmentVariable("ASICEN_LIBRARY") is not null) return;
+        if (Environment.GetEnvironmentVariable("ASICEN_CHILD") is not null) return;
         await Assert.That(AsicenUserland.Installed).IsFalse();
-        await Assert.That(AsicenNative.Problem).IsNotNull();
+        await Assert.That(AsicenChild.Problem).IsNotNull();
         await Assert.That(AsicenUserland.Detect()).IsEmpty();
     }
 }
 
 /// <summary>
-/// 偽の機材で組んだライブラリ (<c>agent/asicen/build.sh --mock</c>) を読み込んで通す。**ASICEN_LIBRARY に組んだものがあるときだけ**
-/// (CI の agent-asicen-mock、または手元のコンテナ)。偽の TS は CC を進めた null パケット。**偽の機材は実機ではない。**
+/// 偽の機材で組んだ子プロセス (<c>agent/asicen/build.sh --mock</c>) を起動して通す。**ASICEN_CHILD に組んだものがあるときだけ**
+/// (CI の agent-asicen-mock・agent-windows・agent-macos、または手元のコンテナ)。偽の TS は CC を進めた null パケット。**偽の機材は実機ではない。**
 /// </summary>
-[RunOn(OS.Linux)]
 [Timeout(120_000)]
-public class AsicenNativeTests
+public class AsicenChildTests
 {
     /// <summary>指してあるのに読めなければ失敗にする (CI で気づかないまま飛ばさない)</summary>
     private static bool Ready()
     {
-        if (Environment.GetEnvironmentVariable("ASICEN_LIBRARY") is null)
+        if (Environment.GetEnvironmentVariable("ASICEN_CHILD") is null)
         {
-            Skip.Test("ASICEN_LIBRARY が指されていません");
+            Skip.Test("ASICEN_CHILD が指されていません");
             return false;
         }
-        if (!AsicenNative.Available) throw new InvalidOperationException(AsicenNative.Problem);
+        if (!AsicenChild.Available) throw new InvalidOperationException(AsicenChild.Problem);
         return true;
     }
 
     private static AsicenEnclosure Mock(string id, int receivers = 4) =>
-        new(id, () => new([]), _ => AsicenNative.OpenMock(receivers));
+        new(id, () => new([]), _ => AsicenChild.OpenMock($"asicen {id}", receivers));
 
     private static async Task Stream(AsicenTuner tuner, string channel, CancellationToken cancel)
     {
@@ -285,12 +291,18 @@ public class AsicenNativeTests
     }
 
     [Test]
-    public async Task 読み込んで_ABI_と上流のバージョンを確かめる()
+    public async Task 起動してプロトコルと上流のバージョンを確かめる()
     {
         if (!Ready()) return;
         await Assert.That(AsicenUserland.Installed).IsTrue();
-        await Assert.That(AsicenNative.ErrorName(AsicenNative.Timeout)).IsEqualTo("TIMEOUT");
-        await Assert.That(AsicenNative.ErrorName(AsicenNative.Loaded)).IsEqualTo("LOADED");
+        await Assert.That(AsicenChild.ErrorName(AsicenChild.Timeout)).IsEqualTo("TIMEOUT");
+    }
+
+    [Test]
+    public async Task 機材が無ければ並べた一覧は空()
+    {
+        if (!Ready()) return;
+        await Assert.That(AsicenUserland.ParseDiscovery(AsicenChild.ListJson(), _ => { })).IsEmpty();
     }
 
     [Test]
@@ -323,7 +335,7 @@ public class AsicenNativeTests
     }
 
     [Test]
-    public async Task 受信機と方式が合わなければライブラリに渡す前に断る()
+    public async Task 受信機と方式が合わなければ子プロセスに渡す前に断る()
     {
         if (!Ready()) return;
         var enclosure = Mock("8-2");
@@ -405,7 +417,7 @@ public class AsicenNativeTests
         var enclosure = new AsicenEnclosure("8-4", () => new([]), _ =>
         {
             Interlocked.Increment(ref opened);
-            return AsicenNative.OpenMock(1);
+            return AsicenChild.OpenMock("asicen 8-4", 1);
         });
         try
         {
@@ -413,6 +425,47 @@ public class AsicenNativeTests
             await Stream(tuner, "T27", cancel);
             enclosure.MarkLost();
             await Stream(tuner, "BS15:16625", cancel);
+            await Assert.That(opened).IsEqualTo(2);
+        }
+        finally
+        {
+            enclosure.Close();
+        }
+    }
+
+    [Test]
+    public async Task 子プロセスが落ちたら_TS_が終わり_次の選局で起動し直す(CancellationToken cancel)
+    {
+        if (!Ready()) return;
+        AsicenChild? last = null;
+        var opened = 0;
+        var enclosure = new AsicenEnclosure("8-5", () => new([]), _ =>
+        {
+            Interlocked.Increment(ref opened);
+            return last = AsicenChild.OpenMock("asicen 8-5", 1);
+        });
+        try
+        {
+            using var tuner = new AsicenTuner(enclosure, 0, null);
+            await Stream(tuner, "T27", cancel);
+            last!.Kill();
+            // 読み出し側には終わりが届く (エージェントは落ちない)
+            var buffer = new byte[188 * 1024];
+            await Task.Run(() =>
+            {
+                try
+                {
+                    while (tuner.Output.Read(buffer) > 0)
+                    {
+                    }
+                }
+                catch (IOException)
+                {
+                }
+            }, cancel).WaitAsync(TimeSpan.FromSeconds(15), cancel);
+            await Assert.That(tuner.Tuned).IsFalse();
+            await Assert.That(enclosure.Opened).IsFalse();
+            await Stream(tuner, "T28", cancel);
             await Assert.That(opened).IsEqualTo(2);
         }
         finally

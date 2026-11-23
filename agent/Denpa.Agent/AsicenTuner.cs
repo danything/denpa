@@ -4,16 +4,16 @@ using System.IO.Pipelines;
 namespace Denpa.Agent;
 
 /// <summary>
-/// asicen-userland の受信機 1 つ (<see cref="AsicenNative"/>)。**試験的。実機では確かめていない。**
+/// asicen-userland の受信機 1 つ (子プロセスの denpa-asicen。<see cref="AsicenChild"/>)。**試験的。実機では確かめていない。**
 ///
 /// <para>
-/// 選局のたびに、受信機を取り・選局して同期を待ち・TS を流し始める (ライブラリの <c>denpa_asicen_tune</c> が 1 度で行う)。
+/// 選局のたびに、受信機を取り・選局して同期を待ち・TS を流し始める (子プロセスへの <c>tune</c> の命令 1 つで)。
 /// 局を替えるときは、流れを止めて受信機を返してから取り直す (<c>denpa_asicen_stop</c>)。
 /// </para>
 ///
 /// <para>
 /// LNB の給電は、選局の要求に 15 V を載せる。載せるのは設定に 15V と書いてあり、上流が給電に対応としている機種
-/// (PX-W3U2・PX-W3U3・PX-W3U3 V2) の衛星の選局のときだけ。受信機ごとの要求はライブラリが数え、最後の受信機が返したら切る。
+/// (PX-W3U2・PX-W3U3・PX-W3U3 V2) の衛星の選局のときだけ。受信機ごとの要求は子プロセスの中のエンジンが数え、最後の受信機が返したら切る。
 /// </para>
 /// </summary>
 /// <param name="name">設定のチューナーの名前。無ければ機種名の代わりに「ASICEN の機材」と付ける (機種は開くまで分からない)</param>
@@ -41,11 +41,11 @@ internal sealed class AsicenTuner(AsicenEnclosure enclosure, int receiver, strin
         }
     }
 
-    /// <summary>同期しているかだけ。**C/N は取れない** (ライブラリが出さない)</summary>
+    /// <summary>同期しているかだけ。**C/N は取れない** (子プロセスが出さない)</summary>
     public TunerSignal? Signal() =>
         Volatile.Read(ref _stream) is { Ended: false } ? new TunerSignal(true, null, TunerSignal.Db, AtTune: true) : null;
 
-    /// <summary>ライブラリに渡す周波数 (Hz)。選局表は地上波が Hz、衛星が中間周波数の kHz なので、衛星は 1000 倍する</summary>
+    /// <summary>子プロセスに渡す周波数 (Hz)。選局表は地上波が Hz、衛星が中間周波数の kHz なので、衛星は 1000 倍する</summary>
     internal static ulong FrequencyHz(ChannelTable.Tuning tuning) => tuning.Satellite ? (ulong)tuning.Frequency * 1000 : tuning.Frequency;
 
     /// <summary>衛星の選び方。名前に TSID があれば TSID で、無ければ (NIT を読むための選局と CS) スロット 0 で選ぶ。地上波はどちらも使わない (0xffff)</summary>
@@ -59,15 +59,15 @@ internal sealed class AsicenTuner(AsicenEnclosure enclosure, int receiver, strin
         lock (_gate)
         {
             Finish();
-            nint stream;
+            AsicenChannel stream;
             try
             {
-                stream = enclosure.Use((handle, listed) =>
+                stream = enclosure.Use((child, listed) =>
                 {
                     AsicenReceiver.Check(listed.Receivers, receiver, tuning);
                     var (tsid, slot) = Selection(tuning);
-                    return AsicenNative.Tune(
-                        handle, receiver, tuning.Satellite ? AsicenNative.IsdbS : AsicenNative.IsdbT, FrequencyHz(tuning),
+                    return child.Tune(
+                        receiver, tuning.Satellite ? AsicenChild.IsdbS : AsicenChild.IsdbT, FrequencyHz(tuning),
                         tsid, slot, Voltage(listed, tuning), (uint)TuneTimeout.TotalMilliseconds);
                 });
             }
@@ -84,9 +84,10 @@ internal sealed class AsicenTuner(AsicenEnclosure enclosure, int receiver, strin
     /// <summary>選局の失敗をこちらの言い方に</summary>
     private string Reason(AsicenError error) => error.Code switch
     {
-        AsicenNative.Timeout => ITuneDevice.SyncFailed,
-        AsicenNative.Busy => $"受信機 {receiver} はほかの選局が使っています (BUSY)",
-        AsicenNative.Unsupported or AsicenNative.InvalidArgument => $"受信機 {receiver} ではこの選局を受けられません ({error.Message})",
+        AsicenChild.Timeout => ITuneDevice.SyncFailed,
+        AsicenChild.ChildExited => $"denpa-asicen が終了しました。次の選局で起動し直します ({error.Message})",
+        AsicenChild.Busy => $"受信機 {receiver} はほかの選局が使っています (BUSY)",
+        AsicenChild.Unsupported or AsicenChild.InvalidArgument => $"受信機 {receiver} ではこの選局を受けられません ({error.Message})",
         _ => $"選局できません ({error.Message})",
     };
 
@@ -121,11 +122,11 @@ internal sealed class AsicenTuner(AsicenEnclosure enclosure, int receiver, strin
 }
 
 /// <summary>
-/// ライブラリから TS を受け取る 1 回ぶん (選局 1 回につき 1 つ)。
+/// 子プロセスから TS を受け取る 1 回ぶん (選局 1 回につき 1 つ)。
 ///
 /// <para>
-/// 読み取りのスレッドがライブラリから読み (待つのは 200 ms ずつ)、<see cref="Pipe"/> に詰める (CECH-ZD1 J の <c>Zd1jStream</c> と同じく Pipelines)。
-/// **止めるときは、読み取りのスレッドが抜けてから <c>denpa_asicen_stop</c> を呼ぶ** (同じストリームの読みと停止を同時に呼ばない決まり)。
+/// 読み取りのスレッドが子プロセスから届いた TS (<see cref="AsicenChannel"/>) を読み (待つのは 200 ms ずつ)、<see cref="Pipe"/> に詰める (CECH-ZD1 J の <c>Zd1jStream</c> と同じく Pipelines)。
+/// 止めるときは子プロセスに <c>stop</c> を送り、受信機を返し終えるのを待つ。
 /// </para>
 /// </summary>
 internal sealed class AsicenStream
@@ -136,7 +137,7 @@ internal sealed class AsicenStream
     /// <summary>1 回に読む上限 (188 の倍数)</summary>
     private const int Chunk = 188 * 1024;
 
-    private readonly nint _stream;
+    private readonly AsicenChannel _stream;
     private readonly string _name;
     private readonly Action _lost;
     private readonly ManualResetEventSlim _first = new();
@@ -152,7 +153,7 @@ internal sealed class AsicenStream
 
     public bool Ended => _ended;
 
-    private AsicenStream(nint stream, string name, Action lost)
+    private AsicenStream(AsicenChannel stream, string name, Action lost)
     {
         _stream = stream;
         _name = name;
@@ -162,7 +163,7 @@ internal sealed class AsicenStream
     }
 
     /// <summary>読み始め、最初の TS が来るまで待つ。来なければ止めて IOException</summary>
-    public static AsicenStream Start(nint stream, string name, Action lost, TimeSpan firstTs)
+    public static AsicenStream Start(AsicenChannel stream, string name, Action lost, TimeSpan firstTs)
     {
         var started = new AsicenStream(stream, name, lost);
         started._pump.Start();
@@ -188,7 +189,7 @@ internal sealed class AsicenStream
             var heard = Stopwatch.StartNew();
             while (!_stopped)
             {
-                var (length, ended, terminal) = AsicenNative.Read(_stream, writer.GetSpan(Chunk)[..Chunk], 200);
+                var (length, ended, terminal) = _stream.Read(writer.GetSpan(Chunk)[..Chunk], 200);
                 if (length > 0)
                 {
                     writer.Advance(length);
@@ -199,9 +200,9 @@ internal sealed class AsicenStream
                 }
                 if (ended)
                 {
-                    // 抜けた・USB の読み書きに失敗した筐体は、次に要ったときに開き直す
-                    if (terminal is 2 or 6) _lost();
-                    End($"TS が止まりました ({AsicenNative.Terminal(terminal)})");
+                    // 抜けた・USB の読み書きに失敗した・子プロセスが終わった筐体は、次に要ったときに開き直す
+                    if (terminal is 2 or 6 or AsicenChild.ChildExited) _lost();
+                    End($"TS が止まりました ({AsicenChild.Terminal(terminal)})");
                     return;
                 }
                 if (length == 0 && heard.Elapsed >= SilenceLimit)
@@ -235,19 +236,15 @@ internal sealed class AsicenStream
         Log.Write($"[{_name}] {reason}");
     }
 
-    /// <summary>止めて、受信機を返す。読み取りのスレッドが抜けるのを待ってから、ライブラリのストリームを解放する</summary>
+    /// <summary>止めて、受信機を返す。読み取りのスレッドが抜けるのを待ってから、子プロセスに止める命令を送る</summary>
     public void Stop()
     {
         _stopped = true;
         ChildTs.Close(Output, () =>
         {
-            // 読みの待ちは 200 ms ずつなので、すぐに抜ける。抜けなければ解放しない (読んでいる途中のストリームを解放しない)
-            if (!_pump.Join(TimeSpan.FromSeconds(5)))
-            {
-                Log.Write($"[{_name}] TS の読み取りが止まらないので、受信機を返さずに残します");
-                return;
-            }
-            if (Interlocked.Exchange(ref _released, 1) == 0) AsicenNative.Stop(_stream);
+            // 読みの待ちは 200 ms ずつなので、すぐに抜ける
+            if (!_pump.Join(TimeSpan.FromSeconds(5))) Log.Write($"[{_name}] TS の読み取りが 5 秒で止まりません");
+            if (Interlocked.Exchange(ref _released, 1) == 0) _stream.Stop();
             _first.Dispose();
         });
         _ended = true;

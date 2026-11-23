@@ -174,8 +174,10 @@ jobs:
       - name: Conformance
         run: bun run test:conformance
 
-  # asicen-userland (PX-W3U3 など。試験的) を組み込んだライブラリを、偽の機材で組んで読み込む (AsicenNativeTests。機材にもファームウェアにも触らない)。
-  # 偽の機材は上流の模擬 (MockTunerBackend) で、エンジンと HardwareStreamService は本物。組み方と上流のバージョンは agent/asicen/build.sh。
+  # ASICEN 系の機材 (PX-W3U3 など。試験的) の子プロセス (denpa-asicen) を偽の機材で組んで起動し、選局から TS を受け取って止めるまでと、
+  # 子プロセスが落ちたときを通す (AsicenChildTests。機材にもファームウェアにも触らない)。偽の機材は上流の模擬 (MockTunerBackend) で、
+  # エンジンと HardwareStreamService は本物。組み方と上流のバージョンは agent/asicen/build.sh。
+  # Windows 向けの子プロセスもここで (Linux から llvm-mingw で) 組み、agent-asicen-windows が Windows で起動して通す。
   # main の ruleset の必須チェックに入っている。上流のアーカイブの取得とビルドで揺れることがある
   agent-asicen-mock:
     runs-on: ubuntu-latest
@@ -183,18 +185,56 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Build libdenpa_asicen.so (mock)
+      - name: Build denpa-asicen (mock)
         run: |
           sudo apt-get update && sudo apt-get install --no-install-recommends -y cmake ninja-build g++ make
           bash agent/asicen/build.sh asicen-mock --mock
+          bash agent/asicen/build.sh asicen-mock-windows --mock --windows
+
+      - name: Upload denpa-asicen.exe (mock)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-asicen-mock-windows
+          path: asicen-mock-windows/denpa-asicen.exe
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Set up .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "11.0.100"
 
-      - name: Unit tests (.NET agent, asicen-userland mock)
-        run: ASICEN_LIBRARY="$PWD/asicen-mock/libdenpa_asicen.so" dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --treenode-filter '/*/*/AsicenNativeTests/*'
+      - name: Unit tests (.NET agent, denpa-asicen mock)
+        run: ASICEN_CHILD="$PWD/asicen-mock/denpa-asicen" dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --treenode-filter '/*/*/AsicenChildTests/*'
+
+  # 上で組んだ Windows 向けの子プロセス (偽の機材) を Windows で起動し、AsicenChildTests を通す
+  # (標準入出力のバイナリのやりとり・止め方・落ちたときの扱いが Windows でも同じに動くこと)
+  agent-asicen-windows:
+    needs: [changes, agent-asicen-mock]
+    if: ${{ !cancelled() && needs.changes.outputs.windows != 'false' && needs.agent-asicen-mock.result == 'success' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download denpa-asicen.exe (mock)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-asicen-mock-windows
+          path: asicen-mock
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "11.0.100"
+
+      - name: Unit tests (.NET agent, denpa-asicen mock)
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $env:ASICEN_CHILD = "$PWD\asicen-mock\denpa-asicen.exe"
+          dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --treenode-filter '/*/*/AsicenChildTests/*'
 
   # 入れ方 (install.sh) を Linux で通しで。compose.prod.yml を置いて、本物のイメージを引いて起こし、
   # denpa が答えるまで。最後に外す。main の ruleset の必須チェックに入っている (イメージを引くので、
@@ -387,10 +427,18 @@ jobs:
           dotnet-version: "11.0.100"
 
       # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
+      # ASICEN 系の機材の子プロセス (denpa-asicen) を偽の機材で組む。libusb は IOKit の経路で中に入る (agent/asicen/build.sh)。
+      # 下の単体テストが起動して、AsicenChildTests を Mac でも通す
+      - name: Build denpa-asicen (mock)
+        run: |
+          command -v ninja > /dev/null || brew install ninja > /dev/null
+          bash agent/asicen/build.sh asicen-mock --mock
+          otool -L asicen-mock/denpa-asicen
+
       # 1 本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
       - name: Unit tests (.NET agent)
         timeout-minutes: 8
-        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
+        run: ASICEN_CHILD="$PWD/asicen-mock/denpa-asicen" dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
 
       # 署名は ad-hoc (`codesign -s -`。リリースと同じ。curl で取ったものには隔離の印が付かないので、Developer ID は要らない)
       - name: Publish (Native AOT, osx-arm64)

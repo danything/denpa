@@ -7,13 +7,13 @@ name: Android
 # 1. OpenSSL を NDK で静的ライブラリに組む (.github/openssl-android.sh)。**組んだものは actions/cache に置き、バージョン・組み方・NDK が
 #    変わるまで使い回す**
 # 2. エージェントを NDK の clang で組む。ASP.NET Core は linux の実行時パックの IL を使わせる (csproj の説明)
-# 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。2 と一緒に NDK で組んだ asicen-userland の
-#    ライブラリも `libdenpa_asicen.so` の名前で入れる (.github/asicen-android.sh)。CI は両方の ABI を入れ、
+# 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。2 と一緒に NDK で組んだ ASICEN 系の機材の
+#    子プロセス (denpa-asicen。asicen-userland を組み込んだもの) も `libdenpa_asicen.so` の名前で入れる (.github/asicen-android.sh)。CI は両方の ABI を入れ、
 #    lint と単体テストも流し、R8 で縮める release も debug の鍵で組む。リリースは arm64 だけを入れ、リリースの鍵で署名する。
 #    bun の公式の Android 向けのビルドも `libbun.so` の名前で入れる (.github/bun-android.sh。バージョンは Dockerfile の oven/bun)。x86_64 は CI のエミュレータ用。
 #    ffmpeg・ffprobe は NDK で組み (.github/ffmpeg-android.sh。2 と並べて流す)、`libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリを入れる。
 #    denpa 本体 (Dockerfile の native-files 段) を `assets/server.zip` に入れる。常駐サービスが書き出して bun で起動する
-# 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・asicen-userland のライブラリの読み込み・
+# 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・ASICEN の子プロセスの起動・
 #    bun の起動・ffmpeg と ffprobe (tests/native-smoke.ts を bun で流す)・denpa 本体の起動とエージェントと組むこと・更新・「終了」・端末の起動を確かめる (.github/android-app-smoke.sh)。
 #    arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)。リリースでは流さない (同じコミットを main で確かめてある)
 #
@@ -120,25 +120,23 @@ jobs:
           # OpenSSL のライセンスの文書を一緒に渡し、APK に入れる (android/app/build.gradle.kts の DENPA_AGENT_LICENSES)
           cp openssl-out/LICENSE.txt out/LICENSE.openssl
 
-      # asicen-userland を組み込んだライブラリ (libdenpa_asicen.so。ASICEN 系。試験的) を、同じ NDK で組む (agent/asicen/build.sh)。
+      # ASICEN 系の機材の子プロセス (denpa-asicen。asicen-userland を組み込んだもの。試験的) を、同じ NDK で組む (agent/asicen/build.sh)。
       # ファームウェアとライセンスの文書も一緒に渡し、アプリを組むところで APK に並べる (.github/asicen-android.sh)
-      - name: Build asicen-userland (${{ matrix.abi }})
+      - name: Build denpa-asicen (${{ matrix.abi }})
         run: |
           set -euo pipefail
           command -v ninja > /dev/null || { sudo apt-get update && sudo apt-get install --no-install-recommends -y ninja-build; }
           ANDROID_NDK_HOME="$ANDROID_NDK_ROOT" bash agent/asicen/build.sh out/asicen --android "${{ matrix.abi }}" --firmware
           readelf="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-          library=out/asicen/libdenpa_asicen.so
-          # libc++ は静的に入れる。繋ぐのは Android にあるものだけで、出すシンボルは denpa_asicen_* だけ。LOAD は 16 KB 以上に揃える
-          needed=$($readelf -d "$library" | sed -nE 's/.*\(NEEDED\).*\[(.+)\]/\1/p' | sort | tr '\n' ' ')
+          program=out/asicen/denpa-asicen
+          # 位置に依らない実行ファイル (PIE)。libc++ は静的に入れる。繋ぐのは Android にあるものだけ。LOAD は 16 KB 以上に揃える
+          $readelf -h "$program" | grep -E 'Type: +DYN'
+          needed=$($readelf -d "$program" | sed -nE 's/.*\(NEEDED\).*\[(.+)\]/\1/p' | sort | tr '\n' ' ')
           echo "NEEDED: $needed"
           for lib in $needed; do
             case "$lib" in libc.so | libm.so | libdl.so | liblog.so) ;; *) echo "::error::$lib を繋いでいます"; exit 1 ;; esac
           done
-          exported=$($readelf --dyn-syms -W "$library" | awk '$5 == "GLOBAL" && $7 != "UND" { print $8 }' | sort -u)
-          echo "$exported"
-          if echo "$exported" | grep -v '^denpa_asicen_'; then echo "::error::denpa_asicen_* のほかのシンボルを出しています"; exit 1; fi
-          for align in $($readelf -lW "$library" | awk '$1 == "LOAD" { print $NF }'); do test "$((align))" -ge 16384; done
+          for align in $($readelf -lW "$program" | awk '$1 == "LOAD" { print $NF }'); do test "$((align))" -ge 16384; done
           ls -lR out/asicen
 
       - name: Upload agent

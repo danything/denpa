@@ -44,7 +44,7 @@
         <Compile Include="../Denpa.Agent/TsSync.cs" />
         <Compile Include="../Denpa.Agent/PortOwner.cs" />
         <Compile Include="../Denpa.Agent/Asicen.cs" />
-        <Compile Include="../Denpa.Agent/AsicenNative.cs" />
+        <Compile Include="../Denpa.Agent/AsicenChild.cs" />
         <Compile Include="../Denpa.Agent/AsicenTuner.cs" />
         <Compile Include="../Denpa.Agent/ChildTs.cs" />
         <Compile Include="../Denpa.Agent/Card.cs" />

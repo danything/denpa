@@ -209,7 +209,7 @@ public sealed partial class UsbBrokerTests
     }
 
     [Test]
-    public async Task ライブラリには受け取った_fd_の複製をポートの順に渡し_閉じても受け取った_fd_は残す()
+    public async Task 子プロセスには受け取った_fd_の複製をポートの順に継がせ_起動し終えたら複製を閉じる()
     {
         using var agent = new Agent();
         using var app = App.Connect(agent.Path);
@@ -219,21 +219,24 @@ public sealed partial class UsbBrokerTests
         await agent.Changed();
 
         // 並べた順と逆に指定しても、指定した順に並ぶ
-        int[] numbers;
-        using (var fds = agent.Host.Borrow(["003-005", "003-004"]))
+        int[] numbers = [];
+        using var child = AsicenChild.Start("/bin/sh", fds =>
         {
-            numbers = [.. fds.Numbers];
-            await Assert.That(numbers.All(fd => fd > 2)).IsTrue();
-            await Assert.That(numbers.Select(fd => new FileInfo($"/proc/self/fd/{fd}").LinkTarget ?? "").ToArray())
-                .IsEquivalentTo(new[] { "/memfd:second (deleted)", "/memfd:first (deleted)" });
-        }
-        // 複製は閉じた。受け取った fd はそのまま
+            numbers = [.. fds];
+            return ["-c", string.Join("; ", fds.Select(fd => $"readlink /proc/self/fd/{fd}"))];
+        }, () => agent.Host.Lend(["003-005", "003-004"]));
+        await Assert.That(numbers.All(fd => fd > 2)).IsTrue();
+        var output = await child.StandardOutput.ReadToEndAsync();
+        await child.WaitForExitAsync();
+        await Assert.That(output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            .IsEquivalentTo(new[] { "/memfd:second (deleted)", "/memfd:first (deleted)" });
+        // こちらの複製は閉じた (子プロセスの写しは子が持つ)。受け取った fd はそのまま
         // (番号はほかのテストの fd に使い回されることがあるので、指す先で見る)
         await Assert.That(numbers.Select(fd => new FileInfo($"/proc/self/fd/{fd}").LinkTarget)
             .Any(target => target is "/memfd:first (deleted)" or "/memfd:second (deleted)")).IsFalse();
         await Assert.That(agent.Host.Peek("003-004")).IsNotNull();
 
-        var gone = Assert.Throws<IOException>(() => agent.Host.Borrow(["003-004", "9-9"]));
+        var gone = Assert.Throws<IOException>(() => agent.Host.Lend(["003-004", "9-9"]));
         await Assert.That(gone.Message).Contains("USB のポート 9-9 に機材がありません");
     }
 

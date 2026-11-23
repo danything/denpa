@@ -259,7 +259,9 @@ jobs:
           dotnet-version: "11.0.100"
 
       # 名前はタグから `v` を落としたバージョンで (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
-      # 中身はエージェントとメニューバーのアプリ (tray/mac。ad-hoc で署名する) の実行ファイル 2 個と、エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 (LICENCE.siano・LICENSE.dib0700)。
+      # 中身はエージェントとメニューバーのアプリ (tray/mac。ad-hoc で署名する) の実行ファイル 2 個と、エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 (LICENCE.siano・LICENSE.dib0700)、
+      # ASICEN 系の機材の子プロセス (asicen/denpa-asicen。GPL-2.0-only。ad-hoc で署名する) とそのライセンスの文書・対応するソースの入手先 (asicen/licenses/)。
+      # **ASICEN のファームウェア (asicen-loader.bin) は入れない** (利用者が置く。docs/licenses.md)。
       # .sha256 は install.sh が確かめる
       - name: Build
         id: build
@@ -270,12 +272,15 @@ jobs:
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -p:InformationalVersion="$tag" -o out
           swift build -c release --package-path tray/mac
           cp "$(swift build -c release --package-path tray/mac --show-bin-path)/denpa-tray" out/denpa-tray
+          # 子プロセスは agent/asicen/build.sh で組む (上流のバージョンと SHA-256 はそこ。libusb は IOKit の経路で中に入る)
+          command -v ninja > /dev/null || brew install ninja > /dev/null
+          bash agent/asicen/build.sh out/asicen
           # ad-hoc 署名 (curl で取ったものには隔離の印が付かないので、Developer ID の署名と公証は要らない。docs/install-mac.md)
           codesign --force --sign - out/denpa-agent out/denpa-tray
           asset="denpa-agent-${tag#v}-darwin-arm64.tar.gz"
           # Siano と DiB0700 のファームウェアはエージェントに埋め込んである。許諾の文面を添える (agent/Denpa.Agent/firmware/README.md)
           cp agent/Denpa.Agent/firmware/LICENCE.siano agent/Denpa.Agent/firmware/LICENSE.dib0700 out/
-          tar -czf "$asset" -C out denpa-agent denpa-tray LICENCE.siano LICENSE.dib0700
+          tar -czf "$asset" -C out denpa-agent denpa-tray asicen LICENCE.siano LICENSE.dib0700
           shasum -a 256 "$asset" > "$asset.sha256"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"

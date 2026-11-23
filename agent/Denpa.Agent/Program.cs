@@ -18,7 +18,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。
- *   asicen-userland の機材は、同梱のライブラリを同じプロセスから呼んで USB を扱わせる (Asicen.cs)。IT930x の機材と CECH-ZD1 J と PIX-DT295 と Siano の機材 (PX-S1UD など) と Xbox One Digital TV Tuner は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs / Siano.cs / XboxOne.cs)
+ *   asicen-userland の機材は、同梱の子プロセス (denpa-asicen) に USB を扱わせる (Asicen.cs)。IT930x の機材と CECH-ZD1 J と PIX-DT295 と Siano の機材 (PX-S1UD など) と Xbox One Digital TV Tuner は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs / Siano.cs / XboxOne.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM と、契約の更新に要る CAT・EMM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -40,15 +40,15 @@ if (args is ["--version"])
     Console.WriteLine(About.Version);
     return 0;
 }
-// asicen-userland のライブラリを読み込めるかを出して終わる。読めなければ exit 1 (イメージを組むときに、実行イメージの土台で読み込めることを確かめる。agent/Dockerfile)
+// asicen-userland の子プロセスを使えるかを出して終わる。使えなければ exit 1 (イメージを組むときに、実行イメージの土台で子プロセスが動くことを確かめる。agent/Dockerfile)
 if (args is ["--asicen-check"])
 {
     if (!AsicenUserland.Installed)
     {
-        Console.Error.WriteLine($"asicen-userland: {AsicenNative.Problem}");
+        Console.Error.WriteLine($"asicen-userland: {AsicenChild.Problem}");
         return 1;
     }
-    Console.WriteLine($"asicen-userland {AsicenNative.Version} ({AsicenNative.LibraryPath})");
+    Console.WriteLine($"asicen-userland {AsicenChild.Version} ({AsicenChild.Program})");
     return 0;
 }
 // エージェントが USB を直に持つ機材の USB ID を出して終わる。install.ps1 -WinUsb が読む (WinUsbTargets.cs)
@@ -214,7 +214,7 @@ var tune = new TuneOptions(Config.Given("FAKE_TUNE"));
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 
 /*
- * **asicen-userland の筐体を開く。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
+ * **asicen-userland の筐体を開く (筐体ごとに子プロセスを起動する)。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
  * 使う受信機が無くなった筐体は閉じる (AsicenEnclosure.Prepare)。
  * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
@@ -226,7 +226,7 @@ void PrepareAsicen()
     lock (asicenGate)
     {
         if (asicenClosed) return;
-        // asicen-userland の筐体 (Asicen.cs)。ライブラリが無ければ顔ぶれにも出ない
+        // asicen-userland の筐体 (Asicen.cs)。子プロセスが無ければ顔ぶれにも出ない
         AsicenEnclosure.Prepare([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenEnclosure.For);
     }
 }
@@ -834,7 +834,7 @@ app.Lifetime.ApplicationStopped.Register(() => StopSteps.Run(
     ("CECH-ZD1 J を閉じる", Zd1jBoard.CloseAll),
     // PIX-DT295 は書いた設定を戻してから閉じる (カードのために開いていても)
     ("PIX-DT295 を閉じる", Dt295NativeDevice.CloseAll),
-    // 利用者を全部離してから asicen-userland の筐体を閉じる。LNB を 0V に戻して USB を手放す
+    // 利用者を全部離してから asicen-userland の筐体を閉じる。子プロセスが LNB を 0V に戻して USB を手放し、終わる
     ("asicen-userland の筐体を閉じる", () =>
     {
         lock (asicenGate) asicenClosed = true;

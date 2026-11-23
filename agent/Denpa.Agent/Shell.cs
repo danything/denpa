@@ -5,12 +5,20 @@ namespace Denpa.Agent;
 /// <summary>子プロセスを起動する所 (エージェントが起動する子プロセスは、どれもここを通す)</summary>
 public static class Shell
 {
-    /// <summary>起動する。起動できなければ例外</summary>
-    public static Process Start(ProcessStartInfo start) =>
-        Process.Start(start) ?? throw new IOException($"{Path.GetFileName(start.FileName)} を起動できません");
+    /// <summary>
+    /// 子プロセスを起動する間のロック。**fd を継がせる起動 (<see cref="AsicenChild.Start"/>) は、複製を作ってから起動し終えるまでこれを持つ。**
+    /// ほかの起動もこれを取るので、継がせる fd の複製 (close-on-exec が無い) を、ほかの子プロセスが継ぐことは無い
+    /// </summary>
+    internal static readonly Lock SpawnGate = new();
+
+    /// <summary>起動する (<see cref="SpawnGate"/> の中で)。起動できなければ例外</summary>
+    public static Process Start(ProcessStartInfo start)
+    {
+        lock (SpawnGate) return Process.Start(start) ?? throw new IOException($"{Path.GetFileName(start.FileName)} を起動できません");
+    }
 
     /// <summary>
-    /// 子プロセスを最後まで回して、出力をまとめて受け取る (defaults・scutil)。
+    /// 子プロセスを最後まで回して、出力をまとめて受け取る (denpa-asicen --version・--list-json・defaults・scutil)。
     /// 上限を過ぎたら子プロセスごと止める。起動できなかった・止めた、は exit -1 と理由で返す
     /// </summary>
     public static (int Code, string Output) Run(string file, IEnumerable<string> args, TimeSpan timeout)

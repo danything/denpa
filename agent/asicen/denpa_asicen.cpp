@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 //
-// denpa_asicen.h の実装。asicen-userland v1.0.0-beta の部品を、上流のデーモン (asicend) と同じ組み方でつなぐ。
+// denpa_asicen.h の実装 (子プロセス denpa-asicen の中で main.cpp が呼ぶ)。asicen-userland v1.0.0-beta の部品を、上流のデーモン (asicend) と同じ組み方でつなぐ。
 //
 // - 起動の手順 (引数・ファームウェアの流し込みと再列挙の待ち・筐体の組み合わせの確認・claim) は、上流の
 //   userland/tools/asicend_hardware.cpp をファイルごと読み込み (変えずに)、その中の関数を使う。流れ (run_asicend_hardware) は
 //   下の open_hardware に写して、最後のソケットの待ち受けの代わりに claim した機材を返すように直した。
-//   直した所: Windows の分岐を落とした・識別のロック (acquire_identity_lease) を写さない (同じ筐体を別のソフトが使っていれば
+//   直した所: Windows の標準入力の見張り (エージェントとのやりとりは main.cpp が持つ) を落とした・識別のロック (acquire_identity_lease) を写さない (同じ筐体を別のソフトが使っていれば
 //   claim が断る)・終了コードの代わりに Error を返す・メッセージを呼んだ側のバッファに書く・シグナルのハンドラを入れない
 // - エンジンは上流のデーモン (run_core_server と AsicenEnclosureFamily) と同じ組み方:
 //   LibusbW3u3Hardware → (shutdown を後に回す前段) → HardwareStreamService → TunerService (+ configure_strict_capabilities)。
@@ -20,7 +20,11 @@
 
 #include "asicend_discovery_json.h"
 #include "asicen/hardware_stream_session.h"
+#if defined(_WIN32)
+#include "px4/windows_tuner_nonce.h"
+#else
 #include "px4/posix_tuner_nonce.h"
+#endif
 
 #include <atomic>
 #include <cstdarg>
@@ -215,7 +219,11 @@ struct Core final {
 #endif
     std::unique_ptr<DeferredShutdown> frontend;
     std::unique_ptr<asicen::HardwareStreamService> stream;
+#if defined(_WIN32)
+    px4::userland::ipc::windows::WindowsTunerNonceSource nonce;
+#else
     px4::userland::ipc::posix::PosixTunerNonceSource nonce;
+#endif
     SteadyTime time;
     std::unique_ptr<px4::userland::TunerService> tuner;
     std::string model;

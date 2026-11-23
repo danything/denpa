@@ -1,8 +1,8 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * ライブラリに問い合わせた受信機 (Asicen.cs の AsicenReceiver)。受信機と選局が合っているかの確認、注意書き。
- * ライブラリとのやり取りは AsicenNativeTests で確かめる。
+ * 子プロセスが知らせた受信機 (Asicen.cs の AsicenReceiver)。受信機と選局が合っているかの確認、注意書き。
+ * 子プロセスとのやり取りは AsicenChildTests で確かめる。
  */
 public class AsicenReceiverTests
 {

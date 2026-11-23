@@ -5,7 +5,8 @@ namespace Denpa.Agent;
 /// <summary>
 /// エージェントが USB を直に持つ機材の USB ID と名前 (<c>denpa-agent --usb-ids</c>)。Windows ではドライバが WinUSB でないと開けないので、
 /// install.ps1 の <c>-WinUsb</c> がこれを読み、挿さっている機材のドライバを WinUSB に替える (docs/install-windows.md)。
-/// ID は各機材の表 (<see cref="Zd1j"/>・<see cref="Dt295.Family"/>・<see cref="It930x.Family"/>・<see cref="Siano.Models"/>・<see cref="XboxOne"/>) から作り、ここにも install.ps1 にも書かない。
+/// ID は各機材の表 (<see cref="Zd1j"/>・<see cref="Dt295.Family"/>・<see cref="It930x.Family"/>・<see cref="Siano.Models"/>・<see cref="XboxOne"/>・<see cref="AsicenUserland.Models"/>) から作り、ここにも install.ps1 にも書かない。
+/// ASICEN 系はエージェントではなく子プロセスの denpa-asicen が開くが、Windows ではどちらも WinUSB が要るので同じに並べる。
 /// Android のアプリの device_filter.xml は、これと asicen-userland の ID を手で並べる (AndroidDeviceFilterTests で突き合わせる)
 /// </summary>
 public static class WinUsbTargets
@@ -18,6 +19,9 @@ public static class WinUsbTargets
         .. It930x.Family.Select(model => (model.Vendor, model.Product, model.Name)),
         .. Siano.Models.Select(model => (model.Vendor, model.Product, model.Name)),
         (XboxOne.Vendor, XboxOne.Product, XboxOne.Model),
+        // ASICEN 系は子プロセス (denpa-asicen) が libusb の WinUSB の経路で開く。ファームウェア待ちの ID も替えないと流し込めない
+        .. AsicenUserland.Models.Select(model => (Id: UsbId.Parse(model.Usb), model.Name)).Select(model => (model.Id.Vendor, model.Id.Product, $"PLEX {model.Name}")),
+        .. AsicenUserland.Loaders.Select(UsbId.Parse).Select(id => (id.Vendor, id.Product, "PLEX ASICEN (ファームウェア待ち)")),
     ];
 
     /// <summary><c>[{"usb":"054c:04b2","name":"Sony CECH-ZD1 J"}, …]</c>。<c>usb</c> は小文字の 16 進 4 桁を <c>:</c> でつないだもの</summary>

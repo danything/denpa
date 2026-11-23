@@ -9,8 +9,8 @@ import java.io.IOException
 /**
  * asicen-userland (PX-W3U3 などの ASICEN 系。試験的) をエージェントに使わせる準備 (docs/agent.md「asicen-userland の作り」)。
  *
- * - ライブラリ (`libdenpa_asicen.so`) は APK の jniLibs に入っていて、nativeLibraryDir に展開される。エージェントがそこから同じプロセスに読み込む
- * - ファームウェアは assets に入れ、ここで filesDir に書き出す (エージェントはライブラリに `--firmware` でパスを渡す)
+ * - 子プロセス (`libdenpa_asicen.so`。中身は実行ファイルの denpa-asicen) は APK の jniLibs に入っていて、nativeLibraryDir に展開される。エージェントがそこから起動する
+ * - ファームウェアは実行しないので assets に入れ、ここで filesDir に書き出す (エージェントは子プロセスに `--firmware` でパスを渡す)
  *
  * asicen-userland を置かずに組んだ APK では、エージェントは ASICEN の機材を挙げない
  */

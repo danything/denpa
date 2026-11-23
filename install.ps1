@@ -178,9 +178,9 @@ function Test-Recording([string]$Exe) {
 # -Server を付けなければエージェントだけ (-AgentOnly のとき)。エンコードの途中なら、次に起きたときにやり直す
 function Stop-Denpa([string]$Exe, [switch]$Server) {
     $tasks = @($TaskName)
-    # 通知領域のアイコン (denpa-tray.exe) もエージェントと同じ bin\ にあるので、入れ替える前に落とす。
+    # 通知領域のアイコン (denpa-tray.exe) と ASICEN 系の機材の子プロセス (asicen\denpa-asicen.exe) もエージェントと同じ bin\ にあるので、入れ替える前に落とす。
     # siano-ts.exe と px4d.exe は前のバージョンのエージェントが起動していたもの (いまは置かない)
-    $names = @('conhost.exe', 'cmd.exe', 'denpa-agent.exe', 'denpa-tray.exe', 'siano-ts.exe', 'px4d.exe', 'px4ctl.exe')
+    $names = @('conhost.exe', 'cmd.exe', 'denpa-agent.exe', 'denpa-tray.exe', 'denpa-asicen.exe', 'siano-ts.exe', 'px4d.exe', 'px4ctl.exe')
     if ($Server) {
         $tasks += $DenpaTask
         $names += 'bun.exe', 'ffmpeg.exe', 'ffprobe.exe'

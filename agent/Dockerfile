@@ -48,8 +48,8 @@ RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet
     /usr/share/dotnet/dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
-# asicen-userland を組み込んだ共有ライブラリ (libdenpa_asicen.so。agent/asicen/)。PLEX PX-W3U3 などの ASICEN 系を、エージェントが
-# 同じプロセスから呼んで動かす (Asicen.cs / AsicenNative.cs)。**試験的。実機では確かめていない。**
+# ASICEN 系の機材の子プロセス (denpa-asicen。agent/asicen/。asicen-userland を組み込んだもの)。PLEX PX-W3U3 などの ASICEN 系を、
+# エージェントが筐体ごとに起動して動かす (Asicen.cs / AsicenChild.cs)。**試験的。実機では確かめていない。**
 #
 # **組むのは agent/asicen/build.sh で、上流のバージョンと SHA-256 もそこに固定してある** (Android のアプリも同じスクリプトで組む)。
 # 上流のソースのアーカイブ (libusb と dtv-userland-core を同梱) から、この段の arch で組む (build 段と同じく QEMU は使わない)。
@@ -58,8 +58,8 @@ RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet
 # **ファームウェアは上流の配布物に入っているものをそのまま使い** (build.sh が SHA-256 を突き合わせる)、/opt/asicen-userland/firmware/ に置く。
 # **再配布の許諾は確かめられていない。上流と同じ判断で同梱している。権利を持つ人から申し出があれば外す** (docs/licenses.md
 # 「ASICEN のファームウェアを同梱している判断」)。上流が添える通知とライセンスの文書、対応するソースの入手先 (SOURCE.txt) は
-# /opt/asicen-userland/licenses/ に置く。**このライブラリは GPL-2.0 で、エージェントと同じプロセスで動くので、このイメージの
-# エージェントの実行ファイルとライブラリは GPL-2.0 の条件で配る** (docs/licenses.md「asicen-userland を組み込んだエージェント」)
+# /opt/asicen-userland/licenses/ に置く。**子プロセスは GPL-2.0-only の別のプログラムで、エージェント (MPL-2.0) とは
+# 標準入出力で選局の要求・状態・TS だけをやりとりする** (docs/licenses.md「ASICEN の子プロセス」)
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS asicen
 ARG TARGETARCH
@@ -74,12 +74,12 @@ RUN bash /src/asicen/build.sh /opt/asicen-userland --firmware
 # **土台は distroless (Debian 13 = trixie。リンクした build 段と同じバージョンなので glibc も合う)。**
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
 # エージェントが要るのはこれで全部。実行ファイルが直に繋ぐのは libc と libm だけで、libssl は .NET が読む。
-# asicen-userland のライブラリ (/opt/asicen-userland/libdenpa_asicen.so) は libstdc++ と libgcc_s も繋ぐ (土台にある)。
+# ASICEN の子プロセス (/opt/asicen-userland/denpa-asicen) は libstdc++ と libgcc_s も繋ぐ (土台にある)。
 # エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
 # CARD_URL を https で指したときも .NET の HttpClient が libssl を読み、
 # 相手の証明書は ca-certificates で確かめる。
-# 子プロセスを起動するのは適合テストの偽の選局 (`FAKE_TUNE`。`setsid sh -c`) だけで、これはホストで組んだ
-# 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
+# 子プロセスは ASICEN の機材の denpa-asicen と、適合テストの偽の選局 (`FAKE_TUNE`。`setsid sh -c`。ホストで組んだ
+# 実行ファイルで回すのでイメージには要らない)。時刻はどこも UTC で扱うので TZ も渡さない。
 #
 # **`recisdb` も libaribb25 も pcscd も入れない。** 選局は自分でやり (ioctl)、
 # B25 も自分で復号し (B25.cs)、カードリーダーとも自分で通信する (Ccid.cs / It930xCard.cs / Zd1j.cs / Dt295NativeCard.cs)。
@@ -91,7 +91,7 @@ FROM gcr.io/distroless/cc-debian13:latest@sha256:dac90a25ffe03ebaace90cda886b081
 # 実行ファイルが要求する GLIBC のバージョンが土台に無ければ、ローダーがここで止めてビルドが落ちる
 # (build 段と土台の Debian がずれたときに、起動してからではなくここで分かる)。
 # シェルが無いので exec の形で起動する。`--version` はバージョンを出して終わる (Program.cs)。
-# asicen-userland のライブラリも、エージェントがこの土台で読み込めることを確かめる (`--asicen-check`。読めなければ exit 1)
+# ASICEN の子プロセスも、この土台で起動してバージョンが合うことを確かめる (`--asicen-check`。合わなければ exit 1)
 FROM runtime AS loaded
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
 COPY --from=asicen /opt/asicen-userland /opt/asicen-userland
