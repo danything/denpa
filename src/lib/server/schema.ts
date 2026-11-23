@@ -813,6 +813,68 @@ export const cmMaterials = sqliteTable("cm_materials", {
   created_at: integer("created_at").notNull(),
 });
 
+/**
+ * **録画の字幕の 1 枚** (字幕で探すため。`caption-index.ts`)。字幕のインデックス (`CAPTION_FTS`) の行と、ID で 1 対 1 に対応する。
+ *
+ * ID は `録画の ID * 2^24 + その録画の中の通し番号` (`caption-index.captionLineId`)。新しい録画の行ほど大きいので、
+ * インデックスを ID の大きい順に読めば、新しい録画から順に当たった行が出てくる (よく出る語でも先頭のぶんだけ読んで止められる)。
+ * 録画を消したら一緒に消す (`caption-index.dropCaptionIndex`)
+ */
+export const captionLines = sqliteTable(
+  "caption_lines",
+  {
+    id: integer("id").primaryKey(),
+    recording_id: integer("recording_id").notNull(),
+    /** 出た時刻 (ms)。**元の TS の物差し** (`resume_ms` と同じ) */
+    at_ms: integer("at_ms").notNull(),
+    /** 字幕の第何言語か (字幕管理データの言語の番号。1〜8) */
+    language: integer("language").notNull().default(1),
+    /** 見せる文字 (`caption-words.captionWords`。行の間に空白) */
+    text: text("text").notNull(),
+  },
+  (t) => [index("caption_lines_recording").on(t.recording_id, t.at_ms)],
+);
+
+/** 録画ごとの、字幕を読んだ結果。`done` は読めた、`missing` は字幕が無い、`failed` は読めなかった、`waiting` はファイルが置き場に無かった */
+export const CAPTION_INDEX_STATES = [
+  "done",
+  "missing",
+  "failed",
+  "waiting",
+] as const;
+
+/**
+ * **録画ごとに、字幕のインデックスをどこまで作ったか** (`caption-index.ts`)。後から埋める仕事の進み具合はこの表だけで、メモリには持たない。
+ *
+ * 読んだときの録画の行のファイルの列 (`library_path`・`ts_path`) と `encode_skip` を写して持ち、録画の行と違えば作り直す
+ * (エンコードし終えた・主のエンコード済みが繰り上がった・行が戻った)。同じ名前に再エンコードしたときは、エンコードの最後に行ごと消す
+ */
+export const captionIndex = sqliteTable("caption_index", {
+  recording_id: integer("recording_id").primaryKey(),
+  /** 作り方のバージョン (`caption-index.CAPTION_INDEX_VERSION`)。違えば全部作り直す */
+  version: integer("version").notNull(),
+  state: text("state", { enum: CAPTION_INDEX_STATES }).notNull(),
+  library_path: mediaPath("library_path", () => config.encodedDir),
+  ts_path: mediaPath("ts_path", () => config.rawDir),
+  encode_skip: real("encode_skip"),
+  /** 入れた行の数 */
+  lines: integer("lines").notNull().default(0),
+  /** 読めなかった理由 (`failed`・`waiting`) */
+  error: text("error"),
+  /** 続けて読めなかった回数 (`failed`)。読めたら 0 */
+  attempts: integer("attempts").notNull().default(0),
+  /** 次に読み直す時刻 (`failed`・`waiting`)。NULL なら読み直さない (ファイルの列かバージョンが変わるまで) */
+  retry_at: integer("retry_at"),
+  updated_at: integer("updated_at").notNull(),
+});
+
+/**
+ * **字幕のインデックス** (FTS5 の仮想表の名前)。drizzle の表ではなく、手で書いたマイグレーション
+ * (`drizzle/0047_caption-fts.sql`) が作る。中身は持たず (`content=''`)、`captionLines` の行の ID を rowid にして、
+ * 揃えた字幕を 2 字ずつ区切ったもの (`caption-key.captionGrams`) を入れる
+ */
+export const CAPTION_FTS = "caption_fts";
+
 const ENCODE_STATES = [
   "queued",
   "running",

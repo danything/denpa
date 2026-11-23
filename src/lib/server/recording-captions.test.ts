@@ -83,7 +83,7 @@ describe("録画の字幕を取り出す", () => {
   });
 
   test("止める合図で ffmpeg を止め、失敗にする", async () => {
-    fake("slow", ["sleep 30"]);
+    fake("slow", ["exec sleep 30"]);
     const abort = new AbortController();
     const pending = extractCaptions(source(false), { signal: abort.signal });
     abort.abort();
@@ -91,7 +91,7 @@ describe("録画の字幕を取り出す", () => {
   });
 
   test("溜める量の上限を超えたら ffmpeg を止め、失敗にする", async () => {
-    fake("huge", ["head -c 40000000 /dev/zero", "sleep 30"]);
+    fake("huge", ["head -c 40000000 /dev/zero", "exec sleep 30"]);
     const started = Date.now();
     expect((await extractCaptions(source(true))).kind).toBe("failed");
     expect(Date.now() - started).toBeLessThan(20_000);

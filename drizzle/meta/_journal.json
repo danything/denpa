@@ -323,6 +323,20 @@
       "when": 1795339999267,
       "tag": "0045_app-cookies",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1795409414914,
+      "tag": "0046_caption-index",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1795409415562,
+      "tag": "0047_caption-fts",
+      "breakpoints": true
     }
   ]
 }
