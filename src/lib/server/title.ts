@@ -67,6 +67,16 @@ const EPISODE = /\s*(?:#|＃|第)\s*(\d{1,4})\s*(?:話|回)?/;
 const LABELED_EPISODE =
   /\s*(?<![A-Za-z0-9【[(])(?:chapter|episode|ep|request|file|case|act|lesson|mission|karte)\s*\.?\s*(\d{1,4})(?!\.?\d|年)\.?/i;
 
+// #・第 の無い話数 (`アニメ X　4話～6話` `韓ドラ 女王の家 44話（全74話）`)。#/第 も英語の話数も無いときだけ見る。
+// 前が空白のものだけ (`全12話` `1話完結` は読まない)。範囲は先頭の数を話数にする (`#1-7` と同じ)
+const BARE_EPISODE =
+  /\s+(\d{1,4})\s*話(?:\s*[~〜-]\s*\d{1,4}\s*話)?(?=\s|$|[【「『([<])/;
+
+// 名前の直後の `（42）` (NHK の書き方。`八重の桜（４２）「襄と行く会津」` `ドラマ１０「会社員」（７）`)。
+// 括弧の中は 1〜3 桁の数だけ (`（2024）` の年は読まない)。前が空白・数・括弧のもの (`名場面 （10）`) と、
+// 後ろに名前が続くもの (`（２）の巻`) も読まない。どれを読むかは title.test.ts に本番の番組名で並べてある
+const PAREN_EPISODE = /(?<=[^\s\d()])\((\d{1,3})\)$/;
+
 // 話数の後ろが枠の名前だけ (`第51話【アニメイズム】`) なら副題ではない
 const LABELS_ONLY = /^(?:【[^】]*】\s*)+$/;
 
@@ -249,7 +259,11 @@ export function parseTitle(rawName: string): ParsedTitle {
   }
 
   let episode: number | null = null;
-  const ep = series.match(EPISODE) ?? series.match(LABELED_EPISODE);
+  const ep =
+    series.match(EPISODE) ??
+    series.match(LABELED_EPISODE) ??
+    series.match(BARE_EPISODE) ??
+    series.match(PAREN_EPISODE);
   if (ep !== null) {
     episode = Number(ep[1]);
     const at = ep.index ?? 0;
