@@ -74,7 +74,7 @@ public static class AsicenUserland
     {
         if (!File.Exists(path))
         {
-            return $"ファームウェアがありません: {path} (Windows と macOS では利用者が置きます。docs/tuners.md「ASICEN 系」)";
+            return $"ファームウェアがありません: {path} (Windows と macOS では利用者が置きます。docs/tuners.md「PX-W3U3 など」)";
         }
         var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
         return sha == sha256 ? null : $"{path} は確かめたファームウェアと違います (SHA-256 {sha})";

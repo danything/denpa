@@ -483,9 +483,10 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$TAG" dist/denpa-*-android-arm64.apk dist/denpa-*-android-arm64.apk.sha256 --clobber -R "${{ github.repository }}"
 
-  # **asicen-userland のソースのアーカイブも添える。** エージェントのイメージと Android のアプリは asicen-userland (GPL-2.0) を組み込んだ
-  # ライブラリと一緒に配るので、対応するソースを上流の置き場だけに頼らずにリリースに置く (docs/licenses.md「asicen-userland を組み込んだエージェント」)。
-  # エージェントと層のソースはタグのソースのアーカイブにある。上流のバージョンと SHA-256 は agent/asicen/build.sh のもの
+  # **ASICEN の子プロセス (denpa-asicen。GPL-2.0-only) の対応するソースも添える。** イメージ・Windows と Mac のエージェント・Android のアプリは、
+  # asicen-userland を組み込んだ子プロセスを一緒に配るので、上流のソースのアーカイブを上流の置き場だけに頼らずにリリースに置き、
+  # `agent/asicen/` だけを固めたもの (denpa-asicen-<バージョン>-source.tar.gz) も添える (docs/licenses.md「ASICEN の子プロセス」)。
+  # 上流のバージョンと SHA-256 は agent/asicen/build.sh のもの
   asicen-source:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
@@ -494,6 +495,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Attach to the release
         env:
@@ -507,7 +510,9 @@ jobs:
           curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$archive" \
             "https://github.com/Khronos31/asicen-userland/releases/download/v$version/$archive"
           echo "$sum  $archive" | sha256sum -c -
-          gh release upload "$TAG" "$archive" --clobber -R "${{ github.repository }}"
+          own="denpa-asicen-${TAG#v}-source.tar.gz"
+          tar -czf "$own" agent/asicen
+          gh release upload "$TAG" "$archive" "$own" --clobber -R "${{ github.repository }}"
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart のバージョン (Chart.yaml の version) とアプリのバージョン (appVersion) をリリースの

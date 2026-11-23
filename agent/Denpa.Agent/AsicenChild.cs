@@ -28,7 +28,7 @@ public sealed class AsicenChild
     /// <summary>ファームウェア待ちの機材に流し込んだだけで、開いていない (main.cpp の 'L')</summary>
     public const int Loaded = 200;
 
-    /// <summary>子プロセスが終わった (こちらで決めた番号。流れの終わりと選局の失敗に使う)</summary>
+    /// <summary>子プロセスが終わった (こちらで決めた番号。ストリームの終わりと選局の失敗に使う)</summary>
     public const int ChildExited = 1000;
 
     public const int IsdbT = 1;

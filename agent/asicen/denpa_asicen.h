@@ -84,7 +84,7 @@ DENPA_ASICEN_API int denpa_asicen_tune(denpa_asicen_enclosure* enclosure, int re
 
 /*
  * TS を読む。capacity は 188 の倍数 (1,048,476 まで)。timeout_ms まで待って来なければ *length は 0。
- * 流れが終わったら *ended を 1 にし、理由を *terminal に入れる (TunerStreamTerminal: 1 読むのが遅い、2 USB の失敗、
+ * ストリームが終わったら *ended を 1 にし、理由を *terminal に入れる (TunerStreamTerminal: 1 読むのが遅い、2 USB の失敗、
  * 3 同期の失敗、4 ブリッジの失敗、5 止めた、6 切断)
  */
 DENPA_ASICEN_API int denpa_asicen_read(denpa_asicen_stream* stream, uint8_t* output, size_t capacity, uint32_t timeout_ms,

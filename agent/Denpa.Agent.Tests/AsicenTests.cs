@@ -320,7 +320,7 @@ public class AsicenChildTests
             using var terrestrial = new AsicenTuner(enclosure, 1, null);
             using var satellite = new AsicenTuner(enclosure, 0, "15v");
             await Stream(terrestrial, "T27", cancel);
-            // 同じ受信機で選局し直す (流れを止めて受信機を返し、取り直す)
+            // 同じ受信機で選局し直す (ストリームを止めて受信機を返し、取り直す)
             await Stream(terrestrial, "T28", cancel);
             // 衛星は TSID で、LNB 15V を載せて。2 つの受信機を同時に流す
             await Stream(satellite, "BS15:16625", cancel);
@@ -356,7 +356,7 @@ public class AsicenChildTests
     }
 
     [Test]
-    public async Task 流している間に筐体を閉じても_TS_は流れ続け_止めたときに後片付けを終える(CancellationToken cancel)
+    public async Task 流している間に筐体を閉じても_TS_は送られ続け_止めたときに後片付けを終える(CancellationToken cancel)
     {
         if (!Ready()) return;
         var enclosure = Mock("8-3");

@@ -155,7 +155,7 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
   | 組      | ジョブ                                                                           | 回すとき                                                                                      |
   | ------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
   | e2e     | `e2e (1)`〜`(10)`                                                                | エージェント・通知領域のアプリ・文書・入れ方・配備のほかを触ったとき                          |
-  | windows | `agent-windows`・`agent-windows-install`                                         | `agent/`・`tray/Denpa.Tray*`・`install.ps1`・`scripts/build-wdi-simple.ps1`                   |
+  | windows | `agent-windows`・`agent-windows-install`・`agent-asicen-windows`                 | `agent/`・`tray/Denpa.Tray*`・`install.ps1`・`scripts/build-wdi-simple.ps1`                   |
   | macos   | `agent-macos`・`tray-macos`                                                      | `agent/`・`tray/mac/`・`install.sh`                                                           |
   | android | `agent-android`                                                                  | `agent/`・android.yml・Android で組む部品・Android の ffmpeg と native-smoke が使うもの       |
   | bundle  | `server-windows-bundle`・`server-windows`・`server-macos-bundle`・`server-macos` | 配布物の組み方・ffmpeg・入れ方・`tests/native-*`・依存と、OS ごとに扱いが違うサーバのファイル |
@@ -332,7 +332,7 @@ denpa が起動するのは ffmpeg / ffprobe だけで、シェルを通しま�
 
 ffmpeg・SVT-AV1・Opus・Mesa・Rockchip MPP・Denpa Font は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
-エージェントに組み込む asicen-userland は `agent/asicen/build.sh` に (Linux のイメージと Android のアプリで同じ)、Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
+ASICEN 系の機材の子プロセスに組み込む asicen-userland は `agent/asicen/build.sh` に (Linux のイメージ・Windows・Mac・Android のアプリで同じ)、Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
 アプリに入れる ffmpeg は Dockerfile の `ffmpeg` 段からバージョンと部品を読み、x264・dav1d・zimg のバージョンは `.github/ffmpeg-android.sh` に書いています (Mac の `ffmpeg-macos.sh` と同じ)。
 `bun-android.sh` は Dockerfile の `oven/bun` からバージョンを読みます。APK の denpa 本体もコンテナと同じ bun で動かすためで、Renovate が Dockerfile を上げれば APK の bun も上がります。
 
@@ -374,7 +374,7 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 - エージェントは `android/agent-libs/<ABI>/libdenpa_agent.so` に置くと APK に入ります (`DENPA_AGENT_LIBS` で別の置き場も渡せます)。
   入れるときに `nativeLibraryDir` へ展開させ (`useLegacyPackaging`)、そこから exec します。Android 10 からは、アプリのデータの置き場のファイルは実行できません
 - asicen-userland は `android/asicen-userland/` に置くと APK に入ります (`DENPA_ASICEN` で別の置き場も渡せます)。`bash .github/asicen-android.sh android/asicen-userland <組んだもの> arm64 x86_64` が、
-  `agent/asicen/build.sh --android <ABI> --firmware` で組んだもの (CI はエージェントと同じジョブで NDK で組む) から、`jniLibs/<ABI>/libdenpa_asicen.so`、ファームウェア、ライセンスの文書を並べます。
+  `agent/asicen/build.sh --android <ABI> --firmware` で組んだもの (CI はエージェントと同じジョブで NDK で組む) から、`jniLibs/<ABI>/libdenpa_asicen.so` (子プロセスの実行ファイル)、ファームウェア、ライセンスの文書を並べます。
   置かなければ asicen-userland の無い APK になります
 - bun は `android/bun/` に置くと APK に入ります (`DENPA_BUN` で別の置き場も渡せます)。`bash .github/bun-android.sh android/bun arm64 x86_64` が、
   公式の Android 向けのビルドを、同じリリースの SHASUMS256.txt の SHA-256 で確かめて取り、`jniLibs/<ABI>/libbun.so` とライセンスの文書を並べます。x86_64 は CI のエミュレータ用で、AVX2 を使わない baseline を入れます。
@@ -418,7 +418,7 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - エージェントがアプリの子プロセス (SELinux の `untrusted_app`) で動き、`<dataDir>/u` に USB_BROKER のソケット (0600) を作り、アプリが繋いで `synced` を送ること
 - denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
 - アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
-- エージェントが APK の asicen-userland のライブラリを読み込めること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd の複製をライブラリに渡すこと
+- エージェントが APK の ASICEN の子プロセスを起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を子プロセスに継がせること
 - denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・フォント・デコーダを返すこと。エージェントが全部のインターフェースで待ち受け、
   denpa が 127.0.0.1 からアプリの作った合言葉でエージェントと組み、設定の「受信」の「チューナー」の一覧 (0 台) を読めること
 - アプリの子プロセスの bun で `.github/android-bun-check.js` を流し (debug の受け口)、JIT が動くこと、`localhost` を引けること、

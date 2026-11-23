@@ -18,12 +18,12 @@
 //     'L' 流し込んだ   ファームウェア待ちの機材に流し込んだだけで開いていない (--fd のとき)。中身はメッセージ。送ったら終わる
 //     'T' 選局の結果   中身は番号 (4 バイト LE。0 が成功)
 //     'D' TS           中身は TS (188 バイトの倍数)
-//     'E' 流れが終わった 中身は理由 (4 バイト LE。上流の TunerStreamTerminal)
+//     'E' ストリームの終わり 中身は理由 (4 バイト LE。上流の TunerStreamTerminal)
 //     'S' 止めた       受信機を返し終えた
 // - エージェント → 子 (標準入力): 1 行に 1 つの命令
 //     tune <ストリーム> <受信機> <方式> <Hz> <TSID> <スロット> <LNB の電圧> <待つ ms>
 //     stop <ストリーム>
-//   標準入力が閉じたら (エージェントが閉じた・落ちた)、流れを全部止め、筐体を閉じて終わる
+//   標準入力が閉じたら (エージェントが閉じた・落ちた)、ストリームを全部止め、筐体を閉じて終わる
 // - 上流の診断とこのプロセスのメッセージは標準エラーに出す (エージェントが記録に写す)
 
 #include "denpa_asicen.h"
@@ -90,7 +90,7 @@ struct Session final {
     std::thread worker;
 };
 
-// 受信機を取って選局し、TS を送り続ける。止める命令か流れの終わりで受信機を返し、'S' を送る
+// 受信機を取って選局し、TS を送り続ける。止める命令かストリームの終わりで受信機を返し、'S' を送る
 void run(denpa_asicen_enclosure* enclosure, int id, int receiver, int system, std::uint64_t hz, std::uint16_t tsid,
          std::uint16_t slot, std::uint8_t lnb, std::uint32_t timeout_ms, Session* session)
 {
