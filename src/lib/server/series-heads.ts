@@ -224,14 +224,13 @@ async function observe(at: number): Promise<boolean> {
   return changed;
 }
 
-/** 録画と引き継いだ履歴の中身の目印。行が増えた・消えた・名前が変わったら変わる */
+/**
+ * 録画と引き継いだ履歴の目印。行が増えた・消えたら変わる。`updated_at` は観た位置を書くたびに変わるので見ない
+ * (録っている間に p/f で名前が変わったぶんは、次に控えか行が変わったときに学ぶ)
+ */
 function inputMark(): string {
   const rec = orm()
-    .select({
-      n: count(),
-      id: max(recordings.id),
-      at: max(recordings.updated_at),
-    })
+    .select({ n: count(), id: max(recordings.id) })
     .from(recordings)
     .get();
   const history = orm()
