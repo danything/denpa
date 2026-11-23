@@ -21,6 +21,7 @@
   import {
     badgeClass,
     cancelable,
+    clock as timecode,
     dateTime,
     quietState,
     recordedDuration,
@@ -52,13 +53,20 @@
    * 人気の番組は `ranking.ts` の `VIEW_LIMIT`) まで広げる
    */
   const FIRST = 5;
-  type Key = "programs" | "recordings" | "reservations" | "rules" | "ranking";
+  type Key =
+    | "programs"
+    | "recordings"
+    | "captions"
+    | "reservations"
+    | "rules"
+    | "ranking";
   /** 開いた節。言葉が変わったら閉じた形に戻す */
   let expanded = $derived.by<Record<Key, boolean>>(() => {
     void q;
     return {
       programs: false,
       recordings: false,
+      captions: false,
       reservations: false,
       rules: false,
       ranking: false,
@@ -236,6 +244,35 @@
     return resolve(
       rec.finished_at === null ? `chase/${rec.id}` : `watch/${rec.id}`,
     );
+  }
+
+  /**
+   * 字幕で当たった録画を観る画面。`at` (番組の始めからの秒) があればその場面から (切り抜きの「この場面から観る」と同じ `?at=`)。
+   * ファイルの無いもの・録画が失敗したものは観られない
+   */
+  function sceneLink(
+    rec: (typeof data.captions.rows)[number],
+    at?: number,
+  ): string | null {
+    if (!rec.has_file || rec.state === "failed") return null;
+    const page = resolve(`watch/${rec.id}`);
+    return at === undefined ? page : `${page}?at=${at.toFixed(1)}`;
+  }
+
+  /** 字幕の文字を、当たった所 (`marks`) とその外に分ける */
+  function pieces(
+    text: string,
+    marks: [number, number][],
+  ): { text: string; hit: boolean }[] {
+    const out: { text: string; hit: boolean }[] = [];
+    let at = 0;
+    for (const [start, end] of marks) {
+      if (start > at) out.push({ text: text.slice(at, start), hit: false });
+      out.push({ text: text.slice(start, end), hit: true });
+      at = end;
+    }
+    if (at < text.length) out.push({ text: text.slice(at), hit: false });
+    return out;
   }
 
   /**
@@ -480,6 +517,90 @@
             "recordings",
             data.recordings.rows.length,
             data.recordings.total,
+          )}
+        {/if}
+      </section>
+
+      <!--
+        録画の字幕 (`search.searchCaptions`)。1 件は録画 1 本で、当たった場面を時刻の順に 3 か所まで、前後の 1 枚を添えて並べる。
+        場面を押すとその場面から、録画の行を押すと初めから観る画面へ
+      -->
+      <section
+        class="hits-section"
+        aria-labelledby="captions-head"
+        data-testid="search-captions"
+      >
+        <div class="hits-head">
+          <h2 id="captions-head">
+            録画の字幕 <span class="count"
+              >{data.captions.total}{data.captions.more ? "+" : ""}</span
+            >
+          </h2>
+        </div>
+        {#if data.captions.pending > 0}
+          <p class="none small muted" data-testid="search-captions-pending">
+            字幕を探せるようにしています (あと {data.captions.pending} 本)
+          </p>
+        {/if}
+        {#if data.captions.short}
+          <p class="none small muted">字幕は 2 文字から探します</p>
+        {:else if data.captions.total === 0}
+          <p class="none small muted">字幕が一致する録画はありません</p>
+        {:else}
+          <ul class="item-list">
+            {#each shown("captions", data.captions.rows) as rec (rec.id)}
+              {@const link = sceneLink(rec)}
+              <li
+                class="caption-hit item"
+                data-testid="search-caption"
+                data-recording-id={rec.id}
+              >
+                <svelte:element
+                  this={link === null ? "div" : "a"}
+                  class="hit-main"
+                  href={link ?? undefined}
+                >
+                  <span class="hit-title">
+                    <span class="truncate broadcast">{rec.name}</span>
+                  </span>
+                  <span class="hit-meta small muted">
+                    {@render service(rec)}<span class="num"
+                      >{dateTime(rec.start_at)}</span
+                    >{#if rec.hits_total > rec.hits.length}・この録画で {rec.hits_total}
+                      か所{/if}
+                  </span>
+                </svelte:element>
+                <ul class="scenes">
+                  {#each rec.hits as hit (hit.at)}
+                    {@const scene = sceneLink(rec, hit.at)}
+                    <li>
+                      <svelte:element
+                        this={scene === null ? "div" : "a"}
+                        class="scene small"
+                        href={scene ?? undefined}
+                        data-testid="search-caption-scene"
+                      >
+                        <span class="num scene-at">{timecode(hit.at)}</span>
+                        <span class="scene-text"
+                          >{#if hit.before !== ""}<span class="muted"
+                              >{hit.before}</span
+                            >{" "}{/if}{#each pieces(hit.text, hit.marks) as piece, i (i)}{#if piece.hit}<mark
+                                >{piece.text}</mark
+                              >{:else}{piece.text}{/if}{/each}{#if hit.after !== ""}{" "}<span
+                              class="muted">{hit.after}</span
+                            >{/if}</span
+                        >
+                      </svelte:element>
+                    </li>
+                  {/each}
+                </ul>
+              </li>
+            {/each}
+          </ul>
+          {@render more(
+            "captions",
+            data.captions.rows.length,
+            data.captions.total,
           )}
         {/if}
       </section>
@@ -1190,6 +1311,51 @@
   }
   .hit .row-actions {
     flex: none;
+  }
+  /*
+   * 録画の字幕の件。録画の 2 段 (`.hit-main`) の下に、当たった場面を 1 行ずつ。場面の字は 2 段目と同じ控えた大きさ (`.small`) で、
+   * 時刻を左にそろえ、字幕は 2 行まで出して切る。当たった所は主の色の下線 (色だけに頼らない。太字は選んでいる件だけに使う)
+   */
+  .caption-hit {
+    display: flex;
+    flex-direction: column;
+    padding-block-end: var(--dp-space-2);
+  }
+  .scenes {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .scene {
+    display: flex;
+    gap: var(--dp-space-2);
+    padding: var(--dp-space-1) var(--dp-space-3);
+    color: inherit;
+    text-decoration: none;
+  }
+  a.scene:hover {
+    background: var(--dp-hover-soft);
+  }
+  .scene-at {
+    flex: none;
+    min-inline-size: 5ch;
+    color: var(--dp-muted);
+    text-align: end;
+  }
+  .scene-text {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+  .scene mark {
+    background: transparent;
+    color: inherit;
+    text-decoration: underline var(--dp-mark) var(--pico-primary);
+    text-underline-offset: 0.2em;
   }
   .none {
     margin: 0;

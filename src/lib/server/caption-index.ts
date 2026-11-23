@@ -492,6 +492,7 @@ async function step(): Promise<void> {
         await indexRecording(recording, abort.signal, snapshot);
       } catch (error) {
         // 例外で終わった録画も失敗として覚える (覚えないと、次の回も同じ録画を選び、ほかの録画を読めなくなる)
+        // ここでも書けない (DB に書けない) ときは外の catch で記録に残すだけにする。DB に書けないなら、ほかの録画も書けない
         console.error(`[caption-index] 録画 ${recording.id}: ${error}`);
         writeCaptionIndex(snapshot, {
           state: "failed",
