@@ -240,3 +240,5 @@ denpa のサーバは、起動したときと 1 時間ごとに、新しいバ�
 
 チューナーエージェント (`agent/`) だけは **MPL-2.0** ([agent/LICENSE](agent/LICENSE))。ほかのソフトに組み込んだり一緒に配ったりできる一方で、
 エージェントのファイルを直して配るなら、そのファイルは同じ条件で公開してください。
+asicen-userland をつなぐ層 (`agent/asicen/`) は **GPL-2.0-only** で、それを組み込んだ Linux のイメージと Android のアプリのエージェントは全体を GPL-2.0 の条件で配ります
+([docs/licenses.md](docs/licenses.md#asicen-userland-を組み込んだエージェント))。

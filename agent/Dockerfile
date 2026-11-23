@@ -48,98 +48,59 @@ RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet
     /usr/share/dotnet/dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
-# 外から取ってくるもの (asicen-userland)。**取ってくる道具は実行イメージに残さない**
-# (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
-# 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る。
-# 土台は digest で留める (リポジトリ直下の Dockerfile にある ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
-# 組み直しになり、配布元から取ってくる回数が増える
+# asicen-userland を組み込んだ共有ライブラリ (libdenpa_asicen.so。agent/asicen/)。PLEX PX-W3U3 などの ASICEN 系を、エージェントが
+# 同じプロセスから呼んで動かす (Asicen.cs / AsicenNative.cs)。**試験的。実機では確かめていない。**
+#
+# **組むのは agent/asicen/build.sh で、上流のバージョンと SHA-256 もそこに固定してある** (Android のアプリも同じスクリプトで組む)。
+# 上流のソースのアーカイブ (libusb と dtv-userland-core を同梱) から、この段の arch で組む (build 段と同じく QEMU は使わない)。
+# リンクする glibc と libstdc++ は実行イメージと同じ Debian 13 のもの。組む道具 (curl・cmake・コンパイラ) は実行イメージに残さない。
+#
+# **ファームウェアは上流の配布物に入っているものをそのまま使い** (build.sh が SHA-256 を突き合わせる)、/opt/asicen-userland/firmware/ に置く。
+# **再配布の許諾は確かめられていない。上流と同じ判断で同梱している。権利を持つ人から申し出があれば外す** (docs/licenses.md
+# 「ASICEN のファームウェアを同梱している判断」)。上流が添える通知とライセンスの文書、対応するソースの入手先 (SOURCE.txt) は
+# /opt/asicen-userland/licenses/ に置く。**このライブラリは GPL-2.0 で、エージェントと同じプロセスで動くので、このイメージの
+# エージェントの実行ファイルとライブラリは GPL-2.0 の条件で配る** (docs/licenses.md「asicen-userland を組み込んだエージェント」)
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS fetch
+FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS asicen
 ARG TARGETARCH
-ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
-RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certificates && \
-    case "${TARGETARCH}" in amd64|arm64) ;; *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; esac
-
-# PLEX PX-W3U3 などの ASICEN 系は asicen-userland で動かす (Asicen.cs / AsicenUdtv.cs)。**試験的。実機では確かめていない。**
-#
-# **上流のプレリリース v1.0.0-beta (2026-11-05) に固定する。** エージェントは asicend と UDTV 1.0 で通信し、その形式の一部は
-# このバージョンの通信を観察して起こした (docs/agent.md「asicen-userland の作り」)。HELLO の応答が asicen-userland 1.0.0 でなければ
-# エージェントが断るので、**バージョンを上げるときは、通信を観察し直して Asicen.cs・AsicenUdtv.cs を合わせ、下の SHA-256 も入れ替える。**
-# Renovate はバージョンを上げる PR を出すだけで、自動ではマージしない (renovate.json)。その PR は、下の SHA-256 が合わずに CI で落ちる。
-#
-# **タグとアーカイブの名前でバージョンが違う。** タグは v1.0.0-beta、アーカイブは asicen-userland-1.0.0-linux-glibc-<arch>.tar.gz で、
-# `--version` も 1.0.0 と出力する (上流のリリースノートの「既知の問題」)。アーカイブの名前には、タグのプレリリースの部分 (-beta) を
-# 落としたものを使う。正式な 1.0.0 が同じ名前のアーカイブで出るので、SHA256SUMS に加えて、**アーカイブそのものの SHA-256 をここに固定する。**
-#
-# アーカイブにはフォルダ分けが無く、コマンド 3 つ (asicend・asicenctl・asicen-ts。musl の完全静的 ELF) が直下にある。
-# 名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、コマンドはどちらも同じ。
-# 受信機は asicend の制御ソケットで直に通信するので、IFD ハンドラと mdev の設定は消す。ライセンスの文書はそのまま置く。
-#
-# **ファームウェアは上流のアーカイブに入っているものをそのまま使う** (asicend が起動するときに機材へ流し込む)。
-# SHA-256 は下の ASICEN_FIRMWARE_SHA256 (上流のリリースノートの値) と突き合わせる。
-#
-# **再配布の許諾は確かめられていない。上流と同じ判断で同梱している。権利を持つ人から申し出があれば外す。** 分かっている事実
-# (docs/licenses.md「ASICEN のファームウェアを同梱している判断」):
-# - PLEX の Windows 用ドライバ (Loader.sys) から上流 (Khronos31/asicen-userland) が取り出した 16,384 バイトのイメージ
-# - チップの会社 ASICEN (昇亮科技股份有限公司 / Asicen Technology、台湾) は解散し、2017-02-23 に清算が完結したと登記されている。
-#   台湾の会社情報サイト (https://www.twincn.com/item.aspx?no=80342850) の記載で、経済部の公式の登記では確かめていない
-# - PLEX は 2026-11 の時点で、公式サイトの「旧製品ドライバ」のページ (https://plex-net.co.jp/old-driver/) で PX-W3U3・PX-W3U3 V2・
-#   PX-S3U2 の Windows 用ドライバを配っている。そのページにも、上流が調べた公式のパッケージにも、再配布を認める文は無い
-# - PLEX が以前配っていた Linux 用ドライバのモジュールには license=GPL の表示があり、同じファームウェアが埋め込まれている。
-#   それだけではファームウェア自体のライセンスは決まらない (上流の NOTICES.md の整理)
-# 上流が添える通知 (licenses/VENDOR-FIRMWARE-NOTICE.txt など) は、配布物のまま置く。
-# renovate: datasource=github-releases depName=Khronos31/asicen-userland versioning=semver extractVersion=^v(?<version>.*)$
-ARG ASICEN_USERLAND_VERSION=1.0.0-beta
-ARG ASICEN_ARCHIVE_SHA256_AMD64=7e2264adee65cb3d0616b19550a36ff299098bcca8f350cec6155b434c0390da
-ARG ASICEN_ARCHIVE_SHA256_ARM64=20c043f27954685a338e7c13402d98dd8bbf6c22b093b792a32721e600e9a7e6
-ARG ASICEN_FIRMWARE_SHA256=5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a
-RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
-    case "${TARGETARCH}" in \
-      amd64) arch=x86_64; sum="${ASICEN_ARCHIVE_SHA256_AMD64}" ;; \
-      arm64) arch=aarch64; sum="${ASICEN_ARCHIVE_SHA256_ARM64}" ;; \
-    esac && \
-    base="https://github.com/Khronos31/asicen-userland/releases/download/v${ASICEN_USERLAND_VERSION}" && \
-    archive="asicen-userland-${ASICEN_USERLAND_VERSION%%-*}-linux-glibc-${arch}.tar.gz" && \
-    $CURL -O "${base}/${archive}" && $CURL -O "${base}/SHA256SUMS" && \
-    grep -E "^[0-9a-f]{64} [ *]${archive}\$" SHA256SUMS > archive.sum && \
-    sha256sum -c archive.sum && \
-    echo "${sum}  ${archive}" | sha256sum -c - && \
-    tar -xzf "${archive}" -C /opt/asicen-userland && \
-    rm -rf /opt/asicen-userland/ifd /opt/asicen-userland/mdev /opt/asicen-userland/reader.conf.d && \
-    test -x /opt/asicen-userland/asicend && test -x /opt/asicen-userland/asicenctl && \
-    echo "${ASICEN_FIRMWARE_SHA256}  /opt/asicen-userland/firmware/asicen-loader.bin" | sha256sum -c - && \
-    test -f /opt/asicen-userland/licenses/VENDOR-FIRMWARE-NOTICE.txt && \
-    rm -rf /tmp/*
+RUN case "${TARGETARCH}" in amd64|arm64) ;; *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; esac && \
+    apt-get update && \
+    apt-get -y --no-install-recommends install curl ca-certificates cmake ninja-build g++ make && \
+    rm -rf /var/lib/apt/lists/*
+COPY agent/asicen/ /src/asicen/
+RUN bash /src/asicen/build.sh /opt/asicen-userland --firmware
 
 # ---------------------------------------------------------------------------
 # **土台は distroless (Debian 13 = trixie。リンクした build 段と同じバージョンなので glibc も合う)。**
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
 # エージェントが要るのはこれで全部。実行ファイルが直に繋ぐのは libc と libm だけで、libssl は .NET が読む。
+# asicen-userland のライブラリ (/opt/asicen-userland/libdenpa_asicen.so) は libstdc++ と libgcc_s も繋ぐ (土台にある)。
 # エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
 # CARD_URL を https で指したときも .NET の HttpClient が libssl を読み、
 # 相手の証明書は ca-certificates で確かめる。
-# 子プロセスは asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起動する。
-# シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
+# 子プロセスを起動するのは適合テストの偽の選局 (`FAKE_TUNE`。`setsid sh -c`) だけで、これはホストで組んだ
 # 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
 #
 # **`recisdb` も libaribb25 も pcscd も入れない。** 選局は自分でやり (ioctl)、
 # B25 も自分で復号し (B25.cs)、カードリーダーとも自分で通信する (Ccid.cs / It930xCard.cs / Zd1j.cs / Dt295NativeCard.cs)。
 #
-# **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
-# asicend のソケットを /run/asicen-userland に作るので、今までどおり root で動かす
+# **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開くので、今までどおり root で動かす
 FROM gcr.io/distroless/cc-debian13:latest@sha256:dac90a25ffe03ebaace90cda886b081e61ab6cd77ac47eda51f7bcc15c320765 AS runtime
 
 # **実行イメージの glibc で実行ファイルを読み込めることを、組むときに確かめる。**
 # 実行ファイルが要求する GLIBC のバージョンが土台に無ければ、ローダーがここで止めてビルドが落ちる
 # (build 段と土台の Debian がずれたときに、起動してからではなくここで分かる)。
-# シェルが無いので exec の形で起動する。`--version` はバージョンを出して終わる (Program.cs)
+# シェルが無いので exec の形で起動する。`--version` はバージョンを出して終わる (Program.cs)。
+# asicen-userland のライブラリも、エージェントがこの土台で読み込めることを確かめる (`--asicen-check`。読めなければ exit 1)
 FROM runtime AS loaded
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
+COPY --from=asicen /opt/asicen-userland /opt/asicen-userland
 RUN ["/usr/local/bin/denpa-agent", "--version"]
+RUN ["/usr/local/bin/denpa-agent", "--asicen-check"]
 
 FROM runtime
 
-COPY --from=fetch /opt/ /opt/
+COPY --from=loaded /opt/asicen-userland /opt/asicen-userland
 
 # PLEX PX-S1UD などの Siano RIO 系の機材は、エージェントが USB を直に持って動かす (Siano.cs)。外から取ってくるものは無い。
 # ISDB-T のファームウェア (isdbt_rio.inp) はエージェントの実行ファイルに埋め込んである (SianoFirmware.cs。agent/Denpa.Agent/firmware/README.md)。

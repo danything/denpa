@@ -27,9 +27,9 @@
       ]
     },
     {
-      "description": ".github/asicen-android.sh の `# renovate:` 付きの変数 (`ASICEN_USERLAND_VERSION=1.0.0-beta`)。Android のアプリに入れる asicen-userland のバージョン。agent/Dockerfile と同じグループの PR になる (下の packageRules)",
+      "description": "agent/asicen/build.sh の `# renovate:` 付きの変数 (`ASICEN_USERLAND_VERSION=1.0.0-beta`)。エージェントに組み込む asicen-userland のバージョン (Linux のイメージと Android のアプリ)。自動ではマージしない (下の packageRules)",
       "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/asicen-android\\.sh$/"],
+      "managerFilePatterns": ["/^agent/asicen/build\\.sh$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?(?: versioning=(?<versioning>\\S+?))?\\s+[A-Z0-9_]+=(?<currentValue>\\S+)"
       ]
@@ -61,7 +61,7 @@
       "pinDigests": true
     },
     {
-      "description": "asicen-userland (PX-W3U3 など、試験的) は agent/Dockerfile と .github/asicen-android.sh (Android のアプリ) でプレリリースの 1.0.0-beta に固定してある (versioning=semver で、次のプレリリースと正式版を追う)。エージェントは通信の形式の一部をこのバージョンの通信を記録して起こしていて、asicen-userland 1.0.0 でなければ断る。バージョンを上げるときは、通信を記録し直して Asicen.cs・AsicenUdtv.cs と Dockerfile・asicen-android.sh の SHA-256 を合わせる必要があるので、自動ではマージしない (docs/tuners.md。PR は SHA-256 が合わずに CI で落ちる)。共有の設定は非 major を全部「all dependencies」の 1 つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
+      "description": "asicen-userland (PX-W3U3 など、試験的) は agent/asicen/build.sh でプレリリースの 1.0.0-beta に固定してある (versioning=semver で、次のプレリリースと正式版を追う)。エージェントに組み込むライブラリ (agent/asicen/denpa_asicen.cpp) は上流の起動の流れを写していて、エージェントは asicen-userland 1.0.0 でなければ使わない。バージョンを上げるときは、写した流れを上流と比べ直し、build.sh の SHA-256 とエージェントの AsicenNative.Version を合わせる必要があるので、自動ではマージしない (docs/agent.md。PR は SHA-256 が合わずに CI で落ちる)。共有の設定は非 major を全部「all dependencies」の 1 つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["Khronos31/asicen-userland"],
       "groupName": "asicen-userland",

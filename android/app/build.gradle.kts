@@ -32,8 +32,7 @@ val dib0700Licence = rootProject.layout.projectDirectory.file("../agent/Denpa.Ag
 val denpaLicense = rootProject.layout.projectDirectory.file("../LICENSE")
 
 /*
- * asicen-userland (ASICEN 系。試験的) の置き場。CI が .github/asicen-android.sh で、上流の Android 向けのビルドを `jniLibs/<ABI>/libasicend.so`・
- * `libasicenctl.so` に、ファームウェアを `assets/asicen/` に、ライセンスの文書とソースの入手先を `assets/licenses/asicen-userland/` に並べる。
+ * asicen-userland (ASICEN 系。試験的) の置き場。CI が .github/asicen-android.sh で、agent/asicen/build.sh で組んだライブラリを `jniLibs/<ABI>/libdenpa_asicen.so` に、ファームウェアを `assets/asicen/` に、ライセンスの文書とソースの入手先を `assets/licenses/asicen-userland/` に並べる。
  * 既定は android/asicen-userland/ (リポジトリには入れない)。`DENPA_ASICEN` で別の置き場を渡せる。無ければ入れずに組む (ASICEN の機材は使えない)
  */
 val asicen = System.getenv("DENPA_ASICEN")?.takeIf { it.isNotEmpty() }

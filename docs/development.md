@@ -306,7 +306,7 @@ release は組み直さず、main で組んだイメージにバージョンを 
 
 **イメージは amd64 と arm64 の 2 つ**で、同じタグに束ねてあります (理由と組み方は
 [architecture.md](architecture.md#イメージのタグ))。Dockerfile は BuildKit の `TARGETARCH`
-で配布物 (asicen-userland) の名前と .NET の RID を読み替え、
+で .NET の RID を読み替え、
 Intel と AMD の VA-API ドライバは amd64 だけに入れます
 (Debian の arm64 には Intel のドライバが無く、AMD の GPU を載せた arm の機械はまず無い)。Dockerfile やそこへ入るもの (`agent/`・`patches/`・依存) を
 触った PR では、`Docker build check` が両方の arch を本物のランナーで組みます
@@ -330,9 +330,9 @@ denpa が起動するのは ffmpeg / ffprobe だけで、シェルを通しま�
 
 ### 外から持ってくるものはバージョンで固定する
 
-ffmpeg・SVT-AV1・Opus・Mesa・Rockchip MPP・Denpa Font・asicen-userland は、どれも
+ffmpeg・SVT-AV1・Opus・Mesa・Rockchip MPP・Denpa Font は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
-Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
+エージェントに組み込む asicen-userland は `agent/asicen/build.sh` に (Linux のイメージと Android のアプリで同じ)、Android 向けのエージェントに入れる OpenSSL は `.github/openssl-android.sh` に、NDK は `.github/workflows/android.yml` に、Android のアプリの AGP と依存は `android/gradle/libs.versions.toml` に、アプリに入れる bun は `.github/bun-android.sh` にバージョンを書いています。
 アプリに入れる ffmpeg は Dockerfile の `ffmpeg` 段からバージョンと部品を読み、x264・dav1d・zimg のバージョンは `.github/ffmpeg-android.sh` に書いています (Mac の `ffmpeg-macos.sh` と同じ)。
 `bun-android.sh` は Dockerfile の `oven/bun` からバージョンを読みます。APK の denpa 本体もコンテナと同じ bun で動かすためで、Renovate が Dockerfile を上げれば APK の bun も上がります。
 
@@ -373,9 +373,9 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
   Gradle・AGP・Kotlin・compileSdk・JDK・依存は、その時点の最新の安定版にします。上げるのは Renovate です (JDK は `renovate.json` の注釈で追う)
 - エージェントは `android/agent-libs/<ABI>/libdenpa_agent.so` に置くと APK に入ります (`DENPA_AGENT_LIBS` で別の置き場も渡せます)。
   入れるときに `nativeLibraryDir` へ展開させ (`useLegacyPackaging`)、そこから exec します。Android 10 からは、アプリのデータの置き場のファイルは実行できません
-- asicen-userland は `android/asicen-userland/` に置くと APK に入ります (`DENPA_ASICEN` で別の置き場も渡せます)。`bash .github/asicen-android.sh android/asicen-userland arm64 x86_64` が、
-  上流の Android 向けのビルドを SHA-256 で確かめて取り、`jniLibs/<ABI>/libasicend.so`・`libasicenctl.so`、ファームウェア、ライセンスの文書を並べます。
-  バージョンが `agent/Dockerfile` と、組んだコミットが test.yml の `ASICEN_USERLAND_REF` と違えば止まります。置かなければ asicen-userland の無い APK になります
+- asicen-userland は `android/asicen-userland/` に置くと APK に入ります (`DENPA_ASICEN` で別の置き場も渡せます)。`bash .github/asicen-android.sh android/asicen-userland <組んだもの> arm64 x86_64` が、
+  `agent/asicen/build.sh --android <ABI> --firmware` で組んだもの (CI はエージェントと同じジョブで NDK で組む) から、`jniLibs/<ABI>/libdenpa_asicen.so`、ファームウェア、ライセンスの文書を並べます。
+  置かなければ asicen-userland の無い APK になります
 - bun は `android/bun/` に置くと APK に入ります (`DENPA_BUN` で別の置き場も渡せます)。`bash .github/bun-android.sh android/bun arm64 x86_64` が、
   公式の Android 向けのビルドを、同じリリースの SHASUMS256.txt の SHA-256 で確かめて取り、`jniLibs/<ABI>/libbun.so` とライセンスの文書を並べます。x86_64 は CI のエミュレータ用で、AVX2 を使わない baseline を入れます。
   bun は配布物のまま入れます (`keepDebugSymbols`)。jniLibs は APK の中では圧縮されるので、増えるのは arm64 で約 53 MB です。端末には展開した 113 MB が置かれます
@@ -418,7 +418,7 @@ x86_64 のエミュレータに入れて確かめます (`.github/android-app-sm
 - エージェントがアプリの子プロセス (SELinux の `untrusted_app`) で動き、`<dataDir>/u` に USB_BROKER のソケット (0600) を作り、アプリが繋いで `synced` を送ること
 - denpa と同じ手順で組み、`/denpa/about` (`os` が `android`)・`/denpa/tuners`・`/denpa/card` が答えること
 - アプリの `LocalSocket` からファイルの fd を付けた `attached` を送ると、エージェントが fd ごと受け取ること
-- エージェントが APK の `asicend --version` を起動できること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせること
+- エージェントが APK の asicen-userland のライブラリを読み込めること。ファームウェア待ちの ID (`1738:5211`) でファイルの fd を送ると、エージェントがその fd の複製をライブラリに渡すこと
 - denpa 本体がアプリの子プロセスの bun で動き、3000 番で `/api/health`・画面・フォント・デコーダを返すこと。エージェントが全部のインターフェースで待ち受け、
   denpa が 127.0.0.1 からアプリの作った合言葉でエージェントと組み、設定の「受信」の「チューナー」の一覧 (0 台) を読めること
 - アプリの子プロセスの bun で `.github/android-bun-check.js` を流し (debug の受け口)、JIT が動くこと、`localhost` を引けること、
