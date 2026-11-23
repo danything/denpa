@@ -27,7 +27,7 @@ import {
   type HwCodec,
   SOFTWARE_CODECS,
 } from "../hw";
-import { encodeSource, recordedTransport, tsPathOf } from "../source";
+import { encodeSource, ownsTs, recordedTransport, tsPathOf } from "../source";
 import {
   type EncodeKind,
   type EncodePhase,
@@ -68,7 +68,7 @@ import {
   UNMEASURED,
   windowLabel,
 } from "./fps";
-import { fileSize, pruneEmptyDirs, removeIfExists } from "./fsx";
+import { fileSize, pruneEmptyDirs, removeIfExists, scratchBase } from "./fsx";
 import { hwArgs, hwChain, hwReady, type HwWay } from "./hwenc";
 import {
   encodeLateAudio,
@@ -1202,8 +1202,23 @@ function paidRecording(recording: Recording): boolean {
  * 取り残されても、ジョブが走っていなければ片付けで消える (同じ名前の動画があっても。`files.orphan`)
  */
 function clearScratch(input: string): void {
-  removeIfExists(`${input}.decoded.m2ts`);
+  removeIfExists(decodedPath(input));
   removeIfExists(remuxedPath(input));
+}
+
+/**
+ * 元の TS から作る作業ファイルの場所 (`fsx.scratchBase`)。**取り込んだ TS (置き場の外) の作業ファイルはユーザーのフォルダに書かず、`RAW_DIR/.import/` に作る。**
+ * そのフォルダが無ければ作る
+ */
+function scratchPath(input: string, suffix: string): string {
+  const path = `${scratchBase(input)}${suffix}`;
+  mkdirSync(dirname(path), { recursive: true });
+  return path;
+}
+
+/** スクランブルを復号した作業ファイル (`descramble`) */
+function decodedPath(input: string): string {
+  return scratchPath(input, ".decoded.m2ts");
 }
 
 /**
@@ -1211,7 +1226,7 @@ function clearScratch(input: string): void {
  * 映像と音声を MP4 に写し、あとは TS の録画と同じく読む。映像と音声をそのまま写すので、元と同じくらいの大きさになる
  */
 function remuxedPath(input: string): string {
-  return `${input}.remux.mp4`;
+  return scratchPath(input, ".remux.mp4");
 }
 
 /**
@@ -1542,7 +1557,7 @@ async function runJob(jobId: number): Promise<void> {
     uhdCaptions = remuxed.captions;
   } else if (isScrambled(input)) {
     setPhase(jobId, "descramble", "スクランブルを復号しています");
-    const target = `${input}.decoded.m2ts`;
+    const target = decodedPath(input);
     const result = await descramble(input, target, signal);
     if (!result.ok) {
       removeIfExists(target);
@@ -1560,7 +1575,8 @@ async function runJob(jobId: number): Promise<void> {
     }
     // 元の TS を残すかは録画ごとではなく全体設定 (settings.keepOriginal)
     decodedBy = result.agent ?? null;
-    if (settings().keepOriginal) {
+    // 取り込んだ TS (ユーザーのファイル) は置き換えない (`source.ownsTs`)。取り込みは掛かったままの TS を入れないので、ここへは来ない
+    if (settings().keepOriginal && ownsTs(recording)) {
       // 元の TS を残す設定なら、残すのは復号できたほうだけにする。
       // 掛かったままの TS を取っておいても、あとから復号できる保証は無い
       renameSync(target, input);
@@ -2359,8 +2375,10 @@ async function runJob(jobId: number): Promise<void> {
     encode_skip: primary.skip,
     updated_at: now(),
   };
-  // 落ちたコーデックがあれば元の TS は消さない (再エンコードすれば全部作り直せるように)
-  const keep = settings().keepOriginal || failure !== null;
+  // 落ちたコーデックがあれば元の TS は消さない (再エンコードすれば全部作り直せるように)。
+  // 取り込んだ TS はユーザーのファイルなので、設定に関係なく消さない (`source.ownsTs`)
+  const keep =
+    settings().keepOriginal || failure !== null || !ownsTs(recording);
   if (!keep) removeIfExists(recording.ts_path);
   orm()
     .update(recordings)
@@ -2553,7 +2571,8 @@ async function detectCm(
    * 覚え書き (`cm_ranges`) も差し替えたあとに書く
    */
   const cm = shiftRanges(detection.cm, skip);
-  const chapters = cm.length > 0 ? `${input}.${jobId}.chapters.txt` : null;
+  const chapters =
+    cm.length > 0 ? scratchPath(input, `.${jobId}.chapters.txt`) : null;
   if (chapters !== null)
     writeFileSync(chapters, chapterMetadata(cm, detection.duration - skip));
   const outputs = files.map((file) => `${file}.${jobId}.post`);
@@ -2642,22 +2661,36 @@ function progressReporter(
 }
 
 /**
+ * **取り込んだ録画の最初のジョブか** (1 なら後ろに並べる)。ほかのソフトで録った TS をまとめて取り込むと (`ts-import.ts`)、数千本のエンコードが
+ * 待ち行列に入る。id 順のままだと新しく録った録画のエンコードが何日も待たされ、その間に元の TS が `RAW_DIR` に積もって、空きが尽きると録画が失敗する。
+ * 取り込んだ録画でも、人が押した再エンコードと CM の再検出 (前のジョブがある) は id 順に並べる
+ */
+const importedFirstEncode = sql`(SELECT ${recordings.imported_ts} IS NOT NULL FROM ${recordings} WHERE ${recordings.id} = ${encodeJobs.recording_id})
+  AND NOT EXISTS (SELECT 1 FROM encode_jobs AS earlier WHERE earlier.recording_id = ${encodeJobs.recording_id} AND earlier.id < ${encodeJobs.id})`;
+
+/** 次に動かすジョブ (待っているもののうち、取り込んだ録画の最初のジョブを後ろにして id 順) */
+export function nextQueuedJob():
+  { id: number; kind: EncodeKind; attempts: number } | undefined {
+  return orm()
+    .select({
+      id: encodeJobs.id,
+      kind: encodeJobs.kind,
+      attempts: encodeJobs.attempts,
+    })
+    .from(encodeJobs)
+    .where(eq(encodeJobs.state, "queued"))
+    .orderBy(importedFirstEncode, encodeJobs.id)
+    .limit(1)
+    .get();
+}
+
+/**
  * 枠の空きぶんだけキューを消化する。録画完了時と定期 tick の両方から呼ばれる。
  * 空きは ffmpeg の本数で数え、動き出したジョブの 2 本目以降のコーデックが枠を待っていれば新しいジョブは始めない (`encode-slots.ts`)
  */
 export function pump(): void {
   while (slots.free()) {
-    const next = orm()
-      .select({
-        id: encodeJobs.id,
-        kind: encodeJobs.kind,
-        attempts: encodeJobs.attempts,
-      })
-      .from(encodeJobs)
-      .where(eq(encodeJobs.state, "queued"))
-      .orderBy(encodeJobs.id)
-      .limit(1)
-      .get();
+    const next = nextQueuedJob();
     if (next === undefined) return;
 
     // **試し過ぎたジョブは失敗にする。** プロセスごと落とすジョブは running→queued

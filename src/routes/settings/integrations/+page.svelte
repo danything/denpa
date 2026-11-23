@@ -8,12 +8,13 @@
   import Notifications from "./Notifications.svelte";
   import Ranking from "./Ranking.svelte";
   import Transfer from "./Transfer.svelte";
+  import TsImport from "./TsImport.svelte";
   import Tv from "./Tv.svelte";
 
   let { data, form } = $props();
 
-  // 引き継ぎの進み具合はサーバから届く
-  liveUpdates(["migrate"]);
+  // 引き継ぎと録画ファイルの取り込みの進み具合はサーバから届く
+  liveUpdates(["migrate", "import"]);
 
   /** 押した結果は画面で 1 か所に出す。引き継ぎの進み具合そのものは、その節の中に出したまま */
   const notices = $derived.by(() => {
@@ -62,4 +63,5 @@
 <div id="ranking" data-part><Ranking {data} /></div>
 <div id="migrate" data-part><Migrate {data} /></div>
 <div id="migrate-edcb" data-part><MigrateEdcb {data} /></div>
+<div id="ts-import" data-part><TsImport {data} /></div>
 <div id="transfer" data-part><Transfer {data} /></div>

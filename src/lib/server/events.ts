@@ -13,6 +13,7 @@ export type DenpaEvent =
   | "recordings"
   | "reservations"
   | "migrate"
+  | "import"
   | "scan"
   | "services"
   /** 番組表が増えた・書き換わった。書くたびに飛ぶ (取得している間は読めたぶんを 30 秒ごとに書く。`epg-collect.collectChannel`) */

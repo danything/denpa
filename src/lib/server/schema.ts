@@ -681,6 +681,12 @@ export const recordings = sqliteTable(
     audio_type: integer("audio_type"),
     /** 元の TS。元の TS の置き場 (`config.rawDir`) からの相対で持つ (`mediaPath`) */
     ts_path: mediaPath("ts_path", () => config.rawDir),
+    /**
+     * **ほかのソフトで録って取り込んだ元の TS の絶対パス** (`ts-import.ts`)。入っている行の `ts_path` はユーザーのファイルで、
+     * **denpa は消さない・動かさない・書き換えない** (削除・エンコードのあと・作業ファイル。`source.ownsTs`)。
+     * 置き場の外にあるので、`ts_path` と同じく絶対のまま持つ。削除しても残し、同じファイルを 2 回取り込まないための鍵にする
+     */
+    imported_ts: text("imported_ts"),
     ts_size: integer("ts_size").notNull().default(0),
     /**
      * エンコードしたもの (再生で主に使う)。いくつものコーデックでエンコードしたときは、

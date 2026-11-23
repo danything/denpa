@@ -1,0 +1,1 @@
+ALTER TABLE `recordings` ADD `imported_ts` text;

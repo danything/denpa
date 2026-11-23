@@ -137,6 +137,11 @@ export const config = {
   rawDir: str("RAW_DIR", join(mediaDir, "raw")),
   /** エンコード済みの置き場。プレイヤーにはここのファイルを配る */
   encodedDir: str("ENCODED_DIR", join(mediaDir, "encoded")),
+  /**
+   * **ほかのソフトで録った TS を取り込んでよいフォルダ** (`ts-import.ts`)。区切りは OS のパスの区切り (Linux と Mac は `:`、Windows は `;`)。
+   * 画面から指せるのはこの下だけで、空なら取り込みは使えない。サーバが読めるどこでも画面から読めてしまわないよう、立てる人が決める
+   */
+  importDirs: str("IMPORT_DIRS", ""),
 
   ffmpeg: str("FFMPEG", "/usr/local/bin/ffmpeg"),
   /**

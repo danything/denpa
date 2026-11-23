@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
@@ -7,7 +8,7 @@ import {
   statSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, isAbsolute, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 
 import { config } from "./config";
 
@@ -59,4 +60,23 @@ export function fileSize(path: string): number | null {
   } catch {
     return null;
   }
+}
+
+/** `path` が `root` そのものか、その下か。名前の先頭が同じだけの隣のフォルダ (`/media/raw2`) は外 */
+export function within(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/**
+ * **元の TS から作る作業ファイルの名前の元** (`<これ>.decoded.m2ts`・`<これ>.remux.mp4`・`<これ>.<ジョブ>.chapters.txt`)。
+ * 置き場 (`RAW_DIR`・`ENCODED_DIR`) の中の TS は今までどおりその隣に作る。**置き場の外の TS (取り込んだもの。`ts-import.ts`) は
+ * `RAW_DIR/.import/` の下に作り、ユーザーのフォルダには書かない。** 名前はパスのハッシュと元の名前で、同じ TS なら同じ名前になる
+ * (落ちたあとの後始末が同じ名前を消せる)。取り残されたものは置き場の片付け (`files.sweepLeftovers`) が見る
+ */
+export function scratchBase(input: string): string {
+  if (within(config.rawDir, input) || within(config.encodedDir, input))
+    return input;
+  const hash = createHash("sha256").update(input).digest("hex").slice(0, 16);
+  return join(config.rawDir, ".import", `${hash}-${basename(input)}`);
 }
