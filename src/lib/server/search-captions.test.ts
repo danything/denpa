@@ -49,6 +49,7 @@ function recordingWith(
       library_path: join(dir, `${id}.mkv`),
       ts_path: null,
       encode_skip: null,
+      encode_job: null,
     },
     {
       state: "done",
