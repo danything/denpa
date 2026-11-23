@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath の artifact configuration (slug windows-agent)。同じ中身を SignPath の画面のプロジェクト denpa に登録する。
+  ここを変えたら、画面の登録も同じ中身に書き換える (SignPath はリポジトリのこのファイルを読まない)。
+
+  署名に送るのは .github/workflows/windows-agent.yml が置く GitHub の artifact で、zip になって届く。
+  中身は denpa-agent.exe と denpa-tray.exe の 2 つだけ (zip の根に置く)。
+  製品名 (csproj の Product) と製品バージョン (InformationalVersion) が合わないものと、どちらかが欠けたものは署名しない。
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <!-- リリースのタグ (v2.62.0)。main から手で流したときは dev。InformationalVersion と同じ値 -->
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file-set product-name="denpa" product-version="${version}">
+      <include path="denpa-agent.exe" />
+      <include path="denpa-tray.exe" />
+      <for-each>
+        <authenticode-sign />
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

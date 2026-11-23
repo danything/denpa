@@ -244,6 +244,35 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 4. main のイメージのビルドが通ったのを確かめて、次のコマンドでリリースを作る。
    `gh release create vX.Y.Z --target main --generate-notes --title vX.Y.Z`。
    イメージは組み直さず、そのコミットのものにバージョンを貼り足します ([下](#イメージ))
+5. **署名が本番の証明書なら、SignPath から届く承認のメールからすぐに承認する** ([下](#windows-のエージェントの署名))。
+   承認するまで、Windows のエージェントの zip はリリースに付きません
+
+### Windows のエージェントの署名
+
+**`denpa-agent.exe` と `denpa-tray.exe` は SignPath で署名します。** zip の組み方と署名は `.github/workflows/windows-agent.yml` にあり、release.yml がリリースのたびに呼びます。
+SignPath に登録した artifact configuration (slug `windows-agent`) の中身は `.signpath/artifact-configurations/windows-agent.xml` です。
+SignPath はこのファイルを読まないので、変えたら SignPath の画面の登録も同じ中身に書き換えます。
+
+- 置き場は次のとおりです。トークンか variables が 1 つでも無いときは署名せず、署名の無い zip を付けます (リリースは止めない)
+
+  | 名前                                   | 置き場                           | 値                                                      |
+  | -------------------------------------- | -------------------------------- | ------------------------------------------------------- |
+  | `SIGNPATH_API_TOKEN`                   | Environment `signpath` の secret | SignPath の CI 用のユーザーの API トークン              |
+  | `SIGNPATH_ORGANIZATION_ID`             | repository variable              | SignPath の組織 ID                                      |
+  | `SIGNPATH_PROJECT_SLUG`                | repository variable              | `denpa`                                                 |
+  | `SIGNPATH_SIGNING_POLICY_SLUG`         | repository variable              | テストの段階は `test-signing`、本番は `release-signing` |
+  | `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | repository variable              | `windows-agent`                                         |
+
+- Environment `signpath` は、Settings の Environments で main とタグ `v*` のジョブからしか使えないようにします (Deployment branches and tags)。ほかの枝から windows-agent.yml を流すとジョブが失敗します
+- テストの段階 (ポリシーが `test-signing`) は、リリースでは署名せず、署名の無い zip を付けます。テスト用の証明書は自己署名で Windows が信頼しないのでリリースに付けず、付けないもののためにリリースを承認まで待たせないためです。
+  署名を試すときは、Actions の「Windows agent」を main から手で流し (Run workflow)、SignPath で承認します。
+  署名した exe は artifact `denpa-agent-windows-x64-test-signed` に残り、artifact `denpa-agent-windows-x64` の zip には署名の無い exe が入ります
+- 本番に替えるのは、SignPath が本番の証明書のポリシー `release-signing` を組織に足してからです。
+  `gh variable set SIGNPATH_SIGNING_POLICY_SLUG --body release-signing -R danything/denpa` で variable を書き換えると、次のリリースから署名した exe の zip が付きます。
+  workflow は、署名が SignPath Foundation の有効な署名 (`Get-AuthenticodeSignature` が `Valid`) であることを確かめてから zip を組みます
+- 本番の証明書では、リリースを作ってから承認するまで、`denpa-agent-<バージョン>-windows-x64.zip` はリリースに付きません。
+  その間に install.ps1 で入れようとした人は、zip が見つからずに止まります。60 分のうちに承認しないとジョブが失敗します。
+  失敗したジョブを流し直すと新しい署名のリクエストが出るので、もう一度承認します
 
 ### `@danything/arib` を出す
 

@@ -1,0 +1,206 @@
+name: Windows agent
+
+# **Windows (x64) 用のエージェントの配布物** (`denpa-agent-<バージョン>-windows-x64.zip` と .sha256) を組み、
+# `denpa-agent.exe` と `denpa-tray.exe` を SignPath で署名する。install.ps1 が取りに来る。
+# リリース (release.yml) がここを呼び、できた artifact に出所の証明を付けてリリースに添える。
+# 署名を試すために、Actions の画面から手でも流せる (workflow_dispatch)。PR の CI (test.yml) は呼ばない。
+#
+# zip の中身は `denpa-agent.exe`、通知領域のアイコンの `denpa-tray.exe` (tray/Denpa.Tray)、wdi-simple.exe とそのライセンスの文書を入れた
+# `libwdi/`、エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 `LICENCE.siano`・`LICENSE.dib0700`。
+# Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーで組む。
+#
+# **署名するのは 2 つの exe だけ** (wdi-simple.exe は上流のソースから組むので署名しない。docs/install-windows.md「コード署名」)。
+# 2 つだけを入れた artifact を置いて SignPath に送り、承認されて署名したものが返ってから zip を組む。
+# SignPath の側の決まり (製品名・製品バージョン) は .signpath/artifact-configurations/windows-agent.xml。
+#
+# 署名するかは、置き場の値と流し方で決める (`Decide` の段)。
+#
+# | 値と流し方                                                  | 署名           | zip に入れる exe |
+# | ----------------------------------------------------------- | -------------- | ---------------- |
+# | variables か secret が無い                                  | しない         | 署名の無いもの   |
+# | ポリシーが本番 (`release-signing`)                          | する           | 署名したもの     |
+# | ポリシーがそれ以外 (`test-signing`) で、手で流した          | する           | 署名の無いもの   |
+# | ポリシーがそれ以外 (`test-signing`) で、リリースから呼ばれた | しない         | 署名の無いもの   |
+#
+# テスト用の証明書 (自己署名) で署名したものはリリースに付けず、artifact `denpa-agent-windows-x64-test-signed` に残すだけ。
+# リリースから呼ばれたときにテストの署名をしないのは、付けないもののためにリリースを承認まで待たせないため。
+# 本番の証明書に替えるときは、repository variable `SIGNPATH_SIGNING_POLICY_SLUG` を `release-signing` に書き換える (docs/development.md「リリース」)
+#
+# | 名前                                    | 置き場                             | 中身                                                     |
+# | --------------------------------------- | ---------------------------------- | -------------------------------------------------------- |
+# | `SIGNPATH_API_TOKEN`                    | Environment `signpath` の secret   | SignPath の CI 用のユーザーの API トークン                |
+# | `SIGNPATH_ORGANIZATION_ID`              | repository variable                | SignPath の組織 ID                                       |
+# | `SIGNPATH_PROJECT_SLUG`                 | repository variable                | `denpa`                                                  |
+# | `SIGNPATH_SIGNING_POLICY_SLUG`          | repository variable                | `test-signing` (テスト用の証明書) か `release-signing`   |
+# | `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`  | repository variable                | `windows-agent`                                          |
+#
+# Environment `signpath` は、デプロイしてよい枝とタグを main と `v*` に絞る。トークンは PR やほかの枝のジョブから読めない
+# (そのため、ほかの枝から手で流すとジョブが失敗する)
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "リリースのタグ (v1.2.3 の形)。配布物の名前には v を落として入れる"
+        type: string
+        required: true
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    environment: signpath
+    # 承認を待つ上限 (60 分) とビルドのぶん
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # SignPath のアクションが、この run のジョブを確かめて artifact を読む (出所の確認)
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "11.0.100"
+
+      # 手で流したときのバージョンは、タグから流せばそのタグ、枝から流せば dev
+      - name: Decide
+        id: decide
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || 'dev' }}
+          EVENT: ${{ github.event_name }}
+          TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          ORGANIZATION: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          POLICY: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          CONFIGURATION: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+        run: |
+          set -eu
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          release=false
+          [ "$POLICY" = release-signing ] && release=true
+          sign=true
+          if [ -z "$TOKEN" ] || [ -z "$ORGANIZATION" ] || [ -z "$PROJECT" ] || [ -z "$POLICY" ] || [ -z "$CONFIGURATION" ]; then
+            sign=false
+            echo "::notice::SignPath の API トークンか variables が無いので、署名せずに組みます"
+          elif [ "$release" = false ] && [ "$EVENT" != workflow_dispatch ]; then
+            sign=false
+            echo "::notice::署名のポリシーがテスト用 ($POLICY) なので、リリースでは署名せずに組みます"
+          fi
+          echo "sign=$sign" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+      # wdi-simple.exe (libwdi。Zadig をコマンドラインで使うもの)。install.ps1 -WinUsb がチューナーのドライバを WinUSB に替えるのに使う。
+      # libwdi のリリースには Zadig しか無いので、決めたタグのソースからビルドする (コミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)
+      - name: Build wdi-simple (libwdi)
+        shell: pwsh
+        run: ./scripts/build-wdi-simple.ps1 -Out out\libwdi
+
+      # 製品バージョンはタグ、ファイルバージョンは v を落としたタグ (どちらも実行ファイルのプロパティに出る)。
+      # dev のときはファイルバージョンを渡さない (csproj の既定の 1.0.0.0 のまま)
+      - name: Build
+        shell: bash
+        env:
+          TAG: ${{ steps.decide.outputs.tag }}
+        run: |
+          set -eu
+          version=(-p:InformationalVersion="$TAG")
+          [ "$TAG" = dev ] || version+=(-p:Version="${TAG#v}")
+          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 "${version[@]}" -o out
+          dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 "${version[@]}" -o out
+
+      # 署名に送る artifact。2 つの exe だけを zip の根に置く (windows-agent.xml の include と同じ並び)
+      - name: Upload unsigned
+        id: unsigned
+        if: steps.decide.outputs.sign == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-agent-unsigned
+          path: |
+            out/denpa-agent.exe
+            out/denpa-tray.exe
+          if-no-files-found: error
+          retention-days: 3
+
+      # SignPath で承認する人が承認するまで待つ (上限 60 分)。過ぎたらジョブが落ちる。流し直すと新しい署名のリクエストが出る
+      - name: Sign
+        if: steps.decide.outputs.sign == 'true'
+        uses: signpath/github-action-submit-signing-request@a2c5b60d9c75f073142b653c354b632eedce097b # v3.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          parameters: |
+            version: ${{ toJSON(steps.decide.outputs.tag) }}
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed
+
+      # 本番の証明書なら、Windows が信頼する SignPath Foundation の証明書で署名してあること (Valid) を求める。
+      # テスト用の証明書は自己署名で Valid にならないので、署名が付いていることだけを求める
+      - name: Check signatures
+        if: steps.decide.outputs.sign == 'true'
+        shell: pwsh
+        env:
+          RELEASE: ${{ steps.decide.outputs.release }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($name in 'denpa-agent.exe', 'denpa-tray.exe') {
+            $sig = Get-AuthenticodeSignature "signed/$name"
+            "${name}: $($sig.Status) $($sig.SignerCertificate.Subject)"
+            if ($env:RELEASE -eq 'true') {
+              if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'CN=SignPath Foundation') { throw "$name の署名が SignPath Foundation の有効な署名ではありません" }
+            } elseif ($null -eq $sig.SignerCertificate) {
+              throw "$name に署名が付いていません ($($sig.Status))"
+            }
+          }
+
+      # 本番の証明書で署名したときだけ、署名したもので置き換える
+      - name: Use signed
+        if: steps.decide.outputs.sign == 'true' && steps.decide.outputs.release == 'true'
+        shell: bash
+        run: cp signed/denpa-agent.exe signed/denpa-tray.exe out/
+
+      - name: Upload test-signed
+        if: steps.decide.outputs.sign == 'true' && steps.decide.outputs.release != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-agent-windows-x64-test-signed
+          path: |
+            signed/denpa-agent.exe
+            signed/denpa-tray.exe
+          if-no-files-found: error
+          retention-days: 7
+
+      # .sha256 は shasum と同じ形式 (install.ps1 が確かめる)
+      - name: Zip
+        id: zip
+        shell: bash
+        env:
+          TAG: ${{ steps.decide.outputs.tag }}
+        run: |
+          set -eu
+          asset="denpa-agent-${TAG#v}-windows-x64.zip"
+          # Siano と DiB0700 のファームウェアはエージェントに埋め込んである。許諾の文面を添える (agent/Denpa.Agent/firmware/README.md)
+          cp agent/Denpa.Agent/firmware/LICENCE.siano agent/Denpa.Agent/firmware/LICENSE.dib0700 out/
+          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe, out/libwdi, out/LICENCE.siano, out/LICENSE.dib0700 -DestinationPath '$asset'"
+          sha256sum "$asset" > "$asset.sha256"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-agent-windows-x64
+          path: |
+            ${{ steps.zip.outputs.asset }}
+            ${{ steps.zip.outputs.asset }}.sha256
+          if-no-files-found: error
+          retention-days: 7
