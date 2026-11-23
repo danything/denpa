@@ -14,10 +14,15 @@ import { alias, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import { globTerms, likePieces } from "../fold";
 import type { ReservationState, Rule } from "../types";
+import { pendingCaptionIndex } from "./caption-index";
+import { captionHits, captionMatch, captionTerms } from "./caption-key";
 import { now, orm } from "./db";
+import { tsHeadOf } from "./recording";
 import { ANY_PAID, compile, haystack, matchesCompiled } from "./rules";
 import {
   activeEncodeJobId,
+  CAPTION_FTS,
+  captionLines,
   HELD_STATES,
   latestReservationRecordingId,
   programs,
@@ -32,7 +37,7 @@ import { searchable } from "./title";
 
 /**
  * **検索** (結果の画面 `/search?q=` と、打つそばから出す `/api/search`)。番組表・録画・予約・ルールを
- * 1 つの言葉で探す。
+ * 1 つの言葉で探す。録画の字幕 (`searchCaptions`) は結果の画面と `/api/search/captions` だけ。
  *
  * 読み方はどこも同じで、空白で区切った語を**すべて**含むもの (AND)。全角と半角、大文字と小文字、
  * 外字と昔の書き方は揃えて比べる (`title.searchable`)。
@@ -452,4 +457,200 @@ export function searchRules(q: string, options: SearchOptions) {
     ),
   }));
   return { total: found.length, rows, more: found.length > options.limit };
+}
+
+/** 録画の字幕で当たった 1 か所 (`searchCaptions`) */
+export interface CaptionHit {
+  /** 番組の始めからの秒 (観る画面の `?at=` と同じ。切り抜きの「この場面から観る」と同じ物差し) */
+  at: number;
+  /** 字幕の 1 枚の文字 (`caption-words.captionWords`。行の間に空白) */
+  text: string;
+  /** `text` の中の当たった所 ([始め, 終わり)。UTF-16 の位置) */
+  marks: [number, number][];
+  /** 同じ言語の 1 つ前と 1 つ後の 1 枚。無ければ空 */
+  before: string;
+  after: string;
+  /** 字幕の第何言語か */
+  language: number;
+}
+
+/** 1 本の録画で見せる当たりの数 */
+export const CAPTION_HITS = 3;
+/** 同じ録画の当たりをまとめる間 (ms)。1 文が何枚にも分かれて出る字幕で、同じ語が続けて当たる */
+const CAPTION_GAP = 10_000;
+/** 1 回に読む当たりの行の数と、読む行の上限。よく出る語でも、ここで止める (100 万行で 2 万行を読んで 90 ms ほど) */
+const CAPTION_BATCH = 500;
+const CAPTION_SCAN = 20_000;
+
+/**
+ * **録画の字幕** (`caption-index.ts` のインデックス)。字幕に語がすべて入っている録画を、新しい順 (録画の ID の大きい順) に返す。
+ *
+ * - インデックスを行の ID の大きい順に少しずつ読む。行の ID の上位は録画の ID なので、録画が `limit` 本を超えたところで止められる
+ *   (その手前の録画の当たりは全部読んである)。読む行は `CAPTION_SCAN` まで。超えたら `more` を立て、最後の録画の `hits_total` は目安になる
+ * - 当たった行は、揃えた文字が語をそのまま含むかで確かめ直す (`caption-key.captionHits`)。当たった所はその位置で返す
+ * - 同じ録画で `CAPTION_GAP` より近い当たりは 1 つにまとめる。見せるのは時刻の順に先頭の `CAPTION_HITS` か所
+ * - 語がどれも 1 字なら探さず、`short` を立てる (2 字ずつ区切って入れているので、1 字では引けない)
+ * - `total` は当たった録画の数で、`limit` を超えたら `limit` (`more` が立つ)
+ */
+export function searchCaptions(q: string, options: { limit: number }) {
+  const { limit } = options;
+  const keys = captionTerms(searchWords(q));
+  const empty = { total: 0, rows: [], more: false, short: false };
+  if (keys.length === 0) return { ...empty, pending: 0 };
+  const pending = pendingCaptionIndex();
+  const match = captionMatch(keys);
+  if (match === null) return { ...empty, short: true, pending };
+
+  /** 録画ごとの当たり (読んだ順 = 録画の新しい順) */
+  const found = new Map<
+    number,
+    {
+      id: number;
+      at_ms: number;
+      language: number;
+      text: string;
+      marks: [number, number][];
+    }[]
+  >();
+  let before = Number.MAX_SAFE_INTEGER;
+  let read = 0;
+  let exhausted = false;
+  while (found.size <= limit) {
+    if (read >= CAPTION_SCAN) break;
+    let ids: number[];
+    try {
+      ids = orm()
+        .all<{ id: number }>(
+          sql`SELECT rowid AS id FROM ${sql.raw(CAPTION_FTS)} WHERE ${sql.raw(CAPTION_FTS)} MATCH ${match} AND rowid < ${before} ORDER BY rowid DESC LIMIT ${CAPTION_BATCH}`,
+        )
+        .map((row) => row.id);
+    } catch (error) {
+      // FTS5 が読めない式 (揃えた語に、SQLite が語の字と読まない字だけが残ったなど)。当たりなしにする
+      console.warn(`[search] 字幕を探せませんでした: ${error}`);
+      ids = [];
+    }
+    if (ids.length === 0) {
+      exhausted = true;
+      break;
+    }
+    read += ids.length;
+    before = ids.at(-1)!;
+    const lines = orm()
+      .select({
+        id: captionLines.id,
+        recording_id: captionLines.recording_id,
+        at_ms: captionLines.at_ms,
+        language: captionLines.language,
+        text: captionLines.text,
+      })
+      .from(captionLines)
+      .innerJoin(recordings, eq(recordings.id, captionLines.recording_id))
+      .where(and(inArray(captionLines.id, ids), isNull(recordings.deleted_at)))
+      .orderBy(desc(captionLines.id))
+      .all();
+    for (const line of lines) {
+      const marks = captionHits(line.text, keys);
+      if (marks === null) continue;
+      const list = found.get(line.recording_id) ?? [];
+      found.set(line.recording_id, list);
+      list.push({ ...line, marks });
+    }
+  }
+  const more = found.size > limit || (!exhausted && read >= CAPTION_SCAN);
+  const ids = [...found.keys()].slice(0, limit);
+  if (ids.length === 0) return { ...empty, more, pending };
+
+  const rows = orm()
+    .select({
+      id: recordings.id,
+      name: recordings.name,
+      service_id: recordings.service_id,
+      service_name: recordings.service_name,
+      has_logo: services.has_logo,
+      start_at: recordings.start_at,
+      end_at: recordings.end_at,
+      duration_ms: recordings.duration_ms,
+      state: recordings.state,
+      finished_at: recordings.finished_at,
+      ts_path: recordings.ts_path,
+      library_path: recordings.library_path,
+      ts_head: recordings.ts_head,
+      record_from: recordings.record_from,
+    })
+    .from(recordings)
+    .leftJoin(services, eq(services.id, recordings.service_id))
+    .where(inArray(recordings.id, ids))
+    .all();
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  /** 同じ録画・同じ言語の、その時刻の 1 つ前か後の 1 枚 */
+  const neighbor = (
+    recordingId: number,
+    language: number,
+    atMs: number,
+    id: number,
+    after: boolean,
+  ): string =>
+    orm()
+      .select({ text: captionLines.text })
+      .from(captionLines)
+      .where(
+        and(
+          eq(captionLines.recording_id, recordingId),
+          eq(captionLines.language, language),
+          after
+            ? sql`(${captionLines.at_ms}, ${captionLines.id}) > (${atMs}, ${id})`
+            : sql`(${captionLines.at_ms}, ${captionLines.id}) < (${atMs}, ${id})`,
+        ),
+      )
+      .orderBy(
+        after ? captionLines.at_ms : desc(captionLines.at_ms),
+        after ? captionLines.id : desc(captionLines.id),
+      )
+      .limit(1)
+      .get()?.text ?? "";
+
+  return {
+    total: ids.length,
+    more,
+    short: false,
+    pending,
+    rows: ids.flatMap((id) => {
+      const rec = byId.get(id);
+      if (rec === undefined) return [];
+      const lines = found.get(id)!.sort((a, b) => a.at_ms - b.at_ms);
+      const kept: typeof lines = [];
+      for (const line of lines) {
+        const last = kept.at(-1);
+        if (last !== undefined && line.at_ms - last.at_ms < CAPTION_GAP)
+          continue;
+        kept.push(line);
+      }
+      // 番組の始めからの秒。録画の物差し (元の TS) の位置に、元の TS の先頭の放送時刻を足して、番組の始まりを引く
+      const offset = tsHeadOf(rec) - rec.start_at;
+      const hits: CaptionHit[] = kept.slice(0, CAPTION_HITS).map((line) => ({
+        at: Math.max(0, Math.round((line.at_ms + offset) / 100) / 10),
+        text: line.text,
+        marks: line.marks,
+        before: neighbor(id, line.language, line.at_ms, line.id, false),
+        after: neighbor(id, line.language, line.at_ms, line.id, true),
+        language: line.language,
+      }));
+      const {
+        ts_path,
+        library_path,
+        ts_head: _h,
+        record_from: _f,
+        ...shown
+      } = rec;
+      return [
+        {
+          ...shown,
+          has_file: (library_path ?? ts_path) !== null,
+          hits_total: kept.length,
+          hits,
+        },
+      ];
+    }),
+  };
 }

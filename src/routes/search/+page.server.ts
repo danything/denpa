@@ -44,6 +44,7 @@ import {
   services as serviceTable,
 } from "#lib/server/schema.js";
 import {
+  searchCaptions,
   searchPrograms,
   searchQuery,
   searchRecordings,
@@ -193,6 +194,8 @@ export function load({ url, locals }) {
     q,
     programs: searchPrograms(q, options),
     recordings: searchRecordings(q, options),
+    /** 録画の字幕で当たった場面 (`search.searchCaptions`) */
+    captions: searchCaptions(q, { limit: LIMIT }),
     reservations: searchReservations(q, options),
     rules: searchRules(q, options),
     /** 切り抜き。並べるのは先頭の数枚だけで、続きは切り抜きの画面で */
