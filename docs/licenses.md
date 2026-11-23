@@ -77,6 +77,9 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 
 IT930x・Siano・DiB0700 のファームウェアは、エージェントの実行ファイルに埋め込んであります ([下](#チューナーエージェントに同梱するファームウェア))。
 
+[px4-userland](https://github.com/Khronos31/px4-userland)・[siano-userland](https://github.com/Khronos31/siano-userland)・[asicen-userland](https://github.com/Khronos31/asicen-userland) (@Khronos31) は、
+ホストにドライバを入れずにチューナーを使う形を先に示してくれた仕事です。このうち asicen-userland を、上の表のとおり同梱しています。
+
 ### ASICEN のファームウェアを同梱している判断
 
 **ASICEN のファームウェア (`asicen-loader.bin`) は、再配布の許諾を確かめられていません。上流と同じ判断で、エージェントのイメージと Android のアプリに同梱しています。**
