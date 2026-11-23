@@ -44,6 +44,10 @@ on:
         description: "リリースのタグ (v1.2.3 の形)。配布物の名前には v を落として入れる"
         type: string
         required: true
+    outputs:
+      signed:
+        description: "zip に入れた exe が本番の証明書で署名したものか (true か false)。release.yml がリリースの本文に書く"
+        value: ${{ jobs.build.outputs.signed }}
   workflow_dispatch:
 
 permissions:
@@ -55,6 +59,8 @@ jobs:
     environment: signpath
     # 承認を待つ上限 (60 分) とビルドのぶん
     timeout-minutes: 90
+    outputs:
+      signed: ${{ steps.decide.outputs.sign == 'true' && steps.decide.outputs.release == 'true' }}
     permissions:
       contents: read
       # SignPath のアクションが、この run のジョブを確かめて artifact を読む (出所の確認)

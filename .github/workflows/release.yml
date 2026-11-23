@@ -293,6 +293,42 @@ jobs:
           ASSET: ${{ steps.build.outputs.asset }}
         run: gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber
 
+  # **リリースの本文の末尾に「Code signing policy」の節を足す。** SignPath Foundation の条件が、ダウンロードのページにもこの言葉と
+  # 決まった帰属の文を置くことを求めるため (README の同じ節へのリンクを付ける。docs/install-windows.md「コード署名」)。
+  # 本文は、人が書いた所と --generate-notes が作る変更点のまま、その後ろに足す。流し直したとき (エージェントの zip を組み直したときも) は、
+  # 前に足した節 (末尾の「## Code signing policy」から後ろ) を書き直す。
+  # 署名したかの 1 行は、エージェントの zip に入れた exe を本番の証明書で署名したか (windows-agent.yml の出力 `signed`) で書き分ける。
+  # そのためエージェントの zip を組み終えてから動く。組めなかったときも節は足し、「署名していない」と書く
+  release-notes:
+    if: ${{ !cancelled() && github.event_name == 'release' }}
+    needs: agent-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Append the code signing policy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+          SIGNED: ${{ needs.agent-windows.outputs.signed }}
+        run: |
+          set -eu
+          gh release view "$TAG" -R "${{ github.repository }}" --json body --jq .body > body.md
+          # 前に足した節を落とす (流し直したとき)。画面で直した本文は改行が CRLF になる
+          body="$(awk '/^## Code signing policy\r?$/ { exit } { print }' body.md)"
+          if [ "$SIGNED" = true ]; then
+            status='`denpa-agent.exe` and `denpa-tray.exe` in the Windows agent zip are signed.'
+          else
+            status='Code signing has not started yet: the executables in this release are not signed.'
+          fi
+          {
+            printf '%s\n\n' "$body"
+            printf '## Code signing policy\n\n'
+            printf '%s\n\n' 'Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org) ([policy](https://github.com/danything/denpa#code-signing-policy))'
+            printf '%s\n' "$status"
+          } > notes.md
+          gh release edit "$TAG" -R "${{ github.repository }}" --notes-file notes.md
+
   # **Windows (x64) 用のエージェントも添える** (install.ps1 が取りに来る)。組み方と署名は windows-agent.yml。
   # 署名のポリシーが本番の証明書 (release-signing) なら、SignPath で承認されるまで zip は添わない (上限 60 分。docs/development.md「リリース」)。
   # Mac と同じく、リリースを作ったときだけ組む。添え損ねたら、その run の失敗したジョブを流し直す

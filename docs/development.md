@@ -243,7 +243,8 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 3. **`packages/arib/` が変わっていれば、その `version` を上げる** ([下](#danythingarib-を出す))。リリースといっしょに npm へ出ます
 4. main のイメージのビルドが通ったのを確かめて、次のコマンドでリリースを作る。
    `gh release create vX.Y.Z --target main --generate-notes --title vX.Y.Z`。
-   イメージは組み直さず、そのコミットのものにバージョンを貼り足します ([下](#イメージ))
+   イメージは組み直さず、そのコミットのものにバージョンを貼り足します ([下](#イメージ))。
+   リリースの本文の末尾には、release.yml の `release-notes` が「Code signing policy」の節を足します (SignPath Foundation の条件。[install-windows.md](install-windows.md#コード署名))
 5. **署名が本番の証明書なら、SignPath から届く承認のメールからすぐに承認する** ([下](#windows-のエージェントの署名))。
    承認するまで、Windows のエージェントの zip はリリースに付きません
 

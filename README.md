@@ -197,6 +197,45 @@ X などの DM での個別の対応は、[GitHub Sponsors](https://github.com/s
 
 - [px4-userland](https://github.com/Khronos31/px4-userland)・[siano-userland](https://github.com/Khronos31/siano-userland)・[asicen-userland](https://github.com/Khronos31/asicen-userland) (@Khronos31) が、ホストにドライバを入れずにチューナーを使う形を先に示してくれました。いまは asicen-userland を同梱しています (PX-W3U3 など。試験的)。
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)
+
+- Committers and reviewers: [5ym](https://github.com/5ym)
+- Approvers: [Owners](https://github.com/orgs/danything/people?query=role%3Aowner)
+- Privacy policy: [Privacy](#privacy)
+
+Code signing is planned and has not started yet: current releases are not signed.
+Once it starts, `denpa-agent.exe` and `denpa-tray.exe` in `denpa-agent-<version>-windows-x64.zip` are signed for every release.
+Upstream binaries (bun, FFmpeg and its DLLs, libwdi's `wdi-simple.exe`) are shipped as they are and are not signed with this certificate.
+
+Windows のエージェントの zip にある `denpa-agent.exe` と `denpa-tray.exe` を、SignPath Foundation の証明書でリリースのたびに署名する予定です。
+**今のリリースはまだ署名していません。** 上流のもの (bun・FFmpeg と DLL・libwdi の `wdi-simple.exe`) は署名しません。
+署名するものと、しないものの判断は [docs/install-windows.md](docs/install-windows.md#コード署名) にあります。
+
+### Privacy
+
+- The signed programs connect to the denpa server and to the devices on the LAN that the user sets up. The only exception is the update below.
+  `denpa-agent.exe` serves the denpa server and, when the user turns on card sharing, other agents on the LAN.
+  It announces itself on the LAN with mDNS so that the denpa server can find it (no pairing token or card data in the announcement).
+  `denpa-tray.exe` calls only the denpa server (or the agent) on the same PC.
+  When the user chooses the update in its menu, it runs `install.ps1`, which downloads the release from GitHub
+- The denpa server checks [GitHub](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) for a new release
+  when it starts and once an hour (`https://api.github.com/repos/danything/denpa/releases/latest`).
+  GitHub sees the IP address of the server and the version of denpa (in the User-Agent). No user data is sent
+- When data broadcasting or a Hybridcast app asks for a broadcaster's server, the denpa server fetches it for the browser
+  (public addresses only, names resolved with `1.1.1.1` and `8.8.8.8`). This can be turned off in the settings
+- Other external services are used only when the user turns them on:
+  live comments (NX-Jikkyo and the NicoNico Jikkyo past log API), NicoNico integration and program ranking (denpa-hub, run by the maintainer),
+  notifications to the webhooks that the user enters, login with the OpenID Connect provider that the user sets up,
+  and moving from EPGStation or EDCB at the address that the user enters.
+  What each service can see is in [docs/architecture.md](docs/architecture.md#端末が外へ繋ぐもの-実況のコメント) (Japanese)
+
+署名する実行ファイルは、通知領域のアイコンのメニューで更新を選んだときを除き、denpa のサーバと、利用者が設定した LAN の機器にだけ繋ぎます。更新を選ぶと、通知領域のアイコンが install.ps1 を流し、GitHub からリリースを取得します。エージェントは、denpa のサーバが見つけられるように、mDNS で LAN にサービスを公開します (合言葉とカードの情報は入れない)。
+denpa のサーバは、起動したときと 1 時間ごとに、新しいバージョンを確かめるために GitHub に繋ぎます。GitHub に見えるのは、サーバの IP と denpa のバージョンです。
+データ放送と Hybridcast のアプリが放送局のサーバを求めたときは、denpa のサーバが代わりに取得します (公開のアドレスだけ。名前は `1.1.1.1` と `8.8.8.8` で引く)。設定で止められます。
+ほかの外のサービス (実況のコメント、ニコニコとの連携と番組ランキングの denpa-hub、利用者が入れた Webhook への通知、利用者が設定した OpenID Connect でのログイン、利用者が入れたアドレスの EPGStation・EDCB からの引き継ぎ) は、オンにしたときだけ使います。
+
 ## ライセンス
 
 **AGPL-3.0-or-later** ([LICENSE](LICENSE))。ネットワーク越しに使わせる形で配るなら、その中身も同じ条件で
