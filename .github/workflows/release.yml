@@ -328,8 +328,10 @@ jobs:
         run: |
           set -eu
           tag="${{ github.event.release.tag_name }}"
-          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -p:InformationalVersion="$tag" -o out
-          dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
+          # 製品バージョンはタグ、ファイルバージョンは v を落としたタグ (どちらも実行ファイルのプロパティに出る)
+          version=(-p:Version="${tag#v}" -p:InformationalVersion="$tag")
+          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 "${version[@]}" -o out
+          dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 "${version[@]}" -o out
           asset="denpa-agent-${tag#v}-windows-x64.zip"
           # Siano と DiB0700 のファームウェアはエージェントに埋め込んである。許諾の文面を添える (agent/Denpa.Agent/firmware/README.md)
           cp agent/Denpa.Agent/firmware/LICENCE.siano agent/Denpa.Agent/firmware/LICENSE.dib0700 out/

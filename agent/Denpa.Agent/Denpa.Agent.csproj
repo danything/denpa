@@ -23,10 +23,18 @@
         <RootNamespace>Denpa.Agent</RootNamespace>
         <!--
             バージョン。リリースでは `-p:InformationalVersion=<タグ>` で上書きして組む (macOS・Windows・Android。
-            Linux のイメージは組み直さないので DENPA_VERSION で知る。About.cs)。`+コミット` は足さない
+            Linux のイメージは組み直さないので DENPA_VERSION で知る。About.cs)。`+コミット` は足さない。
+            Windows はファイルバージョンにも出るように `-p:Version=<v を落としたタグ>` も渡す (release.yml)
         -->
         <InformationalVersion>dev</InformationalVersion>
         <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+        <!--
+            実行ファイルのプロパティに出る製品名・会社名・説明。コード署名 (SignPath Foundation) は署名する実行ファイルの
+            製品名がプロジェクトの名前であることを求めるので、通知領域のアイコン (denpa-tray) と同じく denpa にそろえる
+        -->
+        <Product>denpa</Product>
+        <Company>denpa</Company>
+        <AssemblyTitle>denpa tuner agent</AssemblyTitle>
     </PropertyGroup>
 
     <ItemGroup>
