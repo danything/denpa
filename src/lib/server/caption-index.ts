@@ -35,7 +35,7 @@ import {
  * 揃えて 2 字ずつ区切ったもの (`caption-key.ts`) を FTS5 (`caption_fts`) に入れる。
  *
  * **入れる仕事は 1 つだけ。** 録画ごとの結果 (`caption_index`) と録画の行を突き合わせ、足りない録画を新しい順に 1 本ずつ読む
- * (`nextRecording`)。エンコードし終えたときも、すでにある録画を後から埋めるときも、同じ仕事が拾う。
+ * (`nextRecording`)。エンコードし終えた録画も、すでにある録画も、同じ仕事が読む。
  * 進み具合は DB にしか無いので、止めても次の起動で続きから。
  *
  * - 読むのは録り終えて 5 分たち、消していない、エンコードを待っていない録画。エンコードを待っている録画を元の TS から読むと、
@@ -49,7 +49,11 @@ import {
  *   5 回まで読み直す。どちらも、ファイルの列か作り方のバージョンが変わればまた読む
  */
 
-/** 作り方のバージョン。揃え方・区切り方・入れる字幕を変えたら上げる (上げると全部消して作り直す。`wipeOldVersion`) */
+/**
+ * 作り方のバージョン。上げると全部消して作り直す (`wipeOldVersion`)。
+ * **揃え方 (`caption-key.captionKey` と、それが通す `title.searchable`・`fold.ts`)・区切り方・入れる字幕を変えたら、必ず上げる。**
+ * FTS5 は中身を持たず、消すときは入れたときと同じ区切りを渡し直す (`removeLines`)。揃え方が変わったまま上げずにおくと、古い語が消えずに残る
+ */
 export const CAPTION_INDEX_VERSION = 1;
 
 /** 起動してから始めるまで (起動のときの突き合わせや番組表の取得と重ねない) */
@@ -207,11 +211,45 @@ function encoding(db: Db, recordingId: number): boolean {
   );
 }
 
-/** 読んだときの録画の行 (書く前に、変わっていないかを確かめ直す) */
-type Snapshot = Pick<
+/**
+ * 読んだときの録画の行 (書く前に、変わっていないかを確かめ直す)。`encode_job` はその録画のいちばん新しいエンコードのジョブの ID で、
+ * 読んでいる間に同じ名前へ再エンコードし終えた (ファイルの列も捨てた先頭も変わらない) のを見分ける
+ */
+export type Snapshot = Pick<
   Recording,
   "id" | "library_path" | "ts_path" | "encode_skip"
->;
+> & { encode_job: number | null };
+
+/** その録画のいちばん新しいエンコードのジョブ (CM 検出のやり直しは数えない。字幕は変わらない) */
+function lastEncodeJob(db: Db, recordingId: number): number | null {
+  return (
+    db
+      .select({ id: encodeJobs.id })
+      .from(encodeJobs)
+      .where(
+        and(
+          eq(encodeJobs.recording_id, recordingId),
+          eq(encodeJobs.kind, "encode"),
+        ),
+      )
+      .orderBy(sql`${encodeJobs.id} DESC`)
+      .limit(1)
+      .get()?.id ?? null
+  );
+}
+
+/** 読み始めるときの録画の行 */
+export function captionSnapshot(
+  recording: Pick<Recording, "id" | "library_path" | "ts_path" | "encode_skip">,
+): Snapshot {
+  return {
+    id: recording.id,
+    library_path: recording.library_path,
+    ts_path: recording.ts_path,
+    encode_skip: recording.encode_skip,
+    encode_job: lastEncodeJob(orm(), recording.id),
+  };
+}
 
 /**
  * 読んだ結果を書く。**書く前に、録画の行が読んだときのままかを確かめ直す** (読んでいる間に消された・エンコードが始まった・
@@ -241,7 +279,8 @@ export function writeCaptionIndex(
       encoding(tx, snapshot.id) ||
       current.library_path !== snapshot.library_path ||
       current.ts_path !== snapshot.ts_path ||
-      current.encode_skip !== snapshot.encode_skip
+      current.encode_skip !== snapshot.encode_skip ||
+      lastEncodeJob(tx, snapshot.id) !== snapshot.encode_job
     )
       return false;
     const before = tx
@@ -383,12 +422,7 @@ export async function indexRecording(
   recording: Recording,
   signal?: AbortSignal,
 ): Promise<void> {
-  const snapshot: Snapshot = {
-    id: recording.id,
-    library_path: recording.library_path,
-    ts_path: recording.ts_path,
-    encode_skip: recording.encode_skip,
-  };
+  const snapshot = captionSnapshot(recording);
   const expected = expectedFile(recording);
   if (expected === null || !existsSync(expected)) {
     writeCaptionIndex(snapshot, {
@@ -403,10 +437,11 @@ export async function indexRecording(
     source.kind !== "none" &&
     (source.path === expected ||
       (source.kind === "sidecar" && expected === recording.library_path));
+  // 置き場に無いのとは違い、すぐには変わらないので、読めなかったときと同じく間を延ばして見直す
   if (source.kind === "none" || source.kind === "mmts" || !same) {
     writeCaptionIndex(snapshot, {
-      state: "waiting",
-      error: "読むはずのファイルを読めません",
+      state: "failed",
+      error: "読むはずのファイルから字幕を読めません",
     });
     return;
   }
@@ -429,6 +464,8 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let busy = false;
 let stopped = true;
 let abort = new AbortController();
+/** 始める時刻 (`START_DELAY`)。それより前は `kickCaptionIndex` でも始めない */
+let startsAt = 0;
 
 function schedule(ms: number): void {
   if (timer !== null) clearTimeout(timer);
@@ -449,7 +486,16 @@ async function step(): Promise<void> {
     const recording = nextRecording();
     if (recording !== undefined) {
       const started = Date.now();
-      await indexRecording(recording, abort.signal);
+      try {
+        await indexRecording(recording, abort.signal);
+      } catch (error) {
+        // 例外で終わった録画も失敗として覚える (覚えないと、次の回も同じ録画を選び、ほかの録画を読めなくなる)
+        console.error(`[caption-index] 録画 ${recording.id}: ${error}`);
+        writeCaptionIndex(captionSnapshot(recording), {
+          state: "failed",
+          error: String(error),
+        });
+      }
       wait = Math.max(MIN_GAP, Date.now() - started);
     }
   } catch (error) {
@@ -465,12 +511,13 @@ export function startCaptionIndex(): void {
   if (!stopped) return;
   stopped = false;
   abort = new AbortController();
+  startsAt = Date.now() + START_DELAY;
   schedule(START_DELAY);
 }
 
 /** 読むものが増えた (エンコードし終えた) ので、待っていればすぐ次を見る */
 export function kickCaptionIndex(): void {
-  if (stopped || busy) return;
+  if (stopped || busy || Date.now() < startsAt) return;
   schedule(0);
 }
 

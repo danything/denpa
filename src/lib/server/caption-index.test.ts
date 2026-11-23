@@ -40,6 +40,7 @@ const { CAPTION_FTS, captionIndex, captionLines, encodeJobs, recordings } =
 const {
   CAPTION_INDEX_VERSION,
   captionLineId,
+  captionSnapshot,
   captionLinesOf,
   dropCaptionIndex,
   indexRecording,
@@ -205,12 +206,7 @@ describe("取り出した字幕を入れる行にする", () => {
 });
 
 describe("インデックスに書く・消す", () => {
-  const snapshotOf = (r: typeof recordings.$inferSelect) => ({
-    id: r.id,
-    library_path: r.library_path,
-    ts_path: r.ts_path,
-    encode_skip: r.encode_skip,
-  });
+  const snapshotOf = (r: typeof recordings.$inferSelect) => captionSnapshot(r);
 
   test("書いた行を FTS5 で引け、ID の上位が録画の ID", () => {
     const r = addRecording(3, { ts_path: join(config.rawDir, "a.m2ts") });
@@ -282,6 +278,36 @@ describe("インデックスに書く・消す", () => {
     expect(match("字幕")).toEqual([]);
   });
 
+  test("読んでいる間に同じ名前へ再エンコードし終えていれば書かない", () => {
+    const r = addRecording(40, {
+      library_path: join(config.encodedDir, "l.mkv"),
+    });
+    const snapshot = snapshotOf(r);
+    // 再エンコードが始まって終わった (ファイルの列も捨てた先頭も変わらない)
+    orm()
+      .insert(encodeJobs)
+      .values({ recording_id: 40, state: "done", created_at: START })
+      .run();
+    expect(
+      writeCaptionIndex(snapshot, {
+        state: "done",
+        lines: [{ at_ms: 0, language: 1, text: "古いファイルの字幕" }],
+      }),
+    ).toBe(false);
+    // CM 検出のやり直しは字幕を変えないので数えない
+    const again = snapshotOf(r);
+    orm()
+      .insert(encodeJobs)
+      .values({
+        recording_id: 40,
+        kind: "cm",
+        state: "done",
+        created_at: START,
+      })
+      .run();
+    expect(writeCaptionIndex(again, { state: "done", lines: [] })).toBe(true);
+  });
+
   test("読めなければ間を延ばして読み直し、5 回で諦める", () => {
     const r = addRecording(5, { ts_path: join(config.rawDir, "c.m2ts") });
     const retries: (number | null)[] = [];
@@ -348,10 +374,7 @@ describe("次に読む録画", () => {
 
   test("読んだときとファイルの列が違えば読み直す", () => {
     const r = addRecording(20, { ts_path: join(config.rawDir, "j.m2ts") });
-    writeCaptionIndex(
-      { id: 20, library_path: null, ts_path: r.ts_path, encode_skip: null },
-      { state: "done", lines: [] },
-    );
+    writeCaptionIndex(captionSnapshot(r), { state: "done", lines: [] });
     expect(nextRecording(settled)).toBeUndefined();
     orm()
       .update(recordings)

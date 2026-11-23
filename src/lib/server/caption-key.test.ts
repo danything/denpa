@@ -60,6 +60,14 @@ describe("字幕で探すための揃え方", () => {
     expect(captionHits("東京都の天気は晴れ", keys)).toBeNull();
   });
 
+  test("サロゲートペアの字を含む語も、元の文字の位置で返す", () => {
+    // 𠮷 は UTF-16 で 2 単位
+    expect(captionHits("𠮷野家の 牛丼", captionTerms(["𠮷野家の牛"]))).toEqual([
+      [0, 7],
+    ]);
+    expect(captionHits("あ𠮷野家", captionTerms(["野家"]))).toEqual([[3, 5]]);
+  });
+
   test("重なった当たりはまとめる", () => {
     expect(captionHits("ああああ", captionTerms(["ああ", "あああ"]))).toEqual([
       [0, 4],

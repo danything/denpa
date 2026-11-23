@@ -80,7 +80,7 @@ function seedOld(where: ReturnType<typeof machine>): void {
     .returning()
     .get();
   // 字幕のインデックス (FTS5 の仮想表) も中身を入れて写す (取り込みの確かめで落ちないか)
-  captionIndex.writeCaptionIndex(recording, {
+  captionIndex.writeCaptionIndex(captionIndex.captionSnapshot(recording), {
     state: "done",
     lines: [{ at_ms: 1000, language: 1, text: "移す字幕" }],
   });
