@@ -3,7 +3,7 @@
 // denpa_asicen.h の実装 (子プロセス denpa-asicen の中で main.cpp が呼ぶ)。asicen-userland v1.0.0-beta の部品を、上流のデーモン (asicend) と同じ組み方でつなぐ。
 //
 // - 起動の手順 (引数・ファームウェアの流し込みと再列挙の待ち・筐体の組み合わせの確認・claim) は、上流の
-//   userland/tools/asicend_hardware.cpp をファイルごと読み込み (変えずに)、その中の関数を使う。流れ (run_asicend_hardware) は
+//   userland/tools/asicend_hardware.cpp をファイルごと読み込み (変えずに)、その中の関数を使う。手順の本体 (run_asicend_hardware) は
 //   下の open_hardware に写して、最後のソケットの待ち受けの代わりに claim した機材を返すように直した。
 //   直した所: Windows の標準入力の見張り (エージェントとのやりとりは main.cpp が持つ) を落とした・識別のロック (acquire_identity_lease) を写さない (同じ筐体を別のソフトが使っていれば
 //   claim が断る)・終了コードの代わりに Error を返す・メッセージを呼んだ側のバッファに書く・シグナルのハンドラを入れない
@@ -11,7 +11,7 @@
 //   LibusbW3u3Hardware → (shutdown を後に回す前段) → HardwareStreamService → TunerService (+ configure_strict_capabilities)。
 //   選局はデーモンと同じ Hz の入口。ストリームはエンジンの従来の入口 (start_stream・attach_stream) を使う
 //   (v1 の契約はソケットの相手と期限を取り決めるためのもので、同じプロセスでは要らない)
-// - 上流のバージョンを上げるときは、写した流れを上流の run_asicend_hardware と比べ直す
+// - 上流のバージョンを上げるときは、写した手順を上流の run_asicend_hardware と比べ直す
 
 #include "denpa_asicen.h"
 

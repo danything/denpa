@@ -109,7 +109,7 @@ FSF は、パイプ・ソケット・コマンドラインの引数でのやり�
 
 - `denpa-asicen` は `agent/asicen/` (GPL-2.0-only。[agent/asicen/COPYING](../agent/asicen/COPYING)) と、上流の asicen-userland・dtv-userland-core・libusb を 1 つの実行ファイルにしたものです。
   asicen-userland には GPL-2.0-only のファイルと GPL-2.0-or-later のファイルがあり、取り込んだ px4-userland (`third_party/px4-userland/`。px4_drv から来た部分を含む) は GPL-2.0-only です。
-  そのため `denpa-asicen` は全体を GPL-2.0-only の条件で配ります。上流のファイルは変えずに使い、`agent/asicen/` に写した上流の流れはその場所のコメントに書いてあります
+  そのため `denpa-asicen` は全体を GPL-2.0-only の条件で配ります。上流のファイルは変えずに使い、`agent/asicen/` に写した上流の手順はその場所のコメントに書いてあります
 - 中に入れるもののうち、dtv-userland-core の核 (MIT)、libusb (LGPL-2.1+。静的リンク。組み合わせ全体のソースと組み方を出すので、組み直しの条件も満たす)、
   C++ の実行時ライブラリ (Linux は libstdc++ と libgcc_s を読む。GCC Runtime Library Exception。Android と Windows は LLVM の libc++ を静的に入れる。Apache-2.0 WITH LLVM-exception。
   Windows は mingw-w64 の実行時ライブラリと winpthreads も静的に入れる。MIT 系) は GPL-2.0 の条件と組み合わせられます。OpenSSL は入れません

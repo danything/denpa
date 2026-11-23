@@ -173,6 +173,7 @@ public sealed class AsicenChild
         Begin(name, Start(Program, _ => ["--mock", receivers.ToString(CultureInfo.InvariantCulture)], null))
         ?? throw new IOException("偽の機材を開けません");
 
+    /// <summary>開き終えるのを待つ (最大 <see cref="OpenLimit"/>)。待つのは起動し終えたあとで、<see cref="Shell.SpawnGate"/> は持たない (ほかの子プロセスの起動を止めない)</summary>
     private static AsicenChild? Begin(string name, Process process)
     {
         var child = new AsicenChild(name, process);
@@ -200,7 +201,7 @@ public sealed class AsicenChild
                 catch (Exception error) when (error is System.Text.Json.JsonException or InvalidOperationException or FormatException)
                 {
                     child.Kill();
-                    throw new AsicenError(255, $"開いた筐体の知らせが読めません ({error.Message})");
+                    throw new AsicenError(255, $"開いた筐体の応答が読めません ({error.Message})");
                 }
                 return child;
             case 'L':

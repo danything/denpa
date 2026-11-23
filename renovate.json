@@ -61,7 +61,7 @@
       "pinDigests": true
     },
     {
-      "description": "asicen-userland (PX-W3U3 など、試験的) は agent/asicen/build.sh でプレリリースの 1.0.0-beta に固定してある (versioning=semver で、次のプレリリースと正式版を追う)。エージェントに組み込むライブラリ (agent/asicen/denpa_asicen.cpp) は上流の起動の流れを写していて、エージェントは asicen-userland 1.0.0 でなければ使わない。バージョンを上げるときは、写した流れを上流と比べ直し、build.sh の SHA-256 とエージェントの AsicenNative.Version を合わせる必要があるので、自動ではマージしない (docs/agent.md。PR は SHA-256 が合わずに CI で落ちる)。共有の設定は非 major を全部「all dependencies」の 1 つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
+      "description": "asicen-userland (PX-W3U3 など、試験的) は agent/asicen/build.sh でプレリリースの 1.0.0-beta に固定してある (versioning=semver で、次のプレリリースと正式版を追う)。ASICEN の子プロセス (agent/asicen/denpa_asicen.cpp) は上流の起動の手順を写していて、エージェントは asicen-userland 1.0.0 でなければ使わない。バージョンを上げるときは、写した手順を上流と比べ直し、build.sh の SHA-256 とエージェントの AsicenChild.Version と AsicenUserland.FirmwareSha256 を合わせる必要があるので、自動ではマージしない (docs/agent.md。PR は SHA-256 が合わずに CI で落ちる)。共有の設定は非 major を全部「all dependencies」の 1 つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["Khronos31/asicen-userland"],
       "groupName": "asicen-userland",
