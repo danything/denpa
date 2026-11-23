@@ -421,8 +421,8 @@ export function wipeOldVersion(): boolean {
 export async function indexRecording(
   recording: Recording,
   signal?: AbortSignal,
+  snapshot: Snapshot = captionSnapshot(recording),
 ): Promise<void> {
-  const snapshot = captionSnapshot(recording);
   const expected = expectedFile(recording);
   if (expected === null || !existsSync(expected)) {
     writeCaptionIndex(snapshot, {
@@ -486,12 +486,14 @@ async function step(): Promise<void> {
     const recording = nextRecording();
     if (recording !== undefined) {
       const started = Date.now();
+      // 読み始めたときの行。例外で終わったときも、これと比べて書く (読んでいる間に変わっていれば書かない)
+      const snapshot = captionSnapshot(recording);
       try {
-        await indexRecording(recording, abort.signal);
+        await indexRecording(recording, abort.signal, snapshot);
       } catch (error) {
         // 例外で終わった録画も失敗として覚える (覚えないと、次の回も同じ録画を選び、ほかの録画を読めなくなる)
         console.error(`[caption-index] 録画 ${recording.id}: ${error}`);
-        writeCaptionIndex(captionSnapshot(recording), {
+        writeCaptionIndex(snapshot, {
           state: "failed",
           error: String(error),
         });
