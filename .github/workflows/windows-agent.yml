@@ -9,7 +9,7 @@ name: Windows agent
 # `libwdi/`、エージェントに埋め込んだ Siano と DiB0700 のファームウェアの許諾の文面 `LICENCE.siano`・`LICENSE.dib0700`。
 # Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーで組む。
 #
-# **署名するのは 2 つの exe だけ** (wdi-simple.exe は上流のソースから組むので署名しない。docs/install-windows.md「コード署名」)。
+# **署名するのは 2 つの exe だけ** (wdi-simple.exe は上流の libwdi のソースから組むものなので、SignPath Foundation の条件で署名しない)。
 # 2 つだけを入れた artifact を置いて SignPath に送り、承認されて署名したものが返ってから zip を組む。
 # SignPath の側の決まり (製品名・製品バージョン) は .signpath/artifact-configurations/windows-agent.xml。
 #
@@ -60,6 +60,7 @@ jobs:
       # SignPath のアクションが、この run のジョブを確かめて artifact を読む (出所の確認)
       actions: read
     steps:
+      # 組むのは呼んだ run のコミット (リリースならタグのコミット)。ref を入力で受けて取り出すことはしない (windows-server.yml と同じ)
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
