@@ -57,7 +57,7 @@ jobs:
           allow-unsafe-pr-checkout: true
 
       - name: Claude Code Review
-        uses: anthropics/claude-code-action@4a461cbbb72e467c61b1e47547fc0d7dacece34a # v1.0.288
+        uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1.0.289
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # 既定の「OIDC を Claude の GitHub App のトークンに交換する」方式は、fork の
