@@ -20,6 +20,7 @@ public static class CardLinks
     /// asicen-userland の機材の内蔵カードリーダーは扱わない。カードの操作 (CARD_CONNECT・CARD_TRANSMIT など) は形式が契約の文書に無く、
     /// 模擬のデーモンもカードに対応していない (<c>asicenctl card-status</c> が UNSUPPORTED で返る) ので、観察でも形式を起こせなかった。
     /// CECH-ZD1 J の内蔵の差し込み口と PIX-DT295 の差し込み口はいちばん後ろ (Zd1j.cs・Dt295.cs)。どれもほかのチューナーの復号にも使う。
+    /// カードの要らないソフト B-CAS (SoftCasCard.cs。<c>CARD_SOFT</c> を書いたときだけ) はその次で、実在のカードがあるならそちらを先に試す。
     /// **使わない設定にしたリーダーは入れない** (<see cref="CardChoice"/>)
     /// </para>
     /// </summary>
@@ -31,7 +32,7 @@ public static class CardLinks
 
     /// <summary>使わないものも含めて、見えているリーダー全部。**探すだけで何も開かない**</summary>
     public static IReadOnlyList<CardLinkCandidate> All() =>
-        [.. Ccid.Find() ?? PcscLink.Find(), .. It930x.Cards(), .. Zd1j.Cards(), .. Dt295.Cards()];
+        [.. Ccid.Find() ?? PcscLink.Find(), .. It930x.Cards(), .. Zd1j.Cards(), .. Dt295.Cards(), .. SoftCas.Cards()];
 
     /// <summary>
     /// カードが挿さっていて INT に応答した最初のリーダーで B-CAS を開く。どれも駄目なら例外を送出する。
