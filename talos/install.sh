@@ -37,7 +37,7 @@ set -eu
 TALOS_VERSION=v1.15.0-alpha.2
 # gen config の既定は talosctl と組の Kubernetes で、alpha の talosctl だと Kubernetes も alpha になるので留める
 # renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.*)$
-KUBERNETES_VERSION=1.37.2
+KUBERNETES_VERSION=1.37.3
 # 画面を開く NodePort (http://<IP>:30300)。NodePort は 30000〜32767 からしか選べない
 NODE_PORT=30300
 
