@@ -7,7 +7,7 @@
   "devDependencies": {
     "@danything/arib": "workspace:*",
     "@anyblades/blades": "^3.1.4",
-    "@iconify-json/lucide": "^1.2.159",
+    "@iconify-json/lucide": "^1.2.160",
     "@playwright/test": "^1.65.1",
     "@sveltejs/adapter-bun": "^1.0.3",
     "@sveltejs/kit": "^3.4.1",
