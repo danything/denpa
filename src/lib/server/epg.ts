@@ -105,6 +105,7 @@ export async function setHidden(
   orm().update(services).set({ hidden }).where(inArray(services.id, ids)).run();
   emit("services");
   emit("programs");
+  // 当て直しは全ルール × 全番組。ルールを直したとき (`rule-actions.reapply`) と同じ重さで、押した人には済んでから返す
   applyRules();
   await resolveConflicts();
   return ids;

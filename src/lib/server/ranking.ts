@@ -864,7 +864,7 @@ function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
       });
       continue;
     }
-    // 隠した局でしか受けていない番組は出さない。受信できない局の行にすると、隠した局が名前を変えて残る
+    // 手元では隠した局でしか受けていない番組は出さない (ほかの地域の局の放送があっても)。受信できない局の行にすると、隠した番組がほかの局の名前で残る
     if (entry.airings.some((a) => hidden.has(keyOf(a)))) continue;
     const shown = entry.airings.filter((a) => a.end_at > since);
     const away = pick(
