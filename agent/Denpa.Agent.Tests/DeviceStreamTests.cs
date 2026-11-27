@@ -243,33 +243,24 @@ public class DeviceStreamPipedTests
 
     /*
      * **止めたら、待っている読む側はすぐ戻る** (200 ms ごとの確認を待たない)。200 ms ごとに
-     * 印を確かめるだけだと、止めてから戻るまでに最大 200 ms 掛かり、混んだ CI では 500 ms を超えていた
+     * 印を確かめるだけだと、止めてから戻るまでに最大 200 ms 掛かり、混んだ CI では 500 ms を超えていた。
+     *
+     * 確認の間隔を 1 時間にして、戻るのを止めたときだけにする。止めてから戻るまでの時間は測らない。
+     * 測っていた頃は、混んだランナーで止めてから読む側のスレッドが動き出すまでに 131 ms (Windows)・172 ms (macOS) 掛かって落ちた
      */
     [Test]
     public async Task 止めたら_待っている読む側はすぐ戻る(CancellationToken cancel)
     {
         var pipe = new Pipe(new System.IO.Pipelines.PipeOptions(readerScheduler: PipeScheduler.Inline, writerScheduler: PipeScheduler.Inline, useSynchronizationContext: false));
-        using var stream = new DeviceStream(pipe.Reader);
-        long stoppedAt = 0;
-        var reading = Task.Factory.StartNew(() =>
-        {
-            var read = stream.Read(new byte[188], 0, 188);
-            return (read, Stopwatch.GetElapsedTime(Volatile.Read(ref stoppedAt)));
-        }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        using var stream = new DeviceStream(pipe.Reader, TimeSpan.FromHours(1));
+        var reading = Task.Factory.StartNew(
+            () => stream.Read(new byte[188], 0, 188), cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
-        while (stream.Readers == 0) await Task.Delay(5, cancel);
-        // 待ちに入ってすぐ止める (200 ms ごとに確かめるだけなら、次の確認まで 180 ms ほど掛かる)
-        await Task.Delay(20, cancel);
-        Volatile.Write(ref stoppedAt, Stopwatch.GetTimestamp());
+        while (!stream.Waiting) await Task.Delay(5, cancel);
         stream.Stop();
-        var (read, left) = await reading.WaitAsync(TimeSpan.FromSeconds(5), cancel);
 
-        await Assert.That(read).IsEqualTo(0);
-        /*
-         * 200 ms ごとに確かめるだけなら、止めてから戻るまで 180 ms ほど掛かる。それより短ければ、止めたことで待ちから戻っている。
-         * 100 ms にしていた頃は、混んだ Windows のランナーで 131 ms になって落ちた (待ちが終わってから、スレッドが動き出すまでの遅れ)
-         */
-        await Assert.That(left).IsLessThan(TimeSpan.FromMilliseconds(160));
+        // 止めても戻らなければ 1 時間戻らない。長く待っても、間隔に紛れて通ることはない
+        await Assert.That(await reading.WaitAsync(TimeSpan.FromSeconds(30), cancel)).IsEqualTo(0);
     }
 
     [Test]
