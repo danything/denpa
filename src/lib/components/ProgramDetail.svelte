@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/components/modal";
+  import "@sveti/blades/components/modal";
   import { onMount, type Snippet } from "svelte";
 
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";

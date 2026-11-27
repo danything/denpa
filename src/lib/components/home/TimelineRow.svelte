@@ -5,7 +5,7 @@
    * 段に出すのは、いま動いているもの (録画中・エンコード中・端末に保存中) と、出さないと「録れたつもり」になるもの
    * (競合・失敗・欠ける・録画が途中で切れた・ロゴで CM を判定できなかった)
    */
-  import "@anyblades/blades/components/progress";
+  import "@sveti/blades/components/progress";
   import { resolve } from "$app/paths";
   import Ellipsis from "~icons/lucide/ellipsis";
   import Info from "~icons/lucide/info";

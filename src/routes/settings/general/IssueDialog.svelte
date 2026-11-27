@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/components/modal";
+  import "@sveti/blades/components/modal";
   import { untrack } from "svelte";
 
   import { pad } from "#lib/format.js";

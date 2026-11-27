@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/components/progress";
+  import "@sveti/blades/components/progress";
   import type { Snippet } from "svelte";
 
   /**

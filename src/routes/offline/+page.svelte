@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/components/progress";
+  import "@sveti/blades/components/progress";
   import { onMount, tick } from "svelte";
 
   import { arming } from "#lib/arming.svelte.js";
