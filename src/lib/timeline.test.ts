@@ -403,6 +403,7 @@ describe("絞り込み", () => {
       all: 6,
       reservations: 1,
       recording: 1,
+      recorded: 3,
       unfinished: 2,
       conflict: 0,
       failed: 1,
@@ -432,6 +433,15 @@ describe("絞り込み", () => {
       passes("unfinished", items[1]!, { unfinished: true, failed: false }),
     ).toBe(false);
     expect(passes("failed", items[4]!, traits(items[4]!))).toBe(true);
+  });
+
+  test("録画済みは録れたものだけ (失敗した録画も入れ、録り逃し・録画中・予約は入れない)", () => {
+    const recorded = items.filter((i) => passes("recorded", i, traits(i)));
+    expect(recorded.map((i) => i.key)).toEqual([
+      "rec-new",
+      "rec-old",
+      "rec-failed",
+    ]);
   });
 });
 
@@ -800,6 +810,81 @@ describe("新しい順で表示 (上下を返す)", () => {
     ]);
     expect(pageStart(future, 1)).toBe(2);
     expect(pageStart(future, 4)).toBe(0);
+  });
+
+  describe("予約をたたむ (issue #3240)", () => {
+    const list = [
+      item("rec-1", "past", NOW - 3 * H, "a"),
+      item("rec-2", "past", NOW - 2 * H, "a"),
+      item("res-1", "future", NOW + H, "b"),
+      item("res-2", "future", NOW + 24 * H, "b"),
+    ];
+    const folded = (items: TimelineItem[], grouped: boolean, open: boolean) =>
+      timelineLines(sections(items, true), {
+        now: NOW,
+        grouped,
+        reversed: true,
+        isOpen: () => true,
+        fold: { open },
+      });
+
+    test("閉じていれば予約は見出し 1 つで件数を添え、「いま」の行と録れたものはそのまま", () => {
+      for (const grouped of [false, true]) {
+        const lines = folded(list, grouped, false);
+        expect(lines.future).toEqual([
+          { kind: "fold", key: "fold-future", count: 2, open: false },
+        ]);
+        expect(lines.past.some((line) => line.key === "rec-2")).toBe(true);
+      }
+      // 日ごとのとき、今日の見出しは「いま」の行の上に立つ
+      expect(keys(folded(list, false, false).now)).toEqual([
+        `day-${today}`,
+        "now",
+      ]);
+    });
+
+    test("開くと見出しの下に予約がふだんどおり並ぶ。まとめて表示の「これからの予約」の見出しは兼ねる", () => {
+      const days = folded(list, false, true);
+      expect(keys(days.future)).toEqual([
+        "fold-future",
+        `day-${tomorrow}`,
+        "res-2",
+        `day-${today}`,
+        "res-1",
+      ]);
+      expect(keys(folded(list, true, true).future)).toEqual([
+        "fold-future",
+        "future-group-b",
+        "res-1",
+        "res-2",
+      ]);
+      expect(
+        blocks([...days.future, ...days.now, ...days.past]).map(
+          (block) => block.key,
+        ),
+      ).toEqual(["fold-future", `day-${tomorrow}`, `day-${today}`]);
+    });
+
+    test("予約だけのときと予約が無いときはたたまない", () => {
+      const reservations = list.filter((i) => i.zone === "future");
+      expect(keys(folded(reservations, false, false).future)).toEqual([
+        `day-${tomorrow}`,
+        "res-2",
+        `day-${today}`,
+        "res-1",
+      ]);
+      const recordings = list.filter((i) => i.zone === "past");
+      expect(folded(recordings, false, false).future).toEqual([]);
+      // 録画中があればたたむ
+      const live = [...reservations, item("res-now", "now", NOW - H)];
+      expect(keys(folded(live, false, false).future)).toEqual(["fold-future"]);
+    });
+
+    test("描く先頭を「いま」の行の側から決めても、たたんだ見出しを残す", () => {
+      const future = folded(list, false, true).future;
+      expect(pageStart(future, future.length - 1)).toBe(0);
+      expect(pageStart(future.slice(0, 1), 1)).toBe(0);
+    });
   });
 
   test("覚えていなければ逆にしない", () => {

@@ -74,6 +74,8 @@ interface HomeContext {
   openMissed(res: Missed): void;
   /** まとめて表示の番組を開く・閉じる (側ごと) */
   toggleGroup(zone: "future" | "past", group: string): void;
+  /** 新しい順で表示のとき、たたんだ予約を開く・閉じる (`FoldHead`) */
+  toggleFold(): void;
   /** 日付の見出しの字。今日・明日・昨日は言葉で、ほかは西暦つきの日付 */
   dayLabel(at: number): string;
 }
