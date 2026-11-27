@@ -137,7 +137,8 @@ function sameByName(
   path: string,
 ): boolean {
   try {
-    if (realpathSync(path) !== path) return false;
+    // 取り込むときの `fs/promises` の `realpath` と同じく OS の realpath で引く (Windows のドライブ文字や大文字小文字の書き方をそろえる)
+    if (realpathSync.native(path) !== path) return false;
     const named = statSync(path, { bigint: true });
     return named.dev === opened.dev && named.ino === opened.ino;
   } catch {
@@ -229,6 +230,7 @@ function fdStream(
         close();
         controller.close();
       },
+      // 読む側がやめたとき (接続が切れて Bun が本体を捨てたときも) に閉じる。`Bun.file` のストリームと同じく cancel に任せる
       cancel: close,
     },
     { highWaterMark: 0 },
