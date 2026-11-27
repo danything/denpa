@@ -280,7 +280,15 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     /// <summary>Pipe に詰めた TS (AsicenStream・Zd1jStream・Dt295NativeStream・SianoStream・It930xTsOutput) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
     public DeviceStream(PipeReader reader, Func<string?>? ended = null)
-        : this(new SafeFileHandle(), ended) => _piped = new Piped(reader);
+        : this(new SafeFileHandle(), ended) => _piped = new Piped(reader, WakeMs);
+
+    /// <summary>
+    /// 読み出しを待つ間に印を確かめる間隔を変える (テスト用)。<see cref="Stop"/> が待ちを終わらせるかを、
+    /// 200 ms ごとの確認に紛れさせずに確かめる (間隔を十分長くすると、戻るのは止めたときだけになる)。
+    /// 間隔は int の ms に収まる長さ (24 日まで) にする
+    /// </summary>
+    internal DeviceStream(PipeReader reader, TimeSpan recheck)
+        : this(new SafeFileHandle()) => _piped = new Piped(reader, (int)recheck.TotalMilliseconds);
 
     /// <summary>
     /// **<see cref="PipeReader"/> から読む。待つのは 200 ms ずつ** (fd の poll と同じく、時々印を確かめる)。
@@ -306,14 +314,18 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         private readonly ManualResetEventSlim _ready = new(false);
         private readonly Action _signal;
 
-        public Piped(PipeReader reader)
+        /// <summary>待っている読み出しが済むのを待つ長さ (ms)。ふだんは <see cref="WakeMs"/></summary>
+        private readonly int _recheck;
+
+        public Piped(PipeReader reader, int recheck)
         {
             _reader = reader;
+            _recheck = recheck;
             _signal = _ready.Set;
         }
 
         /// <summary>
-        /// 待っている読み出しが済むのを、長くても <see cref="WakeMs"/> 待つ。
+        /// 待っている読み出しが済むのを、長くても <see cref="_recheck"/> (ふだんは <see cref="WakeMs"/>) 待つ。
         ///
         /// <para>
         /// **済んだかは <see cref="_pending"/> で見る。<see cref="_ready"/> だけで決めない。**
@@ -330,7 +342,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
             var since = Environment.TickCount64;
             while (!_pending.IsCompleted)
             {
-                var left = WakeMs - (int)(Environment.TickCount64 - since);
+                var left = _recheck - (int)(Environment.TickCount64 - since);
                 if (left <= 0 || !_ready.Wait(left)) return _pending.IsCompleted;
                 if (_pending.IsCompleted) break;
                 // 前の読み出しの合図か、Wake で待ちが終わっただけ。下ろして待ち直す (下ろす前にこの読み出しが済んでいても、上の印で分かる)
@@ -345,6 +357,9 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         /// 合図を立てる前に抜ける合図を立てておくこと (待ちが終わった側が見落とさないように)
         /// </summary>
         public void Wake() => _ready.Set();
+
+        /// <summary>読む側が、待っている読み出しが済むのを待ちはじめたか (テストが「待ちに入った」を見る)</summary>
+        public bool Waiting => Volatile.Read(ref _waiting);
 
         /// <summary>読めたバイト数。0 は尽きた、null は抜けた</summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
@@ -540,6 +555,9 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     /// <summary>中にいる読む側の数 (テストが「読む側が入った」「戻った」を見る)</summary>
     internal int Readers => Volatile.Read(ref _reading);
+
+    /// <summary>Pipe に詰めた TS を読む側が、読み出しが済むのを待っているか (テストが「待ちに入った」を見る)</summary>
+    internal bool Waiting => _piped?.Waiting ?? false;
 
     /// <summary>
     /// <see cref="Stop"/> のあと、**読みかけの読む側が戻るまで待つ** (長くても <paramref name="most"/>)。
