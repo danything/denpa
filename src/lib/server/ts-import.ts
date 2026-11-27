@@ -4,6 +4,7 @@
  *
  * - 読んでよいフォルダは環境変数 `IMPORT_DIRS` の下だけ ({@link resolveFolder})。シンボリックリンクは辿らず、denpa の置き場と重なるフォルダは断る
  * - ファイルは**読むだけ**。写さない・動かさない・書き換えない。行の `imported_ts` にパスを入れ、denpa のどの操作でも消さない (`source.ownsTs`)
+ * - 取り込んだあとは、読むたびに開いたものが取り込んだときのパスのファイルかを確かめる (`recording-io` の「取り込んだ TS」。{@link guardImportedOnBoot})
  * - EPGStation からの引き継ぎと同じく、下見 (`apply: false`。DB に書かない) → 取り込みの 2 段階。何度実行しても、取り込み済みのファイルは飛ばす
  *   (`imported_ts`)。中断しても、入れ終えたファイルから続く
  * - 番組は TS の中の SDT・EIT[p/f]・TDT/TOT から決める (`ts-import-read.ts`)。読めなければファイルの名前と更新時刻から作る
@@ -24,7 +25,7 @@ import {
 } from "node:path";
 
 import type { EitEvent } from "@danything/arib/eit";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { CAPTION_SETTLE, kickCaptionIndex } from "./caption-index";
 import { config } from "./config";
@@ -33,6 +34,7 @@ import { enqueue } from "./encoder";
 import { emit } from "./events";
 import { within } from "./fsx";
 import { serviceOf } from "./migrate";
+import { guardImported } from "./recording-io";
 import { recordings } from "./schema";
 import { seriesParts } from "./series-heads";
 import { settings } from "./settings";
@@ -359,6 +361,21 @@ export function planRecording(
   };
 }
 
+/**
+ * **取り込んだ TS を、読むたびに確かめるパスに足す** (`recording-io.guardImported`)。起動したときに呼ぶ (`runtime.start`)。
+ * 消した録画のパスも足す (読まないので確かめても変わらない)
+ */
+export function guardImportedOnBoot(): void {
+  guardImported(
+    orm()
+      .selectDistinct({ path: recordings.imported_ts })
+      .from(recordings)
+      .where(isNotNull(recordings.imported_ts))
+      .all()
+      .map((row) => row.path!),
+  );
+}
+
 /** 同じファイルをもう取り込んだか (消したものも。`imported_ts` は削除しても残る) */
 function alreadyImported(path: string): boolean {
   return (
@@ -472,6 +489,8 @@ async function importFile(
     })
     .returning({ id: recordings.id })
     .get()!;
+  // ここから先は、読むたびに取り込んだときのファイルかを確かめる (`recording-io` の「取り込んだ TS」)
+  guardImported([file]);
   // ふだんの録画と同じく、エンコードする設定ならエンコードする (CM 検出も)。映像の無い録画は TS のまま (`recorder.finish` と同じ)
   if (facts.video && settings().encode) enqueue(id);
   return "imported";

@@ -38,6 +38,7 @@ import { prune as pruneSessions } from "./session";
 import { beginDraining } from "./shutdown";
 import { redeem } from "./tickets";
 import { pruneTransfer, swapAtBoot } from "./transfer";
+import { guardImportedOnBoot } from "./ts-import";
 import { checkForUpdate } from "./update";
 import { notify } from "./webhook";
 import { serve } from "./ws";
@@ -114,6 +115,9 @@ export function start(): void {
   }
   mkdirSync(config.rawDir, { recursive: true });
   mkdirSync(config.encodedDir, { recursive: true });
+
+  // 取り込んだ TS は、読むたびに取り込んだときのファイルかを確かめる (`recording-io` の「取り込んだ TS」)。何かを読み始める前に足す
+  guardImportedOnBoot();
 
   /*
    * **`TUNER_AGENT_URL` と DB の `agents` を突き合わせる** (agents.ts)。環境変数から消したエージェントの行はここで消える。

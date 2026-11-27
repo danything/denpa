@@ -93,7 +93,7 @@ import { remuxMmts } from "./mmts";
 import { saveRecordedBml } from "./recorded-bml";
 import { recordedBroadcast, recordedMedia } from "./recorded-broadcast";
 import { recordingSummary, tsHeadOf } from "./recording";
-import { recordingInput } from "./recording-io";
+import { recordingInput, verifyRecording } from "./recording-io";
 import { encodeJobs, programs, recordings, services } from "./schema";
 import { descramble, isDecoded, isScrambled } from "./scramble";
 import { settings } from "./settings";
@@ -132,6 +132,12 @@ async function measureWindow(
   at: number,
   signal: AbortSignal,
 ): Promise<FpsWindow> {
+  // `fpsArgs` は `-i` を直に書くので、取り込んだ TS はここで確かめる (`recording-io` の「取り込んだ TS」)。違えば本番のエンコードの `recordingInput` が断る
+  try {
+    verifyRecording(input);
+  } catch {
+    return UNMEASURED;
+  }
   const diffs: string[] = [];
   const result = await run([config.ffmpeg, ...fpsArgs(input, at)], {
     signal,

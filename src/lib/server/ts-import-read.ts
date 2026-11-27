@@ -8,7 +8,7 @@
  * (続いていないところでセクションをつなげない)。読んだ表 (PAT・PMT・SDT・EIT) は両方を合わせて使う。
  */
 
-import { open } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 
 import {
   type EitEvent,
@@ -29,6 +29,7 @@ import {
 } from "@danything/arib/psi";
 
 import { PCR_WRAP, readPcr } from "../ts/clock";
+import { openExactRecording } from "./recording-io";
 
 /** EIT の PID と p/f[actual] の table_id (ARIB STD-B10) */
 const PID_EIT = 0x0012;
@@ -306,7 +307,7 @@ function summarize(scan: TsScan, head: Region, tail: Region): TsFacts | null {
 
 /** `from` から `length` バイトを `CHUNK` ずつ読んで渡す。`stop` が true を返したらやめる */
 async function readRange(
-  file: Awaited<ReturnType<typeof open>>,
+  file: FileHandle,
   from: number,
   length: number,
   feed: (chunk: Uint8Array) => boolean,
@@ -336,7 +337,8 @@ export async function readTsFacts(
   path: string,
   size: number,
 ): Promise<TsFacts | null> {
-  const file = await open(path, "r");
+  // 取り込んだあとに読むときと同じく、開いたものがそのパスのファイルかを確かめる (`recording-io` の「取り込んだ TS」)
+  const file = await openExactRecording(path);
   try {
     const scan = new TsScan();
     const head = new Region(scan);

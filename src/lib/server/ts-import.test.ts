@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -45,6 +46,8 @@ const { readTsFacts } = await import("./ts-import-read");
 const { deleteRecordingFiles, reconcile } = await import("./files");
 const { nextQueuedJob } = await import("./encoder");
 const { scratchBase } = await import("./fsx");
+const { serveFile } = await import("./serve");
+const io = await import("./recording-io");
 
 const ONID = 0x7fe0;
 const TSID = 0x7fe0;
@@ -440,5 +443,113 @@ describe("エンコード", () => {
     reconcile();
     expect(existsSync(chapters)).toBe(false);
     expect(existsSync(source)).toBe(true);
+  });
+});
+
+describe("取り込んだあとに読む", () => {
+  /** 取り込んだ TS を配る。`range` を付ければ Range で */
+  async function fetchTs(
+    path: string,
+    range?: string,
+  ): Promise<{ status: number; bytes: Uint8Array }> {
+    const response = serveFile(
+      path,
+      "video/mp2t",
+      new Request("http://denpa/file", {
+        headers: range === undefined ? {} : { range },
+      }),
+    );
+    return {
+      status: response.status,
+      bytes: new Uint8Array(await response.arrayBuffer()),
+    };
+  }
+
+  /** 取り込みの外に置いた、読まれてはいけないファイル */
+  function canary(name: string): { dir: string; path: string } {
+    const dir = join(root, `outside-${name}`);
+    rmSync(dir, { recursive: true, force: true });
+    const path = place(join(dir, "a.m2ts"), "outside canary\n");
+    return { dir, path };
+  }
+
+  async function importOne(path: string): Promise<string> {
+    const bytes = tsBytes();
+    place(path, bytes);
+    expect((await runImport(true)).imported).toBe(1);
+    const [row] = orm().select().from(recordings).all();
+    expect(row!.ts_path).toBe(path);
+    return row!.ts_path!;
+  }
+
+  test("取り込んだときのファイルなら、全体も Range も配る", async () => {
+    const path = await importOne(join(importDir, "keep", "a.m2ts"));
+    const bytes = tsBytes();
+    const whole = await fetchTs(path);
+    expect(whole.status).toBe(200);
+    expect(whole.bytes).toEqual(bytes);
+    const part = await fetchTs(path, "bytes=188-375");
+    expect(part.status).toBe(206);
+    expect(part.bytes).toEqual(bytes.subarray(188, 376));
+    expect(io.recordingSize(path)).toBe(bytes.length);
+    expect(io.recordingInput(path)).toEqual(["-i", path]);
+  });
+
+  test("ファイルをリンクに替えたら、全体も Range も配らない", async () => {
+    const path = await importOne(join(importDir, "swap", "a.m2ts"));
+    const outside = canary("file");
+    renameSync(path, `${path}.original`);
+    symlinkSync(outside.path, path);
+
+    for (const range of [undefined, "bytes=0-3", "bytes=-4"]) {
+      const result = await fetchTs(path, range);
+      expect(result.status).toBe(404);
+      expect(new TextDecoder().decode(result.bytes)).not.toContain("canary");
+    }
+    expect(io.recordingSize(path)).toBeNull();
+    expect(() => io.recordingInput(path)).toThrow(io.ReplacedFileError);
+    expect(() => io.recordingProbeInput(path)).toThrow(io.ReplacedFileError);
+    expect(() => io.openRecordingSync(path)).toThrow(io.ReplacedFileError);
+    await expect(io.openRecording(path)).rejects.toThrow(io.ReplacedFileError);
+    await expect(io.readRecording(path, 0, 4)).rejects.toThrow(
+      io.ReplacedFileError,
+    );
+    await expect(
+      new Response(io.recordingStream(path)).arrayBuffer(),
+    ).rejects.toThrow(io.ReplacedFileError);
+  });
+
+  test("途中のフォルダをリンクに替えても配らない", async () => {
+    const path = await importOne(join(importDir, "dir", "a.m2ts"));
+    const outside = canary("dir");
+    renameSync(join(importDir, "dir"), join(importDir, "dir.original"));
+    symlinkSync(outside.dir, join(importDir, "dir"));
+
+    expect((await fetchTs(path)).status).toBe(404);
+    expect((await fetchTs(path, "bytes=0-3")).status).toBe(404);
+    expect(io.recordingSize(path)).toBeNull();
+  });
+
+  test("起動したときに DB の取り込んだ TS を確かめる対象に足す", async () => {
+    const path = place(join(importDir, "boot", "a.m2ts"), tsBytes());
+    const at = Date.now();
+    orm()
+      .insert(recordings)
+      .values({
+        service_id: 0,
+        name: "前に取り込んだ録画",
+        start_at: at,
+        end_at: at,
+        ts_path: path,
+        imported_ts: path,
+        created_at: at,
+        updated_at: at,
+      })
+      .run();
+    tsImport.guardImportedOnBoot();
+    const outside = canary("boot");
+    renameSync(path, `${path}.original`);
+    symlinkSync(outside.path, path);
+    expect((await fetchTs(path)).status).toBe(404);
   });
 });
