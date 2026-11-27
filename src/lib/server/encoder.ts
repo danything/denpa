@@ -2172,8 +2172,9 @@ async function runJob(jobId: number): Promise<void> {
    *
    * **再エンコードで前のものと同じ名前になったら、その上へ置き換える** (`libraryPath` は自分のいまのファイルを衝突と数えない)。
    * 作業ファイルは同じフォルダにあるので、rename で一度に入れ替わる (再生できるものが無い時間は生まれない)。
-   * 前のもののサイドカー (サムネイル・データ放送の変化ログ・字幕) は消し、下で新しいものから作り直す。
-   * 置けなければ (Windows で前のものを開いているなど) そのコーデックは落ちたものと同じに扱う。1 本も置けなければ前のものを全部残す
+   * サムネイルと 4K の局の字幕は下で同じ名前に書き直すので、前のものを残したまま上書きする (途中で落ちても画像が途切れない)。
+   * データ放送の変化ログだけは、新しいものに無ければ書かない (`saveRecordedBml`) ので、前のものを消しておく
+   * (先頭を捨てた長さが変わると位置がずれる)。置けなければ (Windows で前のものを開いているなど) そのコーデックは落ちたものと同じに扱う。1 本も置けなければ前のものを全部残す
    */
   const placed: (Made & { path: string })[] = [];
   for (const m of made) {
@@ -2187,7 +2188,8 @@ async function runJob(jobId: number): Promise<void> {
       });
       continue;
     }
-    if (previous.includes(path)) removeSidecars(path);
+    if (previous.includes(path))
+      removeIfExists(sidecarPaths(path).dataBroadcast);
     placed.push({ ...m, path });
   }
   // 落ちたコーデックの作業ファイルは捨てる
