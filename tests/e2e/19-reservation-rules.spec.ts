@@ -102,7 +102,9 @@ test.describe("ルールで立った予約", () => {
 
     await goto(page, "/?all=1");
     const kept = page.locator(`[data-reservation-id="${id}"]`);
-    await expect(kept.getByTestId("rule-name")).toHaveText("手動予約");
+    // 手動予約の行はルール名を出さない (「ルール: (削除済み)」にならない)
+    await expect(kept).toBeVisible();
+    await expect(kept.getByTestId("rule-name")).toHaveCount(0);
     await expect(kept.getByTestId("restore-button")).toBeVisible();
   });
 
