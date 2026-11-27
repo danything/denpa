@@ -1,45 +1,46 @@
-import { recordingSize, recordingStream } from "./recording-io";
+import { recordingFile } from "./recording-io";
 
 /**
  * 録画のファイルをそのまま返す。Range に対応する。
  *
  * プレイヤーは Range でシークする。対応していないと、
  * プレイヤーによっては全部落とし終わるまで早送りできない。
+ *
+ * 大きさと中身は、同じく開いたファイルから取る (`recording-io.recordingFile`)。取り込んだ TS が取り込んだときのファイルで
+ * なくなっていれば、無いときと同じく 404 にする (理由は recording-io がログに出す)
  */
 export function serveFile(
   path: string,
   contentType: string,
   request: Request,
 ): Response {
-  const size = recordingSize(path);
-  if (size === null) return new Response("not found", { status: 404 });
+  const file = recordingFile(path);
+  if (file instanceof Error) return new Response("not found", { status: 404 });
+  const { size } = file;
 
   const base: Record<string, string> = {
     "Content-Type": contentType,
     "Accept-Ranges": "bytes",
   };
   if (request.method === "HEAD") {
+    file.close();
     return new Response(null, {
       headers: { ...base, "Content-Length": String(size) },
     });
   }
 
-  // `to` は Range と同じく末尾を含む
-  const stream = (from?: number, to?: number) =>
-    from === undefined || to === undefined
-      ? recordingStream(path)
-      : recordingStream(path, from, to + 1);
-
-  const unsatisfiable = () =>
-    new Response(null, {
+  const unsatisfiable = () => {
+    file.close();
+    return new Response(null, {
       status: 416,
       headers: { "Content-Range": `bytes */${size}` },
     });
+  };
   const range = request.headers.get("range");
   const match =
     range === null ? null : /^bytes=(\d*)-(\d*)$/.exec(range.trim());
   if (match === null) {
-    return new Response(stream(), {
+    return new Response(file.stream(), {
       headers: { ...base, "Content-Length": String(size) },
     });
   }
@@ -60,7 +61,8 @@ export function serveFile(
   if (!Number.isFinite(from) || from >= size || to < from)
     return unsatisfiable();
 
-  return new Response(stream(from, to), {
+  // `to` は Range と同じく末尾を含む
+  return new Response(file.stream(from, to + 1), {
     status: 206,
     headers: {
       ...base,
