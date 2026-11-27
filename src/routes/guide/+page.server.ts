@@ -39,10 +39,13 @@ export function load({ url, cookies }) {
 
   /*
    * 局の数 (種別ごと)。選んでいる種別に局が無ければ、表の真ん中にスキャンの案内を出す。
-   * そのときは上の案内 (`Shell.svelte`) を出さない。同じことを 2 度言わない
+   * そのときは上の案内 (`Shell.svelte`) を出さない。同じことを 2 度言わない。
+   * その種別の局を全部隠しただけなら (`services.hidden`)、スキャンではなく設定の「チャンネル」で戻せることを言う (`typeHidden`)
    */
   const counts = serviceCounts();
+  const all = serviceCounts(true);
   const typeEmpty = (counts[type] ?? 0) === 0;
+  const typeHidden = typeEmpty && (all[type] ?? 0) > 0;
   const today = broadcastDayStart(Date.now());
   const { services, split } = stationsOf(
     type,
@@ -69,11 +72,12 @@ export function load({ url, cookies }) {
     /** サブチャンネルも出すか (`#lib/subchannels.ts`)。端末ごとに覚える */
     subchannels: storedSubchannels(cookies.get(SUBCHANNELS_COOKIE)),
     typeEmpty,
+    typeHidden,
     /** 種別のタブ (`guideTabs`)。CATV と SKY は番組表に出す局があるときだけ */
     types: guideTabs(counts, type),
     channelNotice: typeEmpty
       ? null
-      : channelNotice(counts, listedServices(), agentCount()),
+      : channelNotice(all, listedServices(), agentCount()),
   };
 }
 

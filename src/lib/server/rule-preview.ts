@@ -272,6 +272,8 @@ async function countPreview(
     service_type: serviceTable.type,
     // 映像の無い局は、局を名指ししたルールだけが当てる (`rules.missOf`。予約を立てるときと同じ)
     arib_service_type: serviceTable.service_type,
+    // 隠した局も同じ (`rules.missOf` の `hidden`)
+    service_hidden: serviceTable.hidden,
     service_name: serviceTable.name,
     service_has_logo: serviceTable.has_logo,
     service_channel: shareKey(),

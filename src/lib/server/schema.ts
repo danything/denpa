@@ -300,6 +300,14 @@ export const services = sqliteTable("services", {
   listed: flag("listed")
     .notNull()
     .default(sql`1`),
+  /**
+   * 世帯で隠した局か (設定の「チャンネル」の「非表示」。`epg.setHidden`)。**番組表・ライブ・検索・テレビのアプリの局の一覧に出さない**
+   * (`epg.shownServices`)。局を名指ししていないルールも当てない (`rules.missOf` の `hidden`)。録画・予約・局を名指ししたルールはそのまま。
+   * 取り込み (`epg.syncServices`) は書かないので、スキャンし直しても隠したまま
+   */
+  hidden: flag("hidden")
+    .notNull()
+    .default(sql`0`),
   /** 最後に取り込みで見かけた時刻。見かけない時間が長い局の番組表と予約を片付けるのに使う (`epg.forgetMissing`) */
   updated_at: integer("updated_at").notNull(),
   /**

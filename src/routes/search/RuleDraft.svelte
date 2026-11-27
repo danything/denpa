@@ -17,6 +17,7 @@
     ignore: "除外",
     service: "局",
     videoless: "映像の無い局",
+    hidden: "非表示の局",
     genre: "ジャンル",
     time: "時間帯の外",
     weekday: "曜日の外",

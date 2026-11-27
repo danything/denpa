@@ -1,5 +1,5 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 
 import { parseId } from "#lib/id.js";
 import { tokenRefusal } from "#lib/server/auth.js";
@@ -165,7 +165,11 @@ export function load({ url, locals }) {
     fields.set("keyword", origin?.prefill?.keyword ?? q);
   const seed = editing ?? draftRule(fields);
 
-  // 取り残しの局は選ばせない (currentServices)。もう録れない局が並ぶだけ。並びは番組表・ライブと同じ
+  /*
+   * 取り残しの局は選ばせない (currentServices)。もう録れない局が並ぶだけ。並びは番組表・ライブと同じ。
+   * 隠した局 (`services.hidden`) も並べないが、書く欄のルールが名指ししている局は残す (外せるように)
+   */
+  const named = seed?.service_ids ?? [];
   const services = orm()
     .select({
       id: serviceTable.id,
@@ -173,7 +177,12 @@ export function load({ url, locals }) {
       type: serviceTable.type,
     })
     .from(serviceTable)
-    .where(currentServices())
+    .where(
+      and(
+        currentServices(),
+        or(eq(serviceTable.hidden, false), inArray(serviceTable.id, named)),
+      ),
+    )
     .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
     .all();
 

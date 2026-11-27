@@ -966,7 +966,18 @@
   {#if services.length === 0}
     <!-- まだ何も無いので見せる画面にする (`.glow`。docs/design.md 8 章)。読み込めなかったとき (下) は平らのまま -->
     <div class="empty-state glow" data-testid="empty-grid">
-      {#if data.typeEmpty}
+      {#if data.typeHidden}
+        <!-- 局はあるが、全部隠している (`services.hidden`)。スキャンし直しても戻らないので、戻す場所へ案内する -->
+        <p class="bold">{typeWord}の局をすべて非表示にしています</p>
+        <p class="small muted">設定の「チャンネル」で再表示できます</p>
+        <div class="actions">
+          <a
+            class="button small"
+            href={`${resolve("settings/reception")}#${CHANNEL_NOTICE_SECTION.all}`}
+            >チャンネルへ</a
+          >
+        </div>
+      {:else if data.typeEmpty}
         <!-- 局がまだ無い。上の案内と同じことを、ほかの空の状態と同じ並びで表の場所の真ん中に (上の案内はこのとき出さない) -->
         <p class="bold">{typeWord}のチャンネルがありません</p>
         <p class="small muted">チャンネルスキャンをしてください</p>

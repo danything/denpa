@@ -153,6 +153,14 @@ describe("これからの放送", () => {
     expect(found.rows.map((row) => row.id)).toEqual([2, 1]);
   });
 
+  test("隠した局の番組は出さない", () => {
+    program(1, "テストアニメ 第1話", HOUR);
+    orm().update(services).set({ hidden: true }).run();
+    const found = searchPrograms("テストアニメ", { limit: 10, count: true });
+    expect(found.total).toBe(0);
+    expect(found.rows).toEqual([]);
+  });
+
   test("件数は全部、行は上限まで", () => {
     for (let i = 1; i <= 5; i++) program(i, `テストアニメ 第${i}話`, i * HOUR);
     const found = searchPrograms("テストアニメ", { limit: 2, count: true });

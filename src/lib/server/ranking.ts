@@ -796,7 +796,7 @@ function playableRecordings(programIds: number[]): Map<number, number> {
 
 /**
  * **手元の番組表と突き合わせる。** 番組ごとに、受信できる局 (一覧に出している局) にある、終わって 24 時間以内の放送を選ぶ (`pick`)。
- * 無ければ hub の放送から同じ決め方で選び、受信できない局の行にする。
+ * 無ければ hub の放送から同じ決め方で選び、受信できない局の行にする。世帯で隠した局 (`services.hidden`) にしか無い番組は出さない。
  * 順位は hub のまま (受信できない番組を飛ばして振り直さない)。どの放送も終わって 24 時間を過ぎていて手元に無い番組は出さない
  */
 function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
@@ -805,14 +805,15 @@ function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
     ...new Set(entries.flatMap((e) => e.airings.map((a) => a.event_id))),
   ];
   const local = new Map<string, ProgramRow[]>();
+  /** 世帯で隠した局 (`services.hidden`) の放送。手元のほかの局に無ければ、その番組は出さない (受信できない局の行にもしない) */
+  const hidden = new Set<string>();
   if (events.length > 0) {
-    const rows = programRows(
-      and(
-        eq(services.listed, true),
-        gt(programs.end_at, since),
-        inArray(programs.event_id, events),
-      ),
-    ).all();
+    const near = and(
+      eq(services.listed, true),
+      gt(programs.end_at, since),
+      inArray(programs.event_id, events),
+    );
+    const rows = programRows(and(near, eq(services.hidden, false))).all();
     for (const row of rows) {
       const key = keyOf({
         network_id: row.network_id,
@@ -821,6 +822,17 @@ function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
       });
       local.set(key, [...(local.get(key) ?? []), row]);
     }
+    for (const row of orm()
+      .select({
+        network_id: programs.network_id,
+        service_id: services.service_id,
+        event_id: programs.event_id,
+      })
+      .from(programs)
+      .innerJoin(services, eq(services.id, programs.service_id))
+      .where(and(near, eq(services.hidden, true)))
+      .all())
+      hidden.add(keyOf(row));
   }
   const matched = entries.map((entry) => ({
     entry,
@@ -852,6 +864,8 @@ function matchEntries(entries: HubEntry[], at = now()): RankedRow[] {
       });
       continue;
     }
+    // 隠した局でしか受けていない番組は出さない。受信できない局の行にすると、隠した局が名前を変えて残る
+    if (entry.airings.some((a) => hidden.has(keyOf(a)))) continue;
     const shown = entry.airings.filter((a) => a.end_at > since);
     const away = pick(
       shown,

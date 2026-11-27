@@ -232,6 +232,8 @@ export function searchPrograms(q: string, options: SearchOptions) {
   const compiled = compile(rule);
   const where = and(
     gt(programs.end_at, now()),
+    // 世帯で隠した局 (`services.hidden`) の番組は出さない。番組表とライブにも出ていない
+    eq(services.hidden, false),
     narrow(words, [programs.name, programs.description]),
   );
   const page = (offset: number, size: number) =>
