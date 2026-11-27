@@ -1,8 +1,9 @@
 <script lang="ts">
-  /** 時間軸に描く 1 つ (`#lib/timeline.ts` の `TimelineLine`): 見出し・番組の見出し・行 */
+  /** 時間軸に描く 1 つ (`#lib/timeline.ts` の `TimelineLine`): 見出し・番組の見出し・たたんだ予約の見出し・行 */
   import type { TimelineLine } from "#lib/timeline.js";
 
   import type { Item } from "./context";
+  import FoldHead from "./FoldHead.svelte";
   import GroupHead from "./GroupHead.svelte";
   import TimelineHeading from "./TimelineHeading.svelte";
   import TimelineRow from "./TimelineRow.svelte";
@@ -14,6 +15,8 @@
   <TimelineHeading {entry} />
 {:else if entry.kind === "head"}
   <GroupHead group={entry.group} zone={entry.zone} open={entry.open} />
+{:else if entry.kind === "fold"}
+  <FoldHead count={entry.count} open={entry.open} />
 {:else}
   <TimelineRow item={entry.item} nested={entry.nested} />
 {/if}
