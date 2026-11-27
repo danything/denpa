@@ -1108,8 +1108,23 @@ function errorTail(errors: string[]): string {
     : lines.slice(-ERROR_LINES).join(" / ");
 }
 
-/** 試しのエンコードの素材。小さく短くする (何が使えるかを見るだけで、速さは測らない) */
-const SOURCE = ["-f", "lavfi", "-i", "nullsrc=s=256x256:r=30:d=0.2"];
+/**
+ * **試しのエンコードの素材は、録画がふだんエンコードする大きさ (1920x1080) にする。** 小さな試験映像では、録画の大きさなら
+ * エンコードできるのに試しだけ落ちる GPU がある。RX 9070 XT の av1_amf は 256x256 を `encoder->Init() failed with error 5`
+ * (AMF_OUT_OF_RANGE) で開けず、同じ指定の 1920x1080 は通った (報告者が確かめた)。256x256 は AMF の資料にある AV1 の範囲
+ * (幅 256〜・高さ 128〜) に入っているので、この GPU の下限は資料より大きいと推定している (下限そのものは確かめていない。
+ * docs/encode.md「試しのエンコードの大きさ」)。
+ * コマは短いまま (30 コマ/秒で 0.2 秒 = 6 コマ)。何が使えるかを見るだけで、速さは測らない
+ */
+export const PROBE_SIZE = "1920x1080";
+
+/** 試しのエンコードの素材 (`PROBE_SIZE` の 6 コマ) */
+export const PROBE_SOURCE = [
+  "-f",
+  "lavfi",
+  "-i",
+  `nullsrc=s=${PROBE_SIZE}:r=30:d=0.2`,
+];
 
 /** PCI の作り手の番号 → 名前。sysfs から読めたときだけ添える */
 const VENDOR: Record<string, string> = {
@@ -1440,7 +1455,7 @@ function tryWayFor(way: HwWay, codec: HwCodec): Promise<Trial> {
   return trial(
     [
       ...hw.device,
-      ...SOURCE,
+      ...PROBE_SOURCE,
       "-vf",
       hw.filter.join(","),
       "-c:v",
@@ -1484,7 +1499,8 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
         "-f",
         "lavfi",
         "-i",
-        "nullsrc=s=320x240:r=30000/1001:d=0.3",
+        // 放送と同じ大きさ (小さいと開けない GPU がある。`PROBE_SIZE`)
+        `nullsrc=s=${PROBE_SIZE}:r=30000/1001:d=0.3`,
         "-c:v",
         "mpeg2video",
         "-flags",

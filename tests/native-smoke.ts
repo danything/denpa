@@ -372,7 +372,7 @@ for (const name of mediacodec) {
 const { config } = await import("../src/lib/server/config.ts");
 config.ffmpeg = ffmpeg;
 const { HW_CODECS } = await import("../src/lib/hw.ts");
-const { hwArgs, hwChain, liveHw, liveHwArgs, probe } =
+const { PROBE_SOURCE, hwArgs, hwChain, liveHw, liveHwArgs, probe } =
   await import("../src/lib/server/hwenc.ts");
 type Way = Parameters<typeof hwArgs>[0];
 /** 録画とライブの引数で 1 回ずつ起動する。名前が違って落ちたのなら止める */
@@ -407,7 +407,7 @@ for (const kind of gpuKinds) {
       : android
         ? { device: kind, kind, codecName: softwareMediacodec[codec] }
         : { device: kind, kind };
-    const source = ["-f", "lavfi", "-i", "nullsrc=s=256x256:r=30:d=0.2"];
+    const source = PROBE_SOURCE;
     const hw = hwArgs(way, codec);
     tryArgs(`${codec}_${kind}`, [
       ...hw.device,
