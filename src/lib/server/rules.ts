@@ -729,21 +729,41 @@ function episodeSkips<T extends Candidate>(
  * (EIT p/f は局ごと) ので、片方だけ `end_at` が動いた回は「別の放送」に
  * 見えて両方が立っていた。開始とタイトルが同じなら同じ放送。
  *
+ * **予約のある番組を先に残す** (`preferred`)。人が枝番の大きいほうに手動予約を入れていたとき、小さいほうを残すと
+ * ルールがそちらに別の予約を立て、同じ放送を 2 本録る (`applyRules`)。どちらにも予約があるか、どちらにも無ければ小さい局を残す。
+ *
  * @param channelOf 放送の物理チャンネル
+ * @param preferred 予約のある番組か。下見は渡さない (条件だけで、どの局を録るかを出す)
  */
 export function oneBroadcast<
   T extends { service_id: number; start_at: number; name: string },
->(list: readonly T[], channelOf: (item: T) => string): T[] {
+>(
+  list: readonly T[],
+  channelOf: (item: T) => string,
+  preferred: (item: T) => boolean = () => false,
+): T[] {
   const kept = new Map<string, T>();
   for (const item of list) {
-    const key = `${channelOf(item)} ${item.start_at} ${item.name}`;
+    const key = broadcastKey(item, channelOf(item));
     const twin = kept.get(key);
     // 枝番の小さいほうが本チャンネル (MX1 なら 23608)。並び順に左右されないよう、あとから小さいものが来たら入れ替える
-    if (twin !== undefined && twin.service_id <= item.service_id) continue;
+    if (twin !== undefined) {
+      const rank = Number(preferred(item)) - Number(preferred(twin));
+      if (rank < 0 || (rank === 0 && twin.service_id <= item.service_id))
+        continue;
+    }
     kept.set(key, item);
   }
   const survivors = new Set(kept.values());
   return list.filter((item) => survivors.has(item));
+}
+
+/** 同じ放送か (`oneBroadcast`) を見分ける文字列。物理チャンネル + 開始時刻 + タイトル */
+function broadcastKey(
+  item: { start_at: number; name: string },
+  channel: string,
+): string {
+  return `${channel} ${item.start_at} ${item.name}`;
 }
 
 /**
@@ -1163,10 +1183,46 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     if (owner === undefined) continue;
     hits.push({ owner, program, matched: ordered });
   }
+  /*
+   * **同じ放送が枝番の局に載っていたら、予約のある番組を残す** (`oneBroadcast` の `preferred`)。
+   * 手動予約 (と手動予約から引き取ったもの) のある放送には、ほかの局の番組で予約を立てない。
+   * ルールがその局を当てていなくても同じ (局を選んだルールが、人が枝番の大きいほうで入れた手動予約と同じ放送を録らない)。
+   * ルールの予約はルールが外れれば消えるので、予約のある番組を残すだけにする
+   */
+  const reserved = new Set([
+    ...decisions.keys(),
+    ...orm()
+      .select({ program_id: reservations.program_id })
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.manual, false),
+          isNull(reservations.started_at),
+          inArray(reservations.state, HELD_STATES),
+        ),
+      )
+      .all()
+      .map((row) => row.program_id),
+  ]);
+  const manualBroadcasts = new Set(
+    programs
+      .filter((program) => decisions.get(program.id)?.kind === "manual")
+      .map((program) => broadcastKey(program, program.channel)),
+  );
   const hitPrograms = hits.map((hit) => hit.program);
-  const kept = new Set(oneBroadcast(hitPrograms, (p) => p.channel));
+  const kept = new Set(
+    oneBroadcast(
+      hitPrograms,
+      (p) => p.channel,
+      (p) => reserved.has(p.id),
+    ),
+  );
   for (const { owner, program, matched } of hits)
-    if (kept.has(program))
+    if (
+      kept.has(program) &&
+      (decisions.get(program.id)?.kind === "manual" ||
+        !manualBroadcasts.has(broadcastKey(program, program.channel)))
+    )
       wanted.set(program.id, { rule: owner, program, matched });
 
   /*
