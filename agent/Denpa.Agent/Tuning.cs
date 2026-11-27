@@ -284,7 +284,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     /// <summary>
     /// 読み出しを待つ間に印を確かめる間隔を変える (テスト用)。<see cref="Stop"/> が待ちを終わらせるかを、
-    /// 200 ms ごとの確認に紛れさせずに確かめる (間隔を十分長くすると、戻るのは止めたときだけになる)
+    /// 200 ms ごとの確認に紛れさせずに確かめる (間隔を十分長くすると、戻るのは止めたときだけになる)。
+    /// 間隔は int の ms に収まる長さ (24 日まで) にする
     /// </summary>
     internal DeviceStream(PipeReader reader, TimeSpan recheck)
         : this(new SafeFileHandle()) => _piped = new Piped(reader, (int)recheck.TotalMilliseconds);
