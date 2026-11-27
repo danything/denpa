@@ -126,7 +126,14 @@ export function deinterlace(smooth: boolean): string {
     : "bwdif=mode=send_frame:deint=interlaced";
 }
 
-/** 1 窓ぶん測る。ffmpeg が失敗したら「測れない」 */
+/**
+ * コマ数の実測 1 窓に待つ上限 (ms)。**ffmpeg が固まっても、エンコードの待ち行列を止めたままにしない。**
+ * 1 窓は録画の 30 秒ぶん (BS でも約 90 MB) を読んでデコードするだけなので、低い優先度で CPU をライブに譲っても、
+ * 窓の長さの 20 倍あれば足りる。時間切れの窓は「測れない」で、残りの窓の多数決で決まる (どれも測れなければ 60 コマ)
+ */
+const FPS_WINDOW_TIMEOUT = 10 * 60_000;
+
+/** 1 窓ぶん測る。ffmpeg が失敗した・時間切れになったら「測れない」 */
 async function measureWindow(
   input: string,
   at: number,
@@ -141,6 +148,7 @@ async function measureWindow(
   const diffs: string[] = [];
   const result = await run([config.ffmpeg, ...fpsArgs(input, at)], {
     signal,
+    timeoutMs: FPS_WINDOW_TIMEOUT,
     // 録ったあとのエンコードの一部。ライブに CPU を譲る (stream.lowerPriority)
     lowPriority: true,
     // 1 コマ 2 行ずつ出るので、差の行だけ溜める

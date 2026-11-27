@@ -234,13 +234,20 @@ export function parseFrameRate(value: string | undefined): number {
   return Number.isFinite(fps) && fps > 0 ? fps : NaN;
 }
 
+/**
+ * 録画を調べる ffprobe 1 回に待つ上限 (ms)。**NAS が固まっても、エンコードの待ち行列を止めたままにしない。**
+ * この ffprobe はジョブの中止 (`encoder.cancel`) では止まらないので、上限が無いと次のジョブへ進めない。
+ * 読むのは多くて先頭の約 270 MB (`tsProbe` の上限) と末尾だけで、毎秒 0.5 MB しか読めない共有でも 10 分に収まる。
+ * 上限は 1 回ごとで、エンコードの前には続けて 4 回呼ぶ (`probeVideo` が 2 回・`probeLiveAudio`・`probeLeadIn`) ので、合わせて多くて 40 分待つ。
+ * 時間切れは読めなかったときと同じで、呼ぶ側が代わりの値を使う
+ */
+const PROBE_TIMEOUT = 10 * 60_000;
+
 /** ffprobe を 1 回動かして、標準出力を返す */
 async function probe(input: string, args: string[]): Promise<string> {
   const result = await run(
     [config.ffprobe, "-v", "error", ...args, ...recordingProbeInput(input)],
-    {
-      stdout: true,
-    },
+    { stdout: true, timeoutMs: PROBE_TIMEOUT },
   );
   return new TextDecoder().decode(result.stdout).trim();
 }
