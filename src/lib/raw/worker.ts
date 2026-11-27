@@ -354,13 +354,14 @@ function decodeAudio(audio: WasmAudio, data: Uint8Array, pts: number): void {
   const pcm = audio.decode(data);
   if (pcm === "failed") fail("音声を再生できません");
   if (pcm === null || pcm === "broken" || pcm === "failed") return;
-  const { samples, sampleRate, planes } = pcm;
+  const { samples, sampleRate, layout, planes } = pcm;
   post(
     {
       type: "audio",
       pts,
       duration: (samples / sampleRate) * CLOCK,
       sampleRate,
+      layout,
       planes,
     },
     planes.map((plane) => plane.buffer),

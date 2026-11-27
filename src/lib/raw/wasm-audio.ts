@@ -23,6 +23,8 @@ export interface AudioDecoder {
 interface Pcm {
   sampleRate: number;
   samples: number;
+  /** チャンネルの並び (FFmpeg の `AV_CH_*` の和。分からなければ 0)。2ch に下げるときに使う (`downmix.ts`) */
+  layout: number;
   planes: Float32Array<ArrayBuffer>[];
 }
 
@@ -98,14 +100,15 @@ export class WasmAudio {
       sampleRate > 192000
     )
       return "broken";
+    const layout = d.HEAP32[info + 3]!;
     const planes = Array.from({ length: channels }, (_, i) =>
       new Float32Array(
         d.HEAPU8.buffer,
-        d.HEAP32[info + 3 + i]!,
+        d.HEAP32[info + 4 + i]!,
         samples,
       ).slice(),
     );
-    return { sampleRate, samples, planes };
+    return { sampleRate, samples, layout, planes };
   }
 
   /** WASM のメモリへ写す。**取れなければ 0** (書かない) */

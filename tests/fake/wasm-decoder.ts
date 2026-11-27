@@ -3,7 +3,7 @@ import type { AudioDecoder } from "../../src/lib/raw/wasm-audio";
 /**
  * **WASM のデコーダ (`wasm/decoder.c`) の音声デコーダのふり** (`raw/wasm-audio.ts` の `AudioDecoder`)。
  * メモリは 1 枚の ArrayBuffer で、`_malloc` は後ろへ積むだけ。`_audio_push` は `samples` が返す標本数で
- * (負は壊れたコマ、0 は出てこない)、`_audio_peek` の並び (`[本数, 標本化周波数, 標本数, 各面のアドレス…]`) と
+ * (負は壊れたコマ、0 は出てこない)、`_audio_peek` の並び (`[本数, 標本化周波数, 標本数, チャンネルの並び, 各面のアドレス…]`) と
  * 面の中身 (面 i は i + 0.5) を書く
  */
 export interface FakeDecoder extends AudioDecoder {
@@ -20,11 +20,18 @@ export interface FakeDecoder extends AudioDecoder {
 export function fakeDecoder(
   options: {
     channels?: number;
+    /** チャンネルの並び (`AV_CH_*` の和) */
+    layout?: number;
     sampleRate?: number;
     samples?: (bytes: Uint8Array) => number;
   } = {},
 ): FakeDecoder {
-  const { channels = 2, sampleRate = 48000, samples = () => 1024 } = options;
+  const {
+    channels = 2,
+    layout = 0x3,
+    sampleRate = 48000,
+    samples = () => 1024,
+  } = options;
   const memory = new ArrayBuffer(1 << 20);
   const info = 1024;
   const planeAt = (i: number) => 4096 + i * 8192 * 4;
@@ -57,9 +64,9 @@ export function fakeDecoder(
       d.last = d.HEAPU8.slice(data, data + length);
       const count = d.samples(d.last);
       if (count <= 0) return count;
-      d.HEAP32.set([channels, sampleRate, count], info / 4);
+      d.HEAP32.set([channels, sampleRate, count, layout], info / 4);
       for (let i = 0; i < channels; i++) {
-        d.HEAP32[info / 4 + 3 + i] = planeAt(i);
+        d.HEAP32[info / 4 + 4 + i] = planeAt(i);
         new Float32Array(memory, planeAt(i), count).fill(i + 0.5);
       }
       return count;

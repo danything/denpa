@@ -305,7 +305,7 @@ static AVCodecContext *audio;
 static AVPacket *audio_pkt;
 static AVFrame *audio_frame;
 /** JS へ渡す 1 コマぶんの控え (audio_push) */
-static int audio_info[3 + AUDIO_PLANES];
+static int audio_info[4 + AUDIO_PLANES];
 
 static int audio_open(enum AVCodecID id, const uint8_t *extra, int len) {
     const AVCodec *codec = avcodec_find_decoder(id);
@@ -338,9 +338,10 @@ EMSCRIPTEN_KEEPALIVE int opus_open(const uint8_t *extra, int len) {
  * 1 コマデコードする。**返すのはデコードできた標本数** (0 は出てこなかった、負は壊れたコマ)。
  * デコードできたものは `audio_peek` で読む:
  *
- *     [0] 本数 [1] 標本化周波数 [2] 標本数 [3..] 各面のアドレス (float -1〜1、標本数ぶん)
+ *     [0] 本数 [1] 標本化周波数 [2] 標本数 [3] チャンネルの並び [4..] 各面のアドレス (float -1〜1、標本数ぶん)
  *
- * 面の並びは FFmpeg の決まり (5.1ch なら 前左・前右・中央・LFE・後左・後右)。
+ * 面の並びは FFmpeg の決まり (5.1ch なら 前左・前右・中央・LFE・後左・後右)。チャンネルの並びは `AV_CH_*` のビットの和
+ * (下の 32 ビット)。FFmpeg の順 (native) で並んでいない音は 0 で、JS が本数から決める (`raw/downmix.ts`)。
  * **次の audio_push までしか持たない** (同じ AVFrame を使い回す)
  */
 EMSCRIPTEN_KEEPALIVE int audio_push(const uint8_t *data, int len) {
@@ -359,7 +360,8 @@ EMSCRIPTEN_KEEPALIVE int audio_push(const uint8_t *data, int len) {
     audio_info[0] = channels;
     audio_info[1] = audio_frame->sample_rate;
     audio_info[2] = audio_frame->nb_samples;
-    for (int i = 0; i < channels; i++) audio_info[3 + i] = (int)(intptr_t)audio_frame->extended_data[i];
+    audio_info[3] = audio_frame->ch_layout.order == AV_CHANNEL_ORDER_NATIVE ? (int)(uint32_t)audio_frame->ch_layout.u.mask : 0;
+    for (int i = 0; i < channels; i++) audio_info[4 + i] = (int)(intptr_t)audio_frame->extended_data[i];
     return audio_frame->nb_samples;
 }
 

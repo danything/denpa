@@ -23,12 +23,13 @@ describe("WasmAudio", () => {
     expect([...d.last]).toEqual([7, 8, 9]);
     expect(pcm.sampleRate).toBe(44100);
     expect(pcm.samples).toBe(4);
+    expect(pcm.layout).toBe(0x3);
     expect(pcm.planes.map((p) => [...p])).toEqual([
       [0.5, 0.5, 0.5, 0.5],
       [1.5, 1.5, 1.5, 1.5],
     ]);
     audio.decode(new Uint8Array([1]));
-    new Float32Array(d.HEAPU8.buffer, d.HEAP32[256 + 3]!, 4).fill(9);
+    new Float32Array(d.HEAPU8.buffer, d.HEAP32[256 + 4]!, 4).fill(9);
     expect([...pcm.planes[0]!]).toEqual([0.5, 0.5, 0.5, 0.5]);
     expect(pcm.planes[0]!.buffer).not.toBe(d.HEAPU8.buffer);
   });
