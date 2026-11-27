@@ -1,10 +1,11 @@
 import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   encodeSpans,
   expect,
   goto,
+  recordOne,
   reserveSoon,
   setRecording,
   syncEpg,
@@ -160,5 +161,65 @@ test.describe("コーデックの片方だけ失敗する", () => {
     expect(
       readdirSync(dirname(av1)).filter((name) => name.endsWith(".encoding")),
     ).toEqual([]);
+  });
+});
+
+/**
+ * **再エンコードは出来上がってから前のものと置き換える** (#3238)。失敗しても前のものは残って観られる。
+ * 元の TS を手で消した録画では、再エンコードを押せず (理由を出す)、サーバも断る
+ */
+test.describe("再エンコードの失敗と元の TS", () => {
+  test.afterAll(async ({ request, stack }) => {
+    if (existsSync(stack.failFile)) rmSync(stack.failFile);
+    await setRecording(request);
+  });
+
+  test("再エンコードが失敗しても前のものは残り、元の TS を消したら押せない", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(240_000);
+    await setRecording(request, { keepOriginal: true });
+    const { id, libraryPath } = await recordOne(page, request);
+    expect(libraryPath).toMatch(/\.mkv$/);
+    const row = page.locator(`[data-recording-id="${id}"]`);
+
+    // 再エンコードを失敗させる。前のものは消えず、行も同じものを指す
+    writeFileSync(stack.failFile, "1");
+    const res = await request.post("/?/reencode", { form: { id } });
+    expect(res.ok()).toBe(true);
+    await waitRowState(page, "/", row, "エンコード失敗");
+    expect(await row.getAttribute("data-library-path")).toBe(libraryPath);
+    expect(existsSync(libraryPath)).toBe(true);
+    rmSync(stack.failFile);
+
+    // 元の TS を手で消す (作業領域の `<シリーズ名>-<日時>-<録画ID>.m2ts`)
+    const raw = readdirSync(stack.rawDir).filter((name) =>
+      name.endsWith(`-${id}.m2ts`),
+    );
+    expect(raw).toHaveLength(1);
+    rmSync(join(stack.rawDir, raw[0]!));
+
+    // 詳細の「その他…」の再エンコードは押せず、理由が出る
+    await goto(page, "/");
+    await row.getByTestId("detail-button").click();
+    const detail = page.getByTestId("program-detail");
+    await expect(detail.getByTestId("reencode-button")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await expect(detail.getByTestId("reencode-note")).toHaveText(
+      "元の TS が見つからないため、再エンコードできません",
+    );
+
+    // 画面の外から送っても断る
+    const refused = await request.post("/?/reencode", {
+      form: { id },
+      headers: { accept: "application/json", "x-sveltekit-action": "true" },
+    });
+    const body = (await refused.json()) as { type: string; status: number };
+    expect(body).toMatchObject({ type: "failure", status: 409 });
+    expect(existsSync(libraryPath)).toBe(true);
   });
 });

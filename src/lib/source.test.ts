@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { cmRedo, encodeSource } from "./source";
+import { cmRedo, encodeSource, reencodeState, TS_MISSING } from "./source";
 
 describe("エンコードの元", () => {
   test("元の TS があればそれ", () => {
@@ -42,5 +42,28 @@ describe("CM の再検出", () => {
     const blocked = cmRedo({ ts_path: null, library_path: mkv, cm_kept: kept });
     expect(blocked.state).toBe("disabled");
     expect("reason" in blocked && blocked.reason).toContain("元の TS");
+  });
+});
+
+describe("再エンコード", () => {
+  const ts = "/recorded/a.m2ts";
+
+  test("元の TS のファイルが在れば押せる", () => {
+    expect(reencodeState({ ts_path: ts, ts_found: true })).toEqual({
+      state: "ok",
+    });
+  });
+
+  test("行に元の TS が無ければ出さない (元の TS を残さない設定でエンコードし終えた)", () => {
+    expect(reencodeState({ ts_path: null, ts_found: false }).state).toBe(
+      "hidden",
+    );
+  });
+
+  test("行に元の TS があってもファイルが見つからなければ、理由を出して押せない (#3238)", () => {
+    expect(reencodeState({ ts_path: ts, ts_found: false })).toEqual({
+      state: "disabled",
+      reason: TS_MISSING,
+    });
   });
 });

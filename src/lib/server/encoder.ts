@@ -1474,6 +1474,14 @@ async function runJob(jobId: number): Promise<void> {
     fail(jobId, recording, "元の TS がありません");
     return;
   }
+  /*
+   * **行に元の TS があっても、ファイルが見つからなければ始めない** (手で消した・置き場が外れている。`source.reencodeState`)。
+   * 始めても ffmpeg が読めずに落ちるだけ。前のエンコード済みは、どこで落ちても残る (下の置き換え)
+   */
+  if (!existsSync(input)) {
+    fail(jobId, recording, "元の TS が見つかりません");
+    return;
+  }
   // 映像の無い録画 (ラジオ・データ放送の局) はエンコードしない。元の TS のまま観る画面で再生する (`recorder.finish`)
   if (!recordedMedia(input, aribServiceId(recording.service_id)).video) {
     fail(jobId, recording, NO_VIDEO);
@@ -1493,8 +1501,8 @@ async function runJob(jobId: number): Promise<void> {
   /*
    * **エンコードするコーデックを先に決める。** H.265 は GPU でだけエンコードする (`SOFTWARE_CODECS`) ので、
    * いま H.265 をエンコードできる GPU が無ければ (抜いた・設定で外した) H.265 は飛ばし、
-   * H.265 しか選んでいなければここで失敗にする。復号や前のものを消すより前に決めるのは、
-   * 作れないと分かっている再エンコードで、いま観られる mkv を消さないため (元の TS は残るので、GPU を戻せば作り直せる)。
+   * H.265 しか選んでいなければここで失敗にする。復号より前に決めるのは、作れないと分かっている
+   * 再エンコードで復号に時間を掛けないため (元の TS は残るので、GPU を戻せば作り直せる)。
    *
    * **GPU を確かめ終わるのを待ってから決める** (`hwReady`)。起動した直後のジョブが、確かめる前の
    * 「GPU 無し」で H.265 を飛ばし、H.264 を CPU でエンコードしないように
@@ -1699,46 +1707,21 @@ async function runJob(jobId: number): Promise<void> {
   if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
   /*
-   * **再エンコードする前に、いま置いてあるものを消す。**
+   * **再エンコードでも、いま置いてあるもの (DB が指す最大 3 本) は消さない。** 出来上がってから置き換える (下の `placed`)。
+   * 失敗・中止したら前のものがそのまま残り、観られるものが無くなる間を作らない。元の TS が手で消されていると、
+   * 先に消した前のものは戻せない (#3238)。引き換えに、エンコードしている間は同じ番組の mkv が 2 本ぶん場所を取る
+   * (docs/library.md)。DB も空けないので、実体との照合 (`files.reconcile`) が「保存先から消えた」と読むことも無い。
    *
-   * 出来上がるまで別名 (`.encoding`) に書くので、消さないと同じ番組の mkv が
-   * エンコードしている間ずっと 2 本ぶん場所を取る。**画面に出ている大きさより実際の
-   * 使用量が多い**のは、外から見て分からない。
-   *
-   * **消しても再エンコードできる。** 元は元の TS (`encodeSource`) で、これとは別のファイル。
-   * 引き換えに、失敗したり途中でやめたりするとその間は再生できるものが
-   * 無くなるが、元の TS は残っているのでもう一度押せば戻る。
-   *
-   * **DB の `library_path` も一緒に空ける。** 残したままだと実体との照合が
-   * 「保存先から消えていました」と読んで、**録画ごと削除済みにする**
-   * (そのとき元の TS まで消える)。空けておけば照合の対象から外れ、
-   * 画面でも「まだ保存先に無い」と正しく出る
-   *
-   * **DB が指すもの (最大 3 本) だけでなく、この録画が取りうる名前の取り残されたファイルも消す** (`libraryFamily`)。
+   * **この録画が取りうる名前の取り残されたファイル (DB が指していないもの) は、ここで消す** (`libraryFamily`)。
    * 残っていると置き場所を「衝突」と読ませて `[録画ID]` が付く。
    * **ほかの録画が現に使っている置き場所は消さない** (DB で確認する)
    */
-  const stalePaths = new Set<string>(encodedPaths(recording));
+  const previous = encodedPaths(recording);
   for (const candidate of libraryFamily(recording)) {
-    if (stalePaths.has(candidate) || !existsSync(candidate)) continue;
-    if (!usedByOther(candidate, recording.id)) stalePaths.add(candidate);
-  }
-  if (stalePaths.size > 0) {
-    for (const stalePath of stalePaths) {
-      removeIfExists(stalePath);
-      removeSidecars(stalePath);
-    }
-    orm()
-      .update(recordings)
-      .set({
-        library_path: null,
-        hevc_path: null,
-        alt_path: null,
-        updated_at: now(),
-      })
-      .where(eq(recordings.id, recording.id))
-      .run();
-    emit("recordings");
+    if (previous.includes(candidate) || !existsSync(candidate)) continue;
+    if (usedByOther(candidate, recording.id)) continue;
+    removeIfExists(candidate);
+    removeSidecars(candidate);
   }
 
   /*
@@ -2165,7 +2148,7 @@ async function runJob(jobId: number): Promise<void> {
     return finishCanceled(jobId, null);
   }
   /** 失敗の理由。1 本だけ選んでいたらそのまま、いくつも選んでいたらコーデックの名前を添える */
-  const failure =
+  const failureText = (): string | null =>
     failures.length === 0
       ? null
       : codecs.length === 1
@@ -2173,9 +2156,10 @@ async function runJob(jobId: number): Promise<void> {
         : failures
             .map(({ codec, reason }) => `${CODEC_LABEL[codec]}: ${reason}`)
             .join("\n");
+  // 前のもの (`previous`) には触らずに終える
   if (made.length === 0) {
     cleanup();
-    fail(jobId, recording, failure ?? "エンコードできませんでした");
+    fail(jobId, recording, failureText() ?? "エンコードできませんでした");
     return;
   }
 
@@ -2185,15 +2169,35 @@ async function runJob(jobId: number): Promise<void> {
    * 同じ番組の別の録画が先に置き終えていれば、`encodedPath` がそれを見て
    * `[録画ID]` を足した名前を返す。決めてから `renameSync` までの間に
    * `await` を挟まないので、2 本が同じ名前を使うことはない (同じプロセスの中)
+   *
+   * **再エンコードで前のものと同じ名前になったら、その上へ置き換える** (`libraryPath` は自分のいまのファイルを衝突と数えない)。
+   * 作業ファイルは同じフォルダにあるので、rename で一度に入れ替わる (再生できるものが無い時間は生まれない)。
+   * 前のもののサイドカー (サムネイル・データ放送の変化ログ・字幕) は消し、下で新しいものから作り直す。
+   * 置けなければ (Windows で前のものを開いているなど) そのコーデックは落ちたものと同じに扱う。1 本も置けなければ前のものを全部残す
    */
   const placed: (Made & { path: string })[] = [];
   for (const m of made) {
     const path = encodedPath(recording, m.codec);
-    renameSync(m.working, path);
+    try {
+      renameSync(m.working, path);
+    } catch (error) {
+      failures.push({
+        codec: m.codec,
+        reason: `エンコードしたものを置けませんでした: ${error}`,
+      });
+      continue;
+    }
+    if (previous.includes(path)) removeSidecars(path);
     placed.push({ ...m, path });
   }
   // 落ちたコーデックの作業ファイルは捨てる
   for (const { codec } of failures) removeWorking(codec);
+  const failure = failureText();
+  if (placed.length === 0) {
+    removeIfExists(decoded);
+    fail(jobId, recording, failure ?? "エンコードできませんでした");
+    return;
+  }
 
   /*
    * 主は AV1 → H.265 → H.264 の先頭 (小さいので既定の再生に向く。エンコードした順とは別)。
@@ -2385,6 +2389,19 @@ async function runJob(jobId: number): Promise<void> {
     .set(keep ? finished : { ...finished, ts_path: null })
     .where(eq(recordings.id, recording.id))
     .run();
+  /*
+   * **前のもののうち、新しいものに置き換わらなかったものを消す** (行を書き換えてから。消してから書くと、その間の照合が
+   * 「保存先から消えた」と読む)。選ぶコーデックを変えた・名前が変わった・一部のコーデックが落ちたとき。
+   * 落ちたコーデックの前のものも残さない。CM の区間と先頭を捨てた長さ (`encode_skip`) は新しいものに合わせて書いたので、
+   * 前のものを混ぜるとチャプターと再生位置がずれる。元の TS は残すので、再エンコードすれば作り直せる
+   */
+  for (const path of previous) {
+    if (path === output || path === hevc || path === alt) continue;
+    if (usedByOther(path, recording.id)) continue;
+    removeIfExists(path);
+    removeSidecars(path);
+    pruneEmptyDirs(path);
+  }
   /*
    * **字幕のインデックスは作り直す** (`caption-index.ts`)。同じ名前に再エンコードするとファイルの列が変わらず、
    * 読んだときと比べても作り直しに気づけないので、ここで消す。消したら後から埋める仕事がすぐ読む

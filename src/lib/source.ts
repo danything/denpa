@@ -40,6 +40,28 @@ export function encodeSource(recording: {
   return recording.ts_path;
 }
 
+/** 行に元の TS はあるが、ファイルが見つからないときの理由 (詳細の「再エンコード」と、押したときのサーバの答え) */
+export const TS_MISSING = "元の TS が見つからないため、再エンコードできません";
+
+/**
+ * 「再エンコード」が使えるか (詳細の「その他…」)。元にするのは元の TS だけ (`encodeSource`)。
+ *
+ * - `hidden` … 行に元の TS が無い (元の TS を残さない設定でエンコードし終えた・「エンコードしない」で置き場に移した)。項目を出さない
+ * - `disabled` + 理由 … 行に元の TS はあるが、ファイルが見つからない (手で消した・置き場が外れている)。
+ *   取り込んだ録画 (`imported_ts`) で元のフォルダを消したときも同じ。押せないようにして理由を出す
+ * - `ok`
+ *
+ * ファイルが在るかは画面では分からないので、サーバが調べて `ts_found` に入れる
+ */
+export function reencodeState(recording: {
+  ts_path: string | null;
+  ts_found: boolean;
+}): { state: "hidden" | "ok" } | { state: "disabled"; reason: string } {
+  if (encodeSource(recording) === null) return { state: "hidden" };
+  if (!recording.ts_found) return { state: "disabled", reason: TS_MISSING };
+  return { state: "ok" };
+}
+
 /**
  * 元の TS。エンコードせずに置いた録画 (「エンコードしない」) は置き場の TS がそれ。無ければ null。
  * 録っている最中のものも返す (伸びている)
