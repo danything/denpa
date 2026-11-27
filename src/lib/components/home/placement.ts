@@ -29,7 +29,7 @@ function bottomCover(): number {
  * `target` (映したい録画の行のキー) があって「いま」の行のままでは見えなければ、その行が上の端 (貼り付いた日付の見出しの下)
  * に来るまで戻す。閉じた番組の中にあれば、その見出し (`data-group-rows`)。
  *
- * **新しい順で表示 (`reversed`) のときは、「いま」の行を上の端 (貼り付いた日付の見出しの下) に置く。** 予約は見えている所の上に外れ、
+ * **新しい順で表示 (`reversed`) のときは、「いま」の行を上の端 (日ごとのときは貼り付いた今日の見出しの下) に置く。** 予約は見えている所の上に外れ、
  * 「いま」の行の下に録画中と新しい録画が並ぶ (issue #3240)。予約が何件あっても、「いま」の行がもう見えていても送る。
  * 「いま」の行より下が 1 画面に足りないときは、ページの終わりまでしか送れないので、近い予約が上に残る。
  * `target` は使わない (呼ぶ側が渡さない)
@@ -67,7 +67,15 @@ export function placeTimeline(
   const { top: lineY, height: lineHeight } = lineAt();
   const lineTop = lineY - line;
   if (reversed) {
-    scrollPage(lineTop);
+    /*
+     * 日ごとのときは今日の見出しが「いま」の行の上に貼り付くので、その下端に置く。まとめて表示の「いま」の行は
+     * 見出しの無い包みにいる (`#lib/timeline.ts` の `blocks`) ので、上の端そのものに置く
+     */
+    const mark = hidden && firstLive !== null ? firstLive : now;
+    const headed =
+      (mark.closest(".t-block")?.querySelector(":scope > .t-day") ?? null) !==
+      null;
+    scrollPage(lineY - (headed ? line : topEdge(list)));
     alignTop(list);
     return;
   }

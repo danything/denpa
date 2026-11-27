@@ -1144,35 +1144,41 @@ test.describe("ホームの 1 本の一覧", () => {
     }) => {
       const db = `${stack.root}/denpa.db`;
       seedOld(db, "逆上端試験");
-      /** 「いま」の上端と見出しの下端の差、見えている予約と録画の数 */
+      /**
+       * 「いま」の行が上の端 (貼り付いた見出しの下。まとめて表示は見出しの無い包みなので上の端そのもの) にあるか、
+       * 「いま」の行より下に見えている予約と録画の数。「いま」の行の上には見出しの高さぶんしか残らないので、
+       * 予約は「いま」の行より下に掛かっていなければ見えていない
+       */
       const view = () =>
         page.getByTestId("timeline").evaluate((list) => {
           const day = list.querySelector<HTMLElement>(".t-day");
-          const edge =
-            (day ? Number.parseFloat(getComputedStyle(day).top) || 0 : 0) +
-            (day?.offsetHeight ?? 0);
+          const top = day
+            ? Number.parseFloat(getComputedStyle(day).top) || 0
+            : 0;
           const bottom =
             window.innerHeight -
             (document.querySelector<HTMLElement>('[data-testid="tabbar"]')
               ?.offsetHeight ?? 0);
+          const nowTop = list
+            .querySelector<HTMLElement>('[data-testid="timeline-now"]')!
+            .getBoundingClientRect().top;
           const seen = (selector: string) =>
             [...list.querySelectorAll<HTMLElement>(selector)].filter((node) => {
               const box = node.getBoundingClientRect();
               return (
-                box.height > 0 && box.bottom > edge + 1 && box.top < bottom
+                box.height > 0 && box.bottom > nowTop + 1 && box.top < bottom
               );
             }).length;
-          const now = list.querySelector<HTMLElement>(
-            '[data-testid="timeline-now"]',
-          );
           return {
-            gap: Math.round(now!.getBoundingClientRect().top - edge),
+            atTop:
+              nowTop >= top - 1 && nowTop <= top + (day?.offsetHeight ?? 0) + 8,
             reservations: seen(
               '[data-testid="reservation-row"], [data-testid="recording-group"][data-zone="future"]',
             ),
-            recordings: seen(
-              '[data-testid="recording-row"], [data-testid="recording-group"][data-zone="past"]',
-            ),
+            recordings:
+              seen(
+                '[data-testid="recording-row"], [data-testid="recording-group"][data-zone="past"]',
+              ) > 0,
           };
         });
       const open = async (grouped: boolean) => {
@@ -1187,15 +1193,8 @@ test.describe("ホームの 1 本の一覧", () => {
         await page.goto("/");
         await page.locator('[data-hydrated="true"]').waitFor();
         await expect
-          .poll(async () => {
-            const at = await view();
-            return (
-              Math.abs(at.gap) <= 8 &&
-              at.reservations === 0 &&
-              at.recordings > 0
-            );
-          })
-          .toBe(true);
+          .poll(view)
+          .toEqual({ atTop: true, reservations: 0, recordings: true });
       };
       try {
         for (const size of [
