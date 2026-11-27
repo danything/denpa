@@ -1,6 +1,7 @@
 import { resolve } from "$app/paths";
 
-import { reload } from "./reload.svelte";
+import { missedBeforeOpen } from "./live-missed";
+import { dataAge, reload } from "./reload.svelte";
 
 /**
  * サーバからの通知を受けて画面を読み直す。
@@ -27,6 +28,12 @@ import { reload } from "./reload.svelte";
  * 切れていた間に何が起きていても、**繋がり直した瞬間に 1 回読み直せば
  * 完全に追いつく**。再送も Last-Event-ID も要らない。
  *
+ * **最初に繋がったときは、読み直すのは取りこぼしたときだけ。** 画面を描いたばかりで、たいていは新しい。
+ * ただ、画面の中身を読んでから繋がるまでの間 (ハイドレーションの間) に送られた通知は届かない。
+ * 再エンコードが 0.1 秒で失敗したときのように、その間に終わった変化は次の通知まで画面に出なかった。
+ * サーバは繋がったときに、名前ごとに最後に送ってから経った長さを `hello` で送る (`events.sinceSent`)。
+ * 中身を読み始めてから経った長さ (`dataAge`) より新しいものがあれば、1 回読み直す (`missedBeforeOpen`)
+ *
  * 切れたことに気付く手段は 3 つある。
  * - **定期チェック** … サーバは 25 秒おきに `ping` を送ってくる (`api/events`)。
  *   60 秒何も届かなければ、開いたまま応答しなくなった接続 (遅い回線で TCP が
@@ -48,6 +55,8 @@ export function liveUpdates(
     let retry: ReturnType<typeof setTimeout> | null = null;
     let lastSeen = Date.now();
     let everOpened = false;
+    /** 最初の `hello` を受け取った。繋ぎ直したときの `hello` は見ない */
+    let greeted = false;
 
     const refresh = () => {
       if (timer !== null) clearTimeout(timer);
@@ -64,6 +73,19 @@ export function liveUpdates(
         // 最初の 1 回は要らない。画面を組んだばかりで、もう新しい
         if (everOpened) refresh();
         everOpened = true;
+      });
+      source.addEventListener("hello", (raw) => {
+        lastSeen = Date.now();
+        // 繋ぎ直したときは上の `open` で読み直している
+        if (greeted) return;
+        greeted = true;
+        let ages: unknown = null;
+        try {
+          ages = JSON.parse((raw as MessageEvent).data);
+        } catch {
+          // 読めない中身は取りこぼしていないとみなす
+        }
+        if (missedBeforeOpen(ages, events, dataAge())) refresh();
       });
       source.addEventListener("ping", () => {
         lastSeen = Date.now();

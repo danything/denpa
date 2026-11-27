@@ -1165,7 +1165,7 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 - `clips` は切り抜きが増えた・消えた・字幕やコメントを切り替えたことの通知 ([切り抜き](#切り抜き-post-apiclips))
 - `chapters` は**録画のチャプターが書き換わった** (CM 検出をやり直した) ことの通知。`data` は `{"recordingId":12}`。
   その録画を観ていれば [チャプター](#録画のチャプター-get-apirecordingsidchapters) を読み直してください。位置 (秒) の物差しは変わりません
-- `data` は `encode` と `yielded` と `chapters` だけが中身を運び、ほかは `1`。`encode` は `recordingId` `percent` `etaMs` `log`。`percent` は 0〜1 (名前に反して百分率ではない)。`etaMs` は見積もれなければ `null`
+- `data` は `encode` と `yielded` と `chapters` と `hello` (下) だけが中身を運び、ほかは `1`。`encode` は `recordingId` `percent` `etaMs` `log`。`percent` は 0〜1 (名前に反して百分率ではない)。`etaMs` は見積もれなければ `null`
 - `yielded` は**ライブがチューナーを録画に譲った** (チューナーを取り上げられた) ことの通知。`serviceId` の局を観ていた人だけが読みます。
   譲った録画が分かったときだけ来ます
 
@@ -1180,6 +1180,8 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
   使い方は [ライブ](#ライブ-get-apiservicesidlive) の「録画にチューナーを譲ると閉じます」
 
 - 25 秒おきに `event: ping` が来ます。60 秒ほど何も届かなければ繋ぎ直してください (黙って切れた繋ぎを見分けるため)
+- 繋がった直後に `event: hello` が 1 度来ます。`data` は名前ごとに、最後に送ってから経ったミリ秒 (`{"recordings":850,"encode":120}`。送ったことの無い名前は載りません)。
+  一覧を読んでから繋がるまでの間に送った通知は届かないので、一覧を読み始めてから経った長さより短いものがあれば、その一覧を 1 度読み直してください
 - 繋ぎ直したら一覧を 1 度読み直してください。切れていた間の通知は送り直しません (`Last-Event-ID` は使わない)
 
 ## 認証

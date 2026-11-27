@@ -1,4 +1,4 @@
-import { type DenpaEvent, subscribe } from "#lib/server/events.js";
+import { type DenpaEvent, sinceSent, subscribe } from "#lib/server/events.js";
 
 /** 何も起きなくても切られないよう、定期的に `ping` を送る */
 const HEARTBEAT = 25_000;
@@ -28,6 +28,11 @@ export function GET() {
           `event: ${event}\ndata: ${payload === undefined ? "1" : JSON.stringify(payload)}\n\n`,
         ),
       );
+      /*
+       * **繋がる前に送った通知が、名前ごとに何ミリ秒前だったか** (`sinceSent`)。受け取る側は、手元の一覧を読んでから
+       * 繋がるまでの間に送られたものがあれば読み直す。購読してから測るので、測ったあとの通知は上で届く
+       */
+      send(`event: hello\ndata: ${JSON.stringify(sinceSent())}\n\n`);
       /*
        * **名前付きイベントで送る。** コメント行 (`: ping`) は接続を保つには
        * 十分だが、**EventSource の API からは見えない。** 遅い回線で TCP が

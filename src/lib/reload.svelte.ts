@@ -16,6 +16,17 @@ import { navigating } from "$app/state";
 /** 遷移の最中に来た「読み直して」。終わってから 1 回だけ流す */
 let owed = false;
 
+/**
+ * いま出している中身を読み始めた時刻 (`performance.now()`)。遷移が始まるたびに進める。開いたばかりなら 0 (ページを開き始めた時刻)。
+ * 中身はこれより後に読んだものなので、これより前に送られた通知は中身に入っている (`dataAge`)
+ */
+let loadedFrom = 0;
+
+/** いま出している中身を読み始めてから経ったミリ秒 (多めに見積もる)。通知が繋がったときに、取りこぼしを見分ける (`live-updates`) */
+export function dataAge(): number {
+  return performance.now() - loadedFrom;
+}
+
 function flush(): void {
   if (!owed) return;
   owed = false;
@@ -37,6 +48,7 @@ export function followNavigation(): void {
       flush();
       return;
     }
+    loadedFrom = performance.now();
     let stale = false;
     // 取り消された遷移は `complete` が reject される。どちらでも同じように片を付ける
     const settle = (): void => {
