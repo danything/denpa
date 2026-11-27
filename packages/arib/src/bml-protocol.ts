@@ -150,7 +150,8 @@ export interface ESEventUpdatedMessage {
 /**
  * 使い始めた NPT 参照 ([bml.ts](bml.ts) の `BmlDecoder`)。**参照が替わったときと、放送の時計 (STC) が不連続になったときだけ送る。**
  *
- * NPT は `reference` の STC_Reference で NPT_Reference になり、そこから速さ (scale_numerator / scale_denominator) で進む。
+ * NPT は `reference` の STC_Reference で NPT_Reference になり、そこから速さ (scale_numerator / scale_denominator) で進む
+ * (達する前は `stc` の説明のとおり)。
  * 受け取る側は、STC を自分の時計に直した `timeUnixMillis` から NPT を進める
  */
 export interface NPTUpdatedMessage {
@@ -160,7 +161,9 @@ export interface NPTUpdatedMessage {
   reference: NPTReference | null;
   /**
    * この参照を使い始める STC (90 kHz)。ふつうは参照の STC_Reference。STC が不連続になった直後は、それより後で
-   * 使い始めた時点になる。`reference` が null なら NPT が無くなった時点
+   * 使い始めた時点になる。使っている参照が無いときに届いた、まだ達していない参照は、届いた時点 (STC_Reference より前) になる。
+   * 達するまでの NPT は TR-B14 第二分冊の NPT 値の算出に従う (進む参照は NPT_Reference で止まっていて、止まる参照は進んでいる)。
+   * `reference` が null なら NPT が無くなった時点
    */
   stc: number;
   /**

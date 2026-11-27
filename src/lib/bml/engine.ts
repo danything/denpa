@@ -426,6 +426,15 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     // NPT は文書でなく放送の状態。受け取ったときのコマの時刻は、時刻を付けない送り手のときだけ使う (`npt.ts`)
     if (message.type === "nptUpdated") {
       this.nptClock.update(message, this.shownAt());
+      // 参照が替わるのは番組や場面の変わり目だけで、出力は少ない。NPT で動く文書が止まって見えるときの手がかりにする
+      const reference = message.reference;
+      this.log(
+        `${
+          reference === null
+            ? "NPT が無くなりました"
+            : `NPT 参照を受け取りました (NPT ${Math.floor(reference.NPTReference / 90)} ms、速さ ${reference.scaleNumerator}/${reference.scaleDenominator})`
+        }: 部品 /${hex(message.componentId, 2)}`,
+      );
       // 届いた参照でもう達した NPT のタイマーがあれば起こし、次を待ち直す
       this.tick();
       return;
@@ -698,32 +707,48 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     };
   }
 
-  /** ストリーム記述子 (イベントメッセージ・NPT) */
+  /** beitem の es_ref が指す部品。無ければ今の文書の部品 */
+  private esTarget(
+    beitem: BmlElement,
+    component: number | null,
+  ): number | null {
+    const esRef = beitem.attr("es_ref");
+    if (esRef === null || esRef === "") return component;
+    return this.resources.resolve(esRef, this.current)?.component ?? null;
+  }
+
+  /**
+   * **NPTReferred は、NPT が分かるようになったとき (コマの時刻が参照の時刻に達したとき) に起こす。** 参照が替わるたびに
+   * 1 回ずつ起こす (同じ参照を配り直されても起こさない)。
+   *
+   * ストリーム記述子に参照が載っているだけでは起こさない。届いた参照を使い始めるのはコマが参照の時刻に達してからで
+   * (`npt.ts`)、ライブではストリーム記述子のほうがコマより数秒先に届く。そこで起こすと、文書は NPT を読めない (`getNPT` が NaN)
+   */
+  private nptReferred(shown: number | null): void {
+    const referred = this.nptClock.referred(shown);
+    if (referred === null) return;
+    const component = this.component();
+    for (const beitem of this.beitems("NPTReferred")) {
+      if (
+        this.esTarget(beitem, component) !== referred.component ||
+        beitem.memo["npt"] === referred.key
+      )
+        continue;
+      beitem.memo["npt"] = referred.key;
+      this.handle(beitem, "onoccur", {
+        type: "NPTReferred",
+        esRef: beitem.attr("es_ref") ?? `/${hex(referred.component, 2)}`,
+      });
+    }
+  }
+
+  /** ストリーム記述子 (イベントメッセージ)。NPT 参照はサーバが `nptUpdated` にして送る (`nptReferred`) */
   private esEvents(
     message: Extract<ResponseMessage, { type: "esEventUpdated" }>,
   ): void {
     const component = this.component();
-    const target = (beitem: BmlElement): number | null => {
-      const esRef = beitem.attr("es_ref");
-      if (esRef === null || esRef === "") return component;
-      return this.resources.resolve(esRef, this.current)?.component ?? null;
-    };
-    if (message.events.some((e) => e.type === "nptReference")) {
-      for (const beitem of this.beitems("NPTReferred")) {
-        if (
-          target(beitem) !== message.componentId ||
-          beitem.memo["npt"] === true
-        )
-          continue;
-        beitem.memo["npt"] = true;
-        this.handle(beitem, "onoccur", {
-          type: "NPTReferred",
-          esRef: beitem.attr("es_ref") ?? `/${hex(message.componentId, 2)}`,
-        });
-      }
-    }
     for (const beitem of this.beitems("EventMessageFired")) {
-      if (target(beitem) !== message.componentId) continue;
+      if (this.esTarget(beitem, component) !== message.componentId) continue;
       // 読めない値は DOM の messageId などと同じく既定 (255 は何でも合う)
       const group = numberAttr(beitem, "message_group_id", 0);
       const wantId = numberAttr(beitem, "message_id", 255);
@@ -780,8 +805,12 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const now = this.now();
     const shown = this.shownAt();
     const npt = this.nptClock.at(shown);
-    /** 次の NPT のタイマーまでのミリ秒 (NPT が進んでいるときだけ) */
-    let next = Number.POSITIVE_INFINITY;
+    this.nptReferred(shown);
+    /**
+     * 次に判定し直すまでのミリ秒。NPT が進んでいるときの次の NPT のタイマーと、先に届いている参照を使い始める時刻
+     * (NPTReferred と、新しい参照での NPT のタイマー)
+     */
+    let next = this.nptClock.nextChange(shown) ?? Number.POSITIVE_INFINITY;
     for (const beitem of this.beitems("TimerFired")) {
       if (beitem.memo["fired"] === true) continue;
       const mode = beitem.attr("time_mode") ?? "";
@@ -811,7 +840,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       this.handle(beitem, "onoccur", { type: "TimerFired", status: 0 });
     }
     /*
-     * **NPT のタイマーは、1 秒の刻みを待たずに達した所で起こす。** NPT は番組の中の場面に合わせて書かれ、
+     * **NPT のタイマーと NPTReferred は、1 秒の刻みを待たずに達した所で起こす。** NPT は番組の中の場面に合わせて書かれ、
      * 1 秒遅れると映像とずれて見える。次の刻みより前に達するものがあれば、その時刻にもう一度判定する
      * (待つのは実時間のミリ秒。速く再生していると達したあとに起き、遅れは刻みの 1 秒より短い。遅く再生していると達する前に起き、
      * そこで判定し直して待ち直す。どちらも達する前にはタイマーを起こさない)

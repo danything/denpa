@@ -10,7 +10,11 @@
  * 届いた時点で替えると、前の番組の終わりで次の番組の NPT を答える。録画の変化ログも TDT の粒度で並ぶので、少し先に届く。
  *
  * 速さは運用される 1/1 (進む) と 0/1 (止まっている) だけを扱う (サーバの `dueEvents` と同じ。TR-B14 第二分冊の NPT 値の算出)。
- * ほかの速さの参照のあいだは、NPT は分からない
+ * ほかの速さの参照のあいだは、NPT は分からない。
+ *
+ * **使い始める STC が参照の STC_Reference より前なら、達するまでは速さを入れ替える** (同じ算出。サーバは使っている参照が
+ * 無いときに、まだ達していない参照を届いた時点から使う)。進む参照は達するまで NPT_Reference で止まっていて、
+ * 止まる参照は達するまで進んでいる
  */
 
 import type { NPTUpdatedMessage } from "@danything/arib/bml-protocol";
@@ -29,6 +33,19 @@ interface Anchor {
   npt: number | null;
   /** 1 ミリ秒で進む量 (90 kHz)。止まっている参照は 0 */
   step: number;
+  /** 参照を運んだ部品 (component_tag)。NPTReferred の es_ref と突き合わせる */
+  component: number;
+  /**
+   * 届いた参照ごとに違う印。**同じ参照を配り直されても同じ** (遅れて繋いだときの配り直し)。
+   * 達する前から使う参照は 2 つの区切りになるが、印は同じ (NPTReferred は参照ごとに 1 回)
+   */
+  key: string;
+}
+
+/** NPT が分かっている参照 (`NptClock.referred`) */
+export interface Referred {
+  component: number;
+  key: string;
 }
 
 const since = (from: number, to: number) =>
@@ -46,24 +63,52 @@ export class NptClock {
     const at = message.timeUnixMillis ?? shown;
     if (at === null || !Number.isFinite(at)) return;
     const reference = message.reference;
-    let anchor: Anchor = { at, npt: null, step: 0 };
-    if (reference !== null && reference.scaleDenominator === 1) {
-      if (reference.scaleNumerator === 0)
-        anchor = { at, npt: reference.NPTReference, step: 0 };
-      else if (reference.scaleNumerator === 1)
-        anchor = {
+    const base = {
+      component: message.componentId,
+      key: JSON.stringify([message.componentId, reference, message.stc, at]),
+    };
+    const anchors: Anchor[] = [{ ...base, at, npt: null, step: 0 }];
+    if (
+      reference !== null &&
+      reference.scaleDenominator === 1 &&
+      (reference.scaleNumerator === 0 || reference.scaleNumerator === 1)
+    ) {
+      const step = reference.scaleNumerator === 1 ? TICKS_PER_MS : 0;
+      const passed = since(reference.STCReference, message.stc);
+      if (passed < WRAP / 2) {
+        anchors[0] = {
+          ...base,
           at,
           npt:
-            (reference.NPTReference +
-              since(reference.STCReference, message.stc)) %
-            WRAP,
-          step: TICKS_PER_MS,
+            step > 0
+              ? (reference.NPTReference + passed) % WRAP
+              : reference.NPTReference,
+          step,
         };
+      } else {
+        // まだ達していない。達するまでは速さを入れ替え、達した時刻からは参照のとおり
+        const ahead = WRAP - passed;
+        anchors[0] = {
+          ...base,
+          at,
+          npt:
+            step > 0
+              ? reference.NPTReference
+              : (reference.NPTReference - ahead + WRAP) % WRAP,
+          step: TICKS_PER_MS - step,
+        };
+        anchors.push({
+          ...base,
+          at: at + ahead / TICKS_PER_MS,
+          npt: reference.NPTReference,
+          step,
+        });
+      }
     }
     // 後から届いたものが正しい。同じ時刻か後ろに置いていたものは置き換える
     this.anchors = this.anchors.filter((held) => held.at < at);
-    this.anchors.push(anchor);
-    if (this.anchors.length > KEEP) this.anchors.shift();
+    this.anchors.push(...anchors);
+    while (this.anchors.length > KEEP) this.anchors.shift();
   }
 
   /** コマの時刻 `shown` (ミリ秒) の NPT (ミリ秒)。分からなければ null */
@@ -78,6 +123,21 @@ export class NptClock {
   running(shown: number | null): boolean {
     const anchor = this.anchorAt(shown);
     return anchor !== null && anchor.npt !== null && anchor.step > 0;
+  }
+
+  /** `shown` のときに NPT が分かっている参照 (NPTReferred を起こす)。分からなければ null */
+  referred(shown: number | null): Referred | null {
+    const anchor = this.anchorAt(shown);
+    return anchor === null || anchor.npt === null
+      ? null
+      : { component: anchor.component, key: anchor.key };
+  }
+
+  /** `shown` の次に参照が替わるまでのミリ秒 (コマの時刻で)。先に届いている参照が無ければ null */
+  nextChange(shown: number | null): number | null {
+    if (shown === null || !Number.isFinite(shown)) return null;
+    const next = this.anchors.find((anchor) => anchor.at > shown);
+    return next === undefined ? null : next.at - shown;
   }
 
   /** `shown` のときに使う参照。まだどの参照の時刻にも達していなければ null */

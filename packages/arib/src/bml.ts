@@ -197,18 +197,22 @@ const u33 = (data: Uint8Array, at: number) =>
 
 /**
  * いまの NPT (90 kHz)。TR-B14 第二分冊の NPT 値の算出に従う。
- * 進む (scale 1/1) か止まっている (scale 0/1) ときだけ求め、ほかの速さ (運用されない) は null
+ * 進む (scale 1/1) か止まっている (scale 0/1) ときだけ求め、ほかの速さ (運用されない) は null。
+ *
+ * **参照の時刻 (STC_Reference) に達する前は、速さを入れ替えて求める。** 進む参照は達するまで NPT_Reference で止まっていて、
+ * 止まる参照は達するまで進んでいる (達した時点で NPT_Reference になる)。STC は 33 ビットで一周するので、
+ * 達する前の差 (`since`) は一周から引いた値で出て、止まる参照の式がそのまま達する前の値になる
  */
 function nptAt(reference: NPTReference, stc: number): number | null {
   if (reference.scaleDenominator !== 1) return null;
-  if (reference.scaleNumerator === 0) return reference.NPTReference;
-  if (reference.scaleNumerator !== 1) return null;
+  const running = reference.scaleNumerator === 1;
+  if (!running && reference.scaleNumerator !== 0) return null;
+  if (running !== reached(reference, stc)) return reference.NPTReference;
   return (reference.NPTReference + since(reference.STCReference, stc)) % WRAP;
 }
 
 /**
- * NPT 参照記述子に書かれた時刻 (STC_Reference) に STC が達したか。**達する前の参照は使わない。**
- * 放送は切り替える少し前から次の参照を送るので、達する前に使うと NPT が先へ飛ぶ。
+ * NPT 参照記述子に書かれた時刻 (STC_Reference) に STC が達したか。
  * 33 ビットで一周するので、差が半周より大きいものはまだ先とみなす
  */
 function reached(reference: NPTReference, stc: number): boolean {
@@ -528,7 +532,11 @@ export class BmlDecoder {
    * 同じ参照は繰り返し届くので、中身が変わったときだけ送る。
    *
    * 使い始める STC はふつう参照の STC_Reference。前に NPT が替わった時点 (`nptSince`) より前になるときは、
-   * 届いた今の STC にする。STC が不連続になったあとに前と同じ参照が届いたとき、NPT を無くした時点より前へ戻さないため
+   * 届いた今の STC にする。STC が不連続になったあとに前と同じ参照が届いたとき、NPT を無くした時点より前へ戻さないため。
+   *
+   * **使っている参照が無い (読み始めた・STC が不連続になった) ときは、まだ達していない参照も使う** (STC_Reference が最も近いもの)。
+   * NPT は達する前も決まっている (`nptAt`)。達するまで待つと、そのあいだ NPT が分からない (データ放送の文書は NPT を読めずに止まる)。使い始める STC は届いた今の STC にする。
+   * 使っている参照があるときは、達するまでそちらを使い続ける (達する前の NPT は、前の参照から続いた値になる)
    */
   private useReference(
     component: Component,
@@ -536,18 +544,29 @@ export class BmlDecoder {
     stc: number,
   ): void {
     let chosen: NPTReference | null = null;
+    let ahead: NPTReference | null = null;
     for (const event of events) {
-      if (event.type !== "nptReference" || !reached(event, stc)) continue;
+      if (event.type !== "nptReference") continue;
+      if (!reached(event, stc)) {
+        if (
+          ahead === null ||
+          since(stc, event.STCReference) < since(stc, ahead.STCReference)
+        )
+          ahead = event;
+        continue;
+      }
       if (
         chosen === null ||
         since(event.STCReference, stc) < since(chosen.STCReference, stc)
       )
         chosen = event;
     }
+    if (chosen === null && component.npt === null) chosen = ahead;
     if (chosen === null || sameReference(chosen, component.npt)) return;
     const held = component.nptSince;
     const start =
-      held !== null && since(held, chosen.STCReference) >= WRAP / 2
+      !reached(chosen, stc) ||
+      (held !== null && since(held, chosen.STCReference) >= WRAP / 2)
         ? stc
         : chosen.STCReference;
     component.npt = chosen;
