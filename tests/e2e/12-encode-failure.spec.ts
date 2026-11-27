@@ -170,7 +170,7 @@ test.describe("コーデックの片方だけ失敗する", () => {
  */
 test.describe("再エンコードの失敗と元の TS", () => {
   test.afterAll(async ({ request, stack }) => {
-    if (existsSync(stack.failFile)) rmSync(stack.failFile);
+    if (existsSync(stack.failEncoderFile)) rmSync(stack.failEncoderFile);
     await setRecording(request);
   });
 
@@ -185,14 +185,14 @@ test.describe("再エンコードの失敗と元の TS", () => {
     expect(libraryPath).toMatch(/\.mkv$/);
     const row = page.locator(`[data-recording-id="${id}"]`);
 
-    // 再エンコードを失敗させる。前のものは消えず、行も同じものを指す
-    writeFileSync(stack.failFile, "1");
+    // 再エンコードの AV1 (libsvtav1) を失敗させる。前のものは消えず、行も同じものを指す
+    writeFileSync(stack.failEncoderFile, "libsvtav1");
     const res = await request.post("/?/reencode", { form: { id } });
     expect(res.ok()).toBe(true);
     await waitRowState(page, "/", row, "エンコード失敗");
     expect(await row.getAttribute("data-library-path")).toBe(libraryPath);
     expect(existsSync(libraryPath)).toBe(true);
-    rmSync(stack.failFile);
+    rmSync(stack.failEncoderFile);
 
     // 元の TS を手で消す (作業領域の `<シリーズ名>-<日時>-<録画ID>.m2ts`)
     const raw = readdirSync(stack.rawDir).filter((name) =>
