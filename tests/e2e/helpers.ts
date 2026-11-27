@@ -1359,7 +1359,7 @@ export async function homeTools(page: Page): Promise<Locator> {
 }
 
 /**
- * ホームの絞り込み (すべて・予約・録画中・録画済み・未視聴、見てほしいことの競合・失敗・録り逃し・CM の判定) を押す。
+ * ホームの絞り込み (すべて・予約・録画中・未視聴、見てほしいことの競合・失敗・録り逃し・CM の判定) を押す。
  * 広い画面はサイドバーの行、狭い画面は下のタブのすぐ上の 1 行のチップ
  */
 export async function homeFilter(page: Page, id: string): Promise<void> {

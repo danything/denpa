@@ -456,7 +456,7 @@ test.describe("ホームの 1 本の一覧", () => {
 
   test("絞り込みのボタンは件数どおりの行に絞る", async ({ page }) => {
     await goto(page, "/");
-    for (const id of ["reservations", "recorded", "unfinished", "failed"]) {
+    for (const id of ["reservations", "unfinished", "failed"]) {
       const count = await countOf(page, id);
       await homeFilter(page, id);
       await expect(
@@ -475,17 +475,6 @@ test.describe("ホームの 1 本の一覧", () => {
     await homeFilter(page, "failed");
     await expect(rows(page).filter({ hasText: "一覧試験の失敗" })).toHaveCount(
       1,
-    );
-    // 録画済みは録れたもの (観たもの・失敗も) だけで、予約は入れない
-    await homeFilter(page, "recorded");
-    for (const name of [
-      "一覧試験の未視聴",
-      "一覧試験の視聴済み",
-      "一覧試験の失敗",
-    ])
-      await expect(rows(page).filter({ hasText: name })).toHaveCount(1);
-    await expect(rows(page).filter({ hasText: "一覧試験の予約" })).toHaveCount(
-      0,
     );
     await homeFilter(page, "reservations");
     await expect(rows(page).filter({ hasText: "一覧試験の予約" })).toHaveCount(
@@ -554,7 +543,7 @@ test.describe("ホームの 1 本の一覧", () => {
       "表示",
     ]);
     const filters = side.getByRole("group", { name: "絞り込み" });
-    await expect(filters.locator("button").nth(4)).toHaveAttribute(
+    await expect(filters.locator("button").nth(3)).toHaveAttribute(
       "data-filter",
       "unfinished",
     );
@@ -1077,7 +1066,6 @@ test.describe("ホームの 1 本の一覧", () => {
 
   /*
    * **新しい順で表示 (issue #1930)。** 上下を返し、上から予約 (遠い順)・「いま」・録画中・録れたもの (新しい順)。
-   * 予約は先頭の「これからの予約」1 行にたたむ (issue #3240)。
    * 覚えはサーバが読む cookie なので、cookie を入れてから開く
    */
   test.describe("新しい順で表示", () => {
@@ -1104,18 +1092,6 @@ test.describe("ホームの 1 本の一覧", () => {
     }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
       await goto(page, "/");
-      // 予約は先頭の 1 行にたたんであり、押すとその下に開く
-      const fold = page.getByTestId("reservations-fold");
-      await expect(fold).toHaveAttribute("aria-expanded", "false");
-      await expect(fold).toContainText("これからの予約");
-      await expect(
-        rows(page).filter({ hasText: "一覧試験の予約" }),
-      ).toHaveCount(0);
-      await fold.click();
-      await expect(fold).toHaveAttribute("aria-expanded", "true");
-      await expect(
-        rows(page).filter({ hasText: "一覧試験の予約" }),
-      ).toHaveCount(1);
       const names = await rows(page).locator(".row-name").allInnerTexts();
       const order = [
         "一覧試験の予約",
@@ -1157,25 +1133,98 @@ test.describe("ホームの 1 本の一覧", () => {
       expect(days.below.length).toBeGreaterThan(0);
     });
 
-    /** issue #3240: まとめて表示・新しい順で表示・録画済みを合わせると、録れたものだけが新しい順に並ぶ */
-    test("まとめて表示と録画済みの絞り込みを合わせると、予約を出さずに録画だけが並ぶ", async ({
+    /**
+     * **開いたときは「いま」を上端に映し、予約は上に外す (issue #3240)。** 予約が少なくて「いま」がもう見えていても送る。
+     * まとめて表示・スマホの形・予約が 1 画面より多いときも同じ。下に 1 画面より多くの録画を入れておく
+     * (足りないとページの終わりまでしか送れない)
+     */
+    test("開くと「いま」を上端に映し、予約は上に外れて新しい録画が並ぶ", async ({
       page,
       stack,
     }) => {
-      await page
-        .context()
-        .addCookies([
-          { name: "denpa_recordings_grouped", value: "1", url: stack.appUrl },
+      const db = `${stack.root}/denpa.db`;
+      seedOld(db, "逆上端試験");
+      /** 「いま」の上端と見出しの下端の差、見えている予約と録画の数 */
+      const view = () =>
+        page.getByTestId("timeline").evaluate((list) => {
+          const day = list.querySelector<HTMLElement>(".t-day");
+          const edge =
+            (day ? Number.parseFloat(getComputedStyle(day).top) || 0 : 0) +
+            (day?.offsetHeight ?? 0);
+          const bottom =
+            window.innerHeight -
+            (document.querySelector<HTMLElement>('[data-testid="tabbar"]')
+              ?.offsetHeight ?? 0);
+          const seen = (selector: string) =>
+            [...list.querySelectorAll<HTMLElement>(selector)].filter((node) => {
+              const box = node.getBoundingClientRect();
+              return (
+                box.height > 0 && box.bottom > edge + 1 && box.top < bottom
+              );
+            }).length;
+          const now = list.querySelector<HTMLElement>(
+            '[data-testid="timeline-now"]',
+          );
+          return {
+            gap: Math.round(now!.getBoundingClientRect().top - edge),
+            reservations: seen(
+              '[data-testid="reservation-row"], [data-testid="recording-group"][data-zone="future"]',
+            ),
+            recordings: seen(
+              '[data-testid="recording-row"], [data-testid="recording-group"][data-zone="past"]',
+            ),
+          };
+        });
+      const open = async (grouped: boolean) => {
+        await page.context().addCookies([
+          {
+            name: "denpa_recordings_grouped",
+            value: grouped ? "1" : "0",
+            url: stack.appUrl,
+          },
         ]);
-      await page.setViewportSize({ width: 1366, height: 768 });
-      await goto(page, "/");
-      await expect(page.getByTestId("reservations-fold")).toBeVisible();
-      await homeFilter(page, "recorded");
-      await expect(page.getByTestId("reservations-fold")).toHaveCount(0);
-      await expect(page.getByTestId("reservation-row")).toHaveCount(0);
-      await expect(
-        rows(page).filter({ hasText: "一覧試験の未視聴" }),
-      ).toHaveCount(1);
+        // 全部描かせる `goto` は使わない (開いたときの位置を見る)
+        await page.goto("/");
+        await page.locator('[data-hydrated="true"]').waitFor();
+        await expect
+          .poll(async () => {
+            const at = await view();
+            return (
+              Math.abs(at.gap) <= 8 &&
+              at.reservations === 0 &&
+              at.recordings > 0
+            );
+          })
+          .toBe(true);
+      };
+      try {
+        for (const size of [
+          { width: 1366, height: 768 },
+          { width: 390, height: 844 },
+        ]) {
+          await page.setViewportSize(size);
+          for (const grouped of [false, true]) await open(grouped);
+        }
+        // 予約が 1 画面より多いときも
+        const now = Date.now();
+        sqlite(
+          db,
+          `const res = db.prepare("INSERT INTO reservations (program_id, service_id, name, start_at, end_at, manual, state, created_at, updated_at) VALUES (?, (SELECT id FROM services ORDER BY id LIMIT 1), ?, ?, ?, 1, 'scheduled', ${now}, ${now})");
+                  for (let i = 0; i < 40; i++) res.run(981000 + i, '逆上端試験の予約' + i, ${FUTURE} + (i + 1) * ${DAY}, ${FUTURE} + (i + 1) * ${DAY} + 1800000);`,
+        );
+        for (const size of [
+          { width: 1366, height: 768 },
+          { width: 390, height: 844 },
+        ]) {
+          await page.setViewportSize(size);
+          for (const grouped of [false, true]) await open(grouped);
+        }
+      } finally {
+        sqlite(
+          db,
+          `db.run("DELETE FROM recordings WHERE name LIKE '逆上端試験%'"); db.run("DELETE FROM reservations WHERE name LIKE '逆上端試験%'");`,
+        );
+      }
     });
 
     test("切り替えても、見ていた行は同じ高さに残る", async ({
@@ -1221,10 +1270,10 @@ test.describe("ホームの 1 本の一覧", () => {
         await expect
           .poll(async () => Math.abs((await row.boundingBox())!.y - anchor!.y))
           .toBeLessThan(2);
-        // 並びは返っている (たたんだ予約が「いま」より上)
+        // 並びは返っている (予約が「いま」より上)
         const now = await page.getByTestId("timeline-now").boundingBox();
-        const reservation = await page
-          .getByTestId("reservations-fold")
+        const reservation = await rows(page)
+          .filter({ hasText: "一覧試験の予約" })
           .boundingBox();
         expect(reservation!.y).toBeLessThan(now!.y);
       } finally {

@@ -494,7 +494,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
 
   /**
    * **新しい順で表示 (issue #1930) は端末に覚える。** 覚えはサーバが読む cookie で、まとめて表示と同じ仕組み。
-   * 上下を返し、「いま」の上に予約 (遠い順。1 行にたたみ、押すと開く)、下に録画 (新しい順)。まとめて表示でも番組どうしは新しい順で、中は放送順
+   * 上下を返し、「いま」の上に予約 (遠い順)、下に録画 (新しい順)。まとめて表示でも番組どうしは新しい順で、中は放送順
    */
   test("新しい順で表示は上下を返し、端末に覚える", async ({ page }) => {
     await open(page);
@@ -506,12 +506,8 @@ test.describe("ホームの一覧のまとめて表示", () => {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await expect(page.getByTestId("view-toggle")).toHaveAttribute("data-on");
 
-    const fold = page.getByTestId("reservations-fold");
     const expectReversed = async () => {
-      // 「いま」の上 (予約) は 1 行にたたみ、開くと遠い順
-      await expect(fold).toHaveAttribute("aria-expanded", "false");
-      await expect.poll(async () => ours(await listed(page))).toEqual([]);
-      await fold.click();
+      // 「いま」の上 (予約) は遠い順
       await expect
         .poll(async () => ours(await listed(page)))
         .toEqual([
@@ -519,8 +515,6 @@ test.describe("ホームの一覧のまとめて表示", () => {
           "グループ試験特番",
           "グループ試験アニメ #4",
         ]);
-      await fold.click();
-      await expect(fold).toHaveAttribute("aria-expanded", "false");
       // 「いま」の下 (録画) は新しい順
       await expect
         .poll(async () => ours(await listed(page, "future")).slice(0, 6))
@@ -597,15 +591,12 @@ test.describe("ホームの一覧のまとめて表示", () => {
       ]);
       const page = await context.newPage();
       await page.goto("/");
-      // 予約はたたんだ 1 行で「いま」の上、録画は「いま」の下
       const now = await page.getByTestId("timeline-now").boundingBox();
-      const fold = await page.getByTestId("reservations-fold").boundingBox();
-      const recording = await page
-        .getByTestId("recording-row")
-        .filter({ hasText: "グループ試験アニメ #3" })
+      const reservation = await page
+        .getByTestId("reservation-row")
+        .filter({ hasText: "グループ試験アニメ #4" })
         .boundingBox();
-      expect(fold!.y).toBeLessThan(now!.y);
-      expect(recording!.y).toBeGreaterThan(now!.y);
+      expect(reservation!.y).toBeLessThan(now!.y);
     } finally {
       await context.close();
     }
