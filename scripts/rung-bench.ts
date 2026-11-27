@@ -172,7 +172,8 @@ async function usable(encoder: BenchEncoder): Promise<boolean> {
     "-f",
     "lavfi",
     "-i",
-    // `hwenc.ts` の `PROBE_SOURCE` と同じ大きさ (小さいと開けない GPU がある)
+    // `hwenc.ts` の `PROBE_SIZE` と同じ大きさ (小さいと開けない GPU がある)。イメージの中では src の依存を読めないので
+    // import せずに書く (上の説明)。ずれていないかは `rung-bench.test.ts` が確かめる
     "nullsrc=s=1920x1080:r=30:d=0.2",
     "-vf",
     "format=nv12",

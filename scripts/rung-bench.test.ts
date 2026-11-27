@@ -1,8 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
-import type { LiveHw } from "../src/lib/server/hwenc";
+import { type LiveHw, PROBE_SIZE } from "../src/lib/server/hwenc";
 import { videoArgs } from "../src/lib/server/live";
 import { benchVideo, readBench } from "./rung-bench";
+
+test("使えるかを見る試しのエンコードは、hwenc.ts と同じ大きさで試す", () => {
+  const script = readFileSync(
+    new URL("./rung-bench.ts", import.meta.url),
+    "utf8",
+  );
+  expect(script).toContain(`"nullsrc=s=${PROBE_SIZE}:r=30:d=0.2"`);
+});
 
 /**
  * **測る引数が本物とずれていないか。** `rung-bench.ts` はイメージの中で依存を読めないので、段の映像の引数を自分で組む。
