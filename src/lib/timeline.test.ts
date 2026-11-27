@@ -828,7 +828,7 @@ describe("新しい順で表示 (上下を返す)", () => {
         fold: { open },
       });
 
-    test("閉じていれば予約は見出し 1 つで本数を添え、「いま」の行と録れたものはそのまま", () => {
+    test("閉じていれば予約は見出し 1 つで件数を添え、「いま」の行と録れたものはそのまま", () => {
       for (const grouped of [false, true]) {
         const lines = folded(list, grouped, false);
         expect(lines.future).toEqual([

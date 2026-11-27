@@ -197,7 +197,7 @@ export type TimelineLine<T extends TimelineItem> =
       group: SeriesGroup<T>;
       open: boolean;
     }
-  /** 新しい順で表示のとき、たたんだ予約の見出し (`LineOptions.fold`)。`count` は予約の本数 */
+  /** 新しい順で表示のとき、たたんだ予約の見出し (`LineOptions.fold`)。`count` は予約の件数 (画面は「N 件」) */
   | { kind: "fold"; key: "fold-future"; count: number; open: boolean }
   | { kind: "row"; key: string; item: T; nested: boolean };
 

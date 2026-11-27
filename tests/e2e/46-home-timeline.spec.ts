@@ -554,7 +554,7 @@ test.describe("ホームの 1 本の一覧", () => {
       "表示",
     ]);
     const filters = side.getByRole("group", { name: "絞り込み" });
-    await expect(filters.locator("button").nth(3)).toHaveAttribute(
+    await expect(filters.locator("button").nth(4)).toHaveAttribute(
       "data-filter",
       "unfinished",
     );
