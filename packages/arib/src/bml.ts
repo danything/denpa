@@ -404,7 +404,7 @@ export class BmlDecoder {
 
   /**
    * 適応フィールドの PCR の基準部 (90 kHz。`pcrBase`)。**STC が不連続になったら、使っていた NPT 参照を捨てる** (`STC_JUMP`)。
-   * 前の時計の参照で NPT を求めると、飛んだぶんだけ NPT も飛ぶ。新しい時計で達した参照が届けば、そこから使い直す
+   * 前の時計の参照で NPT を求めると、飛んだぶんだけ NPT も飛ぶ。新しい時計で参照が届けば、そこから使い直す (まだ達していなくても。`useReference`)
    */
   private readPcr(packet: Uint8Array): void {
     const stc = pcrBase(packet);

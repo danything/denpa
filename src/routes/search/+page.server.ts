@@ -278,7 +278,7 @@ export const actions = {
     return { success: true, warning: reserveWarning(reserved.programId) };
   },
 
-  /** 予約を取り消す。ルールが立てた予約でも作り直されない (戻すのはホームの「戻す」) */
+  /** 予約を取り消す。ルールが立てた予約も、あとでルールを保存し直すまで作り直されない (戻すのはホームの「戻す」) */
   cancel: async ({ request }) => {
     const form = await request.formData();
     const id = parseId(form.get("reservationId"));
