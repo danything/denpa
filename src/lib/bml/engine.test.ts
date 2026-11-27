@@ -1210,7 +1210,12 @@ describe("NPT (getNPT・NPT の TimerFired)", () => {
   });
   const script = `function start() { browser.Ureg[1] = "ready"; }
         function read() { browser.Ureg[3] = "" + browser.getNPT(); }
-        function fired() { browser.Ureg[4] = "fired:" + browser.getNPT(); }`;
+        function fired() { browser.Ureg[4] = "fired:" + browser.getNPT(); }
+        function referred() { browser.Ureg[5] = browser.Ureg[5] + "|" + browser.getNPT(); }
+        function again() {
+            browser.Ureg[6] = browser.Ureg[6] + "|" + browser.getNPT();
+            document.getElementById("t").timeValue = "" + (browser.getNPT() + 200);
+        }`;
 
   async function opening(
     shownAt: () => number | null,
@@ -1304,6 +1309,45 @@ describe("NPT (getNPT・NPT の TimerFired)", () => {
     );
     await watch(() => false, 1_200);
     expect(inside(bml).ureg[4]).toBe("");
+  });
+
+  test("NPTReferred は、コマの時刻が参照の時刻に達してから起き、getNPT が読める。参照が替わるたびに 1 回ずつ起きる", async () => {
+    let shown = 10_000;
+    const bml = await opening(
+      () => shown,
+      '<beitem type="NPTReferred" subscribe="subscribe" es_ref="/41" onoccur="referred();"/>',
+    );
+    const ureg = inside(bml).ureg;
+    // ライブでは参照がコマより先に届く。コマが参照の時刻 (20 秒) に達するまでは起こさない
+    const first = nptAt(20_000, 5_000);
+    bml.feed(first);
+    await watch(() => false, 1_200);
+    expect(ureg[5]).toBe("");
+    shown = 20_500;
+    expect((await watch(() => ureg[5] !== "", 2_000)).done).toBe(true);
+    expect(ureg[5]).toBe("|5500");
+    // 同じ参照を配り直されても起こさない (遅れて繋いだときの配り直し)
+    bml.feed(first);
+    await watch(() => false, 1_200);
+    expect(ureg[5]).toBe("|5500");
+    // 次の場面の参照
+    shown = 30_000;
+    bml.feed(nptAt(30_000, 0));
+    expect((await watch(() => ureg[5] !== "|5500", 2_000)).done).toBe(true);
+    expect(ureg[5]).toBe("|5500|0");
+  });
+
+  test("NPT の TimerFired は、time_value を書き換えると新しい値でもう一度起きる", async () => {
+    const started = performance.now();
+    const shown = () => 10_000 + (performance.now() - started);
+    const bml = await opening(
+      shown,
+      '<beitem id="t" type="TimerFired" subscribe="subscribe" time_mode="NPT" time_value="5100" onoccur="again();"/>',
+    );
+    const ureg = inside(bml).ureg;
+    bml.feed(nptAt(shown(), 5_000));
+    const { done } = await watch(() => ureg[6]!.split("|").length > 2, 3_000);
+    expect(done).toBe(true);
   });
 });
 

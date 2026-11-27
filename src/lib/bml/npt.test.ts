@@ -124,4 +124,62 @@ describe("NPT", () => {
     clock.update(updated(undefined, { reference: null }), null);
     expect(clock.at(9_000)).toBe(2_000);
   });
+  test("達する前から使う進む参照は、達するまで NPT_Reference で止まり、達した時刻から進む", () => {
+    const clock = new NptClock();
+    // STC 20 秒から NPT 0 で進む参照を、STC 10 秒 (時刻 100 秒) から使う
+    clock.update(
+      updated(100_000, {
+        stc: 10 * 90_000,
+        reference: { STCReference: 20 * 90_000 },
+      }),
+      0,
+    );
+    expect(clock.at(100_000)).toBe(0);
+    expect(clock.at(109_000)).toBe(0);
+    expect(clock.running(109_000)).toBe(false);
+    expect(clock.nextChange(109_000)).toBe(1_000);
+    expect(clock.at(112_500)).toBe(2_500);
+    expect(clock.running(112_500)).toBe(true);
+    expect(clock.nextChange(112_500)).toBeNull();
+  });
+
+  test("達する前から使う止まる参照は、達するまで進み、達した時刻に NPT_Reference で止まる", () => {
+    const clock = new NptClock();
+    // STC 20 秒に NPT 30 秒で止まる参照を、STC 15 秒 (時刻 0) から使う
+    clock.update(
+      updated(0, {
+        stc: 15 * 90_000,
+        reference: {
+          STCReference: 20 * 90_000,
+          NPTReference: 30 * 90_000,
+          scaleNumerator: 0,
+        },
+      }),
+      0,
+    );
+    expect(clock.at(0)).toBe(25_000);
+    expect(clock.at(4_000)).toBe(29_000);
+    expect(clock.at(9_000)).toBe(30_000);
+  });
+
+  test("NPT が分かっている参照は、参照ごとに同じ印を返し、配り直されても変わらない", () => {
+    const clock = new NptClock();
+    expect(clock.referred(0)).toBeNull();
+    const first = updated(1_000, {
+      stc: 10 * 90_000,
+      reference: { STCReference: 20 * 90_000 },
+    });
+    clock.update(first, 0);
+    expect(clock.referred(500)).toBeNull();
+    const held = clock.referred(1_000);
+    expect(held?.component).toBe(0x41);
+    // 達する前と後で同じ参照
+    expect(clock.referred(30_000)).toEqual(held);
+    clock.update(first, 0);
+    expect(clock.referred(30_000)).toEqual(held);
+    clock.update(updated(40_000, { reference: { NPTReference: 90_000 } }), 0);
+    expect(clock.referred(41_000)?.key).not.toBe(held?.key);
+    clock.update(updated(50_000, { reference: null }), 0);
+    expect(clock.referred(51_000)).toBeNull();
+  });
 });

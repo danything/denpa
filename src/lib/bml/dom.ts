@@ -334,6 +334,7 @@ export class Dom {
       attr: string,
       kind: "string" | "number" = "string",
       fallback = 0,
+      changed?: () => void,
     ): void => {
       object.define(
         name,
@@ -341,7 +342,12 @@ export class Dom {
           kind === "number"
             ? numberAttr(element, attr, fallback)
             : (element.attr(attr) ?? ""),
-        (value) => element.setAttr(attr, toStr(value)),
+        (value) => {
+          const text = toStr(value);
+          const was = element.attr(attr);
+          element.setAttr(attr, text);
+          if (was !== text) changed?.();
+        },
       );
     };
     switch (element.tag) {
@@ -390,7 +396,15 @@ export class Dom {
         break;
       case "beitem":
         object.define("type", () => element.attr("type") ?? "");
-        attribute("esRef", "es_ref");
+        /*
+         * **起こす先や時刻を書き換えたら、別の beitem として数え直す。** 1 つの TimerFired の time_value を
+         * 次の場面の NPT へ書き換えて使い回す文書では、起きたという印を残すと 2 つ目から起きない。
+         * es_ref を替えたら、前の部品で見たイベントメッセージと NPT 参照の印を捨てる
+         */
+        attribute("esRef", "es_ref", "string", 0, () => {
+          delete element.memo["messages"];
+          delete element.memo["npt"];
+        });
         attribute("messageId", "message_id", "number", 255);
         attribute("messageVersion", "message_version", "number", 255);
         object.define("messageGroupId", () =>
@@ -399,7 +413,9 @@ export class Dom {
         attribute("moduleRef", "module_ref");
         attribute("languageTag", "language_tag", "number");
         object.define("timeMode", () => element.attr("time_mode") ?? "");
-        attribute("timeValue", "time_value");
+        attribute("timeValue", "time_value", "string", 0, () => {
+          delete element.memo["fired"];
+        });
         attribute("objectId", "object_id");
         attribute("segmentId", "segment_id");
         attribute("peripheralRef", "peripheral_ref");
