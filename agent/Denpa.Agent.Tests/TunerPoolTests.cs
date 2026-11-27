@@ -406,6 +406,35 @@ public class TunerPoolTests
     }
 
     /*
+     * 選局表に無い名前は、チューナーを取る前に断る (#1578)。前は取ってから断っていたので、前のバージョンの衛星の名前 (BS15_0) の
+     * ライブが、番組表の取得からチューナーを取り上げてから「選局表にありません」で終わっていた
+     */
+    [Test]
+    public async Task 選局表に無い名前は_チューナーを取らずに断る(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var rig = new Rig([new TunerSpec("A", ["GR", "BS"], false, "fake:a")], TimeSpan.Zero, TimeSpan.FromMilliseconds(10));
+        try
+        {
+            var low = rig.Pool.Open("GR", "T27", 1, "epg T27");
+            await FirstChunk(low, cancel);
+
+            var error = Assert.Throws<IOException>(() => rig.Pool.Open("BS", "BS15_0", 10, "live BS/BS15_0"));
+            await Assert.That(error.Message).IsEqualTo(ChannelTable.NotInTable("BS15_0"));
+            // 番組表の取得は取り上げられずに続き、機材は開き直さない
+            await Assert.That(low.FailedWith).IsNull();
+            await FirstChunk(low, cancel);
+            var a = rig.Opened("fake:a").Single();
+            await Assert.That(a.Tunes).IsEqualTo(1);
+            low.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /*
      * 同期しなかったら別のチューナーで選局し直す (Open の SyncTries・Pick の tried)。
      * 偽のチューナーの Deaf は、選局すると「同期しませんでした」の例外を送出する
      */

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace Denpa.Agent;
 
@@ -13,7 +14,7 @@ namespace Denpa.Agent;
 /// どの中継器にどの TSID があるかは denpa が放送の NIT から決める (<c>src/lib/server/satellite.ts</c>)
 /// </para>
 /// </summary>
-public static class ChannelTable
+public static partial class ChannelTable
 {
     /// <summary>`linux/dvb/frontend.h` の <c>SYS_ISDBT</c></summary>
     public const int SysIsdbt = 8;
@@ -205,6 +206,20 @@ public static class ChannelTable
 
         return null;
     }
+
+    /// <summary>
+    /// 選局表に無い名前 (<see cref="Parse"/> が null を返した名前) を断る文。
+    /// **前のバージョンの衛星の名前 (相対の番号の <c>BS15_0</c>) には、denpa が作り直すまで選局できないことを添える。**
+    /// denpa は衛星を受けられるチューナーで放送の一覧を読めたときに作り直すので、読めない間はこの名前の選局が続く
+    /// (PX-W3PE4 が溢れたままで作り直せず、「選局表にありません」だけでは、どこに古い名前が残っているのかが分からなかった。#1578)
+    /// </summary>
+    public static string NotInTable(string name) => LegacySatellite().IsMatch(name)
+        ? $"{name} は前のバージョンの衛星のチャンネルの名前 (相対の番号) で、選局できません。denpa が衛星の放送の一覧を読めると、新しい名前 (BS15:16625 の形) で作り直します"
+        : $"{name} は選局表にありません";
+
+    /// <summary>前のバージョンの衛星の名前 (<c>BS15_0</c>・<c>CS02_0</c>)</summary>
+    [GeneratedRegex(@"^(?:BS|CS)\d{2}_\d+$")]
+    private static partial Regex LegacySatellite();
 
     /// <summary>
     /// 衛星の名前の、種別の後ろ (<c>15:16625</c> か <c>15</c>)。TSID は 1〜65535。付いていなければ <see cref="NoStreamId"/>

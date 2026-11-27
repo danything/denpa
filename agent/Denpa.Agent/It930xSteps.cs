@@ -89,7 +89,7 @@ internal static class It930xSteps
         var tunings = channels.Select(ChannelTable.Parse).ToList();
         if (tunings.IndexOf(null) is var missing and >= 0)
         {
-            output.WriteLine($"{channels[missing]}: 選局表にありません");
+            output.WriteLine(ChannelTable.NotInTable(channels[missing]));
             return 2;
         }
         var port = parsed[0]!.Value.Port;
