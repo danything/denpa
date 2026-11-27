@@ -124,6 +124,9 @@ saveSettings({ codecs: ["av1"], keepOriginal: true });
 
 test("出来上がったら同じ名前の前のものを置き換える", async () => {
   seed();
+  // 前のもののデータ放送の変化ログ。新しいもの (データ放送の無い TS) には書かれないので、残っていてはいけない
+  const bml = av1.replace(/\.mkv$/, ".bml.jsonl");
+  writeFileSync(bml, "{}\n");
   const job = await reencode();
   expect(job.error).toBeNull();
   expect(job.state).toBe("done");
@@ -132,6 +135,7 @@ test("出来上がったら同じ名前の前のものを置き換える", async
   expect(readFileSync(av1, "utf8")).not.toBe(PREVIOUS);
   // 作業ファイルは残らない
   expect(existsSync(`${av1}.${job.id}.av1.encoding`)).toBe(false);
+  expect(existsSync(bml)).toBe(false);
 }, 60_000);
 
 test("エンコードが失敗したら、前のものと行をそのまま残す", async () => {
