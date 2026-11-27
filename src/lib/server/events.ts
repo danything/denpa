@@ -65,7 +65,11 @@ type Listener = (event: DenpaEvent, payload?: unknown) => void;
 
 const listeners = new Set<Listener>();
 
+/** 名前ごとに、最後に送った時刻 (`performance.now()`)。繋がったときの `hello` に載せる (`sinceSent`) */
+const lastSent = new Map<DenpaEvent, number>();
+
 export function emit(event: DenpaEvent, payload?: unknown): void {
+  lastSent.set(event, performance.now());
   for (const listener of listeners) {
     try {
       listener(event, payload);
@@ -78,4 +82,19 @@ export function emit(event: DenpaEvent, payload?: unknown): void {
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/**
+ * **名前ごとに、最後に送ってから何ミリ秒たったか** (送ったことの無い名前は載せない)。
+ * 繋がったときに送る (`api/events` の `hello`)。画面は手元の一覧を読んでから繋がるまでの間に
+ * 送られた通知を受け取れないので、それより新しい通知があったかをこれで見分けて読み直す (`live-updates`)。
+ * 時刻ではなく経った長さで渡すので、サーバと端末の時計がずれていても比べられる
+ */
+export function sinceSent(
+  at = performance.now(),
+): Partial<Record<DenpaEvent, number>> {
+  const out: Partial<Record<DenpaEvent, number>> = {};
+  for (const [event, sent] of lastSent)
+    out[event] = Math.max(0, Math.round(at - sent));
+  return out;
 }
