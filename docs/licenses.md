@@ -84,7 +84,7 @@ IT930x・Siano・DiB0700 のファームウェアは、エージェントの実�
 ### ASICEN のファームウェア
 
 **ASICEN のファームウェア (`asicen-loader.bin`) は、再配布の許諾を確かめられていません。上流と同じ判断で、エージェントのイメージと Android のアプリに同梱しています。**
-**Windows と Mac のエージェントの配布物には入れません** (PLEX に許諾を問い合わせています。SignPath で署名する配布物に、許諾の分からないものを入れないため)。
+**Windows と Mac のエージェントの配布物には入れません** (SignPath で署名する配布物に、許諾の分からないものを入れないため)。
 Windows と Mac では、利用者が tuners.json の隣の `firmware/` に置いたものを使います (Xbox One Digital TV Tuner の復調のファームウェアと同じ。[tuners.md](tuners.md#ファームウェア))。
 権利を持つ人から申し出があれば外します。分かっている事実は次のとおりです。
 
@@ -93,8 +93,11 @@ Windows と Mac では、利用者が tuners.json の隣の `firmware/` に置�
   利用者が置いたものも、エージェントが同じ SHA-256 かを確かめてから使います
 - チップの会社 ASICEN (昇亮科技股份有限公司 / Asicen Technology、台湾) は解散し、2017-02-23 に清算が完結したと登記されています。
   台湾の会社情報サイト (<https://www.twincn.com/item.aspx?no=80342850>) の記載で、経済部の公式の登記では確かめていません
-- PLEX は 2026-11 の時点で、公式サイトの「旧製品ドライバ」のページ (<https://plex-net.co.jp/old-driver/>) で PX-W3U3・PX-W3U3 V2・PX-S3U2 の Windows 用ドライバを配っています。
+- PLEX は 2026-11 の時点で、公式サイト (<https://plex-net.co.jp/>) の「旧製品ドライバ」のページで PX-W3U3・PX-W3U3 V2・PX-S3U2 の Windows 用ドライバを配っています。
   そのページにも、上流が調べた公式のパッケージにも、再配布を認める文はありません
+- PLEX に再配布の許諾を問い合わせ、2026-11-25 に回答を受けました。ドライバとファームウェアは当時の製品の製造元から提供を受けたもので、
+  PLEX も当時のライセンス条件と今の権利の帰属先を把握していないため、再配布は許諾できないとのことです。
+  配布の停止や削除は求めず、権利関係の確認と扱いは denpa の責任と判断に任されています。当時の製造元を PLEX に問い合わせています
 - PLEX が以前配っていた Linux 用ドライバのモジュールには `license=GPL` の表示があり、同じファームウェアが埋め込まれています。
   それだけではファームウェア自体のライセンスは決まりません (上流の `NOTICES.md` の整理)
 - 上流が添える通知 (`licenses/VENDOR-FIRMWARE-NOTICE.txt` など) は、配布物のままイメージ (`/opt/asicen-userland/licenses/`) と APK (`assets/licenses/asicen-userland/`) に置いてあります
