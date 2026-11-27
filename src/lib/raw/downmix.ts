@@ -73,16 +73,16 @@ export function downmix(
   const frames = first.length;
   const left = new Float32Array(frames);
   const right = new Float32Array(frames);
-  for (let n = 0; n < frames; n++) {
-    let l = 0;
-    let r = 0;
-    gains.forEach(([toLeft, toRight], i) => {
-      const sample = planes[i]![n]!;
-      l += toLeft * sample;
-      r += toRight * sample;
-    });
-    left[n] = l;
-    right[n] = r;
+  // チャンネルごとに面を 1 回ずつなめる (標本ごとに関数を作らない。メインスレッドで 1 秒に 5 万標本)
+  for (let i = 0; i < gains.length; i++) {
+    const [toLeft, toRight] = gains[i]!;
+    if (toLeft === 0 && toRight === 0) continue;
+    const plane = planes[i]!;
+    for (let n = 0; n < frames; n++) {
+      const sample = plane[n]!;
+      left[n] = left[n]! + toLeft * sample;
+      right[n] = right[n]! + toRight * sample;
+    }
   }
   return [left, right];
 }

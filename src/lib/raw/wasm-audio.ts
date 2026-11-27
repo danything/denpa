@@ -100,7 +100,8 @@ export class WasmAudio {
       sampleRate > 192000
     )
       return "broken";
-    const layout = d.HEAP32[info + 3]!;
+    // C の int で渡るので、上のビットが立つと負になる。ビットの和として読む
+    const layout = d.HEAP32[info + 3]! >>> 0;
     const planes = Array.from({ length: channels }, (_, i) =>
       new Float32Array(
         d.HEAPU8.buffer,
