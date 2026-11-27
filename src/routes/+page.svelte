@@ -71,7 +71,7 @@
     saveOffline,
   } from "#lib/offline.svelte.js";
   import { Paged, sentinel } from "#lib/paging.svelte.js";
-  import { cmRedo, encodeSource } from "#lib/source.js";
+  import { cmRedo, reencodeState } from "#lib/source.js";
   import {
     blocks,
     catchUp,
@@ -1066,18 +1066,36 @@
           { id: rec.id, watched: rec.watched_at === null ? "1" : "0" },
           detail.close,
         )}
-        {#if rec.job_id === null && encodeSource(rec) !== null}
+        {#if rec.job_id === null && reencodeState(rec).state !== "hidden"}
+          {@const reencode = reencodeState(rec)}
           <!--
             再エンコードの元になるのは元の TS。エンコード済みを元にしても
-            画質は戻らないので、元の TS があるときだけ出す
+            画質は戻らないので、行に元の TS があるときだけ出す。ファイルが見つからなければ
+            (手で消した・置き場が外れている) 理由を出して押せない
           -->
-          {@render menuSubmit(
-            "?/reencode",
-            "再エンコード",
-            "reencode-button",
-            { id: rec.id },
-            detail.close,
-          )}
+          {#if reencode.state === "disabled"}
+            <div
+              role="menuitem"
+              class="menu-item"
+              aria-disabled="true"
+              data-disabled
+              tabindex="-1"
+              data-testid="reencode-button"
+            >
+              再エンコード
+            </div>
+            <div class="menu-note muted small" data-testid="reencode-note">
+              {reencode.reason}
+            </div>
+          {:else}
+            {@render menuSubmit(
+              "?/reencode",
+              "再エンコード",
+              "reencode-button",
+              { id: rec.id },
+              detail.close,
+            )}
+          {/if}
         {/if}
         {#if rec.job_id === null && cmRedo(rec).state !== "hidden"}
           {@const redo = cmRedo(rec)}

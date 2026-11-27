@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import { fail } from "@sveltejs/kit";
 import {
   and,
@@ -53,7 +55,7 @@ import {
 import { seriesName } from "#lib/server/series-heads.js";
 import { settings } from "#lib/server/settings.js";
 import { sanitizeFileName } from "#lib/server/title.js";
-import { cmRedo, encodeSource } from "#lib/source.js";
+import { cmRedo, reencodeState } from "#lib/source.js";
 import { REVERSED_COOKIE, storedReversed } from "#lib/timeline.js";
 import type {
   EncodeJob,
@@ -85,6 +87,11 @@ interface RecordingRow extends Recording {
    * 空くのか」が画面から分からなかった
    */
   raw_size: number | null;
+  /**
+   * 元の TS (`ts_path`) のファイルが在るか。行に元の TS が無ければ false。
+   * 手で消した・置き場が外れているときは行に残っていてもファイルが無いので、再エンコードを押させない (`source.reencodeState`)
+   */
+  ts_found: boolean;
   /**
    * もう一方のコーデック (H.265・H.264) の大きさ。**主でないときだけ**入る (`hevc_path`・`alt_path`)。
    *
@@ -280,6 +287,7 @@ export function load({ url, cookies }) {
         row.library_path === null || row.ts_path === null
           ? null
           : fileSize(row.ts_path),
+      ts_found: row.ts_path !== null && existsSync(row.ts_path),
       hevc_size: row.hevc_path === null ? null : fileSize(row.hevc_path),
       alt_size: row.alt_path === null ? null : fileSize(row.alt_path),
       job_canceling: row.job_id !== null && isCanceling(row.job_id),
@@ -368,12 +376,20 @@ export const actions = {
     const recording = recordingFromForm(await request.formData());
     if (recording === undefined)
       return fail(400, { message: "録画が見つかりません" });
-    // 元になるのは元の TS。エンコード済みを元に録り直しても画質は戻らない
-    if (encodeSource(recording) === null) {
-      return fail(400, {
+    /*
+     * 元になるのは元の TS。エンコード済みを元に録り直しても画質は戻らない。
+     * 行に元の TS があっても、ファイルが見つからなければ断る (画面は押させないが、開いたままの古い画面からも来る)
+     */
+    const state = reencodeState({
+      ts_path: recording.ts_path,
+      ts_found: recording.ts_path !== null && existsSync(recording.ts_path),
+    });
+    if (state.state === "hidden") {
+      return fail(409, {
         message: "元の TS が残っていないため再エンコードできません",
       });
     }
+    if (state.state === "disabled") return fail(409, { message: state.reason });
     /*
      * どのコーデックでエンコードするかは**そのときの設定**。押した人はエンコードしたいので、
      * 録ったときの設定を再現したいわけではない。設定が「エンコードしない」
