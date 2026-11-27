@@ -432,7 +432,7 @@ public static class Probe
             var tuning = ChannelTable.Parse(name);
             if (tuning is null)
             {
-                error.WriteLine($"{name}: 選局表にありません");
+                error.WriteLine(ChannelTable.NotInTable(name));
                 return new TuneResults(results, true);
             }
 
@@ -823,7 +823,7 @@ public static class Probe
                 var name = names[index];
                 if (ChannelTable.Parse(name) is not { } tuning)
                 {
-                    Console.Error.WriteLine($"{name}: 選局表にありません");
+                    Console.Error.WriteLine(ChannelTable.NotInTable(name));
                     return 1;
                 }
                 var warm = index == names.Count - 1;

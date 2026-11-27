@@ -461,7 +461,7 @@ public static class Dt295NativeProbe
         {
             if (ChannelTable.Parse(name) is not { } tuning)
             {
-                output.WriteLine($"  {name}: 選局表にありません");
+                output.WriteLine($"  {ChannelTable.NotInTable(name)}");
                 continue;
             }
             var controls = device?.Link.Controls ?? 0;

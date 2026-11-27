@@ -222,9 +222,18 @@ public sealed class TunerPool(
     /// その受信機だけ TS が届かなかったとき (<see cref="TunerStalledException"/>) も、同じ組の空いている別のチューナーで選局し直す。
     /// 電源を入れ直すまで使えないチューナーで終わったときは <see cref="TunerUnusableException"/> を送出する
     /// </para>
+    ///
+    /// <para>
+    /// **選局表に無い名前は、チューナーを取る前に断る** (<see cref="ChannelTable.NotInTable"/>)。取ってから断ると、選局できない名前のために
+    /// ほかの利用者に譲らせ、機材を開いていた (前のバージョンの衛星の名前 <c>BS15_0</c> で、PX-W3PE4 を開いてから断っていた。#1578)
+    /// </para>
     /// </summary>
-    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null, int? service = null) =>
-        Open(type, channel, priority, use, after, pin, service, []);
+    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null, int? service = null)
+    {
+        // 偽の選局 (適合テスト) は選局表を使わない
+        if (tune.FakeTune is null && ChannelTable.Parse(channel) is null) throw new IOException(ChannelTable.NotInTable(channel));
+        return Open(type, channel, priority, use, after, pin, service, []);
+    }
 
     /// <summary>
     /// **1 回の選局で試すチューナーの数の上限** (最初の 1 台を含む)。同期しないと分かるまでに機材ごとの待ち (DVB は 5 秒、PIX-DT295 は 10 秒) が掛かり、
@@ -381,7 +390,7 @@ public sealed class TunerPool(
                     if (held.Channel != channel || !held.Device.Tuned)
                     {
                         var tuning = ChannelTable.Parse(channel)
-                            ?? throw new IOException($"{channel} は選局表にありません");
+                            ?? throw new IOException(ChannelTable.NotInTable(channel));
                         // 受け付けない方式は渡さない (J.83B と ISDB-C を選局できない機材は、地上波の選局として扱ってしまう。ITuneDevice.Accepts)
                         if (!held.Device.Accepts(tuning)) throw new IOException(Unaccepted(channel, tuning));
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す

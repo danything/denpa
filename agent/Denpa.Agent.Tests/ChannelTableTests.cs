@@ -130,6 +130,22 @@ public class ChannelTableTests
     }
 
     [Test]
+    [Arguments("BS15_0", true)]
+    [Arguments("BS01_1", true)]
+    [Arguments("CS02_0", true)]
+    [Arguments("BS25:16400", false)]
+    [Arguments("T12", false)]
+    [Arguments("XBS15_0", false)]
+    public async Task 前のバージョンの衛星の名前は_作り直すまで選局できないと断る(string name, bool legacy)
+    {
+        // 「選局表にありません」だけでは、どこに古い名前が残っているかが分からない (#1578)
+        var text = ChannelTable.NotInTable(name);
+        await Assert.That(text.StartsWith(name, StringComparison.Ordinal)).IsTrue();
+        await Assert.That(text.Contains("前のバージョンの衛星のチャンネルの名前", StringComparison.Ordinal)).IsEqualTo(legacy);
+        await Assert.That(text.Contains("選局表にありません", StringComparison.Ordinal)).IsEqualTo(!legacy);
+    }
+
+    [Test]
     public async Task J83B_は_H01_から_H105_の名前で_SKY_の選局になる()
     {
         // 93.25 MHz から 6.5 MHz おきの中心周波数 (CXD2856 の仕様書 7.1)。地上波と同じく Hz で、1/7 MHz はずらさない
