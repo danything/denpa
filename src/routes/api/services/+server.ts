@@ -5,9 +5,9 @@ import { audioTracks, parseAudios } from "#lib/arib.js";
 import { jikkyoChannel } from "#lib/jikkyo/channels.js";
 import { orm } from "#lib/server/db.js";
 import {
-  currentServices,
   SERVICE_ORDER,
   SERVICE_TYPE_ORDER,
+  shownServices,
   watchableServices,
 } from "#lib/server/epg.js";
 import { reservationStates, willRecord } from "#lib/server/reservations.js";
@@ -15,7 +15,7 @@ import { hasVideo, programs, services } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 
 /**
- * **局の一覧** (画面の外のもの向けの API。docs/api.md)。並びはテレビと同じ
+ * **局の一覧** (画面の外のもの向けの API。docs/api.md)。世帯で隠した局 (`services.hidden`) は入れない (`shownServices`)。並びはテレビと同じ
  * (種別 → リモコン番号 → サービス ID)。ライブは `live` の URL をそのまま開けばよい。
  * `now` はいま放送中の番組 (番組表に無ければ null)。テレビのアプリがライブの列に出す。
  * `now.audios` はその番組で選べる音声 (画面のライブと同じ一覧。`live?audio=<id>` で選ぶ)。
@@ -40,7 +40,7 @@ export function GET() {
       serviceType: services.service_type,
     })
     .from(services)
-    .where(currentServices())
+    .where(shownServices())
     .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
     .all();
   const at = Date.now();

@@ -89,6 +89,7 @@ const {
   SERVICE_ORDER,
   SERVICE_TYPE_ORDER,
   serviceCounts,
+  setHidden,
   settle,
   readChannels,
   sync,
@@ -424,6 +425,62 @@ describe("消えた局の片付け", () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
     syncServicesOnly(await readChannels());
     expect(listedIds()).toEqual([3239123608]);
+  });
+
+  /*
+   * 本チャンネルだけ隠すと、残ったサブがいちばん若い局になって本チャンネル扱いになり、ずっと並ぶ。
+   * 隠すのは取り込みが書かない列なので、スキャンし直しても隠したまま
+   */
+  test("局を隠すと同じ放送局のサブチャンネルも隠し、取り込み直しても隠したまま。戻すと揃って戻る", async () => {
+    orm().delete(programs).run();
+    orm().delete(reservations).run();
+    // ほかの局 (`channel` は TS 32391) と別の TS
+    const station = {
+      ...channel(1072, "テレ東1"),
+      channel: "T23",
+      transportStreamId: 32_736,
+    };
+    station.services.push({ serviceId: 1073, serviceType: 1, name: "テレ東2" });
+    // 同じ TS のデータ放送の局は束ねない (別の局として隠す・戻す)
+    station.services.push({
+      serviceId: 1076,
+      serviceType: 192,
+      name: "テレ東データ",
+      partialReception: false,
+    });
+    offered = [station, channel(23608, "ＴＯＫＹＯ　ＭＸ")];
+    syncServicesOnly(await readChannels());
+    const hiddenIds = () =>
+      orm()
+        .select({ id: services.id })
+        .from(services)
+        .where(eq(services.hidden, true))
+        .all()
+        .map((row) => row.id)
+        .sort();
+
+    expect((await setHidden(3239101072, true)).sort()).toEqual([
+      3239101072, 3239101073,
+    ]);
+    expect(hiddenIds()).toEqual([3239101072, 3239101073]);
+    // タブの数からは外し、局が無いときの案内の数には入れる
+    expect(serviceCounts()).toEqual({ GR: 2 });
+    expect(serviceCounts(true)).toEqual({ GR: 4 });
+
+    syncServicesOnly(await readChannels());
+    expect(hiddenIds()).toEqual([3239101072, 3239101073]);
+
+    expect((await setHidden(3239101072, false)).sort()).toEqual([
+      3239101072, 3239101073,
+    ]);
+    expect(hiddenIds()).toEqual([]);
+    // 一覧に無い局は書き換えない
+    expect(await setHidden(1, true)).toEqual([]);
+    // あとのテストは局の行を 1 つだけと見ているものがあるので、足した局を消しておく
+    orm()
+      .delete(services)
+      .where(sql`${services.id} IN (3239101072, 3239101073, 3239101076)`)
+      .run();
   });
 
   /*

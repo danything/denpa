@@ -1,3 +1,4 @@
+import { FUJI, MX } from "../fake/services";
 import { expect, goto, syncEpg, test } from "./helpers";
 
 /**
@@ -325,6 +326,49 @@ test.describe("設定のチューナーとチャンネル", () => {
     await expect(result).toContainText(
       /誤り [\d.]+%・ドロップ [\d.]+%・[\d.]+ Mbps/,
     );
+  });
+
+  /*
+   * **局を隠す** (docs/data.md の「局を隠す」)。表には並べたまま「非表示」と出し、番組表とテレビのアプリの局の一覧から外す。
+   * 同じ表の「再表示」で戻す
+   */
+  test("局を非表示にすると番組表と局の一覧から外れ、再表示で戻る", async ({
+    page,
+    request,
+  }) => {
+    await syncEpg(request);
+    const ids = async () =>
+      (
+        (await (await request.get("/api/services")).json()) as { id: number }[]
+      ).map((service) => service.id);
+    const column = (name: string) =>
+      page.getByTestId("guide-service").filter({ hasText: name });
+    try {
+      await goto(page, "/settings/reception");
+      const row = page.locator(
+        `[data-testid="channel-row"][data-service-id="${FUJI.id}"]`,
+      );
+      await row.getByTestId("service-hide").click();
+      await expect(row.getByTestId("service-hidden")).toHaveText("非表示");
+      await expect(page.getByTestId("status-hidden")).toHaveText("1 局");
+      expect(await ids()).not.toContain(FUJI.id);
+      expect(await ids()).toContain(MX.id);
+      await goto(page, "/guide?type=GR");
+      await expect(column(MX.name)).toHaveCount(1);
+      await expect(column(FUJI.name)).toHaveCount(0);
+
+      await goto(page, "/settings/reception");
+      await row.getByTestId("service-show").click();
+      await expect(row.getByTestId("service-hidden")).toHaveCount(0);
+      await expect(page.getByTestId("status-hidden")).toHaveCount(0);
+      expect(await ids()).toContain(FUJI.id);
+    } finally {
+      // 途中で落ちても、後のテストのために戻しておく
+      await request.post("/settings/reception?/hideService", {
+        form: { id: String(FUJI.id), hidden: "0" },
+        headers: { accept: "application/json", "x-sveltekit-action": "true" },
+      });
+    }
   });
 });
 

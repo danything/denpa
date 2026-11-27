@@ -413,7 +413,7 @@ describe("番組からルールを作る", () => {
 describe("当たらない理由", () => {
   const miss = (
     fields: Partial<Rule>,
-    p: Program & { arib_service_type?: number },
+    p: Program & { arib_service_type?: number; service_hidden?: boolean },
     type = "GR",
     paidOk: PaidAllowed = NO_PAID,
   ) =>
@@ -445,6 +445,17 @@ describe("当たらない理由", () => {
       miss({ keyword: "テストアニメ" }, { ...anime, arib_service_type: 1 }),
     ).toBeNull();
     expect(miss({ keyword: "テストアニメ" }, anime)).toBeNull();
+  });
+  test("隠した局の番組は、局を名指ししたルールだけが当てる", () => {
+    const hidden = { ...anime, service_hidden: true };
+    expect(miss({ keyword: "テストアニメ" }, hidden)).toBe("hidden");
+    expect(miss({ service_types: ["GR"] }, hidden)).toBe("hidden");
+    expect(
+      miss({ keyword: "テストアニメ", service_ids: [7] }, hidden),
+    ).toBeNull();
+    expect(
+      miss({ keyword: "テストアニメ" }, { ...anime, service_hidden: false }),
+    ).toBeNull();
   });
   test("有料放送は、契約中と確かめた局だけ当てる", () => {
     const paid = { ...anime, is_free: false };

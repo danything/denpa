@@ -1,7 +1,7 @@
 import { error, json } from "@sveltejs/kit";
 
 import { orm } from "#lib/server/db.js";
-import { currentServices } from "#lib/server/epg.js";
+import { shownServices } from "#lib/server/epg.js";
 import { rankingEntries, RankingRelay } from "#lib/server/jikkyo.js";
 import { services } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
@@ -31,7 +31,7 @@ export async function GET() {
       network_id: services.network_id,
     })
     .from(services)
-    .where(currentServices())
+    .where(shownServices())
     .all();
   return json({
     at: ranking.at,

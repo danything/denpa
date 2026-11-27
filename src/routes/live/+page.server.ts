@@ -12,11 +12,11 @@ import { agentCount } from "#lib/server/agents.js";
 import { orm } from "#lib/server/db.js";
 import {
   airing,
-  currentServices,
   listedServices,
   SERVICE_ORDER,
   SERVICE_TYPE_ORDER,
   serviceCounts,
+  shownServices,
 } from "#lib/server/epg.js";
 import { warm } from "#lib/server/live.js";
 import { linkState } from "#lib/server/niconico.js";
@@ -34,7 +34,7 @@ import type { Actions } from "./$types";
  * **番組表と同じ並びにする** (`SERVICE_ORDER`)。番組表で見つけた局を、ここでも
  * 同じ位置で探せるようにするため。
  *
- * 取り残しの局は出さない (`currentServices` と `airing`)。出すと、選んでも
+ * 取り残しの局と隠した局は出さない (`shownServices` と `airing`)。取り残しの局を出すと、選んでも
  * 映らない行が並ぶ。終わったチャンネルの枠が SDT に残っていることがある。
  */
 export interface LiveChannel {
@@ -82,7 +82,7 @@ export function load(event) {
   const services = orm()
     .select({ ...getTableColumns(stations), channel: serviceChannel() })
     .from(stations)
-    .where(currentServices())
+    .where(shownServices())
     .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
     .all()
     /*
@@ -176,7 +176,7 @@ export function load(event) {
     channels,
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `Shell.svelte`) */
     channelNotice: channelNotice(
-      serviceCounts(),
+      serviceCounts(true),
       listedServices(),
       agentCount(),
     ),

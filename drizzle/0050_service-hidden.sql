@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `hidden` integer DEFAULT 0 NOT NULL;

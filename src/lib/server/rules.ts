@@ -84,6 +84,8 @@ type Matchable = Pick<
    * 省けば見ない (検索の「これからの放送」は録るかどうかを決めないので、映像の無い局の番組も出す)
    */
   arib_service_type?: number;
+  /** 世帯で隠した局か (`services.hidden`)。隠した局は、局を名指ししたルールだけが当てる。省けば見ない (`arib_service_type` と同じ) */
+  service_hidden?: boolean;
 };
 
 /**
@@ -182,6 +184,7 @@ export const ANY_PAID: PaidAllowed = () => true;
  * - `paid` 契約を確かめていない有料放送 (`PaidAllowed`)
  * - `service` 局の条件から外れる
  * - `videoless` 映像の無い局 (ラジオ・データ放送) の番組で、ルールがその局を名指ししていない
+ * - `hidden` 世帯で隠した局 (`services.hidden`) の番組で、ルールがその局を名指ししていない
  * - `genre` ジャンルの条件から外れる
  * - `time` 始まる時刻が時間帯の外
  * - `weekday` 始まる時刻の曜日が条件の外
@@ -193,6 +196,7 @@ export type Miss =
   | "paid"
   | "service"
   | "videoless"
+  | "hidden"
   | "genre"
   | "time"
   | "weekday"
@@ -241,6 +245,16 @@ export function missOf(
     !(services?.includes(program.service_id) ?? false)
   )
     return "videoless";
+
+  /*
+   * **隠した局 (`services.hidden`) の番組も、その局を名指ししたルールだけが当てる。** 隠すのは要らない局 (契約していない有料の局など) で、
+   * 検索の「これからの放送」にも出さない。キーワードや種別だけのルールがそこで録ると、どこにも出ていない局の録画が増える
+   */
+  if (
+    program.service_hidden === true &&
+    !(services?.includes(program.service_id) ?? false)
+  )
+    return "hidden";
 
   // ジャンルは "7" (大分類だけ) と "7-0" (中分類まで) の 2 通りで持つ。
   // 昔のルールは数値の配列だが、読み出し時に文字列へ揃えてある (schema.ts の strings)
@@ -946,6 +960,8 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
       service_type: services.type,
       // 映像の無い局は、局を名指ししたルールだけが当てる (`missOf`)
       arib_service_type: services.service_type,
+      // 隠した局も、局を名指ししたルールだけが当てる (`missOf`)
+      service_hidden: services.hidden,
       channel: shareKey(),
       decodable: services.decodable,
     })

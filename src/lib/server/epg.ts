@@ -61,6 +61,57 @@ export function currentServices() {
 }
 
 /**
+ * **番組表・ライブ・検索・テレビのアプリに出す局。** いまの一覧にある局 (`currentServices`) のうち、世帯で隠していないもの (`services.hidden`)。
+ *
+ * 番組表とロゴの取得、受信の設定の表、ルールの判定は `currentServices` のまま (隠した局も取得する)。
+ * 局を名指ししたルールは隠した局でも予約を立て、戻したときにはすぐ番組表がある
+ */
+export function shownServices() {
+  return and(currentServices(), eq(services.hidden, false));
+}
+
+/**
+ * **局を隠す・戻す** (設定の「チャンネル」の「非表示」と「再表示」)。
+ *
+ * **同じ放送局のサブチャンネル (`subchannels.mainOf` で同じ本チャンネル) も一緒に書き換える。** 本チャンネルだけ隠すと、
+ * 残ったサブのうちサービス ID のいちばん若い局が本チャンネルになり、分割放送でない時間もずっと並ぶ。
+ * 束ねる局を見るのは、受信の設定の表に並ぶ局 (いまの一覧にある局と、全部のエージェントで受信できない局)。
+ * 予約と録画には触らない。ルールは当て直す (局を名指ししていないルールは隠した局に当てない。`rules.missOf` の `hidden`)
+ *
+ * @returns 書き換えた局の id。表に無い局なら空
+ */
+export async function setHidden(
+  id: number,
+  hidden: boolean,
+): Promise<number[]> {
+  const rows = orm()
+    .select({
+      id: services.id,
+      service_id: services.service_id,
+      network_id: services.network_id,
+      transport_stream_id: services.transport_stream_id,
+      type: services.type,
+      service_type: services.service_type,
+    })
+    .from(services)
+    .where(or(currentServices(), unreceivableService()))
+    .all();
+  const group = mainOf(rows);
+  const main = group.get(id);
+  if (main === undefined) return [];
+  const ids = rows
+    .filter((row) => group.get(row.id) === main)
+    .map((row) => row.id);
+  orm().update(services).set({ hidden }).where(inArray(services.id, ids)).run();
+  emit("services");
+  emit("programs");
+  // 当て直しは全ルール × 全番組。ルールを直したとき (`rule-actions.reapply`) と同じ重さで、押した人には済んでから返す
+  applyRules();
+  await resolveConflicts();
+  return ids;
+}
+
+/**
  * **設定から消した種別の局を、その場で一覧から外す** (`scan.removeType`)。番組表と、まだ始めていない予約も片付ける。
  *
  * 取り込みに任せないのは、最後の 1 種別を消すとエージェントの一覧が空になり、取り込みが何もしないため
@@ -92,12 +143,20 @@ export function unlistType(type: ChannelType): number {
 /**
  * 番組表に出す局の数を種別ごとに。番組表のタブ (`#lib/types.ts` の `guideTabs`) と、局が無いときの案内に使う (`#lib/channel-notice.ts`)。
  * 局が 1 つも無い種別は入らない。番組表を読めない局 (EIT がスクランブルされた SKY の局など) は番組表に出ないので数えない (`services.epg_readable`)
+ *
+ * @param hidden 隠した局 (`services.hidden`) も数えるか。タブは数えない (全部隠した種別のタブは出さない)。
+ *   局が無いときの案内は数える (隠しただけで「スキャンしてください」と言わない)
  */
-export function serviceCounts(): Record<string, number> {
+export function serviceCounts(hidden = false): Record<string, number> {
   const rows = orm()
     .select({ type: services.type, n: count() })
     .from(services)
-    .where(and(currentServices(), eq(services.epg_readable, true)))
+    .where(
+      and(
+        hidden ? currentServices() : shownServices(),
+        eq(services.epg_readable, true),
+      ),
+    )
     .groupBy(services.type)
     .all();
   return Object.fromEntries(rows.map((row) => [row.type, row.n]));
@@ -202,7 +261,7 @@ const ENDED_NAME = /^[\s\-－]*$/u;
  * 分割放送をしていない間は名前の無い枠が並ぶ)。
  *
  * 局は種別で絞らない (ライブ画面も全種別をまとめて扱っている)。
- * 外すのは、ライブ画面も外している復号できない局 (`services.decodable`) と、チャンネルの分からない局
+ * 外すのは、ライブ画面も外している隠した局 (`services.hidden`)・復号できない局 (`services.decodable`)・チャンネルの分からない局
  * (どのエージェントの控えにも無い。エージェントを消した直後など) だけ
  *
  * **出す画面ごとに書かない。** 番組表と検索で別々に書いていると、片方だけ
@@ -221,10 +280,10 @@ export function watchableServices(at: number): number[] {
         service_type: services.service_type,
       })
       .from(services)
-      // 復号できない局とチャンネルの分からない局はライブに出さない
+      // 隠した局・復号できない局・チャンネルの分からない局はライブに出さない
       .where(
         and(
-          currentServices(),
+          shownServices(),
           eq(services.decodable, true),
           sql`${serviceChannel()} IS NOT NULL`,
         ),

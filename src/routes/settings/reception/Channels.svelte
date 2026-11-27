@@ -201,6 +201,10 @@
   const coverage = $derived(data.channels);
   /** 入っている局をすべて並べたもの */
   const services = $derived(coverage.flatMap((channel) => channel.services));
+  /** 世帯で隠した局の数 (`services.hidden`)。表の上の数の行に添える */
+  const hiddenCount = $derived(
+    services.filter((service) => service.hidden).length,
+  );
 
   /** 最後に測った受信品質 (`channels.server.ts` の `measureSignal`)。そのチャンネルの行の下に出す */
   const measured = $derived(form?.measured ?? null);
@@ -402,6 +406,15 @@
         <span class="faint">→</span>
         <span class="muted">番組表のある局</span>
         <strong>{withEpg}</strong>
+        <!-- 隠した局の数 (`services.hidden`)。局の数には入れたまま。どれかは表の「非表示」で分かる -->
+        {#if hiddenCount > 0}
+          <span class="side-count">
+            <span class="muted">非表示</span>
+            <strong class="num" data-testid="status-hidden"
+              >{hiddenCount} 局</strong
+            >
+          </span>
+        {/if}
         <!--
           ロゴの数も同じ行に、ほかの数と同じ形で (事実はバッジにしない。docs/design.md の「印の意味」)。
           取れないぶんは下の行で断る。CM ロゴは CM 検出のために覚えたもので、局ロゴとは別物 (logo-data.ts)
@@ -558,6 +571,13 @@
             2
             回続けて受信できなかったチャンネルは「受信できません」と出し、その局を番組表・ライブ・ルールの対象から外します。受信できるようになれば戻ります。
           </p>
+          <p>
+            要らない局 (契約していない有料の局など) は、局名の後ろの<strong
+              >「非表示」</strong
+            >で番組表・ライブ・検索・テレビのアプリから外せます。サブチャンネルは本チャンネルと一緒に外れます。
+            局を名指ししていないルールはその局で予約しなくなり、局を名指ししたルール・予約・録画はそのまま残ります。
+            スキャンし直しても非表示のままで、「再表示」で戻せます。
+          </p>
           {#if hasCatv}
             <p>
               ケーブルの局は、番組表とライブでは「ケーブル」にまとめて並べます。
@@ -707,12 +727,38 @@
                         {@render stationLogo(service.id, service.name, false)}
                         {@render cmLogo(service.id, service.name, false)}
                       </span>
-                      <span class="broadcast">{service.name}</span>
+                      <span class="broadcast" class:muted={service.hidden}
+                        >{service.name}</span
+                      >
                       <!-- ライブと録画に使えない局 (わけは表の上の 1 行) -->
                       {#if !service.decodable}
                         <span
                           class="tiny muted nowrap"
                           data-testid="service-undecodable">復号できません</span
+                        >
+                      {/if}
+                      <!--
+                        **世帯で隠した局** (`services.hidden`)。番組表・ライブ・検索・テレビのアプリに出さない。表には並べたままにして、ここで戻す。
+                        サブチャンネルは本チャンネルと一緒に隠れ、一緒に戻る (`epg.setHidden`) ので、ボタンは本チャンネルの行だけ。戻せるので 2 回押しにしない
+                      -->
+                      {#if service.hidden}
+                        <span
+                          class="tiny muted nowrap"
+                          data-testid="service-hidden">非表示</span
+                        >
+                      {/if}
+                      {#if !service.sub}
+                        <ActionButton
+                          action="?/hideService"
+                          fields={{
+                            id: service.id,
+                            hidden: service.hidden ? 0 : 1,
+                          }}
+                          class="xs secondary outline"
+                          testid={service.hidden
+                            ? "service-show"
+                            : "service-hide"}
+                          >{service.hidden ? "再表示" : "非表示"}</ActionButton
                         >
                       {/if}
                     </span>
@@ -874,7 +920,8 @@
       padding-inline: var(--dp-space-1);
     }
   }
-  /* ロゴの数は、チャンネル → 局 → 番組表の数のあとに少し離して並べる */
+  /* 隠した局の数とロゴの数は、チャンネル → 局 → 番組表の数のあとに少し離して並べる */
+  .side-count,
   .logo-counts {
     display: inline-flex;
     flex-wrap: wrap;
@@ -893,10 +940,12 @@
   .channels-wrap td[rowspan] {
     vertical-align: top;
   }
+  /* 局名・印・「非表示」のボタン。入りきらない幅では、ボタンを局名の下へ回す (表を横にはみ出させない) */
   .station {
     display: inline-flex;
     align-items: center;
-    gap: var(--dp-space-2);
+    flex-wrap: wrap;
+    gap: var(--dp-space-1) var(--dp-space-2);
   }
   /* 局名は欄の幅で折り返す (全角の英数が続く局名でも) */
   .station .broadcast {

@@ -10,7 +10,7 @@ import type {
   Service,
 } from "../types";
 import { orm } from "./db";
-import { airing, currentServices, SERVICE_ORDER } from "./epg";
+import { airing, SERVICE_ORDER, shownServices } from "./epg";
 import {
   latestRecordingId,
   latestReservationRecordingId,
@@ -69,14 +69,14 @@ export function stationsOf(
   end: number,
 ): { services: Service[]; split: number[] } {
   // テレビと同じ並びにする (SERVICE_ORDER)。
-  // 取り残しの局は出さない (currentServices)。出すと番組表に空の列が並ぶ。番組表を読めない局も出さない (番組が来ない。`services.epg_readable`)
+  // 取り残しの局と隠した局は出さない (shownServices)。取り残しの局を出すと番組表に空の列が並ぶ。番組表を読めない局も出さない (番組が来ない。`services.epg_readable`)
   const services: Service[] = orm()
     .select()
     .from(serviceTable)
     .where(
       and(
         eq(serviceTable.type, type),
-        currentServices(),
+        shownServices(),
         eq(serviceTable.epg_readable, true),
       ),
     )
@@ -285,7 +285,7 @@ function lastEndOf(type: ChannelType): number | null {
     .select({ until: sql<number | null>`MAX(${programTable.end_at})` })
     .from(programTable)
     .innerJoin(serviceTable, eq(serviceTable.id, programTable.service_id))
-    .where(and(eq(serviceTable.type, type), currentServices()))
+    .where(and(eq(serviceTable.type, type), shownServices()))
     .get();
   return row?.until ?? null;
 }

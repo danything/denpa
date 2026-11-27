@@ -134,6 +134,8 @@ describe("0039_agent-channels", () => {
           Object.entries(row).filter(([column]) => column !== "channel"),
         ),
         transport_stream_id: null,
+        // 世帯で隠した局の列 (0050) は隠していない (0) で足される
+        hidden: 0,
       })),
     );
     after.close();

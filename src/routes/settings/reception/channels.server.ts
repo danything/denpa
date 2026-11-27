@@ -15,7 +15,7 @@ import {
 } from "#lib/server/ca-observe.js";
 import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
-import { currentServices, typeRank } from "#lib/server/epg.js";
+import { currentServices, setHidden, typeRank } from "#lib/server/epg.js";
 import { lineupNotice, seenLineupChanges } from "#lib/server/lineup-follow.js";
 import { type Reception, receptionOf } from "#lib/server/reception.js";
 import {
@@ -34,6 +34,7 @@ import {
   services,
 } from "#lib/server/schema.js";
 import { measureSignal } from "#lib/server/signal-quality.js";
+import { mainOf } from "#lib/subchannels.js";
 import {
   ALL_CHANNEL_TYPES,
   type ChannelType,
@@ -62,13 +63,19 @@ interface Coverage {
   origin: Exclude<Origin, "CATV"> | null;
   /** 伝送の形式 (`services.transport`)。チャンネルごとに 1 つで、同じチャンネルに TS と TLV の局は混ざらない (形式は選んだ TS で決まる)。`tlv` はケーブルで受けた 4K の局 */
   transport: Transport;
-  /** `decodable` はライブと録画に使える局か (`services.decodable`)。復号できない局も表には並べる */
+  /**
+   * `decodable` はライブと録画に使える局か (`services.decodable`)。復号できない局も表には並べる。
+   * `hidden` は世帯で隠した局か (`services.hidden`)。隠した局も表に並べ、ここで戻す。
+   * `sub` はサブチャンネルか (`subchannels.mainOf` で本チャンネルが別の局)。隠す・戻すは本チャンネルと一緒なので (`epg.setHidden`)、サブの行にはボタンを置かない
+   */
   services: {
     id: number;
     name: string;
     programs: number;
     until: number;
     decodable: boolean;
+    hidden: boolean;
+    sub: boolean;
   }[];
   /**
    * SKY と CATV のチャンネルで、最後のスキャンで分かったこと (`ca-observe.ts`)。CA_system_id と番組表・ロゴが来ているか。
@@ -123,6 +130,9 @@ function coverage(): Coverage[] {
       network_id: services.network_id,
       transport_stream_id: services.transport_stream_id,
       decodable: services.decodable,
+      hidden: services.hidden,
+      service_id: services.service_id,
+      service_type: services.service_type,
       transport: services.transport,
       programs: count(programs.id),
       until: sql`COALESCE(MAX(${programs.end_at}), 0)`.mapWith(Number),
@@ -136,9 +146,11 @@ function coverage(): Coverage[] {
     .all();
 
   const receivers = receiversByTs();
+  // 隠す・戻すと同じ束ね方 (`epg.setHidden`)
+  const main = mainOf(rows);
   const channels = new Map<string, Coverage>();
   for (const row of rows) {
-    const { id, name, type, programs, until, decodable } = row;
+    const { id, name, type, programs, until, decodable, hidden } = row;
     /*
      * 選局するエージェントのチャンネルで出す。並びの先頭のエージェントで受信できなくても、ほかのエージェントで
      * 受信できるなら、そちらのチャンネルの受信の様子を出す
@@ -162,7 +174,15 @@ function coverage(): Coverage[] {
       services: [],
       observed: observation(type, channel),
     };
-    entry.services.push({ id, name, programs, until, decodable });
+    entry.services.push({
+      id,
+      name,
+      programs,
+      until,
+      decodable,
+      hidden,
+      sub: (main.get(id) ?? id) !== id,
+    });
     channels.set(key, entry);
   }
   const list = [...channels.values()];
@@ -242,6 +262,33 @@ export const actions = {
   seenLineup: () => {
     seenLineupChanges();
     return { success: true };
+  },
+
+  /**
+   * 局を隠す・戻す (`epg.setHidden`)。同じ放送局のサブチャンネルも一緒に。戻せるので 2 回押しにしない。
+   * `hidden` が `1` なら隠し、`0` なら戻す
+   */
+  hideService: async ({ request }) => {
+    const form = await request.formData();
+    const id = parseId(form.get("id"));
+    const hidden = form.get("hidden") === "1";
+    if (id === null) return fail(400, { message: "局を選んでください" });
+    const name = orm()
+      .select({ name: services.name })
+      .from(services)
+      .where(eq(services.id, id))
+      .get()?.name;
+    const ids = name === undefined ? [] : await setHidden(id, hidden);
+    if (ids.length === 0)
+      return fail(404, { message: "その局は受信できるチャンネルにありません" });
+    const target =
+      ids.length > 1 ? `「${name}」とサブチャンネル` : `「${name}」`;
+    return {
+      success: true,
+      done: hidden
+        ? `${target}を非表示にしました。番組表・ライブ・検索に出しません`
+        : `${target}を再表示しました`,
+    };
   },
 
   /**
