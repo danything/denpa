@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, not } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, not, or } from "drizzle-orm";
 
 import { parseId } from "../id";
 import { now, orm } from "./db";
@@ -11,7 +11,7 @@ import {
 } from "./rule-form";
 import { applyRules } from "./rules";
 import { resolveConflicts } from "./scheduler";
-import { reservations, rules as ruleTable } from "./schema";
+import { MANUAL_PRIORITY, reservations, rules as ruleTable } from "./schema";
 
 /**
  * **ルールを足す・直す・止める・消す。** 検索の画面の「ルールとして保存」とルールの一覧の
@@ -53,13 +53,16 @@ export async function createRule(
   const conditions = conditionsOf(form);
   if (conditions.empty) return { error: EMPTY_RULE };
   if (conditions.invalid !== null) return { error: conditions.invalid };
+  const at = now();
   const created = orm()
     .insert(ruleTable)
     .values({
       ...ruleValues(conditions, form),
       ...newSwitches(conditions),
       enabled: true,
-      created_at: now(),
+      created_at: at,
+      // 保存した時刻。これより前の取り消し・手動予約の回は、このルールが引き取る (`rules.applyRules` の後勝ち)
+      decided_at: at,
     })
     .returning({ id: ruleTable.id, name: ruleTable.name })
     .get()!;
@@ -81,7 +84,8 @@ export async function updateRule(
   if (conditions.invalid !== null) return { error: conditions.invalid };
   const saved = orm()
     .update(ruleTable)
-    .set(ruleValues(conditions, form))
+    // 直した時刻。これより前の取り消し・手動予約の回は、このルールが引き取る (後勝ち)
+    .set({ ...ruleValues(conditions, form), decided_at: now() })
     .where(eq(ruleTable.id, id))
     .returning({ id: ruleTable.id, name: ruleTable.name })
     .get();
@@ -103,27 +107,60 @@ export async function toggleRule(id: number): Promise<void> {
 /**
  * ルールを消す。
  *
- * **取り消しの記録だけ先に消す。** ルールごと無くなるので、「このルールには作り直させない」という
- * 目印を残す意味がない。残すと、後から `scheduled` に戻ったときに**消したはずの
- * ルールの予約が「ルール: (削除済み)」として一覧に並ぶ** (実機で 45 件)。
+ * **取り消しの記録は消さずに、手動予約の取り消しにする。** 消すと、その取り消しより前に保存したほかのルールが
+ * 次の当て直しでその放送に予約を立て、人が取り消した回が録れてしまう (`rules.applyRules` の後勝ち)。
+ * ルールを指したまま残すと、後から `scheduled` に戻したときに**消したはずのルールの予約が
+ * 「ルール: (削除済み)」として一覧に並ぶ** (実機で 45 件) ので、手動予約の取り消しとして残す
+ * (「戻す」で手動予約として録れる)。システムの取り消し (局が選局できなくなった) は、ルールが人の決定から
+ * 引き取ったもの (`claimed_from`) だけを引き取る前の形に戻し、ほかは消す (局が戻っても持ち主がいない)。
  *
  * まだ立っている予約はここでは触らない。**他のルールが引き取れるかどうかを見てから決める。**
  * 消したのが「アニメ」でも、「無職転生」が残っていればその予約は残す
- * (`rules.applyRules` が付け替える)
+ * (`rules.applyRules` が付け替える)。人の決定から引き取った予約は、引き取り手が無ければ元の形に戻る
  *
- * @returns 引き取り手が無くて消えた予約の数 (猶予は効かない = 人が押した結果なので)
+ * @returns 引き取り手が無くて録らなくなった予約の数 (消えたものと、取り消しに戻ったもの。猶予は効かない = 人が押した結果なので)
  */
 export async function deleteRule(id: number): Promise<number> {
+  const canceled = and(
+    eq(reservations.rule_id, id),
+    isNull(reservations.started_at),
+    eq(reservations.state, "canceled"),
+  );
+  // 手動予約の取り消しにする。優先度も手動予約の既定にする
+  const released = {
+    manual: true,
+    rule_id: null,
+    claimed_from: null,
+    priority: MANUAL_PRIORITY,
+  };
+  const bySystem = eq(reservations.canceled_by, "system");
+  // 人の取り消し (列を足す前の NULL も人として扱う)
   orm()
-    .delete(reservations)
+    .update(reservations)
+    .set(released)
     .where(
       and(
-        eq(reservations.rule_id, id),
-        isNull(reservations.started_at),
-        eq(reservations.state, "canceled"),
+        canceled,
+        or(
+          isNull(reservations.canceled_by),
+          ne(reservations.canceled_by, "system"),
+        ),
       ),
     )
     .run();
+  // システムの取り消しのうち、引き取る前が人の取り消しだったもの → 人の取り消し
+  orm()
+    .update(reservations)
+    .set({ ...released, canceled_by: "user" })
+    .where(and(canceled, bySystem, eq(reservations.claimed_from, "canceled")))
+    .run();
+  // 引き取る前が手動予約だったもの → システムの取り消しのままの手動予約 (局が戻れば `epg.restoreReturned` が戻す)
+  orm()
+    .update(reservations)
+    .set(released)
+    .where(and(canceled, bySystem, eq(reservations.claimed_from, "manual")))
+    .run();
+  orm().delete(reservations).where(canceled).run();
   // 録画中・録画済みのぶんは履歴として残すので、ルールとの紐付けだけ外す
   orm()
     .update(reservations)
@@ -147,7 +184,12 @@ export async function deleteRule(id: number): Promise<number> {
       : orm()
           .select({ id: reservations.id })
           .from(reservations)
-          .where(inArray(reservations.id, pending))
+          .where(
+            and(
+              inArray(reservations.id, pending),
+              ne(reservations.state, "canceled"),
+            ),
+          )
           .all().length;
   const dropped = pending.length - left;
   // 代わりに予約するルールを探したあとも消したルールを指している行 (録り逃し・番組表から消えた放送) は、紐付けを外して「(削除済み)」にする

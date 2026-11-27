@@ -203,6 +203,7 @@ export function draftRule(fields: Fields): Rule | null {
     ...newSwitches(conditions),
     source: null,
     created_at: 0,
+    decided_at: 0,
   };
 }
 

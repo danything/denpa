@@ -228,6 +228,7 @@ export function searchPrograms(q: string, options: SearchOptions) {
     skip_earlier: false,
     source: null,
     created_at: 0,
+    decided_at: 0,
   };
   const compiled = compile(rule);
   const where = and(

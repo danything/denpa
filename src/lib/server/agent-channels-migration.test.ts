@@ -119,7 +119,14 @@ describe("0039_agent-channels", () => {
     const { agents, channelReception } = await import("./schema");
     const agent = orm().select().from(agents).get()!;
     const after = new Database(config.dbPath);
-    expect(rows(after, "reservations")).toEqual(before.reservations);
+    // 上げたあとの予約には、人が決めた時刻 (0051。足す前の行は 0) と引き取る前の形の列が足される
+    expect(rows(after, "reservations")).toEqual(
+      before.reservations.map((row) => ({
+        ...row,
+        decided_at: 0,
+        claimed_from: null,
+      })),
+    );
     // 上げたあとの録画には、録ったエージェントの列 (0040) と取り込んだ元の TS の列 (0049) が null で足される
     expect(rows(after, "recordings")).toEqual(
       before.recordings.map((row) => ({

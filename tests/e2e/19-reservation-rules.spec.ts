@@ -74,12 +74,14 @@ test.describe("ルールで立った予約", () => {
   });
 
   /*
-   * **実機で踏んだところ。** 消すのを `scheduled`/`conflict` に絞っていた頃は、
-   * 取り消し済みのぶんがルールとの紐付けだけ外されて残っていた。それが後から
-   * `scheduled` に戻ると、消したはずのルールの予約が「ルール: (削除済み)」として
-   * 一覧に並ぶ (実機で 45 件)。まだ 1 コマも録っていないものは状態を問わず消す
+   * **実機で踏んだところ。** 取り消し済みのぶんをルールとの紐付けだけ外して残していた頃は、それが後から
+   * `scheduled` に戻ると、消したはずのルールの予約が「ルール: (削除済み)」として一覧に並んだ (実機で 45 件)。
+   * そのあと消すようにしたが、消すと取り消しの記録が無くなり、取り消しより前に保存したほかのルールが
+   * その回を録ってしまう (後勝ち、#3239)。いまは手動予約の取り消しとして残す (「戻す」で手動予約として録れる)
    */
-  test("ルールを消すと、取り消し済みのぶんも残らない", async ({ page }) => {
+  test("ルールを消すと、取り消し済みのぶんは手動予約の取り消しとして残る", async ({
+    page,
+  }) => {
     await goto(page, "/");
     const row = page
       .getByTestId("reservation-row")
@@ -99,7 +101,11 @@ test.describe("ルールで立った予約", () => {
     await expect(page.getByTestId("rule-row")).toHaveCount(0);
 
     await goto(page, "/?all=1");
-    await expect(page.locator(`[data-reservation-id="${id}"]`)).toHaveCount(0);
+    const kept = page.locator(`[data-reservation-id="${id}"]`);
+    // 手動予約の行はルール名を出さない (「ルール: (削除済み)」にならない)
+    await expect(kept).toBeVisible();
+    await expect(kept.getByTestId("rule-name")).toHaveCount(0);
+    await expect(kept.getByTestId("restore-button")).toBeVisible();
   });
 
   test("ルール名からそのルールの編集に飛べる", async ({ page }) => {

@@ -170,6 +170,8 @@ describe("ルールを当て直す", () => {
       dropped: 0,
       moved: 0,
       repriced: 0,
+      claimed: 0,
+      returned: 0,
     });
     expect(reservations()).toEqual([
       { program_id: 10, rule_id: 1, state: "scheduled" },
@@ -198,6 +200,8 @@ describe("ルールを当て直す", () => {
       dropped: 0,
       moved: 0,
       repriced: 1,
+      claimed: 0,
+      returned: 0,
     });
     expect(priorityOf(10)).toBe(2);
 
@@ -207,6 +211,8 @@ describe("ルールを当て直す", () => {
       dropped: 0,
       moved: 0,
       repriced: 0,
+      claimed: 0,
+      returned: 0,
     });
   });
 
@@ -387,6 +393,8 @@ describe("ルールを当て直す", () => {
       dropped: 0,
       moved: 0,
       repriced: 0,
+      claimed: 0,
+      returned: 0,
     });
     expect(reservations()).toEqual([
       { program_id: 10, rule_id: 1, state: "scheduled" },
@@ -841,6 +849,7 @@ describe("同じ回は最初の放送だけ録る", () => {
     };
   }
 
+  // 保存してあるルール (列を足す前の 0) を開いたとき。取り消し (0) と同じ時刻なので取り消しが勝つ
   test("下見: 人が取り消した放送は最初の放送に選ばず、次の放送を録ると出す", () => {
     withBs();
     rule(1, "テストアニメ", true, 1, true);
@@ -862,6 +871,7 @@ describe("同じ回は最初の放送だけ録る", () => {
       [hit(10, SERVICE, "GR", "T16"), hit(11, BS11, "BS", "BS09_0")],
       now(),
       { dedupe: true, skip_earlier: false },
+      { decided_at: 0 },
     );
     expect(skips.has(11)).toBe(false);
   });

@@ -10,7 +10,7 @@
     recorded: "録画済み",
     earlier: "前の回",
     "copy-never": "コピー禁止",
-    declined: "取り消し済み",
+    declined: "取り消し済み・保存すると録る",
     simulcast: "本チャンネルと同じ番組",
     undecodable: "復号できない局",
     airing: "放送中",

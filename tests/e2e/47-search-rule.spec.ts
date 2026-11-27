@@ -42,7 +42,7 @@ test.describe("検索からルールを作る", () => {
     // 画面の右端に付き、ヘッダーのすぐ下から
     expect(shape.right).toBe(0);
     expect(shape.top).toBeLessThan(80);
-    // 先の放送まで並べる (前のテストが取り消した近い放送は「取り消し済み」になる)
+    // 先の放送まで並べる (近い放送は、前のテストが立てた予約や録画で答えが変わる)
     await page.getByTestId("search-more-programs").click();
 
     /*

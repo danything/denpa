@@ -400,10 +400,13 @@ describe("録画・番組から作るときの元", () => {
   });
 });
 
+/*
+ * 人の取り消しとルールは後勝ち (`rules.applyRules`)。下見は「この条件で保存したら」なので、新しいルールは
+ * 取り消した回も録る。保存してあるルールを開いたときは、そのルールより後の取り消しをいまは録らないと出す
+ */
 describe("人が取り消した放送", () => {
-  test("ルールは立て直さないので、下見でも「録らない」(取り消し済み)", async () => {
-    program(1, "テスト魔法 #1", 5 * HOUR);
-    program(2, "テスト魔法 #2", 8 * HOUR);
+  /** 番組 1 を人が取り消した (`decided_at` が取り消した時刻) */
+  function canceled(decidedAt: number): void {
     orm()
       .insert(reservations)
       .values({
@@ -417,18 +420,64 @@ describe("人が取り消した放送", () => {
         priority: 2,
         manual: true,
         state: "canceled",
+        canceled_by: "user",
+        decided_at: decidedAt,
         created_at: now(),
         updated_at: now(),
       })
       .run();
+  }
+
+  test("新しいルールは、保存すると取り消した回も引き取るので「録る」", async () => {
+    program(1, "テスト魔法 #1", 5 * HOUR);
+    program(2, "テスト魔法 #2", 8 * HOUR);
+    canceled(now());
     const preview = await previewFor(
       draftRule(form({ keyword: "テスト魔法", dedupe: "0" }))!,
-      {
-        ids: [1, 2],
-      },
+      { ids: [1, 2] },
     );
     expect(preview.verdicts).toEqual({
+      1: { kind: "record" },
+      2: { kind: "record" },
+    });
+  });
+
+  test("保存してあるルールより後の取り消しは「録らない」(取り消し済み)。前の取り消しは「録る」", async () => {
+    program(1, "テスト魔法 #1", 5 * HOUR);
+    program(2, "テスト魔法 #2", 8 * HOUR);
+    const saved = now();
+    orm()
+      .insert(ruleTable)
+      .values({
+        id: 7,
+        name: "テスト魔法",
+        keyword: "テスト魔法",
+        enabled: true,
+        created_at: saved,
+        decided_at: saved,
+      })
+      .run();
+    const editing = orm()
+      .select()
+      .from(ruleTable)
+      .where(eq(ruleTable.id, 7))
+      .get()!;
+    const draft = draftRule(form({ keyword: "テスト魔法", dedupe: "0" }))!;
+
+    canceled(saved + 1);
+    expect(
+      (await previewFor(draft, { editing, ids: [1, 2] })).verdicts,
+    ).toEqual({
       1: { kind: "skip", reason: "declined" },
+      2: { kind: "record" },
+    });
+
+    orm().delete(reservations).run();
+    canceled(saved - 1);
+    expect(
+      (await previewFor(draft, { editing, ids: [1, 2] })).verdicts,
+    ).toEqual({
+      1: { kind: "record" },
       2: { kind: "record" },
     });
   });
@@ -472,7 +521,8 @@ describe("枝番の局で同じ放送", () => {
     });
   });
 
-  // 取り消しは物理チャンネルとタイトルと時刻で当てるので、片方を取り消すと両方とも録らない (`applyRules` と同じ)
+  // 取り消しは物理チャンネルとタイトルと時刻で当てるので、片方を取り消すと両方とも録らない (`applyRules` と同じ)。
+  // 保存してあるルールより後の取り消しのとき
   test("本チャンネルのほうを取り消したら、枝番のほうも「取り消し済み」", async () => {
     orm()
       .insert(services)
@@ -506,13 +556,33 @@ describe("枝番の局で同じ放送", () => {
         updated_at: now(),
       })
       .run();
-    const preview = await previewFor(
-      draftRule(form({ keyword: "テスト魔法", dedupe: "0" }))!,
-      { ids: [1, 2] },
-    );
-    expect(preview.verdicts).toEqual({
+    // 列を足す前のルール (0) と取り消し (0)。同じ時刻なら人の取り消しが勝つ
+    orm()
+      .insert(ruleTable)
+      .values({
+        id: 7,
+        name: "テスト魔法",
+        keyword: "テスト魔法",
+        enabled: true,
+        created_at: now(),
+      })
+      .run();
+    const editing = orm()
+      .select()
+      .from(ruleTable)
+      .where(eq(ruleTable.id, 7))
+      .get()!;
+    const draft = draftRule(form({ keyword: "テスト魔法", dedupe: "0" }))!;
+    expect(
+      (await previewFor(draft, { editing, ids: [1, 2] })).verdicts,
+    ).toEqual({
       1: { kind: "skip", reason: "declined" },
       2: { kind: "skip", reason: "declined" },
+    });
+    // 新しいルールなら、本チャンネルのほうを引き取って録る
+    expect((await previewFor(draft, { ids: [1, 2] })).verdicts).toEqual({
+      1: { kind: "record" },
+      2: { kind: "skip", reason: "simulcast" },
     });
   });
 });
