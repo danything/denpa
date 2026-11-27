@@ -223,3 +223,64 @@ test.describe("再エンコードの失敗と元の TS", () => {
     expect(existsSync(libraryPath)).toBe(true);
   });
 });
+
+/**
+ * **開いてから通知が繋がるまでの間に変わったものも、行に出る** (`live-updates` の `hello`)。
+ * 偽 ffmpeg が全部の呼び出しを失敗させると、再エンコードは 0.1 秒ほどで失敗して終わる。画面を描いたあと通知が繋がる前に
+ * 終わると、行は描いたときの「CM 検出中」のまま、次の通知まで変わらなかった
+ */
+test.describe("開いた直後の変化", () => {
+  test.afterAll(async ({ request, stack }) => {
+    if (existsSync(stack.failFile)) rmSync(stack.failFile);
+    await setRecording(request);
+  });
+
+  test("通知が繋がる前に再エンコードが失敗しても、繋がったら行に出る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(180_000);
+    await setRecording(request, { keepOriginal: true });
+    const { id } = await recordOne(page, request);
+
+    // 通知の接続を止めておく。開いたあとに起きたことは、繋がるまで届かない
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/events", async (route) => {
+      await gate;
+      await route.continue();
+    });
+    await goto(page, "/");
+    const state = page
+      .locator(`[data-recording-id="${id}"]`)
+      .getByTestId("recording-state");
+    await expect(state).toHaveText("視聴可能");
+
+    // 開いたあとで、再エンコードを失敗させる
+    writeFileSync(stack.failFile, "1");
+    const res = await request.post("/?/reencode", { form: { id } });
+    expect(res.ok()).toBe(true);
+    /*
+     * 終わったことはサーバの描いた画面で確かめる。別のタブで開くと、戻ってきたときの読み直し (`Shell.svelte`) が
+     * 先に追いついてしまう
+     */
+    const rowState = new RegExp(
+      String.raw`data-recording-id="${id}"[\s\S]*?data-testid="recording-state"[^>]*>([^<]*)<`,
+    );
+    await expect
+      .poll(
+        async () => rowState.exec(await (await request.get("/")).text())?.[1],
+        { timeout: 30_000 },
+      )
+      .toBe("エンコード失敗");
+    rmSync(stack.failFile);
+    await expect(state).toHaveText("視聴可能");
+
+    // 繋がったら、読み直さなくても追いつく
+    release();
+    await expect(state).toHaveText("エンコード失敗", { timeout: 10_000 });
+  });
+});
