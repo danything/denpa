@@ -17,7 +17,6 @@ import { contentions, type Occupant, settled } from "./conflict";
 import { paidAllowed } from "./contracts";
 import { now, orm } from "./db";
 import {
-  canceledBroadcasts,
   compile,
   enabledRuleIds,
   globPatterns,
@@ -26,6 +25,7 @@ import {
   type Miss,
   missOf,
   oneBroadcast,
+  previewDeclined,
   previewSkips,
 } from "./rules";
 import { tunerState } from "./scheduler";
@@ -60,8 +60,8 @@ const stillHeld = () =>
  * **録らない理由。**
  * `repeat` は同じ回を別の放送で録る (その放送の局と時刻)、`recorded` はもう録ってある。
  * `earlier` は前の回 (先の回 `number` 話を録った・予約した。`episode.earlierAirings`)。
- * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)。`declined` は人が取り消した放送
- * (ルールは立て直さない。`rules.canceledBroadcasts`)。`simulcast` は本チャンネルと同じ番組を流している
+ * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)。`declined` は保存してあるルールより後に人が取り消した放送
+ * (いまは録らない。保存し直すと後勝ちで録る。`rules.previewDeclined`)。`simulcast` は本チャンネルと同じ番組を流している
  * 枝番の局 (本チャンネルのほうを録る。`rules.oneBroadcast`)。`undecodable` は番組表に出ているが復号できない局
  * (`services.decodable`。予約を立てるときも当てない。`rules.applyRules`)
  */
@@ -141,6 +141,8 @@ interface Pending {
   rule_id: number | null;
   manual: boolean;
   program_id: number;
+  /** ルールが人の決定から引き取った予約の、引き取る前の形 (`reservations.claimed_from`) */
+  claimed_from: "canceled" | "manual" | null;
   name: string;
   service_id: number;
   service_name: string;
@@ -217,6 +219,7 @@ async function countPreview(
       manual: reservations.manual,
       program_id: reservations.program_id,
       name: reservations.name,
+      claimed_from: reservations.claimed_from,
       service_id: reservations.service_id,
       start_at: reservations.start_at,
       end_at: reservations.end_at,
@@ -293,12 +296,13 @@ async function countPreview(
     );
   const hits = all.filter((program) => missFor(program) === null);
   /**
-   * **人が取り消した放送は録らない** (`applyRules` も立て直さない)。下見で「録る」と出して、
-   * 保存しても予約が立たない、ということが無いように
+   * **人の取り消しで録らない放送** (`rules.previewDeclined`)。保存すると、このルールはどの取り消しより新しくなり、
+   * 取り消した回も引き取る (後勝ち)。保存してあるルールを開いたときだけ、そのルールより後に人が取り消した回を
+   * いまは録らないと出す (画面は「取り消し済み・保存すると録る」と出す)
    */
-  const declined = canceledBroadcasts(at);
+  const declined = previewDeclined(at, editing);
   const isDeclined = (p: (typeof hits)[number]) =>
-    declined.has({ ...p, channel: p.service_channel });
+    declined({ ...p, channel: p.service_channel });
   /*
    * **同じ放送が枝番の局 (MX1 の 23608 / 23609) に載っていたら、小さいほうだけ録る** (`rules.oneBroadcast`。
    * 予約を立てるときと同じく、取り消した放送と復号できない局の番組を除いてから)。もう片方は「録らない」の行に出し、同じ回をまとめる相手にもしない
@@ -312,7 +316,7 @@ async function countPreview(
    * 選び方は予約を立てるときと同じもの (`rules.previewSkips`)
    */
   const once = hits.filter((p) => kept.has(p));
-  const skips = previewSkips(once, at, conditions);
+  const skips = previewSkips(once, at, conditions, editing);
   const skipOf = (p: (typeof hits)[number]): Skip => {
     // 復号できない局は録らない。同じ回をまとめる相手にもしない (上の `open`)
     if (!p.service_decodable) return { kind: "undecodable" };
@@ -406,6 +410,12 @@ async function countPreview(
     for (const held of pending) {
       if (shown.has(held.program_id)) continue;
       if (held.rule_id !== editing.id) continue;
+      // 取り消しから引き取った予約は、外れると取り消しに戻る (`rules.applyRules`)。残る予約ではないので混ぜない
+      if (
+        held.claimed_from === "canceled" &&
+        !keepsReservation(held, at, enabled)
+      )
+        continue;
       rows.push({
         id: held.program_id,
         name: held.name,

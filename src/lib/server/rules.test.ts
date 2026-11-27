@@ -45,6 +45,7 @@ function rule(fields: Partial<Rule>): Rule {
     skip_earlier: false,
     source: null,
     created_at: 0,
+    decided_at: 0,
     ...fields,
   };
 }

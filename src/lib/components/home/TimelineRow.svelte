@@ -248,7 +248,7 @@
           <Icon icon={X} size="size-4" /><span class="btn-label">取消</span>
         </ActionButton>
       {:else if res.state === "canceled" && res.end_at > ctx.clock}
-        <!-- 取り消した予約はルールが作り直さないので、気が変わったときに戻せるのはここだけ -->
+        <!-- 取り消した予約は、あとでルールを保存し直すまで作り直さないので、気が変わったときにすぐ戻せるのはここだけ -->
         <ActionButton
           action="?/restore"
           fields={{ id: res.id }}

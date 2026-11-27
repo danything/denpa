@@ -539,6 +539,12 @@ export const rules = sqliteTable("rules", {
     .notNull()
     .default(sql`0`),
   created_at: integer("created_at").notNull(),
+  /**
+   * **人がこのルールを最後に保存した時刻** (作る・直す。`rule-actions.ts`)。人の取り消し・手動予約 (`reservations.decided_at`)
+   * と比べて、新しいほうを採る (`rules.applyRules`)。止める・有効に戻す・局の付け替え・引き継ぎでは変えない。
+   * 列を足す前のルールは 0 で、どの取り消しより古い (上げただけでは動きを変えない。保存し直すと効く)
+   */
+  decided_at: integer("decided_at").notNull().default(0),
   /** 引き継ぎ元での識別子 (例: epgstation:12・edcb:12)。自分で作ったものは NULL */
   source: text("source"),
 });
@@ -592,6 +598,9 @@ export const HELD_STATES: StoredReservationState[] = [
   "skipped",
 ];
 
+/** 手動予約の優先度。ルール由来 (既定 1) より上。**予約どうしだけの物差し** (`conflict.ts`) */
+export const MANUAL_PRIORITY = 2;
+
 export const reservations = sqliteTable(
   "reservations",
   {
@@ -629,13 +638,24 @@ export const reservations = sqliteTable(
     /** 録り始めた時刻。NULL なら**まだ始めていない**。二重に録り始めないための鍵でもある (scheduler.tick) */
     started_at: integer("started_at"),
     /**
-     * **誰が取り消したか。** 人が押した取り消し (`user`) はその放送に二度と
-     * ルールを立てない印になる (`rules.ts` の `canceledBroadcasts`)。局が選局
+     * **誰が取り消したか。** 人が押した取り消し (`user`) は、それより前に保存した
+     * ルールがその放送に予約を立てない印になる (`rules.ts` の `canceledBroadcasts`。後勝ち)。局が選局
      * できなくなってシステムが片付けたもの (`system`。`epg.clearBelongings`) は
      * 局が戻れば録り直してよいので、印にしない。NULL は列を足す前の行で、
      * 人が押したものとして扱う (余分に録るより、取り消したものを録るほうが困る)
      */
     canceled_by: text("canceled_by", { enum: ["user", "system"] }),
+    /**
+     * **人がこの予約を最後に決めた時刻** (手動で予約した・取り消した・戻した。`reservations.ts`)。
+     * ルールを保存した時刻 (`rules.decided_at`) と比べて、新しいほうを採る (`rules.applyRules`)。
+     * ルールが立てた行と、システムの取り消し・戻しでは変えない。列を足す前の行は 0 (どのルールとも同じ時刻で、人が勝つ)
+     */
+    decided_at: integer("decided_at").notNull().default(0),
+    /**
+     * **ルールが人の決定から引き取った予約の、引き取る前の形** (`canceled` = 人の取り消し、`manual` = 手動予約)。
+     * 受け持つルールが無くなったら、行を消さずにこの形に戻す (`rules.applyRules`)。消すと人の決定の記録が無くなるため
+     */
+    claimed_from: text("claimed_from", { enum: ["canceled", "manual"] }),
     /** 録れない・録らない理由 (チューナー不足の `conflict`、コピー禁止の `skipped`)。画面にそのまま出す */
     conflict_reason: text("conflict_reason"),
     created_at: integer("created_at").notNull(),

@@ -17,6 +17,7 @@ import { stopRecording } from "./recorder";
 import { resolveConflicts } from "./scheduler";
 import {
   latestReservationRecordingId,
+  MANUAL_PRIORITY,
   programs,
   recordings,
   reservations,
@@ -73,8 +74,7 @@ export async function reserve(programId: number): Promise<Reservation> {
     .get();
   if (service !== undefined && !service.decodable)
     throw new Error(undecodableReason(service.type, service.transport));
-  // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
-  const priority = 2;
+  const priority = MANUAL_PRIORITY;
   // 録画のしかたは全体で 1 つ。「エンコードするか否か」は予約時の設定を写す (録り終えたときの設定が「エンコードしない」なら、こちらが true でもエンコードしない)。
   // エンコードの細目 (元の TS を残すか・コーデック) はエンコードするときに settings を見る
   const encode = settings().encode;
@@ -93,6 +93,8 @@ export async function reserve(programId: number): Promise<Reservation> {
       manual: true,
       encode,
       state: "scheduled",
+      // 人が決めた時刻。これより後に保存したルールが引き取る (`rules.applyRules` の後勝ち)
+      decided_at: at,
       created_at: at,
       updated_at: at,
     })
@@ -107,6 +109,9 @@ export async function reserve(programId: number): Promise<Reservation> {
         started_at: rerecord,
         // 取り消しを解除したので、印も消す
         canceled_by: null,
+        // ルールが引き取っていた回も、押した人の手動予約に戻す (後勝ち)
+        decided_at: sql`excluded.decided_at`,
+        claimed_from: null,
         updated_at: sql`excluded.updated_at`,
       },
     })
@@ -145,9 +150,10 @@ function reason(error: unknown): string {
 /**
  * 取り消した予約を戻す。
  *
- * ルールが作った予約を手で取り消すと、以後ルールは作り直さない
- * (`INSERT OR IGNORE` と、放送単位で当てる `rules.canceledBroadcasts` が弾く)。
- * 気が変わったときに戻す方法がここ。
+ * ルールが作った予約を手で取り消すと、そのあとに保存したルールが引き取るまで作り直さない
+ * (放送単位で当てる `rules.canceledBroadcasts` と、保存した時刻を比べる後勝ち)。
+ * 気が変わったときに戻す方法がここ。手動予約の取り消しは手動予約に、ルールの予約の取り消しはそのルールの予約に戻る。
+ * 戻した時刻 (`decided_at`) を比べるのは手動予約の行だけ (ルールの予約に戻ったものは、もうルールが受け持っている)
  */
 export async function restore(reservationId: number): Promise<void> {
   const reservation = byId(reservationId);
@@ -164,6 +170,7 @@ export async function restore(reservationId: number): Promise<void> {
       state: "scheduled",
       started_at: null,
       canceled_by: null,
+      decided_at: now(),
       updated_at: now(),
     })
     .where(eq(reservations.id, reservationId))
@@ -200,10 +207,18 @@ export async function cancel(reservationId: number): Promise<boolean> {
     .get();
   if (recording !== undefined) stopRecording(recording.id);
 
-  // 人が押した印。**この放送にはルールが二度と立てない** (rules.ts の canceledBroadcasts)
+  // 人が押した印。**これより前に保存したルールは、この放送に立てない** (rules.ts の canceledBroadcasts。後勝ち)。
+  // ルールが引き取っていた回も、ふつうの取り消しになる
+  const at = now();
   orm()
     .update(reservations)
-    .set({ state: "canceled", canceled_by: "user", updated_at: now() })
+    .set({
+      state: "canceled",
+      canceled_by: "user",
+      decided_at: at,
+      claimed_from: null,
+      updated_at: at,
+    })
     .where(eq(reservations.id, reservationId))
     .run();
   await resolveConflicts();

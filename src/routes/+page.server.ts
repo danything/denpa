@@ -478,7 +478,7 @@ export const actions = {
     return { success: true };
   },
 
-  /** 取り消した予約を戻す。ルールは作り直さないので、ここからしか戻せない */
+  /** 取り消した予約を戻す。ルールは、取り消しのあとに保存し直すまで作り直さない (後勝ち。`rules.applyRules`) */
   restore: async ({ request }) => {
     const id = await formId(request);
     if (id === null) return fail(400, { message: "ID が不正です" });

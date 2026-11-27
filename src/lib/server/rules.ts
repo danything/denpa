@@ -5,6 +5,7 @@ import {
   getTableColumns,
   gt,
   inArray,
+  isNotNull,
   isNull,
   lt,
   ne,
@@ -35,6 +36,7 @@ import {
 import {
   hasVideo,
   HELD_STATES,
+  MANUAL_PRIORITY,
   programs as programTable,
   recordedHistory,
   recordings,
@@ -411,11 +413,12 @@ export function coveringRule(
     );
 }
 
-/** 取り消し済みの放送に、番組が当たるかどうか */
+/** 人が取り消した放送に、番組が当たるか */
 interface Declined {
-  has(
+  /** 当たる取り消しのうち、いちばん新しいものの時刻 (`reservations.decided_at`)。当たらなければ null */
+  at(
     program: Pick<Program, "name" | "start_at"> & { channel: string },
-  ): boolean;
+  ): number | null;
 }
 
 /**
@@ -425,10 +428,11 @@ interface Declined {
 const DECLINE_WINDOW = 10 * 60 * 1000;
 
 /**
- * **人が取り消した放送。** 番組の id ではなく、**物理チャンネル + タイトル + 開始時刻**で持つ。
+ * **人が取り消した放送と、取り消した時刻。** 番組の id ではなく、**物理チャンネル + タイトル + 開始時刻**で持つ。
+ * 取り消した時刻より前に保存したルールは、その放送に予約を立てない。後に保存したルールは立てる ({@link ruleWins})。
  *
  * 取り消しの記録は `reservations.program_id` (局 + event_id) に付いていて、ルールは
- * `INSERT OR IGNORE` がそれに当たることで「二度と立てない」を成り立たせていた。
+ * `INSERT OR IGNORE` がそれに当たることで「立てない」を成り立たせていた。
  * ところが id が同じでなくなるケースが 2 つあり、どちらも実機で**取り消したはずの回が
  * 録れた**として出た。
  *
@@ -447,8 +451,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  * 取り消す (`epg.clearBelongings`、`canceled_by = 'system'`) が、それは「局が戻ったなら
  * 録る」でよい。同じ番組 (同じ id) で戻ったぶんは、当て直しの前に取り消しの行を予約に戻す (`epg.restoreReturned`)。
  * 列を足す前の行 (NULL) は人が押したものとして扱う。
- * 手動予約を人が取り消したぶんは含める。id が同じなら `INSERT OR IGNORE` でルールが止まるので、
- * id が変わっても同じに止める。
+ * 手動予約を人が取り消したぶんも含める。
  */
 export function canceledBroadcasts(at: number): Declined {
   const rows = orm()
@@ -456,6 +459,7 @@ export function canceledBroadcasts(at: number): Declined {
       channel: shareKey(),
       name: reservations.name,
       start_at: reservations.start_at,
+      decided_at: reservations.decided_at,
     })
     .from(reservations)
     .innerJoin(services, eq(services.id, reservations.service_id))
@@ -476,12 +480,27 @@ export function canceledBroadcasts(at: number): Declined {
     (row) => `${row.channel} ${row.name}`,
   );
   return {
-    has(program) {
-      return (starts.get(`${program.channel} ${program.name}`) ?? []).some(
-        (row) => Math.abs(row.start_at - program.start_at) <= DECLINE_WINDOW,
-      );
+    at(program) {
+      const near = (starts.get(`${program.channel} ${program.name}`) ?? [])
+        .filter(
+          (row) => Math.abs(row.start_at - program.start_at) <= DECLINE_WINDOW,
+        )
+        .map((row) => row.decided_at);
+      return near.length === 0 ? null : Math.max(...near);
     },
   };
+}
+
+/**
+ * **ルールが人の決定に勝つか** (後勝ち)。ルールを保存した時刻 (`rules.decided_at`) が、人が予約を決めた時刻
+ * (`reservations.decided_at`) より新しいときだけ勝つ。同じ時刻なら人が勝つ。
+ * 列を足す前のルールと予約はどちらも 0 なので、上げただけでは今までどおり人が勝ち、ルールを保存し直すと効く
+ */
+export function ruleWins(
+  rule: Pick<Rule, "decided_at">,
+  decidedAt: number,
+): boolean {
+  return rule.decided_at > decidedAt;
 }
 
 /**
@@ -728,17 +747,38 @@ export function oneBroadcast<
 }
 
 /**
- * 下見 (`rule-preview.ts`) の「録らない」({@link episodeSkips})。人が取り消した放送は `applyRules` も
- * 立てないので、「最初の放送」の候補に入れない。両方当たるなら同じ回のほう (`repeat` / `recorded`) を返す
+ * **下見で、人の取り消しで録らない放送** (`rule-preview.ts`)。下見は「この条件で保存したら」の答えで、保存すると
+ * そのルールはどの取り消しより新しくなり、取り消した回も引き取る ({@link ruleWins})。なので新しいルール (`editing` が無い) では
+ * どれも録らないにしない。保存してあるルールを開いたときは、そのルールより後に人が取り消した回だけを
+ * いまは録らないとする (画面は「取り消し済み・保存すると録る」と出す)
+ */
+export function previewDeclined(
+  at: number,
+  editing: Pick<Rule, "decided_at"> | undefined,
+): (
+  program: Pick<Program, "name" | "start_at"> & { channel: string },
+) => boolean {
+  if (editing === undefined) return () => false;
+  const declined = canceledBroadcasts(at);
+  return (program) => {
+    const canceledAt = declined.at(program);
+    return canceledAt !== null && !ruleWins(editing, canceledAt);
+  };
+}
+
+/**
+ * 下見 (`rule-preview.ts`) の「録らない」({@link episodeSkips})。人の取り消しで録らない放送 ({@link previewDeclined}) は
+ * `applyRules` も立てないので、「最初の放送」の候補に入れない。両方当たるなら同じ回のほう (`repeat` / `recorded`) を返す
  */
 export function previewSkips<T extends Candidate & { service_channel: string }>(
   hits: T[],
   at: number,
   rule: Pick<Rule, "dedupe" | "skip_earlier">,
+  editing?: Pick<Rule, "decided_at">,
 ): Map<number, Skip<T & Airing>> {
-  const declined = canceledBroadcasts(at);
+  const declined = previewDeclined(at, editing);
   const list = hits.filter(
-    (p) => !declined.has({ ...p, channel: p.service_channel }),
+    (p) => !declined({ ...p, channel: p.service_channel }),
   );
   const { dedupe, earlier } = episodeSkips(
     {
@@ -893,6 +933,21 @@ export function enabledRuleIds(): Set<number> {
   );
 }
 
+/**
+ * 人が決めた予約がある番組で、当たったルールを並べ直す (後勝ち。`applyRules`)。人の決定より後に保存したルールを先に
+ * (中の順は先勝ちのまま)。前に保存したルールは、取り消し (と取り消しから引き取ったもの) なら外す。
+ * 手動予約 (と手動予約から引き取ったもの) なら後ろに残す。その番組を「同じ回は最初の放送だけ」の候補に入れたままにするため
+ * (外すと同じ回の再放送が「最初の放送」に繰り上がり、二重に録る)
+ */
+function afterDecision(
+  matched: Rule[],
+  decision: { kind: "canceled" | "manual"; decided_at: number },
+): Rule[] {
+  const later = matched.filter((rule) => ruleWins(rule, decision.decided_at));
+  if (decision.kind === "canceled") return later;
+  return [...later, ...matched.filter((rule) => !later.includes(rule))];
+}
+
 interface RuleSync {
   /** 新しく立てた予約 */
   created: number;
@@ -902,6 +957,10 @@ interface RuleSync {
   moved: number;
   /** ルールの優先度が変わって、付け替えた予約 */
   repriced: number;
+  /** 人の取り消し・手動予約から、あとに保存したルールが引き取った予約 */
+  claimed: number;
+  /** 引き取ったルールが外れて、引き取る前の形 (取り消し・手動予約) に戻した予約 */
+  returned: number;
 }
 
 /**
@@ -915,16 +974,28 @@ interface RuleSync {
  * - 当てているルールが変わった (別のルールが引き取った) → **付け替える**
  *
  * **消すのであって「取り消し」にはしない。** 取り消しは*人が押したこと*の記録で、
- * ルールは二度と作り直さない (`INSERT OR IGNORE` と、放送単位で当てる
- * `canceledBroadcasts`)。番組表が動いただけのものを取り消しにすると、条件に
- * 戻ってきても永久に予約が立たなくなる。
+ * それより前に保存したルールは作り直さない (放送単位で当てる `canceledBroadcasts`)。番組表が動いただけのものを
+ * 取り消しにすると、条件に戻ってきてもルールを保存し直すまで予約が立たなくなる。
+ *
+ * ### 人の決定とルールは後勝ち
+ *
+ * 人の取り消し・手動予約 (`reservations.decided_at`) と、ルールを保存した時刻 (`rules.decided_at`) を比べ、
+ * 新しいほうを採る ({@link ruleWins})。比べるのは保存してある時刻どうしなので、番組表が動いただけでは答えが変わらない。
+ *
+ * - 取り消しより後に保存したルールは、取り消しの行をそのルールの予約に書き換える (引き取る。`claimed_from = canceled`)。
+ *   前に保存したルールは、今までどおりその放送に立てない
+ * - 手動予約より後に保存したルールは、手動予約をそのルールの予約に切り替える (`claimed_from = manual`)
+ * - 引き取った予約を受け持つルールが無くなったら (消した・止めた・外れた)、消さずに引き取る前の形に戻す。
+ *   消すと人の決定の記録が無くなり、取り消しより前のルールが立て直したり、人が録ると決めた回が録れなくなったりする。
+ *   受け持てるのは、人の決定より新しいルールだけ (古いルールが拾うと、人が決めたことを覆す)
+ * - 録り始めたものは触らない (番組表はこれから始まる番組だけを読み、書き換えるのは `started_at` が空の行だけ)
  *
  * ### 引っ込めないもの
  *
  * 手違いで消すほうが、余分に録るより高くつく。次のどれかに当たるものは残す。
  *
  * - **手動の予約と、録り始めたもの** (`manual` / `started_at`)
- * - **人が取り消したもの。** 取り消しの記録はそのまま残す
+ * - **人が取り消したもの** (あとに保存したルールが引き取るまで)。取り消しの記録はそのまま残す
  * - **番組表からその番組ごと消えているとき。** 「条件から外れた」のか
  *   「まだ読めていない」のか区別が付かない
  * - **タイトルが空の番組。** 放送が名前を出していないのではなく、こちらがまだ
@@ -939,7 +1010,14 @@ interface RuleSync {
  *   全ルール × 全番組 (実機で 318 × 25,608) を回し直さずに済む
  */
 export function applyRules(options: { rule?: number } = {}): RuleSync {
-  const result: RuleSync = { created: 0, dropped: 0, moved: 0, repriced: 0 };
+  const result: RuleSync = {
+    created: 0,
+    dropped: 0,
+    moved: 0,
+    repriced: 0,
+    claimed: 0,
+    returned: 0,
+  };
   const rules = orm()
     .select()
     .from(ruleTable)
@@ -977,6 +1055,56 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     : compiled;
 
   const declined = canceledBroadcasts(at);
+  /**
+   * 番組ごとの、人が決めた予約 (取り消し・手動予約と、ルールが人の決定から引き取った予約)。
+   * 後に保存したルールが引き取るか (下の書き込み)、引き取った予約を戻すか (下の `held`) を決める。録り始めたものは入らない
+   */
+  const decisions = new Map(
+    orm()
+      .select({
+        id: reservations.id,
+        program_id: reservations.program_id,
+        state: reservations.state,
+        manual: reservations.manual,
+        claimed_from: reservations.claimed_from,
+        decided_at: reservations.decided_at,
+      })
+      .from(reservations)
+      .where(
+        and(
+          isNull(reservations.started_at),
+          or(
+            and(
+              eq(reservations.state, "canceled"),
+              or(
+                isNull(reservations.canceled_by),
+                ne(reservations.canceled_by, "system"),
+              ),
+            ),
+            and(
+              inArray(reservations.state, HELD_STATES),
+              or(
+                eq(reservations.manual, true),
+                isNotNull(reservations.claimed_from),
+              ),
+            ),
+          ),
+        ),
+      )
+      .all()
+      .map((row) => [
+        row.program_id,
+        {
+          ...row,
+          kind:
+            row.state === "canceled"
+              ? ("canceled" as const)
+              : row.manual
+                ? ("manual" as const)
+                : row.claimed_from!,
+        },
+      ]),
+  );
 
   /**
    * 番組 → 受け持つルール。同じ番組に何本当たっても予約は 1 つで、**先勝ち**。
@@ -1018,15 +1146,22 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
         ),
       )
       .map((candidate) => candidate.rule);
-    const owner = matched[0];
-    if (owner === undefined) continue;
     /*
-     * **人が取り消した放送には立てない。** 取り消しの記録は番組の id
-     * (局 + event_id) に付いているので、`INSERT OR IGNORE` だけに頼ると
-     * 枝番違いや event_id の変更ですり抜ける (上の `canceledBroadcasts`)
+     * **人の決定より後に保存したルールだけが、その放送を受け持てる** (後勝ち。`ruleWins`)。
+     * 人の取り消しは放送単位で当てる。取り消しの記録は番組の id (局 + event_id) に付いているので、
+     * `INSERT OR IGNORE` だけに頼ると枝番違いや event_id の変更ですり抜ける (上の `canceledBroadcasts`)
      */
-    if (declined.has(program)) continue;
-    hits.push({ owner, program, matched });
+    const canceledAt = declined.at(program);
+    const ruled =
+      canceledAt === null
+        ? matched
+        : matched.filter((rule) => ruleWins(rule, canceledAt));
+    const decision = decisions.get(program.id);
+    const ordered =
+      decision === undefined ? ruled : afterDecision(ruled, decision);
+    const owner = ordered[0];
+    if (owner === undefined) continue;
+    hits.push({ owner, program, matched: ordered });
   }
   const hitPrograms = hits.map((hit) => hit.program);
   const kept = new Set(oneBroadcast(hitPrograms, (p) => p.channel));
@@ -1075,6 +1210,8 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
           rule_id: reservations.rule_id,
           priority: reservations.priority,
           start_at: reservations.start_at,
+          decided_at: reservations.decided_at,
+          claimed_from: reservations.claimed_from,
         })
         .from(reservations)
         .where(
@@ -1113,11 +1250,60 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
         .onConflictDoNothing()
         .returning({ id: reservations.id })
         .get();
-      if (made !== undefined) result.created++;
+      if (made !== undefined) {
+        result.created++;
+        continue;
+      }
+      /*
+       * **人の取り消し・手動予約より後に保存したルールは、その行を自分の予約に書き換える** (後勝ち)。
+       * 引き取る前の形を `claimed_from` に残し、人が決めた時刻 (`decided_at`) はそのままにする
+       * (受け持つルールが無くなったら、下でこの形に戻す)
+       */
+      const decided = decisions.get(program.id);
+      if (
+        decided === undefined ||
+        decided.claimed_from !== null ||
+        !ruleWins(rule, decided.decided_at)
+      )
+        continue;
+      const fromCancel = decided.state === "canceled";
+      tx.update(reservations)
+        .set({
+          rule_id: rule.id,
+          priority: rule.priority,
+          manual: false,
+          name: program.name,
+          description: program.description,
+          start_at: program.start_at,
+          end_at: program.end_at,
+          claimed_from: fromCancel ? "canceled" : "manual",
+          // 取り消しは録る予定に戻す。手動予約の状態 (競合・録画しない) はスケジューラが計算し直す
+          ...(fromCancel
+            ? {
+                state: "scheduled" as const,
+                canceled_by: null,
+                conflict_reason: null,
+              }
+            : {}),
+          updated_at: at,
+        })
+        .where(eq(reservations.id, decided.id))
+        .run();
+      result.claimed++;
     }
 
     for (const reservation of held) {
-      const owner = wanted.get(reservation.program_id);
+      const wantedBy = wanted.get(reservation.program_id);
+      /*
+       * 人の決定から引き取った予約を受け持てるのは、その決定より後に保存したルールだけ。
+       * 「同じ回は最初の放送だけ」などで前のルールに受け持ちが移ったときは、受け持つルールが無いのと同じ
+       */
+      const owner =
+        wantedBy === undefined ||
+        (reservation.claimed_from !== null &&
+          !ruleWins(wantedBy.rule, reservation.decided_at))
+          ? undefined
+          : wantedBy;
       if (owner !== undefined) {
         /*
          * 別のルールが引き取ったなら付け替えるだけで、録るものは変わらない。
@@ -1151,6 +1337,32 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
         (id) => enabled.has(id),
       );
       if (kept) continue;
+      /*
+       * **人の決定から引き取った予約は、消さずに引き取る前の形に戻す。** 消すと人の決定の記録が無くなり、
+       * 取り消しより前に保存したルールがその放送に立て直したり、人が録ると決めた回が録れなくなったりする。
+       * どのルールの予約だったかは持っていないので、どちらも手動予約 (の取り消し) にする (「戻す」で手動予約として録れる)
+       */
+      if (reservation.claimed_from !== null) {
+        tx.update(reservations)
+          .set({
+            manual: true,
+            rule_id: null,
+            priority: MANUAL_PRIORITY,
+            claimed_from: null,
+            ...(reservation.claimed_from === "canceled"
+              ? {
+                  state: "canceled" as const,
+                  canceled_by: "user" as const,
+                  conflict_reason: null,
+                }
+              : {}),
+            updated_at: at,
+          })
+          .where(eq(reservations.id, reservation.id))
+          .run();
+        result.returned++;
+        continue;
+      }
       tx.delete(reservations).where(eq(reservations.id, reservation.id)).run();
       result.dropped++;
     }
