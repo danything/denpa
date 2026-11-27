@@ -112,6 +112,8 @@ export type FromWorker =
       pts: number;
       duration: number;
       sampleRate: number;
+      /** チャンネルの並び (FFmpeg の `AV_CH_*` の和。分からなければ 0。`downmix.ts`) */
+      layout: number;
       planes: Float32Array[];
     }
   /** 選局し直してから最初のフレームを描いた。**前の局の静止画を剥がす合図** */

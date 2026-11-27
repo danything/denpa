@@ -23,6 +23,7 @@ import { CLOCK, unwrap } from "@danything/arib/pes";
 import type { AudioSide } from "#lib/arib.js";
 import { Outlet, playbackSession } from "#lib/sound.js";
 
+import { downmix } from "./downmix";
 import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
 import { type Chunk, Playout, type Scheduled } from "./playout";
 import { audioContext, Seam } from "./seam";
@@ -53,6 +54,8 @@ const STREAM_OUT = 0.03;
 
 interface AudioChunk extends Chunk {
   sampleRate: number;
+  /** チャンネルの並び (FFmpeg の `AV_CH_*` の和。`downmix.ts`) */
+  layout: number;
   planes: Float32Array[];
 }
 
@@ -632,17 +635,15 @@ export class RawEngine {
     if (frames === 0) return;
     const buffer = this.context.createBuffer(2, frames, chunk.sampleRate);
     /*
-     * **デュアルモノは片側を両耳へ** (エンコードする経路の `pan` と同じ)。
-     *
-     * 5.1ch の番組は**最初の 2 本 (前の左右) だけ**鳴らす。面の並びは FFmpeg の決まりで
-     * 分かっている (worker の WASM がデコードする) が、中央と後ろを混ぜる下げ方はまだ持っていない
+     * **3ch 以上 (5.1ch など) は ffmpeg の `-ac 2` と同じ係数で 2ch に下げる** (`downmix.ts`)。
+     * **デュアルモノは片側を両耳へ** (エンコードする経路の `pan` と同じ)。デュアルモノは 2ch なので、2ch のときだけ見る
      */
-    const left = chunk.planes[0]!;
-    const right = chunk.planes[1] ?? left;
+    const [left, right] = downmix(chunk.planes, chunk.layout);
+    const dual = chunk.planes.length === 2;
     const [l, r] =
-      this.side === "main"
+      dual && this.side === "main"
         ? [left, left]
-        : this.side === "sub"
+        : dual && this.side === "sub"
           ? [right, right]
           : [left, right];
     buffer.copyToChannel(l as Float32Array<ArrayBuffer>, 0);
