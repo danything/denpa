@@ -36,7 +36,9 @@ interface Anchor {
   /** 参照を運んだ部品 (component_tag)。NPTReferred の es_ref と突き合わせる */
   component: number;
   /**
-   * 届いた参照ごとに違う印。**同じ参照を配り直されても同じ** (遅れて繋いだときの配り直し)。
+   * 届いた参照ごとに違う印 (部品・参照・使い始める STC・その時刻)。**同じ参照を配り直されても同じ。** 配り直すのは
+   * 覚えておいた同じ `nptUpdated` で、時刻もサーバが覚える前に付けている (`server/databroadcast.ts`・`ts/carousel.ts`。録画は変化ログの同じ行)。
+   * STC が不連続になって同じ参照を使い直したときは、使い始める STC が違うので別の印になる。
    * 達する前から使う参照は 2 つの区切りになるが、印は同じ (NPTReferred は参照ごとに 1 回)
    */
   key: string;
