@@ -138,6 +138,32 @@ AV1 は RDNA3 (RX 7000・Radeon 780M など) から使えますが、どれが�
 入ってイメージが約 170 MB 増えるため。`Dockerfile` の mesa 段)。手元に AMD の GPU が無いので、実機ではまだ確かめていません。
 AMD の別の仕組み (AMF) は、Linux では AMD が別に配るランタイムが要り、イメージ 1 つで配れないので使いません。
 
+### 試しのエンコードの大きさ
+
+**試しのエンコードは、録画がふだんエンコードする 1920x1080 の試験映像で試します** (`hwenc.PROBE_SOURCE`。どの OS・方式も同じ)。
+コマは 6 コマ (30 コマ/秒で 0.2 秒) のままで、使えるかを見るだけです。デコードから GPU で通せるかを見る MPEG-2 の試し素材も、放送と同じ 1920x1080 です。
+
+前は 256x256 で試していて、録画の大きさならエンコードできるのに試しだけ落ちる GPU がありました。
+RX 9070 XT (Windows、AMF) の av1_amf は 256x256 を `encoder->Init() failed with error 5` で開けず、同じ ffmpeg・同じ指定で
+1920x1080 にするとエンコードできました (報告者が高画質の指定と古い世代向けの指定の両方で確かめた)。AMF の 5 は `AMF_OUT_OF_RANGE` です
+([Result.h](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/blob/master/amf/public/include/core/Result.h))。
+AMF の資料が書く AV1 の大きさは幅 256〜8192・高さ 128〜4352 で、上限は GPU ごとに caps で問い合わせるものです
+([AMF_Video_Encode_AV1_API.md](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/blob/master/amf/doc/AMF_Video_Encode_AV1_API.md) の `FRAMESIZE`)。
+256x256 はこの範囲に入っているので、RX 9070 XT の下限は資料より大きいと推定しています (下限そのものは確かめていません)。
+
+- 揃えは問題になりません。RDNA3 の AV1 は 64x16 に揃えてエンコードしますが、FFmpeg の av1_amf の既定 (`-align none`) は
+  揃わない大きさも受けて詰めます (1080 は 1082 にして切り取りを付ける)。録画はこの既定のまま 1920x1080 をエンコードしています
+- NVENC・QSV・VA-API・VideoToolbox・MediaCodec・Rockchip MPP も同じ大きさで試します。大きさの下限はどれも GPU やドライバごとに違い、
+  小さい試験映像では同じずれが起きうるためです (RX 9070 XT のほかに落ちた報告はありません)
+- ライブで段を下げたときの 640x360 (段 3) は試していません。開けなければ、ライブは映像が出る前に失敗した方式としてソフトウェアに戻ります
+  ([ライブ](#ライブは別に選んだエンコーダで-gpu-に載る))
+
+試しが落ちたときのログは、エンコーダ・デバイス・試した指定と、ffmpeg のエラーの最後の 3 行です
+(`[hwenc] av1_amf (amf0、古い世代向けの指定) の試しのエンコードが落ちました (終了コード 1): [av1_amf @ …] encoder->Init() failed with error 5 / …`)。
+
+実機で確かめていないこと: RX 9070 XT で 1920x1080 の試しが通り AV1 が設定に出ること (報告者の手での確かめは ffmpeg を直接動かしたもの)、
+ほかの GPU で大きくした試しが前より遅くならないこと。
+
 ### QSV を使わない理由
 
 **Linux では** Intel の GPU も VA-API だけで使い、QSV (libvpl) はイメージに入れていません (前は QSV を先に試し、VA-API を予備にしていました)。

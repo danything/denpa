@@ -274,7 +274,7 @@ test("AV1 の ICQ がドライバに無ければ、警告にせずに CQP で試
 test("ほかの理由で落ちたら警告し、原因を持たない ffmpeg の行は外して出す", async () => {
   answer = (argv) => (argv.join(" ").includes("av1_vaapi") ? 1 : 0);
   failText = openFailure(
-    "Hardware does not support encoding at size 256x256 (constraints: width 320-8192 height 128-8192).",
+    "Failed to create encode pipeline configuration: 1 (operation failed).",
     "Invalid argument",
   );
   const warn = spyOn(console, "warn").mockImplementation(() => {});
@@ -282,8 +282,8 @@ test("ほかの理由で落ちたら警告し、原因を持たない ffmpeg の
     await probe();
     const path = join(dir, "renderD128");
     expect(warn.mock.calls.map((args) => String(args[0]))).toEqual([
-      `[hwenc] av1_vaapi (${path}) の試しのエンコードが落ちました (終了コード 1): [av1_vaapi @ 0x5502] Hardware does not support encoding at size 256x256 (constraints: width 320-8192 height 128-8192). / [vf#0:0 @ 0x5504] Error while filtering: Invalid argument (ドライバ: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1)`,
-      `[hwenc] av1_vaapi (${path}、CQP) の試しのエンコードが落ちました (終了コード 1): [av1_vaapi @ 0x5502] Hardware does not support encoding at size 256x256 (constraints: width 320-8192 height 128-8192). / [vf#0:0 @ 0x5504] Error while filtering: Invalid argument (ドライバ: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1)`,
+      `[hwenc] av1_vaapi (${path}) の試しのエンコードが落ちました (終了コード 1): [av1_vaapi @ 0x5502] Failed to create encode pipeline configuration: 1 (operation failed). / [vf#0:0 @ 0x5504] Error while filtering: Invalid argument (ドライバ: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1)`,
+      `[hwenc] av1_vaapi (${path}、CQP) の試しのエンコードが落ちました (終了コード 1): [av1_vaapi @ 0x5502] Failed to create encode pipeline configuration: 1 (operation failed). / [vf#0:0 @ 0x5504] Error while filtering: Invalid argument (ドライバ: Intel i965 driver for Intel(R) Gemini Lake - 2.4.1)`,
     ]);
   } finally {
     warn.mockRestore();
@@ -673,6 +673,66 @@ test("AMF は高画質の指定が通れば、古い世代向けの指定を試�
       (l) => l.includes("d3d11va=d3d:0") && l.includes("-usage transcoding"),
     ),
   ).toBe(false);
+});
+
+/*
+ * **試しのエンコードは録画と同じ 1920x1080 で試す** (`PROBE_SOURCE`)。RX 9070 XT の av1_amf は 256x256 の試験映像を
+ * `encoder->Init() failed with error 5` で開けず、1920x1080 なら通った。小さい大きさで試すと、録画では使える AV1 が出なかった
+ */
+test("試しのエンコードは録画と同じ 1920x1080 で試し、小さい大きさで落ちる AV1 も使える", async () => {
+  // RX 9070 XT らしい返事。アダプタ 0 の AMD で、av1_amf は 256x256 だと開けない
+  answer = (argv) => {
+    const line = argv.join(" ");
+    if (!line.includes("d3d11va=d3d:0") || !line.includes("_amf")) return 1;
+    return line.includes("av1_amf") && line.includes("s=256x256") ? 1 : 0;
+  };
+  calls.length = 0;
+  const { devices } = await onWindows(() => probe());
+  expect(devices[0]).toMatchObject({
+    path: "amf0",
+    amf: ["av1", "hevc", "h264"],
+    amfTranscoding: [],
+  });
+  const sources = calls
+    .map((argv) => argv[argv.indexOf("-i") + 1])
+    .filter((input) => input?.startsWith("nullsrc"));
+  expect(sources.length).toBeGreaterThan(0);
+  expect(new Set(sources)).toEqual(new Set(["nullsrc=s=1920x1080:r=30:d=0.2"]));
+});
+
+test("AMF の AV1 が開けなければ、AMF のエラーの行をログに出し、AV1 だけ外す", async () => {
+  answer = (argv) => {
+    const line = argv.join(" ");
+    if (!line.includes("d3d11va=d3d:0") || !line.includes("_amf")) return 1;
+    return line.includes("av1_amf") ? 1 : 0;
+  };
+  failText = [
+    "[av1_amf @ 0000020] [error] encoder->Init() failed with error 5",
+    "[vost#0:0/av1_amf @ 0000021] [error] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.",
+    "[vf#0:0 @ 0000022] [error] Error while filtering: Internal bug, should not have happened",
+    "[out#0/null @ 0000023] [error] Nothing was written into output file, because at least one of its streams received no packets.",
+    "Conversion failed!",
+  ].join("\n");
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const { devices } = await onWindows(() => probe());
+    expect(devices[0]).toMatchObject({ path: "amf0", amf: ["hevc", "h264"] });
+    // 高画質の指定と古い世代向けの指定の両方で落ちたことを、エンコーダ・デバイス・指定と ffmpeg のエラーの行で出す
+    // (GPU の無い番号の NVENC・QSV・AMF も同じ返事で落ちるので、AMD の 0 番の AV1 の行だけ見る)
+    expect(
+      warn.mock.calls
+        .map((args) => String(args[0]))
+        .filter((line) => line.startsWith("[hwenc] av1_amf (amf0")),
+    ).toEqual([
+      "[hwenc] av1_amf (amf0) の試しのエンコードが落ちました (終了コード 1): [av1_amf @ 0000020] encoder->Init() failed with error 5 / [vf#0:0 @ 0000022] Error while filtering: Internal bug, should not have happened",
+      "[hwenc] av1_amf (amf0、古い世代向けの指定) の試しのエンコードが落ちました (終了コード 1): [av1_amf @ 0000020] encoder->Init() failed with error 5 / [vf#0:0 @ 0000022] Error while filtering: Internal bug, should not have happened",
+    ]);
+  } finally {
+    warn.mockRestore();
+    log.mockRestore();
+    failText = "";
+  }
 });
 
 /** Mac の探し方 (`probeMac`)。Windows と同じく OS の名前だけ差し替える */
