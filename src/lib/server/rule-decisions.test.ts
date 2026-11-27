@@ -58,7 +58,11 @@ afterAll(() => {
 });
 
 const MX = 3239123608;
+/** MX1 の枝番。分割していない間は、同じ放送が MX と両方に載る */
+const MX_SUB = 3239123609;
 const HOUR = 3_600_000;
+/** 番組の開始時刻の基準。枝番の組に同じ放送を載せるので、テストの中で動かさない */
+const BASE = Date.now();
 
 beforeEach(() => {
   orm().delete(reservations).run();
@@ -67,27 +71,37 @@ beforeEach(() => {
   orm().delete(services).run();
   orm()
     .insert(services)
-    .values({
-      id: MX,
-      service_id: 23608,
-      network_id: 32391,
-      name: "TOKYO MX1",
-      type: "GR",
-      service_type: 1,
-      updated_at: 0,
-    })
+    .values(
+      [MX, MX_SUB].map((id) => ({
+        id,
+        service_id: id % 100_000,
+        network_id: 32391,
+        name: "TOKYO MX1",
+        type: "GR" as const,
+        service_type: 1,
+        updated_at: 0,
+      })),
+    )
     .run();
-  placeServices([{ id: MX, channel: "T16" }]);
+  placeServices([
+    { id: MX, channel: "T16" },
+    { id: MX_SUB, channel: "T16" },
+  ]);
 });
 
 /** 3 時間後から (猶予の外) の番組を置く */
-function program(id: number, name: string, startsIn = 3 * HOUR): void {
-  const start = Date.now() + startsIn;
+function program(
+  id: number,
+  name: string,
+  startsIn = 3 * HOUR,
+  service = MX,
+): void {
+  const start = BASE + startsIn;
   orm()
     .insert(programs)
     .values({
       id,
-      service_id: MX,
+      service_id: service,
       network_id: 32391,
       event_id: id,
       start_at: start,
@@ -105,8 +119,13 @@ function form(values: Record<string, string>): URLSearchParams {
   return new URLSearchParams(values);
 }
 
-async function saveRule(keyword: string): Promise<number> {
-  const saved = await createRule(form({ keyword, dedupe: "0" }));
+async function saveRule(
+  keyword: string,
+  serviceIds: number[] = [],
+): Promise<number> {
+  const fields = form({ keyword, dedupe: "0" });
+  for (const id of serviceIds) fields.append("serviceIds", String(id));
+  const saved = await createRule(fields);
   if ("error" in saved) throw new Error(saved.error);
   return saved.id;
 }
@@ -352,5 +371,59 @@ describe("番組表だけが動いたとき", () => {
     program(12, "テスト魔法 #1");
     applyRules();
     expect(rowOf(12)).toBeUndefined();
+  });
+});
+
+/*
+ * **同じ放送が枝番の局 (23608 / 23609) の両方に載るとき。** ルールは小さいほうだけを録る (`rules.oneBroadcast`)。
+ * 人が大きいほうに手動予約を入れていると、ルールが小さいほうに別の予約を立て、同じ放送を 2 本録っていた
+ */
+describe("枝番の局に載った同じ放送の手動予約", () => {
+  const rows = () =>
+    orm()
+      .select({
+        program_id: reservations.program_id,
+        manual: reservations.manual,
+        state: reservations.state,
+      })
+      .from(reservations)
+      .orderBy(reservations.program_id)
+      .all();
+
+  test("手動予約のほうが新しければ、ルールはもう片方の局に立てない", async () => {
+    await saveRule("テスト魔法");
+    await later();
+    program(10, "テスト魔法 #1");
+    program(11, "テスト魔法 #1", 3 * HOUR, MX_SUB);
+    await reserve(11);
+    applyRules();
+    expect(rows()).toEqual([
+      { program_id: 11, manual: true, state: "scheduled" },
+    ]);
+  });
+
+  test("手動予約より後に保存したルールは、その手動予約を引き取る", async () => {
+    program(10, "テスト魔法 #1");
+    program(11, "テスト魔法 #1", 3 * HOUR, MX_SUB);
+    await reserve(11);
+    await later();
+    const rule = await saveRule("テスト魔法");
+    expect(rowOf(10)).toBeUndefined();
+    expect(rowOf(11)).toMatchObject({
+      rule_id: rule,
+      manual: false,
+      claimed_from: "manual",
+    });
+  });
+
+  test("もう片方の局だけを選んだルールも、手動予約と同じ放送には立てない", async () => {
+    program(10, "テスト魔法 #1");
+    program(11, "テスト魔法 #1", 3 * HOUR, MX_SUB);
+    await reserve(11);
+    await later();
+    await saveRule("テスト魔法", [MX]);
+    expect(rows()).toEqual([
+      { program_id: 11, manual: true, state: "scheduled" },
+    ]);
   });
 });
