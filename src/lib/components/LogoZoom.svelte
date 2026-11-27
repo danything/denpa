@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/components/modal";
+  import "@sveti/blades/components/modal";
   import { resolve } from "$app/paths";
   import { untrack } from "svelte";
 

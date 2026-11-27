@@ -1,6 +1,6 @@
 <script lang="ts">
-  import "@anyblades/blades/components/modal";
-  import "@anyblades/blades/content/table";
+  import "@sveti/blades/components/modal";
+  import "@sveti/blades/content/table";
   import { deserialize } from "$app/forms";
   import { untrack } from "svelte";
   import RefreshCw from "~icons/lucide/refresh-cw";

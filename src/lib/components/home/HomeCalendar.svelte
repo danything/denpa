@@ -10,7 +10,7 @@
    * 日の数え方と升目は `#lib/calendar.ts`。どの日を一覧の先頭に送るか (まだ描いていない古い日を描かせるのも) はホームが持つ。
    * 切り抜きの画面 (`/clips`) も同じものを使う (撮った日を押すとその日で絞る。選んでいる日が `pinned`)
    */
-  import "@anyblades/blades/content/table";
+  import "@sveti/blades/content/table";
   import { tick } from "svelte";
   import ChevronLeft from "~icons/lucide/chevron-left";
   import ChevronRight from "~icons/lucide/chevron-right";

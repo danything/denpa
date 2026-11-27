@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/components/modal";
+  import "@sveti/blades/components/modal";
   import { onDestroy, tick, untrack } from "svelte";
   import ScanLine from "~icons/lucide/scan-line";
 

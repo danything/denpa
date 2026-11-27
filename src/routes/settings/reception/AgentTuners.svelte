@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/content/table";
+  import "@sveti/blades/content/table";
   import { resolve } from "$app/paths";
   import Ellipsis from "~icons/lucide/ellipsis";
   import ShieldCheck from "~icons/lucide/shield-check";
