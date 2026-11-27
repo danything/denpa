@@ -6,11 +6,6 @@
    * モジュールに置くので、観る画面へ行って戻っても開いたまま。読み込み直すと閉じる
    */
   const openedGroups = new SvelteSet<string>();
-  /**
-   * 新しい順で表示のとき、たたんだ予約 (`#lib/timeline.ts` の `LineOptions.fold`) を開いているか。
-   * 開いた番組と同じく、観る画面へ行って戻っても開いたまま。読み込み直すとたたむ
-   */
-  const fold = $state({ open: false });
 </script>
 
 <script lang="ts">
@@ -421,8 +416,7 @@
   /**
    * **新しい順で表示 (issue #1930)。** 上下を返し、上から予約 (遠い順)・「いま」・録画中・録れたもの (新しい順) に並べる。
    * まとめて表示と同じく端末ごとに cookie で覚え、**サーバが読む** (`+page.server.ts`)。逆にするのは並べる所
-   * (`sections`・`timelineLines`) だけで、ここでは「いま」の行より上と下のどちらに描くかを替える。
-   * 予約は「これからの予約」の見出しにたたむ (`fold`。issue #3240)
+   * (`sections`・`timelineLines`) だけで、ここでは「いま」の行より上と下のどちらに描くかを替える
    */
   // svelte-ignore state_referenced_locally
   let reversed = $state(data.reversed);
@@ -468,16 +462,8 @@
   }
 
   const lines = $derived(
-    timelineLines(parts, { now: clock, grouped, reversed, isOpen, fold }),
+    timelineLines(parts, { now: clock, grouped, reversed, isOpen }),
   );
-  /**
-   * たたんだ予約を開く・閉じる。予約は押した見出しの下に開くので、位置は合わせない
-   * (見出しはその場に残り、「いま」の行より下が押し下げられる)。開いたのは予約を読むためなので、
-   * 「いま」の行が画面の外へ出てもよい。「いま」の行を残すと、開いた予約が見出しごと上へ逃げて読めない
-   */
-  function toggleFold(): void {
-    fold.open = !fold.open;
-  }
   /** 開いた瞬間に作る行数 (「いま」の行の上と下それぞれ)。1 画面に収まるくらい。残りは表示したあとで足す (`fillSoon`) */
   const FIRST_ROWS = 15;
   /** 映したい行の上に余分に作る行数 (見出しの貼り付きと、上に少し送ったときのため) */
@@ -605,7 +591,7 @@
    *
    * **観終えていない録画があれば、いちばん古いものを映す** (`catchUp`)。無ければ「いま」の行。
    * まだ描いていない所にあれば、そこまで描いてから送る。
-   * **新しい順のときは探さず、「いま」の行を上のほうに映す** (「いま」の行のすぐ下に新しい録画が並ぶ。古い未視聴へ送ると、
+   * **新しい順のときは探さず、「いま」の行を上の端に映す** (予約は上に外れ、「いま」の行のすぐ下に新しい録画が並ぶ。古い未視聴へ送ると、
    * 新しいものがすべて上に残り、読む向きと逆になる)。
    * 並べ替えや絞り込みのたびには動かさない (開いたときの 1 回だけ)
    */
@@ -730,16 +716,6 @@
       await tick();
       restore();
     }
-    // 予約にしか無い日を、予約をたたんでいる間に押したら、開いてから送る
-    if (
-      lines.future[0]?.kind === "fold" &&
-      !fold.open &&
-      index < 0 &&
-      !lines.now.some((line) => line.kind === "day" && line.at === day)
-    ) {
-      fold.open = true;
-      await tick();
-    }
     showDay(listBox, day);
   }
   const calendar = $derived({
@@ -791,7 +767,6 @@
     openRecording,
     openMissed,
     toggleGroup,
-    toggleFold,
     dayLabel,
   });
 </script>

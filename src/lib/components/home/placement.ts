@@ -29,8 +29,10 @@ function bottomCover(): number {
  * `target` (映したい録画の行のキー) があって「いま」の行のままでは見えなければ、その行が上の端 (貼り付いた日付の見出しの下)
  * に来るまで戻す。閉じた番組の中にあれば、その見出し (`data-group-rows`)。
  *
- * **新しい順で表示 (`reversed`) のときは、「いま」の行を上から 3 割ほどの高さに置く。** 上に近い予約、下に新しい録画が入る。
- * 録画中の行は「いま」の行の下にいる
+ * **新しい順で表示 (`reversed`) のときは、「いま」の行を上の端 (日ごとのときは貼り付いた今日の見出しの下) に置く。** 予約は見えている所の上に外れ、
+ * 「いま」の行の下に録画中と新しい録画が並ぶ (issue #3240)。予約が何件あっても、「いま」の行がもう見えていても送る。
+ * 「いま」の行より下が 1 画面に足りないときは、ページの終わりまでしか送れないので、近い予約が上に残る。
+ * `target` は使わない (呼ぶ側が渡さない)
  */
 export function placeTimeline(
   list: HTMLElement,
@@ -62,32 +64,36 @@ export function placeTimeline(
       ? { top: firstLive.getBoundingClientRect().top, height: 0 }
       : { top: lastLive.getBoundingClientRect().bottom, height: 0 };
   };
-  /*
-   * **「いま」の行がもう見えている (ふだんは上から 4 割より下、逆のときは上から 6 割より上で、どちらも下に被さるものより上) なら動かさない。**
-   * 録れたもの (逆のときは予約) が少ないと「いま」の行は先頭の近くにあり、決めた高さまで下げる余地が無い
-   */
   const { top: lineY, height: lineHeight } = lineAt();
   const lineTop = lineY - line;
   if (reversed) {
-    if (lineTop < 0 || lineTop > Math.min(view * 0.6, view - lineHeight))
-      scrollPage(lineTop - view * 0.3);
-  } else if (lineTop < view * 0.4 || lineTop > view - lineHeight)
+    /*
+     * 日ごとのときは今日の見出しが「いま」の行の上に貼り付くので、その下端に置く。まとめて表示の「いま」の行は
+     * 見出しの無い包みにいる (`#lib/timeline.ts` の `blocks`) ので、上の端そのものに置く
+     */
+    const mark = hidden && firstLive !== null ? firstLive : now;
+    const headed =
+      (mark.closest(".t-block")?.querySelector(":scope > .t-day") ?? null) !==
+      null;
+    scrollPage(lineY - (headed ? line : topEdge(list)));
+    alignTop(list);
+    return;
+  }
+  /*
+   * **「いま」の行がもう見えている (上から 4 割より下で、下に被さるものより上) なら動かさない。**
+   * 録れたものが少ないと「いま」の行は先頭の近くにあり、決めた高さまで下げる余地が無い
+   */
+  if (lineTop < view * 0.4 || lineTop > view - lineHeight)
     scrollPage(lineTop - view * 0.7);
   /*
-   * **録画中の行は「いま」の行のすぐ隣にいるので、「いま」の行と一緒に映す。** 何本も録っていて、ふだんは先頭が見出しの裏に入るなら、
-   * 「いま」の行が下の端に掛からない範囲で戻す。逆のときは末尾が下に被さるものの裏に入るなら、「いま」の行が上の端に掛からない範囲で送る
+   * **録画中の行は「いま」の行のすぐ隣にいるので、「いま」の行と一緒に映す。** 何本も録っていて先頭が見出しの裏に入るなら、
+   * 「いま」の行が下の端に掛からない範囲で戻す
    */
   if (firstLive !== null && lastLive !== null) {
     const { top, height } = lineAt();
-    if (reversed) {
-      const over = lastLive.getBoundingClientRect().bottom - bottom;
-      const room = top - line - 8;
-      if (over > 0 && room > 0) scrollPage(Math.min(over, room));
-    } else {
-      const short = line + 8 - firstLive.getBoundingClientRect().top;
-      const room = bottom - (top + height);
-      if (short > 0 && room > 0) scrollPage(-Math.min(short, room));
-    }
+    const short = line + 8 - firstLive.getBoundingClientRect().top;
+    const room = bottom - (top + height);
+    if (short > 0 && room > 0) scrollPage(-Math.min(short, room));
   }
   const row =
     target === null

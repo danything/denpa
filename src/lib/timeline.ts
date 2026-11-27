@@ -36,12 +36,6 @@
  * (今日と「録画」の見出しの位置は `timelineLines`)。まとめて表示では番組どうしも新しい順にし
  * (予約は次の回が遠い番組が上)、番組の中の回は放送順のまま (開いた番組を上から読めば話が進む)。
  *
- * **新しい順で表示のとき、予約はたたむ** (`LineOptions.fold`。issue #3240)。上の側の予約を「これからの予約」の見出し 1 つにして、
- * 開いた画面の先頭から新しい録画が並ぶようにする。並びは時刻の順のままにし、予約を録れたものの下へは回さない。
- * 下へ回すと、300 件の録画を描き足し終えるまで予約に届かず、「いま」の行の上と下で時刻の進む向きも崩れるため。
- * たたむのは録れたものか録画中もあるときだけ (予約だけの一覧をたたむと、開くまで何も見えない)。
- * 開くと見出しの下に予約がふだんどおり並ぶ (まとめて表示の「これからの予約」の見出しは、たたんだ見出しが兼ねる)
- *
  * 「いま」の行から遠いほうを後から描き足すのはどちらの向きも同じで、「いま」の行より上の側 (ふだんは録れたもの、逆のときは予約) は
  * `pageStart`、下の側は `pageEnd` で描く範囲を決める
  */
@@ -83,7 +77,6 @@ export const FILTERS = [
   { id: "all", label: "すべて" },
   { id: "reservations", label: "予約" },
   { id: "recording", label: "録画中" },
-  { id: "recorded", label: "録画済み" },
   { id: "unfinished", label: "未視聴" },
 ] as const;
 
@@ -122,9 +115,6 @@ export function passes(
       return item.zone === "future";
     case "recording":
       return item.zone === "now";
-    case "recorded":
-      // 録れたものだけ。録り逃しは録れていないので入れない
-      return item.zone === "past" && traits.missed !== true;
     case "unfinished":
       return item.zone === "past" && traits.unfinished;
     case "failed":
@@ -197,8 +187,6 @@ export type TimelineLine<T extends TimelineItem> =
       group: SeriesGroup<T>;
       open: boolean;
     }
-  /** 新しい順で表示のとき、たたんだ予約の見出し (`LineOptions.fold`)。`count` は予約の件数 (画面は「N 件」) */
-  | { kind: "fold"; key: "fold-future"; count: number; open: boolean }
   | { kind: "row"; key: string; item: T; nested: boolean };
 
 /** その時刻の日の 0 時 (端末のタイムゾーン) */
@@ -310,11 +298,6 @@ interface LineOptions {
   reversed?: boolean;
   /** その側のその番組を開いているか (まとめて表示のとき) */
   isOpen: (zone: "future" | "past", group: string) => boolean;
-  /**
-   * 新しい順で表示のとき、予約を「これからの予約」の見出しにたたむ。`open` はその見出しを開いているか。
-   * 渡さなければたたまない。ふだんの並びでは使わない (予約はもともと録れたものの下にある)
-   */
-  fold?: { open: boolean };
 }
 
 /** 描く行を、録れたもの・録画中と「いま」の行・予約の 3 つに分けたもの */
@@ -392,43 +375,18 @@ function reversedLines<T extends TimelineItem>(
     if (parts.past.length > 0 || live.length > 0)
       now.push({ kind: "side", key: "side-past", zone: "past" });
     now.push(...live);
-    const series = bySeries(parts.future, "future", options.isOpen, true);
-    // たたんだ見出しが「これからの予約」の見出しを兼ねる
-    const future = folded(parts, options, series.slice(1)) ?? series;
-    return { past, now, future };
+    return {
+      past,
+      now,
+      future: bySeries(parts.future, "future", options.isOpen, true),
+    };
   }
   const today = dayStart(options.now);
-  const days = byDay(parts.future, "future", today, true);
-  const future = folded(parts, options, days) ?? days;
+  const future = byDay(parts.future, "future", today, true);
   const now: TimelineLine<T>[] = [line, ...live];
   if (!future.some((entry) => entry.key === `day-${today}`))
     now.unshift({ kind: "day", key: `day-${today}`, at: today });
   return { past: byDay(parts.past, "past", today, true), now, future };
-}
-
-/**
- * 予約をたたんだ行 (`LineOptions.fold`)。閉じていれば見出しだけ、開いていれば見出しの下に `lines` を続ける。
- * たたまないとき (指定が無い・予約が無い・録れたものも録画中も無い) は null
- */
-function folded<T extends TimelineItem>(
-  parts: Sections<T>,
-  options: LineOptions,
-  lines: TimelineLine<T>[],
-): TimelineLine<T>[] | null {
-  if (
-    options.fold === undefined ||
-    parts.future.length === 0 ||
-    (parts.past.length === 0 && parts.now.length === 0)
-  )
-    return null;
-  const { open } = options.fold;
-  const head: TimelineLine<T> = {
-    kind: "fold",
-    key: "fold-future",
-    count: parts.future.length,
-    open,
-  };
-  return open ? [head, ...lines] : [head];
 }
 
 /** 画面で 1 つに包む行 (見出しは包みの中だけで貼り付く) */
@@ -485,8 +443,8 @@ export function pageStart<T extends TimelineItem>(
     if (line.kind !== "row" || (grouped && !line.nested)) break;
     at -= 1;
   }
-  // 残りが側の見出し (「録画」) か、たたんだ予約の見出しだけなら、それも描く
-  return at === 1 && (grouped || lines[0]?.kind === "fold") ? 0 : at;
+  // 残りが側の見出し (「録画」) だけなら、それも描く
+  return at === 1 && grouped ? 0 : at;
 }
 
 /**
