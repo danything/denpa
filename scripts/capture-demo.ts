@@ -47,14 +47,52 @@ const VIDEO = { width: VIEW.width * SCALE, height: VIEW.height * SCALE };
 /** X に上げられる長さの上限 (秒) */
 const MAX_SECONDS = 140;
 
-/** 1 つの場面。`start` を開いて落ち着いてから録り始め、`run` で操作する */
+/**
+ * 1 つの場面。`prepare` で支度してから `start` を開き、落ち着いてから録り始め、`run` で操作する。
+ * `prepare` の間も録画は回っているが、録り始めより前は mp4 にするときに切り落とす。
+ * `prepare` が返した関数は、撮り終えたら (失敗しても) 呼ぶ
+ */
 interface Scene {
   start: string;
+  prepare?: (page: Page, stack: Stack) => Promise<(() => Promise<void>) | void>;
   run: (page: Page) => Promise<void>;
 }
 
 /** 隠して見せる局 (`tests/fake/docs.ts` の作り物の地上波) */
 const WAKABA = DOCS_SERVICES.find((s) => s.name === "テレビわかば")!;
+/** 実況のコメントを流す局 (作り物の地上波。局の番号が実況のチャンネルの表に当たる) */
+const DENPA = DOCS_SERVICES.find((s) => s.name === "でんぱテレビ")!;
+const DENPA_LIVE = `/live?service=${DENPA.id}`;
+
+/** 実況の場面で流すコメント。どれも作った文で、実在の人や作品の名前を出さない。`mail` は色のコマンド */
+const JIKKYO_LINES: { text: string; mail?: string }[] = [
+  { text: "こんばんは" },
+  { text: "始まった" },
+  { text: "待ってました", mail: "184 yellow" },
+  { text: "今日もよろしく" },
+  { text: "画面きれい" },
+  { text: "88888888", mail: "184 cyan" },
+  { text: "カラーバーだ" },
+  { text: "この時間が楽しみ" },
+  { text: "おつかれさまです" },
+  { text: "音もいい感じ" },
+  { text: "きたきた" },
+  { text: "ここ好き", mail: "184 pink" },
+  { text: "今週も見てる" },
+  { text: "わかる" },
+  { text: "色が鮮やか" },
+  { text: "なるほど" },
+  { text: "いい流れ", mail: "184 green" },
+  { text: "ちょうど帰ってきた" },
+  { text: "まだ間に合った" },
+  { text: "おお" },
+  { text: "ナイス" },
+  { text: "すごい" },
+  { text: "明日も早いけど見る", mail: "184 orange" },
+  { text: "いいね" },
+];
+/** 実況の場面で書き込む 1 行 (作った文) */
+const JIKKYO_POST = "denpa から書き込んでみました";
 
 const SCENES: Record<string, Scene> = {
   /**
@@ -95,6 +133,135 @@ const SCENES: Record<string, Scene> = {
       if (left !== null)
         await glide(page, left.x + left.width, left.y + left.height / 2);
       await page.waitForTimeout(3200);
+    },
+  },
+
+  /**
+   * 実況のコメント (v2.64.0)。denpa のサーバが偽の denpa-hub (`tests/fake/denpa-hub.ts`) からコメントを受けて端末へ渡す。
+   * 世帯はニコニコと連携しておく (偽の hub が中継する)。でんぱテレビのライブで映像の上にコメントが流れ、
+   * 右端の列の「コメントの一覧」を開いて一覧に並ぶのを見せ、書き込みの欄から 1 行送り、自分の書き込み (縦線の印) が流れるところで止める
+   */
+  "jikkyo-comments": {
+    start: DENPA_LIVE,
+    prepare: async (page, stack) => {
+      // 勢いは denpa のサーバが NX-Jikkyo から読むので、画面からの呼び出しに作り物の数を返す (外へ繋がない)
+      const forces = [240, 85, 60, 42, 30, 18];
+      await page.route("**/api/jikkyo/ranking", (route) =>
+        route.fulfill({
+          json: {
+            at: Date.now(),
+            channels: DOCS_SERVICES.filter((s) => s.type === "GR").map(
+              (s, i) => ({ serviceId: s.id, force: forces[i] ?? 10 }),
+            ),
+          },
+        }),
+      );
+      // 偽の hub が決まった本文を流し続けないようにする (下で 1 件ずつ流す)
+      const control = await fetch(`${stack.hubUrl}/__control/jikkyo`, {
+        method: "POST",
+        body: JSON.stringify({ quiet: true }),
+      });
+      if (!control.ok) throw new Error(`偽の denpa-hub: ${control.status}`);
+      // 既定の流し方に戻す。撮り終えたときと、支度に失敗したときに呼ぶ (後の場面が実況を使っても黙ったままにしない)
+      const restore = async () => {
+        await fetch(`${stack.hubUrl}/__control/jikkyo`, {
+          method: "POST",
+          body: "{}",
+        }).catch(() => {});
+      };
+      try {
+        // 世帯の設定の「実況」をオンにし、ニコニコと連携する (偽の hub は人を出さずに連携を返す)
+        await page.goto(`${stack.appUrl}/settings/integrations`);
+        await settle(page, 300);
+        await page.getByTestId("jikkyo-setting").setChecked(true);
+        await page.getByTestId("saved-result").waitFor();
+        await page.goto(`${stack.appUrl}/settings/integrations#jikkyo`);
+        await settle(page, 300);
+        await page.getByTestId("niconico-link").click();
+        await page.waitForURL(/\/settings\/integrations#jikkyo$/);
+        await page
+          .getByTestId("niconico-state")
+          .filter({ hasText: "連携中" })
+          .waitFor();
+
+        // 端末の ⚙ の「実況」をオンにし、ライブは放送のまま (MPEG-2) で観る (変換する経路は偽 ffmpeg が映像を作らない)
+        await page.evaluate(() => localStorage.setItem("player-jikkyo", "1"));
+        await page.goto(`${stack.appUrl}${DENPA_LIVE}`);
+        await settle(page, 500);
+        await wake(page);
+        await page.getByTestId("live-settings").click();
+        await page.getByTestId("live-codec").click();
+        await page
+          .locator('[data-testid="live-codec-option"][data-codec="mpeg2"]')
+          .click();
+
+        const services = (await (
+          await page.request.get(`${stack.appUrl}/api/services`)
+        ).json()) as { id: number; jikkyo: string | null }[];
+        const channel = services.find((s) => s.id === DENPA.id)?.jikkyo;
+        if (typeof channel !== "string")
+          throw new Error(`${DENPA.name} に実況のチャンネルが当たっていません`);
+        // 0.4〜0.9 秒おきに 1 件ずつ、書かれた時刻を今にして流す。出どころは公式 (NX-Jikkyo が取り込んだもの)
+        let next = 0;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const emit = () => {
+          const line = JIKKYO_LINES[next++ % JIKKYO_LINES.length]!;
+          const comment = {
+            at: Date.now(),
+            text: line.text,
+            mail: line.mail ?? "184",
+            src: "nicolive",
+          };
+          fetch(`${stack.hubUrl}/__control/jikkyo/emit`, {
+            method: "POST",
+            body: JSON.stringify({ channel, comments: [comment] }),
+          }).catch(() => {});
+          timer = setTimeout(emit, 400 + Math.random() * 500);
+        };
+        emit();
+        return async () => {
+          if (timer !== null) clearTimeout(timer);
+          await restore();
+        };
+      } catch (error) {
+        await restore();
+        throw error;
+      }
+    },
+    run: async (page) => {
+      // 映像の上にコメントが流れる
+      await page.getByTestId("jikkyo-comment").first().waitFor();
+      await page.waitForTimeout(4000);
+
+      // 右端の列の「コメントの一覧」を開く
+      await wake(page);
+      await clickAt(page, page.getByTestId("live-jikkyo-list"));
+      await page
+        .getByTestId("jikkyo-compose-line")
+        .filter({ hasText: "ニコニコ実況に書きます" })
+        .waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(2500);
+
+      // 書き込みの欄に 1 行書いて送る
+      await clickAt(page, page.getByTestId("jikkyo-compose-input"));
+      await page.waitForTimeout(400);
+      await page.keyboard.type(JIKKYO_POST, { delay: 120 });
+      await page.waitForTimeout(800);
+      await clickAt(page, page.getByTestId("jikkyo-compose-send"));
+      await page
+        .locator('[data-testid="jikkyo-comment"].mine-line')
+        .first()
+        .waitFor();
+      await page.waitForTimeout(1500);
+      // 一覧の自分の書き込みを指す
+      await glideTo(
+        page,
+        page
+          .getByTestId("jikkyo-list-row")
+          .filter({ hasText: JIKKYO_POST })
+          .last(),
+      );
+      await page.waitForTimeout(3500);
     },
   },
 };
@@ -270,6 +437,18 @@ async function glideTo(page: Page, target: Locator): Promise<void> {
   await glide(page, x, y);
 }
 
+/** ライブの映像の上でカーソルを少し動かし、操作バーと右端の列を出す */
+async function wake(page: Page): Promise<void> {
+  const box = await page.getByTestId("live-frame").boundingBox();
+  if (box === null) throw new Error("ライブの映像の位置が取れません");
+  const x = box.x + box.width * 0.6;
+  const y = box.y + box.height * 0.45;
+  await glide(page, x, y);
+  // もうそこにいたときも動いたことにする (4 px は映像では目立たない)
+  await page.mouse.move(x, y - 4);
+  pointer.set(page, { x, y: y - 4 });
+}
+
 /**
  * **要素へカーソルを動かして押す。** 座標は動かす前に 1 つだけ決め、押すのも離すのも同じ座標
  * (押す瞬間にカーソルが動かない)。画面の外にある要素は、先に `scrollToCenter` で見えるところへ動かしておく
@@ -327,10 +506,11 @@ async function settle(page: Page, ms: number): Promise<void> {
 /** 1 つの場面を録って mp4 にする */
 async function shoot(
   browser: Browser,
-  base: string,
+  stack: Stack,
   name: string,
   scene: Scene,
 ): Promise<void> {
+  const base = stack.appUrl;
   const raw = join(OUT, `${name}.raw`);
   rmSync(raw, { recursive: true, force: true });
   const ctx = await browser.newContext({
@@ -347,15 +527,25 @@ async function shoot(
   await ctx.addInitScript(cursorScript);
   const opened = Date.now();
   const page = await ctx.newPage();
-  await page.goto(`${base}${scene.start}`);
-  await settle(page, 1500);
-  await page.mouse.move(VIEW.width / 2, VIEW.height / 2);
-  pointer.set(page, { x: VIEW.width / 2, y: VIEW.height / 2 });
-  // 録画はページを作ったとき (`opened`) から始まる。読み込みの間 (白い画面) は切り落とす
-  const begun = Date.now();
+  // 録画はページを作ったとき (`opened`) から始まる。支度と読み込みの間は切り落とす
+  let begun: number;
+  let cleanup: (() => Promise<void>) | void = undefined;
+  try {
+    cleanup = await scene.prepare?.(page, stack);
+    await page.goto(`${base}${scene.start}`);
+    await settle(page, 1500);
+    await page.mouse.move(VIEW.width / 2, VIEW.height / 2);
+    pointer.set(page, { x: VIEW.width / 2, y: VIEW.height / 2 });
+    begun = Date.now();
+    clicks.length = 0;
+    await scene.run(page);
+  } catch (error) {
+    await ctx.close();
+    throw error;
+  } finally {
+    await cleanup?.();
+  }
   const skip = (begun - opened) / 1000;
-  clicks.length = 0;
-  await scene.run(page);
   const video = page.video();
   await ctx.close();
   if (video === null) throw new Error("録画がありません");
@@ -406,8 +596,7 @@ try {
   onlyDocsServices(stack);
   mkdirSync(OUT, { recursive: true });
   browser = await chromium.launch({ args: ["--disable-gpu"] });
-  for (const name of scenes)
-    await shoot(browser, stack.appUrl, name, SCENES[name]!);
+  for (const name of scenes) await shoot(browser, stack, name, SCENES[name]!);
 } finally {
   await browser?.close();
   await shutdown();
