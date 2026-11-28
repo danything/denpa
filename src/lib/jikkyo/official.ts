@@ -151,6 +151,7 @@ export class OfficialReader {
   /** 最初の返事の時刻 (サーバの時計) */
   private first: number | null = null;
   private readonly echoes = new Echoes();
+  private stopped = false;
 
   constructor(
     private readonly events: ReaderEvents,
@@ -175,13 +176,21 @@ export class OfficialReader {
     this.echoes.forget(text);
   }
 
+  /** 止めた (局を替えた・画面を閉じた)。このあとに読み終えた返事は捨てる */
+  stop(): void {
+    this.stopped = true;
+  }
+
   /** 届かない・断られた。境を無くす */
   fail(): void {
+    if (this.stopped) return;
     this.setBoundary(null);
   }
 
   /** 返事の `official` を読む。読めた数を返す (形式が違えば境を無くして null) */
   apply(reply: unknown): number | null {
+    // 止めたあとに読み終えた返事は捨てる (局を替えたあとに、前の局のコメントを流さない)
+    if (this.stopped) return null;
     if (reply === null || typeof reply !== "object") {
       this.fail();
       return null;

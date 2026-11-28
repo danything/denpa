@@ -163,6 +163,8 @@ export class LiveReader {
 
   /** 返事を読む。受けたコメントの数 (公式のぶんも) を返す */
   private take(body: unknown): number {
+    // 止めたあとに読み終えた返事は捨てる (局を替えたあとに、前の局のコメントを流さない)
+    if (this.stopped) return 0;
     if (body === null || typeof body !== "object") {
       this.events.odd("実況の返事の形式が違います");
       return 0;

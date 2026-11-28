@@ -157,6 +157,18 @@ describe("OfficialReader", () => {
     expect(h.boundaries).toEqual([5_000, null, 5_000, null, 5_000, null]);
   });
 
+  test("止めたあとに読んだ返事は流さない", () => {
+    const h = reader();
+    h.r.apply(reply({ seq: 3 }));
+    h.r.stop();
+    expect(
+      h.r.apply(reply({ seq: 4, comments: [{ at: 6_000, text: "前の局" }] })),
+    ).toBeNull();
+    h.r.fail();
+    expect(h.got).toEqual([]);
+    expect(h.boundaries).toEqual([5_000]);
+  });
+
   test("epoch が変わったら、その返事の now から境を取り直す", () => {
     const h = reader();
     h.r.apply(reply({ seq: 9 }));

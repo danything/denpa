@@ -27,7 +27,7 @@ import { POST_GAP, type PostResult, REPLY_WAIT, vpos } from "../jikkyo/post";
 import { config, userAgent } from "./config";
 import { accessToken, HUB_TIMEOUT, linkState, renew } from "./niconico";
 import type { OfficialChat } from "./niconico-messages";
-import { allowedHttp, ViewReader } from "./niconico-view";
+import { allowedHttp, allowedUrl, ViewReader } from "./niconico-view";
 
 /** 呼ばれなくなってから閉じるまで (ms)。欄は 30 秒おきに呼ぶ */
 export const IDLE = 2 * 60_000;
@@ -121,20 +121,9 @@ async function hubWatch(
   };
 }
 
-/**
- * 繋いでよい接続先か。`wss:` だけ。テストの偽物 (ループバックのアドレス) だけは `ws:` も通す
- */
+/** 繋いでよい接続先か。`wss:` だけ (テストの偽物だけは `ws:` も。`niconico-view.allowedUrl`) */
 export function allowedSocket(url: string): boolean {
-  try {
-    const target = new URL(url);
-    if (target.protocol === "wss:") return true;
-    return (
-      target.protocol === "ws:" &&
-      (target.hostname === "127.0.0.1" || target.hostname === "localhost")
-    );
-  } catch {
-    return false;
-  }
+  return allowedUrl(url, "wss:", "ws:");
 }
 
 /** `reconnect` で受けたトークンに替えた URL。URL に `audience_token` が無ければ null (hub から受け取り直す) */

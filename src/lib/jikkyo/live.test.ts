@@ -136,6 +136,40 @@ describe("LiveReader", () => {
     reader.stop();
   });
 
+  test("止めたあとに届いた返事は流さない", async () => {
+    let release: (r: Response) => void = () => {};
+    const late = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    const got: LiveComment[] = [];
+    const deps = {
+      now: () => 0,
+      fetch: () => late,
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+    };
+    const reader = new LiveReader(
+      "jk1",
+      "/api/jikkyo/feed",
+      { comments: (c) => got.push(...c), state: () => {}, odd: () => {} },
+      deps,
+    );
+    reader.start();
+    await tick();
+    reader.stop();
+    release(
+      reply({
+        epoch: "e",
+        seq: 1,
+        hub: "up",
+        nx: "up",
+        comments: [{ at: 1, text: "前の局" }],
+      }),
+    );
+    for (let i = 0; i < 5; i++) await tick();
+    expect(got).toEqual([]);
+  });
+
   test("3 回続けて届かなければ繋がっていない (書けない) にし、10 秒おきに呼び直す", async () => {
     const { deps, timers } = fake([
       reply({ epoch: "e", seq: 0, hub: "up", nx: "up", comments: [] }),

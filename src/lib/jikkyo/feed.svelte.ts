@@ -383,6 +383,7 @@ export class JikkyoFeed {
   private stopSources(): void {
     this.live?.stop();
     this.live = null;
+    this.reader?.stop();
     this.reader = null;
     this.expected.clear();
     this.seen.clear();

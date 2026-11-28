@@ -49,18 +49,30 @@ export interface ViewEvents {
   fatal: (reason: string) => void;
 }
 
-/** 読んでよい URL か。`https:` だけ。テストの偽物 (ループバックのアドレス) だけは `http:` も通す */
-export function allowedHttp(url: string): boolean {
+/**
+ * 繋いでよい URL か。`secure` (`https:`・`wss:`) だけ。テストの偽物 (ループバックのアドレス) だけは `plain` (`http:`・`ws:`) も通す。
+ * メッセージサーバ (`allowedHttp`) と視聴の WebSocket (`niconico-live.allowedSocket`) で同じ決め方にする
+ */
+export function allowedUrl(
+  url: string,
+  secure: string,
+  plain: string,
+): boolean {
   try {
     const target = new URL(url);
-    if (target.protocol === "https:") return true;
+    if (target.protocol === secure) return true;
     return (
-      target.protocol === "http:" &&
+      target.protocol === plain &&
       (target.hostname === "127.0.0.1" || target.hostname === "localhost")
     );
   } catch {
     return false;
   }
+}
+
+/** 読んでよい URL か。`https:` だけ (テストの偽物だけは `http:` も。`allowedUrl`) */
+export function allowedHttp(url: string): boolean {
+  return allowedUrl(url, "https:", "http:");
 }
 
 /** 1 回の読み取りの結果 */

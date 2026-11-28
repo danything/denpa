@@ -23,8 +23,11 @@ export const actions = {
     if ("error" in ng) return fail(400, { message: ng.error });
     const jikkyo = form.get("jikkyo") === "on";
     saveSettings({ jikkyo, jikkyoNg: ng.words });
-    // オフにしたら hub への購読も閉じる (控えも捨てる)
-    if (!jikkyo) jikkyoLive.closeAll();
+    // オフにしたら hub への購読 (控えも捨てる) と、開いている公式の実況への接続をすぐ閉じる (呼ばれなくなるのを待たない)
+    if (!jikkyo) {
+      jikkyoLive.closeAll();
+      niconicoLive.closeAll();
+    }
     return { success: true, saved: true };
   },
   unlinkNiconico: async (event) => {
