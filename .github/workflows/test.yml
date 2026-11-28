@@ -36,12 +36,13 @@ permissions:
 # 1 台 3 ワーカー (playwright.config.ts。9 組と 10 組は 1 ワーカー) なので、38 ワーカーぶん並びます
 # (中身は待ち時間が大半なので、割った分だけ効く。docs/development.md「並べて流す」)。
 # 組のテストは 90 秒ほどで、準備の 30 秒ほどを足した 2 分ほどがジョブの時間です。
+# TypeScript だけの PR では、最初のジョブの開始から最後のジョブの終わりまでが 2 分 20 秒ほどです (10 組だった頃は 4 分 30 秒ほど)。
 #
-# **GitHub のランナーは、アカウントの全部の workflow を合わせて同時に 20 台まで** (無料のプランの上限)。
-# TypeScript だけの PR では、この workflow の Linux のジョブが 22、CodeQL と claude-review が 5 で、上限を超える。
-# いちばん長い E2E が先にランナーを取るように、E2E と changes のほかは changes の後に始める (`needs: changes`)。
-# changes は数秒で終わり、後から始めるジョブはどれも E2E より短いので、空いたランナーへ順に入って E2E より先に終わる。
-# changes が落ちても回すよう `!cancelled()` を付ける (if で飛ばした必須チェックは成功として数えられる)
+# **GitHub のランナーは、アカウントの全部の workflow を合わせて同時に 20 台までです** (無料のプランの上限)。
+# TypeScript だけの PR では、この workflow の Linux のジョブが 22、CodeQL と claude-review が 5 で、上限を超えます。
+# いちばん長い E2E が先にランナーを取るように、E2E と changes のほかは changes の後に始めます (`needs: changes`)。
+# changes は数秒で終わり、後から始めるジョブはどれも E2E より短いので、空いたランナーへ順に入って E2E より先に終わります。
+# changes が落ちても回すよう `!cancelled()` を付けます (if で飛ばした必須チェックは成功として数えられるため)
 #
 # **PR では、触ったファイルに関係する重いジョブだけ中身を回します** (.github/ci-changes.sh)。
 # Windows・Mac・Android のエミュレータ・配布物 (ffmpeg) は、関係ない PR ではジョブごと飛ばします。
