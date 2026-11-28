@@ -335,7 +335,7 @@
     </div>
   </aside>
 
-  <!-- スマホの形の細い 1 行 (下のタブのすぐ上に浮かせる)。絞り込みは横に送れる 1 列のチップ、並びは選ぶ欄、右に「作る」 -->
+  <!-- スマホの形の細い 1 行 (下のタブのすぐ上に浮かせる)。絞り込みは横に送れる 1 列のチップ、並びは選ぶ欄、右に「作成」 -->
   <div class="rules-bar dock" data-testid="rule-bar">
     <div class="chips scroll" role="group" aria-label="絞り込み">
       {#each FILTERS as f (f.key)}
@@ -358,7 +358,7 @@
     <a
       class="button small"
       href={resolve("search")}
-      data-testid="rule-new-narrow">作る</a
+      data-testid="rule-new-narrow">作成</a
     >
   </div>
 </div>
