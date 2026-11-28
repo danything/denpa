@@ -248,6 +248,18 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 5. **署名が本番の証明書なら、SignPath から届く承認のメールからすぐに承認する** ([下](#windows-のエージェントの署名))。
    承認するまで、Windows のエージェントの zip はリリースに付きません
 
+### 紹介の動画
+
+X に載せる短い画面録画は `scripts/capture-demo.ts` で撮ります。docs の画像と同じく偽の放送 (`tests/fake/docs.ts`) で撮り、
+撮る前に DB の局名が偽の局だけであることを確かめて、違えば止まります。場面は名前で選びます (名前を挙げなければ全部)。
+
+```sh
+docker compose run --rm docs bun scripts/capture-demo.ts hide-service   # 局を非表示にする
+```
+
+出力は `docs/images/.capture/demo/<場面>.mp4` で、コミットしません。1920×1080・30 fps・H.264・音声なしで、140 秒を超えると止まります。
+カーソルはページに描いた矢印で、押すときはそこまで動かしてから同じ座標で押します。場面を足すときは `SCENES` に足します
+
 ### Windows のエージェントの署名
 
 **`denpa-agent.exe` と `denpa-tray.exe` は SignPath で署名します。** zip の組み方と署名は `.github/workflows/windows-agent.yml` にあり、release.yml がリリースのたびに呼びます。

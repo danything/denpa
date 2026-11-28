@@ -82,7 +82,8 @@ services:
       - .:/app
       - app-node-modules:/app/node_modules
 
-  # README・docs の画像を撮る (scripts/capture-docs.ts)。偽の放送 (作り物の局と番組) だけで撮り、docs/images に置く
+  # README・docs の画像を撮る (scripts/capture-docs.ts)。偽の放送 (作り物の局と番組) だけで撮り、docs/images に置く。
+  # リリースの紹介の動画 (scripts/capture-demo.ts) も同じイメージで撮る
   docs:
     build:
       context: .

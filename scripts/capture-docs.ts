@@ -52,6 +52,7 @@ import { type Browser, chromium, type Page } from "@playwright/test";
 
 import { docsCaptions } from "../tests/fake/docs";
 import { boot } from "../tests/stack";
+import { collect, post as postTo } from "./capture-stack";
 import { toDocsImages } from "./docs-images";
 
 const OUT = process.env["OUT"] ?? "docs/images/.capture";
@@ -90,28 +91,9 @@ if (process.env["SKIP_BUILD"] !== "1") {
 const { stack, shutdown } = await boot(0);
 const BASE = stack.appUrl;
 
-/** 画面と同じエンドポイントへ送る。SvelteKit は Origin の無いフォームを断る */
-async function post(
-  path: string,
-  body: Record<string, string | string[]> | null,
-): Promise<void> {
-  const form = new URLSearchParams();
-  for (const [key, value] of Object.entries(body ?? {}))
-    for (const v of [value].flat()) form.append(key, v);
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    redirect: "manual",
-    headers:
-      body === null
-        ? { Origin: BASE, "Content-Type": "application/json" }
-        : { Origin: BASE },
-    body: body === null ? null : form,
-  });
-  if (res.status >= 400)
-    throw new Error(
-      `${path} が ${res.status}: ${(await res.text()).slice(0, 300)}`,
-    );
-}
+/** 画面と同じエンドポイントへ送る (`capture-stack.post`) */
+const post = (path: string, body: Record<string, string | string[]> | null) =>
+  postTo(BASE, path, body);
 
 /** 空白で区切った ffmpeg の引数 (値に空白を含まないものだけ) */
 const words = (args: string) => args.split(" ");
@@ -244,46 +226,9 @@ function stamp(at: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} - ${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
-/**
- * 局ロゴを集める (設定の「受信できるチャンネル」の「ロゴをいますぐ集める」と同じ API)。番組表とライブの局の列に出る。
- * 集めている間はチューナーが塞がり、ライブが映らないので、終わるまで待つ
- */
-async function sweepLogos(): Promise<void> {
-  // 番組表を集め終えた直後は、衛星のロゴを待つ選局 (`awaitCarousel`) や番組表集めの片付けでチューナーが
-  // まだ空いていないことがあり、押しても「空いているチューナーがありません」と断られる。空くまで押し直す
-  const asked = Date.now() + 60_000;
-  for (;;) {
-    try {
-      await post("/settings/reception?/logoSweep", {});
-      break;
-    } catch (error) {
-      if (
-        Date.now() > asked ||
-        !String(error).includes("空いているチューナーがありません")
-      )
-        throw error;
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-  }
-  const until = Date.now() + 180_000;
-  while (Date.now() < until) {
-    const html = await (await fetch(`${BASE}/settings/reception`)).text();
-    if (html.includes('data-testid="logo-sweep-done"')) return;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-  throw new Error("局ロゴの取得が 3 分で終わりませんでした");
-}
-
 async function seed(): Promise<void> {
-  // 番組表。偽エージェントから集め終わるまで待つ (`/api/sync`)
-  await post("/api/sync", null);
-  await sweepLogos();
-  // 1 回目で取りこぼした局 (チューナーの取り合いで待ちきれなかったもの) を集め直す
-  await post("/api/sync", null);
-
-  // GPU (偽物。置いたファイルを偽 ffmpeg が「ある」と答える)
-  writeFileSync(join(stack.hwDir, "renderD128"), "");
-  await post("/settings/recording?/probeHw", {});
+  // 番組表・局ロゴ・偽の GPU (`capture-stack.collect`)
+  await collect(stack);
 
   // ルール (検索の画面の「ルールとして保存」と同じものを送る)。当てると予約が立つ
   for (const rule of [
