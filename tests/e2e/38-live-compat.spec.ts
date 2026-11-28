@@ -13,6 +13,7 @@ import {
   test,
   wakeControls,
 } from "./helpers";
+import { plugGpu } from "./hwenc";
 
 /**
  * **互換モード** — ライブの H.264 / AV1 も canvas に描く (`src/lib/canvas-video.ts`・`src/lib/raw/fmp4.ts`)。
@@ -23,15 +24,15 @@ import {
  * (`tests/fake/fmp4-loop.ts`)。映像は VideoDecoder が、音は WASM (`wasm/decoder.c`、28-live-raw と同じ
  * デコーダ。AAC は ADTS の先頭を付けて、Opus は OpusHead で) がデコードする。
  *
- * 描くのは AV1 (互換モードの自動は AV1 を先に選ぶ)。箱の読み方 (avcC・esds) は単体試験 (`ts/fmp4.test.ts`) が見る
+ * 描くのは AV1 (互換モードの自動は AV1 を先に選ぶ)。自動は AV1 をその場でエンコードできるときだけ選ぶので、
+ * 偽の GPU (VA-API) を挿しておく (`hwenc.ts` の `plugGpu`)。箱の読み方 (avcC・esds) は単体試験 (`ts/fmp4.test.ts`) が見る
  */
 
 const TESLA =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Tesla/2026.32.1";
 
 /**
- * 選局して、自動で AV1 になるのを待つ (互換モードの自動は AV1 → H.264 → MPEG-2)。GPU が無いので
- * メニューに並ぶエンコードするものは H.264 で、AV1 は選べない
+ * 選局して、自動で AV1 になるのを待つ (互換モードの自動は AV1 → H.264 → MPEG-2。GPU で AV1 をエンコードできるとき)
  */
 async function watchAv1(page: Page): Promise<void> {
   await expect(page.getByTestId("live-title")).toBeVisible();
@@ -68,12 +69,16 @@ async function expectDrawn(page: Page, prefix = "live"): Promise<void> {
 }
 
 test.describe("互換モード", () => {
+  let unplug: (() => Promise<void>) | null = null;
   test.beforeEach(async ({ request, stack }) => {
     await syncEpg(request);
     writeFileSync(stack.liveFmp4File, "");
+    unplug = await plugGpu(stack.hwDir, request);
   });
   test.afterEach(async ({ stack }) => {
     rmSync(stack.liveFmp4File, { force: true });
+    await unplug?.();
+    unplug = null;
   });
 
   test("⚙ で入れると運転中の注意が出て、読み直したライブを canvas に描く", async ({
@@ -273,9 +278,11 @@ test.describe("互換モード", () => {
 test.describe("互換モードの追っかけ", () => {
   /** 録っている番組 (止めるのに使う) */
   let programId: number | null = null;
+  let unplug: (() => Promise<void>) | null = null;
   test.beforeEach(async ({ request, stack }) => {
     await syncEpg(request);
     writeFileSync(stack.liveFmp4File, "");
+    unplug = await plugGpu(stack.hwDir, request);
   });
   test.afterEach(async ({ request, stack }) => {
     // 地上波の偽番組は 30 分あるので、止めないと次のテストまでチューナーを塞ぐ
@@ -287,6 +294,8 @@ test.describe("互換モードの追っかけ", () => {
     programId = null;
     rmSync(stack.liveFmp4File, { force: true });
     rmSync(stack.failFile, { force: true });
+    await unplug?.();
+    unplug = null;
   });
 
   test("追っかけも canvas に描き、速さは出さず、止めた所から再開する", async ({
@@ -331,7 +340,7 @@ test.describe("互換モードの追っかけ", () => {
 
     await goto(page, `/chase/${id}`);
     await expect(page.getByTestId("chase-title")).toBeVisible();
-    // 互換モードの自動は AV1 から (GPU が無いので、メニューに並ぶエンコードするものは H.264)
+    // 互換モードの自動は AV1 から (GPU で AV1 をエンコードできるので)
     await expect(page.getByTestId("chase-codec")).toContainText("自動 (AV1)");
     await expectDrawn(page, "chase");
 

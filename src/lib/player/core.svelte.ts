@@ -1919,7 +1919,11 @@ export function playbackCore(options: PlaybackCoreOptions) {
       served === 0 && asked === 0
         ? decideFormat() === before
         : next === "auto" && asked === served;
-    if (!unknown && same && state !== "error") return;
+    if (!unknown && same && state !== "error") {
+      // リクエストし直さなくても、選んだものを使えない理由は出す (MPEG-2 をデコードできない端末で MPEG-2 を選んだ。`pickFormat`)
+      if (served === 0 && asked === 0) pickFormat();
+      return;
+    }
     requestAgain();
   }
 
@@ -2006,6 +2010,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
    * 使えなければ外と同じ順 (AV1 → H.265 → H.264、互換モードは AV1 → H.264 → MPEG-2) で代わりを探す。何も使えなければ null。
    * 使えるかは、MPEG-2 はデコードできて打ち切っていないか、AV1・H.265・H.264 は受け取れて (互換モードなら描けて) 打ち切っていないか。
    * H.265 はそのうえで、ライブのエンコーダが GPU のときだけ (`options.hevc`)。互換モードと TS の局の追っかけでは使わない。
+   * 自動で選ぶ形式のうち、エンコードするものは、サーバがその場でエンコードできるもの (`options.liveCodecs`) を先に選び、どれも使えなければほかのものも選ぶ。
    * ライブと追っかけで決め方は同じ (使えない形式を外すだけ)。
    * **4K の局は、放送のままが HEVC の詰め替え** (`BroadcastCodec`)。MPEG-2 の場所に HEVC が入り (`autoOrder`)、H.265 は
    * 放送の HEVC を再生できるか (`hevcCan`) で決める
@@ -2022,6 +2027,7 @@ export function playbackCore(options: PlaybackCoreOptions) {
         ? !compatGaveUp && compatSupport?.h264 === true
         : mseCan("h264"),
       compat,
+      live: options.liveCodecs ?? ["h264"],
       broadcast: kind,
     };
     const chosen = inUse();

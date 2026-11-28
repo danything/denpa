@@ -12,7 +12,13 @@ import {
   shownCodec,
 } from "./live-choice";
 
-const all = { rawOk: true, av1: true, hevc: true, h264: true };
+const all = {
+  rawOk: true,
+  av1: true,
+  hevc: true,
+  h264: true,
+  live: ["av1", "hevc", "h264"] as const,
+};
 const where = { indoor: false, compat: false };
 
 /** **「自動」の順** (`autoOrder`)。ライブ・追っかけ・録画の観る画面で同じ関数から出す */
@@ -83,6 +89,7 @@ describe("自動の形式", () => {
           av1: false,
           hevc: true,
           h264: false,
+          live: all.live,
           ...compat,
         }),
       ).toBe(null);
@@ -97,6 +104,37 @@ describe("自動の形式", () => {
     expect(autoCodec({ ...chase, rawOk: false, h264: false, av1: false })).toBe(
       null,
     );
+  });
+
+  test("エンコードするものは、サーバがその場でエンコードできる並び (live) にあるものを先に選ぶ", () => {
+    // GPU で AV1 をエンコードできるサーバは今までどおり AV1 から
+    expect(autoCodec({ ...all, ...where })).toBe("av1");
+    // GPU で H.265 と H.264 だけ (AV1 はソフトウェアになるので選ばない)
+    expect(autoCodec({ ...all, ...where, live: ["hevc", "h264"] })).toBe(
+      "hevc",
+    );
+    // GPU が無ければ H.264 (互換モードも)
+    expect(autoCodec({ ...all, ...where, live: ["h264"] })).toBe("h264");
+    expect(
+      autoCodec({ ...all, indoor: false, compat: true, live: ["h264"] }),
+    ).toBe("h264");
+    // live に再生できるものが無ければ、ほかの形式も選ぶ (AV1 しか受け取れない端末)
+    expect(
+      autoCodec({ ...all, ...where, hevc: false, h264: false, live: ["h264"] }),
+    ).toBe("av1");
+    // 家の中の MPEG-2 と、4K の局の HEVC (詰め替え) は GPU が無くても選ぶ
+    expect(
+      autoCodec({ ...all, indoor: true, compat: false, live: ["h264"] }),
+    ).toBe("raw");
+    expect(
+      autoCodec({
+        ...all,
+        indoor: true,
+        compat: false,
+        broadcast: "hevc",
+        live: ["h264"],
+      }),
+    ).toBe("hevc");
   });
 });
 
