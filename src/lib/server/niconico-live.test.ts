@@ -491,6 +491,12 @@ async function receiving(h: ReturnType<typeof harness>, channel = "jk1") {
   await settle(h);
   const seg = h.bodies.at(-1)!;
   expect(seg.url).toBe("https://mpn.example/data/segment/v4/s1");
+  // view を読めただけでは、まだ受けられていない
+  expect((await h.live.feed(channel, null, null)).since).toBeNull();
+  // 先読みしたセグメントの先頭の合図 (Signal.Flushed)。ここで受けられていることになる
+  seg.send(vf(5, 0));
+  await settle(h);
+  expect((await h.live.feed(channel, null, null)).since).toBe(T);
   return { socket, view, seg };
 }
 

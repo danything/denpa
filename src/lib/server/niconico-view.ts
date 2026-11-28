@@ -29,6 +29,8 @@ export const VIEW_BACKOFF_MAX = 30_000;
 export const SEGMENT_TRIES = 3;
 /** 重なりを除くために ID を持つ長さ (投稿時刻で。ms) */
 export const ID_SPAN = 3 * 60_000;
+/** 古い ID を捨てる間隔 (ms) */
+const PRUNE_EVERY = 10_000;
 
 /** 差し替えられるもの (単体テストで偽物を渡す) */
 export interface ViewDeps {
@@ -72,6 +74,8 @@ export class ViewReader {
   /** 受けたメッセージの ID と投稿時刻 */
   private readonly ids = new Map<string, number>();
   private ok: boolean | null = null;
+  /** 最後に古い ID を捨てた時刻 */
+  private pruned = Number.NEGATIVE_INFINITY;
 
   constructor(
     readonly view: string,
@@ -174,12 +178,7 @@ export class ViewReader {
     const url = new URL(this.view);
     url.searchParams.set("at", at);
     let next: number | null = null;
-    let first = true;
     const status = await this.stream(url.toString(), (message) => {
-      if (first) {
-        first = false;
-        if (next === null) this.mark(true);
-      }
       let entry;
       try {
         entry = readEntry(message);
@@ -219,7 +218,9 @@ export class ViewReader {
     this.mark(false);
   }
 
+  /** セグメントの 1 メッセージ。届いたら受けられていることにする (コメントの無いセグメントでも、先頭に合図が来る) */
   private onMessage(message: Uint8Array): void {
+    this.mark(true);
     let chat: OfficialChat | null;
     try {
       chat = readMessage(message, this.self);
@@ -229,9 +230,11 @@ export class ViewReader {
     if (chat === null || this.ids.has(chat.id)) return;
     const now = this.deps.now();
     this.ids.set(chat.id, chat.at);
-    if (this.ids.size % 256 === 0)
+    if (now - this.pruned >= PRUNE_EVERY) {
+      this.pruned = now;
       for (const [id, at] of this.ids)
         if (at < now - ID_SPAN) this.ids.delete(id);
+    }
     this.events.chats([chat]);
   }
 }
