@@ -233,7 +233,7 @@ iPhone は要素の全画面を持たず、あるのは `<video>` だけの `web
   世帯の全員が同じアカウントで書くことになり、匿名でも、ニコニコには書いたアカウントと家の IP が分かります。
   サーバが公式の視聴の接続を張るのは、入力の 1 行が開いている間だけです (閉じて 2 分たつと切ります。同時に 2 つの局まで)
 - **連携していないときは、denpa のサーバが denpa-hub へ送ります** (端末は外へ繋ぎません)。入力の 1 行の下に「投稿の決まり・削除の依頼」のリンクが付きます
-  ([denpa-hub の docs/rules.md](https://github.com/danything/denpa-hub/blob/main/docs/rules.md)。削除の依頼は info@doany.io か denpa-hub の GitHub の Issue で受けます)。ニコニコのアカウントは使いません。hub は書き込みを保存してほかの家に配り、
+  ([denpa-hub の docs/rules.md](https://github.com/danything/denpa-hub/blob/main/docs/rules.md))。削除の依頼は info@doany.io か denpa-hub の GitHub の Issue で受けます。ニコニコのアカウントは使いません。hub は書き込みを保存してほかの家に配り、
   NX-Jikkyo が動いていれば NX-Jikkyo にも書きます。書き込みにはログインした人 (ログインしていなければ端末) ごとに決まった ID が付き、同じ人の書き込みは hub と NX-Jikkyo で結び付けられます
   ([architecture.md](architecture.md#実況のコメント-denpa-hub))
 - **書けるのは「いま」に追い付いているときだけです** (止めていない・映しているコマが放送から 30 秒以内)。止めた・遡ったときは
