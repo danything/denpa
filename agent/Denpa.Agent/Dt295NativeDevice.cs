@@ -48,7 +48,7 @@ public sealed class Dt295NativeDevice : PortOwner<Dt295NativeDevice>
     public Task? CardWarmTask => _cardWarm;
 
     /// <summary>
-    /// カードの電源投入から ATR・T=1 の IFSD の取り決めまでを、別のスレッドで始める (1 台に 1 回)。選局の待ち (仕様書の固定の待ち) と
+    /// カードの電源投入から ATR・T=1 の IFSD の取り決めまでを、別のスレッドで始める (1 台に 1 回)。選局 (衛星の固定の待ちを含む) と
     /// 受信の確認の周回の間に進むので、TS が届くころにはカードが使える。制御転送と機材のプログラムへの要求は 1 つずつ通る (<c>Dt295NativeLink</c>) ので、
     /// 選局の I2C の手順と交互に入る。カードが無ければ記録に残して終わる (使うときの <see cref="Dt295NativeCard.Reset"/> がもう一度試す)
     /// </summary>

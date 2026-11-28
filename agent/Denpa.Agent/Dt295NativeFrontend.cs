@@ -12,7 +12,7 @@ namespace Denpa.Agent;
 /// 仕様書に無くて決めた所:
 /// - 仕様書の手順は、常駐イメージの時刻 (ms) で書かれている。ホストの I2C は 1 転送が数 ms かかるので、時刻には合わせず、
 ///   実機で必要な所だけ待つ。初期化と衛星は仕様書の待ちを置き、衛星の約 40 ms は実機試験で 20 ms に短縮した。
-///   地上波選局 (7.2.2) の 20 + 20 + 100 ms は、実機 3 台で省いても全回ロックし誤りが 0 だったため省いた
+///   地上波選局 (7.2.2) の 20 + 20 + 100 ms は、実機で省いても安定してロックし誤りと飛びが 0 だったため省いた
 /// - 受信の確認の周の間は、地上波は <see cref="TerrestrialPollMs"/>、衛星は <see cref="SatellitePollMs"/> だけ空ける (仕様書 7.2.4 の常駐イメージは 10 ms 周期で、1500 回 × 10 ms で 15 秒回しても失敗にしなかった)
 /// </summary>
 public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, Dt295Timeline? timeline = null)
@@ -299,8 +299,10 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         }
         // t=1〜2: 0B=01 は前に地上波を選んでいないときだけ先頭に入る (仕様書 7.2.2)
         // 仕様書 7.2.2 は t=2→22 (20 ms)・t=25→45 (20 ms)・t=46→146 (100 ms) に固定の待ちを置く。
-        // 実機 3 台で 3 か所とも省いて GR→GR 30 回・BS→GR 60 回・コールド 5 回を試したところ全回ロックし、
-        // transport_error_indicator 0・continuity_counter 飛び 0 で中央値が 708 ms から 658 ms に縮んだため省く
+        // 実機で元と省いた形を交互に --lock-test 30 × 2 ラウンド測ったところ、全回ロックし中央値が 702/705 ms から 662/660 ms に縮み
+        // (受信の確認は 451/454 ms から 555/556 ms へ増え、前チャンネルの誤読ではない)、
+        // 3 台のロック試験 (GR→GR 30 回・BS→GR 60 回・コールド 5 回) も全回ロックした。
+        // また --tune (GR→GR 6 回・BS→GR 6 回) と初回 --dt295-probe (5 回) で transport_error_indicator 0・continuity_counter 飛び 0 を確かめたため省く
         Next(phases, "t=1〜2 チューナーを動かす", "7.2.2");
         if (before != Last.Terrestrial) T(0x0B, 0x01);
         T(0x12, 0x01);
