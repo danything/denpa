@@ -3,14 +3,19 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_POST_STYLE } from "../jikkyo/command";
 import {
   allowedSocket,
+  BATCH,
   CONNECT_WAIT,
+  HOLD,
   IDLE,
   type LiveDeps,
+  LONG_POLL,
+  LONG_RETRY,
   MAX_SESSIONS,
   NiconicoLive,
   RETRY_AFTER,
   type WatchResult,
 } from "./niconico-live";
+import { STALL } from "./niconico-view";
 
 /*
  * 公式の実況への接続。外 (hub・ニコニコ) には繋がず、偽の hub と偽の WebSocket と偽の時計で見る
@@ -47,6 +52,77 @@ class FakeSocket {
   }
 }
 
+/** メッセージサーバの偽の返事。テストが少しずつ流し、閉じる */
+class FakeBody {
+  readonly stream: ReadableStream<Uint8Array>;
+  private controller!: ReadableStreamDefaultController<Uint8Array>;
+  aborted = false;
+  constructor(
+    readonly url: string,
+    signal: AbortSignal | null,
+  ) {
+    this.stream = new ReadableStream({
+      start: (controller) => {
+        this.controller = controller;
+      },
+    });
+    signal?.addEventListener("abort", () => {
+      this.aborted = true;
+      try {
+        this.controller.error(new Error("aborted"));
+      } catch {
+        // 閉じたあと
+      }
+    });
+  }
+  /** 長さ付きの並びの 1 つを流す */
+  send(message: number[]): void {
+    this.controller.enqueue(new Uint8Array(delimited(message)));
+  }
+  end(): void {
+    this.controller.close();
+  }
+}
+
+/* protobuf を組む (`niconico-messages.test.ts` と同じ) */
+function v(n: number): number[] {
+  const out: number[] = [];
+  let rest = n;
+  while (rest >= 128) {
+    out.push((rest % 128) | 0x80);
+    rest = Math.floor(rest / 128);
+  }
+  out.push(rest);
+  return out;
+}
+function vf(no: number, n: number): number[] {
+  return [...v(no * 8), ...v(n)];
+}
+function bf(no: number, body: number[] | string): number[] {
+  const bytes =
+    typeof body === "string" ? [...new TextEncoder().encode(body)] : body;
+  return [...v(no * 8 + 2), ...v(bytes.length), ...bytes];
+}
+function delimited(body: number[]): number[] {
+  return [...v(body.length), ...body];
+}
+/** view の `next` */
+function next(at: number): number[] {
+  return bf(4, vf(1, at));
+}
+/** view の `segment` */
+function segment(uri: string, until: number): number[] {
+  return bf(1, [...bf(2, vf(1, Math.floor(until / 1000))), ...bf(3, uri)]);
+}
+/** セグメントのコメント */
+function chat(id: string, at: number, text: string, hashed?: string): number[] {
+  const body = [...bf(1, text), ...(hashed === undefined ? [] : bf(6, hashed))];
+  return [
+    ...bf(1, [...bf(1, id), ...bf(2, vf(1, Math.floor(at / 1000)))]),
+    ...bf(2, bf(1, body)),
+  ];
+}
+
 const T = Date.UTC(2026, 10, 2, 12, 0, 0);
 
 function harness(
@@ -56,9 +132,12 @@ function harness(
     user?: string | null;
     /** 更新で hub に届かない */
     renewFails?: boolean;
+    /** メッセージサーバの HTTP の状態 (既定 200) */
+    status?: (url: string) => number;
   } = {},
 ) {
   const sockets: FakeSocket[] = [];
+  const bodies: FakeBody[] = [];
   const timers: { run: () => void; at: number; id: number }[] = [];
   const asked: { token: string; channel: string; user: string }[] = [];
   let renewed = 0;
@@ -79,6 +158,9 @@ function harness(
       sockets.push(socket);
       return socket as unknown as WebSocket;
     },
+    fetch: async () => {
+      throw new Error("下で差し替える");
+    },
     token: async () => (opts.token === undefined ? token : opts.token()),
     renew: async () => {
       renewed++;
@@ -96,6 +178,11 @@ function harness(
       const at = timers.findIndex((t) => t.id === handle);
       if (at >= 0) timers.splice(at, 1);
     },
+  };
+  deps.fetch = async (url, init) => {
+    const body = new FakeBody(url, init.signal ?? null);
+    bodies.push(body);
+    return new Response(body.stream, { status: opts.status?.(url) ?? 200 });
   };
   const live = new NiconicoLive(deps);
   /** 時計を進め、その間に来る目覚ましを鳴らす */
@@ -116,6 +203,7 @@ function harness(
   return {
     live,
     sockets,
+    bodies,
     asked,
     advance,
     flush,
@@ -374,5 +462,197 @@ describe("書き込む", () => {
     const socket = await connected(h);
     h.live.closeAll();
     expect(socket.closed).toBe(true);
+  });
+});
+
+/** 非同期の続き (偽の fetch と、返事の読み取り) を何度か流す */
+async function settle(h: ReturnType<typeof harness>, times = 8) {
+  for (let i = 0; i < times; i++) await h.flush();
+}
+
+const VIEW = "https://mpn.example/api/view/v4/abc";
+
+/** 繋いで `messageServer` を受け、view の `at=now` → 次の view → セグメントまで進める。セグメントの返事を返す */
+async function receiving(h: ReturnType<typeof harness>, channel = "jk1") {
+  const socket = await connected(h, channel);
+  socket.receive({
+    type: "messageServer",
+    data: { viewUri: VIEW, hashedUserId: "a:own" },
+  });
+  await settle(h);
+  const now = h.bodies.at(-1)!;
+  expect(now.url).toBe(`${VIEW}?at=now`);
+  now.send(next(1_000));
+  now.end();
+  await settle(h);
+  const view = h.bodies.at(-1)!;
+  expect(view.url).toBe(`${VIEW}?at=1000`);
+  view.send(segment("https://mpn.example/data/segment/v4/s1", T + 16_000));
+  await settle(h);
+  const seg = h.bodies.at(-1)!;
+  expect(seg.url).toBe("https://mpn.example/data/segment/v4/s1");
+  // view を読めただけでは、まだ受けられていない
+  expect((await h.live.feed(channel, null, null)).since).toBeNull();
+  // 先読みしたセグメントの先頭の合図 (Signal.Flushed)。ここで受けられていることになる
+  seg.send(vf(5, 0));
+  await settle(h);
+  expect((await h.live.feed(channel, null, null)).since).toBe(T);
+  return { socket, view, seg };
+}
+
+describe("受ける", () => {
+  test("messageServer の view からセグメントを読み、feed に渡す。受けている間は since がある", async () => {
+    const h = harness();
+    const first = await h.live.feed("jk1", null, null);
+    expect(first.comments).toEqual([]);
+    const { seg } = await receiving(h);
+    const waiting = h.live.feed("jk1", first.seq, first.epoch);
+    seg.send(chat("m1", T + 2_000, " こんにちは "));
+    seg.send(chat("m2", T + 3_000, "自分", "a:own"));
+    // 同じ ID は 1 回だけ
+    seg.send(chat("m1", T + 2_000, " こんにちは "));
+    await settle(h);
+    h.advance(BATCH);
+    const got = await waiting;
+    expect(got.state).toBe("ready");
+    expect(got.since).toBe(T);
+    expect(got.comments).toEqual([
+      { at: T + 2_000, text: "こんにちは" },
+      { at: T + 3_000, text: "自分", own: true },
+    ]);
+    // 続きは番号の後ろから
+    const again = h.live.feed("jk1", got.seq, got.epoch);
+    h.advance(LONG_POLL);
+    expect((await again).comments).toEqual([]);
+  });
+
+  test("epoch が違えば (サーバを起こし直した) 番号を捨て、いまの番号だけ返す", async () => {
+    const h = harness();
+    const { seg } = await receiving(h);
+    seg.send(chat("m1", T, "a"));
+    await settle(h);
+    const got = await h.live.feed("jk1", 0, "old");
+    expect(got.comments).toEqual([]);
+    expect(got.seq).toBe(1);
+  });
+
+  test("状態が変わったら、待っている feed をすぐ返す", async () => {
+    const h = harness();
+    const first = await h.live.feed("jk1", null, null);
+    const { socket } = await receiving(h);
+    const waiting = h.live.feed("jk1", first.seq, first.epoch);
+    socket.receive({ type: "disconnect", data: { reason: "END_PROGRAM" } });
+    const got = await waiting;
+    expect(got.since).toBeNull();
+    expect(h.bodies.every((b) => b.aborted || b.url.includes("at=now"))).toBe(
+      true,
+    );
+  });
+
+  test("閉じたら、読んでいる view とセグメントを止める", async () => {
+    const h = harness();
+    const { view, seg } = await receiving(h);
+    h.live.closeAll();
+    expect(view.aborted).toBe(true);
+    expect(seg.aborted).toBe(true);
+  });
+
+  test("view が止まったら (STALL の間バイトが来ない) 受けていないことにし、at=now から取り直す", async () => {
+    const h = harness();
+    await receiving(h);
+    const before = h.bodies.length;
+    h.advance(STALL);
+    await settle(h);
+    expect((await h.live.feed("jk1", null, null)).since).toBeNull();
+    h.advance(1_000);
+    await settle(h);
+    expect(h.bodies.length).toBeGreaterThan(before);
+    expect(h.bodies.at(-1)!.url).toBe(`${VIEW}?at=now`);
+  });
+
+  test("view の 403・404 は接続ごと down にする", async () => {
+    const h = harness({ status: (url) => (url.includes("at=") ? 404 : 200) });
+    const socket = await connected(h);
+    socket.receive({
+      type: "messageServer",
+      data: { viewUri: VIEW, hashedUserId: "a:own" },
+    });
+    await settle(h);
+    expect(socket.closed).toBe(true);
+    expect(h.live.touch("jk1")).toBe("down");
+  });
+
+  test("https: でない view は読まない", async () => {
+    const h = harness();
+    const socket = await connected(h);
+    socket.receive({
+      type: "messageServer",
+      data: { viewUri: "http://evil.example/view" },
+    });
+    await settle(h);
+    expect(h.bodies).toHaveLength(0);
+  });
+});
+
+describe("上限と聴かれている局", () => {
+  test(`feed で聴かれている局は閉じない。${MAX_SESSIONS} つとも聴かれていれば新しい局は down。HOLD を過ぎれば開ける`, async () => {
+    const h = harness();
+    const a = await connected(h, "jk1");
+    await h.live.feed("jk1", null, null);
+    const b = await connected(h, "jk4");
+    await h.live.feed("jk4", null, null);
+    expect(h.live.touch("jk6")).toBe("down");
+    expect(a.closed).toBe(false);
+    expect(b.closed).toBe(false);
+    h.advance(HOLD);
+    expect(h.live.touch("jk6")).toBe("connecting");
+    expect(a.closed).toBe(true);
+  });
+});
+
+describe("切れ方", () => {
+  test("reconnect は待ってから audience_token を替えて繋ぎ直す (hub は呼ばない)", async () => {
+    const h = harness({
+      watch: () => ({ url: "wss://watch.example/jk1?audience_token=t1" }),
+    });
+    const socket = await connected(h);
+    socket.receive({
+      type: "reconnect",
+      data: { audienceToken: "t2", waitTimeSec: 10 },
+    });
+    expect(socket.closed).toBe(true);
+    expect(h.live.touch("jk1")).toBe("connecting");
+    h.advance(9_999);
+    expect(h.sockets).toHaveLength(1);
+    h.advance(1);
+    expect(h.sockets).toHaveLength(2);
+    expect(h.sockets[1]!.url).toBe("wss://watch.example/jk1?audience_token=t2");
+    expect(h.asked).toHaveLength(1);
+  });
+
+  test("追い出された・接続が多すぎるときは LONG_RETRY 待つ。ほかの理由は RETRY_AFTER", async () => {
+    const h = harness();
+    const socket = await connected(h);
+    socket.receive({ type: "disconnect", data: { reason: "TAKEOVER" } });
+    h.advance(RETRY_AFTER);
+    expect(h.live.touch("jk1")).toBe("down");
+    h.advance(LONG_RETRY - RETRY_AFTER);
+    expect(h.live.touch("jk1")).toBe("connecting");
+
+    const other = await connected(h, "jk4");
+    other.receive({ type: "disconnect", data: { reason: "CROWDED" } });
+    h.advance(RETRY_AFTER - 1);
+    expect(h.live.touch("jk4")).toBe("down");
+    h.advance(1);
+    expect(h.live.touch("jk4")).toBe("connecting");
+  });
+
+  test("disconnect 無しに閉じられたら RETRY_AFTER 待つ (閉じられ続けて hub を呼び続けない)", async () => {
+    const h = harness();
+    const socket = await connected(h);
+    socket.drop();
+    expect(h.live.touch("jk1")).toBe("down");
+    h.advance(RETRY_AFTER);
+    expect(h.live.touch("jk1")).toBe("connecting");
   });
 });

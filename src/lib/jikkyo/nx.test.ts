@@ -348,4 +348,26 @@ describe("NxJikkyo.post", () => {
     comment.receive({ chat: { ...chat, content: "失敗" } });
     expect(h.got.map((c) => c.text)).toEqual(["公式", "失敗"]);
   });
+
+  test("公式から直に受けている間は、境より後の公式の取り込み (nicolive:) だけを捨てる。NX-Jikkyo の利用者のものは流す", () => {
+    const { h, comment } = ready();
+    h.nx.setBoundary(T);
+    const at = (ms: number) => ({ date: Math.floor(ms / 1000) });
+    comment.receive({
+      chat: { ...at(T - 1_000), content: "前", user_id: "nicolive:1" },
+    });
+    comment.receive({
+      chat: { ...at(T + 1_000), content: "後", user_id: "nicolive:2" },
+    });
+    comment.receive({
+      chat: { ...at(T + 1_000), content: "NX", user_id: "abc" },
+    });
+    expect(h.got.map((c) => c.text)).toEqual(["前", "NX"]);
+    // 受けなくなったら全部流す
+    h.nx.setBoundary(null);
+    comment.receive({
+      chat: { ...at(T + 2_000), content: "戻り", user_id: "nicolive:3" },
+    });
+    expect(h.got.map((c) => c.text)).toEqual(["前", "NX", "戻り"]);
+  });
 });
