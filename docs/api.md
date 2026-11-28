@@ -86,8 +86,8 @@
   いま録っている最中か (録画中なら `reserved` も `true`)。番組表のマスの印と同じ物差しです。
   録画ボタンの印に使い、押すのは [`POST /api/services/<id>/record`](#いまの番組を録る-post-apiservicesidrecord)
 - `jikkyo` は実況のチャンネル (`jk1` など。NX-Jikkyo と過去ログ API のチャンネルの ID)。実況の無い局と、世帯の設定 (連携の「実況」) が
-  オフのときは `null`。対応表は denpa が持ちます (`src/lib/jikkyo/channels.ts`)。コメントは denpa を通らないので、
-  使う側が NX-Jikkyo と過去ログ API へ直接繋ぎます ([architecture.md](architecture.md#端末が外へ繋ぐもの-実況のコメント))
+  オフのときは `null`。対応表は denpa が持ちます (`src/lib/jikkyo/channels.ts`)。コメントは
+  [`/api/jikkyo/feed`・`/api/jikkyo/kakolog`](#実況のコメント-post-apijikkyofeedget-apijikkyokakolog) で受けます
 
 ### 音声の一覧 `audios`
 
@@ -1278,7 +1278,7 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 - `jikkyo` は実況のチャンネルと、元の TS の先頭 (再生位置 0 の手前) の放送時刻 (`head`)、録画の終わりの放送時刻 (`end`。予定。どちらも epoch ms)。実況の無い局と、世帯の設定がオフのときは `null`。
   `head` は TS から測った値で、測れていない録画 (取り込んだものなど) は予定の時刻 (`record_from`、無ければ番組の始まりから前のマージンを引いたもの) です。
   再生位置を元の TS の秒に直して ([`playback` の `ruler`](#録画の観方-get-apirecordingsidplayback)) 足すと、その場面の放送時刻になります。
-  過去ログ API にその時刻のコメントを訊けば、場面に合ったコメントが取れます
+  [`/api/jikkyo/kakolog`](#実況のコメント-post-apijikkyofeedget-apijikkyokakolog) にその時刻のコメントを訊けば、場面に合ったコメントが取れます
 
 ## 局の勢い `GET /api/jikkyo/ranking`
 
@@ -1307,6 +1307,58 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 - 再生の画面を開いたときに読めば足ります (画面も、開いている間は読み直しません)
 - 世帯の設定がオフなら `403`
 
+## 実況のコメント `POST /api/jikkyo/feed`・`GET /api/jikkyo/kakolog`
+
+ライブと録画の実況のコメントです。どれも denpa のサーバが denpa-hub から受けたもので、呼ぶ側は外へ繋ぎません ([architecture.md](architecture.md#実況のコメント-denpa-hub))。
+世帯の設定 (連携の「実況」) がオフなら `403`、`channel` (`jk1` など) が無い・違うときは `400` です。コメントの形はどれも次のとおりです。
+
+```json
+{
+  "at": 1790000000123,
+  "text": "わこつ",
+  "mail": "184 red ue",
+  "src": "nx",
+  "id": "…"
+}
+```
+
+- `at` は書かれた時刻 (epoch ms)、`mail` は色・位置・大きさのコマンド (無ければ欄ごと無い)
+- `src` は出どころです。`hub` (denpa-hub に書かれたもの)・`nx` (NX-Jikkyo に書かれたもの)・`nicolive` (NX-Jikkyo が公式のニコニコ実況から取り込んだもの)。知らない値は `nx` と同じに扱ってください
+- `id` は `hub` のものだけに付きます。書き込みの返事の `id` と同じものが来たら、自分の書き込みが戻ってきたものです
+
+`feed` は `{"channel":"jk1","after":<前に受けた seq>,"epoch":"<前に受けた epoch>"}` (JSON の本文だけ。ほかは `415`) を受け、ライブのコメントを続きから返します。
+
+```json
+{ "epoch": "5f1c…", "seq": 1234, "hub": "up", "nx": "up", "comments": [] }
+```
+
+- 初めて (`after` が無い・`epoch` が違う) ならすぐ、直近 15 分 (1000 件まで) を返します。そうでなければ、続きが来るか 20 秒たつまで返事を待ちます。返事を受けたらすぐ次を呼んでください
+- `hub` は denpa のサーバが hub に繋がっているか (`down` の間は書けません)、`nx` は hub が NX-Jikkyo に繋がっているか (`down` でも hub に書かれたものは流れ、書けます)
+- サーバは局ごとに 1 本だけ hub を購読し、30 秒呼ばれなければ閉じます
+- ニコニコと連携している世帯では、本文に `official` を載せると公式のコメントも同じ返事で受けられます ([下記](#公式の実況のコメント-post-apijikkyofeed-の-official))
+
+`kakolog` は `?channel=jk1&from=<epoch ms>&to=<epoch ms>` (3 日まで) を受け、録画の区間のコメントを返します。
+
+```json
+{ "comments": [], "complete": true }
+```
+
+- `complete` が `false` なら、hub が過去ログ API から取りきれなかった所があります。返ったものは使い、時間をおいて (60 秒ほど) 取り直してください
+- hub に届かなければ `503`。過去ログに入るのは書かれてから 10 分ほどあとです
+
+## 実況に書き込む `POST /api/jikkyo/comments`
+
+ニコニコと連携していない世帯で、ライブの書き込みの欄が使います ([watch.md](watch.md#実況に書き込む))。`Content-Type: application/json` の本文だけを受けます (ほかは `415`)。
+`{"channel":"jk1","text":"わこつ","style":{"color":"white","position":"naka","size":"medium"}}` を受けて、denpa-hub へいつも匿名 (184) で送ります。hub は保存してほかの家に配り、NX-Jikkyo にも書きます。
+
+```json
+{ "result": "sent", "id": "…" }
+```
+
+- 本文の決まりは公式に書くときと同じです (60 文字まで・改行や制御文字なし。違えば `400`)
+- `result` は `sent`・`rejected` (hub が受け付けなかった)・`wait` (同じ人が 3 秒以内に書いた)・`closed` (hub がその局を受けていない)・`unknown` (hub に届かない)
+- 書いた人の ID は denpa のサーバが作ります (ログインの subject か、アクセストークン、無ければ端末の Cookie `denpa_jikkyo` から。中身は hub に渡りません)
+
 ## 公式の実況に書き込む `POST /api/jikkyo/niconico/session`・`POST /api/jikkyo/niconico/comments`
 
 ニコニコと連携している世帯で、ライブの書き込みの欄が使います ([watch.md](watch.md#実況に書き込む))。どちらも `Content-Type: application/json` の本文だけを受けます (ほかは `415`)。
@@ -1318,7 +1370,8 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 { "state": "ready" }
 ```
 
-- `state` は `connecting` (繋いでいる途中)・`ready` (書ける)・`unlinked` (連携していない・切れた)・`down` (繋げない。30 秒は試し直さない)
+- `state` は `connecting` (繋いでいる途中)・`ready` (書ける)・`unlinked` (連携していない・切れた)・`down` (繋げない)。
+  `down` のあとは 30 秒試し直しません。同じアカウントで別の所が観ている・接続が多すぎると言われて切られたときは 5 分です
 
 `comments` は `{"channel":"jk1","text":"わこつ","style":{"color":"white","position":"naka","size":"medium"}}` を受けて、いつも匿名 (184) で送ります。
 
@@ -1326,19 +1379,18 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 { "result": "sent" }
 ```
 
-- 本文の決まりは NX-Jikkyo に書くときと同じです (60 文字まで・改行や制御文字なし。違えば `400`)。`style` の読めないところは既定 (白・流れる・中) にします
+- 本文の決まりは denpa-hub に書くときと同じです (60 文字まで・改行や制御文字なし。違えば `400`)。`style` の読めないところは既定 (白・流れる・中) にします
 - `result` は `sent`・`unknown` (5 秒返事が無い・途中で切れた)・`not-on-air` (番組が替わった)・`rejected` (受け付けられなかった)・`closed` (繋がらない)・
   `unlinked` (連携していない・切れた)・`wait` (世帯のほかの端末が 3 秒以内に書いた)
 - 繋いでいなければ繋いでから送ります (10 秒まで待つ)
 - アプリのアクセストークンでも呼べます
 
-## 公式の実況のコメントを受ける `POST /api/jikkyo/niconico/feed`
+## 公式の実況のコメント (`POST /api/jikkyo/feed` の `official`)
 
-ニコニコと連携している世帯で、ライブの画面が実況を流している間続けて呼びます ([watch.md](watch.md#実況のコメント))。
-本文の決まりと断るとき (`415`・`403`・`400`) は書き込み (上) と同じです。コメントは denpa のサーバが公式のニコニコ実況から受けたものです。
-
-`{"channel":"jk1","after":12,"epoch":"…"}` を受けます。`after` と `epoch` には前の返事の `seq` と `epoch` を渡し、最初は `channel` だけを送ります。
-新しいコメントが来るか、状態が変わるか、20 秒経つまで返事を待ちます (ロングポーリング)。返事を受けたら、すぐ次を呼んでください。
+ニコニコと連携している世帯で、ライブの画面が実況を流している間に受けます ([watch.md](watch.md#実況のコメント))。コメントは denpa のサーバが公式のニコニコ実況から受けたものです。
+端末から denpa のサーバへのロングポーリングを 1 本にするため、[`/api/jikkyo/feed`](#実況のコメント-post-apijikkyofeedget-apijikkyokakolog) の本文に
+`"official":{"after":12,"epoch":"…"}` を載せ、返事の `official` で受けます。`after` と `epoch` には前の返事の `official` の `seq` と `epoch` を渡し、最初は `{}` を送ります。
+hub のぶんか公式のぶんに新しいものが来るか、状態が変わるか、20 秒経つまで返事を待ちます。返事の `official` は次の形です。
 
 ```json
 {

@@ -8,10 +8,10 @@ import {
   test,
   wakeControls,
 } from "./helpers";
-import { deviceOn, setJikkyo } from "./jikkyo";
+import { deviceOn, fakeComments, setJikkyo } from "./jikkyo";
 
 /**
- * **録画の実況** (docs/watch.md の「実況」)。過去ログ API は `page.route` で偽物に差し替える。
+ * **録画の実況** (docs/watch.md の「実況」)。過去ログは偽の denpa-hub が返す (`fakeComments`)。
  *
  * 57-jikkyo から分けたもの。どれも録画を 1 本録ってから見るので、まとめると 1 分を超える。
  * コメントを流すところと読めないときをここに、コメントの一覧を 57-jikkyo-recorded-list に分けて並べて流す。
@@ -19,7 +19,7 @@ import { deviceOn, setJikkyo } from "./jikkyo";
  */
 
 test.describe("録画の実況", () => {
-  test("録画の区間のコメントを過去ログ API から 1 回で取り、再生位置の放送時刻に合わせて流す", async ({
+  test("録画の区間のコメントを過去ログから 1 回で取り、再生位置の放送時刻に合わせて流す", async ({
     page,
     request,
   }) => {
@@ -35,31 +35,14 @@ test.describe("録画の実況", () => {
       const target = state.jikkyo;
       if (target === null) throw new Error("録画に実況のチャンネルが無い");
       // 偽の過去ログ。録画の先頭の前後に 0.2 秒おきのコメント (自分で作ったもの)
-      const asked: URL[] = [];
-      await page.route(
-        "https://jikkyo.tsukumijima.net/api/kakolog/**",
-        (route) => {
-          asked.push(new URL(route.request().url()));
-          const packet = [];
-          for (let ms = -60_000; ms < 10 * 60_000; ms += 200) {
-            const at = target.head + ms;
-            packet.push({
-              chat: {
-                thread: "1",
-                date: String(Math.floor(at / 1000)),
-                date_usec: String((at % 1000) * 1000),
-                user_id: "fake",
-                content: "録画のコメント",
-              },
-            });
-          }
-          return route.fulfill({
-            contentType: "application/json",
-            headers: { "access-control-allow-origin": "*" },
-            body: JSON.stringify({ packet }),
-          });
-        },
-      );
+      const comments: unknown[] = [];
+      for (let ms = -60_000; ms < 10 * 60_000; ms += 200)
+        comments.push({
+          at: target.head + ms,
+          text: "録画のコメント",
+          src: "nx",
+        });
+      const nx = await fakeComments({ quiet: true, kakolog: comments });
       await deviceOn(page);
       /*
        * 偽 ffmpeg は映像を作らないので、録画は再生できない。映像の取得は返さずに待たせ (読めない形式で
@@ -80,11 +63,13 @@ test.describe("録画の実況", () => {
         { timeout: 20_000 },
       );
       // 開いたときに 1 回だけ、録画の先頭から訊く
+      const asked = await nx.kakolog();
       expect(asked).toHaveLength(1);
-      expect(asked[0]!.pathname).toBe(`/api/kakolog/${target.channel}`);
-      expect(asked[0]!.searchParams.get("starttime")).toBe(
-        String(Math.floor(target.head / 1000)),
+      const query = new URLSearchParams(
+        asked[0]!.slice(asked[0]!.indexOf("?")),
       );
+      expect(asked[0]!.startsWith(`${target.channel}?`)).toBe(true);
+      expect(query.get("from")).toBe(String(target.head));
 
       // 切り抜きには流れているコメントも写る。映像とは分けて送り、あとから出し入れできる
       await fakeFrame(page, "watch-video");
@@ -105,7 +90,7 @@ test.describe("録画の実況", () => {
     }
   });
 
-  test("過去ログ API が誤りを返したら、⚙ の行に「(いまは読めません)」を添える", async ({
+  test("過去ログを読めなければ、⚙ の行に「(いまは読めません)」を添える", async ({
     page,
     request,
   }) => {
@@ -113,15 +98,7 @@ test.describe("録画の実況", () => {
     const { id } = await recordOne(page, request);
     await setJikkyo(page, true);
     try {
-      await page.route(
-        "https://jikkyo.tsukumijima.net/api/kakolog/**",
-        (route) =>
-          route.fulfill({
-            contentType: "application/json",
-            headers: { "access-control-allow-origin": "*" },
-            body: JSON.stringify({ error: "テストの誤り" }),
-          }),
-      );
+      await fakeComments({ quiet: true, kakolog: "error" });
       await deviceOn(page);
       await goto(page, `/watch/${id}`);
       await wakeControls(page, "watch-stage");

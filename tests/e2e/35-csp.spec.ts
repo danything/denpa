@@ -63,10 +63,8 @@ test.describe("CSP", () => {
       expect(policy, path).toContain("script-src-attr 'none'");
       expect(policy, path).toMatch(/script-src 'self' 'nonce-[^']+'/);
       expect(policy, path).not.toContain("unsafe-eval");
-      // 外へ繋いでよいのは実況のコメントの 2 つだけ (ホストまで書く。`wss:` だけにするとどこへでも繋げる)
-      expect(policy, path).toContain(
-        "connect-src 'self' wss://nx-jikkyo.tsukumijima.net https://jikkyo.tsukumijima.net;",
-      );
+      // 外へは繋がない (実況のコメントも denpa のサーバから受ける)
+      expect(policy, path).toContain("connect-src 'self';");
       await page.locator('[data-hydrated="true"]').waitFor();
       // app.html の色当て (インラインの 1 つ) も nonce で通っている
       expect(

@@ -2,13 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { DEFAULT_POST_STYLE } from "./command";
 import type { Comment } from "./comments";
-import {
-  FEED_GAP,
-  FEED_RETRY,
-  HEARTBEAT,
-  OfficialReader,
-  OfficialWriter,
-} from "./official";
+import { HEARTBEAT, OfficialReader, OfficialWriter } from "./official";
 
 /*
  * 公式の実況に書く端末の側。サーバ (`/api/jikkyo/niconico/…`) は偽の fetch で答える
@@ -104,52 +98,17 @@ describe("書き込む", () => {
 });
 
 describe("OfficialReader", () => {
-  /** 偽のサーバ。呼ばれるたびに次の答えを返す (無ければ止めるまで待つ) */
-  function reader(answers: unknown[]) {
-    const bodies: Record<string, unknown>[] = [];
+  function reader() {
     const got: Comment[] = [];
     const boundaries: (number | null)[] = [];
-    const timers: { run: () => void; ms: number }[] = [];
-    const clock = { now: 0 };
     const r = new OfficialReader(
-      "/denpa/api/jikkyo/niconico/feed",
-      "jk1",
       {
         comments: (comments) => got.push(...comments),
         boundary: (at) => boundaries.push(at),
       },
-      {
-        now: () => clock.now,
-        fetch: async (url, init) => {
-          expect(url).toBe("/denpa/api/jikkyo/niconico/feed");
-          bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
-          const answer = answers.shift();
-          if (answer === undefined)
-            return new Promise((_, reject) =>
-              init.signal?.addEventListener("abort", () =>
-                reject(new Error("aborted")),
-              ),
-            );
-          if (answer instanceof Error) throw answer;
-          return Response.json(answer);
-        },
-        setTimeout: (run, ms) => {
-          timers.push({ run, ms });
-          return timers.length;
-        },
-        clearTimeout: () => {},
-      },
+      () => 0,
     );
-    const flush = async () => {
-      for (let i = 0; i < 5; i++)
-        await new Promise((resolve) => setTimeout(resolve, 0));
-    };
-    /** 仕掛けた待ちを鳴らして、続きを流す */
-    const step = async () => {
-      timers.shift()?.run();
-      await flush();
-    };
-    return { r, bodies, got, boundaries, timers, clock, flush, step };
+    return { r, got, boundaries };
   }
 
   const reply = (over: Record<string, unknown>) => ({
@@ -162,9 +121,13 @@ describe("OfficialReader", () => {
     ...over,
   });
 
-  test("番号の続きをリクエストし、境 = max(since, 最初の now) より後だけ流す。自分の書き込みの戻りは 1 回だけ捨てる", async () => {
-    const h = reader([
-      reply({ seq: 3 }),
+  test("番号の続きを載せ、境 = max(since, 最初の now) より後だけ流す。自分の書き込みの戻りは 1 回だけ捨てる", () => {
+    const h = reader();
+    expect(h.r.body()).toEqual({});
+    h.r.expectEcho("送った");
+    expect(h.r.apply(reply({ seq: 3 }))).toBe(0);
+    expect(h.r.body()).toEqual({ after: 3, epoch: "e1" });
+    h.r.apply(
       reply({
         seq: 6,
         now: 9_000,
@@ -175,45 +138,41 @@ describe("OfficialReader", () => {
           { at: 8_000, text: "送った", own: true },
         ],
       }),
-    ]);
-    h.r.expectEcho("送った");
-    h.r.start();
-    await h.flush();
-    // コメントの無い返事のあとは FEED_GAP 置く
-    expect(h.timers[0]?.ms).toBe(FEED_GAP);
-    await h.step();
-    expect(h.bodies[0]).toEqual({ channel: "jk1" });
-    expect(h.bodies[1]).toEqual({ channel: "jk1", after: 3, epoch: "e1" });
+    );
     expect(h.boundaries).toEqual([5_000]);
     expect(h.got).toEqual([
       { at: 6_000, text: "後", style: { place: "ue" } },
       { at: 8_000, text: "送った" },
     ]);
-    h.r.stop();
   });
 
-  test("サーバが受けていなければ境を無くす。届かなければ境を無くし FEED_RETRY 置く", async () => {
-    const h = reader([reply({}), reply({ since: null }), new Error("down")]);
-    h.r.start();
-    await h.flush();
-    await h.step();
-    expect(h.boundaries).toEqual([5_000, null]);
-    // since が無い返事もすぐ返ってくるので、詰めて呼ばない
-    expect(h.timers[0]?.ms).toBe(FEED_GAP);
-    await h.step();
-    expect(h.timers[0]?.ms).toBe(FEED_RETRY);
-    h.r.stop();
+  test("サーバが受けていない・届かない・形が違うときは境を無くす", () => {
+    const h = reader();
+    h.r.apply(reply({}));
+    h.r.apply(reply({ since: null }));
+    h.r.apply(reply({}));
+    h.r.fail();
+    h.r.apply(reply({}));
+    expect(h.r.apply({ epoch: 1 })).toBeNull();
+    expect(h.boundaries).toEqual([5_000, null, 5_000, null, 5_000, null]);
   });
 
-  test("epoch が変わったら、その返事の now から境を取り直す", async () => {
-    const h = reader([
-      reply({ seq: 9 }),
-      reply({ epoch: "e2", seq: 0, now: 20_000, since: 15_000 }),
-    ]);
-    h.r.start();
-    await h.flush();
-    await h.step();
+  test("止めたあとに読んだ返事は流さない", () => {
+    const h = reader();
+    h.r.apply(reply({ seq: 3 }));
+    h.r.stop();
+    expect(
+      h.r.apply(reply({ seq: 4, comments: [{ at: 6_000, text: "前の局" }] })),
+    ).toBeNull();
+    h.r.fail();
+    expect(h.got).toEqual([]);
+    expect(h.boundaries).toEqual([5_000]);
+  });
+
+  test("epoch が変わったら、その返事の now から境を取り直す", () => {
+    const h = reader();
+    h.r.apply(reply({ seq: 9 }));
+    h.r.apply(reply({ epoch: "e2", seq: 0, now: 20_000, since: 15_000 }));
     expect(h.boundaries).toEqual([5_000, 20_000]);
-    h.r.stop();
   });
 });

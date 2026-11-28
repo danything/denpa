@@ -32,8 +32,8 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 - カードの鍵を、世帯の外の機器に配らない
 - カードを書き換えない
 
-端末 (ブラウザ) が外のサービスに直接繋ぐのは、設定でオンにしたときの実況のコメントだけです。NX-Jikkyo とニコニコ実況 過去ログ API に繋ぎ、相手には端末の IP とどの局をいつ観ているかが見えます ([docs/architecture.md](docs/architecture.md#端末が外へ繋ぐもの-実況のコメント))。
-ライブでは実況に書き込めます (ニコニコと連携している世帯では公式のニコニコ実況へ、ほかは NX-Jikkyo へ)。書いたものは公開され、消せません ([docs/watch.md](docs/watch.md#実況に書き込む))。
+端末 (ブラウザ) は外のサービスに繋ぎません。実況のコメント (設定でオンにしたとき) も、denpa のサーバが Doa の denpa-hub から受けて渡します。hub にはどの局をいつ観ているかが届きます ([docs/architecture.md](docs/architecture.md#実況のコメント-denpa-hub))。
+ライブでは実況に書き込めます (ニコニコと連携している世帯では公式のニコニコ実況へ、ほかは denpa-hub へ。hub が NX-Jikkyo にも書きます)。書いたものは公開され、消せません ([docs/watch.md](docs/watch.md#実況に書き込む))。
 
 考え方は [Discussion #760](https://github.com/danything/denpa/discussions/760) にまとめています (法律相談ではなく、議論のための整理です)。
 
@@ -223,10 +223,10 @@ Windows のエージェントの zip にある `denpa-agent.exe` と `denpa-tray
 - When data broadcasting or a Hybridcast app asks for a broadcaster's server, the denpa server fetches it for the browser
   (public addresses only, names resolved with `1.1.1.1` and `8.8.8.8`). This can be turned off in the settings
 - Other external services are used only when the user turns them on:
-  live comments (NX-Jikkyo and the NicoNico Jikkyo past log API), NicoNico integration and program ranking (denpa-hub, run by the maintainer),
+  live comments, NicoNico integration and program ranking (denpa-hub, run by the maintainer; denpa-hub reads NX-Jikkyo and the NicoNico Jikkyo past log API),
   notifications to the webhooks that the user enters, login with the OpenID Connect provider that the user sets up,
   and moving from EPGStation or EDCB at the address that the user enters.
-  What each service can see is in [docs/architecture.md](docs/architecture.md#端末が外へ繋ぐもの-実況のコメント) (Japanese)
+  What each service can see is in [docs/architecture.md](docs/architecture.md#実況のコメント-denpa-hub) (Japanese)
 
 署名する実行ファイルは、通知領域のアイコンのメニューで更新を選んだときを除き、denpa のサーバと、利用者が設定した LAN の機器にだけ繋ぎます。更新を選ぶと、通知領域のアイコンが install.ps1 を流し、GitHub からリリースを取得します。エージェントは、denpa のサーバが見つけられるように、mDNS で LAN にサービスを公開します (合言葉とカードの情報は入れない)。
 denpa のサーバは、起動したときと 1 時間ごとに、新しいバージョンを確かめるために GitHub に繋ぎます。GitHub に見えるのは、サーバの IP と denpa のバージョンです。

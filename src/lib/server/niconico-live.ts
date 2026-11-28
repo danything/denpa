@@ -5,7 +5,7 @@
  *   端末が何台あっても、1 つの局に繋ぐのは 1 本。書き込みと受信で同じ接続を使う
  * - 接続先は denpa-hub の `/niconico/live/watch` から受け取る (局の ID とユーザー ID を渡し、アクセストークンを付ける)。
  *   ニコニコ固有の値は hub が持つ。hub が 401 を返したら 1 回だけトークンを更新してやり直す
- * - やり取りは NX-Jikkyo と同じ形式 (`nx.ts`) で、`startWatching` (映像はリクエストしない)・`ping` に `pong`・`seat` の間隔で `keepSeat`・
+ * - やり取りは NX-Jikkyo と同じ形式で、`startWatching` (映像はリクエストしない)・`ping` に `pong`・`seat` の間隔で `keepSeat`・
  *   `postComment` (いつも 184) に `postCommentResult` か `error`・`disconnect`・`reconnect` を使う。最初の返事が来たら書ける。
  *   書き込みの `vpos` の基準 (`vposBaseTime`) は、どの返事に載っていても読む (読めなければ繋いだ時刻)
  * - **コメントは `messageServer` の view から受ける** (`niconico-view.ts`)。局ごとに直近 `RING` のぶんを通し番号を付けて持ち、
@@ -27,7 +27,7 @@ import { POST_GAP, type PostResult, REPLY_WAIT, vpos } from "../jikkyo/post";
 import { config, userAgent } from "./config";
 import { accessToken, HUB_TIMEOUT, linkState, renew } from "./niconico";
 import type { OfficialChat } from "./niconico-messages";
-import { allowedHttp, ViewReader } from "./niconico-view";
+import { allowedHttp, allowedUrl, ViewReader } from "./niconico-view";
 
 /** 呼ばれなくなってから閉じるまで (ms)。欄は 30 秒おきに呼ぶ */
 export const IDLE = 2 * 60_000;
@@ -121,20 +121,9 @@ async function hubWatch(
   };
 }
 
-/**
- * 繋いでよい接続先か。`wss:` だけ。テストの偽物 (ループバックのアドレス) だけは `ws:` も通す
- */
+/** 繋いでよい接続先か。`wss:` だけ (テストの偽物だけは `ws:` も。`niconico-view.allowedUrl`) */
 export function allowedSocket(url: string): boolean {
-  try {
-    const target = new URL(url);
-    if (target.protocol === "wss:") return true;
-    return (
-      target.protocol === "ws:" &&
-      (target.hostname === "127.0.0.1" || target.hostname === "localhost")
-    );
-  } catch {
-    return false;
-  }
+  return allowedUrl(url, "wss:", "ws:");
 }
 
 /** `reconnect` で受けたトークンに替えた URL。URL に `audience_token` が無ければ null (hub から受け取り直す) */

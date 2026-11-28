@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { resolve } from "$app/paths";
   import { onMount, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
 
@@ -184,7 +183,7 @@
    * denpa のサーバから受ける (`official.ts` の `OfficialReader`)。局を替えたら繋ぎ直す
    */
   const jikkyoOn = jikkyoSwitch();
-  const jikkyo = new JikkyoFeed(true, resolve("api/jikkyo/niconico/feed"));
+  const jikkyo = new JikkyoFeed(true);
   $effect(() => jikkyo.setNg(data.jikkyoNg));
   const jikkyoChannel = $derived(
     data.jikkyoAllowed ? (current?.jikkyo ?? null) : null,

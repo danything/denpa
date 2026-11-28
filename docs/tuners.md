@@ -280,7 +280,7 @@ LNB の給電と同時に受けられる数は、上流が未確認・未解明�
 権利を持つ人から申し出があれば外します。分かっている事実と判断は [licenses.md](licenses.md#asicen-のファームウェア) にあります。
 上流の配布物に入っているものをそのまま使い、イメージと APK を組むときに SHA-256 を確かめます (`agent/asicen/build.sh` の `ASICEN_FIRMWARE_SHA256`)。
 
-**Windows と Mac のエージェントの配布物には入れていません** (PLEX に許諾を問い合わせています)。使うときは、利用者が置きます。
+**Windows と Mac のエージェントの配布物には入れていません** (SignPath で署名する配布物に、許諾の分からないものを入れないため。PLEX は再配布を許諾できないと回答しています)。使うときは、利用者が置きます。
 
 - 置き場: `tuners.json` の隣の `firmware/` (Mac と Windows は `~/denpa/config/firmware/`。Xbox One Digital TV Tuner の復調のファームウェアと同じ場所)
 - ファイル: `asicen-loader.bin` (16,384 バイト。SHA-256 が `5db39fac` で始まり `a0ad6a2a` で終わるもの)。asicen-userland v1.0.0-beta のバイナリの配布物 (`asicen-userland-1.0.0-linux-glibc-x86_64.tar.gz` など) の `firmware/` にあります

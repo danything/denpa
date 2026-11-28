@@ -9,10 +9,10 @@ import {
   test,
   wakeControls,
 } from "./helpers";
-import { deviceOn, fakeNx, type Posted, setJikkyo } from "./jikkyo";
+import { deviceOn, fakeComments, type OfficialPost, setJikkyo } from "./jikkyo";
 
 /**
- * **ライブで実況に書き込む** (docs/watch.md の「実況」)。NX-Jikkyo へ直に書くときと、ニコニコと連携して
+ * **ライブで実況に書き込む** (docs/watch.md の「実況」)。denpa-hub へ (denpa のサーバ経由で) 書くときと、ニコニコと連携して
  * denpa のサーバから公式のニコニコ実況へ送るときを見る。偽物の作り方と、テストどうしが状態を当てにしないことは 57-jikkyo の冒頭にある
  */
 
@@ -59,8 +59,13 @@ test.describe("ライブで実況に書き込む", () => {
     await setJikkyo(page, true);
     try {
       const csp = await watchViolations(page);
-      const nx = await fakeNx(page, { quiet: true });
+      const nx = await fakeComments({ quiet: true });
       await openWriting(page);
+      // 投稿の決まりと削除の依頼の窓口へ 1 行でリンクする
+      await expect(page.getByTestId("jikkyo-compose-rules")).toHaveAttribute(
+        "href",
+        "https://github.com/danything/denpa-hub/blob/main/docs/rules.md",
+      );
 
       await page.getByTestId("jikkyo-style-button").click();
       await page.getByTestId("jikkyo-color-red").click();
@@ -75,15 +80,16 @@ test.describe("ライブで実況に書き込む", () => {
       await input.fill("自分の書き込み");
       await input.press("Enter");
       await expect(input).toHaveValue("");
-      expect(nx.posts).toHaveLength(1);
-      expect(nx.posts[0]).toMatchObject({
+      expect(await nx.posts()).toHaveLength(1);
+      expect((await nx.posts())[0]).toMatchObject({
+        channel: "jk9",
         text: "自分の書き込み",
-        isAnonymous: true,
         color: "red",
         position: "shita",
         size: "big",
       });
-      expect(nx.posts[0]!.vpos).toBeGreaterThan(0);
+      // 書いた人の ID は denpa のサーバが作る (ログインの subject や Cookie そのものは hub へ送らない)
+      expect((await nx.posts())[0]!.author).toMatch(/^[A-Za-z0-9_-]{22}$/);
 
       const mine = page.getByTestId("jikkyo-comment");
       await expect(mine).toHaveCount(1);
@@ -94,7 +100,7 @@ test.describe("ライブで実況に書き込む", () => {
       const frame = (await page.getByTestId("jikkyo-layer").boundingBox())!;
       const box = (await mine.boundingBox())!;
       expect(box.y - frame.y).toBeGreaterThan(frame.height / 2);
-      // 戻ってきた yourpost のものは流さない
+      // hub から戻ってきた同じもの (同じ id) は流さない
       await page.waitForTimeout(1_000);
       await expect(mine).toHaveCount(1);
 
@@ -105,7 +111,7 @@ test.describe("ライブで実況に書き込む", () => {
         "続けて送るには 3 秒あけてください",
       );
       await expect(input).toHaveValue("続けて");
-      expect(nx.posts).toHaveLength(1);
+      expect(await nx.posts()).toHaveLength(1);
 
       // 一覧の中なので ✕ は無い (しまうのは右端の列のボタン)
       await expect(page.getByTestId("jikkyo-compose-close")).toHaveCount(0);
@@ -130,7 +136,7 @@ test.describe("ライブで実況に書き込む", () => {
   }) => {
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, { quiet: true, reply: () => "INVALID_MESSAGE" });
+      await fakeComments({ quiet: true, reply: "rejected" });
       await openWriting(page);
       const input = page.getByTestId("jikkyo-compose-input");
       await input.fill("断られる書き込み");
@@ -164,7 +170,7 @@ test.describe("ライブで実況に書き込む", () => {
   }) => {
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, { quiet: true });
+      await fakeComments({ quiet: true });
       await openWriting(page);
       await page.getByTestId("jikkyo-style-button").click();
       await page.getByTestId("jikkyo-color-red").click();
@@ -209,7 +215,7 @@ test.describe("ライブで実況に書き込む", () => {
   test("変換中の Enter では送らない", async ({ page }) => {
     await setJikkyo(page, true);
     try {
-      const nx = await fakeNx(page, { quiet: true });
+      const nx = await fakeComments({ quiet: true });
       await openWriting(page);
       const input = page.getByTestId("jikkyo-compose-input");
       await input.fill("へんかんちゅう");
@@ -224,7 +230,7 @@ test.describe("ライブで実況に書き込む", () => {
         ),
       );
       await page.waitForTimeout(500);
-      expect(nx.posts).toHaveLength(0);
+      expect(await nx.posts()).toHaveLength(0);
       await expect(input).toHaveValue("へんかんちゅう");
     } finally {
       await setJikkyo(page, false);
@@ -234,7 +240,7 @@ test.describe("ライブで実況に書き込む", () => {
   test("止めていると書けない", async ({ page }) => {
     await setJikkyo(page, true);
     try {
-      const nx = await fakeNx(page, { quiet: true });
+      const nx = await fakeComments({ quiet: true });
       await openWriting(page);
       await page.getByTestId("live-play").click();
       const line = page.getByTestId("jikkyo-compose-line");
@@ -243,7 +249,7 @@ test.describe("ライブで実況に書き込む", () => {
       await input.fill("止めたまま");
       await input.press("Enter");
       await expect(line).toHaveText("ライブに戻ると書けます");
-      expect(nx.posts).toHaveLength(0);
+      expect(await nx.posts()).toHaveLength(0);
     } finally {
       await setJikkyo(page, false);
     }
@@ -254,7 +260,7 @@ test.describe("ライブで実況に書き込む", () => {
   }) => {
     await setJikkyo(page, true);
     try {
-      const nx = await fakeNx(page, { quiet: true });
+      const nx = await fakeComments({ quiet: true });
       await deviceOn(page);
       await goto(page, `/live?service=${MX.id}`);
       await expect(page.getByTestId("live-title")).toBeVisible();
@@ -288,7 +294,7 @@ test.describe("ライブで実況に書き込む", () => {
       await input.fill("全画面から");
       await input.press("Enter");
       await expect(input).toHaveValue("");
-      expect(nx.posts.map((p) => p.text)).toEqual(["全画面から"]);
+      expect((await nx.posts()).map((p) => p.text)).toEqual(["全画面から"]);
       await page.getByTestId("jikkyo-compose-close").click();
       await expect(page.getByTestId("jikkyo-compose")).toHaveCount(0);
       await expect(button).toBeFocused();
@@ -309,7 +315,7 @@ test.describe("ライブで実況に書き込む", () => {
   }) => {
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, { quiet: true });
+      await fakeComments({ quiet: true });
       await deviceOn(page);
       await page.setViewportSize({ width: 390, height: 844 });
       await goto(page, `/live?service=${MX.id}`);
@@ -370,18 +376,20 @@ test.describe("ニコニコと連携しているときの書き込み", () => {
     try {
       await linkNiconico(page);
       const csp = await watchViolations(page);
-      const nx = await fakeNx(page, { quiet: true });
+      const nx = await fakeComments({ quiet: true });
       await openWriting(page, "ニコニコ実況に書きます");
+      // 公式に書くときは denpa-hub の決まりを出さない
+      await expect(page.getByTestId("jikkyo-compose-rules")).toHaveCount(0);
 
       const input = page.getByTestId("jikkyo-compose-input");
       await input.fill("公式への書き込み");
       await input.press("Enter");
       await expect(input).toHaveValue("");
-      // NX-Jikkyo には送らず、denpa のサーバが偽の視聴の WebSocket へ送る (いつも 184)
-      expect(nx.posts).toHaveLength(0);
+      // hub には送らず、denpa のサーバが偽の視聴の WebSocket へ送る (いつも 184)
+      expect(await nx.posts()).toHaveLength(0);
       const state = (await (
         await request.get(`${stack.hubUrl}/__control/state`)
-      ).json()) as { posts: Posted[]; watched: string[] };
+      ).json()) as { posts: OfficialPost[]; watched: string[] };
       expect(state.watched).toContain("jk9");
       expect(state.posts.at(-1)).toMatchObject({
         text: "公式への書き込み",
@@ -398,8 +406,8 @@ test.describe("ニコニコと連携しているときの書き込み", () => {
       const mine = comments.filter({ hasText: "公式への書き込み" });
       await expect(mine).toHaveCount(1);
       // NX-Jikkyo が取り込んで流してきた同じ本文は流さない (ほかの人の書き込みは流れる)
-      nx.emit("公式への書き込み");
-      nx.emit("ほかの人の書き込み", [-5_000, 0, 5_000, 10_000, 20_000]);
+      await nx.emit("公式への書き込み", [0], "nicolive");
+      await nx.emit("ほかの人の書き込み", [-5_000, 0, 5_000, 10_000, 20_000]);
       await expect(
         comments.filter({ hasText: "ほかの人の書き込み" }).first(),
       ).toBeVisible({ timeout: 25_000 });
@@ -417,7 +425,7 @@ test.describe("ニコニコと連携しているときの書き込み", () => {
     await setJikkyo(page, true);
     try {
       await linkNiconico(page);
-      await fakeNx(page, { quiet: true });
+      await fakeComments({ quiet: true });
       await openWriting(page, "ニコニコ実況に書きます");
       // 開いたまま、別のタブで連携を外す
       const other = await page.context().newPage();

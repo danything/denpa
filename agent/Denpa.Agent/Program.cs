@@ -122,6 +122,7 @@ if (args.Length > 0)
     Console.Error.WriteLine("       denpa-agent --pair                (denpa と組むときの URL を出す。端末なら QR も)");
     Console.Error.WriteLine("       denpa-agent --status              (動いているエージェントの /denpa/tuners を出す)");
     Console.Error.WriteLine("       denpa-agent --usb-ids             (エージェントが USB を直に持つ機材の USB ID を出す)");
+    Console.Error.WriteLine("       denpa-agent --asicen-check        (asicen-userland の子プロセスを使えるかを出す)");
     Console.Error.WriteLine($"       {Probe.TuneUsage}");
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
