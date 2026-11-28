@@ -1318,7 +1318,8 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 { "state": "ready" }
 ```
 
-- `state` は `connecting` (繋いでいる途中)・`ready` (書ける)・`unlinked` (連携していない・切れた)・`down` (繋げない。30 秒は試し直さない)
+- `state` は `connecting` (繋いでいる途中)・`ready` (書ける)・`unlinked` (連携していない・切れた)・`down` (繋げない)。
+  `down` のあとは 30 秒試し直しません。同じアカウントで別の所が観ている・接続が多すぎると言われて切られたときは 5 分です
 
 `comments` は `{"channel":"jk1","text":"わこつ","style":{"color":"white","position":"naka","size":"medium"}}` を受けて、いつも匿名 (184) で送ります。
 

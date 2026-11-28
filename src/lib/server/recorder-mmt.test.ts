@@ -70,7 +70,7 @@ const { startRecording, stopRecording } = await import("./recorder");
 const { recordings, reservations, services } = await import("./schema");
 const { probeMmts } = await import("./mmts");
 
-/** ケーブルで受けた 4K の局 (`types.serviceKey`。network_id 0x000B) */
+/** ケーブルで受けた 4K の局 (`tuner.serviceKey`。network_id 0x000B) */
 const SERVICE = (0x10000 + 0x000b) * 100000 + SERVICE_ID;
 
 async function until(check: () => boolean, ms = 5_000): Promise<void> {
