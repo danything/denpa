@@ -11,15 +11,15 @@ import {
   test,
   wakeControls,
 } from "./helpers";
-import { deviceOn, fakeNx, setJikkyo } from "./jikkyo";
+import { deviceOn, fakeComments, setJikkyo } from "./jikkyo";
 
 /**
  * **ニコニコ実況のコメント** (docs/watch.md の「実況」)。既定はオフで、世帯の設定 (連携の「実況」) と
  * 端末の ⚙ の両方がオンのときだけ流す。
  *
- * **外 (NX-Jikkyo・過去ログ API) には繋がない。** 端末が繋ぐ WebSocket と fetch は
- * `page.routeWebSocket` と `page.route` で偽物に差し替え、勢いの中継 (`/api/jikkyo/ranking`) も
- * 画面からの呼び出しを `page.route` で差し替える (サーバの中継そのものは単体テストで見る)。
+ * **外 (NX-Jikkyo・過去ログ API) には繋がない。** 端末は denpa のサーバにだけ繋ぎ、サーバは偽の denpa-hub (`tests/fake/denpa-hub.ts`) に繋ぐ
+ * (流し方は `fakeComments` で決める)。勢いの中継 (`/api/jikkyo/ranking`) は画面からの呼び出しを `page.route` で差し替える
+ * (サーバの中継そのものは単体テストで見る)。
  *
  * 実況のテストは、ライブの表示 (このファイル)、書き込み (57-jikkyo-write)、一覧とタブ (57-jikkyo-list)、
  * 録画の実況 (57-jikkyo-recorded と 57-jikkyo-recorded-list) に分けてある。1 本にまとめると、CI の組の時間がその 1 本より短くならない。
@@ -87,7 +87,7 @@ test.describe("ライブの実況", () => {
   }) => {
     await setJikkyo(page, true);
     try {
-      const nx = await fakeNx(page);
+      const nx = await fakeComments();
       await deviceOn(page);
       await goto(page, `/live?service=${MX.id}`);
       await expect(page.getByTestId("live-title")).toBeVisible();
@@ -96,7 +96,7 @@ test.describe("ライブの実況", () => {
       await pickCodec(page, "live", "mpeg2");
       const comment = page.getByTestId("jikkyo-comment").first();
       await expect(comment).toHaveText("テストのコメント", { timeout: 20_000 });
-      expect(nx.watched[0]).toContain("/channels/jk9/ws/watch");
+      expect(await nx.watched()).toContain("jk9");
       // 読み上げには出さない
       await expect(page.getByTestId("jikkyo-layer")).toHaveAttribute(
         "aria-hidden",
@@ -115,14 +115,12 @@ test.describe("ライブの実況", () => {
     }
   });
 
-  test("NX-Jikkyo に繋がらなければ、⚙ の行に「(いまは読めません)」を添える (通知は出さない)", async ({
+  test("denpa-hub に繋がらなければ、⚙ の行に「(いまは読めません)」を添える (通知は出さない)", async ({
     page,
   }) => {
-    // 5 回続けて失敗するまで 1+2+4+8 秒ほど待つ
-    test.setTimeout(150_000);
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, { refuse: () => true });
+      await fakeComments({ refuse: true });
       await deviceOn(page);
       await goto(page, `/live?service=${MX.id}`);
       await expect(page.getByTestId("live-title")).toBeVisible();
@@ -148,7 +146,7 @@ test.describe("ライブの実況の色・位置・大きさ", () => {
   }) => {
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, { text: "赤い上の字", mail: "184 red ue big" });
+      await fakeComments({ text: "赤い上の字", mail: "184 red ue big" });
       await deviceOn(page);
       await goto(page, `/live?service=${MX.id}`);
       await expect(page.getByTestId("live-title")).toBeVisible();
@@ -236,7 +234,7 @@ test.describe("アンビエントの光の上を流れる実況", () => {
     test.setTimeout(180_000);
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, {
+      await fakeComments({
         texts: ["流れる字", "上の字"],
         mails: [undefined, "ue"],
       });
@@ -390,7 +388,7 @@ test.describe("実況の NG ワード", () => {
       expect(await (await page.request.get("/api/jikkyo/ng")).json()).toEqual({
         words: ["ﾈﾀﾊﾞﾚ"],
       });
-      await fakeNx(page, { texts: ["ねたばれ注意", "ふつうのコメント"] });
+      await fakeComments({ texts: ["ねたばれ注意", "ふつうのコメント"] });
       await deviceOn(page);
       await goto(page, `/live?service=${MX.id}`);
       await expect(page.getByTestId("live-title")).toBeVisible();

@@ -1,5 +1,6 @@
-import type { Page, WebSocketRoute } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
+import { workerStack } from "../stack";
 import { expect, goto } from "./helpers";
 
 /**
@@ -29,27 +30,38 @@ export async function deviceOn(page: Page): Promise<void> {
     );
 }
 
-/** 書き込みの返事の偽物。`ok` は受け付けて、コメントの WS から `yourpost: 1` で戻す。`none` は返事をしない */
-export type Reply = "ok" | "NOT_ON_AIR" | "INVALID_MESSAGE" | "none";
+/** 書き込みの返事の偽物。`ok` は受け付けて、購読にも流す */
+export type Reply = "ok" | "rejected";
 
-/** 画面が送った書き込み (`postComment` の `data`) */
+/** 画面が送った書き込み (denpa のサーバが hub へ送ったもの) */
 export interface Posted {
+  channel: string;
+  author: string;
   text: string;
-  vpos: number;
-  isAnonymous: boolean;
   color?: string;
   position?: string;
   size?: string;
 }
 
+/** 公式の視聴の WebSocket に送られた書き込み (`postComment` の `data`) */
+export interface OfficialPost {
+  text: string;
+  vpos: number;
+  isAnonymous: boolean;
+}
+
+function hub(): string {
+  if (workerStack === null) throw new Error("ワーカーの 1 式が立っていません");
+  return workerStack.hubUrl;
+}
+
 /**
- * NX-Jikkyo の WebSocket の偽物。視聴の WS に room を返し、コメントの WS に `text` の本文 (`mail` 付き) を流し続ける
- * (`quiet` なら流さない)。書き込み (`postComment`) は `posts` に貯め、`reply` のとおりに返す
+ * 実況のコメントの偽物 (偽の denpa-hub の `/jikkyo/*`。`tests/fake/denpa-hub.ts`)。購読に `text` の本文 (`mail` 付き) を流し続ける
+ * (`quiet` なら流さない)。書き込みは hub に貯まり、`reply` のとおりに返る。端末は外へ繋がず、denpa のサーバが hub に繋ぐ
  */
-export async function fakeNx(
-  page: Page,
+export async function fakeComments(
   opts: {
-    refuse?: () => boolean;
+    refuse?: boolean;
     text?: string;
     /** 本文を替えて流す (それぞれを同じ時刻に) */
     texts?: string[];
@@ -57,142 +69,48 @@ export async function fakeNx(
     /** `texts` のそれぞれの `mail` (無いものは `mail`) */
     mails?: (string | undefined)[];
     quiet?: boolean;
-    reply?: () => Reply;
+    reply?: Reply;
+    /** 過去ログの返事のコメント (`{ at, text, mail?, src }`)。`error` なら hub が 503 を返す */
+    kakolog?: unknown[] | "error";
   } = {},
 ): Promise<{
-  watched: string[];
-  posts: Posted[];
-  /** コメントの WS へ、ほかの人の書き込みの形 (`yourpost` 無し) で流す。`offsets` は書かれた時刻を今からずらす量 (ms) */
-  emit: (content: string, offsets?: number[]) => void;
+  /** 購読された局 */
+  watched: () => Promise<string[]>;
+  posts: () => Promise<Posted[]>;
+  /** 過去ログで訊かれたもの (`jk9?from=…&to=…`) */
+  kakolog: () => Promise<string[]>;
+  /** 購読へ流す。`offsets` は書かれた時刻を今からずらす量 (ms)。`src` は出どころ */
+  emit: (text: string, offsets?: number[], src?: string) => Promise<void>;
 }> {
-  const watched: string[] = [];
-  const posts: Posted[] = [];
-  let comments: WebSocketRoute | null = null;
-  await page.routeWebSocket(
-    /nx-jikkyo\.tsukumijima\.net\/.*\/ws\/watch$/,
-    (ws) => {
-      watched.push(ws.url());
-      if (opts.refuse?.() === true) {
-        void ws.close({ code: 1011, reason: "down" });
-        return;
+  const { mails, ...rest } = opts;
+  const control = await fetch(`${hub()}/__control/jikkyo`, {
+    method: "POST",
+    body: JSON.stringify({ ...rest, mails: mails?.map((m) => m ?? null) }),
+  });
+  if (!control.ok) throw new Error(`偽の hub: ${control.status}`);
+  const state = async () =>
+    (
+      (await (await fetch(`${hub()}/__control/state`)).json()) as {
+        jikkyo: { posts: Posted[]; watched: string[]; kakolog: string[] };
       }
-      ws.onMessage((message) => {
-        const body = JSON.parse(String(message)) as {
-          type?: string;
-          data?: Posted;
-        };
-        if (body.type === "postComment" && body.data !== undefined) {
-          const data = body.data;
-          posts.push(data);
-          const reply = opts.reply?.() ?? "ok";
-          if (reply === "none") return;
-          if (reply !== "ok") {
-            ws.send(
-              JSON.stringify({ type: "error", data: { message: reply } }),
-            );
-            return;
-          }
-          // 本物と同じく、コメントの WS へ先に流してから返事をする
-          const mail = ["184", data.color, data.position, data.size]
-            .filter((c) => c !== undefined)
-            .join(" ");
-          const at = Date.now();
-          comments?.send(
-            JSON.stringify({
-              chat: {
-                thread: "1",
-                date: Math.floor(at / 1000),
-                date_usec: (at % 1000) * 1000,
-                user_id: "me",
-                mail,
-                yourpost: 1,
-                content: data.text,
-              },
-            }),
-          );
-          ws.send(
-            JSON.stringify({
-              type: "postCommentResult",
-              data: { chat: { mail, anonymity: 1, content: data.text } },
-            }),
-          );
-          return;
-        }
-        if (body.type !== "startWatching") return;
-        ws.send(
-          JSON.stringify({ type: "seat", data: { keepIntervalSec: 30 } }),
-        );
-        ws.send(
-          JSON.stringify({
-            type: "room",
-            data: {
-              messageServer: {
-                uri: "wss://nx-jikkyo.tsukumijima.net/api/v1/channels/jk9/ws/comment",
-              },
-              threadId: "1",
-              yourPostKey: "me",
-              vposBaseTime: new Date(Date.now() - 3_600_000).toISOString(),
-            },
-          }),
-        );
-      });
-    },
-  );
-  await page.routeWebSocket(
-    /nx-jikkyo\.tsukumijima\.net\/.*\/ws\/comment$/,
-    (ws: WebSocketRoute) => {
-      comments = ws;
-      let timer: ReturnType<typeof setInterval> | null = null;
-      ws.onMessage(() => {
-        ws.send(JSON.stringify({ thread: { resultcode: 0, thread: "1" } }));
-        if (opts.quiet === true) return;
-        /*
-         * 書かれた時刻を前後に散らして流し続ける。画面は映しているコマの放送時刻 (偽の放送の時計) に届いたものから流し、
-         * 10 秒より古いものは捨てるので、放送時刻が壁時計より進んでいても遅れていても、どれかが当たるように
-         */
-        timer ??= setInterval(() => {
-          for (const offset of [-5_000, 0, 5_000, 10_000, 20_000]) {
-            const at = Date.now() + offset;
-            const texts = opts.texts ?? [opts.text ?? "テストのコメント"];
-            texts.forEach((content, i) => {
-              const mail = opts.mails?.[i] ?? opts.mail;
-              ws.send(
-                JSON.stringify({
-                  chat: {
-                    thread: "1",
-                    date: Math.floor(at / 1000),
-                    date_usec: (at % 1000) * 1000,
-                    user_id: "fake",
-                    ...(mail === undefined ? {} : { mail }),
-                    content,
-                  },
-                }),
-              );
-            });
-          }
-        }, 500);
-      });
-      ws.onClose(() => {
-        if (timer !== null) clearInterval(timer);
-      });
-    },
-  );
-  const emit = (content: string, offsets = [0]) => {
-    for (const offset of offsets) {
-      const at = Date.now() + offset;
-      comments?.send(
-        JSON.stringify({
-          chat: {
-            thread: "1",
-            date: Math.floor(at / 1000),
-            date_usec: (at % 1000) * 1000,
-            user_id: "official",
+    ).jikkyo;
+  return {
+    watched: async () => (await state()).watched,
+    posts: async () => (await state()).posts,
+    kakolog: async () => (await state()).kakolog,
+    emit: async (text, offsets = [0], src = "nx") => {
+      await fetch(`${hub()}/__control/jikkyo/emit`, {
+        method: "POST",
+        body: JSON.stringify({
+          channel: "jk9",
+          comments: offsets.map((offset) => ({
+            at: Date.now() + offset,
+            text,
             mail: "184",
-            content,
-          },
+            src,
+          })),
         }),
-      );
-    }
+      });
+    },
   };
-  return { watched, posts, emit };
 }

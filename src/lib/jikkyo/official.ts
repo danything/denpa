@@ -123,11 +123,6 @@ export class OfficialWriter {
   }
 }
 
-/** 受けられなかった (サーバに届かない・断られた) あと、次に呼ぶまで (ms) */
-export const FEED_RETRY = 10_000;
-/** すぐ返ってきた (状態が変わった) 返事のあと、次に呼ぶまで (ms)。続けてすぐ返ってきても詰めて呼ばない */
-export const FEED_GAP = 1_000;
-
 /** サーバが渡すコメント (`server/niconico-live.ts` の `FeedComment`) */
 type FeedComment = Comment & { own?: true };
 
@@ -138,21 +133,16 @@ interface ReaderEvents {
   boundary: (at: number | null) => void;
 }
 
-/** 差し替えられるもの (単体テストで偽物を渡す) */
-interface ReaderDeps extends OfficialDeps {
-  setTimeout: (run: () => void, ms: number) => unknown;
-  clearTimeout: (id: unknown) => void;
-}
-
 /**
  * **公式のニコニコ実況のコメントを受ける (端末の側)。** ニコニコと連携している世帯のライブの画面で、局ごとに 1 つ (`feed.svelte.ts`)。
- * サーバの `feed` (`/api/jikkyo/niconico/feed`) を続けて呼ぶ (ロングポーリング。サーバは新しいものが来るまで返事を待つ)。
+ * 自分ではリクエストしない。ライブのコメントと同じ `POST /api/jikkyo/feed` の呼び出しに、続きの番号を `official` として載せ (`body`)、
+ * 返事の `official` を読む (`apply`。`live.ts` の `LiveReader`)。端末から denpa のサーバへのロングポーリングを 1 本にするため
  *
  * - **境 (`boundary`) より後は公式、前は NX-Jikkyo が取り込んだもの** を流す。境は max(サーバが受け続けている始まり, 最初の返事の時刻)。
- *   サーバが受けられていなければ境は無く、NX-Jikkyo の取り込みを全部流す (`nx.ts`)
+ *   サーバが受けられていなければ境は無く、NX-Jikkyo の取り込み (`src: "nicolive"`) を全部流す (`feed.svelte.ts` の `receiveLive`)
  * - サーバが返す番号 (`seq`) の続きをリクエストする。サーバを起こし直した (`epoch` が違う) ら最初から
  * - 世帯のアカウントが書いたもの (`own`) のうち、この端末が送ってから 60 秒以内の同じ本文は 1 回だけ捨てる (送れたときにもう流している)
- * - 受けられなければ境を無くし、`FEED_RETRY` 後にまた呼ぶ
+ * - 受けられなければ (`fail`) 境を無くす
  */
 export class OfficialReader {
   boundary: number | null = null;
@@ -160,39 +150,25 @@ export class OfficialReader {
   private epoch: string | null = null;
   /** 最初の返事の時刻 (サーバの時計) */
   private first: number | null = null;
-  private stopped = false;
-  private readonly abort = new AbortController();
-  private timer: unknown = null;
   private readonly echoes = new Echoes();
+  private stopped = false;
 
   constructor(
-    /** `/api/jikkyo/niconico/feed` (前段の接頭辞を付けたもの) */
-    private readonly url: string,
-    private readonly channel: string,
     private readonly events: ReaderEvents,
-    private readonly deps: ReaderDeps = {
-      fetch: (url, init) => fetch(url, init),
-      now: () => Date.now(),
-      setTimeout: (run, ms) => setTimeout(run, ms),
-      clearTimeout: (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
-    },
+    private readonly now: () => number = () => Date.now(),
   ) {}
 
-  start(): void {
-    void this.loop();
-  }
-
-  /** 止める。待っているリクエストも止める (サーバが「聴かれている」と数え続けないように) */
-  stop(): void {
-    this.stopped = true;
-    this.abort.abort();
-    if (this.timer !== null) this.deps.clearTimeout(this.timer);
-    this.timer = null;
+  /** 次の呼び出しに載せるもの */
+  body(): { after?: number; epoch?: string } {
+    return {
+      ...(this.after === null ? {} : { after: this.after }),
+      ...(this.epoch === null ? {} : { epoch: this.epoch }),
+    };
   }
 
   /** 公式に書いた。戻ってきた同じ本文を 1 回だけ捨てる */
   expectEcho(text: string): void {
-    this.echoes.expect(text, this.deps.now());
+    this.echoes.expect(text, this.now());
   }
 
   /** 送れなかった。覚えたものを 1 つ忘れる */
@@ -200,48 +176,25 @@ export class OfficialReader {
     this.echoes.forget(text);
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      this.timer = this.deps.setTimeout(() => {
-        this.timer = null;
-        resolve();
-      }, ms);
-    });
+  /** 止めた (局を替えた・画面を閉じた)。このあとに読み終えた返事は捨てる */
+  stop(): void {
+    this.stopped = true;
   }
 
-  private async loop(): Promise<void> {
-    while (!this.stopped) {
-      const started = this.deps.now();
-      let got: number | null = null;
-      try {
-        const res = await this.deps.fetch(this.url, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            channel: this.channel,
-            ...(this.after === null ? {} : { after: this.after }),
-            ...(this.epoch === null ? {} : { epoch: this.epoch }),
-          }),
-          signal: this.abort.signal,
-        });
-        if (res.ok) got = this.apply(await res.json());
-      } catch {
-        // 届かない・止めた
-      }
-      if (this.stopped) return;
-      if (got === null) {
-        this.setBoundary(null);
-        await this.sleep(FEED_RETRY);
-      } else if (got === 0 && this.deps.now() - started < FEED_GAP)
-        await this.sleep(FEED_GAP);
-    }
+  /** 届かない・断られた。境を無くす */
+  fail(): void {
+    if (this.stopped) return;
+    this.setBoundary(null);
   }
 
-  /** 返事を読む。読めた数を返す (形式が違えば null) */
-  private apply(reply: unknown): number | null {
+  /** 返事の `official` を読む。読めた数を返す (形式が違えば境を無くして null) */
+  apply(reply: unknown): number | null {
     // 止めたあとに読み終えた返事は捨てる (局を替えたあとに、前の局のコメントを流さない)
     if (this.stopped) return null;
-    if (reply === null || typeof reply !== "object") return null;
+    if (reply === null || typeof reply !== "object") {
+      this.fail();
+      return null;
+    }
     const r = reply as Record<string, unknown>;
     const { epoch, seq, now, since, comments } = r;
     if (
@@ -249,8 +202,10 @@ export class OfficialReader {
       typeof seq !== "number" ||
       typeof now !== "number" ||
       !Array.isArray(comments)
-    )
+    ) {
+      this.fail();
       return null;
+    }
     if (epoch !== this.epoch || this.first === null) {
       this.epoch = epoch;
       this.first = now;
@@ -270,7 +225,7 @@ export class OfficialReader {
         item.at < boundary
       )
         continue;
-      if (item.own === true && this.echoes.take(item.text, this.deps.now()))
+      if (item.own === true && this.echoes.take(item.text, this.now()))
         continue;
       out.push(
         item.style !== undefined

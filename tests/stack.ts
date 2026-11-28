@@ -643,6 +643,9 @@ export async function liveWithoutMpeg2(context: BrowserContext): Promise<void> {
   });
 }
 
+/** このワーカーの 1 式。フィクスチャを受け取らない道具 (`e2e/jikkyo.ts` など) が偽物を操るのに使う */
+export let workerStack: Stack | null = null;
+
 /**
  * `stack` はワーカーに 1 つ。`auto` にしてあるので、明示的に受け取らないテストでも
  * 立ち上がった状態で始まる (`baseURL` がこれに乗っているため)。
@@ -657,6 +660,7 @@ export const test = base.extend<
     // oxlint-disable-next-line no-empty-pattern -- Playwright は分割代入でないと受け付けない
     async ({}, use, workerInfo) => {
       const { stack, shutdown } = await boot(workerInfo.workerIndex);
+      workerStack = stack;
       await use(stack);
       await shutdown();
     },

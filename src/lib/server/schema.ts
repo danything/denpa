@@ -1116,6 +1116,17 @@ export const deviceCodes = sqliteTable(
 );
 
 /**
+ * **実況のコメントの中継 (denpa-hub) のトークン** (`jikkyo-hub.ts`。行は多くて 1 つ、`id` はいつも 1)。
+ * 世帯の設定 (連携の「実況」) で初めてコメントを取るときに hub から受け取る。hub が知らないと言ったら (401) 取り直して置き換える。
+ * 書いた人の ID (`author`) もこのトークンから作るので、替えると hub と NX-Jikkyo での書いた人の ID も替わる
+ */
+export const jikkyoLink = sqliteTable("jikkyo_link", {
+  id: integer("id").primaryKey(),
+  token: text("token").notNull(),
+  issued_at: integer("issued_at").notNull(),
+});
+
+/**
  * **ニコニコのアカウントとの連携** (niconico.ts。世帯で 1 つなので行は多くて 1 つ、`id` はいつも 1)。
  *
  * - トークンは denpa のサーバだけが持ち、端末には渡さない。**暗号化して置く** (鍵は DB の隣の `niconico.key`)。

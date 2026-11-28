@@ -2,6 +2,7 @@ import { type Actions, fail } from "@sveltejs/kit";
 
 import { parseNg } from "#lib/jikkyo/ng.js";
 import { tokenRefusal } from "#lib/server/auth.js";
+import { jikkyoLive } from "#lib/server/jikkyo-live.js";
 import { niconicoLive } from "#lib/server/niconico-live.js";
 import { linkState, unlink } from "#lib/server/niconico.js";
 import { saveSettings, settings } from "#lib/server/settings.js";
@@ -22,8 +23,11 @@ export const actions = {
     if ("error" in ng) return fail(400, { message: ng.error });
     const jikkyo = form.get("jikkyo") === "on";
     saveSettings({ jikkyo, jikkyoNg: ng.words });
-    // オフにしたら、開いている公式の実況への接続もすぐ閉じる (呼ばれなくなるのを `IDLE` まで待たない)
-    if (!jikkyo) niconicoLive.closeAll();
+    // オフにしたら hub への購読 (控えも捨てる) と、開いている公式の実況への接続をすぐ閉じる (呼ばれなくなるのを待たない)
+    if (!jikkyo) {
+      jikkyoLive.closeAll();
+      niconicoLive.closeAll();
+    }
     return { success: true, saved: true };
   },
   unlinkNiconico: async (event) => {

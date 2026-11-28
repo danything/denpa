@@ -1,7 +1,6 @@
 /**
- * **実況のコメント (サーバの受け持ち)。** NX-Jikkyo と過去ログ API のコメントはサーバを通らず、端末が
- * 直接つなぐ (`#lib/jikkyo/endpoints.ts`)。公式の実況は、ニコニコと連携していればサーバが書き込みを中継し、ライブのコメントも受けて渡す (`niconico-live.ts`)。
- * ここでサーバが渡すのは次の 2 つです。
+ * **実況のコメント (サーバの受け持ち)。** 流れるコメントと過去ログは denpa-hub から受けて端末に渡す (`jikkyo-live.ts`・`/api/jikkyo/kakolog`)。
+ * 公式の実況への書き込みはサーバが中継する (`niconico-live.ts`)。ここでサーバが渡すのは、ほかに次の 2 つです。
  *
  * - 録画の実況のチャンネルと、先頭と終わりの放送時刻 (`recordingJikkyo`)。観る画面がコメントを取得して再生位置に合わせるのに使う
  * - 局の勢い (`RankingRelay`)。NX-Jikkyo の REST は CORS を許していないのでブラウザから読めず、
@@ -12,13 +11,15 @@
 import { eq } from "drizzle-orm";
 
 import { jikkyoChannel, type JikkyoStation } from "../jikkyo/channels";
-import { NX_JIKKYO_CHANNELS } from "../jikkyo/endpoints";
 import type { Recording } from "../types";
 import { config, userAgent } from "./config";
 import { orm } from "./db";
 import { tsHeadOf } from "./recording";
 import { services } from "./schema";
 import { settings } from "./settings";
+
+/** NX-Jikkyo の全チャンネルの今の勢い (REST。CORS を許していないので、サーバが読む) */
+const NX_JIKKYO_CHANNELS = "https://nx-jikkyo.tsukumijima.net/api/v1/channels";
 
 /**
  * 録画の実況。チャンネルと、元の TS の先頭 (再生位置 0 の手前) の放送時刻、録画の終わりの放送時刻 (unix ms)。

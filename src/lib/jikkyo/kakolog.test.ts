@@ -1,112 +1,111 @@
 import { describe, expect, test } from "bun:test";
 
+import { readMail } from "./command";
 import { fetchKakolog } from "./kakolog";
 
 /*
- * 過去ログ API からの取得。外には繋がず、fetch を差し替える。返事は自分で作った偽物
+ * 過去ログの取得 (denpa のサーバの `/api/jikkyo/kakolog` から)。fetch を差し替える。返事は自分で作った偽物
  */
 
 const T = Date.UTC(2026, 9, 28, 12, 0, 0);
 const DAY = 24 * 60 * 60_000;
+const URL_ = "http://denpa.test/api/jikkyo/kakolog";
 
-/** 訊かれた URL と付けたものを控え、`body` を返す偽の fetch */
+/** 訊かれた URL を控え、`body` を返す偽の fetch */
 function fake(body: (url: URL) => unknown) {
-  const asked: { url: URL; init: RequestInit | undefined }[] = [];
-  const get = (async (input: string | URL | Request, init?: RequestInit) => {
+  const asked: URL[] = [];
+  const get = (async (input: string | URL | Request) => {
     const url = new URL(String(input));
-    asked.push({ url, init });
+    asked.push(url);
     return new Response(JSON.stringify(body(url)));
   }) as typeof fetch;
   return { asked, get };
 }
 
-const chat = (ms: number, content: string) => ({
-  chat: {
-    thread: "1",
-    no: "1",
-    date: String(Math.floor(ms / 1000)),
-    date_usec: String((ms % 1000) * 1000),
-    user_id: "1234",
-    content,
-  },
-});
-
 describe("fetchKakolog", () => {
-  test("区間を秒で訊き、Cookie と denpa のページの URL を渡さない", async () => {
+  test("区間を ms で訊き、出どころと ID を残して読む", async () => {
     const { asked, get } = fake(() => ({
-      packet: [chat(T + 1500, "a"), chat(T + 2500, "b")],
+      comments: [
+        { at: T + 1500, text: "a", src: "nx" },
+        { at: T + 2500, text: "b", mail: "184 red", src: "hub", id: "x1" },
+      ],
+      complete: true,
     }));
-    const { comments, odd } = await fetchKakolog("jk1", T, T + 60_000, {
+    const got = await fetchKakolog(URL_, "jk1", T, T + 60_000, {
       now: T + DAY,
       fetch: get,
     });
-    expect(comments).toEqual([
-      { at: T + 1500, text: "a" },
-      { at: T + 2500, text: "b" },
+    expect(got.comments).toEqual([
+      { at: T + 1500, text: "a", src: "nx" },
+      {
+        at: T + 2500,
+        text: "b",
+        src: "hub",
+        id: "x1",
+        style: readMail("184 red"),
+      },
     ]);
-    expect(odd).toBe(0);
+    expect(got.odd).toBe(0);
+    expect(got.complete).toBe(true);
     expect(asked).toHaveLength(1);
-    const { url, init } = asked[0]!;
-    expect(url.origin + url.pathname).toBe(
-      "https://jikkyo.tsukumijima.net/api/kakolog/jk1",
-    );
-    expect(url.searchParams.get("starttime")).toBe(String(T / 1000));
-    expect(url.searchParams.get("endtime")).toBe(String(T / 1000 + 60));
-    expect(url.searchParams.get("format")).toBe("json");
-    expect(init?.credentials).toBe("omit");
-    expect(init?.referrerPolicy).toBe("no-referrer");
+    expect(asked[0]!.searchParams.get("channel")).toBe("jk1");
+    expect(asked[0]!.searchParams.get("from")).toBe(String(T));
+    expect(asked[0]!.searchParams.get("to")).toBe(String(T + 60_000));
   });
 
-  test("終わりは今で切る (今より後は誤りになる)", async () => {
-    const { asked, get } = fake(() => ({ packet: [] }));
-    await fetchKakolog("jk1", T, T + 60 * 60_000, {
-      now: T + 600_500,
+  test("終わりは今で切り、3 日ごとに分けて訊く", async () => {
+    const { asked, get } = fake(() => ({ comments: [], complete: true }));
+    await fetchKakolog(URL_, "jk1", T, T + 7 * DAY, {
+      now: T + 4 * DAY,
       fetch: get,
     });
-    expect(asked[0]!.url.searchParams.get("endtime")).toBe(
-      String(T / 1000 + 600),
-    );
-  });
-
-  test("3 日を超える区間は分けて訊く", async () => {
-    const { asked, get } = fake(() => ({ packet: [] }));
-    await fetchKakolog("jk1", T, T + 4 * DAY, {
-      now: T + 10 * DAY,
-      fetch: get,
-    });
-    expect(asked.map((a) => a.url.searchParams.get("starttime"))).toEqual([
-      String(T / 1000),
-      String((T + 3 * DAY) / 1000),
+    expect(
+      asked.map((u) => [u.searchParams.get("from"), u.searchParams.get("to")]),
+    ).toEqual([
+      [String(T), String(T + 3 * DAY)],
+      [String(T + 3 * DAY), String(T + 4 * DAY)],
     ]);
   });
 
-  test("空の packet はコメントなし。{error} は HTTP 200 でも誤り", async () => {
-    const empty = fake(() => ({ packet: [] }));
-    expect(
-      (
-        await fetchKakolog("jk1", T, T + 1000, {
-          now: T + DAY,
-          fetch: empty.get,
-        })
-      ).comments,
-    ).toEqual([]);
-    const broken = fake(() => ({
-      error: "取得開始時刻または取得終了時刻が不正です。",
-    }));
-    await expect(
-      fetchKakolog("jk1", T, T + 1000, { now: T + DAY, fetch: broken.get }),
-    ).rejects.toThrow("不正です");
-  });
-
-  test("形式のずれた行は飛ばして数える", async () => {
+  test("hub が取りきれなかったら complete が false。取れた分は返す", async () => {
     const { get } = fake(() => ({
-      packet: [chat(T, "a"), { chat: { content: "時刻が無い" } }],
+      comments: [{ at: T + 1, text: "独自", src: "hub", id: "y" }],
+      complete: false,
     }));
-    const { comments, odd } = await fetchKakolog("jk1", T, T + 1000, {
+    const got = await fetchKakolog(URL_, "jk1", T, T + 60_000, {
       now: T + DAY,
       fetch: get,
     });
-    expect(comments.map((c) => c.text)).toEqual(["a"]);
-    expect(odd).toBe(1);
+    expect(got.complete).toBe(false);
+    expect(got.comments).toHaveLength(1);
+  });
+
+  test("形のずれた行は飛ばして数え、運営のコメントは流さない", async () => {
+    const { get } = fake(() => ({
+      comments: [
+        { at: T + 1, text: "ok" },
+        { at: "x", text: "bad" },
+        { at: T + 2, text: "/nicoad {}" },
+      ],
+      complete: true,
+    }));
+    const got = await fetchKakolog(URL_, "jk1", T, T + 60_000, {
+      now: T + DAY,
+      fetch: get,
+    });
+    expect(got.comments.map((c) => c.text)).toEqual(["ok"]);
+    expect(got.odd).toBe(1);
+  });
+
+  test("届かない・形が違うときは例外", async () => {
+    const down = (async () =>
+      new Response("", { status: 503 })) as unknown as typeof fetch;
+    await expect(
+      fetchKakolog(URL_, "jk1", T, T + 1000, { now: T + DAY, fetch: down }),
+    ).rejects.toThrow();
+    const { get } = fake(() => ({ error: "x" }));
+    await expect(
+      fetchKakolog(URL_, "jk1", T, T + 1000, { now: T + DAY, fetch: get }),
+    ).rejects.toThrow();
   });
 });

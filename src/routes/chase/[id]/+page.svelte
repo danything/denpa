@@ -200,12 +200,6 @@
       ? "before"
       : playbackAt((at - target.head) / 1000, null);
   }
-  // 過去ログにまだ入っていない新しいところ (10 分以内) を観ているなら、NX-Jikkyo で 1 回だけ遡る
-  $effect(() => {
-    const w = airTime();
-    if (w !== null && jikkyoActive) untrack(() => jikkyo.backfill(w));
-  });
-
   /**
    * シーク。**録れているところより先へは行かせない** (まだ無い)。
    * 録れている長さがまだ届いていない間 (`line` が null) は飛ばない。0 として扱うと、続きから開いた録画が先頭へ戻る

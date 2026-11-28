@@ -9,6 +9,7 @@ config.dbPath = join(
   "denpa.db",
 );
 const { niconicoLive } = await import("#lib/server/niconico-live.js");
+const { jikkyoLive } = await import("#lib/server/jikkyo-live.js");
 const { settings } = await import("#lib/server/settings.js");
 const { actions } = await import("./jikkyo.server");
 
@@ -28,17 +29,21 @@ function save(form: Record<string, string>) {
 describe("設定の「実況」の保存", () => {
   afterEach(() => mock.restore());
 
-  test("オフにしたら、公式の実況への接続を閉じる", async () => {
+  test("オフにしたら、hub への購読と公式の実況への接続を閉じる", async () => {
     const closeAll = spyOn(niconicoLive, "closeAll");
+    const closeHub = spyOn(jikkyoLive, "closeAll");
     await save({ jikkyoNg: "" });
     expect(settings().jikkyo).toBe(false);
     expect(closeAll).toHaveBeenCalledTimes(1);
+    expect(closeHub).toHaveBeenCalledTimes(1);
   });
 
   test("オンのままなら閉じない", async () => {
     const closeAll = spyOn(niconicoLive, "closeAll");
+    const closeHub = spyOn(jikkyoLive, "closeAll");
     await save({ jikkyo: "on", jikkyoNg: "" });
     expect(settings().jikkyo).toBe(true);
     expect(closeAll).not.toHaveBeenCalled();
+    expect(closeHub).not.toHaveBeenCalled();
   });
 });

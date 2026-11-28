@@ -6,7 +6,7 @@ import { idTokenFor, sealForDenpa } from "./niconico-seal";
  * 偽の denpa-hub (ニコニコの OAuth の中継) と、偽の視聴の WebSocket。
  *
  * denpa のニコニコとの連携と、公式の実況への書き込みを通しで試すためだけのもの。使うのは hub の公開の約束
- * (denpa-hub の docs/niconico.md) と、NX-Jikkyo と同じ形のやり取り (`src/lib/jikkyo/nx.ts`) だけで、ニコニコそのものの値は何も持たない。
+ * (denpa-hub の docs/niconico.md) と、NX-Jikkyo と同じ形のやり取りだけで、ニコニコそのものの値は何も持たない。
  *
  * - `GET /niconico/authorize`: **人は出てこない。** その場で偽のトークンの応答を denpa の鍵に宛てて封じ、`<return>#result=` へ 303。
  *   `/__control/mode` で `deny` にすると `#error=access_denied` を返す (ニコニコで断った)
@@ -17,6 +17,7 @@ import { idTokenFor, sealForDenpa } from "./niconico-seal";
  *   `/__control/ranking` で `off` にすると、本物の hub がランキングを受け付けていないときと同じく 404 を返す。
  *   `GET /ranking` は、そのトークンが送った放送のうち、これからのものをそのまま順位にし (どれも 10 票。始まりの早い順)、
  *   その下に受信できない局の番組 (`AWAY`) を足して返す。本物の 5 つのトークンの決まりは持たない
+ * - `/jikkyo/*`: 実況のコメントの中継 (denpa-hub の docs/jikkyo.md)。`/__control/jikkyo` で流し方と書き込みへの返事を決め、`/__control/jikkyo/emit` でコメントを流す
  */
 const PORT = Number(process.env["FAKE_HUB_PORT"] ?? 8100);
 /** 偽のニコニコのユーザー ID */
@@ -125,6 +126,132 @@ const json = (body: unknown, status = 200) =>
     headers: { "Content-Type": "application/json" },
   });
 
+/**
+ * 実況のコメントの中継 (denpa-hub の docs/jikkyo.md)。`/__control/jikkyo` で流し方を決める。
+ * 購読 (`/jikkyo/channels/:ch/live`) には、決めた本文を書かれた時刻を前後に散らして 0.5 秒ごとに流し続ける (`quiet` なら流さない)。
+ * 書き込みは `jikkyoPosts` に貯め、`reply` のとおりに返す (`ok` なら購読に `src: "hub"` で流す)。過去ログは `kakolog` のものを返す
+ */
+interface JikkyoMode {
+  text?: string;
+  texts?: string[];
+  mail?: string;
+  mails?: (string | null)[];
+  quiet?: boolean;
+  /** 購読を断る (hub が落ちている) */
+  refuse?: boolean;
+  reply?: "ok" | "rejected";
+  /** 過去ログの返事のコメント。`error` なら 503 */
+  kakolog?: unknown[] | "error";
+}
+let jikkyoMode: JikkyoMode = {};
+const jikkyoPosts: Record<string, unknown>[] = [];
+const jikkyoWatched: string[] = [];
+const jikkyoKakolog: string[] = [];
+const jikkyoStreams = new Set<{
+  channel: string;
+  send: (text: string) => void;
+}>();
+let jikkyoSeq = 0;
+let jikkyoSerial = 0;
+
+function jikkyoBroadcast(channel: string, comments: unknown[]): void {
+  const text = `id: ${++jikkyoSeq}\nevent: comments\ndata: ${JSON.stringify(comments)}\n\n`;
+  for (const stream of jikkyoStreams)
+    if (stream.channel === channel) stream.send(text);
+}
+
+function jikkyoLive(channel: string): Response {
+  jikkyoWatched.push(channel);
+  if (jikkyoMode.refuse === true) return json({ error: "down" }, 503);
+  const encoder = new TextEncoder();
+  let stream: { channel: string; send: (text: string) => void } | null = null;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        const send = (text: string) => {
+          try {
+            controller.enqueue(encoder.encode(text));
+          } catch {
+            // 閉じた
+          }
+        };
+        stream = { channel, send };
+        jikkyoStreams.add(stream);
+        send(`event: state\ndata: {"nx":"up","epoch":"fake"}\n\n`);
+        timer = setInterval(() => {
+          if (jikkyoMode.quiet === true) {
+            send("event: ping\ndata: 1\n\n");
+            return;
+          }
+          const texts = jikkyoMode.texts ?? [
+            jikkyoMode.text ?? "テストのコメント",
+          ];
+          const comments: unknown[] = [];
+          for (const offset of [-5_000, 0, 5_000, 10_000, 20_000]) {
+            const at = Date.now() + offset;
+            texts.forEach((text, i) => {
+              const mail = jikkyoMode.mails?.[i] ?? jikkyoMode.mail;
+              comments.push({ at, text, src: "nx", ...(mail ? { mail } : {}) });
+            });
+          }
+          jikkyoBroadcast(channel, comments);
+        }, 500);
+      },
+      cancel() {
+        if (stream !== null) jikkyoStreams.delete(stream);
+        if (timer !== null) clearInterval(timer);
+      },
+    }),
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+}
+
+async function jikkyo(request: Request, url: URL): Promise<Response> {
+  if (url.pathname === "/jikkyo/tokens" && request.method === "POST")
+    return json(
+      { token: `fake-jikkyo-${++jikkyoSerial}`.padEnd(43, "x") },
+      201,
+    );
+  if (
+    !(request.headers.get("authorization") ?? "").startsWith(
+      "Bearer fake-jikkyo-",
+    )
+  )
+    return json({ error: "invalid_token" }, 401);
+  const match = /^\/jikkyo\/channels\/(jk\d+)\/(live|kakolog|comments)$/.exec(
+    url.pathname,
+  );
+  if (match === null) return json({ error: "not_found" }, 404);
+  const [, channel, what] = match as unknown as [string, string, string];
+  if (what === "live") return jikkyoLive(channel);
+  if (what === "kakolog") {
+    jikkyoKakolog.push(`${channel}${url.search}`);
+    const comments = jikkyoMode.kakolog ?? [];
+    if (comments === "error") return json({ error: "down" }, 503);
+    const from = Number(url.searchParams.get("from"));
+    const to = Number(url.searchParams.get("to"));
+    return json({
+      comments: comments.filter((c) => {
+        const at = (c as { at: number }).at;
+        return at >= from && at < to;
+      }),
+      complete: true,
+    });
+  }
+  const body = (await request.json()) as Record<string, unknown>;
+  jikkyoPosts.push({ channel, ...body });
+  if (jikkyoMode.reply === "rejected") return json({ error: "rejected" }, 400);
+  const id = `fake${jikkyoPosts.length}`.padEnd(16, "0");
+  const at = Date.now();
+  const mail = ["184", body["color"], body["position"], body["size"]]
+    .filter((c) => typeof c === "string")
+    .join(" ");
+  // 本物と同じく、購読にも流す (端末は id で自分の書き込みを 1 回だけ捨てる)
+  jikkyoBroadcast(channel, [{ at, text: body["text"], mail, src: "hub", id }]);
+  return json({ id, at });
+}
+
 Bun.serve({
   port: PORT,
   hostname: "0.0.0.0",
@@ -215,6 +342,25 @@ Bun.serve({
       }
       return json({ error: "not_found" }, 404);
     }
+    if (url.pathname.startsWith("/jikkyo/")) return jikkyo(request, url);
+    if (url.pathname === "/__control/jikkyo" && request.method === "POST") {
+      jikkyoMode = (await request.json()) as JikkyoMode;
+      jikkyoPosts.length = 0;
+      jikkyoWatched.length = 0;
+      jikkyoKakolog.length = 0;
+      return json({ ok: true });
+    }
+    if (
+      url.pathname === "/__control/jikkyo/emit" &&
+      request.method === "POST"
+    ) {
+      const body = (await request.json()) as {
+        channel: string;
+        comments: unknown[];
+      };
+      jikkyoBroadcast(body.channel, body.comments);
+      return json({ ok: true });
+    }
     if (url.pathname === "/__control/ranking" && request.method === "POST") {
       ranking = (await request.text()) === "off" ? "off" : "ok";
       return json({ ranking });
@@ -234,6 +380,11 @@ Bun.serve({
         posts,
         watched,
         ranking: { tokens: rankingTokens.size, votes, revoked },
+        jikkyo: {
+          posts: jikkyoPosts,
+          watched: jikkyoWatched,
+          kakolog: jikkyoKakolog,
+        },
       });
     return new Response("not found", { status: 404 });
   },
