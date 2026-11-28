@@ -95,7 +95,7 @@ type AutoScene = "live" | "chase";
 
 /**
  * **`codec=auto` で流す形式。** 段 0 は `autoCodec` (家の中なら MPEG-2 → H.264 → AV1 → H.265、外なら AV1 → H.265 → H.264) で、
- * 端末が再生できて (`formats`)、その場面で出せる最初のもの。エンコードするものは、その場でエンコードできるもの (`live`。`live.liveRealtime`) だけ
+ * 端末が再生できて (`formats`)、その場面で出せる最初のもの。エンコードする形式は、その場でエンコードできる並び (`live`。`live.liveRealtime`) にあるものだけ
  * (H.265 はライブで、エンコーダが GPU のときだけ)。
  * 段を下げるなら、今までどおり `rungCodec` (`raw` は並びから外す)。選べなければ null。
  *
