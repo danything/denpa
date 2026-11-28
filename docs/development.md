@@ -186,7 +186,7 @@ main は ruleset の必須チェックで守ってあります。`check`・`unit
 - Windows で別に置く Opus と SVT-AV1 の組み上がりは、MSYS2 の gcc のパッケージのバージョンも鍵に入れます。SVT-AV1 の静的ライブラリは LTO の中間表現で、
   組んだ gcc と ffmpeg を繋ぐ gcc がずれると壊れるためです (16.2.0-6 で組んだものを 16.2.0-7 で繋いだら、SVT-AV1 のスレッドが Segmentation fault で落ちた)
 - wdi-simple の鍵は、組むスクリプトとランナーのイメージのバージョンです。イメージが上がるたびに組み直し、新しい MSVC で組めるかを見ます。置くのは main だけです
-- ASICEN の子プロセス (偽の機材。agent-asicen-mock) の鍵は `agent/asicen/` の中身です。組み方も上流のバージョンもそこにあります
+- ASICEN の子プロセス (偽の機材。agent-asicen-mock) の鍵は、`agent/asicen/` の中身とランナーのイメージのバージョンです。組み方も上流のバージョンも `agent/asicen/` にあり、cmake と g++ はイメージと apt から入ります
 
 ## DB の列を足す
 

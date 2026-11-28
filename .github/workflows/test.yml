@@ -158,8 +158,8 @@ jobs:
           printf '%s\n' "$version" > VERSION
           echo "FONT_DIR=$dir" >> "$GITHUB_ENV"
 
-      # **ファイルを 2 つのプロセスに分けて流す** (`--parallel=2`。ファイルごとに新しいグローバルで動かすのは
-      # `--isolate` と同じ)。1 つずつ流すと 85 秒かかっていた。4 コアのランナーで 3 つ以上にすると、
+      # **ファイルを 2 つのプロセスに分けて流す** (`--parallel=2`)。ファイルごとに新しいグローバルで動かすのは `--isolate` と同じ。
+      # 1 つずつ流すと 85 秒かかっていた。4 コアのランナーで 3 つ以上にすると、
       # 時間を測るテスト (ロゴの検出・カルーセルを待つ中継) が CPU の取り合いで 5 秒の上限を超えて落ちる
       - name: Unit tests
         run: bun run test:unit --parallel=2
@@ -228,7 +228,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # **組んだ子プロセスは actions/cache に置いて使い回す。** 組むと 70 秒ほどかかる (apt と 2 つの組み方)。
-      # 組み方も上流のバージョンも agent/asicen/ の中にあるので、それを鍵にする。外れたときだけ組んで置く
+      # 組み方も上流のバージョンも agent/asicen/ の中にあるので、それとランナーのイメージのバージョンを鍵にする。
+      # cmake と g++ はイメージと apt から入るので、イメージが上がるたびに組み直し、新しいもので組めるかを見る。
+      # 外れたときだけ組んで置く
+      - name: Key for denpa-asicen (mock)
+        id: asicen
+        run: echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
       - name: Restore denpa-asicen (mock)
         id: asicen-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -236,7 +242,7 @@ jobs:
           path: |
             asicen-mock
             asicen-mock-windows
-          key: asicen-mock-${{ runner.os }}-${{ hashFiles('agent/asicen/**') }}
+          key: asicen-mock-${{ steps.asicen.outputs.image }}-${{ hashFiles('agent/asicen/**') }}
 
       - name: Build denpa-asicen (mock)
         if: steps.asicen-cache.outputs.cache-hit != 'true'
