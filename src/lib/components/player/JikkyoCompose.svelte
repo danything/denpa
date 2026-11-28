@@ -35,6 +35,7 @@
    *   先頭の字をその理由 1 行に替える (トーストは出さない)
    * - Enter で送る (変換中は送らない)。Esc か ✕ で閉じる (一覧の下では一覧ごとしまう)。送れたら欄を空にし、失敗したら残す。自動で送り直さない
    * - 色・位置・大きさは、パレットのボタンで開く選択の行で選ぶ。端末ごとに覚える (`JIKKYO_STYLE_KEY`)
+   * - denpa-hub に書くときは、入力の 1 行の下に投稿の決まり (と削除の依頼の窓口) への 1 行のリンクを置く
    * - 置き場は画面が決める。ふだんはコメントの一覧の下 (`panel`。一覧の中なので面も影も付けず、先頭の字は入力欄の上の行に。
    *   ✕ は置かない。しまうのは一覧のボタン)。一覧を出せない形 (横にしたスマホ・全画面) では映像の上、操作バーのすぐ上
    */
@@ -66,6 +67,10 @@
     official,
     onclose,
   }: Props = $props();
+
+  /** denpa-hub に書くときの投稿の決まりと、削除の依頼の窓口 (denpa-hub の docs/rules.md)。公式に書くときはニコニコの決まりなので出さない */
+  const RULES =
+    "https://github.com/danything/denpa-hub/blob/main/docs/rules.md";
 
   /** 色・位置・大きさを覚えておくキー (端末ごと。接頭辞の `player-` は画面をまたいで効くもの) */
   const JIKKYO_STYLE_KEY = "player-jikkyo-style";
@@ -339,6 +344,15 @@
       >
     {/if}
   </div>
+  {#if !official}
+    <a
+      class="rules"
+      href={RULES}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-testid="jikkyo-compose-rules">投稿の決まり・削除の依頼</a
+    >
+  {/if}
   <span class="visually-hidden" role="status" aria-live="polite">{told}</span>
 </div>
 
@@ -477,6 +491,16 @@
   }
   button:focus-visible {
     outline-color: var(--c-focus);
+  }
+  /* 投稿の決まりへの 1 行。先頭の字と同じ控えた字で、入力の 1 行の下に置く */
+  .rules {
+    align-self: flex-start;
+    padding: 0 var(--dp-space-3);
+    font-size: var(--dp-text-xs);
+    color: var(--c-muted);
+  }
+  .in-list .rules {
+    padding: 0;
   }
   .left {
     font-size: var(--dp-text-xs);

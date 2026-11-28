@@ -61,6 +61,11 @@ test.describe("ライブで実況に書き込む", () => {
       const csp = await watchViolations(page);
       const nx = await fakeComments({ quiet: true });
       await openWriting(page);
+      // 投稿の決まりと削除の依頼の窓口へ 1 行でリンクする
+      await expect(page.getByTestId("jikkyo-compose-rules")).toHaveAttribute(
+        "href",
+        "https://github.com/danything/denpa-hub/blob/main/docs/rules.md",
+      );
 
       await page.getByTestId("jikkyo-style-button").click();
       await page.getByTestId("jikkyo-color-red").click();
@@ -373,6 +378,8 @@ test.describe("ニコニコと連携しているときの書き込み", () => {
       const csp = await watchViolations(page);
       const nx = await fakeComments({ quiet: true });
       await openWriting(page, "ニコニコ実況に書きます");
+      // 公式に書くときは denpa-hub の決まりを出さない
+      await expect(page.getByTestId("jikkyo-compose-rules")).toHaveCount(0);
 
       const input = page.getByTestId("jikkyo-compose-input");
       await input.fill("公式への書き込み");
