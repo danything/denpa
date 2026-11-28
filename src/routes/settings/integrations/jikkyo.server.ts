@@ -20,7 +20,10 @@ export const actions = {
     const form = await request.formData();
     const ng = parseNg(String(form.get("jikkyoNg") ?? ""));
     if ("error" in ng) return fail(400, { message: ng.error });
-    saveSettings({ jikkyo: form.get("jikkyo") === "on", jikkyoNg: ng.words });
+    const jikkyo = form.get("jikkyo") === "on";
+    saveSettings({ jikkyo, jikkyoNg: ng.words });
+    // オフにしたら、開いている公式の実況への接続もすぐ閉じる (呼ばれなくなるのを `IDLE` まで待たない)
+    if (!jikkyo) niconicoLive.closeAll();
     return { success: true, saved: true };
   },
   unlinkNiconico: async (event) => {
