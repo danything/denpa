@@ -1,10 +1,10 @@
 import type { Locator } from "@playwright/test";
 
 import { expect, goto, recordOne, test } from "./helpers";
-import { deviceOn, setJikkyo } from "./jikkyo";
+import { deviceOn, fakeComments, setJikkyo } from "./jikkyo";
 
 /**
- * **録画の実況** のコメントの一覧 (docs/watch.md の「実況」)。過去ログ API は `page.route` で偽物に差し替える。
+ * **録画の実況** のコメントの一覧 (docs/watch.md の「実況」)。過去ログは偽の denpa-hub が返す (`fakeComments`)。
  *
  * 57-jikkyo-recorded から分けたもの。どれも録画を 1 本録ってから見るので、まとめると 1 分を超える。
  * 別のファイルにして並べて流す。世帯の設定は終わったら既定 (オフ) に戻す
@@ -27,29 +27,10 @@ test.describe("録画の実況", () => {
       const target = state.jikkyo;
       if (target === null) throw new Error("録画に実況のチャンネルが無い");
       // 偽の過去ログ。録画の先頭から 0.1 秒おきに、先頭からの番号を本文にしたコメント
-      await page.route(
-        "https://jikkyo.tsukumijima.net/api/kakolog/**",
-        (route) => {
-          const packet = [];
-          for (let n = 0; n < 1200; n++) {
-            const at = target.head + n * 100;
-            packet.push({
-              chat: {
-                thread: "1",
-                date: String(Math.floor(at / 1000)),
-                date_usec: String((at % 1000) * 1000),
-                user_id: "fake",
-                content: `${n}番`,
-              },
-            });
-          }
-          return route.fulfill({
-            contentType: "application/json",
-            headers: { "access-control-allow-origin": "*" },
-            body: JSON.stringify({ packet }),
-          });
-        },
-      );
+      const comments: unknown[] = [];
+      for (let n = 0; n < 1200; n++)
+        comments.push({ at: target.head + n * 100, text: `${n}番`, src: "nx" });
+      await fakeComments({ quiet: true, kakolog: comments });
       await deviceOn(page);
       await page.addInitScript(() =>
         localStorage.setItem("player-jikkyo-list", "1"),
@@ -120,29 +101,10 @@ test.describe("録画の実況", () => {
       const target = state.jikkyo;
       if (target === null) throw new Error("録画に実況のチャンネルが無い");
       // 偽の過去ログ。録画の先頭から 0.1 秒おきに、先頭からの番号を本文にしたコメント
-      await page.route(
-        "https://jikkyo.tsukumijima.net/api/kakolog/**",
-        (route) => {
-          const packet = [];
-          for (let n = 0; n < 1200; n++) {
-            const at = target.head + n * 100;
-            packet.push({
-              chat: {
-                thread: "1",
-                date: String(Math.floor(at / 1000)),
-                date_usec: String((at % 1000) * 1000),
-                user_id: "fake",
-                content: `${n}番`,
-              },
-            });
-          }
-          return route.fulfill({
-            contentType: "application/json",
-            headers: { "access-control-allow-origin": "*" },
-            body: JSON.stringify({ packet }),
-          });
-        },
-      );
+      const comments: unknown[] = [];
+      for (let n = 0; n < 1200; n++)
+        comments.push({ at: target.head + n * 100, text: `${n}番`, src: "nx" });
+      await fakeComments({ quiet: true, kakolog: comments });
       await deviceOn(page);
       await page.addInitScript(() =>
         localStorage.setItem("player-jikkyo-list", "1"),

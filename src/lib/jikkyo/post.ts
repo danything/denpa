@@ -1,5 +1,5 @@
 /**
- * **実況に書き込むときの決まり** (画面に触らない所。単体テストで見る)。NX-Jikkyo へ送るのは `nx.ts` の `post`、
+ * **実況に書き込むときの決まり** (画面に触らない所。単体テストで見る)。denpa-hub へ送るのは denpa のサーバ (`/api/jikkyo/comments`。hub が NX-Jikkyo にも書く)、
  * ニコニコと連携しているときに公式のニコニコ実況へ送るのは denpa のサーバ (`server/niconico-live.ts`)。
  * 画面は `JikkyoCompose`。決まりの理由は docs/watch.md の「実況に書き込む」。どちらに書くときも同じ決まりにする
  *

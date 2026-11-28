@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { BS11, FUJI, MX } from "../fake/services";
 import { expect, goto, pickCodec, test, wakeControls } from "./helpers";
-import { deviceOn, fakeNx, ranked, setJikkyo } from "./jikkyo";
+import { deviceOn, fakeComments, ranked, setJikkyo } from "./jikkyo";
 
 /**
  * **実況のコメントの一覧と「実況」タブ** (docs/watch.md の「実況」)。流れるコメントと操作バーの重なりもここで見る。
@@ -18,7 +18,7 @@ test.describe("実況のコメントの一覧", () => {
   }) => {
     await setJikkyo(page, true);
     try {
-      await fakeNx(page);
+      await fakeComments();
       await deviceOn(page);
       await goto(page, `/live?service=${MX.id}`);
       await expect(page.getByTestId("live-title")).toBeVisible();
@@ -120,7 +120,7 @@ test.describe("実況のコメントの一覧", () => {
   }) => {
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, { quiet: true });
+      await fakeComments({ quiet: true });
       await deviceOn(page);
       await page.addInitScript(() =>
         localStorage.setItem("player-jikkyo-list", "1"),
@@ -384,7 +384,7 @@ test.describe("実況のコメントと操作バーの重なり", () => {
     test.setTimeout(180_000);
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, {
+      await fakeComments({
         texts: ["右の列の下を通るコメント", "下の字"],
         mails: [undefined, "shita"],
       });
