@@ -131,6 +131,8 @@ describe("OfficialReader", () => {
               ),
             );
           if (answer instanceof Error) throw answer;
+          if (typeof answer === "function")
+            return (answer as () => Promise<Response>)();
           return Response.json(answer);
         },
         setTimeout: (run, ms) => {
@@ -215,5 +217,27 @@ describe("OfficialReader", () => {
     await h.step();
     expect(h.boundaries).toEqual([5_000, 20_000]);
     h.r.stop();
+  });
+
+  test("止めたあとに届いた返事は流さない", async () => {
+    let release = () => {};
+    const late = () =>
+      new Promise<Response>((resolve) => {
+        release = () =>
+          resolve(
+            Response.json(
+              reply({ seq: 4, comments: [{ at: 6_000, text: "前の局" }] }),
+            ),
+          );
+      });
+    const h = reader([reply({ seq: 3 }), late]);
+    h.r.start();
+    await h.flush();
+    await h.step();
+    h.r.stop();
+    release();
+    await h.flush();
+    expect(h.got).toEqual([]);
+    expect(h.boundaries).toEqual([5_000]);
   });
 });

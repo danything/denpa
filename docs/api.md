@@ -86,8 +86,8 @@
   いま録っている最中か (録画中なら `reserved` も `true`)。番組表のマスの印と同じ物差しです。
   録画ボタンの印に使い、押すのは [`POST /api/services/<id>/record`](#いまの番組を録る-post-apiservicesidrecord)
 - `jikkyo` は実況のチャンネル (`jk1` など。NX-Jikkyo と過去ログ API のチャンネルの ID)。実況の無い局と、世帯の設定 (連携の「実況」) が
-  オフのときは `null`。対応表は denpa が持ちます (`src/lib/jikkyo/channels.ts`)。コメントは denpa を通らないので、
-  使う側が NX-Jikkyo と過去ログ API へ直接繋ぎます ([architecture.md](architecture.md#端末が外へ繋ぐもの-実況のコメント))
+  オフのときは `null`。対応表は denpa が持ちます (`src/lib/jikkyo/channels.ts`)。NX-Jikkyo と過去ログ API のコメントは denpa を通らないので、
+  使う側が直接繋ぎます ([architecture.md](architecture.md#端末が外へ繋ぐもの-実況のコメント))。公式のニコニコ実況のコメントは [`feed`](#公式の実況のコメントを受ける-post-apijikkyoniconicofeed) で受けます
 
 ### 音声の一覧 `audios`
 
