@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { DEFAULT_POST_STYLE } from "./command";
-import { HEARTBEAT, OfficialWriter } from "./official";
+import type { Comment } from "./comments";
+import { HEARTBEAT, OfficialReader, OfficialWriter } from "./official";
 
 /*
  * 公式の実況に書く端末の側。サーバ (`/api/jikkyo/niconico/…`) は偽の fetch で答える
@@ -93,5 +94,73 @@ describe("書き込む", () => {
     expect(h.writer.state).toBe("unlinked");
     result = "something-new";
     expect(await h.writer.post("a", DEFAULT_POST_STYLE)).toBe("unknown");
+  });
+});
+
+describe("OfficialReader", () => {
+  function reader() {
+    const got: Comment[] = [];
+    const boundaries: (number | null)[] = [];
+    const r = new OfficialReader(
+      {
+        comments: (comments) => got.push(...comments),
+        boundary: (at) => boundaries.push(at),
+      },
+      () => 0,
+    );
+    return { r, got, boundaries };
+  }
+
+  const reply = (over: Record<string, unknown>) => ({
+    epoch: "e1",
+    state: "ready",
+    since: 1_000,
+    now: 5_000,
+    seq: 0,
+    comments: [],
+    ...over,
+  });
+
+  test("番号の続きを載せ、境 = max(since, 最初の now) より後だけ流す。自分の書き込みの戻りは 1 回だけ捨てる", () => {
+    const h = reader();
+    expect(h.r.body()).toEqual({});
+    h.r.expectEcho("送った");
+    expect(h.r.apply(reply({ seq: 3 }))).toBe(0);
+    expect(h.r.body()).toEqual({ after: 3, epoch: "e1" });
+    h.r.apply(
+      reply({
+        seq: 6,
+        now: 9_000,
+        comments: [
+          { at: 4_000, text: "境より前" },
+          { at: 6_000, text: "後", style: { place: "ue" } },
+          { at: 7_000, text: "送った", own: true },
+          { at: 8_000, text: "送った", own: true },
+        ],
+      }),
+    );
+    expect(h.boundaries).toEqual([5_000]);
+    expect(h.got).toEqual([
+      { at: 6_000, text: "後", style: { place: "ue" } },
+      { at: 8_000, text: "送った" },
+    ]);
+  });
+
+  test("サーバが受けていない・届かない・形が違うときは境を無くす", () => {
+    const h = reader();
+    h.r.apply(reply({}));
+    h.r.apply(reply({ since: null }));
+    h.r.apply(reply({}));
+    h.r.fail();
+    h.r.apply(reply({}));
+    expect(h.r.apply({ epoch: 1 })).toBeNull();
+    expect(h.boundaries).toEqual([5_000, null, 5_000, null, 5_000, null]);
+  });
+
+  test("epoch が変わったら、その返事の now から境を取り直す", () => {
+    const h = reader();
+    h.r.apply(reply({ seq: 9 }));
+    h.r.apply(reply({ epoch: "e2", seq: 0, now: 20_000, since: 15_000 }));
+    expect(h.boundaries).toEqual([5_000, 20_000]);
   });
 });

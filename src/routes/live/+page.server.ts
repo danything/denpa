@@ -202,7 +202,7 @@ export function load(event) {
     jikkyoAllowed: current.jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
     jikkyoNg: current.jikkyoNg,
-    /** ニコニコと連携しているか (世帯で 1 つ)。しているときは、書き込みを公式のニコニコ実況へ送る (`server/niconico-live.ts`) */
+    /** ニコニコと連携しているか (世帯で 1 つ)。しているときは、書き込みを公式のニコニコ実況へ送り、公式のコメントも受ける (`server/niconico-live.ts`) */
     niconico: linkState().state === "linked",
   };
 }

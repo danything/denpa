@@ -1,12 +1,15 @@
 /**
- * **公式のニコニコ実況に書く (端末の側)。** ニコニコと連携している世帯で、書き込みの欄 (`JikkyoCompose`) が使う。
+ * **公式のニコニコ実況に書く・受ける (端末の側)。** ニコニコと連携している世帯で、書き込みの欄 (`JikkyoCompose`) と
+ * ライブの画面のコメント (`feed.svelte.ts`) が使う。
  * 端末はトークンも接続先も持たず、denpa のサーバにリクエストする (`/api/jikkyo/niconico/…`。繋ぐのはサーバ。`server/niconico-live.ts`)。
  *
  * - 欄が開いている間、`HEARTBEAT` おきと局が替わったときに `session` を呼んで接続を保ち、状態を受け取る
  * - 書き込みは `comments` に送り、結果 (`PostResult`) を受け取る
+ * - コメントは `feed` から受ける (`OfficialReader`)
  */
 import type { PostStyle } from "./command";
-import type { PostResult } from "./post";
+import type { Comment } from "./comments";
+import { Echoes, type PostResult } from "./post";
 
 /** 接続を保つために呼ぶ間隔 (ms)。サーバは 2 分呼ばれなければ閉じる */
 export const HEARTBEAT = 30_000;
@@ -117,5 +120,117 @@ export class OfficialWriter {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
+  }
+}
+
+/** サーバが渡すコメント (`server/niconico-live.ts` の `FeedComment`) */
+type FeedComment = Comment & { own?: true };
+
+interface ReaderEvents {
+  /** コメントが来た (境より前のもの・自分の書き込みの戻りは来ない) */
+  comments: (comments: Comment[]) => void;
+  /** 境が変わった (null なら公式を受けていない) */
+  boundary: (at: number | null) => void;
+}
+
+/**
+ * **公式のニコニコ実況のコメントを受ける (端末の側)。** ニコニコと連携している世帯のライブの画面で、局ごとに 1 つ (`feed.svelte.ts`)。
+ * 自分ではリクエストしない。ライブのコメントと同じ `POST /api/jikkyo/feed` の呼び出しに、続きの番号を `official` として載せ (`body`)、
+ * 返事の `official` を読む (`apply`。`live.ts` の `LiveReader`)。端末から denpa のサーバへのロングポーリングを 1 本にするため
+ *
+ * - **境 (`boundary`) より後は公式、前は NX-Jikkyo が取り込んだもの** を流す。境は max(サーバが受け続けている始まり, 最初の返事の時刻)。
+ *   サーバが受けられていなければ境は無く、NX-Jikkyo の取り込み (`src: "nicolive"`) を全部流す (`feed.svelte.ts` の `receiveLive`)
+ * - サーバが返す番号 (`seq`) の続きをリクエストする。サーバを起こし直した (`epoch` が違う) ら最初から
+ * - 世帯のアカウントが書いたもの (`own`) のうち、この端末が送ってから 60 秒以内の同じ本文は 1 回だけ捨てる (送れたときにもう流している)
+ * - 受けられなければ (`fail`) 境を無くす
+ */
+export class OfficialReader {
+  boundary: number | null = null;
+  private after: number | null = null;
+  private epoch: string | null = null;
+  /** 最初の返事の時刻 (サーバの時計) */
+  private first: number | null = null;
+  private readonly echoes = new Echoes();
+
+  constructor(
+    private readonly events: ReaderEvents,
+    private readonly now: () => number = () => Date.now(),
+  ) {}
+
+  /** 次の呼び出しに載せるもの */
+  body(): { after?: number; epoch?: string } {
+    return {
+      ...(this.after === null ? {} : { after: this.after }),
+      ...(this.epoch === null ? {} : { epoch: this.epoch }),
+    };
+  }
+
+  /** 公式に書いた。戻ってきた同じ本文を 1 回だけ捨てる */
+  expectEcho(text: string): void {
+    this.echoes.expect(text, this.now());
+  }
+
+  /** 送れなかった。覚えたものを 1 つ忘れる */
+  forgetEcho(text: string): void {
+    this.echoes.forget(text);
+  }
+
+  /** 届かない・断られた。境を無くす */
+  fail(): void {
+    this.setBoundary(null);
+  }
+
+  /** 返事の `official` を読む。読めた数を返す (形式が違えば境を無くして null) */
+  apply(reply: unknown): number | null {
+    if (reply === null || typeof reply !== "object") {
+      this.fail();
+      return null;
+    }
+    const r = reply as Record<string, unknown>;
+    const { epoch, seq, now, since, comments } = r;
+    if (
+      typeof epoch !== "string" ||
+      typeof seq !== "number" ||
+      typeof now !== "number" ||
+      !Array.isArray(comments)
+    ) {
+      this.fail();
+      return null;
+    }
+    if (epoch !== this.epoch || this.first === null) {
+      this.epoch = epoch;
+      this.first = now;
+    }
+    this.after = seq;
+    const boundary =
+      typeof since === "number" ? Math.max(since, this.first) : null;
+    this.setBoundary(boundary);
+    if (boundary === null) return 0;
+    const out: Comment[] = [];
+    for (const item of comments as FeedComment[]) {
+      if (
+        item === null ||
+        typeof item !== "object" ||
+        typeof item.at !== "number" ||
+        typeof item.text !== "string" ||
+        item.at < boundary
+      )
+        continue;
+      if (item.own === true && this.echoes.take(item.text, this.now()))
+        continue;
+      out.push(
+        item.style !== undefined
+          ? { at: item.at, text: item.text, style: item.style }
+          : { at: item.at, text: item.text },
+      );
+    }
+    if (out.length > 0) this.events.comments(out);
+    return out.length;
+  }
+
+  private setBoundary(at: number | null): void {
+    if (at === this.boundary) return;
+    this.boundary = at;
+    this.events.boundary(at);
   }
 }

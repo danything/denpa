@@ -15,7 +15,7 @@ import { fetchKakolog, KAKOLOG_LAG } from "./kakolog";
 import { FORCE_SPAN, LIST_SPAN } from "./list";
 import { type LiveComment, LiveReader } from "./live";
 import { compileNg } from "./ng";
-import type { OfficialWriter } from "./official";
+import { OfficialReader, type OfficialWriter } from "./official";
 import { ECHO_SPAN, Echoes, type PostResult } from "./post";
 
 /** 過去ログが読めなかったとき、もう一度試すまで */
@@ -51,6 +51,9 @@ export class JikkyoFeed {
   private ngSeen = new WeakMap<Comment, boolean>();
   private readonly cursor = new Cursor();
   private live: LiveReader | null = null;
+  /** 公式のニコニコ実況のコメントの受け手 (連携している世帯のライブだけ。同じ `/api/jikkyo/feed` で受ける) */
+  private reader: OfficialReader | null = null;
+  private official = false;
   private channel: string | null = null;
   private active = false;
   /** 書き込みの返事を待っている */
@@ -81,22 +84,40 @@ export class JikkyoFeed {
    * 局を替えた・オン/オフを替えた。替わったら繋ぎ直す。局が替わったら控えも捨てる。
    * @param channel 実況のチャンネル。実況の無い局・世帯の設定がオフなら null
    * @param on 流すか (端末の設定がオンのとき)
+   * @param official ニコニコと連携している (公式のコメントも denpa のサーバから受ける。ライブだけ)
    */
-  set(channel: string | null, on: boolean): void {
+  set(channel: string | null, on: boolean, official = false): void {
     const active = on && channel !== null;
-    if (channel === this.channel && active === this.active) return;
+    if (
+      channel === this.channel &&
+      active === this.active &&
+      official === this.official
+    )
+      return;
     if (channel !== this.channel) this.cursor.reset();
     else this.cursor.pause();
     this.channel = channel;
     this.active = active;
+    this.official = official;
     this.stopSources();
     if (!active || !this.receives || channel === null) return;
     // NX-Jikkyo が読めなくても、hub の独自コメントは流れて書けるので「読めない」にはしない (hub に届かないときだけ)
-    this.live = new LiveReader(channel, resolve("api/jikkyo/feed"), {
-      comments: (comments) => this.receiveLive(comments),
-      state: (hub) => this.mark("hub", hub),
-      odd: warnShape,
-    });
+    if (official)
+      this.reader = new OfficialReader({
+        comments: (comments) => this.cursor.receive(comments),
+        boundary: () => this.refresh(),
+      });
+    this.live = new LiveReader(
+      channel,
+      resolve("api/jikkyo/feed"),
+      {
+        comments: (comments) => this.receiveLive(comments),
+        state: (hub) => this.mark("hub", hub),
+        odd: warnShape,
+      },
+      undefined,
+      this.reader,
+    );
     this.live.start();
   }
 
@@ -184,9 +205,15 @@ export class JikkyoFeed {
       if (official === undefined)
         ({ result, id } = await this.postHub(text, style));
       else {
-        this.officialEchoes.expect(text, Date.now());
+        // 公式から直に受けている間は、そちらから戻ってくる (NX-Jikkyo の取り込みは境より後を捨てている)
+        const reader = this.reader?.boundary != null ? this.reader : null;
+        if (reader !== null) reader.expectEcho(text);
+        else this.officialEchoes.expect(text, Date.now());
         result = await official.post(text, style);
-        if (result !== "sent") this.officialEchoes.forget(text);
+        if (result !== "sent") {
+          if (reader !== null) reader.forgetEcho(text);
+          else this.officialEchoes.forget(text);
+        }
       }
     } finally {
       this.posting = false;
@@ -245,12 +272,13 @@ export class JikkyoFeed {
     for (const [id, entry] of this.seen)
       if (entry.until < now) this.seen.delete(id);
     const keep: LiveComment[] = [];
+    // 公式から直に受けている間は、境より後に書かれた NX-Jikkyo の取り込みを捨てる (`official.ts`)
+    const boundary = this.reader?.boundary ?? null;
     for (const comment of comments) {
-      if (
-        comment.src === "nicolive" &&
-        this.officialEchoes.take(comment.text, now)
-      )
-        continue;
+      if (comment.src === "nicolive") {
+        if (boundary !== null && comment.at >= boundary) continue;
+        if (this.officialEchoes.take(comment.text, now)) continue;
+      }
       if (comment.id !== undefined) {
         if (comment.src === "hub" && comment.text === this.sending)
           comment.mine = true;
@@ -262,11 +290,20 @@ export class JikkyoFeed {
     if (keep.length > 0) this.cursor.receive(keep);
   }
 
-  /** 出どころが読めるか。どれかが読めなければ `down` */
+  /**
+   * 出どころが読めるか。過去ログが読めない、または hub に繋がらず公式からも受けていなければ `down`
+   * (NX-Jikkyo が落ちていても hub の独自コメントは流れ、公式から受けている間は公式のものが流れる)
+   */
   private mark(source: string, ok: boolean): void {
     if (ok) this.failing.delete(source);
     else this.failing.add(source);
-    this.down = this.failing.size > 0;
+    this.refresh();
+  }
+
+  private refresh(): void {
+    const official = this.reader?.boundary != null;
+    this.down =
+      this.failing.has("kakolog") || (this.failing.has("hub") && !official);
   }
 
   /** 重ねるのを止めた (データ放送を出した・オフにした)。戻ったときに、止めていた間のぶんをまとめて流さない */
@@ -344,6 +381,7 @@ export class JikkyoFeed {
   private stopSources(): void {
     this.live?.stop();
     this.live = null;
+    this.reader = null;
     this.expected.clear();
     this.seen.clear();
     this.stopKakolog();

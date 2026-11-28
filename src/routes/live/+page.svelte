@@ -179,7 +179,8 @@
 
   /**
    * 実況のコメント (docs/watch.md の「実況のコメント」)。世帯の設定 (`data.jikkyoAllowed`) と端末の ⚙ の両方がオンで、
-   * 局を映している間だけ NX-Jikkyo に繋ぐ。局を替えたら繋ぎ直す
+   * 局を映している間だけ NX-Jikkyo に繋ぐ。ニコニコと連携していれば (`data.niconico`)、同じ間だけ公式のコメントも
+   * denpa のサーバから受ける (`official.ts` の `OfficialReader`)。局を替えたら繋ぎ直す
    */
   const jikkyoOn = jikkyoSwitch();
   const jikkyo = new JikkyoFeed(true);
@@ -191,7 +192,7 @@
     data.jikkyoAllowed && jikkyoOn.on && player.tuned !== null,
   );
   $effect(() => {
-    jikkyo.set(jikkyoChannel, jikkyoActive);
+    jikkyo.set(jikkyoChannel, jikkyoActive, data.niconico);
   });
   onMount(() => () => {
     jikkyo.close();

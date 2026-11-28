@@ -19,6 +19,8 @@ export interface LiveComment extends Comment {
 
 /** 届かなかったあと、次に呼ぶまで (ms) */
 export const RETRY = 10_000;
+/** すぐ返ってきた (状態が替わった・初めての) 返事のあと、次に呼ぶまで (ms)。続けてすぐ返ってきても詰めて呼ばない */
+export const GAP = 1_000;
 /** 続けて何回届かなければ「繋がっていない」にするか */
 const FAILURES_TO_DOWN = 3;
 
@@ -31,14 +33,26 @@ interface LiveEvents {
 }
 
 /** 差し替えられるもの (単体テストで偽物を渡す) */
+/**
+ * 同じ呼び出しに載せる公式のコメントの受け手 (連携している世帯のライブ。`official.ts` の `OfficialReader`)。
+ * 端末から denpa のサーバへのロングポーリングを 1 本にするため、公式のぶんも同じ `/api/jikkyo/feed` で受ける
+ */
+export interface OfficialPart {
+  body: () => Record<string, unknown>;
+  apply: (reply: unknown) => number | null;
+  fail: () => void;
+}
+
 export interface LiveDeps {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
+  now: () => number;
   setTimeout: (run: () => void, ms: number) => unknown;
   clearTimeout: (id: unknown) => void;
 }
 
 const browser: LiveDeps = {
   fetch: (url, init) => fetch(url, init),
+  now: () => Date.now(),
   setTimeout: (run, ms) => setTimeout(run, ms),
   clearTimeout: (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
 };
@@ -80,6 +94,7 @@ export class LiveReader {
     private readonly url: string,
     private readonly events: LiveEvents,
     private readonly deps: LiveDeps = browser,
+    private readonly official: OfficialPart | null = null,
   ) {}
 
   start(): void {
@@ -100,6 +115,8 @@ export class LiveReader {
   private async loop(): Promise<void> {
     while (!this.stopped) {
       let ok = false;
+      let got = 0;
+      const started = this.deps.now();
       try {
         this.abort = new AbortController();
         const res = await this.deps.fetch(this.url, {
@@ -109,11 +126,14 @@ export class LiveReader {
             channel: this.channel,
             ...(this.seq === null ? {} : { after: this.seq }),
             ...(this.epoch === null ? {} : { epoch: this.epoch }),
+            ...(this.official === null
+              ? {}
+              : { official: this.official.body() }),
           }),
           signal: this.abort.signal,
         });
         if (res.ok) {
-          this.take((await res.json()) as unknown);
+          got = this.take((await res.json()) as unknown);
           ok = true;
         }
       } catch {
@@ -122,30 +142,39 @@ export class LiveReader {
       if (this.stopped) return;
       if (ok) {
         this.failures = 0;
+        if (got === 0 && this.deps.now() - started < GAP) await this.sleep(GAP);
         continue;
       }
+      this.official?.fail();
       this.failures++;
       if (this.failures >= FAILURES_TO_DOWN) this.setState(false, this.nx);
-      await new Promise<void>((resolve) => {
-        this.timer = this.deps.setTimeout(() => {
-          this.timer = null;
-          resolve();
-        }, RETRY);
-      });
+      await this.sleep(RETRY);
     }
   }
 
-  private take(body: unknown): void {
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      this.timer = this.deps.setTimeout(() => {
+        this.timer = null;
+        resolve();
+      }, ms);
+    });
+  }
+
+  /** 返事を読む。受けたコメントの数 (公式のぶんも) を返す */
+  private take(body: unknown): number {
     if (body === null || typeof body !== "object") {
       this.events.odd("実況の返事の形式が違います");
-      return;
+      return 0;
     }
     const b = body as Record<string, unknown>;
     if (typeof b["epoch"] === "string") this.epoch = b["epoch"];
     if (typeof b["seq"] === "number") this.seq = b["seq"];
     this.ready = true;
     this.setState(b["hub"] !== "down", b["nx"] !== "down");
-    if (!Array.isArray(b["comments"])) return;
+    const official =
+      this.official === null ? 0 : (this.official.apply(b["official"]) ?? 0);
+    if (!Array.isArray(b["comments"])) return official;
     const comments: LiveComment[] = [];
     let odd = false;
     for (const raw of b["comments"] as unknown[]) {
@@ -155,6 +184,7 @@ export class LiveReader {
     }
     if (odd) this.events.odd("実況のコメントの形式が一部違います");
     if (comments.length > 0) this.events.comments(comments);
+    return comments.length + official;
   }
 
   private setState(hub: boolean, nx: boolean): void {

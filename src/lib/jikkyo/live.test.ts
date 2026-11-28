@@ -11,6 +11,7 @@ function fake(replies: (Response | Error)[]) {
   const bodies: Record<string, unknown>[] = [];
   const timers: (() => void)[] = [];
   const deps = {
+    now: () => 0,
     fetch: async (_url: string, init: RequestInit) => {
       bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
       const next = replies.shift();
@@ -88,6 +89,50 @@ describe("LiveReader", () => {
     // NX-Jikkyo が落ちても hub に繋がっていれば書ける
     expect(states).toEqual([[true, false]]);
     expect(reader.writable).toBe(true);
+    reader.stop();
+  });
+
+  test("公式の受け手があれば、同じ呼び出しに続きを載せて返事の official を渡す。届かなければ fail", async () => {
+    const { deps, bodies, timers } = fake([
+      reply({
+        epoch: "e",
+        seq: 1,
+        hub: "up",
+        nx: "up",
+        comments: [],
+        official: { seq: 5 },
+      }),
+      new Error("down"),
+    ]);
+    const applied: unknown[] = [];
+    let failed = 0;
+    const reader = new LiveReader(
+      "jk1",
+      "/api/jikkyo/feed",
+      { comments: () => {}, state: () => {}, odd: () => {} },
+      deps,
+      {
+        body: () => ({ after: applied.length }),
+        apply: (r) => {
+          applied.push(r);
+          return 0;
+        },
+        fail: () => failed++,
+      },
+    );
+    reader.start();
+    for (let i = 0; i < 5; i++) await tick();
+    expect(bodies[0]).toEqual({ channel: "jk1", official: { after: 0 } });
+    expect(applied).toEqual([{ seq: 5 }]);
+    timers.shift()?.();
+    for (let i = 0; i < 5; i++) await tick();
+    expect(bodies[1]).toEqual({
+      channel: "jk1",
+      after: 1,
+      epoch: "e",
+      official: { after: 1 },
+    });
+    expect(failed).toBe(1);
     reader.stop();
   });
 
