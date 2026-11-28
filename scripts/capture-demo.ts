@@ -14,7 +14,7 @@
  *
  * 画面の無いブラウザにはマウスのカーソルが写らないので、ページに矢印を描き、マウスの動きに付いて動かす。
  * 押すときは要素の箱から座標を 1 つ決め、そこまでカーソルを滑らかに動かしてから同じ座標で押して離す
- * (`clickAt`)。Playwright の `click()` は要素の中心へマウスを一瞬で動かすので、押す瞬間にカーソルが跳んで写る
+ * (`clickAt`)。Playwright の `click()` は要素の中心へマウスを一瞬で動かすので、押す瞬間にカーソルが飛んで写る
  */
 
 import { Database } from "bun:sqlite";
@@ -345,13 +345,13 @@ async function shoot(
   });
   await ctx.addInitScript(() => localStorage.setItem("theme", "dark"));
   await ctx.addInitScript(cursorScript);
-  const page = await ctx.newPage();
   const opened = Date.now();
+  const page = await ctx.newPage();
   await page.goto(`${base}${scene.start}`);
   await settle(page, 1500);
   await page.mouse.move(VIEW.width / 2, VIEW.height / 2);
   pointer.set(page, { x: VIEW.width / 2, y: VIEW.height / 2 });
-  // 録画はページを開いたときから始まる。読み込みの間 (白い画面) は切り落とす
+  // 録画はページを作ったとき (`opened`) から始まる。読み込みの間 (白い画面) は切り落とす
   const begun = Date.now();
   const skip = (begun - opened) / 1000;
   clicks.length = 0;
