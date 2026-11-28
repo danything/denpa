@@ -6,7 +6,7 @@
   ],
   "devDependencies": {
     "@danything/arib": "workspace:*",
-    "@iconify-json/lucide": "^1.2.160",
+    "@iconify-json/lucide": "^1.2.161",
     "@playwright/test": "^1.65.1",
     "@sveltejs/adapter-bun": "^1.0.3",
     "@sveltejs/kit": "^3.4.1",
