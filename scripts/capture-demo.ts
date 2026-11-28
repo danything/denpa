@@ -162,64 +162,71 @@ const SCENES: Record<string, Scene> = {
         body: JSON.stringify({ quiet: true }),
       });
       if (!control.ok) throw new Error(`偽の denpa-hub: ${control.status}`);
-
-      // 世帯の設定の「実況」をオンにし、ニコニコと連携する (偽の hub は人を出さずに連携を返す)
-      await page.goto(`${stack.appUrl}/settings/integrations`);
-      await settle(page, 300);
-      await page.getByTestId("jikkyo-setting").setChecked(true);
-      await page.getByTestId("saved-result").waitFor();
-      await page.goto(`${stack.appUrl}/settings/integrations#jikkyo`);
-      await settle(page, 300);
-      await page.getByTestId("niconico-link").click();
-      await page.waitForURL(/\/settings\/integrations#jikkyo$/);
-      await page
-        .getByTestId("niconico-state")
-        .filter({ hasText: "連携中" })
-        .waitFor();
-
-      // 端末の ⚙ の「実況」をオンにし、ライブは放送のまま (MPEG-2) で観る (変換する経路は偽 ffmpeg が映像を作らない)
-      await page.evaluate(() => localStorage.setItem("player-jikkyo", "1"));
-      await page.goto(`${stack.appUrl}${DENPA_LIVE}`);
-      await settle(page, 500);
-      await wake(page);
-      await page.getByTestId("live-settings").click();
-      await page.getByTestId("live-codec").click();
-      await page
-        .locator('[data-testid="live-codec-option"][data-codec="mpeg2"]')
-        .click();
-
-      const services = (await (
-        await page.request.get(`${stack.appUrl}/api/services`)
-      ).json()) as { id: number; jikkyo: string | null }[];
-      const channel = services.find((s) => s.id === DENPA.id)?.jikkyo;
-      if (typeof channel !== "string")
-        throw new Error(`${DENPA.name} に実況のチャンネルが当たっていません`);
-      // 0.4〜0.9 秒おきに 1 件ずつ、書かれた時刻を今にして流す。出どころは公式 (NX-Jikkyo が取り込んだもの)
-      let next = 0;
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      const emit = () => {
-        const line = JIKKYO_LINES[next++ % JIKKYO_LINES.length]!;
-        const comment = {
-          at: Date.now(),
-          text: line.text,
-          mail: line.mail ?? "184",
-          src: "nicolive",
-        };
-        fetch(`${stack.hubUrl}/__control/jikkyo/emit`, {
-          method: "POST",
-          body: JSON.stringify({ channel, comments: [comment] }),
-        }).catch(() => {});
-        timer = setTimeout(emit, 400 + Math.random() * 500);
-      };
-      emit();
-      // 撮り終えたら流すのを止め、偽の hub を既定の流し方に戻す (後の場面が実況を使っても黙ったままにしない)
-      return async () => {
-        if (timer !== null) clearTimeout(timer);
+      // 既定の流し方に戻す。撮り終えたときと、支度に失敗したときに呼ぶ (後の場面が実況を使っても黙ったままにしない)
+      const restore = async () => {
         await fetch(`${stack.hubUrl}/__control/jikkyo`, {
           method: "POST",
           body: "{}",
-        });
+        }).catch(() => {});
       };
+      try {
+        // 世帯の設定の「実況」をオンにし、ニコニコと連携する (偽の hub は人を出さずに連携を返す)
+        await page.goto(`${stack.appUrl}/settings/integrations`);
+        await settle(page, 300);
+        await page.getByTestId("jikkyo-setting").setChecked(true);
+        await page.getByTestId("saved-result").waitFor();
+        await page.goto(`${stack.appUrl}/settings/integrations#jikkyo`);
+        await settle(page, 300);
+        await page.getByTestId("niconico-link").click();
+        await page.waitForURL(/\/settings\/integrations#jikkyo$/);
+        await page
+          .getByTestId("niconico-state")
+          .filter({ hasText: "連携中" })
+          .waitFor();
+
+        // 端末の ⚙ の「実況」をオンにし、ライブは放送のまま (MPEG-2) で観る (変換する経路は偽 ffmpeg が映像を作らない)
+        await page.evaluate(() => localStorage.setItem("player-jikkyo", "1"));
+        await page.goto(`${stack.appUrl}${DENPA_LIVE}`);
+        await settle(page, 500);
+        await wake(page);
+        await page.getByTestId("live-settings").click();
+        await page.getByTestId("live-codec").click();
+        await page
+          .locator('[data-testid="live-codec-option"][data-codec="mpeg2"]')
+          .click();
+
+        const services = (await (
+          await page.request.get(`${stack.appUrl}/api/services`)
+        ).json()) as { id: number; jikkyo: string | null }[];
+        const channel = services.find((s) => s.id === DENPA.id)?.jikkyo;
+        if (typeof channel !== "string")
+          throw new Error(`${DENPA.name} に実況のチャンネルが当たっていません`);
+        // 0.4〜0.9 秒おきに 1 件ずつ、書かれた時刻を今にして流す。出どころは公式 (NX-Jikkyo が取り込んだもの)
+        let next = 0;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const emit = () => {
+          const line = JIKKYO_LINES[next++ % JIKKYO_LINES.length]!;
+          const comment = {
+            at: Date.now(),
+            text: line.text,
+            mail: line.mail ?? "184",
+            src: "nicolive",
+          };
+          fetch(`${stack.hubUrl}/__control/jikkyo/emit`, {
+            method: "POST",
+            body: JSON.stringify({ channel, comments: [comment] }),
+          }).catch(() => {});
+          timer = setTimeout(emit, 400 + Math.random() * 500);
+        };
+        emit();
+        return async () => {
+          if (timer !== null) clearTimeout(timer);
+          await restore();
+        };
+      } catch (error) {
+        await restore();
+        throw error;
+      }
     },
     run: async (page) => {
       // 映像の上にコメントが流れる
