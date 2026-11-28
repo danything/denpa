@@ -69,9 +69,11 @@ internal sealed class NativeTsFramer
 /// <summary>
 /// TS を 1 回流すぶん。取り込みを設定して始め (<see cref="Dt295NativeBoard"/>)、EP 0x81 の転送要求を出しっぱなしにして 188 バイトのパケットを取り出し、
 /// <see cref="Pipe"/> に詰める。流している間は、別のスレッドで機材のプログラムに要求を送り続ける (1 回の要求で <see cref="KickPackets"/> 個のパケットを bulk IN へ送らせる)。
-/// 要求を送っている間は制御転送が機材の中の処理の終わりまで返らない。通常の要求は <see cref="KickPackets"/> 個 (256 KiB。30 Mbps で約 70 ms) で、
+/// 要求を送っている間は制御転送が機材の中の処理の終わりまで返らない。通常の要求は <see cref="KickPackets"/> 個 (256 KiB。30 Mbps で約 70 ms、地上波で約 125 ms) で、
 /// 実機の試験では 30 Mbps を欠けなく送れ、ホストの CPU 時間も少なかった (32 個にすると CS22 の 6 秒で 313 ms から 797 ms に増えた)。
-/// 同じ機材のカードが読み書きしている間 (<see cref="Dt295NativeLink.CardBusy"/>) だけ、要求を <see cref="CardKickPackets"/> 個 (64 KiB。30 Mbps で約 17 ms) にする (仕様書に無い。数は <see cref="CardKickPackets"/> の説明)
+/// 取り込みを始めてから <see cref="InitialKickWindow"/> (600 ms) は、機材のプログラムでカードを送受信する形 (<see cref="Dt295NativeLink.CardProgram"/>) のときだけ <see cref="InitialKickPackets"/> 個 (32 KiB) にして最初の ECM の待ちを抑え、
+/// その後は同じ機材のカードが読み書きしている間 (<see cref="Dt295NativeLink.CardBusy"/>) だけ <see cref="CardKickPackets"/> 個 (64 KiB) にする。
+/// 実機 (PIX-DT295) では、地上波の切り替え直後の ECM 応答中央値が 122 ms から 92 ms に縮み、CS18・CS22 (各 20 秒の復号付き) と地上波・BS15 の切り替えで連続性の飛びは 0 回だった
 /// </summary>
 internal sealed class Dt295NativeStream
 {
@@ -87,6 +89,17 @@ internal sealed class Dt295NativeStream
     /// <summary>1 回の要求で送らせるパケット数 (512 バイトずつ)。カードが読み書きしていないとき</summary>
     internal const uint KickPackets = 512;
 
+    /// <summary>取り込みを始めてから最初の ECM 応答を待たせないための 1 回の要求のパケット数 (32 KiB。地上波 16.8 Mbps で約 15 ms、BS/CS 30 Mbps で約 8 ms)。<see cref="Dt295NativeLink.CardProgram"/> のときだけ使う</summary>
+    internal const uint InitialKickPackets = 64;
+
+    /// <summary>取り込みを始めてから <see cref="InitialKickPackets"/> を使う時間。取り込みを始めてから 600 ms で通常の <see cref="KickPackets"/> / <see cref="CardKickPackets"/> へ戻す</summary>
+    internal static readonly TimeSpan InitialKickWindow = TimeSpan.FromMilliseconds(600);
+
+    internal static uint SelectKickPackets(bool cardBusy, bool cardProgram, TimeSpan sinceBegin) =>
+        cardProgram && sinceBegin < InitialKickWindow ? InitialKickPackets
+        : cardBusy ? CardKickPackets
+        : KickPackets;
+
     /// <summary>
     /// カードが読み書きしている間の 1 回の要求のパケット数。
     ///
@@ -98,7 +111,7 @@ internal sealed class Dt295NativeStream
     /// CS18 (37 Mbps) の 40 秒で、32 個だと連続性の飛びが 8142 個、64 個だと 1593 個、128 個だと 0 個。BS15 (24 Mbps) の 90 秒、
     /// 地上波 (T28) のライブ 40 秒、全 108 局の 15〜20 秒ずつでも 0 個だった。
     /// いまはカードの送受信を機材のプログラムに実行させる (<see cref="Dt295NativeLink.CardProgram"/>) ので、1 ブロックの制御転送は数回になり、
-    /// TS の要求が譲る時間は短い。この形では、実機の BS15 と地上波 (T22) で連続性の飛びが 0 個だった (#2413)。CS18 ではまだ測っていない
+    /// TS の要求が譲る時間は短い。この形では、実機の BS15・地上波 (T22) に加え (#2413)、CS18・CS22 (各 20 秒の復号付き) でも連続性の飛びが 0 個だった
     /// </para>
     /// </summary>
     internal const uint CardKickPackets = 128;
@@ -116,6 +129,7 @@ internal sealed class Dt295NativeStream
     private Dt295NativeBoard.CaptureSaved? _capture;
     private Dt295NativeBoard.EndpointSaved? _endpoint;
     private bool _capturing;
+    private long _beganAt;
     private volatile bool _stopped;
     private volatile bool _ended;
     private volatile string? _reason;
@@ -167,6 +181,7 @@ internal sealed class Dt295NativeStream
         _device.Board.ResetPumpState();
         using (_device.Timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) _device.Board.StartCapture();
         _capturing = true;
+        _beganAt = Stopwatch.GetTimestamp();
         _reader.Start();
         _kicker.Start();
     }
@@ -256,7 +271,8 @@ internal sealed class Dt295NativeStream
         {
             while (!_stopped && !_ended)
             {
-                var reply = _device.Link.Pump(_device.Link.CardBusy ? CardKickPackets : KickPackets, _device.IdlePolls, PumpTimeoutMs);
+                var packets = SelectKickPackets(_device.Link.CardBusy, _device.Link.CardProgram, Stopwatch.GetElapsedTime(_beganAt));
+                var reply = _device.Link.Pump(packets, _device.IdlePolls, PumpTimeoutMs);
                 if (reply.Result == Dt295NativePrograms.ResultBadWrite)
                 {
                     End($"リングの書き込み位置 0x{reply.WritePosition:X} が長さ以上です (取り込みの異常)");
