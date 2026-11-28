@@ -1,6 +1,7 @@
 import { parseId } from "./id";
 
 /**
+ * (計測用の PR。マージしない)
  * **切り抜き** の取り決め (画面とサーバで同じもの)。撮って送るのはプレイヤー (`components/player/snapshot.ts`)、
  * 受けて AVIF にして置くのはサーバ (`server/clips.ts`)、並べるのは `/clips`
  */
