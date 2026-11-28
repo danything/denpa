@@ -1305,14 +1305,14 @@ export function liveHevc(devices: HwDevice[] = hwEncode().devices): boolean {
 
 /**
  * ソフトウェアでもライブに間に合うコーデック。**H.264 (x264) だけ。** SVT-AV1 は小さな CPU では
- * 1080i のライブに追いつかないので数えない (メニューと同じく「自動」も選ばない。`autoCodec`)
+ * 1080i のライブに追いつかないので数えない (メニューに並べず、「自動」もほかに再生できるものがあればそちらを選ぶ。`autoCodec`)
  */
 const REALTIME_SOFTWARE: LiveCodec = "h264";
 
 /**
  * **ライブでその場でエンコードできるコーデック。** エンコード済みの順 (`autoOrder("encoded")`。AV1 → H.265 → H.264) のうち、
  * ライブの印 (`liveHwAllow`) で GPU に載って最近落ちていないもの (`liveHevc` と同じ決め方) と、ソフトウェアの H.264。
- * 先頭がコーデックのメニューに並ぶ候補 (`#lib/live-choice.ts` の `shownCodec`・`hiddenCodecs`。`viewing.viewingOptions` が渡す)。「自動」もこの中から選ぶ (`autoCodec`)。
+ * 先頭がコーデックのメニューに並ぶ候補 (`#lib/live-choice.ts` の `shownCodec`・`hiddenCodecs`。`viewing.viewingOptions` が渡す)。「自動」もこの中から先に選ぶ (`autoCodec`)。
  * 順番 (`liveTurn`) は進めない。`devices` はテストで差し替えるときだけ渡す
  */
 export function liveRealtime(

@@ -106,7 +106,7 @@ describe("自動の形式", () => {
     );
   });
 
-  test("エンコードするものは、サーバがその場でエンコードできる並び (live) にあるものだけ", () => {
+  test("エンコードするものは、サーバがその場でエンコードできる並び (live) にあるものを先に選ぶ", () => {
     // GPU で AV1 をエンコードできるサーバは今までどおり AV1 から
     expect(autoCodec({ ...all, ...where })).toBe("av1");
     // GPU で H.265 と H.264 だけ (AV1 はソフトウェアになるので選ばない)
@@ -118,6 +118,10 @@ describe("自動の形式", () => {
     expect(
       autoCodec({ ...all, indoor: false, compat: true, live: ["h264"] }),
     ).toBe("h264");
+    // live に再生できるものが無ければ、ほかの形式も選ぶ (AV1 しか受け取れない端末)
+    expect(
+      autoCodec({ ...all, ...where, hevc: false, h264: false, live: ["h264"] }),
+    ).toBe("av1");
     // 家の中の MPEG-2 と、4K の局の HEVC (詰め替え) は GPU が無くても選ぶ
     expect(
       autoCodec({ ...all, indoor: true, compat: false, live: ["h264"] }),

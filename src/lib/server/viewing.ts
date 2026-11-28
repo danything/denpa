@@ -95,8 +95,8 @@ type AutoScene = "live" | "chase";
 
 /**
  * **`codec=auto` で流す形式。** 段 0 は `autoCodec` (家の中なら MPEG-2 → H.264 → AV1 → H.265、外なら AV1 → H.265 → H.264) で、
- * 端末が再生できて (`formats`)、その場面で出せる最初のもの。エンコードする形式は、その場でエンコードできる並び (`live`。`live.liveRealtime`) にあるものだけ
- * (H.265 はライブで、エンコーダが GPU のときだけ)。
+ * 端末が再生できて (`formats`)、その場面で出せる最初のもの。エンコードする形式は、その場でエンコードできる並び (`live`。`live.liveRealtime`) にあるものを先に選び、
+ * どれも再生できなければほかの形式も選ぶ (`autoCodec`)。H.265 はライブで、エンコーダが GPU のときだけ。
  * 段を下げるなら、今までどおり `rungCodec` (`raw` は並びから外す)。選べなければ null。
  *
  * **4K の局 (`broadcast` が `hevc`。TLV と、TS で送る局) は、放送のままが HEVC の詰め替え** (`#lib/live-choice.ts` の `BroadcastCodec`)。家の中は HEVC → H.264 → AV1、
@@ -124,15 +124,16 @@ export function autoFormat(o: {
     return codecs.includes(codec) ? codec : null;
   }
   const has = (format: LiveFormat) => o.formats.includes(format);
+  const live = o.live ?? liveRealtime();
   return autoCodec({
     indoor: o.indoor,
     rawOk: !uhd && has("raw"),
     av1: has("av1"),
     // 4K の局の H.265 は放送の HEVC の詰め替えなので、追っかけ (4K の局の録画) でも出す
-    hevc: has("hevc") && (uhd || o.scene === "live"),
+    hevc: has("hevc") && (uhd || (o.scene === "live" && live.includes("hevc"))),
     h264: has("h264"),
     compat: false,
-    live: o.live ?? liveRealtime(),
+    live,
     broadcast: uhd ? "hevc" : "mpeg2",
   });
 }
