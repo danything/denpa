@@ -6,7 +6,7 @@
       "name": "denpa",
       "devDependencies": {
         "@danything/arib": "workspace:*",
-        "@iconify-json/lucide": "^1.2.160",
+        "@iconify-json/lucide": "^1.2.161",
         "@playwright/test": "^1.65.1",
         "@sveltejs/adapter-bun": "^1.0.3",
         "@sveltejs/kit": "^3.4.1",
@@ -25,7 +25,7 @@
     },
     "packages/arib": {
       "name": "@danything/arib",
-      "version": "2.7.0",
+      "version": "2.7.1",
     },
   },
   "packages": {
@@ -97,7 +97,7 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
 
-    "@iconify-json/lucide": ["@iconify-json/lucide@1.2.160", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-811QWUxsgfjFZewGJG45+TG62TNaeGMhsQr6XGiheTJpoe9Dc/vY2RHPLjOE1EuZ6vt70060MBkqz0whJG9I3w=="],
+    "@iconify-json/lucide": ["@iconify-json/lucide@1.2.161", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-vqnIm6PfUnSnfD1boZSS74iJbYOL+ckFczHNIGFKUQTIynz7E4RH8szrehBPjGIUe1SioCaXsRNgnamDeSAmDg=="],
 
     "@iconify/types": ["@iconify/types@2.0.0", "", {}, "sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg=="],
 
