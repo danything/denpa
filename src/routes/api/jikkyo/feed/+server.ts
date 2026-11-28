@@ -39,9 +39,12 @@ export async function POST(event) {
     typeof o["epoch"] === "string" ? o["epoch"] : null,
     signal,
   );
-  // 先に返したほうに合わせて、もう一方も待つのをやめる (止めると、その時の中身ですぐ返る)
-  await Promise.race([hub, niconico]);
-  stop.abort();
+  // 先に返したほうに合わせて、もう一方も待つのをやめる (止めると、その時の中身ですぐ返る)。片方が失敗しても止める
+  try {
+    await Promise.race([hub, niconico]);
+  } finally {
+    stop.abort();
+  }
   const [h, n] = await Promise.all([hub, niconico]);
   return json({ ...h, official: n });
 }

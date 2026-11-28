@@ -250,7 +250,9 @@ export class JikkyoFeed {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ channel, text, style }),
       });
-      if (!res.ok) return { result: "rejected" };
+      // 本文の決まりで断られたのは 400。ほか (サーバや通信の失敗) は送れたか分からない
+      if (!res.ok)
+        return { result: res.status === 400 ? "rejected" : "unknown" };
       const body = (await res.json()) as { result?: unknown; id?: unknown };
       const result = HUB_RESULTS.includes(body.result as PostResult)
         ? (body.result as PostResult)

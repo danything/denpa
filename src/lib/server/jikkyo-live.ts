@@ -84,6 +84,14 @@ function readComment(raw: unknown): LiveComment | null {
   return out;
 }
 
+/**
+ * 同じものを 1 つにするキー。hub の独自コメントは `id`、ほかは時刻 (ms) と本文 (繋ぎ直しで同じものが 2 度来る。NX-Jikkyo の時刻は µs まであるので、
+ * 別の人の同じ本文が重なることはほとんど無い)
+ */
+function keyOf(comment: LiveComment): string {
+  return comment.id ?? `${comment.at}\u0000${comment.text}`;
+}
+
 class Channel {
   private readonly ring: { seq: number; comment: LiveComment }[] = [];
   private readonly keys = new Set<string>();
@@ -149,7 +157,7 @@ class Channel {
   private add(list: LiveComment[]): void {
     let added = false;
     for (const comment of list) {
-      const key = `${comment.at}\u0000${comment.text}`;
+      const key = keyOf(comment);
       if (this.keys.has(key)) continue;
       this.keys.add(key);
       this.ring.push({ seq: ++this.owner.seq, comment });
@@ -161,7 +169,7 @@ class Channel {
       (this.ring.length > KEEP_COUNT || this.ring[0]!.comment.at < before)
     ) {
       const old = this.ring.shift()!;
-      this.keys.delete(`${old.comment.at}\u0000${old.comment.text}`);
+      this.keys.delete(keyOf(old.comment));
     }
     if (added) this.wake();
   }
