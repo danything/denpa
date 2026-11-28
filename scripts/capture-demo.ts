@@ -54,7 +54,7 @@ const MAX_SECONDS = 140;
  */
 interface Scene {
   start: string;
-  prepare?: (page: Page, stack: Stack) => Promise<(() => void) | void>;
+  prepare?: (page: Page, stack: Stack) => Promise<(() => Promise<void>) | void>;
   run: (page: Page) => Promise<void>;
 }
 
@@ -212,8 +212,13 @@ const SCENES: Record<string, Scene> = {
         timer = setTimeout(emit, 400 + Math.random() * 500);
       };
       emit();
-      return () => {
+      // 撮り終えたら流すのを止め、偽の hub を既定の流し方に戻す (後の場面が実況を使っても黙ったままにしない)
+      return async () => {
         if (timer !== null) clearTimeout(timer);
+        await fetch(`${stack.hubUrl}/__control/jikkyo`, {
+          method: "POST",
+          body: "{}",
+        });
       };
     },
     run: async (page) => {
@@ -429,10 +434,12 @@ async function glideTo(page: Page, target: Locator): Promise<void> {
 async function wake(page: Page): Promise<void> {
   const box = await page.getByTestId("live-frame").boundingBox();
   if (box === null) throw new Error("ライブの映像の位置が取れません");
-  const from = pointer.get(page);
   const x = box.x + box.width * 0.6;
   const y = box.y + box.height * 0.45;
-  await glide(page, from !== undefined && from.x === x ? x - 24 : x, y);
+  await glide(page, x, y);
+  // もうそこにいたときも動いたことにする (4 px は映像では目立たない)
+  await page.mouse.move(x, y - 4);
+  pointer.set(page, { x, y: y - 4 });
 }
 
 /**
@@ -513,10 +520,11 @@ async function shoot(
   await ctx.addInitScript(cursorScript);
   const opened = Date.now();
   const page = await ctx.newPage();
-  const cleanup = await scene.prepare?.(page, stack);
   // 録画はページを作ったとき (`opened`) から始まる。支度と読み込みの間は切り落とす
   let begun: number;
+  let cleanup: (() => Promise<void>) | void = undefined;
   try {
+    cleanup = await scene.prepare?.(page, stack);
     await page.goto(`${base}${scene.start}`);
     await settle(page, 1500);
     await page.mouse.move(VIEW.width / 2, VIEW.height / 2);
@@ -524,8 +532,11 @@ async function shoot(
     begun = Date.now();
     clicks.length = 0;
     await scene.run(page);
+  } catch (error) {
+    await ctx.close();
+    throw error;
   } finally {
-    cleanup?.();
+    await cleanup?.();
   }
   const skip = (begun - opened) / 1000;
   const video = page.video();
