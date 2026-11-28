@@ -239,6 +239,8 @@ export class OfficialReader {
 
   /** 返事を読む。読めた数を返す (形式が違えば null) */
   private apply(reply: unknown): number | null {
+    // 止めたあとに読み終えた返事は捨てる (局を替えたあとに、前の局のコメントを流さない)
+    if (this.stopped) return null;
     if (reply === null || typeof reply !== "object") return null;
     const r = reply as Record<string, unknown>;
     const { epoch, seq, now, since, comments } = r;
