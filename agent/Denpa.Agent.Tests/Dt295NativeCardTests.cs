@@ -302,4 +302,32 @@ public class Dt295NativeCardTests
         await Assert.That(fake.Stores.Count(s => s.Address is >= 0xFEA000 and <= 0xFEA03F)).IsEqualTo(before);
         tuner.Dispose();
     }
+
+    [Test]
+    public async Task Transmit_は_Present_の前に_CardBusy_を立て_正常時も抜かれたときも戻す()
+    {
+        var fake = new Dt295Fake { CardAtr = BcasAtr, CardResponder = Respond };
+        var traces = new List<(string Line, bool Busy)>();
+        Dt295NativeLink? linkRef = null;
+        var link = new Dt295NativeLink(fake, line => traces.Add((line, linkRef?.CardBusy ?? false)));
+        linkRef = link;
+        using var card = new Dt295NativeCard("DT295 カード", () => link, delay: _ => { });
+        card.Reset();
+        await Assert.That(link.CardBusy).IsFalse();
+
+        traces.Clear();
+        await Assert.That(card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00])).IsEquivalentTo(new byte[] { 0x90, 0x00 });
+        await Assert.That(link.CardBusy).IsFalse();
+        var presentReads = traces.Where(t => t.Line.StartsWith("読む 0x00FEA01C", StringComparison.Ordinal) || t.Line.StartsWith("読む 0x00F00224", StringComparison.Ordinal)).ToList();
+        await Assert.That(presentReads.Count).IsGreaterThanOrEqualTo(2);
+        await Assert.That(presentReads.All(t => t.Busy)).IsTrue();
+
+        fake.CardInserted = false;
+        traces.Clear();
+        Assert.Throws<CardAbsentException>(() => card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00]));
+        await Assert.That(link.CardBusy).IsFalse();
+        var absentReads = traces.Where(t => t.Line.StartsWith("読む 0x00FEA01C", StringComparison.Ordinal) || t.Line.StartsWith("読む 0x00F00224", StringComparison.Ordinal)).ToList();
+        await Assert.That(absentReads.Count).IsGreaterThanOrEqualTo(2);
+        await Assert.That(absentReads.All(t => t.Busy)).IsTrue();
+    }
 }

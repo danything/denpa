@@ -745,4 +745,21 @@ public class Dt295NativeTests
         await Assert.That(runs.Select(run => run.Length)).IsEquivalentTo(new[] { 188, 188 });
         await Assert.That(runs[0][187]).IsEqualTo((byte)5);
     }
+
+    [Test]
+    public async Task 選局直後の短い窓だけは_TS_の要求を小さくし_その後はカードの使用中だけ小さくする()
+    {
+        var init = Dt295NativeStream.InitialKickPackets;
+        var card = Dt295NativeStream.CardKickPackets;
+        var normal = Dt295NativeStream.KickPackets;
+        var window = Dt295NativeStream.InitialKickWindow;
+
+        await Assert.That(init < card && card < normal).IsTrue();
+        await Assert.That(Dt295NativeStream.SelectKickPackets(cardBusy: false, TimeSpan.Zero)).IsEqualTo(init);
+        await Assert.That(Dt295NativeStream.SelectKickPackets(cardBusy: true, window - TimeSpan.FromMilliseconds(1))).IsEqualTo(init);
+        await Assert.That(Dt295NativeStream.SelectKickPackets(cardBusy: true, window)).IsEqualTo(card);
+        await Assert.That(Dt295NativeStream.SelectKickPackets(cardBusy: true, TimeSpan.FromSeconds(1))).IsEqualTo(card);
+        await Assert.That(Dt295NativeStream.SelectKickPackets(cardBusy: false, window)).IsEqualTo(normal);
+        await Assert.That(Dt295NativeStream.SelectKickPackets(cardBusy: false, TimeSpan.FromSeconds(1))).IsEqualTo(normal);
+    }
 }

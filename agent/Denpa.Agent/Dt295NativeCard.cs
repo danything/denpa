@@ -164,6 +164,8 @@ public sealed class Dt295NativeCard : ICardLink
         lock (_session)
         {
             if (_t1 is null) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
+            // Present のレジスタ読み出しのあいだに TS の要求が大きく (KickPackets) 走り出さないよう、先に CardBusy を立てる
+            Link.EnterCard();
             try
             {
                 if (!Present())
@@ -180,6 +182,10 @@ public sealed class Dt295NativeCard : ICardLink
                 _t1 = null;
                 _atr = null;
                 throw;
+            }
+            finally
+            {
+                Link.LeaveCard();
             }
         }
     }
