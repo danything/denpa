@@ -95,13 +95,14 @@ type AutoScene = "live" | "chase";
 
 /**
  * **`codec=auto` で流す形式。** 段 0 は `autoCodec` (家の中なら MPEG-2 → H.264 → AV1 → H.265、外なら AV1 → H.265 → H.264) で、
- * 端末が再生できて (`formats`)、その場面で出せる最初のもの。H.265 はライブで、エンコーダが GPU のとき (`hevc`) だけ。
+ * 端末が再生できて (`formats`)、その場面で出せる最初のもの。エンコードするものは、その場でエンコードできるもの (`live`。`live.liveRealtime`) だけ
+ * (H.265 はライブで、エンコーダが GPU のときだけ)。
  * 段を下げるなら、今までどおり `rungCodec` (`raw` は並びから外す)。選べなければ null。
  *
  * **4K の局 (`broadcast` が `hevc`。TLV と、TS で送る局) は、放送のままが HEVC の詰め替え** (`#lib/live-choice.ts` の `BroadcastCodec`)。家の中は HEVC → H.264 → AV1、
  * 外は AV1 → H.264。`hevc` は「放送の HEVC (2160p・10 ビット・HLG) を再生できる」の意味で、GPU は要らない。`raw` (MPEG-2 の TS を読める) は候補にしない。
  * 段を下げるときは H.265 を外して選ぶ (`live.liveRungCodec`)。
- * `hevc` と `pick` はテストで差し替えるときだけ渡す
+ * `live` と `pick` はテストで差し替えるときだけ渡す
  */
 export function autoFormat(o: {
   scene: AutoScene;
@@ -109,7 +110,7 @@ export function autoFormat(o: {
   indoor: boolean;
   rung: Rung;
   broadcast?: BroadcastCodec;
-  hevc?: boolean;
+  live?: readonly LiveCodec[];
   pick?: Parameters<typeof rungCodec>[2];
 }): LiveFormat | null {
   const uhd = o.broadcast === "hevc";
@@ -128,10 +129,10 @@ export function autoFormat(o: {
     rawOk: !uhd && has("raw"),
     av1: has("av1"),
     // 4K の局の H.265 は放送の HEVC の詰め替えなので、追っかけ (4K の局の録画) でも出す
-    hevc:
-      has("hevc") && (uhd || (o.scene === "live" && (o.hevc ?? liveHevc()))),
+    hevc: has("hevc") && (uhd || o.scene === "live"),
     h264: has("h264"),
     compat: false,
+    live: o.live ?? liveRealtime(),
     broadcast: uhd ? "hevc" : "mpeg2",
   });
 }
@@ -146,12 +147,16 @@ export function autoFormat(o: {
  * - 4K の局 (`broadcast` が `hevc`) の `hevc` は放送の HEVC の詰め替えで、GPU は要らない。`raw` は元の TS か、1 局に絞った TLV。
  *   追っかけでも同じ (4K の局の録画 `.mmts` を読む)
  *
- * `hevc` と `pick` はテストで差し替えるときだけ渡す
+ * `hevc`・`live`・`pick` はテストで差し替えるときだけ渡す
  */
 export function askedFormat(
   url: URL,
   scene: AutoScene,
-  test: { hevc?: boolean; pick?: Parameters<typeof rungCodec>[2] } = {},
+  test: {
+    hevc?: boolean;
+    live?: readonly LiveCodec[];
+    pick?: Parameters<typeof rungCodec>[2];
+  } = {},
   broadcast: BroadcastCodec = "mpeg2",
 ): { codec: LiveFormat; rung: Rung } | null {
   const query = url.searchParams;
@@ -246,7 +251,7 @@ export function readKept(
 
 /**
  * **開いたときに先回りする形式** (`live.warm`)。選んだものがあればそれ、自動なら `autoCodec` を、
- * 端末が何でも受け取れるとみて決める (家の中なら MPEG-2、外なら AV1)。外れたら画面は自分で決めた形式で
+ * 端末が何でも受け取れるとみて、その場でエンコードできるもの (`live`) から決める (家の中なら MPEG-2、外なら AV1。GPU で AV1 をエンコードできなければ H.265 か H.264)。外れたら画面は自分で決めた形式で
  * リクエストし、先回りしたものはそのリクエストがチューナーを使えた時点で閉じる (`live.ts` の `dropWarm`)。
  * 4K の局 (`broadcast` が `hevc`) の放送のままは HEVC の詰め替え (家の中の自動も)。4K の局では H.265 にエンコードしないので、
  * 選んでいた H.265 は自動として扱う (画面の `keptChoice` と同じ)
@@ -255,6 +260,7 @@ export function warmFormat(
   choice: LiveChoice,
   indoor: boolean,
   broadcast: BroadcastCodec = "mpeg2",
+  live: readonly LiveCodec[] = liveRealtime(),
 ): LiveFormat {
   if (choice === "raw") return broadcastFormat(broadcast);
   if (choice !== "auto" && !(broadcast === "hevc" && choice === "hevc"))
@@ -263,11 +269,12 @@ export function warmFormat(
     autoCodec({
       indoor,
       rawOk: true,
-      // どれも受け取れるとみるので、家の中は放送のまま、外は AV1 が先に当たる (H.265・H.264 には進まない)
+      // どれも受け取れるとみるので、家の中は放送のまま、外は `live` にあるもののうち順で先のものが当たる
       av1: true,
       hevc: true,
       h264: true,
       compat: false,
+      live,
       broadcast,
     }) ?? "h264"
   );
@@ -288,7 +295,7 @@ interface LiveStart {
 /**
  * **どの局を、どの形式で開くか。** 番組表から名指しで来た局 (`asked`。無い番号は使わない) → 前回の局 (`kept`) →
  * 一覧の先頭。音声の控えは同じ局に戻ったときだけ活かす。形式は選択 (`kept.choice`) と家の中か (`indoor`) から
- * (`warmFormat`)。局が無ければ null
+ * (`warmFormat`。`live` はその場でエンコードできるもの)。局が無ければ null
  */
 export function liveStart(
   channels: readonly {
@@ -300,6 +307,7 @@ export function liveStart(
   asked: number,
   kept: Kept,
   indoor: boolean,
+  live: readonly LiveCodec[] = liveRealtime(),
 ): LiveStart | null {
   const named = channels.find((channel) => channel.id === asked);
   const saved =
@@ -314,7 +322,7 @@ export function liveStart(
   const target = named ?? saved ?? channels[0];
   if (target === undefined) return null;
   const broadcast = target.broadcast ?? "mpeg2";
-  const format = warmFormat(kept.choice, indoor, broadcast);
+  const format = warmFormat(kept.choice, indoor, broadcast, live);
   return {
     channelType: target.type,
     channel: target.channel,

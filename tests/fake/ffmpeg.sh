@@ -210,11 +210,11 @@ if [ "$input" = "pipe:0" ]; then
     fi
 
     # **互換モード (canvas に描く方式) の E2E から「本物の映像を流せ」と指示する目印。**
-    # 置いてあれば、本物の ffmpeg に書かせた fMP4 (H.264 + AAC / AV1 + Opus。エンコード方式はライブと同じ組) を
+    # 置いてあれば、本物の ffmpeg に書かせた fMP4 (H.264 + AAC / AV1 + Opus。エンコード方式はライブと同じ組。AV1 はソフトウェアでも VA-API でも同じもの) を
     # 時刻を進めながら繰り返し流す (`fmp4-loop.ts`)。置いていなければ今までどおり素通し
     # (映像の要らないテストは MSE に何も映らなくてよい)
     if [ -f "${FAKE_FFMPEG_LIVE_FMP4_FILE:-/nonexistent}" ]; then
-        if printf '%s\n' "$@" | grep -qx -- 'libsvtav1'; then
+        if printf '%s\n' "$@" | grep -qxE -- 'libsvtav1|av1_vaapi'; then
             exec bun "$(dirname "$0")/fmp4-loop.ts" "$(dirname "$0")/live-av1.mp4"
         fi
         if printf '%s\n' "$@" | grep -qx -- 'libx264'; then

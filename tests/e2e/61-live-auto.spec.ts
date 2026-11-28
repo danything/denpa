@@ -204,7 +204,10 @@ test.describe("ライブの自動", () => {
     ).toBe(0);
   });
 
-  test("H.264 も受け取れない端末では AV1 で観る", async ({ page }) => {
+  // GPU が無いサーバは AV1 をその場でエンコードできないので、自動でも AV1 (SVT-AV1) を選ばない
+  test("H.264 も受け取れない端末は、AV1 をその場でエンコードできないサーバでは再生できる形式が無い", async ({
+    page,
+  }) => {
     await page.addInitScript(() => {
       // oxlint-disable-next-line typescript/no-explicit-any -- 端末に無いことにする
       delete (HTMLCanvasElement.prototype as any).transferControlToOffscreen;
@@ -212,8 +215,13 @@ test.describe("ライブの自動", () => {
       MediaSource.isTypeSupported = (type) =>
         !type.includes("avc1") && can(type);
     });
-    await openLive(page);
-    await expect(page.getByTestId("live-codec")).toContainText("自動 (AV1)");
+    await page.context().clearCookies();
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-status")).toContainText(
+      "再生できる形式がありません",
+      { timeout: 15_000 },
+    );
   });
 
   test("選んだものは家の中でもそのまま使い、開き直しても覚えている", async ({

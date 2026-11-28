@@ -29,6 +29,9 @@ const {
   warmFormat,
 } = await import("./viewing");
 
+/** GPU で AV1・H.265・H.264 をライブにエンコードできるサーバの並び (`liveRealtime`) */
+const gpu3 = ["av1", "hevc", "h264"] as const;
+
 describe("観るときの決まり (画面の load と GET /api/playback/options)", () => {
   test("設定が無ければ、外の名前は外・家の中のアドレスは家の中。GPU が無ければその場でエンコードできるのは H.264 だけで、AV1 と H.265 を外させる", () => {
     expect(
@@ -137,7 +140,10 @@ describe("開いたときに先回りする形式と局", () => {
 
   test("自動なら家の中は MPEG-2、外は AV1。選んだものは場所によらずそれ", () => {
     expect(warmFormat("auto", true)).toBe("raw");
-    expect(warmFormat("auto", false)).toBe("av1");
+    expect(warmFormat("auto", false, "mpeg2", gpu3)).toBe("av1");
+    // GPU で AV1 をエンコードできなければ、外の先回りも H.265 か H.264
+    expect(warmFormat("auto", false, "mpeg2", ["hevc", "h264"])).toBe("hevc");
+    expect(warmFormat("auto", false, "mpeg2", ["h264"])).toBe("h264");
     expect(warmFormat("av1", true)).toBe("av1");
     expect(warmFormat("raw", false)).toBe("raw");
   });
@@ -156,7 +162,7 @@ describe("開いたときに先回りする形式と局", () => {
       audio: "1:sub",
       raw: true,
     });
-    expect(liveStart(channels, NaN, kept, false)).toEqual({
+    expect(liveStart(channels, NaN, kept, false, gpu3)).toEqual({
       channelType: "BS",
       channel: "BS01_0",
       serviceId: 20,
@@ -196,7 +202,7 @@ describe("開いたときに先回りする形式と局", () => {
       codec: "av1",
     });
     expect(
-      liveStart(channels, NaN, { choice: "auto", channel: "99" }, false),
+      liveStart(channels, NaN, { choice: "auto", channel: "99" }, false, gpu3),
     ).toEqual({
       channelType: "GR",
       channel: "27",
@@ -222,7 +228,11 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
 
   test("家の中は MPEG-2 → H.264 → AV1 → H.265、外は AV1 → H.265 → H.264", () => {
     const all = ["raw", "av1", "hevc", "h264"] as const;
-    const base = { scene: "live" as const, rung: 0 as const, hevc: true };
+    const base = {
+      scene: "live" as const,
+      rung: 0 as const,
+      live: ["av1", "hevc", "h264"] as const,
+    };
     expect(autoFormat({ ...base, formats: all, indoor: true })).toBe("raw");
     expect(autoFormat({ ...base, formats: all, indoor: false })).toBe("av1");
     expect(
@@ -243,7 +253,7 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
         formats,
         indoor: false,
         rung: 0,
-        hevc: false,
+        live: ["av1", "h264"],
       }),
     ).toBe("h264");
     expect(
@@ -252,7 +262,7 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
         formats,
         indoor: false,
         rung: 0,
-        hevc: true,
+        live: ["av1", "hevc", "h264"],
       }),
     ).toBe("h264");
     expect(
@@ -261,7 +271,7 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
         formats: ["hevc"],
         indoor: false,
         rung: 0,
-        hevc: true,
+        live: ["av1", "hevc", "h264"],
       }),
     ).toBeNull();
   });
@@ -288,7 +298,9 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
       rung: 0,
     });
     expect(
-      askedFormat(outside("codec=auto&playable=raw,h264,av1"), "chase"),
+      askedFormat(outside("codec=auto&playable=raw,h264,av1"), "chase", {
+        live: ["av1", "hevc", "h264"],
+      }),
     ).toEqual({ codec: "av1", rung: 0 });
     expect(askedFormat(at("codec=auto"), "live")).toEqual({
       codec: "h264",
@@ -347,7 +359,7 @@ describe("4K の局の形式", () => {
     const base = {
       scene: "live" as const,
       rung: 0 as const,
-      hevc: false,
+      live: ["av1", "h264"] as const,
       broadcast: "hevc" as const,
     };
     const all = ["raw", "av1", "hevc", "h264"] as const;
@@ -384,10 +396,10 @@ describe("4K の局の形式", () => {
   test("先回りは、放送のままを選んでいれば・家の中の自動なら HEVC の詰め替え", () => {
     expect(warmFormat("raw", false, "hevc")).toBe("hevc");
     expect(warmFormat("auto", true, "hevc")).toBe("hevc");
-    expect(warmFormat("auto", false, "hevc")).toBe("av1");
+    expect(warmFormat("auto", false, "hevc", gpu3)).toBe("av1");
     // 4K の局では H.265 にエンコードしないので、選んでいた H.265 は自動 (家の中は詰め替え、外は AV1)
     expect(warmFormat("hevc", true, "hevc")).toBe("hevc");
-    expect(warmFormat("hevc", false, "hevc")).toBe("av1");
+    expect(warmFormat("hevc", false, "hevc", gpu3)).toBe("av1");
     expect(warmFormat("h264", false, "hevc")).toBe("h264");
     expect(
       liveStart(

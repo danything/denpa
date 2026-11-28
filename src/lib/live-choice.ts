@@ -145,9 +145,10 @@ export function autoOrder(
  * 使えなければ null。
  *
  * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ打ち切っていない」、`av1`・`hevc`・`h264` は「受け取れて (互換モードなら
- * 描けて)、まだ打ち切っていない」。`hevc` はそのうえでライブのエンコーダが GPU のとき (`server/viewing.ts` の
- * `ViewingOptions.hevc`)。TS の局の追っかけと互換モードでは呼ぶ側が false にする。どれをやめたかは呼ぶ側が持つ。
- * 4K の局 (`broadcast` が `hevc`) の `hevc` は「放送の HEVC (2160p・10 ビット・HLG) を再生できる」で、GPU は要らない (`#lib/hevc-4k.ts`)
+ * 描けて)、まだ打ち切っていない」。TS の局の追っかけと互換モードでは呼ぶ側が `hevc` を false にする。どれをやめたかは呼ぶ側が持つ。
+ * **エンコードするものは、サーバがその場でエンコードできる並び (`live`。`server/live.ts` の `liveRealtime`) にあるものだけ**
+ * (メニューの `shownCodec` と同じ並び)。GPU で AV1 をエンコードできないサーバでは、外でも H.265 か H.264 から始まる。
+ * 4K の局 (`broadcast` が `hevc`) の `hevc` は「放送の HEVC (2160p・10 ビット・HLG) を再生できる」で、詰め替えなので `live` は見ない (`#lib/hevc-4k.ts`)
  */
 export function autoCodec(o: {
   indoor: boolean;
@@ -156,10 +157,16 @@ export function autoCodec(o: {
   hevc: boolean;
   h264: boolean;
   compat: boolean;
+  live: readonly LiveCodec[];
   broadcast?: BroadcastCodec;
 }): LiveFormat | null {
   return (
-    autoOrder(o).find((format) => (format === "raw" ? o.rawOk : o[format])) ??
-    null
+    autoOrder(o).find((format) =>
+      format === "raw"
+        ? o.rawOk
+        : o[format] &&
+          (o.live.includes(format) ||
+            (format === "hevc" && o.broadcast === "hevc")),
+    ) ?? null
   );
 }

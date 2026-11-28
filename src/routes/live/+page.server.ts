@@ -154,11 +154,12 @@ export function load(event) {
     Number(url.searchParams.get("service")),
     kept,
     viewing.indoor,
+    viewing.liveCodecs,
   );
 
   /*
    * 繋いでくる前にエンコードし始める (`live.warm`。WebSocket が繋がるまでの 160ms を ffmpeg の立ち上がりと重ねる)。
-   * 形式は選択と開いた名前から決めたもの (自動なら家の中は放送のまま、外は AV1。`viewing.warmFormat`)。
+   * 形式は選択と開いた名前から決めたもの (自動なら家の中は放送のまま、外は AV1 か、GPU で AV1 をエンコードできなければ H.265・H.264。`viewing.warmFormat`)。
    * 画面が別の形式をリクエストしたら、そのリクエストがチューナーを使えた時点で閉じる (`live.dropWarm`)。誰も来なければ 8 秒で閉じる
    */
   if (start !== null)
