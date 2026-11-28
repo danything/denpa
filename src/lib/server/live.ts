@@ -1305,7 +1305,7 @@ export function liveHevc(devices: HwDevice[] = hwEncode().devices): boolean {
 
 /**
  * ソフトウェアでもライブに間に合うコーデック。**H.264 (x264) だけ。** SVT-AV1 は小さな CPU では
- * 1080i のライブに追いつかないので数えない (メニューに並べず、「自動」もほかに再生できるものがあればそちらを選ぶ。`autoCodec`)
+ * 1080i のライブに追いつかないので数えない。メニューに並べず、「自動」もほかに再生できるものがあればそちらを選ぶ (`autoCodec`)
  */
 const REALTIME_SOFTWARE: LiveCodec = "h264";
 
