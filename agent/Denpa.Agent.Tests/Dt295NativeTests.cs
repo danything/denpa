@@ -481,16 +481,17 @@ public class Dt295NativeTests
         foreach (var expected in new[]
         {
             "手順 1〜3", "手順 10〜12", "T 復調の初期値", "T チューナーの初期化", "S 復調の初期値", "待ち 100 ms (この間に別の処理) (仕様書 7.1.2", "待ち 4 ms (仕様書 7.1.3",
-            "t=23 周波数の設定", "待ち 100 ms (仕様書 7.2.2。t=46", "受信の確認 (地上波)", "取り込みの設定", "取り込みの開始", "最初の TS を待つ", "固定の待ち:",
+            "t=23 周波数の設定", "t=146 復調の仕上げ", "受信の確認 (地上波)", "取り込みの設定", "取り込みの開始", "最初の TS を待つ", "固定の待ち:",
         })
         {
             await Assert.That(text).Contains(expected);
         }
+        await Assert.That(text).DoesNotContain("仕様書 7.2.2。t=46");
         // カードは選局と並べて準備し、開き始めてからの時間を出す (偽の機材にカードは無いので、済んでいない)
         await Assert.That(text).Contains("カード: 準備完了まで");
         // 受信の確認は周回と待ちの合計を補足に出す
         await Assert.That(text).Contains("周、周の間の待ち");
-        // 待ちの合計は、7.1 の 130 ms と 7.2.2 の 140 ms を含む
+        // 待ちの合計は 7.1 の 130 ms のみ (7.2.2 の固定の待ち 140 ms は省いた)
         var waits = text.Split('\n').First(line => line.StartsWith("固定の待ち:", StringComparison.Ordinal));
         await Assert.That(waits).Contains("合計");
         // 受信の平均は、最初の読み出しから最後の読み出しまでの秒数で割る (読み出しが 1 回だけなら求められないと出す)
@@ -591,7 +592,7 @@ public class Dt295NativeTests
         // 開いたあとの最初の地上波: 0B=01 (チューナーを動かす) が先頭に入る
         var first = Tune(terrestrial);
         await Assert.That(first).Contains("10 W FEC00B01");
-        // 続けて地上波: 0B=01 は前に地上波を選んでいるので入らない。12=01 と 20 ms の待ちは入る
+        // 続けて地上波: 0B=01 は前に地上波を選んでいるので入らない。12=01 は入る
         var again = Tune(terrestrial);
         await Assert.That(again).DoesNotContain("10 W FEC00B01");
         await Assert.That(again).Contains("10 W FEC01201");
@@ -744,5 +745,31 @@ public class Dt295NativeTests
         framer.PushRuns(split[150..].Concat(Packets(1, 6)).ToArray(), run => runs.Add(run.ToArray()));
         await Assert.That(runs.Select(run => run.Length)).IsEquivalentTo(new[] { 188, 188 });
         await Assert.That(runs[0][187]).IsEqualTo((byte)5);
+    }
+
+    [Test]
+    public async Task 地上波の選局は固定の待ちを置かずに_I2C_の順を保って書き切る()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var waits = new List<int>();
+        var device = Dt295NativeDevice.Acquire(port, () => fake, null, waits.Add, 2000);
+        try
+        {
+            waits.Clear();
+            var from = fake.I2cLog.Count;
+            device.Frontend.TuneTerrestrial(545143);
+            var i2c = fake.I2cLog.Skip(from).ToList();
+            await Assert.That(waits).IsEmpty();
+            var resetRelease = i2c.IndexOf("10 W 234C");
+            var finish = i2c.IndexOf("10 W 1D02");
+            await Assert.That(resetRelease).IsGreaterThan(0);
+            await Assert.That(finish).IsGreaterThan(resetRelease);
+        }
+        finally
+        {
+            device.Release();
+            Dt295NativeDevice.CloseIfIdle(port);
+        }
     }
 }

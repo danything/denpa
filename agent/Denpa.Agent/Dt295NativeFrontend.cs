@@ -11,7 +11,8 @@ namespace Denpa.Agent;
 ///
 /// 仕様書に無くて決めた所:
 /// - 仕様書の手順は、常駐イメージの時刻 (ms) で書かれている。ホストの I2C は 1 転送が数 ms かかるので、時刻には合わせず、
-///   仕様書が「待つ」と書いた所 (100 ms・20 ms・4 ms・6 ms・10 ms・約 40 ms) だけ待ち、あとは順に出す。衛星の約 40 ms だけは、実機の試験で 20 ms に短くした
+///   実機で必要な所だけ待つ。初期化と衛星は仕様書の待ちを置き、衛星の約 40 ms は実機試験で 20 ms に短縮した。
+///   地上波選局 (7.2.2) の 20 + 20 + 100 ms は、実機 3 台で省いても全回ロックし誤りが 0 だったため省いた
 /// - 受信の確認の周の間は、地上波は <see cref="TerrestrialPollMs"/>、衛星は <see cref="SatellitePollMs"/> だけ空ける (仕様書 7.2.4 の常駐イメージは 10 ms 周期で、1500 回 × 10 ms で 15 秒回しても失敗にしなかった)
 /// </summary>
 public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, Dt295Timeline? timeline = null)
@@ -297,10 +298,12 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
             RestSatellite();
         }
         // t=1〜2: 0B=01 は前に地上波を選んでいないときだけ先頭に入る (仕様書 7.2.2)
+        // 仕様書 7.2.2 は t=2→22 (20 ms)・t=25→45 (20 ms)・t=46→146 (100 ms) に固定の待ちを置く。
+        // 実機 3 台で 3 か所とも省いて GR→GR 30 回・BS→GR 60 回・コールド 5 回を試したところ全回ロックし、
+        // transport_error_indicator 0・continuity_counter 飛び 0 で中央値が 708 ms から 658 ms に縮んだため省く
         Next(phases, "t=1〜2 チューナーを動かす", "7.2.2");
         if (before != Last.Terrestrial) T(0x0B, 0x01);
         T(0x12, 0x01);
-        Wait(20, "仕様書 7.2.2。t=2 から t=22");
         // t=22
         Next(phases, "t=22 復調の準備", "7.2.2");
         Demod(Terrestrial, 0x03, 0x00);
@@ -326,7 +329,6 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         TunerRmw(Terrestrial, 0x14, 0xDF, 0x00);
         // t=25
         T(0x12, 0x01);
-        Wait(20, "仕様書 7.2.2。t=25 から t=45");
         // t=45。TS の出し元は T 復調 (仕様書 8.1.5)
         Next(phases, "t=45 TS の出し元を T 復調に", "7.2.2。8.1.5");
         TunerRmw(Terrestrial, 0x6E, 0x7F, 0x00);
@@ -337,7 +339,6 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         // t=46
         Next(phases, "t=46", "7.2.2");
         Demod(Terrestrial, 0x23, 0x4C);
-        Wait(100, "仕様書 7.2.2。t=46 から t=146");
         // t=146
         Next(phases, "t=146 復調の仕上げ", "7.2.2");
         Demod(Terrestrial, 0x1D, 0x02);
