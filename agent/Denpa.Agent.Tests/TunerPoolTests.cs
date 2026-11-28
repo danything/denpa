@@ -709,9 +709,8 @@ public class TunerPoolTests
     /// 使えないチューナーしか無ければ、その理由を返し、次の選局でも機材に確かめ直す (電源を入れ直したあとなら選局できる)
     /// </summary>
     [Test]
-    public async Task 使えるチューナーが残っていなければ最後の理由を返す(CancellationToken cancel)
+    public async Task 使えるチューナーが残っていなければ最後の理由を返す()
     {
-        await Task.Yield();
         var mixed = Unusable([Spec("A", "fake:a"), Spec("B", "fake:b")], new HashSet<string> { "fake:b" }, "fake:a");
         try
         {
