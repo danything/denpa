@@ -1,17 +1,123 @@
 {
   "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割る (割り方は docs/development.md「並べて流す」)。9 組と 10 組のほかは 3 ワーカーで、どの組も 1 ワーカーの時間が 90 秒ほどになるように割ってある (ファイル名の順に空いたワーカーへ配り、何回かの CI の結果から 10 回に 9 回はそれ以下になる秒数で見積もる)。1 本で 80 秒を超えるスペックは分ける (長い 1 本が組の時間の下限になるため)。映像を長くデコードし続けるスペック (20-live・20-live-tune・20-live-player・20-live-encode、22-watch・22-watch-clips・22-watch-layout、28-live-raw・28-live-raw-device、38/40/41 の互換モードと 40-watch-compat-long・39-watch-adapt・39-watch-adapt-handoff・39-watch-adapt-encode・39-watch-adapt-relay・39-watch-resume、43-raw-cadence・44-ambient・68-watch-cm-frames・57-jikkyo・57-jikkyo-write・57-jikkyo-list・58-volume) は 1 つの組に 2 本までにする (混むとどれも遅くなる。3 本が同時に始まった組では、どれも 20 秒ほど延びた。本数の都合で 1 組だけ 3 本)。9 組と 10 組はライブの貯め方 (50-live-pacing・51-live-gaps) を 1 本ずつ、1 ワーカーで流す (test.yml。同じ組でほかのワーカーが動くと、届く間隔が乱れて貯める量がそれを覆う高さへ上がり、「下限のまま」を見るテストが落ちる。デコードが重なると、途中から入ったときにコマも落とす。1 ワーカーなので、足したぶんだけ組が長くなる)。33-recordings-group は 21-onair-fallback と同じ組に入れない (21 が延長して録り終えた録画が、同じワーカーで次に流れた 33 のホームの一覧に入る)。どの組にも入っていないスペックは 5 組で流す。足したら CI の結果の所要時間を見て、あとでどこかの組に入れ直せばよい。ここに書いた名前のファイルが無い・2 つの組に入っている、は CI の「組分けの検算」が落とす",
-  "1": ["05-rules", "12-encode-failure", "34-live-yield", "35-csp", "41-watch-compat-local", "42-copy-never", "44-ambient", "53-header-float"],
-  "2": ["09-behaviour", "16-scan", "20-onair", "22-oidc", "26-hwenc-vendors", "28-live-raw", "39-watch-adapt-relay", "46-search", "54-lite", "63-programs-api"],
-  "3": ["23-watch-data-receive", "24-bml-network", "37-playback", "39-watch-adapt-handoff", "52-diagnostics", "58-volume", "58-volume-controls", "68-watch-cm-frames"],
-  "4": ["15-scramble-live", "26-hwenc", "27-encode-cancel", "28-live-raw-device", "45-buttons", "49-guide-skeleton", "57-jikkyo-write", "60-embed-data"],
-  "5": ["16-scan-tuners", "20-live-encode", "36-bml-npt", "39-watch-adapt", "70-season"],
-  "6": ["01-dashboard", "20-live-player", "30-api", "31-device", "48-link-hover", "57-jikkyo-list", "57-jikkyo-recorded", "64-sky"],
-  "7": ["17-logo", "18-pwa", "39-watch-stream", "40-watch-compat-long", "43-raw-cadence", "47-search-rule", "59-boot-signal"],
-  "8": ["03-recording-chapters", "04-external-delete", "10-webhook", "15-scramble", "22-watch-layout", "29-subpath", "40-watch-compat", "62-chase-raw"],
+  "1": [
+    "05-rules",
+    "12-encode-failure",
+    "34-live-yield",
+    "35-csp",
+    "41-watch-compat-local",
+    "42-copy-never",
+    "44-ambient",
+    "53-header-float"
+  ],
+  "2": [
+    "09-behaviour",
+    "16-scan",
+    "20-onair",
+    "22-oidc",
+    "26-hwenc-vendors",
+    "28-live-raw",
+    "39-watch-adapt-relay",
+    "46-search",
+    "54-lite",
+    "63-programs-api"
+  ],
+  "3": [
+    "23-watch-data-receive",
+    "24-bml-network",
+    "37-playback",
+    "39-watch-adapt-handoff",
+    "52-diagnostics",
+    "58-volume",
+    "58-volume-controls",
+    "68-watch-cm-frames"
+  ],
+  "4": [
+    "15-scramble-live",
+    "26-hwenc",
+    "27-encode-cancel",
+    "28-live-raw-device",
+    "45-buttons",
+    "49-guide-skeleton",
+    "57-jikkyo-write",
+    "60-embed-data"
+  ],
+  "5": [
+    "16-scan-tuners",
+    "20-live-encode",
+    "36-bml-npt",
+    "39-watch-adapt",
+    "70-season"
+  ],
+  "6": [
+    "01-dashboard",
+    "20-live-player",
+    "30-api",
+    "31-device",
+    "48-link-hover",
+    "57-jikkyo-list",
+    "57-jikkyo-recorded",
+    "64-sky"
+  ],
+  "7": [
+    "17-logo",
+    "18-pwa",
+    "39-watch-stream",
+    "40-watch-compat-long",
+    "43-raw-cadence",
+    "47-search-rule",
+    "59-boot-signal"
+  ],
+  "8": [
+    "03-recording-chapters",
+    "04-external-delete",
+    "10-webhook",
+    "15-scramble",
+    "22-watch-layout",
+    "29-subpath",
+    "40-watch-compat",
+    "62-chase-raw"
+  ],
   "9": ["50-live-pacing"],
   "10": ["51-live-gaps"],
-  "11": ["03-recording", "13-migrate", "14-serve", "19-reservation-rules", "22-watch", "22-watch-clips", "25-chase", "56-transfer", "60-niconico"],
-  "12": ["20-live-tune", "23-watch-data", "26-hwenc-hevc", "33-recordings-group", "39-watch-adapt-encode", "55-tabletop", "65-catv", "69-live-handoff"],
-  "13": ["11-rule-edit", "21-onair-fallback", "39-watch-resume", "57-jikkyo", "57-jikkyo-recorded-list", "61-live-auto", "67-ranking"],
-  "14": ["02-reservation", "13-ts-import", "20-live", "32-chase-api", "36-bml", "38-live-compat", "46-home-timeline", "66-agents"]
+  "11": [
+    "03-recording",
+    "13-migrate",
+    "14-serve",
+    "19-reservation-rules",
+    "22-watch",
+    "22-watch-clips",
+    "25-chase",
+    "56-transfer",
+    "60-niconico"
+  ],
+  "12": [
+    "20-live-tune",
+    "23-watch-data",
+    "26-hwenc-hevc",
+    "33-recordings-group",
+    "39-watch-adapt-encode",
+    "55-tabletop",
+    "65-catv",
+    "69-live-handoff"
+  ],
+  "13": [
+    "11-rule-edit",
+    "21-onair-fallback",
+    "39-watch-resume",
+    "57-jikkyo",
+    "57-jikkyo-recorded-list",
+    "61-live-auto",
+    "67-ranking"
+  ],
+  "14": [
+    "02-reservation",
+    "13-ts-import",
+    "20-live",
+    "32-chase-api",
+    "36-bml",
+    "38-live-compat",
+    "46-home-timeline",
+    "66-agents"
+  ]
 }
