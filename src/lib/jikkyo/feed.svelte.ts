@@ -55,6 +55,8 @@ export class JikkyoFeed {
   private active = false;
   /** 書き込みの返事を待っている */
   private posting = false;
+  /** 返事を待っている hub への書き込みの本文。返事より先に購読から戻ってきたら、すぐ自分の印を付ける (印の無いまま流さない) */
+  private sending: string | null = null;
   /** 公式に書いたもの。NX-Jikkyo が取り込んで流してくる (`src: "nicolive"`) が、自分の印が付かないので本文で 1 回だけ捨てる */
   private readonly officialEchoes = new Echoes();
   /** 書いて送れた独自コメントの `id` → 捨てる期限。購読から戻ってきたら 1 回だけ捨てる (もう流している) */
@@ -177,6 +179,7 @@ export class JikkyoFeed {
     let result: PostResult;
     let id: string | undefined;
     this.posting = true;
+    if (official === undefined) this.sending = text;
     try {
       if (official === undefined)
         ({ result, id } = await this.postHub(text, style));
@@ -187,6 +190,7 @@ export class JikkyoFeed {
       }
     } finally {
       this.posting = false;
+      this.sending = null;
     }
     const at = w() ?? before;
     if (result !== "sent" || live !== this.live) return result;
@@ -248,6 +252,8 @@ export class JikkyoFeed {
       )
         continue;
       if (comment.id !== undefined) {
+        if (comment.src === "hub" && comment.text === this.sending)
+          comment.mine = true;
         if (this.expected.delete(comment.id)) continue;
         this.seen.set(comment.id, { comment, until: now + ECHO_SPAN });
       }
