@@ -90,29 +90,37 @@ PR を出して自分でマージします。急ぐときは Actions から手�
 **1 台ではこれ以上縮みません。** 中身の合計は約 3 分で大半は偽の放送を待つ時間、
 下限はいちばん長いファイル 1 本の時間です。
 
-CI では 10 組に割って別のランナーに出し、3 ワーカーの 8 組と 1 ワーカーの 2 組 (下) で 26 ワーカーぶん並べます。
+CI では 14 組に割って別のランナーに出し、3 ワーカーの 12 組と 1 ワーカーの 2 組 (下) で 38 ワーカーぶん並べます。
 組の中身は `tests/e2e/shards.json` で、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割っています。
-1 組から 8 組は、テストの秒数の和がどれも 320 秒ほど (1 ワーカー 110 秒ほど) になるように割ります。
-8 組の秒数の和を 24 ワーカーで割った値が、組の時間の下限です。ジョブの時間は、これにチェックアウト・ビルド・ワーカーの立ち上がりの約 20 秒を足したものです。
+3 ワーカーの組は、どれも 1 ワーカーの時間が 90 秒ほどになるように割ります。ジョブの時間は、これにチェックアウト・ビルド・
+ワーカーの立ち上がりと片付けの約 30 秒を足した 2 分ほどです (実測で 1 分 40 秒〜2 分 20 秒)。
+TypeScript だけの PR では、Test denpa の最初のジョブの開始から最後のジョブの終わりまでが 2 分 20 秒ほどです (10 組だった頃は 4 分 30 秒ほど)。
 
-- **1 本のスペックは 50 秒以下にします。** 組の時間の下限は、いちばん長いファイル 1 本の時間です。50 秒を超えたら、確かめる中身はそのままで、describe やテストの切れ目で
-  ファイルを分けます。いまは 03-recording・15-scramble・20-live・22-watch・23-watch-data・26-hwenc・28-live-raw・
-  39-watch-stream・40-watch-compat・57-jikkyo・57-jikkyo-recorded をそうして分けてあり、いちばん長いのは 50 秒ほどです
+**組の数は、同時に動くランナーの数で決まります。** GitHub のランナーは、無料のプランではアカウントの workflow を全部合わせて
+同時に 20 台までです ([GitHub の上限](https://docs.github.com/en/actions/reference/limits))。TypeScript だけの PR では、
+E2E のほかに test.yml の Linux のジョブが 8、CodeQL と claude-review が 5 あります。組を増やすと、その分だけ空きを待つジョブが増えます。
+全部のジョブを足すと 2,200 ランナー秒ほどで、20 台で割った 110 秒ほどが全体の時間の下限です。
+E2E の組は準備と片付けに 30 秒ほどかかるので、組を増やしても下限は下がりません。
+
+- **1 本のスペックは 80 秒以下にします。** 組の時間の下限は、いちばん長いファイル 1 本の時間です。80 秒を超えたら、確かめる中身はそのままで、describe やテストの切れ目で
+  ファイルを分けます。いまは 03-recording・15-scramble・16-scan・20-live・22-watch・23-watch-data・26-hwenc・28-live-raw・
+  39-watch-stream・39-watch-adapt・40-watch-compat・57-jikkyo・57-jikkyo-recorded・58-volume をそうして分けてあり、いちばん長いのは 09-behaviour の 80 秒ほどです
+- 1 本の秒数は、同じ組で何が動いているかで揺れます (09-behaviour は 48〜83 秒)。割るときは、何回かの CI の結果から 10 回に 9 回はそれ以下になる値を使います。4 回に 3 回の値で割ったときは、短く見積もったファイルの後に長いファイルが始まった組が、見積もりより 2 割ほど延びました
 - 分けた先のファイルは、ほかのファイルの後でも前でも、単独でも通るようにします。同じファイルの前のテストが録った録画を
   使い回していたもの (22-watch・23-watch-data) は、ファイルごとに 1 本録ります (`tests/e2e/watch.ts` の `sharedRecording`)。
   分けたファイルどうしで使う道具は、`tests/e2e/` の小さなモジュール (`jikkyo.ts`・`live.ts`・`watch.ts` など) に置きます
-- 映像を長くデコードし続けるスペック (20-live・22-watch・互換モードのものなどと、そこから分けたもの。一覧は shards.json の注記) は 1 つの組に 3 本までにします。混むとどれも遅くなります
+- 映像を長くデコードし続けるスペック (20-live・22-watch・互換モードのものなどと、そこから分けたもの。一覧は shards.json の注記) は 1 つの組に 2 本までにします。混むとどれも遅くなります (3 本が同時に始まった組では、どれも 20 秒ほど延びた)。本数の都合で、1 組だけ 3 本にしています
 - 9 組と 10 組は、ライブの貯め方 (50-live-pacing・51-live-gaps) を 1 本ずつ 1 ワーカーで流します (test.yml)。同じ組でほかのワーカーが動くと
   届く間隔が乱れ、貯める量がその間隔を覆う高さ (`pacing.ts` の `cover`) へ上がって、「下限のまま」を見るテストが落ちるためです
   (軽いスペックと組ませても 5 回に 2 回落ちた)。デコードが重なると、途中から入ったときにコマも落とします。
-  1 ワーカーなので、ほかのスペックを足すとそのぶん組が長くなります。どちらも 1 本で 60 秒ほどですが、組の時間は 1 分半ほどなので分けていません
+  1 ワーカーなので、ほかのスペックを足すとそのぶん組が長くなります。どちらも 1 本で 60 秒ほどで、ほかの組より短いので分けていません
 - 組の時間は、組の秒数の和を 3 で割った値と、長いファイルが始まる時刻にその長さを足した値の、大きいほうで決まります。
   割り直すときは、ファイル名の順に空いたワーカーへ配って両方を見積もります
 - 実時間を待つテストは、確かめる性質が出る最短の尺で見ます。51-live-gaps は空きを 3 回 (縮めにかかる 20 秒より長い間隔で)、
   50-live-pacing は 20 秒、録画を待つテストはすぐ次の番組 (`reserveSoon` の `skip` を付けない) を録ります
 - どの組にも入れていない新しいスペックは **5 組で流れます** (CI に注記が出る)。あとで所要時間を見て割り直してください
 - shards.json にあるのにファイルが無い・2 つの組に入っている、は CI の「組分けの検算」が落とします
-- 組を増やしたら、test.yml の `shard` の並びと検算の `range(1; 11)`、main の ruleset の必須チェックにも `e2e (n)` を足します
+- 組を増やしたら、test.yml の `shard` の並びと検算の `range(1; 15)`、main の ruleset の必須チェックにも `e2e (n)` を足します
 
 ワーカー数は**手元では CPU の数そのまま (下限 2・上限 6)、CI (`CI=1`。`docker compose run e2e` も
 そう) では 3 で固定**です (4 つ並べるとチューナー待ちで落ちる。実測は `playwright.config.ts` の冒頭)。
@@ -142,8 +150,8 @@ Linux の WebKit は H.264 の fMP4 を再生できないので、iPhone の Saf
 **PR の CI は、触ったファイルに関係するジョブだけ中身を回します。** main への push では全部回します。
 PR で飛ばしたものが main で赤くなったら、見て直します。
 
-main は ruleset の必須チェックで守ってあります。`check`・`agent`・`agent-asicen-mock`・`install-linux`・`talos`・
-`agent-windows`・`agent-windows-install`・`agent-macos`・`e2e (1)`〜`(10)`・`claude-review` と、CodeQL の
+main は ruleset の必須チェックで守ってあります。`check`・`unit`・`agent`・`agent-conformance`・`agent-asicen-mock`・`install-linux`・`talos`・
+`agent-windows`・`agent-windows-install`・`agent-macos`・`e2e (1)`〜`(14)`・`claude-review` と、CodeQL の
 `codeql / Analyze (actions・c-cpp・csharp・javascript-typescript)` です。確かめるには `gh api repos/danything/denpa/rules/branches/main`。
 
 ### 中身を回すジョブを決める
@@ -154,7 +162,7 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
 
   | 組      | ジョブ                                                                           | 回すとき                                                                                      |
   | ------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-  | e2e     | `e2e (1)`〜`(10)`                                                                | エージェント・通知領域のアプリ・文書・入れ方・配備のほかを触ったとき                          |
+  | e2e     | `e2e (1)`〜`(14)`                                                                | エージェント・通知領域のアプリ・文書・入れ方・配備のほかを触ったとき                          |
   | windows | `agent-windows`・`agent-windows-install`・`agent-asicen-windows`                 | `agent/`・`tray/Denpa.Tray*`・`install.ps1`・`scripts/build-wdi-simple.ps1`                   |
   | macos   | `agent-macos`・`tray-macos`                                                      | `agent/`・`tray/mac/`・`install.sh`                                                           |
   | android | `agent-android`                                                                  | `agent/`・android.yml・Android で組む部品・Android の ffmpeg と native-smoke が使うもの       |
@@ -163,9 +171,11 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
 - test.yml・ci-changes.sh・`.github/actions/` (いくつもの workflow が使う composite action)・global.json を触ったときは全部回します。bundle を回すときは windows・macos・android も回します (配布物を確かめるジョブがそちらで組んだエージェントを使い、Android の APK にも同じ denpa 本体を入れる)
 - 回したか飛ばしたかは `changes` ジョブの Summary に出ます。`changes` が落ちたときも、必須チェックのジョブは回します
 - e2e だけはジョブを走らせ、`changes` を待たずにそれぞれのジョブの最初の段で決めて、中身の段を飛ばします。E2E がいちばん長いので、始まりを遅らせないためです
+- `check`・`unit`・`agent`・`agent-conformance`・`agent-asicen-mock`・`install-linux`・`talos` は `changes` の後に始めます。ランナーの同時に動く数 (20 台) を超えたときに、E2E が先にランナーを取るためです (「並べて流す」)
 - CodeQL の C# の解析は、PR が `agent/`・`tray/`・C# のファイル・global.json・codeql.yml を触っていなければ飛ばします (codeql.yml の `language-paths`。中身は 5ym/repo-config の共有の workflow)。
   matrix の 1 つだけはジョブの `if` で飛ばせないので、ジョブは走らせて解析の段を飛ばします。main への push と週 1 回の実行では全部解析します
-- `check`・`agent`・`agent-asicen-mock`・`install-linux`・`talos` はいつも回します。どれも ubuntu のランナーで 2 分ほどです
+- `check`・`unit`・`agent`・`agent-conformance`・`agent-asicen-mock`・`install-linux`・`talos` はいつも回します。どれも ubuntu のランナーで 1 分ほどです。
+  単体テストは `--parallel=2` で 2 つのプロセスに分けて流します (3 つ以上にすると、時間を測るテストが CPU の取り合いで落ちる)
 - ジョブが読むファイルを足したら、ci-changes.sh の一覧にも足します。足さないと、そのファイルだけを触った PR でジョブの中身が回りません
 
 ### キャッシュ
@@ -179,6 +189,7 @@ main は ruleset の必須チェックで守ってあります。`check`・`agen
 - Windows で別に置く Opus と SVT-AV1 の組み上がりは、MSYS2 の gcc のパッケージのバージョンも鍵に入れます。SVT-AV1 の静的ライブラリは LTO の中間表現で、
   組んだ gcc と ffmpeg を繋ぐ gcc がずれると壊れるためです (16.2.0-6 で組んだものを 16.2.0-7 で繋いだら、SVT-AV1 のスレッドが Segmentation fault で落ちた)
 - wdi-simple の鍵は、組むスクリプトとランナーのイメージのバージョンです。イメージが上がるたびに組み直し、新しい MSVC で組めるかを見ます。置くのは main だけです
+- ASICEN の子プロセス (偽の機材。agent-asicen-mock) の鍵は、`agent/asicen/` の中身とランナーのイメージのバージョンです。組み方も上流のバージョンも `agent/asicen/` にあり、cmake と g++ はイメージと apt から入ります
 
 ## DB の列を足す
 

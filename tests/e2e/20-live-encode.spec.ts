@@ -267,7 +267,7 @@ test.describe("ライブ視聴", () => {
     await expect(menu).toBeVisible();
     await expect(menu).toHaveAttribute("role", "menu");
 
-    // マウスの端末の広い枠では音量のつまみは音のボタンにだけあり (`58-volume`)、先頭はアンビエントモード
+    // マウスの端末の広い枠では音量のつまみは音のボタンにだけあり (`58-volume-controls`)、先頭はアンビエントモード
     // (ライブに CM スキップは無く、実況は世帯の設定がオフ。データ放送は右端の列の d で、自動で受信するかも d の長押し)。
     // Enter で切り替わり、閉じない
     await expect(page.getByTestId("live-volume")).toHaveCount(0);

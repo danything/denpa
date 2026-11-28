@@ -47,7 +47,7 @@ test.describe("CM のコマを映さずに飛ぶ", () => {
       request,
     }) => {
       test.setTimeout(180_000);
-      // エンコードしない録画にする (CM 検出が走らず、観はじめの CM 飛ばしがオンのまま。39-watch-adapt と同じ)
+      // エンコードしない録画にする (CM 検出が走らず、観はじめの CM 飛ばしがオンのまま。39-watch-adapt-handoff と同じ)
       await setRecording(request, { codecs: [] });
       try {
         const { id } = await recordOne(page, request);

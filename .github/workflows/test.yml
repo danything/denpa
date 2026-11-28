@@ -32,10 +32,17 @@ permissions:
 # 合わせても 1 分ありません。待っているのは**いちばん遅い 1 つ**だけでよいので、
 # 中身の関係ないものを、それぞれ別のランナーに出しています。
 #
-# E2E はさらに 10 組に割ります (組分けは tests/e2e/shards.json)。ランナーは 4 コアで
-# 1 台 3 ワーカー (playwright.config.ts。9 組と 10 組は 1 ワーカー) なので、26 ワーカーぶん並びます
-# (中身は待ち時間が大半なので、割った分だけ効く。
-# docs/development.md「並べて流す」)。
+# E2E はさらに 14 組に割ります (組分けは tests/e2e/shards.json)。ランナーは 4 コアで
+# 1 台 3 ワーカー (playwright.config.ts。9 組と 10 組は 1 ワーカー) なので、38 ワーカーぶん並びます
+# (中身は待ち時間が大半なので、割った分だけ効く。docs/development.md「並べて流す」)。
+# 組のテストは 90 秒ほどで、準備の 30 秒ほどを足した 2 分ほどがジョブの時間です。
+# TypeScript だけの PR では、最初のジョブの開始から最後のジョブの終わりまでが 2 分 20 秒ほどです (10 組だった頃は 4 分 30 秒ほど)。
+#
+# **GitHub のランナーは、アカウントの全部の workflow を合わせて同時に 20 台までです** (無料のプランの上限)。
+# TypeScript だけの PR では、この workflow の Linux のジョブが 22、CodeQL と claude-review が 5 で、上限を超えます。
+# いちばん長い E2E が先にランナーを取るように、E2E と changes のほかは changes の後に始めます (`needs: changes`)。
+# changes は数秒で終わり、後から始めるジョブはどれも E2E より短いので、空いたランナーへ順に入って E2E より先に終わります。
+# changes が落ちても回すよう `!cancelled()` を付けます (if で飛ばした必須チェックは成功として数えられるため)
 #
 # **PR では、触ったファイルに関係する重いジョブだけ中身を回します** (.github/ci-changes.sh)。
 # Windows・Mac・Android のエミュレータ・配布物 (ffmpeg) は、関係ない PR ではジョブごと飛ばします。
@@ -75,7 +82,7 @@ jobs:
             echo "| --- | --- |"
             while IFS='=' read -r name value; do
               case "$name" in
-                e2e) jobs="e2e (1)〜(10)" ;;
+                e2e) jobs="e2e (1)〜(14)" ;;
                 windows) jobs="agent-windows・agent-windows-install" ;;
                 macos) jobs="agent-macos・tray-macos" ;;
                 android) jobs="agent-android" ;;
@@ -86,8 +93,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           cat "$RUNNER_TEMP/changes"
 
-  # リント・型・単体。**いちばん早く赤くなるところ**なので、先に見えるように分ける
+  # リント・型・マイグレーション。**いちばん早く赤くなるところ**なので、先に見えるように分ける
   check:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -116,6 +125,22 @@ jobs:
           git add -N drizzle
           git diff --exit-code --stat -- drizzle
 
+  # denpa 本体の単体テスト。エージェントは .NET なので下の agent ジョブで見る
+  # (`agent/conformance.test.ts` はビルドした実行ファイルが要るので、ここには入れない)
+  unit:
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       # 字の表とフォントを突き合わせるテスト (`src/lib/ts/font-coverage.test.ts`) が読む Denpa Font を、
       # Dockerfile の `denpa-font` 段と同じリリースから取得して照合しておく。テストの中で取得していた頃は、
       # GitHub との接続が 1 回切れただけで落ちた。ここは切れたら繰り返す
@@ -134,13 +159,41 @@ jobs:
           printf '%s\n' "$version" > VERSION
           echo "FONT_DIR=$dir" >> "$GITHUB_ENV"
 
-      # denpa 本体だけ。エージェントは .NET なので下の agent ジョブで見る
-      # (`agent/conformance.test.ts` はビルドした実行ファイルが要るので、ここには入れない)
+      # **ファイルを 2 つのプロセスに分けて流す** (`--parallel=2`)。ファイルごとに新しいグローバルで動かすのは `--isolate` と同じ。
+      # 1 つずつ流すと 85 秒かかっていた。4 コアのランナーで 3 つ以上にすると、
+      # 時間を測るテスト (ロゴの検出・カルーセルを待つ中継) が CPU の取り合いで 5 秒の上限を超えて落ちる
       - name: Unit tests
-        run: bun run test:unit
+        run: bun run test:unit --parallel=2
 
-  # チューナーエージェント (.NET)。設定の読み書き・選局表と、API への適合テスト
+  # チューナーエージェント (.NET) の単体テスト。設定の読み書き・選局表・チューナー自動検出の値の読み取り
   agent:
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "11.0.100"
+
+      # MTP の方式 (global.json の test.runner) ではプロジェクトは --project で渡す
+      - name: Unit tests (.NET agent)
+        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed
+
+      # Windows の通知領域のアプリのうち、Win32 に触らないところ (/api/health の読み方・更新の前に確かめる文・install.ps1 の流し方)。
+      # Win32 の側は agent-windows-install でビルドして起こす
+      - name: Unit tests (.NET tray)
+        run: dotnet test --project tray/Denpa.Tray.Tests/Denpa.Tray.Tests.csproj
+
+  # エージェントの API に直接当てるテスト。**本物をビルドして起こして**、偽の選局
+  # コマンドで流す (bun で書いたものがあった頃は、同じものを 2 つの実装に通していた)。
+  # 単体テストとは別のランナーで流す (どちらもビルドに 30 秒ほどかかり、続けると 2 分近くになっていた)
+  agent-conformance:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -157,18 +210,6 @@ jobs:
         with:
           dotnet-version: "11.0.100"
 
-      # 設定の読み書き、選局表、チューナー自動検出の値の読み取り。
-      # MTP の方式 (global.json の test.runner) ではプロジェクトは --project で渡す
-      - name: Unit tests (.NET agent)
-        run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed
-
-      # Windows の通知領域のアプリのうち、Win32 に触らないところ (/api/health の読み方・更新の前に確かめる文・install.ps1 の流し方)。
-      # Win32 の側は agent-windows-install でビルドして起こす
-      - name: Unit tests (.NET tray)
-        run: dotnet test --project tray/Denpa.Tray.Tests/Denpa.Tray.Tests.csproj
-
-      # エージェントの API に直接当てるテスト。**本物をビルドして起こして**、偽の選局
-      # コマンドで流す (bun で書いたものがあった頃は、同じものを 2 つの実装に通していた)。
       # ビルドするところまで含めて 1 つの script にしてある。手元で走らせるときに
       # ビルドし忘れると、消えた既定の置き場を読みに行って ENOENT で落ちるだけになる
       - name: Conformance
@@ -180,16 +221,45 @@ jobs:
   # Windows 向けの子プロセスもここで (Linux から llvm-mingw で) 組み、agent-asicen-windows が Windows で起動して通す。
   # main の ruleset の必須チェックに入っている。上流のアーカイブの取得とビルドで揺れることがある
   agent-asicen-mock:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # **組んだ子プロセスは actions/cache に置いて使い回す。** 組むと 70 秒ほどかかる (apt と 2 つの組み方)。
+      # 組み方も上流のバージョンも agent/asicen/ の中にあるので、それとランナーのイメージのバージョンを鍵にする。
+      # cmake と g++ はイメージと apt から入るので、イメージが上がるたびに組み直し、新しいもので組めるかを見る。
+      # 外れたときだけ組んで置く
+      - name: Key for denpa-asicen (mock)
+        id: asicen
+        run: echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Restore denpa-asicen (mock)
+        id: asicen-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            asicen-mock
+            asicen-mock-windows
+          key: asicen-mock-${{ steps.asicen.outputs.image }}-${{ hashFiles('agent/asicen/**') }}
+
       - name: Build denpa-asicen (mock)
+        if: steps.asicen-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update && sudo apt-get install --no-install-recommends -y cmake ninja-build g++ make
           bash agent/asicen/build.sh asicen-mock --mock
           bash agent/asicen/build.sh asicen-mock-windows --mock --windows
+
+      - name: Save denpa-asicen (mock)
+        if: steps.asicen-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            asicen-mock
+            asicen-mock-windows
+          key: ${{ steps.asicen-cache.outputs.cache-primary-key }}
 
       - name: Upload denpa-asicen.exe (mock)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -240,6 +310,8 @@ jobs:
   # denpa が答えるまで。最後に外す。main の ruleset の必須チェックに入っている (イメージを引くので、
   # レジストリの具合でも揺れる)。compose ファイルはこのコミットのものを取らせる (DENPA_VERSION)
   install-linux:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -324,6 +396,8 @@ jobs:
   # main の ruleset の必須チェックに入っている (talosctl のイメージと Image Factory に頼るので、外の具合で揺れることがある)。Renovate が Talos を
   # 上げたときにここが赤くなったら、docs の ISO の URL か patch.yaml を直す
   talos:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -1246,7 +1320,7 @@ jobs:
   # 予約から録画・エンコード・保存先への配置まで、偽の放送で通しで流す
   e2e:
     runs-on: ubuntu-latest
-    # 中身は 3 分もかからない。ここに引っかかるのは待ちぼうけしているとき
+    # 中身は 2 分もかからない。ここに引っかかるのは待ちぼうけしているとき
     timeout-minutes: 12
     strategy:
       # 1 つ落ちても残りは最後まで流す。落ち方を全部まとめて見たい
@@ -1257,7 +1331,7 @@ jobs:
         # 同じ組に固まり、28 秒の組と 3.6 分の組ができていた
         # **組を増やしたら、main の ruleset の必須チェックにも `e2e (n)` を足すこと** (足さないと
         # 増やした組が落ちていてもマージできてしまう。bump の PR は ruleset から引くので直さなくてよい)
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     # 触ったファイルを読む (下の「中身を回すか」)
     permissions:
       contents: read
@@ -1336,7 +1410,7 @@ jobs:
         run: |
           ls tests/e2e/*.spec.ts | xargs -n1 basename | sed 's/\.spec\.ts$//' | sort > "$RUNNER_TEMP/all"
           jq -r 'del(."//") | .[][]' tests/e2e/shards.json | sort > "$RUNNER_TEMP/listed"
-          jq -e 'del(."//") | [keys[] | tonumber] | sort == [range(1; 11)]' tests/e2e/shards.json > /dev/null
+          jq -e 'del(."//") | [keys[] | tonumber] | sort == [range(1; 15)]' tests/e2e/shards.json > /dev/null
           dup=$(uniq -d "$RUNNER_TEMP/listed")
           if [ -n "$dup" ]; then echo "::error::2つの組に入っています: $(echo $dup)"; exit 1; fi
           gone=$(comm -13 "$RUNNER_TEMP/all" "$RUNNER_TEMP/listed")
@@ -1396,7 +1470,7 @@ jobs:
         if: env.RUN == 'true'
         env:
           MPEG2_DIR: ${{ runner.temp }}/mpeg2
-          WORKERS: ${{ matrix.shard >= 9 && '--workers=1' || '' }}
+          WORKERS: ${{ (matrix.shard == 9 || matrix.shard == 10) && '--workers=1' || '' }}
         run: bunx playwright test $WORKERS ${{ steps.specs.outputs.files }}
 
       - name: Upload Playwright report

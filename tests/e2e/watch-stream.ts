@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 
 /**
  * 観る画面で、サーバがその場で流すものを観るスペックの部品
- * (`39-watch-stream`・`39-watch-adapt`・`39-watch-adapt-encode`・`39-watch-adapt-relay`・`40-watch-compat`・`40-watch-compat-long`)
+ * (`39-watch-stream`・`39-watch-adapt`・`39-watch-adapt-handoff`・`39-watch-adapt-encode`・`39-watch-adapt-relay`・`40-watch-compat`・`40-watch-compat-long`)
  */
 
 /** リクエストした `stream` の URL を順に控える */
