@@ -1,121 +1,123 @@
 {
-  "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割る (割り方は docs/development.md「並べて流す」)。9 組と 10 組のほかは 3 ワーカーで、どの組も 1 ワーカーの時間が 90 秒ほどになるように割ってある (ファイル名の順に空いたワーカーへ配って見積もる)。1 本で 90 秒を超えるスペックは分ける (長い 1 本が組の時間の下限になるため)。映像を長くデコードし続けるスペック (20-live・20-live-tune・20-live-player・20-live-encode、22-watch・22-watch-clips・22-watch-layout、28-live-raw・28-live-raw-device、38/40/41 の互換モードと 40-watch-compat-long・39-watch-adapt・39-watch-adapt-handoff・39-watch-adapt-encode・39-watch-adapt-relay・39-watch-resume、43-raw-cadence・44-ambient・68-watch-cm-frames・57-jikkyo・57-jikkyo-write・57-jikkyo-list・58-volume) は 1 つの組に 3 本までにする (混むとどれも遅くなる)。9 組と 10 組はライブの貯め方 (50-live-pacing・51-live-gaps) を 1 本ずつ、1 ワーカーで流す (test.yml。同じ組でほかのワーカーが動くと、届く間隔が乱れて貯める量がそれを覆う高さへ上がり、「下限のまま」を見るテストが落ちる。デコードが重なると、途中から入ったときにコマも落とす。1 ワーカーなので、足したぶんだけ組が長くなる)。33-recordings-group は 21-onair-fallback と同じ組に入れない (21 が延長して録り終えた録画が、同じワーカーで次に流れた 33 のホームの一覧に入る)。どの組にも入っていないスペックは 5 組で流す。足したら CI の結果の所要時間を見て、あとでどこかの組に入れ直せばよい。ここに書いた名前のファイルが無い・2 つの組に入っている、は CI の「組分けの検算」が落とす",
+  "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割る (割り方は docs/development.md「並べて流す」)。9 組と 10 組のほかは 3 ワーカーで、どの組も 1 ワーカーの時間が 85 秒ほどになるように割ってある (ファイル名の順に空いたワーカーへ配って見積もる)。1 本で 80 秒を超えるスペックは分ける (長い 1 本が組の時間の下限になるため)。映像を長くデコードし続けるスペック (20-live・20-live-tune・20-live-player・20-live-encode、22-watch・22-watch-clips・22-watch-layout、28-live-raw・28-live-raw-device、38/40/41 の互換モードと 40-watch-compat-long・39-watch-adapt・39-watch-adapt-handoff・39-watch-adapt-encode・39-watch-adapt-relay・39-watch-resume、43-raw-cadence・44-ambient・68-watch-cm-frames・57-jikkyo・57-jikkyo-write・57-jikkyo-list・58-volume) は 1 つの組に 2 本までにする (混むとどれも遅くなる。3 本が同時に始まった組では、どれも 20 秒ほど延びた。本数の都合で 1 組だけ 3 本)。9 組と 10 組はライブの貯め方 (50-live-pacing・51-live-gaps) を 1 本ずつ、1 ワーカーで流す (test.yml。同じ組でほかのワーカーが動くと、届く間隔が乱れて貯める量がそれを覆う高さへ上がり、「下限のまま」を見るテストが落ちる。デコードが重なると、途中から入ったときにコマも落とす。1 ワーカーなので、足したぶんだけ組が長くなる)。33-recordings-group は 21-onair-fallback と同じ組に入れない (21 が延長して録り終えた録画が、同じワーカーで次に流れた 33 のホームの一覧に入る)。どの組にも入っていないスペックは 5 組で流す。足したら CI の結果の所要時間を見て、あとでどこかの組に入れ直せばよい。ここに書いた名前のファイルが無い・2 つの組に入っている、は CI の「組分けの検算」が落とす",
   "1": [
-    "03-recording-chapters",
-    "09-behaviour",
-    "23-watch-data",
-    "26-hwenc",
-    "28-live-raw",
-    "29-subpath"
-  ],
-  "2": [
-    "16-scan",
-    "34-live-yield",
-    "39-watch-adapt-handoff",
-    "40-watch-compat",
-    "43-raw-cadence",
-    "47-search-rule",
-    "62-chase-raw"
-  ],
-  "3": [
-    "03-recording",
-    "20-live-encode",
-    "38-live-compat",
-    "48-link-hover",
-    "54-lite",
-    "56-transfer"
-  ],
-  "4": [
-    "18-pwa",
-    "39-watch-resume",
-    "44-ambient",
-    "45-buttons",
-    "46-search",
-    "52-diagnostics",
+    "11-rule-edit",
+    "13-ts-import",
+    "14-serve",
+    "19-reservation-rules",
+    "53-header-float",
+    "55-tabletop",
     "57-jikkyo",
     "57-jikkyo-recorded-list",
-    "60-embed-data",
-    "60-niconico"
+    "68-watch-cm-frames"
+  ],
+  "2": [
+    "01-dashboard",
+    "22-watch-layout",
+    "28-live-raw",
+    "66-agents",
+    "69-live-handoff"
+  ],
+  "3": [
+    "18-pwa",
+    "20-live",
+    "23-watch-data",
+    "32-chase-api",
+    "35-csp",
+    "40-watch-compat-long",
+    "45-buttons",
+    "47-search-rule",
+    "60-embed-data"
+  ],
+  "4": [
+    "20-live-player",
+    "22-oidc",
+    "26-hwenc",
+    "29-subpath",
+    "43-raw-cadence",
+    "46-home-timeline",
+    "49-guide-skeleton",
+    "61-live-auto"
   ],
   "5": [
-    "01-dashboard",
-    "13-migrate",
-    "30-api",
+    "20-live-encode",
     "36-bml-npt",
-    "39-watch-adapt",
-    "39-watch-adapt-relay",
-    "61-live-auto",
-    "64-sky"
-  ],
-  "6": [
-    "31-device",
     "37-playback",
-    "58-volume",
-    "59-boot-signal",
-    "66-agents",
+    "39-watch-adapt",
     "70-season"
   ],
+  "6": [
+    "02-reservation",
+    "05-rules",
+    "16-scan",
+    "20-live-tune",
+    "20-onair",
+    "33-recordings-group",
+    "39-watch-resume",
+    "46-search",
+    "52-diagnostics"
+  ],
   "7": [
-    "12-encode-failure",
-    "14-serve",
+    "03-recording-chapters",
     "17-logo",
-    "20-live",
-    "22-oidc",
-    "25-chase",
-    "26-hwenc-hevc",
-    "41-watch-compat-local",
-    "53-header-float"
+    "24-bml-network",
+    "26-hwenc-vendors",
+    "34-live-yield",
+    "39-watch-adapt-handoff",
+    "44-ambient",
+    "65-catv"
   ],
   "8": [
-    "13-ts-import",
-    "20-live-player",
-    "20-live-tune",
-    "21-onair-fallback",
-    "24-bml-network",
-    "27-encode-cancel",
-    "28-live-raw-device",
+    "09-behaviour",
+    "25-chase",
+    "26-hwenc-hevc",
     "36-bml",
+    "54-lite",
+    "57-jikkyo-list",
+    "57-jikkyo-write",
+    "60-niconico",
     "63-programs-api"
   ],
   "9": ["50-live-pacing"],
   "10": ["51-live-gaps"],
   "11": [
-    "02-reservation",
-    "10-webhook",
-    "11-rule-edit",
+    "03-recording",
+    "04-external-delete",
+    "13-migrate",
+    "15-scramble",
     "15-scramble-live",
     "22-watch-clips",
-    "49-guide-skeleton",
-    "55-tabletop",
-    "67-ranking"
+    "30-api",
+    "40-watch-compat",
+    "62-chase-raw"
   ],
   "12": [
-    "04-external-delete",
-    "05-rules",
-    "20-onair",
+    "12-encode-failure",
     "22-watch",
-    "22-watch-layout",
-    "46-home-timeline",
-    "57-jikkyo-recorded",
-    "69-live-handoff"
+    "39-watch-adapt-encode",
+    "58-volume",
+    "58-volume-controls",
+    "59-boot-signal",
+    "64-sky",
+    "67-ranking"
   ],
   "13": [
-    "15-scramble",
-    "23-watch-data-receive",
-    "26-hwenc-vendors",
-    "33-recordings-group",
-    "35-csp",
-    "40-watch-compat-long",
-    "57-jikkyo-write",
-    "65-catv"
+    "16-scan-tuners",
+    "21-onair-fallback",
+    "27-encode-cancel",
+    "28-live-raw-device",
+    "38-live-compat",
+    "39-watch-stream",
+    "57-jikkyo-recorded"
   ],
   "14": [
-    "19-reservation-rules",
-    "32-chase-api",
-    "39-watch-adapt-encode",
-    "39-watch-stream",
+    "10-webhook",
+    "23-watch-data-receive",
+    "31-device",
+    "39-watch-adapt-relay",
+    "41-watch-compat-local",
     "42-copy-never",
-    "57-jikkyo-list",
-    "68-watch-cm-frames"
+    "48-link-hover",
+    "56-transfer"
   ]
 }
