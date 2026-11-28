@@ -265,8 +265,12 @@ X に載せる短い画面録画は `scripts/capture-demo.ts` で撮ります。
 撮る前に DB の局名が偽の局だけであることを確かめて、違えば止まります。場面は名前で選びます (名前を挙げなければ全部)。
 
 ```sh
-docker compose run --rm docs bun scripts/capture-demo.ts hide-service   # 局を非表示にする
+docker compose run --rm docs bun scripts/capture-demo.ts hide-service      # 局を非表示にする
+docker compose run --rm docs bun scripts/capture-demo.ts jikkyo-comments   # 実況のコメントを流して書き込む
 ```
+
+`jikkyo-comments` のコメントは偽の denpa-hub (`tests/fake/denpa-hub.ts`) から流し、本文はスクリプトの中で作った文です。
+世帯は偽の hub でニコニコと連携してから撮ります。勢いは画面からの呼び出しに作り物の数を返すので、denpa のサーバは NX-Jikkyo に繋ぎません。
 
 出力は `docs/images/.capture/demo/<場面>.mp4` で、コミットしません。1920×1080・30 fps・H.264・音声なしで、140 秒を超えると止まります。
 カーソルはページに描いた矢印で、押すときはそこまで動かしてから同じ座標で押します。場面を足すときは `SCENES` に足します
