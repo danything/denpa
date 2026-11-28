@@ -3,7 +3,7 @@
  *
  * 画面は放送時刻 `W` (いま映しているコマの放送時刻。ライブは `clock` の通知、録画は `ts_head` と再生位置から) を
  * 渡して `take` を呼び、返ってきたものを流す (`JikkyoLayer`)。出し方は `cursor.ts`。
- * コメントの出どころ (NX-Jikkyo・過去ログ API) と控えはここが持つ。どこから埋めるかは docs/watch.md の「実況のコメント」
+ * コメントの出どころ (NX-Jikkyo・過去ログ API・連携している世帯のライブでは公式のニコニコ実況) と控えはここが持つ。どこから埋めるかは docs/watch.md の「実況のコメント」
  */
 import { type PostStyle, postStyle } from "./command";
 import type { Comment } from "./comments";
@@ -12,7 +12,7 @@ import { fetchKakolog, KAKOLOG_LAG } from "./kakolog";
 import { FORCE_SPAN, LIST_SPAN } from "./list";
 import { compileNg } from "./ng";
 import { NxJikkyo } from "./nx";
-import type { OfficialWriter } from "./official";
+import { OfficialReader, type OfficialWriter } from "./official";
 import type { PostResult } from "./post";
 
 /** 過去ログ API が読めなかったとき、もう一度試すまで */
@@ -40,8 +40,11 @@ export class JikkyoFeed {
   private ngSeen = new WeakMap<Comment, boolean>();
   private readonly cursor = new Cursor();
   private nx: NxJikkyo | null = null;
+  /** 公式のニコニコ実況から直に受けるもの (連携している世帯のライブだけ) */
+  private reader: OfficialReader | null = null;
   private channel: string | null = null;
   private active = false;
+  private official = false;
   /** 読めなくなっている出どころ (`nx`・`kakolog`) */
   private readonly failing = new Set<string>();
   private kakologTimer: ReturnType<typeof setTimeout> | null = null;
@@ -51,28 +54,47 @@ export class JikkyoFeed {
   constructor(
     /** NX-Jikkyo の WebSocket に繋ぐか (ライブと追っかけ) */
     private readonly live: boolean,
+    /** 公式のコメントを受ける `/api/jikkyo/niconico/feed` (前段の接頭辞を付けたもの。ライブだけ渡す) */
+    private readonly officialUrl?: string,
   ) {}
 
   /**
    * 局を替えた・オン/オフを替えた。替わったら繋ぎ直す。局が替わったら控えも捨てる。
    * @param channel 実況のチャンネル。実況の無い局・世帯の設定がオフなら null
    * @param on 流すか (端末の設定がオンのとき)
+   * @param official ニコニコと連携している (公式のコメントも denpa のサーバから受ける)
    */
-  set(channel: string | null, on: boolean): void {
+  set(channel: string | null, on: boolean, official = false): void {
     const active = on && channel !== null;
-    if (channel === this.channel && active === this.active) return;
+    if (
+      channel === this.channel &&
+      active === this.active &&
+      official === this.official
+    )
+      return;
     if (channel !== this.channel) this.cursor.reset();
     else this.cursor.pause();
     this.channel = channel;
     this.active = active;
+    this.official = official;
     this.stopSources();
     if (!active || !this.live || channel === null) return;
-    this.nx = new NxJikkyo(channel, {
+    const nx = new NxJikkyo(channel, {
       comments: (comments) => this.cursor.receive(comments),
       state: (ok) => this.mark("nx", ok),
       odd: warnShape,
     });
-    this.nx.start();
+    this.nx = nx;
+    nx.start();
+    if (!official || this.officialUrl === undefined) return;
+    this.reader = new OfficialReader(this.officialUrl, channel, {
+      comments: (comments) => this.cursor.receive(comments),
+      boundary: (at) => {
+        nx.setBoundary(at);
+        this.refresh();
+      },
+    });
+    this.reader.start();
   }
 
   /**
@@ -152,9 +174,11 @@ export class JikkyoFeed {
     let result: PostResult;
     if (official === undefined) result = await nx.post(text, style);
     else {
-      nx.expectEcho(text);
+      // 公式から直に受けている間は、そちらから戻ってくる (NX-Jikkyo の取り込みは境より後を捨てている)
+      const echo = this.reader?.boundary != null ? this.reader : nx;
+      echo.expectEcho(text);
       result = await official.post(text, style);
-      if (result !== "sent") nx.forgetEcho(text);
+      if (result !== "sent") echo.forgetEcho(text);
     }
     const at = w() ?? before;
     if (result === "sent" && nx === this.nx && at !== null) {
@@ -168,11 +192,20 @@ export class JikkyoFeed {
     return result;
   }
 
-  /** 出どころが読めるか。どれかが読めなければ `down` */
+  /**
+   * 出どころが読めるか。過去ログが読めない、または NX-Jikkyo が読めず公式からも受けていなければ `down`
+   * (公式から受けている間は、NX-Jikkyo が落ちていても流れる)
+   */
   private mark(source: string, ok: boolean): void {
     if (ok) this.failing.delete(source);
     else this.failing.add(source);
-    this.down = this.failing.size > 0;
+    this.refresh();
+  }
+
+  private refresh(): void {
+    const official = this.reader?.boundary != null;
+    this.down =
+      this.failing.has("kakolog") || (this.failing.has("nx") && !official);
   }
 
   /** 重ねるのを止めた (データ放送を出した・オフにした)。戻ったときに、止めていた間のぶんをまとめて流さない */
@@ -250,6 +283,8 @@ export class JikkyoFeed {
   private stopSources(): void {
     this.nx?.close();
     this.nx = null;
+    this.reader?.stop();
+    this.reader = null;
     this.stopKakolog();
     this.failing.clear();
     this.down = false;

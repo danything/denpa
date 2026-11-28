@@ -13,6 +13,8 @@
  *    コメントの WS から `yourpost: 1` で戻ってくる。送れたものは画面がすぐ流すので、戻ってきたものは 1 回だけ捨てる (`Echoes`)
  * 5. 公式のニコニコ実況に書いたもの (denpa のサーバが送る。`feed.post`) も NX-Jikkyo が取り込んで流してくる。`yourpost` は付かないので、
  *    送ってから 60 秒の間に本文が同じものを 1 回だけ捨てる (`expectEcho`。ほかの人の同じ本文を 1 件消すことがある)
+ * 6. 公式から直に受けている間 (ニコニコと連携している世帯のライブ。`official.ts`) は、境 (`setBoundary`) より後に書かれた
+ *    公式の取り込み (`user_id` が `nicolive:` で始まる) を捨てる。NX-Jikkyo の利用者のコメントはそのまま流す
  */
 import type { PostStyle } from "./command";
 import { type Comment, toComment } from "./comments";
@@ -86,6 +88,8 @@ export class NxJikkyo {
   private readonly echoes = new Echoes();
   /** 公式のニコニコ実況に書いたもの。NX-Jikkyo が取り込んで流してくるが `yourpost` が付かないので、本文だけで 1 回捨てる */
   private readonly official = new Echoes();
+  /** 公式から直に受けている境 (`setBoundary`)。これより後の公式の取り込みは捨てる */
+  private boundary: number | null = null;
   /** 遡る起点の時刻 (unix ms)。コメントの WS が開いたら 1 回だけ送る */
   private backfillBefore: number | null = null;
   private backfilled = false;
@@ -147,6 +151,13 @@ export class NxJikkyo {
         }),
       );
     });
+  }
+
+  /**
+   * 公式から直に受け始めた・やめた (`official.ts`)。`at` (unix ms) より後に書かれた公式の取り込みを捨てる。null なら全部流す
+   */
+  setBoundary(at: number | null): void {
+    this.boundary = at;
   }
 
   /** 公式に書く (`feed.post`)。取り込まれて戻ってきた同じ本文を 1 回だけ捨てる */
@@ -339,10 +350,24 @@ export class NxJikkyo {
       const chat = (item as { chat: unknown }).chat;
       const comment = toComment(chat);
       if (comment === undefined) this.events.odd("chat の形式が違います");
-      else if (comment !== null && !this.ownEcho(chat, comment.text))
+      else if (
+        comment !== null &&
+        !this.received(chat, comment.at) &&
+        !this.ownEcho(chat, comment.text)
+      )
         comments.push(comment);
     }
     if (comments.length > 0) this.events.comments(comments);
+  }
+
+  /**
+   * 公式のニコニコ実況から取り込んだもの (`user_id` が `nicolive:` で始まる) で、境より後に書かれたもの。
+   * 公式から直に受けている (`official.ts` の `OfficialReader`) ので捨てる
+   */
+  private received(chat: unknown, at: number): boolean {
+    if (this.boundary === null || at < this.boundary) return false;
+    const user = (chat as { user_id?: unknown }).user_id;
+    return typeof user === "string" && user.startsWith("nicolive:");
   }
 
   /** 戻ってきた自分の書き込みで、もう流したもの。返事を待っている間なら、送れている印にする */

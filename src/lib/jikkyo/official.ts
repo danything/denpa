@@ -1,12 +1,15 @@
 /**
- * **公式のニコニコ実況に書く (端末の側)。** ニコニコと連携している世帯で、書き込みの欄 (`JikkyoCompose`) が使う。
+ * **公式のニコニコ実況に書く・受ける (端末の側)。** ニコニコと連携している世帯で、書き込みの欄 (`JikkyoCompose`) と
+ * ライブの画面のコメント (`feed.svelte.ts`) が使う。
  * 端末はトークンも接続先も持たず、denpa のサーバにリクエストする (`/api/jikkyo/niconico/…`。繋ぐのはサーバ。`server/niconico-live.ts`)。
  *
  * - 欄が開いている間、`HEARTBEAT` おきと局が替わったときに `session` を呼んで接続を保ち、状態を受け取る
  * - 書き込みは `comments` に送り、結果 (`PostResult`) を受け取る
+ * - コメントは `feed` から受ける (`OfficialReader`)
  */
 import type { PostStyle } from "./command";
-import type { PostResult } from "./post";
+import type { Comment } from "./comments";
+import { Echoes, type PostResult } from "./post";
 
 /** 接続を保つために呼ぶ間隔 (ms)。サーバは 2 分呼ばれなければ閉じる */
 export const HEARTBEAT = 30_000;
@@ -117,5 +120,169 @@ export class OfficialWriter {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
+  }
+}
+
+/** 受けられなかった (サーバに届かない・断られた) あと、次に呼ぶまで (ms) */
+export const FEED_RETRY = 10_000;
+/** すぐ返ってきた (状態が変わった) 返事のあと、次に呼ぶまで (ms)。続けてすぐ返ってきても詰めて呼ばない */
+export const FEED_GAP = 1_000;
+
+/** サーバが渡すコメント (`server/niconico-live.ts` の `FeedComment`) */
+type FeedComment = Comment & { own?: true };
+
+interface ReaderEvents {
+  /** コメントが来た (境より前のもの・自分の書き込みの戻りは来ない) */
+  comments: (comments: Comment[]) => void;
+  /** 境が変わった (null なら公式を受けていない) */
+  boundary: (at: number | null) => void;
+}
+
+/** 差し替えられるもの (単体テストで偽物を渡す) */
+interface ReaderDeps extends OfficialDeps {
+  setTimeout: (run: () => void, ms: number) => unknown;
+  clearTimeout: (id: unknown) => void;
+}
+
+/**
+ * **公式のニコニコ実況のコメントを受ける (端末の側)。** ニコニコと連携している世帯のライブの画面で、局ごとに 1 つ (`feed.svelte.ts`)。
+ * サーバの `feed` (`/api/jikkyo/niconico/feed`) を続けて呼ぶ (ロングポーリング。サーバは新しいものが来るまで返事を待つ)。
+ *
+ * - **境 (`boundary`) より後は公式、前は NX-Jikkyo が取り込んだもの** を流す。境は max(サーバが受け続けている始まり, 最初の返事の時刻)。
+ *   サーバが受けられていなければ境は無く、NX-Jikkyo の取り込みを全部流す (`nx.ts`)
+ * - サーバが返す番号 (`seq`) の続きをリクエストする。サーバを起こし直した (`epoch` が違う) ら最初から
+ * - 世帯のアカウントが書いたもの (`own`) のうち、この端末が送ってから 60 秒以内の同じ本文は 1 回だけ捨てる (送れたときにもう流している)
+ * - 受けられなければ境を無くし、`FEED_RETRY` 後にまた呼ぶ
+ */
+export class OfficialReader {
+  boundary: number | null = null;
+  private after: number | null = null;
+  private epoch: string | null = null;
+  /** 最初の返事の時刻 (サーバの時計) */
+  private first: number | null = null;
+  private stopped = false;
+  private readonly abort = new AbortController();
+  private timer: unknown = null;
+  private readonly echoes = new Echoes();
+
+  constructor(
+    /** `/api/jikkyo/niconico/feed` (前段の接頭辞を付けたもの) */
+    private readonly url: string,
+    private readonly channel: string,
+    private readonly events: ReaderEvents,
+    private readonly deps: ReaderDeps = {
+      fetch: (url, init) => fetch(url, init),
+      now: () => Date.now(),
+      setTimeout: (run, ms) => setTimeout(run, ms),
+      clearTimeout: (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
+    },
+  ) {}
+
+  start(): void {
+    void this.loop();
+  }
+
+  /** 止める。待っているリクエストも止める (サーバが「聴かれている」と数え続けないように) */
+  stop(): void {
+    this.stopped = true;
+    this.abort.abort();
+    if (this.timer !== null) this.deps.clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  /** 公式に書いた。戻ってきた同じ本文を 1 回だけ捨てる */
+  expectEcho(text: string): void {
+    this.echoes.expect(text, this.deps.now());
+  }
+
+  /** 送れなかった。覚えたものを 1 つ忘れる */
+  forgetEcho(text: string): void {
+    this.echoes.forget(text);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      this.timer = this.deps.setTimeout(() => {
+        this.timer = null;
+        resolve();
+      }, ms);
+    });
+  }
+
+  private async loop(): Promise<void> {
+    while (!this.stopped) {
+      const started = this.deps.now();
+      let got: number | null = null;
+      try {
+        const res = await this.deps.fetch(this.url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            channel: this.channel,
+            ...(this.after === null ? {} : { after: this.after }),
+            ...(this.epoch === null ? {} : { epoch: this.epoch }),
+          }),
+          signal: this.abort.signal,
+        });
+        if (res.ok) got = this.apply(await res.json());
+      } catch {
+        // 届かない・止めた
+      }
+      if (this.stopped) return;
+      if (got === null) {
+        this.setBoundary(null);
+        await this.sleep(FEED_RETRY);
+      } else if (got === 0 && this.deps.now() - started < FEED_GAP)
+        await this.sleep(FEED_GAP);
+    }
+  }
+
+  /** 返事を読む。読めた数を返す (形式が違えば null) */
+  private apply(reply: unknown): number | null {
+    if (reply === null || typeof reply !== "object") return null;
+    const r = reply as Record<string, unknown>;
+    const { epoch, seq, now, since, comments } = r;
+    if (
+      typeof epoch !== "string" ||
+      typeof seq !== "number" ||
+      typeof now !== "number" ||
+      !Array.isArray(comments)
+    )
+      return null;
+    if (epoch !== this.epoch || this.first === null) {
+      this.epoch = epoch;
+      this.first = now;
+    }
+    this.after = seq;
+    const boundary =
+      typeof since === "number" ? Math.max(since, this.first) : null;
+    this.setBoundary(boundary);
+    if (boundary === null) return 0;
+    const out: Comment[] = [];
+    for (const item of comments as FeedComment[]) {
+      if (
+        item === null ||
+        typeof item !== "object" ||
+        typeof item.at !== "number" ||
+        typeof item.text !== "string" ||
+        item.at < boundary
+      )
+        continue;
+      if (item.own === true && this.echoes.take(item.text, this.deps.now()))
+        continue;
+      out.push(
+        item.style !== undefined
+          ? { at: item.at, text: item.text, style: item.style }
+          : { at: item.at, text: item.text },
+      );
+    }
+    if (out.length > 0) this.events.comments(out);
+    return out.length;
+  }
+
+  private setBoundary(at: number | null): void {
+    if (at === this.boundary) return;
+    this.boundary = at;
+    this.events.boundary(at);
   }
 }

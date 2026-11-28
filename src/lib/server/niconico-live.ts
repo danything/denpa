@@ -1,35 +1,54 @@
 /**
- * **公式のニコニコ実況に書き込む** (ニコニコと連携しているとき。連携そのものは `niconico.ts`)。
+ * **公式のニコニコ実況に書き込み、コメントを受ける** (ニコニコと連携しているとき。連携そのものは `niconico.ts`)。
  *
  * - **視聴の WebSocket は denpa のサーバが張る。** トークンも接続先の URL (それ自体が資格情報) も端末に出さない。
- *   端末が何台あっても、1 つの局に繋ぐのは 1 本
+ *   端末が何台あっても、1 つの局に繋ぐのは 1 本。書き込みと受信で同じ接続を使う
  * - 接続先は denpa-hub の `/niconico/live/watch` から受け取る (局の ID とユーザー ID を渡し、アクセストークンを付ける)。
  *   ニコニコ固有の値は hub が持つ。hub が 401 を返したら 1 回だけトークンを更新してやり直す
  * - やり取りは NX-Jikkyo と同じ形式 (`nx.ts`) で、`startWatching` (映像はリクエストしない)・`ping` に `pong`・`seat` の間隔で `keepSeat`・
- *   `postComment` (いつも 184) に `postCommentResult` か `error`・`disconnect` を使う。最初の返事が来たら書ける。
+ *   `postComment` (いつも 184) に `postCommentResult` か `error`・`disconnect`・`reconnect` を使う。最初の返事が来たら書ける。
  *   書き込みの `vpos` の基準 (`vposBaseTime`) は、どの返事に載っていても読む (読めなければ繋いだ時刻)
- * - **繋ぐのは書き込みの欄が開いている間だけ。** 欄は開いている間 30 秒おきに `touch` を呼ぶ。`IDLE` の間呼ばれなければ閉じる。
- *   同じアカウントで開ける接続の数には上限がある (数は公開されていない) ので、同時に開くのは `MAX_SESSIONS` まで
- *   (超えたら、いちばん長く呼ばれていないものを閉じる)
+ * - **コメントは `messageServer` の view から受ける** (`niconico-view.ts`)。局ごとに直近 `RING` のぶんを通し番号を付けて持ち、
+ *   端末は `feed` で前回の番号より後を受け取る (ロングポーリング)。受けたコメントは家の端末にだけ渡す
+ * - **繋ぐのは、書き込みの欄が開いているか、ライブの画面がその局のコメントを受けている間だけ。** 欄は 30 秒おきに `touch` を、
+ *   ライブの画面は続けて `feed` を呼ぶ。`IDLE` の間どちらも呼ばれなければ閉じる。
+ *   同じアカウントで開ける接続の数には上限がある (数は公開されていない) ので、同時に開くのは `MAX_SESSIONS` まで。
+ *   超えたら、聴かれていない (`feed` が待っていない・`HOLD` の間返していない) もののうち、いちばん長く呼ばれていないものを閉じる。
+ *   全部聴かれていれば新しい局は開かない
  * - 書き込みは 1 件ずつ、世帯 (アカウント) で `POST_GAP` 空ける。5 秒返事が無ければ「分からない」
+ * - 切れたとき: `END_PROGRAM` (4:00 の替わり目) は次に呼ばれたらすぐ繋ぎ直す。`reconnect` は言われた秒数待ってから、
+ *   URL の `audience_token` を替えて繋ぎ直す。追い出された・接続が多すぎるときは `LONG_RETRY`、ほかは `RETRY_AFTER` 待つ
  *
  * 接続先の URL とトークンは記録に書かない
  */
-import type { PostStyle } from "../jikkyo/command";
+import { type PostStyle, readMail } from "../jikkyo/command";
+import type { Comment } from "../jikkyo/comments";
 import { POST_GAP, type PostResult, REPLY_WAIT, vpos } from "../jikkyo/post";
 import { config, userAgent } from "./config";
 import { accessToken, HUB_TIMEOUT, linkState, renew } from "./niconico";
+import type { OfficialChat } from "./niconico-messages";
+import { allowedHttp, ViewReader } from "./niconico-view";
 
-/** 欄が呼ばなくなってから閉じるまで (ms)。欄は 30 秒おきに呼ぶ */
+/** 呼ばれなくなってから閉じるまで (ms)。欄は 30 秒おきに呼ぶ */
 export const IDLE = 2 * 60_000;
-/** 同時に開く接続の上限。世帯で別々の局に書くことは多くないうえ、同じアカウントの接続の数には上限がある */
+/** 同時に開く接続の上限。世帯で別々の局を観ることは多くないうえ、同じアカウントの接続の数には上限がある */
 export const MAX_SESSIONS = 2;
 /** 書き込みが来たとき、繋がるのを待つ上限 (ms) */
 export const CONNECT_WAIT = 10_000;
-/** 繋げなかったあと、次に試すまで (ms)。欄が呼ぶたびに hub を呼ばない */
+/** 繋げなかったあと、次に試すまで (ms)。呼ばれるたびに hub を呼ばない */
 export const RETRY_AFTER = 30_000;
+/** 追い出された (同じアカウントでほかの所が観ている)・接続が多すぎると言われたあと、次に試すまで (ms) */
+export const LONG_RETRY = 5 * 60_000;
+/** `feed` が新しいものを待つ上限 (ms) */
+export const LONG_POLL = 20_000;
+/** 最初のコメントが来てから、まとめて返すまで (ms)。混む局で 1 秒に何度も呼ばせない */
+export const BATCH = 400;
+/** 最後の `feed` の返事からこの間は「聴かれている」(ms)。上限で閉じない */
+export const HOLD = 10_000;
+/** 局ごとに持つコメントの長さ (受けた時刻で。ms) */
+export const RING = 2 * 60_000;
 
-/** 欄に返す接続の状態 */
+/** 欄と画面に返す接続の状態 */
 export type LiveState =
   /** 繋いでいる途中 */
   | "connecting"
@@ -37,8 +56,25 @@ export type LiveState =
   | "ready"
   /** 連携していない・切れた */
   | "unlinked"
-  /** 繋げない (番組が無い・hub やニコニコが断った・届かない)。`RETRY_AFTER` 後にまた試す */
+  /** 繋げない (番組が無い・hub やニコニコが断った・届かない・上限)。しばらく後にまた試す */
   | "down";
+
+/** 端末に渡すコメント。`own` は世帯のアカウントが書いたもの */
+export type FeedComment = Comment & { own?: true };
+
+/** `feed` の返事 */
+export interface FeedReply {
+  /** サーバを起こすたびに変わる。違えば端末は番号を捨てる */
+  epoch: string;
+  state: LiveState;
+  /** 受信が途切れずに続いている始まり (unix ms。サーバの時計)。受けられていなければ null */
+  since: number | null;
+  /** サーバの時刻 (unix ms) */
+  now: number;
+  /** 最後の番号。次はこれを `after` に渡す */
+  seq: number;
+  comments: FeedComment[];
+}
 
 /** hub から接続先を受け取った結果 */
 export type WatchResult = { url: string } | { error: string; status: number };
@@ -48,6 +84,8 @@ export interface LiveDeps {
   /** hub の `/niconico/live/watch` */
   watch: (token: string, channel: string, user: string) => Promise<WatchResult>;
   open: (url: string) => WebSocket;
+  /** メッセージサーバを読む */
+  fetch: (url: string, init: RequestInit) => Promise<Response>;
   token: () => Promise<string | null>;
   renew: () => Promise<string | null>;
   user: () => string | null;
@@ -99,6 +137,32 @@ export function allowedSocket(url: string): boolean {
   }
 }
 
+/** `reconnect` で受けたトークンに替えた URL。URL に `audience_token` が無ければ null (hub から受け取り直す) */
+export function reconnectUrl(url: string, token: unknown): string | null {
+  if (typeof token !== "string" || token === "") return null;
+  try {
+    const target = new URL(url);
+    if (!target.searchParams.has("audience_token")) return null;
+    target.searchParams.set("audience_token", token);
+    return target.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** 受けたコメントを端末に渡す形に。流さないもの (空・運営の命令) は null。決まりは `comments.ts` の `toComment` と同じ */
+export function toFeedComment(chat: OfficialChat): FeedComment | null {
+  const text = chat.text.trim();
+  if (text === "" || /^\/[a-z]/.test(text)) return null;
+  const style = readMail(chat.mail);
+  const comment: FeedComment =
+    Object.keys(style).length > 0
+      ? { at: chat.at, text, style }
+      : { at: chat.at, text };
+  if (chat.own) comment.own = true;
+  return comment;
+}
+
 const server: LiveDeps = {
   watch: hubWatch,
   // Bun の WebSocket はヘッダーを付けられる。ニコニコはツールの名前が分かる User-Agent を求めている
@@ -106,6 +170,7 @@ const server: LiveDeps = {
     new WebSocket(url, {
       headers: { "User-Agent": userAgent() },
     } as unknown as string[]),
+  fetch: (url, init) => fetch(url, init),
   token: accessToken,
   renew,
   user: () => {
@@ -117,15 +182,33 @@ const server: LiveDeps = {
   clearTimeout: (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
 };
 
+/** 接続が外へ知らせること */
+interface SessionEvents {
+  log: (message: string) => void;
+  /** 閉じた */
+  end: (session: Session) => void;
+  /** コメントが来た */
+  chats: (chats: OfficialChat[]) => void;
+  /** 状態 (`state`・`since`) が変わった */
+  changed: () => void;
+}
+
 /** 1 つの局への接続 */
 class Session {
   state: LiveState = "connecting";
   touched: number;
-  /** `down` になった時刻 (`RETRY_AFTER` の間は試し直さない) */
-  downAt = 0;
+  /** `down` になったあと、次に試してよい時刻 (0 なら待たない) */
+  retryAt = 0;
+  /** 受信が途切れずに続いている始まり (受けられていなければ null) */
+  since: number | null = null;
   private ws: WebSocket | null = null;
+  /** いまの視聴の WS の URL (`reconnect` で替える) */
+  private url: string | null = null;
   private keep: unknown = null;
   private idle: unknown = null;
+  /** `reconnect` で繋ぎ直すまでの目覚まし */
+  private again: unknown = null;
+  private reader: ViewReader | null = null;
   /** 書き込みの `vpos` の基準 (unix ms) */
   private base: number;
   private pending: {
@@ -139,14 +222,13 @@ class Session {
   constructor(
     readonly channel: string,
     private readonly deps: LiveDeps,
-    private readonly log: (message: string) => void,
-    private readonly onEnd: (session: Session) => void,
+    private readonly events: SessionEvents,
   ) {
     this.touched = deps.now();
     this.base = deps.now();
   }
 
-  /** 欄が呼んだ・書き込みが来た。閉じるまでの時間を延ばす */
+  /** 欄・画面が呼んだ・書き込みが来た。閉じるまでの時間を延ばす */
   touch(): void {
     this.touched = this.deps.now();
     if (this.idle !== null) this.deps.clearTimeout(this.idle);
@@ -201,6 +283,8 @@ class Session {
   }
 
   private connect(url: string): void {
+    if (this.closed) return;
+    this.url = url;
     const ws = this.deps.open(url);
     this.ws = ws;
     ws.onopen = () => {
@@ -211,7 +295,8 @@ class Session {
     ws.onmessage = (event) => this.onMessage(ws, event.data);
     ws.onclose = () => {
       if (ws !== this.ws) return;
-      this.close();
+      // disconnect も reconnect も無しに閉じられた。閉じられ続けて hub を呼び続けないよう、しばらく待つ
+      this.fail(`${this.channel} の視聴の接続が切れました`);
     };
     ws.onerror = () => {
       // 続く close で閉じる
@@ -241,6 +326,9 @@ class Session {
         this.startKeep(ws, Number.isFinite(every) && every > 0 ? every : 30);
         break;
       }
+      case "messageServer":
+        this.receive(body["viewUri"], body["hashedUserId"]);
+        break;
       case "postCommentResult":
         this.settlePost("sent");
         break;
@@ -249,11 +337,75 @@ class Session {
           body["message"] === "NOT_ON_AIR" ? "not-on-air" : "rejected",
         );
         break;
-      case "disconnect":
-        // 番組の終わり (4:00 の替わり目) など。閉じて、次に呼ばれたときに接続先から取り直す
-        this.close();
+      case "reconnect": {
+        const url = reconnectUrl(this.url ?? "", body["audienceToken"]);
+        // URL を替えられなければ、閉じて次に呼ばれたときに接続先から取り直す
+        if (url === null) return this.close();
+        const wait = Number(body["waitTimeSec"]);
+        // 視聴の WS だけを替える。受信 (view) はそのまま続ける
+        this.dropSocket();
+        this.settle("connecting");
+        this.again = this.deps.setTimeout(
+          () => {
+            this.again = null;
+            this.connect(url);
+          },
+          Number.isFinite(wait) && wait > 0 ? wait * 1000 : 0,
+        );
         break;
+      }
+      case "disconnect": {
+        const reason = String(body["reason"] ?? "");
+        // 番組の終わり (4:00 の替わり目)。閉じて、次に呼ばれたときに接続先から取り直す
+        if (reason === "END_PROGRAM") return this.close();
+        // 同じアカウントでほかの所が観ている・接続が多すぎる。すぐ繋ぎ直すと追い出し合う
+        const long =
+          reason === "TAKEOVER" ||
+          reason === "TOO_MANY_CONNECTIONS" ||
+          reason === "TOO_MANY_WATCHINGS";
+        this.fail(
+          `${this.channel} の視聴の接続が切られました (${reason || "理由なし"})`,
+          long ? LONG_RETRY : RETRY_AFTER,
+        );
+        break;
+      }
     }
+  }
+
+  /** コメントを受け始める。view が替わったときだけ読み直す */
+  private receive(view: unknown, hashed: unknown): void {
+    if (typeof view !== "string" || !allowedHttp(view)) {
+      this.events.log("messageServer の view が https: ではありません");
+      return;
+    }
+    if (this.reader?.view === view) return;
+    this.reader?.stop();
+    this.setSince(null);
+    const reader = new ViewReader(
+      view,
+      typeof hashed === "string" ? hashed : null,
+      this.deps,
+      {
+        chats: (chats) => {
+          if (reader === this.reader) this.events.chats(chats);
+        },
+        receiving: (ok) => {
+          if (reader !== this.reader) return;
+          this.setSince(ok ? (this.since ?? this.deps.now()) : null);
+        },
+        fatal: (reason) => {
+          if (reader === this.reader) this.fail(`${this.channel} の ${reason}`);
+        },
+      },
+    );
+    this.reader = reader;
+    reader.start();
+  }
+
+  private setSince(since: number | null): void {
+    if (since === this.since) return;
+    this.since = since;
+    this.events.changed();
   }
 
   private startKeep(ws: WebSocket, seconds: number): void {
@@ -278,17 +430,21 @@ class Session {
     });
   }
 
-  /** 状態を決めて、待っているものを起こす。`down` は試し直すまで待つ印 (`downAt`) も付ける。閉じたときは付けない (`mark` が false) */
-  private settle(state: LiveState, mark = true): void {
+  /** 状態を決めて、待っているものを起こす */
+  private settle(state: LiveState): void {
+    const changed = state !== this.state;
     this.state = state;
-    if (state === "down" && mark) this.downAt = this.deps.now();
     for (const wake of this.waiters.splice(0)) wake();
+    if (changed) this.events.changed();
   }
 
-  private fail(reason: string): void {
-    this.log(reason);
+  /** 繋げない。`wait` の間は試し直さない */
+  private fail(reason: string, wait = RETRY_AFTER): void {
+    if (this.closed) return;
+    this.events.log(reason);
+    this.retryAt = this.deps.now() + wait;
     this.settle("down");
-    this.teardown();
+    this.close();
   }
 
   /** 書き込む (`text` は確かめ終えたもの)。いつも 184 */
@@ -328,7 +484,8 @@ class Session {
     pending.done(result);
   }
 
-  private teardown(): void {
+  /** 視聴の WS だけを閉じる (受信は止めない) */
+  private dropSocket(): void {
     if (this.keep !== null) this.deps.clearTimeout(this.keep);
     this.keep = null;
     // 返事を待っている間に切れた。届いたかは分からない
@@ -347,17 +504,25 @@ class Session {
     }
   }
 
-  /** 閉じる (使われなくなった・相手が閉じた・連携を外した・繋げなかった) */
+  /** 閉じる (使われなくなった・番組が替わった・連携を外した・繋げなかった・上限) */
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    if (this.idle !== null) this.deps.clearTimeout(this.idle);
+    for (const timer of [this.idle, this.again])
+      if (timer !== null) this.deps.clearTimeout(timer);
     this.idle = null;
-    this.teardown();
-    // 使われなくなった・相手が閉じたときは、次に呼ばれたらすぐ繋ぎ直す (試し直すまで待つのは繋げなかったときだけ)
-    if (this.state === "connecting" || this.state === "ready")
-      this.settle("down", false);
-    this.onEnd(this);
+    this.again = null;
+    this.dropSocket();
+    this.reader?.stop();
+    this.reader = null;
+    this.since = null;
+    // 使われなくなった・番組が替わったときは、次に呼ばれたらすぐ繋ぎ直す (待つのは繋げなかったときだけ。`retryAt`)
+    if (this.state === "connecting" || this.state === "ready") {
+      this.state = "down";
+      for (const wake of this.waiters.splice(0)) wake();
+    }
+    this.events.changed();
+    this.events.end(this);
   }
 
   get ended(): boolean {
@@ -365,15 +530,30 @@ class Session {
   }
 }
 
+/** 局ごとに持つもの (受けたコメントと、`feed` で待っているもの)。サーバが動いている間は作り直さない */
+interface Channel {
+  seq: number;
+  ring: { seq: number; got: number; comment: FeedComment }[];
+  /** 待っている `feed`。`true` はすぐ返す (状態が変わった)、`false` はまとめて返す (コメントが来た) */
+  waiters: Set<(now: boolean) => void>;
+  /** 待っている `feed` の数 */
+  waiting: number;
+  /** 最後に `feed` に返した時刻 */
+  replied: number;
+}
+
 /** 公式の実況への接続をまとめるもの (サーバに 1 つ。下の `niconicoLive`) */
 export class NiconicoLive {
   private readonly sessions = new Map<string, Session>();
-  /** 繋げなかった局と時刻。`RETRY_AFTER` の間は同じ答えを返す */
+  /** 繋げなかった局と、次に試してよい時刻 */
   private readonly down = new Map<string, number>();
+  private readonly channels = new Map<string, Channel>();
   /** 最後に書いた時刻 (世帯で 1 つのアカウントなので、局をまたいで数える) */
   private lastPost = Number.NEGATIVE_INFINITY;
   /** 最後に記録に残した理由。同じものは繰り返さない */
   private lastReason: string | null = null;
+  /** サーバを起こすたびに変わる (`feed` の番号が続いているか) */
+  readonly epoch = crypto.randomUUID();
 
   constructor(private readonly deps: LiveDeps = server) {}
 
@@ -383,9 +563,33 @@ export class NiconicoLive {
     console.warn(`[niconico] ${reason}`);
   }
 
+  private channel(name: string): Channel {
+    let ch = this.channels.get(name);
+    if (ch === undefined) {
+      ch = {
+        seq: 0,
+        ring: [],
+        waiters: new Set(),
+        waiting: 0,
+        replied: Number.NEGATIVE_INFINITY,
+      };
+      this.channels.set(name, ch);
+    }
+    return ch;
+  }
+
+  /** 聴かれているか (`feed` が待っている・`HOLD` の間に返した) */
+  private held(name: string): boolean {
+    const ch = this.channels.get(name);
+    return (
+      ch !== undefined &&
+      (ch.waiting > 0 || this.deps.now() - ch.replied < HOLD)
+    );
+  }
+
   /**
-   * **欄が開いている (30 秒おきに呼ぶ)。** 繋いでいなければ繋ぎ始め、いまの状態を返す。
-   * 繋げなかった局は `RETRY_AFTER` の間は試し直さない
+   * **欄が開いている (30 秒おきに呼ぶ)・画面がコメントを受けている。** 繋いでいなければ繋ぎ始め、いまの状態を返す。
+   * 繋げなかった局は決めた時刻まで試し直さない
    */
   touch(channel: string): LiveState {
     const session = this.sessions.get(channel);
@@ -395,39 +599,116 @@ export class NiconicoLive {
       if (session.state === "ready") this.lastReason = null;
       return session.state;
     }
-    const downAt = this.down.get(channel);
-    if (downAt !== undefined && this.deps.now() - downAt < RETRY_AFTER)
-      return "down";
+    const retryAt = this.down.get(channel);
+    if (retryAt !== undefined && this.deps.now() < retryAt) return "down";
     if (this.deps.user() === null) return "unlinked";
-    return this.start(channel).state;
+    return this.start(channel)?.state ?? "down";
   }
 
-  private start(channel: string): Session {
-    // 上限を超えるなら、いちばん長く呼ばれていないものを閉じる
+  /** 繋ぎ始める。上限で、聴かれていないものを閉じられなければ null */
+  private start(channel: string): Session | null {
     while (this.sessions.size >= MAX_SESSIONS) {
-      const oldest = [...this.sessions.values()].sort(
-        (a, b) => a.touched - b.touched,
-      )[0];
-      if (oldest === undefined) break;
-      oldest.close();
+      const free = [...this.sessions.values()]
+        .filter((s) => !this.held(s.channel))
+        .sort((a, b) => a.touched - b.touched)[0];
+      if (free === undefined) return null;
+      free.close();
     }
     this.down.delete(channel);
-    const session = new Session(
-      channel,
-      this.deps,
-      (reason) => this.log(reason),
-      (ended) => {
+    const session = new Session(channel, this.deps, {
+      log: (reason) => this.log(reason),
+      end: (ended) => {
         if (this.sessions.get(channel) === ended) this.sessions.delete(channel);
-        if (ended.downAt > 0) this.down.set(channel, ended.downAt);
+        if (ended.retryAt > 0) this.down.set(channel, ended.retryAt);
       },
-    );
+      chats: (chats) => this.add(channel, chats),
+      changed: () => this.wake(channel, true),
+    });
     this.sessions.set(channel, session);
     void session.open().then(() => {
-      // 繋げなかった (連携していない・切れた・断られた) ものは閉じる。次に呼ばれたら試し直す
-      if (session.state === "unlinked" || session.state === "down")
-        session.close();
+      // 連携していない・切れたものは閉じる。次に呼ばれたら試し直す
+      if (session.state === "unlinked") session.close();
     });
     return session;
+  }
+
+  /** 受けたコメントを局の持ち物に足し、待っている `feed` を起こす */
+  private add(name: string, chats: OfficialChat[]): void {
+    const ch = this.channel(name);
+    const now = this.deps.now();
+    let added = false;
+    for (const chat of chats) {
+      const comment = toFeedComment(chat);
+      if (comment === null) continue;
+      ch.ring.push({ seq: ++ch.seq, got: now, comment });
+      added = true;
+    }
+    while (ch.ring.length > 0 && ch.ring[0]!.got < now - RING) ch.ring.shift();
+    if (added) this.wake(name, false);
+  }
+
+  private wake(name: string, now: boolean): void {
+    for (const wake of [...(this.channels.get(name)?.waiters ?? [])]) wake(now);
+  }
+
+  /** いまの状態 (繋ぎ始めない) */
+  private peek(channel: string): LiveState {
+    const session = this.sessions.get(channel);
+    if (session !== undefined && !session.ended) return session.state;
+    if (this.deps.user() === null) return "unlinked";
+    return "down";
+  }
+
+  /**
+   * **コメントを受ける** (ライブの画面が続けて呼ぶ。ロングポーリング)。`after` より後の番号のコメントを返す。
+   * 無ければ、コメントが来る (`BATCH` だけまとめる)・状態が変わる・`LONG_POLL` が過ぎる・`signal` が止まるまで待つ。
+   * `after` が無い・`epoch` が違う (サーバを起こし直した) ときは、コメントを返さずにいまの番号だけ返す。
+   * `after` が持っているものより古ければ、持っているものの先頭から返す
+   */
+  async feed(
+    channel: string,
+    after: number | null,
+    epoch: string | null,
+    signal?: AbortSignal,
+  ): Promise<FeedReply> {
+    const ch = this.channel(channel);
+    this.touch(channel);
+    const from = epoch === this.epoch ? after : null;
+    if (from !== null && !ch.ring.some((r) => r.seq > from)) {
+      ch.waiting++;
+      await new Promise<void>((resolve) => {
+        let batch: unknown = null;
+        const finish = () => {
+          ch.waiters.delete(wake);
+          signal?.removeEventListener("abort", finish);
+          this.deps.clearTimeout(timer);
+          if (batch !== null) this.deps.clearTimeout(batch);
+          resolve();
+        };
+        const wake = (now: boolean) => {
+          if (now) finish();
+          else batch ??= this.deps.setTimeout(finish, BATCH);
+        };
+        const timer = this.deps.setTimeout(finish, LONG_POLL);
+        ch.waiters.add(wake);
+        signal?.addEventListener("abort", finish);
+        if (signal?.aborted === true) finish();
+      });
+      ch.waiting--;
+    }
+    ch.replied = this.deps.now();
+    const session = this.sessions.get(channel);
+    return {
+      epoch: this.epoch,
+      state: this.peek(channel),
+      since: session !== undefined && !session.ended ? session.since : null,
+      now: this.deps.now(),
+      seq: ch.seq,
+      comments:
+        from === null
+          ? []
+          : ch.ring.filter((r) => r.seq > from).map((r) => r.comment),
+    };
   }
 
   /** **書き込む。** 繋いでいなければ繋ぎ、`CONNECT_WAIT` まで待つ */
